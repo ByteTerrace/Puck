@@ -6,7 +6,9 @@ These laws hold `puck shaders` and the shared shader build targets it drives. Th
 projects through `ShaderBuildFixture`, with a CPU-only compiler stand-in, each class beside the others. They check
 restored include inputs, unchanged builds, temporary cleanup, the publication lock, refusal of missing compiler
 outputs, the build task's request files, cancellation and core requests, and collection of existing Direct3D 11
-kernels without compiling during pack. `ShaderBuildCoreProtocolLawTests` holds the core brokers the build task and
+kernels without compiling during pack. `ShaderBuildHostLawTests` evaluates the targets as this host plans them and
+as a host other than Windows does, which plans no DXIL, and `ShadersCompareLawTests` holds `puck shaders compare` and
+`collect` to exactly the SPIR-V. `ShaderBuildCoreProtocolLawTests` holds the core brokers the build task and
 the generator share. `ShaderDeclarationBuildLawTests` runs the generator targets with the built
 `Puck.Shaders.Generator` host. It checks repair of drift and missing declarations, unchanged file times, and explicit
 checking without generation. The suite references `Puck.Cli.Shaders` and `Puck.SdfVm`, whose generated kernel
