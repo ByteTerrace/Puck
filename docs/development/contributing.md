@@ -21,6 +21,65 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
   snapshots. Wall-clock time, ambient randomness, and floating-point state do
   not enter replay-bearing simulation.
 
+## Setting up a machine
+
+A machine builds and verifies Puck once it carries the toolchain below. The
+list is the same for a person and for an agent; the Claude Code and Codex items
+apply to any machine an agent session runs on. CI runs on Windows and Ubuntu
+runners, so a Linux machine differs only where this list says; no runner is
+macOS, and nothing here is verified there.
+
+- **The .NET SDK `global.json` pins.** Roll-forward is disabled, so install
+  exactly that version; `dotnet --version` run inside the checkout prints it.
+  The full build also needs the `wasm-tools` workload
+  (`dotnet workload install wasm-tools`), which `Puck.World.Browser` compiles
+  with; the [CI guide](ci.md#shared-repository-tooling) shows the full local
+  build with it.
+- **DXC on `PATH`.** Every build compiles the shaders, so a machine with no GPU
+  needs it too. Install the release CI pins (`.github/actions/setup-dxc/action.yml`
+  names the version, the Windows and Linux archives and their checksums);
+  [GPU support and shader builds](#gpu-support-and-shader-builds) explains what
+  the build does with it. Only Windows builds DXIL.
+- **`git`, and `gh` signed in** (`gh auth status`): the release verbs call
+  `gh`, and agent sessions use it for pull requests and workflow runs.
+- **Node.js** at the version CI pins (`node-version` in
+  `.github/workflows/browser.yml` and `azure.yml`), for the dashboard's npm
+  projects, which `.claude/launch.json`'s previews run, and the browser
+  payload's Node harness.
+- **PowerShell 7 (`pwsh`).** The versioned `.claude/settings.json` runs the
+  hooks under `.claude/hooks/` through `pwsh`, so a machine without it reports
+  a hook error on every shell command and every edit. Windows PowerShell 5 is
+  not `pwsh`; on Linux, install PowerShell from Microsoft's package feed.
+- **The global `puck` tool, installed from the checkout**, as
+  [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
+  describes. An installed tool keeps its commit while the checkout moves on:
+  `puck --version` and `puck mcp` warn on stderr when the two differ, so
+  reinstall after pulling.
+- **Claude Code.** The project's settings are shared and versioned:
+  `.claude/settings.json` turns auto memory off, enables the Codex plugin and
+  names its marketplace, and registers the hooks, and `.claude/launch.json`
+  holds the preview configurations. Trust the folder when Claude Code asks,
+  because the marketplace entry loads only in a trusted project. Personal
+  overrides go in `.claude/settings.local.json`, which `.gitignore` keeps
+  untracked. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
+  ([documentation policy](#documentation-policy)).
+- **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
+  (`codex login`), and install the Claude Code plugin `codex@openai-codex` on
+  each machine: `.claude/settings.json` enables it and names its marketplace,
+  so Claude Code offers the install when it loads the project, and
+  `/codex:setup` checks the CLI afterwards. The Windows sandbox's permission
+  cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
+- **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
+  and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
+  and runs GPU gates one at a time per GPU under the
+  [verification skill](../../.claude/skills/verification/SKILL.md)'s rules.
+- **A checkout older than the versioned Claude Code files.**
+  `.claude/settings.json`, `.claude/launch.json` and `.claude/hooks/` were once
+  ignored, so a checkout from then may hold untracked copies, and `git pull`
+  refuses to overwrite them. Move them aside, pull, and fold anything personal
+  from the old copies into `.claude/settings.local.json`.
+
 ## Find code and references
 
 Use text search for file discovery, literals, JSON, HLSL, and project files. Use the

@@ -3,9 +3,9 @@
 These pages cover the practical work of changing, verifying, packaging, and
 deploying Puck.
 
-- [Contributing to Puck](contributing.md) explains how to find code, change world
-  documents, run the relevant verification commands, and account for hardware
-  and toolchain constraints.
+- [Contributing to Puck](contributing.md) explains how to set up a machine,
+  find code, change world documents, run the relevant verification commands,
+  and account for hardware and toolchain constraints.
 - [Writing documentation](documentation.md) describes the shared prose, naming,
   navigation, README ownership, and example conventions.
 - [Branding](../../branding/README.md) identifies the maintained logo, visual
