@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Runs.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The verbs that boot a World and judge it: canary, counters, parity, qualify, determinism and schema. -->
+        <ProjectReference Include="../../src/Puck.Cli.Runs/Puck.Cli.Runs.csproj" />
+        <!-- The laws that boot a real World run the repository's own Release output, so that build exists before the suite runs; nothing here links against it. -->
+        <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
+        <Compile Include="../Shared/Cli/LedgerMergeProbe.cs" Link="LedgerMergeProbe.cs" />
+        <Compile Include="../Shared/Cli/ScheduledWorldBoot.cs" Link="ScheduledWorldBoot.cs" />
+        <Compile Include="../Shared/Cli/SchedulingCohorts.cs" Link="SchedulingCohorts.cs" />
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Update="Assets/**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+</Project>

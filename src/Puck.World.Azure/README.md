@@ -39,12 +39,16 @@ The silo selects the storage and retirement providers from its document:
 ```json
 "store": { "type": "azure.blob", "settings": { "accountUrl": "https://<account>.blob.core.windows.net" } },
 "lifecycle": {
-  "shutdownSeconds": 120, "healthPort": 8081,
+  "shutdownSeconds": 120, "healthPort": 8081, "healthAddress": "0.0.0.0",
   "progressTimeoutSeconds": 30, "checkpointTimeoutSeconds": 180,
   "journalTimeoutSeconds": 30, "journalBacklogLimit": 1024,
   "observer": { "type": "azure.scheduled-events", "settings": { "pollSeconds": 1 } }
 }
 ```
+
+The Azure document binds the health listener to every interface, because the
+load balancer's probe reaches the worker's own address; a silo document that
+names no `healthAddress` listens on loopback.
 
 This extension validates those settings. Blob persistence uses the deployed
 identity's restricted storage access. `AzureScheduledEvents` polls local metadata

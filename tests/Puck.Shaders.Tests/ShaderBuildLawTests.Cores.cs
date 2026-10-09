@@ -65,7 +65,7 @@ public sealed partial class ShaderBuildLawTests {
             var runner = new Runner { Delay = TimeSpan.FromMilliseconds(milliseconds: 100) };
             var build = new ShaderBuild(
                 availableMemory: () => free,
-                compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: cache), processRunner: runner),
+                compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: cache), processRunner: runner, toolchainDirectory: ToolchainStandIn(root: scratch.RootPath)),
                 lockFile: Path.Combine(path1: checkout.Root, path2: "obj", path3: "shader-publish.lock"),
                 log: TextWriter.Null,
                 projectDirectory: checkout.Root

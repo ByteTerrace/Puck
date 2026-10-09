@@ -37,10 +37,12 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
-  The clone's shader build publishes from the per-user shader cache every
-  checkout shares, so only a shader the proof withholds or changes compiles;
-  do not copy bytecode or managed outputs, or alter timestamps, to make a
-  proof appear incremental. Native proof builds use `-m:1` with build servers
+  The clone's ordinary shader build reaches the same default per-user shader
+  cache as the caller. Valid entries with matching closures, options, and
+  toolchain publish without DXC; missing or invalid entries compile. A cache
+  override used only on the caller's build is not forwarded to the proof.
+  Do not copy bytecode or managed outputs, or alter timestamps, to make a proof
+  appear incremental. Native proof builds use `-m:1` with build servers
   and node reuse disabled; shader compiles still run on the cores MSBuild
   grants.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`
@@ -264,15 +266,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 
 ### GPU process checks and script runs
 
-A detector that waits for the GPU to go idle by matching process command lines
-excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
-command line contains the strings it searches for; without this exclusion it
-waits on itself forever. Treat a match you cannot account for as suspect, not as
-proof of a busy GPU: exclude the search's own process by process id, or use a
-pattern that cannot match its own command line (a bracketed first letter), then
-confirm whether a real process remains. Never skip or postpone a granted GPU leg
-because of a match that was the search itself. Run such a
-detector once by hand on an idle machine before trusting it.
+Wait for an idle GPU with `puck host load` (`--watch` prints `GPU busy (<holder>)`
+and `GPU idle` transitions); its probe already excludes shells and builds. A
+detector of your own that matches command lines must exclude its own shell,
+since the query's command line contains the strings it searches for. Never skip
+or postpone a granted GPU leg because of a match that was the search itself.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
 script's own bash running. Before relaunching a GPU script, find every instance

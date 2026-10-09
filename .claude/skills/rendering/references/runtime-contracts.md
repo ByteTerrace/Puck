@@ -67,7 +67,7 @@ yields an empty, default or stale result that the frame presents as success.
   `RenderGraphRuntimeRefusal` whose code is a `RenderGraphRuntimeRefusalCode`
   (`GraphCount`, `Root`, `OutputKind`, `PackageUnserved`, `InputVersion`,
   `InputProducer`, `InputKind`, `InputSize`, `ExternalProducer`,
-  `StandingChain`).
+  `StandingChain`, `MutableInput`, `InputOutput`, `TransferInput`).
 - At frame time, an image input whose producer has no output binds a
   transparent-black stand-in (`RenderGraphRuntime.Bind`,
   `RenderGraphRuntime.StandIns.cs`), recorded per instance. A capture waits on

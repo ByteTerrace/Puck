@@ -1,0 +1,159 @@
+using System.Text.Json.Nodes;
+
+using Puck.Testing;
+
+using Xunit;
+
+namespace Puck.Cli.Format.Tests;
+
+public sealed class FormatSelectionTests : IDisposable {
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-format-selection-");
+
+    public FormatSelectionTests() {
+        CliScratchDirectories.PinSdk(directory: m_directory.RootPath);
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "One.cs"
+            ),
+            contents: "class One {}\n"
+        );
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "Two.cs"
+            ),
+            contents: "class Two {}\n"
+        );
+    }
+
+    private string WriteManifest(string[] paths) {
+        var array = new JsonArray();
+
+        foreach (var path in paths) { array.Add(item: JsonValue.Create(value: path)); }
+        var manifest = Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "files.json"
+        );
+
+        File.WriteAllText(
+            path: manifest,
+            contents: array.ToJsonString()
+        );
+        return manifest;
+    }
+
+    [Fact]
+    public void AnEmptyDirectoryArgumentStillReturnsAUsageError() {
+        Assert.Equal(
+            expected: 2,
+            actual: SuiteRoot.Invoke(args: ["format", ""])
+        );
+    }
+    [InlineData("../One.cs")]
+    [InlineData("./One.cs")]
+    [InlineData("missing.cs")]
+    [InlineData("files.json")]
+    [Theory]
+    public void AnInvalidSelectionFailsBeforeAnyRewriting(string path) {
+        var manifest = WriteManifest(paths: ["One.cs", path]);
+
+        Assert.Throws<ArgumentException>(testCode: () => FormatSelection.Read(
+            manifest: manifest,
+            root: m_directory.RootPath
+        ));
+        Assert.Equal(
+            expected: "class One {}\n",
+            actual: File.ReadAllText(path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "One.cs"
+            ))
+        );
+    }
+    [Fact]
+    public void BothSemanticPhasesRejectAnUnbuiltOwningProject() {
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "Sample.csproj"
+            ),
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />"
+        );
+        var targets = new[] { Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "One.cs"
+        ) };
+        // One run's phases share its closures, as `format` hands them over.
+        var closures = new CompileClosures();
+
+        Assert.Equal(
+            expected: 1,
+            actual: SemanticPhases.Run(
+                check: true,
+                closures: closures,
+                configuration: "Release",
+                namedArgs: true,
+                nullPattern: false,
+                rootArgument: m_directory.RootPath,
+                targets: targets
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: SemanticPhases.Run(
+                check: true,
+                closures: closures,
+                configuration: "Release",
+                namedArgs: false,
+                nullPattern: true,
+                rootArgument: m_directory.RootPath,
+                targets: targets
+            )
+        );
+    }
+    [InlineData("src/Puck.Cli/Format/FormatCommand.cs", true)]
+    [InlineData("tests/Puck.Cli.Tests/FormatSelectionTests.cs", true)]
+    [InlineData("build/Toolchain.cs", true)]
+    [InlineData("experimental/Old/Program.cs", false)]
+    [InlineData("src/App/obj/Generated.cs", false)]
+    [InlineData("src/App/Generated.g.cs", false)]
+    [InlineData(".github/workflows/format.yml", false)]
+    [InlineData("worlds/parlor/basis.puck", true)]
+    [InlineData("experimental/Old/world.puck", false)]
+    [InlineData("src/App/bin/copied.puck", false)]
+    [InlineData("src\\App\\Program.cs", false)]
+    [InlineData("src/../Program.cs", false)]
+    [Theory]
+    public void PullRequestSelectionExcludesGeneratedAndQuarantinedSources(string path, bool expected) {
+        Assert.Equal(
+            expected: expected,
+            actual: FormatSources.Admits(path: path)
+        );
+    }
+    public void Dispose() {
+        m_directory.Dispose();
+        GC.SuppressFinalize(obj: this);
+    }
+    [Fact]
+    public void EmptySelectionIsEmptyRatherThanTheDefaultSourceTree() {
+        Assert.Empty(collection: FormatSelection.Read(
+            root: m_directory.RootPath,
+            manifest: WriteManifest(paths: [])
+        ));
+    }
+    [Fact]
+    public void ExplicitSelectionDoesNotIncludeSiblingsAndDeduplicatesTargets() {
+        var manifest = WriteManifest(paths: ["One.cs", "One.cs"]);
+
+        Assert.Equal(
+            expected: [Path.Combine(
+                    path1: m_directory.RootPath,
+                    path2: "One.cs"
+                )],
+            actual: FormatSelection.Read(
+                manifest: manifest,
+                root: m_directory.RootPath
+            )
+        );
+    }
+}

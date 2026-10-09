@@ -1,4 +1,4 @@
-// Generated from shader interface 'indirect' (sha256/c8f1c7c84bb704687753e66bb561a3ee53b7268338c9454a0d1fe9a94d4a4340). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'indirect' (sha256/d88b2626353db3184f03ee11d5bfb37458ed225d8fadf1614420d145a1638079). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_INDIRECT
 #define PUCK_SHADER_INTERFACE_INDIRECT
 
@@ -195,27 +195,27 @@ struct IndirectPass {
     [[vk::offset(288)]] float indirectFeedback;
     [[vk::offset(292)]] float indirectFeedbackGain;
     [[vk::offset(296)]] uint indirectFrame;
-    [[vk::offset(300)]] uint indirectMethod;
-    [[vk::offset(304)]] uint indirectPhase;
-    [[vk::offset(308)]] uint indirectPlaceCount;
-    [[vk::offset(312)]] uint indirectReadGeneration;
-    [[vk::offset(316)]] uint indirectReadPublication;
-    [[vk::offset(320)]] uint indirectShadeCount;
-    [[vk::offset(324)]] uint _pad324;
+    [[vk::offset(300)]] uint indirectItemFirst;
+    [[vk::offset(304)]] uint indirectMethod;
+    [[vk::offset(308)]] uint indirectPhase;
+    [[vk::offset(312)]] uint indirectPlaceCount;
+    [[vk::offset(316)]] uint indirectReadGeneration;
+    [[vk::offset(320)]] uint indirectReadPublication;
+    [[vk::offset(324)]] uint indirectShadeCount;
     [[vk::offset(328)]] uint _pad328;
     [[vk::offset(332)]] uint _pad332;
     [[vk::offset(336)]] float4 indirectSourceGains;
     [[vk::offset(352)]] uint indirectSources;
     [[vk::offset(356)]] uint indirectTier;
     [[vk::offset(360)]] uint indirectTraceCount;
-    [[vk::offset(364)]] uint indirectWriteGeneration;
-    [[vk::offset(368)]] uint indirectWritePublication;
-    [[vk::offset(372)]] uint instanceMaskWordCount;
-    [[vk::offset(376)]] float2 jitter;
-    [[vk::offset(384)]] uint lightCount;
-    [[vk::offset(388)]] uint lightMapCount;
-    [[vk::offset(392)]] uint _pad392;
-    [[vk::offset(396)]] uint _pad396;
+    [[vk::offset(364)]] uint indirectUnitCount;
+    [[vk::offset(368)]] uint indirectUnitFirst;
+    [[vk::offset(372)]] uint indirectWriteGeneration;
+    [[vk::offset(376)]] uint indirectWritePublication;
+    [[vk::offset(380)]] uint instanceMaskWordCount;
+    [[vk::offset(384)]] float2 jitter;
+    [[vk::offset(392)]] uint lightCount;
+    [[vk::offset(396)]] uint lightMapCount;
     [[vk::offset(400)]] float4 lightMaps[84];
     [[vk::offset(1744)]] uint lightSlice;
     [[vk::offset(1748)]] float lightSweepRadius;

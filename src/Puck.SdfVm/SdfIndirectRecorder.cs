@@ -30,12 +30,11 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         m_lightDepthVersion = (m_prefix + SdfWorldPackage.IndirectLightDepth);
     }
 
-    private int Count => m_context.Part switch {
-        SdfWorldPackage.IndirectPlace => m_built.Cache.PlaceCount,
-        SdfWorldPackage.IndirectClassify => m_built.Cache.ClassifyCount,
-        SdfWorldPackage.IndirectShade => m_built.Cache.ShadeCount,
-        _ => m_built.Cache.TraceCount,
-    };
+    // The pass's admitted chunk this frame: a transport step's chunk of its kind, or the shade batch's current chunk.
+    private SdfIndirectChunk? Chunk => (IsShade ? m_built.Cache.ShadeChunk : m_built.Cache.TransportChunk(part: m_context.Part!));
+    private SdfIndirectUnits Units => (IsShade ? m_built.Cache.ShadeUnits : SdfIndirectCache.TransportUnits(part: m_context.Part!));
+    // The workgroups the chunk touches, one per item.
+    private int Count => ((Chunk is { } chunk) ? chunk.Items(unitsPerItem: Units.UnitsPerItem) : 0);
     private bool IsEnvironmentPin => (m_context.Part == SdfSkyEnvironmentGraph.Pin);
     private bool IsShade => (m_context.Part == SdfWorldPackage.IndirectShade);
     private SdfKernel Kernel => m_context.Part switch {
@@ -82,6 +81,11 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectClassifyCount, value: ((uint)cache.ClassifyCount));
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectTraceCount, value: ((uint)cache.TraceCount));
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectPhase, value: ((m_context.Part == SdfWorldPackage.IndirectPlace) ? 0u : 1u));
+        var chunk = Chunk;
+
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectItemFirst, value: ((uint)(chunk?.ItemFirst ?? 0)));
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectUnitFirst, value: ((uint)(chunk?.UnitFirst ?? 0)));
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectUnitCount, value: ((uint)(chunk?.UnitCount ?? 0)));
         var batch = cache.ShadeBatch;
 
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectShadeCount, value: ((uint)cache.ShadeCount));
@@ -114,15 +118,11 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         m_sets.Bind(recording.Recorder, recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, recording.Slot);
         recording.Recorder.BindDescriptorSet(recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, ((uint)ShaderInterfaceGroup.World), (pinned?.WorldSet(slot: tables.CurrentSlot) ?? tables.WorldSet(slot: tables.CurrentSlot)));
         var sourceFrame = (pinned?.Frame ?? m_built.Residency.Frame!);
-        var queries = m_context.Part switch {
-            SdfWorldPackage.IndirectPlace => (((long)Count) * SdfIndirectCost.PlaceQueries),
-            SdfWorldPackage.IndirectClassify => (((long)Count) * SdfIndirectCost.ClassifyQueries),
-            SdfWorldPackage.IndirectShade => (((long)Count) * SdfIndirectCost.ShadeQueries(cache.Layout, sourceFrame)),
-            _ => (((long)Count) * SdfIndirectCost.TraceQueries),
-        };
+        var instructions = (IsShade ? sourceFrame.Program.InstructionCount : cache.InstructionCount);
+        var queries = ((chunk is null) ? 0 : checked((chunk.UnitCount * Units.QueriesPerUnit)));
+        var fixedCost = ((chunk is null) ? 0 : (Units.CostOf(chunk: chunk, instructionCount: instructions) - SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: queries)));
 
-        m_built.Residency.LogIndirectSubmission(m_context.Part!, queries, sourceFrame.Program.InstructionCount, cache.Frame,
-            (IsShade ? (Count * SdfIndirectCost.ShadeCacheCost(layout: cache.Layout)) : 0));
+        m_built.Residency.LogIndirectSubmission(m_context.Part!, queries, instructions, cache.Frame, fixedCost);
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((uint)Math.Max(val1: 1, val2: Count)), groupCountY: 1, groupCountZ: 1);
         return RenderGraphPackageOutcome.Drew;
     }

@@ -136,6 +136,13 @@ public static class WorldSiloDefinitionValidator {
                 reason = "lifecycle requires a positive shutdownSeconds and valid healthPort";
                 return false;
             }
+            if (!System.Net.IPAddress.TryParse(
+                address: out _,
+                ipString: lifecycle.HealthAddress
+            )) {
+                reason = $"lifecycle.healthAddress '{lifecycle.HealthAddress}' is not an IP address literal";
+                return false;
+            }
             if (
                 (lifecycle.Observer is { } observer) &&
                 (string.IsNullOrWhiteSpace(value: observer.Type) || (observer.Settings.ValueKind != JsonValueKind.Object))

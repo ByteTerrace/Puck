@@ -7,7 +7,7 @@ and rules; the console is their playing surface.
 Every game in this directory is authored as `.puck` source, and the directory
 holds sources only. The game's build compiles each one into its own output
 (`build/WorldAssets.targets`), where
-[WorldDocumentOutputLawTests](../../../../../tests/Puck.Cli.Tests/WorldDocumentOutputLawTests.cs)
+[WorldDocumentOutputLawTests](../../../../../tests/Puck.Cli.Worlds.Tests/WorldDocumentOutputLawTests.cs)
 holds every shipped document to exactly what its source compiles to. A document
 names a game by its document name (`games/poker`), never a file.
 

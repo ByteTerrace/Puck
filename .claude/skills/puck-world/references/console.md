@@ -450,9 +450,8 @@ refuses by name and enumerates its siblings.
 **Adding a section means adding a ROW to `BuildSections`, never a verb pair.**
 That table carries the only three facts the document model cannot supply: whether
 the section is a keyed list, which member is its key, and its
-upsert/remove `WorldMutation` pair. These two generic verbs replace separate per-section
-verbs; re-growing individual per-section verbs is the regression this design
-exists to prevent. `puck schema` documents payload shapes — cite it, but there is
+upsert/remove `WorldMutation` pair. These two generic verbs are the whole surface; a
+per-section verb is the regression this design exists to prevent. `puck schema` documents payload shapes — cite it, but there is
 deliberately NO runtime schema validation (owner deferred the gate; validation
 stays at the full-document revalidation on apply).
 

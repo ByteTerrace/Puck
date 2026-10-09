@@ -137,7 +137,10 @@ artifact rather than a second build. The Windows build compiles the whole
 solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
-projects included, is in the compare.
+projects included, is in the compare. A DXIL difference names the container
+chunks that differ, and a failed comparison collects the Linux build's shaders
+into the `shader-bytecode-linux` artifact, so either host's `dxc -dumpbin` can
+disassemble both sides.
 The comparison compiles into `.tmp/shader-cache` (`--cache`), and once it passes
 the job saves that directory as the Linux shader cache under the shader inputs'
 key. A run whose key already has a Linux cache has nothing new to compare: the
@@ -235,8 +238,8 @@ out the default branch, installs the CLI packed from that checkout through
 `setup-puck`, and runs `puck pull-request submit-format`, which reads the artifact
 as data.
 Only default-branch code ever runs with the write token. Its
-`src/Puck.Cli/PullRequest/FormatSubmission.cs` policy is covered by
-`tests/Puck.Cli.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
+`src/Puck.Cli.Format/PullRequest/FormatSubmission.cs` policy is covered by
+`tests/Puck.Cli.Format.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
 and successful build job, limits artifact size and file count, and accepts only
 ordinary C# and `.puck` sources already changed by that PR. The write token never reaches the
 PR's build or formatter.
@@ -410,10 +413,10 @@ artifact contains only those `.nupkg` and `.snupkg` files and a `release.json`
 manifest recording the version, source commit, file checksums, and dependencies
 already on NuGet.org. The publisher checks those checksums and uploads these
 files in dependency order after all gates succeed. It does not rebuild them.
-Selection and failure paths have offline tests in `tests/Puck.Cli.Tests`:
+Selection and failure paths have offline tests in `tests/Puck.Cli.Release.Tests`:
 
 ```sh
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*NuGetCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*NuGetCommandTests"
 ```
 
 `puck nuget --help` lists the release commands. The tests construct package
@@ -644,7 +647,15 @@ the host OS and container libraries are upgraded independently. The bootstrap
 installs Microsoft's Moby packages on Azure Linux and retains Ubuntu support
 for rollback. It preserves the host firewall policy and installs only the
 configured QUIC UDP port and the health port from Azure's load-balancer probe
-address. The service restores those rules after reboot. Host-image qualification
+address. The service restores those rules after reboot. The deployment is the
+one place that names every interface: the world document it publishes sets
+`host.listen` to `0.0.0.0:<port>` and the silo document it composes sets
+`lifecycle.healthAddress` to `0.0.0.0`, both from
+`AzureCommand.DeploymentListenAddress`, so the probe and forwarded QUIC reach
+the worker. The container smoke test, `puck azure test-world-container`, writes
+the same address inside its container and publishes the ports on the runner's
+loopback only. A local World or silo listens on loopback, and the `NET001` analyzer
+refuses an any-address bind anywhere else. Host-image qualification
 must exercise public QUIC with the expected world key, checkpoint recovery,
 drain/readiness withdrawal, and reboot recovery before changing the pinned image.
 The production release check compares the running VM's image reference as well

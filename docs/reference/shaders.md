@@ -86,44 +86,66 @@ a catalog entry and its HLSL stages; there is no per-pass C#.
 ### Freshness
 
 The build compiles every stage source through the same `ShaderCompiler` the
-runtime and the CLI use, so there is one compiler, one statement of DXC's
-options (`ShaderCompiler.StepsOf`) and one cache. `build/Shaders.targets` hands
+runtime and the CLI use, so there is one compiler and one statement of DXC's
+options (`ShaderCompiler.StepsOf`). `build/Shaders.targets` hands
 each shader project's outputs (one per stage source and enabled backend) to the
 build-only `Puck.Shaders.Generator`, which runs the project's shader build
 (`ShaderBuild`).
 
-The cache holds one file per output, named by a key that hashes everything the
-compile reads and nothing about where the checkout lies: the compiler revision,
-the step's options, the content of the `dxc` it runs (`ShaderToolchain.Identity`:
-the SHA-256 of the executable and of the `dxcompiler` and `dxil` libraries it
-loads, never their install path or file times, so a cache restored or extracted
-elsewhere still hits), and the stage source's include closure
+The cache holds one file per output. Its key includes the compiler revision,
+the step's options, the content of the resolved `dxc` and the `dxcompiler` and
+`dxil` library candidates `ShaderToolchain.Identity` finds, and the stage source's include closure
 (`ShaderSourceClosure`), each file by its path relative to the others and its
-content. Two consequences follow. A shader that any checkout on the machine has
-compiled, on any commit, is published from the cache and runs no compiler, so a
-fresh worktree builds its shaders in seconds. And editing one `.hlsli`
-recompiles only the outputs whose closure includes it.
+content. It also names the entry layout, so checkouts on different commits
+that share one cache never read each other's entries as bytecode when their
+compilers lay entries out differently. Any checkout can reuse a valid entry for
+those same inputs, options and toolchain. Editing one `.hlsli` invalidates only the outputs whose closure
+includes it; a matching entry already in the cache needs no compiler run.
 
-A compile runs DXC over a snapshot of the closure under the cache directory,
-each file by its own name in a numbered directory, with every include directive
-naming that short path. DXC refuses paths past the Windows limit, so the
-snapshot keeps them short however deep the checkout and the cache lie.
+The toolchain identity hashes file contents rather than installation paths or
+timestamps. A compiler hashes them once (about 23 MB with the Vulkan SDK's
+`dxc`), not once per output; every later key re-reads only each file's path,
+length and times, and hashes again when one moves, so a toolchain replaced
+during a build still refuses that build's publications. A replacement that
+keeps all of them is read by the next process's compiler. Its library search covers ordinary DXC layouts, but does not yet
+resolve every native loader search rule or overrides such as `LD_LIBRARY_PATH`
+and `DXC_DXIL_DLL_PATH`. A library loaded through those routes can change output
+without changing the key; complete loader identity remains open. Closures
+spanning filesystem volumes also retain volume identity in their layout, so
+they do not share the usual cross-checkout relocation guarantee.
+
+A compile runs DXC over a snapshot under the operating system's temporary
+directory, named `puck-dxc-<id>`. It mirrors the closure's directory tree and
+preserves include directives as written, because their spelling can affect
+DXIL bytes. An absolute include, or one whose join within that tree exceeds
+160 characters, is rewritten to its snapshot path. That choice depends on the closure's
+layout, so moving the checkout or cache does not change it.
 
 The cache lives in `shaders` under the per-user Puck directory
-(`ShaderCompiler.DefaultCacheDirectory`: `%LOCALAPPDATA%\Puck\shaders` on Windows,
-`~/.local/share/Puck/shaders` on Linux), which the `puck shaders` verbs share.
+(`ShaderCompiler.DefaultCacheDirectory`: `%LOCALAPPDATA%/Puck/shaders` on Windows,
+`$XDG_DATA_HOME/Puck/shaders` or `~/.local/share/Puck/shaders` on Linux), which the
+`puck shaders` verbs share.
 A World keeps its own compiler cache under its state root (`pipelines`), so a
 World run in a fresh state directory still compiles what it observes.
-`-p:PuckShaderCacheDirectory=<dir>` names another build cache.
-Each entry is published whole by one rename and never replaced, so builds in
-parallel checkouts can share it. Pointing the property at an empty directory compiles
+`-p:PuckShaderCacheDirectory=<dir>` names another build cache, such as the
+directory CI saves and restores between runs.
+Each cache entry contains its input key, its bytecode, and the bytecode's
+SHA-256. A read checks the key and digest before returning bytes; a missing,
+truncated, or corrupted entry is a cache miss and a successful compile replaces
+it. Whole-file publication lets parallel checkouts share the cache. Pointing
+the property at an empty directory compiles
 every output afresh, however current the tree is: `puck shaders compare --build`
 does that, so the cross-host comparison always holds this host's own DXC output.
 
 An entry's last write time is when a compile last used it. Publishing an entry
-writes it, and every compile that reads one, or finds it current, stamps it
-with the time, as it does each duration record it reads. Nothing evicts
-entries on its own: `puck shaders cache prune --unused-minutes <n>` removes
+writes it, and every compile that verifies one stamps it with the time: a read,
+a check that it is current, and a publication a peer already made alike, as it
+does each duration record it reads. A publication keeps the cache within
+`ShaderCompiler.Retention` (4096 outputs, 1 GiB), the least recently used
+outputs out, through the per-user caches' one
+[retention policy](../development/contributing.md#per-user-directory); a process
+lists the directory for this at most once a minute, and a staged publication or a
+duration record never counts. `puck shaders cache prune --unused-minutes <n>` removes
 every entry, duration record and abandoned staged publication (`*.tmp`) no
 compile has used for that long, and leaves any other file alone. A cache that a
 CI job restores, builds through and then prunes with a bound longer than the job
@@ -140,17 +162,26 @@ start first: the cache records how long each output last took, and an output
 never measured is estimated from its closure's size. Memory bounds them too: the
 largest kernels' DXIL compiles peak near 2 GB each, so a compile starts beside
 running ones only while the machine has 2 GB of physical memory free for it and
-for each compile started in the last 30 seconds (`HostMemory`), and one compile
-always runs. A failed compile stops new compiles and cancels the ones still
-running.
+for each compile started in the last 30 seconds (`HostMemory`). Each project's
+first compile can start even below that reserve, so low free memory cannot
+stop all progress. Windows reports available physical memory and Linux reads
+`MemAvailable` from `/proc/meminfo`; an unavailable reading leaves admission
+bounded by cores alone. These are host readings, not container memory limits.
+A failed compile stops new compiles and cancels the ones still running.
 
-A shader build waits on nothing but its own compiles and its one outstanding
-core request, so a request MSBuild cannot answer yet never stops a finished
-compile from starting the next one or giving its core back. Cores no running or
-queued compile can use go back at once, a late grant included, and a build ends
-holding none. The generator and its build host speak a line protocol over the
-generator's standard streams (`StreamShaderCoreBroker`), whose answers are read
-on a thread of their own.
+The MSBuild host asks the engine for cores once, using its guaranteed
+nonblocking first request. It refuses subsequent requests explicitly, and the
+project finishes on its initial grant; it cannot increase that grant when a
+peer finishes. This avoids an uncancellable engine request at shutdown. Cores
+no running or queued compile can use go back at once, and the task releases
+any remainder on every exit path. The generator and host speak a line protocol
+over standard streams (`StreamShaderCoreBroker`), whose answers are read on a
+separate thread. A refused first request ends the build. A refused later
+request leaves existing compiles running on their held cores.
+Cancellation stays available after the core budget closes: the host sends a
+cancellation message, and the generator cancels and awaits its compiler tasks.
+The host kills the process tree if the generator has not exited within ten
+seconds. Abrupt process termination cannot promise graceful cleanup.
 
 Shader bytecode and its `.hash` sidecars are ignored build outputs, written
 beside each source as `<stem>.spv` and `<stem>.dxil`. A build needs DXC even
@@ -2460,11 +2491,10 @@ dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders compile src/Puck.Wo
 `--stage compute|vertex|fragment` and `--entry` make the source contract
 explicit. `--toolchain` selects a directory containing DXC. Without it, the
 compiler resolves DXC from the process search path. Diagnostics identify the author's file and
-line. Each compile snapshots its sources and includes into a short build
-directory under the cache. The snapshot mirrors only the directory tree those
-files span, so the paths handed to DXC stay short however
-deep the checkout sits. DXC does not accept paths beyond the Windows
-260-character limit. Compilation results and dependencies are immutable; shader compilation
+line. Each compile snapshots its sources and includes into the operating
+system's temporary directory, preserving their relative layout and include
+spelling as described under [freshness](#freshness). This keeps the checkout
+and cache locations out of DXC's input paths. Compilation results and dependencies are immutable; shader compilation
 does not mutate a running instance.
 
 Every compile first collects its source closure (`ShaderSourceClosure`): the
@@ -2488,10 +2518,12 @@ manifest records them. Every `CompiledShader` carries the identity it was
 compiled under (`ShaderCompileIdentity`). Several compilers, several World
 processes and the build can share one cache directory; the build and the CLI
 share `ShaderCompiler.DefaultCacheDirectory` by default ([freshness](#freshness)),
-and a World its state root's `pipelines`. A finished
-compile moves each bytecode file into place and never replaces an existing one.
-When a peer published the name first, the compile keeps the peer's file,
-because it holds the same content. A cache hit reads the bytecode with
+and a World its state root's `pipelines`. A finished compile publishes an
+entry containing its key, bytecode, and content digest as a whole file by one
+rename, and never replaces a valid entry a peer published first, since it holds
+the same content. Reads verify that envelope; invalid entries compile again and
+are replaced. A cache
+hit reads the entry with
 `AtomicFile.ReadAllBytes`, which shares delete access, so it can read a file a
 peer's rename still holds open.
 
@@ -2906,7 +2938,7 @@ compiler. An edited source misses its stored package: it compiles while the
 compiler exists and is refused by `SHADERPKG_ABSENT` once it does not. A
 one-off shader is stored under the name it plans with, so another name misses.
 A damaged stored package is refused by its pin and nothing compiles in its
-place. In `tests/Puck.Cli.Tests`, `NoDeviceShaderCompileLawTests` hold every
+place. In `tests/Puck.Cli.Shaders.Tests`, `NoDeviceShaderCompileLawTests` hold every
 Puck assembly in the World's Release output to importing nothing from the
 Direct3D HLSL compiler. In `tests/Puck.World.Presentation.Tests`, `PipelineOverrideLawTests`
 also check that a

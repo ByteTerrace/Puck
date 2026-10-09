@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Embeddings.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The embedding generators. -->
+        <ProjectReference Include="../../src/Puck.Embeddings/Puck.Embeddings.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+
+    </ItemGroup>
+</Project>

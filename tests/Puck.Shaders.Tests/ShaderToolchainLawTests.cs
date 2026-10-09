@@ -4,11 +4,136 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// A toolchain's identity, which every shader cache key includes, is the content of the <c>dxc</c> it runs and the
-/// compiler and validator libraries that <c>dxc</c> loads, never where they are installed or when their files were
+/// compiler and validator libraries in its standard release layout, never where they are installed or when their files were
 /// written: a cache restored or extracted onto another machine is a hit for the same toolchain and a miss for any other.
-/// A toolchain file that cannot be read refuses by name.
+/// A toolchain file that cannot be read refuses by name. A toolchain hashes its files once and afterwards re-reads only
+/// their metadata, hashing again when a file's path, length or times move, so a compile still refuses a toolchain
+/// replaced under it, and a new toolchain, as the next process holds, reads a replacement that kept all of them.
 /// </summary>
 public sealed class ShaderToolchainLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task AToolchainChangedAfterPlanningCannotPublishUnderThePlannedKey(bool duringCompile) {
+        using var scratch = new TemporaryDirectory(prefix: "puck-toolchain-");
+        var bin = Install(compiler: 6, root: scratch.RootPath, validator: 7, written: DateTime.UtcNow.AddHours(value: -1));
+        var tool = Path.Combine(path1: bin, path2: DxcName);
+        var runner = new ReplacingRunner(replace: () => File.WriteAllBytes(bytes: [1, 2, 9], path: tool));
+        var compiler = new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: "cache"), processRunner: runner, toolchainDirectory: bin);
+        var plan = compiler.Plan(stage: new ShaderStageSource(Stage: ShaderStage.Compute, Path: Path.Combine(path1: scratch.RootPath, path2: "a.hlsl"), Source: "void main() {}"), target: ShaderTarget.Spirv);
+
+        if (!duringCompile) { File.WriteAllBytes(bytes: [1, 2, 8], path: tool); }
+        var failure = await Assert.ThrowsAsync<IOException>(testCode: () => compiler.CompileOutputAsync(plan: plan, cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Contains(expectedSubstring: "toolchain changed", actualString: failure.Message);
+        Assert.Equal(expected: (duringCompile ? 1 : 0), actual: runner.Runs);
+        Assert.Null(@object: compiler.ReadCached(plan: plan));
+        Assert.Empty(collection: Directory.EnumerateFiles(path: compiler.CacheDirectory, searchPattern: "*.spv"));
+    }
+
+    private sealed class ReplacingRunner(Action replace) : IShaderProcessRunner {
+        public int Runs { get; private set; }
+
+        public Task<Puck.Hosting.ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+            Runs++;
+            replace();
+            var output = (arguments.ToList().IndexOf(item: "-Fo") + 1);
+
+            File.WriteAllBytes(bytes: [1, 2, 3], path: arguments[output]);
+            return Task.FromResult(result: new Puck.Hosting.ChildProcessResult(ExitCode: 0, Stdout: "", Stderr: ""));
+        }
+    }
+
+    [InlineData("dxc")]
+    [InlineData("compiler")]
+    [InlineData("validator")]
+    [Theory]
+    public void ReplacingToolchainBytesInvalidatesIdentityEvenWhenLengthAndWriteTimeStayTheSame(string part) {
+        using var scratch = new TemporaryDirectory(prefix: "puck-toolchain-");
+        var bin = Install(compiler: 6, root: scratch.RootPath, validator: 7, written: DateTime.UtcNow);
+        var before = new ShaderToolchain(directory: bin).Identity;
+        var file = part switch {
+            "dxc" => Path.Combine(path1: bin, path2: DxcName),
+            "compiler" => Path.Combine(path1: LibrariesOf(bin: bin), path2: CompilerName),
+            _ => Path.Combine(path1: LibrariesOf(bin: bin), path2: ValidatorName),
+        };
+        var written = File.GetLastWriteTimeUtc(path: file);
+        var bytes = File.ReadAllBytes(path: file);
+
+        bytes[^1]++;
+        File.WriteAllBytes(bytes: bytes, path: file);
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: written, path: file);
+
+        // A toolchain reads its files' bytes once (a new process, such as the next build, holds a new one), so the
+        // replacement is seen by the next reading however little of the file's metadata it moved.
+        Assert.NotEqual(expected: before, actual: new ShaderToolchain(directory: bin).Identity);
+    }
+    [Fact]
+    public void AToolchainHashesItsFilesOnceWhileTheyStayUnchanged() {
+        Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "Only Windows enforces an exclusive file lock on other readers.");
+
+        using var scratch = new TemporaryDirectory(prefix: "puck-toolchain-");
+        var bin = Install(compiler: 6, root: scratch.RootPath, validator: 7, written: DateTime.UtcNow);
+        var toolchain = new ShaderToolchain(directory: bin);
+        var first = toolchain.Identity;
+        string? second = null;
+        IOException? reread = null;
+
+        // Every file is held so that nothing can read it: a toolchain that hashed again would refuse.
+        using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: Path.Combine(path1: bin, path2: DxcName), share: FileShare.None))
+        using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: Path.Combine(path1: LibrariesOf(bin: bin), path2: CompilerName), share: FileShare.None))
+        using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: Path.Combine(path1: LibrariesOf(bin: bin), path2: ValidatorName), share: FileShare.None)) {
+            try {
+                second = toolchain.Identity;
+            } catch (IOException exception) {
+                reread = exception;
+            }
+        }
+
+        Assert.Null(@object: reread);
+        Assert.Equal(actual: second, expected: first);
+    }
+    [InlineData("dxc")]
+    [InlineData("compiler")]
+    [InlineData("validator")]
+    [Theory]
+    public void AToolchainFileReplacedUnderARunningToolchainIsHashedAgain(string part) {
+        using var scratch = new TemporaryDirectory(prefix: "puck-toolchain-");
+        var bin = Install(compiler: 6, root: scratch.RootPath, validator: 7, written: DateTime.UtcNow.AddHours(value: -1));
+        var toolchain = new ShaderToolchain(directory: bin);
+        var before = toolchain.Identity;
+        var file = part switch {
+            "dxc" => Path.Combine(path1: bin, path2: DxcName),
+            "compiler" => Path.Combine(path1: LibrariesOf(bin: bin), path2: CompilerName),
+            _ => Path.Combine(path1: LibrariesOf(bin: bin), path2: ValidatorName),
+        };
+        var bytes = File.ReadAllBytes(path: file);
+
+        // The same length, written now: only the write time moves.
+        bytes[^1]++;
+        File.WriteAllBytes(bytes: bytes, path: file);
+
+        Assert.NotEqual(expected: before, actual: toolchain.Identity);
+        Assert.Equal(expected: new ShaderToolchain(directory: bin).Identity, actual: toolchain.Identity);
+    }
+    [Fact]
+    public void ACommandWithoutDirectorySeparatorsRetainsTheRequestedNameWhenAbsent() {
+        const string Command = "puck-absent-dxc";
+        var toolchain = ShaderToolchain.OfCommand(command: Command);
+
+        Assert.Null(@object: toolchain.Locate(name: ShaderCompiler.DxcTool));
+        Assert.Equal(expected: Command, actual: toolchain.Resolve(name: ShaderCompiler.DxcTool));
+    }
+    [Fact]
+    public void AToolOnTheSearchPathRunsTheExactExecutableThatLocateIdentifies() {
+        var toolchain = new ShaderToolchain();
+        var located = toolchain.Locate(name: "dotnet");
+
+        Assert.NotNull(@object: located);
+        Assert.True(condition: Path.IsPathFullyQualified(path: located));
+        Assert.Equal(expected: located, actual: toolchain.Resolve(name: "dotnet"));
+        Assert.Equal(expected: located, actual: ShaderToolchain.OfCommand(command: "dotnet").Resolve(name: ShaderCompiler.DxcTool));
+    }
     [Fact]
     public void TheIdentityIsTheToolchainsContentNotWhereOrWhenItWasInstalled() {
         using var scratch = new TemporaryDirectory(prefix: "puck-toolchain-");

@@ -168,8 +168,12 @@ public sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicati
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         var builder = WebApplication.CreateSlimBuilder();
+        var endpoint = new IPEndPoint(
+            address: IPAddress.Parse(ipString: m_options.HealthAddress),
+            port: m_options.HealthPort
+        );
 
-        builder.WebHost.UseKestrel(options: options => options.ListenAnyIP(port: m_options.HealthPort));
+        builder.WebHost.UseKestrel(options: options => options.Listen(endPoint: endpoint));
         builder.Services.AddSingleton<IHostLifetime, HealthLifetime>();
         await using var web = builder.Build();
 
@@ -177,7 +181,7 @@ public sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicati
         try {
             await web.StartAsync(cancellationToken: stoppingToken);
         } catch (Exception failure) when ((ListenEndpointUnavailableException.Classify(
-            endpoint: $"*:{m_options.HealthPort}",
+            endpoint: endpoint.ToString(),
             failure: failure,
             transport: "http"
         ) is { } unavailable)) {

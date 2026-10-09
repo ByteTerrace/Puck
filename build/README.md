@@ -11,10 +11,12 @@ Every output compiles into one content-addressed cache, by default `shaders`
 under the per-user Puck directory, or the directory
 `-p:PuckShaderCacheDirectory=<dir>` names. An output's key hashes its stage
 source's include closure, its options and its `dxc`, not where the checkout
-lies, so a shader any checkout on the machine has compiled is published from the
-cache and runs no compiler, and an edited include recompiles only the outputs
-that reach it. Missing outputs compile concurrently on cores MSBuild grants
-through its own core budget, the longest first. The
+lies. A valid entry with matching inputs can be published in another checkout
+without a compiler run, and an edited include invalidates only the outputs
+that reach it. Entries are checked against their key and bytecode digest before
+reuse; damaged entries compile again. Missing outputs compile concurrently on cores MSBuild grants
+through its own core budget, the longest first. Each project takes one initial
+grant and returns unused cores; it makes no blocking follow-up engine request. The
 [shader reference](../docs/reference/shaders.md#freshness) owns the details.
 
 Kernel projects build their declaration generator before compiling shaders.
@@ -33,10 +35,15 @@ documents the game ships, their compiled worlds, and the one bake pack holding
 the creation bakes those compiled worlds name there, and reports what it
 wrote (`--written`); the build copies exactly the reported files into the
 output's `Assets/worlds`. The run reads and keeps its bakes in the
-content-addressed cache `obj/bakes` (`--bake-cache`), which every configuration
-shares and `dotnet clean` keeps, so a run bakes only the creations whose keys
-it lacks: an engine change that reruns the compile bakes nothing, and an edited
-prototype bakes that prototype alone. The run's one incremental output is the
+content-addressed `bakes` cache under the per-user Puck directory
+(`--bake-cache`), which every configuration and every checkout shares with
+`puck parity` and the World, and `dotnet clean` keeps, so a run bakes only the
+creations whose keys no build on the machine has baked: a new worktree bakes
+nothing another has baked, an engine change that reruns the compile bakes
+nothing, and an edited prototype bakes that prototype alone. A bake's key
+carries the bake code's fingerprint (`DerivationFingerprint.Bake`), so two
+checkouts whose bake code differs never share a key. `-p:PuckWorldBakeCache=<dir>`
+names another cache. The run's one incremental output is the
 report, which every run writes last; a reported file that is gone removes the
 report, so the next build runs again. Only a compile knows which sources emit documents: a
 module library emits none, so a `.world.json` named like it ships, while a

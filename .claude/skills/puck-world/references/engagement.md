@@ -74,9 +74,8 @@ mirrored keeps both. So:
 
 `WorldBody.Engaged` is a DERIVED projection of one predicate ("the set omits the
 own-body application"), written by `WorldEngagement.SyncLatch` alone and
-re-asserted every tick at the top of `FoldTick`. One storage, one derivation —
-so the latch/route desync class, and the repair machine that existed to detect
-it, are both gone.
+re-asserted every tick at the top of `FoldTick`. One storage, one derivation:
+the latch cannot disagree with the set, so nothing detects or repairs a desync.
 
 ## One kit vocabulary, two destinations
 
@@ -328,7 +327,7 @@ application, off retains it. A body target skips every screen-only policy check
 (engageable, auto-insert, machine presence, engage radius); it only needs a live
 body at that index. The driving body is an optional 0-based body index, like
 every `body.*` verb's: it defaults to body 0 (seat 1's body), is bounded to
-`0..population.capacity - 1`, and `body.engage <target> 1` is driven by body:1,
+`0..bodies.capacity - 1`, and `body.engage <target> 1` is driven by body:1,
 seat 2's body. `body.engage` and `body.disengage [body]` resolve it through the
 one `ResolveTarget` the other `body.*` verbs use, a stripped `capture:` token
 counting as absent (`EngageBodyIndexLawTests`). `body.disengage` submits

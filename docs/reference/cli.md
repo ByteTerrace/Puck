@@ -5,7 +5,9 @@ tracked parents. See [generated assets](../../build/README.md) for build,
 source-control, and packaging rules.
 
 `Puck.Cli` provides `puck`, the repository's developer command line. Its
-commands share the System.CommandLine tree declared in `PuckRootCommand.cs`.
+commands share the System.CommandLine tree declared in `PuckRootCommand.cs`,
+which composes the verb assemblies under `src/Puck.Cli.*` through `CliRoot`;
+each assembly references only what its own verbs need.
 `PuckRootCommand.Create` takes the CLI's one `TimeProvider`, and every deadline a
 verb puts on a process, a connection, a lease, or a request runs on it, so a law
 drives the verb's deadline with a virtual clock.
@@ -41,7 +43,7 @@ whose command no longer breaks its rule, until the row is deleted.
    `references`) found nothing, as with grep. 2 means a usage error, a refusal, or
    an infrastructure failure. 130 means the run was cancelled. An exception that
    escapes a verb is reported on one line, `puck <verb>: <message>`, and exits 2;
-   `CliExit` in `src/Puck.Cli` owns the mapping.
+   `CliExit` in `src/Puck.Cli.Core` owns the mapping.
 6. **Help is layered.** The root listing is alphabetical and gives each verb one
    imperative sentence. A verb's own `--help` carries its detail: modes, exit
    codes, and examples.
@@ -62,13 +64,16 @@ whose command no longer breaks its rule, until the row is deleted.
     for one run (canary legs and packages, parity, counters, test, qualify,
     docs citations, affected `--record`, firmware, `compile --check`, the
     formatter's closure evaluation, the NuGet smoke install) creates a uniquely
-    named `puck-<verb>-…` directory under the temporary directory through one
-    policy, `RunDirectory` (`build/RunDirectory.cs`). A run that passes deletes
-    it. A run that fails, or stops before it reaches a verdict, keeps it and
-    prints `run directory kept: <absolute path>` on standard error, so the
-    evidence survives. The first directory a process creates under a prefix
-    deletes that prefix's directories older than six hours, which is how a
-    killed run's leftovers and old kept evidence go away. A directory that holds
+    named `puck-<verb>-…-<process id>-<token>` directory under the temporary
+    directory through one policy, `RunDirectory` (`build/RunDirectory.cs`). A
+    run that passes deletes it. A run that fails, or stops before it reaches a
+    verdict, keeps it and prints `run directory kept: <absolute path>` on
+    standard error, so the evidence survives, and then keeps only the newest
+    four directories of its kind whose processes have finished. The first
+    directory a process creates sweeps every kind the same way and removes any
+    finished process's directory older than six hours, which is how a killed
+    run's leftovers and old kept evidence go away; a directory whose process
+    still runs is never removed. A directory that holds
     no evidence or holds credentials (release staging, the bench state root) is
     deleted however the run ends. A directory the caller names (`--keep`,
     `--output`, `--out-dir`) is the caller's and is never deleted.
@@ -661,7 +666,8 @@ reported as `puck shaders <verb>: <path>: <why>`.
 the same file in another, byte for byte. Both trees are walked for bytecode,
 skipping `artifacts`, `bin`, `obj`, `.git`, `.tmp` and `node_modules`, and
 matched by relative path; a file only one tree holds, or one whose bytes differ
-(named with its first differing byte), fails with exit 1, and a tree holding no
+(named with its first differing byte and, for a DXIL container, the chunks
+that differ, such as `DXIL`, `STAT` or `PSV0`), fails with exit 1, and a tree holding no
 bytecode is refused with exit 2. `<actual>` is the repository root when absent.
 `--build` first builds `Puck.Shaders.Generator`, the shader build's host, then
 restores and runs the build's own `CompileShaders` target
@@ -1120,7 +1126,9 @@ Thresholds must be finite and nonnegative; `--capacity-cpu` must be at most 100.
 A `NaN` CPU or memory reading cannot produce `CAPACITY`; a failed CPU reading
 stays in the mean until it leaves the window.
 An unreadable process command line cannot identify a managed entry assembly or
-CLI verb; a recognizable World or device-test apphost still counts by name.
+CLI verb; a recognizable World apphost still counts by name. Test hosts run
+under `dotnet`, never their apphost, so a device-test run is recognized only
+from its command line.
 
 Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 1), 130 cancelled.
@@ -1154,20 +1162,27 @@ The fix is one of:
 The proof never touches the working tree. It keeps one persistent proof clone
 per repository under `law-trees` in the [per-user Puck
 directory](../development/contributing.md#per-user-directory), in a subdirectory
-named by the SHA-256 of the repository's common Git directory
-(`git rev-parse --git-common-dir`, case folded on Windows), so every worktree
-of one repository shares one clone. The clone is made from that common Git
+named by the first 16 hexadecimal digits of the SHA-256 of the repository's common
+Git directory (`git rev-parse --git-common-dir`, case folded on Windows), so every
+worktree of one repository shares one clone. The name is short because the
+clone's own build writes deep paths (the Azure Functions worker extension builds
+under `obj`), and Windows refuses a copy past 260 characters unless long paths
+are enabled. The clone is made from that common Git
 directory and shares its objects through alternates; it is never a worktree
-and never registers in the caller's worktree list.
+and never registers in the caller's worktree list. Leasing a clone stamps its lease
+and keeps it and the most recently leased other clone, removing the rest once
+their own leases can be taken, so a clone another proof holds stays and the clone
+of a repository that is gone ages out.
 
 Each proof fetches the caller's `HEAD` by object id, checks it out detached,
 removes untracked files Git does not ignore, and mirrors the caller's
 uncommitted and untracked files. Ignored managed build outputs stay in the clone at
 the paths where MSBuild produced them. Nothing copies or links the caller's
-`obj` or `bin`. The clone's shader build compiles into the per-user shader
-cache every checkout shares, keyed by each source's include closure, so its
-shaders are published from that cache and only a shader the proof withholds or
-changes compiles ([freshness](shaders.md#freshness)). Git rewrites changed
+`obj` or `bin`. The clone's ordinary shader build reaches the same default
+per-user shader cache as the caller. Valid entries with matching closures,
+options, and toolchain publish without DXC; missing or invalid entries compile
+([freshness](shaders.md#freshness)). A cache override passed only to the caller's
+build is not forwarded to the proof. Git rewrites changed
 tracked files; unchanged files retain their timestamps, so MSBuild's ordinary
 incremental checks apply.
 Each native proof build uses one MSBuild node (`-m:1`), disables build servers
@@ -1617,8 +1632,8 @@ The store is the `world-builds` subdirectory of the
 `~/.local/share/Puck/world-builds` on Linux. It is never inside the checkout.
 
 A build is keyed by the sources it is made from. The key covers the World
-project, every project it references (including `Puck.Cli` and
-`Puck.Analyzers`, which carry no assembly into it), and every file those
+project, every project it references (including `Puck.Cli.Worlds`, the world
+compiler, and `Puck.Analyzers`, which carry no assembly into it), and every file those
 project files import or link from elsewhere in the checkout, read as MSBuild
 reads them, with a backslash as a directory separator on every platform. It also
 covers every file directly in the repository root. For these paths, the key hashes
@@ -1640,7 +1655,8 @@ run building the same key waits for that build and uses it. The progress line
 `<verb>: reusing the Puck.World build of source state <key>.`) goes to standard
 error, so standard output carries only results. Each build is several hundred
 megabytes. The store keeps the four most recently used builds, plus any build a
-run still holds, and prunes the rest. A build directory left by a killed run is
+run still holds, and prunes the rest, under the per-user caches' one
+[retention policy](../development/contributing.md#per-user-directory). A build directory left by a killed run is
 deleted after six hours.
 
 Every build restores first. NuGet's no-op check compares each closure
@@ -1665,11 +1681,10 @@ Build log names come from the project name, so projects can share a log
 directory without overwriting each other's output.
 
 None of these verbs builds in place. `Puck.World` has a build-time reference to
-`Puck.Cli`, whose build compiles the shipped `.puck` worlds, so an in-place
-World build would also write into the CLI's own Release output directory
-(`bin/Release/net10.0` under `src/Puck.Cli`). A CLI started from there holds those assemblies open, and the copy would fail with
-MSB3027. Because the build goes to the store, a branch can run these verbs from
-its own build output:
+`Puck.Cli.Worlds`, the world-authoring verbs' own executable, whose build compiles
+the shipped `.puck` worlds; no other verb assembly is in the World's closure, so a
+change to another verb neither rebuilds the World nor changes its key. Because the
+build goes to the store, a branch can run these verbs from its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
@@ -3161,8 +3176,11 @@ creation baked once. A run whose compiled worlds name no bake writes no pack.
 (`WorldBakeStore`): the run reads each outcome whose key the cache holds and
 keeps there every outcome it bakes, so a run over unchanged prototypes bakes
 nothing and one after an edit bakes the edited prototypes alone. The pack's
-bytes are the same with or without the cache. The game's build passes
-`obj/bakes`; `--check` refuses the option, since it compares with a fresh run
+bytes are the same with or without the cache. The game's build passes the
+per-user `bakes` cache, which `puck parity` and the World share, so every
+checkout reuses every other's bakes; a bake's key carries the bake code's
+fingerprint, so checkouts whose bake code differs never share a key. `--check`
+refuses the option, since it compares with a fresh run
 (`TreeBakeCacheLawTests`).
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
@@ -3825,7 +3843,10 @@ without trivia. Parentheses do not contribute an extra node, but operator groupi
 call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
 are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
 Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
-move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
+move it. Unresolved calls retain their written syntax. The closure compiles the repository's sources against the shared
+framework alone, never the assemblies the computing process loads, so a call into a package member is unresolved in
+every host and the same source gives the same digest in the `puck` tool, a test suite's host and any machine on the
+framework. These are conservative source fingerprints: an implementation
 edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
 is refused.
 

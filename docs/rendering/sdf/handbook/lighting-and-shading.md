@@ -363,15 +363,42 @@ and tracing share that allowance. Shade also counts continuation-record
 searches and irradiance reduction, including when direct lighting is disabled.
 Transport, light rectangles and the shared receiver allowance advance across
 frames; a frame never drains a pending queue in a loop. The tier's existing count
-ceilings remain additional limits. An indivisible work item above the cost limit
-is refused before dispatch. These counts estimate work, not elapsed GPU time;
+ceilings remain additional limits. These counts estimate work, not elapsed GPU time;
 device qualification must establish the margin below its watchdog.
+
+A work item above the cost limit is split across submissions, never refused whole.
+`SdfIndirectCost.Admit` partitions each kind's scheduled items into chunks of
+admission units: a probe's placement, a cell's partition, a ray's trace, or a ray's
+shading. Items that fit are admitted whole, as many to a chunk as the limit allows;
+a heavier item is cut into runs of its units, and a run may continue into the next
+item. Every chunk fits the limit, and together they cover each item exactly once,
+in order. The pass block names the chunk (`indirectItemFirst`, `indirectUnitFirst`
+and `indirectUnitCount`), and only those units execute. A transport plan submits one
+chunk of each pass per produced frame, placement before partition before trace,
+and commits only with its last chunk. Until then the uploaded brick table lists a
+newly placed brick only once its placement completes and flags its partition only
+once the partition completes. A probe whose shading exceeds the limit is a batch of
+its own: each chunk stores its rays' packed sources in the cache's shade scratch,
+and the last chunk reduces every stored ray, so the probe's irradiance and
+publication match the whole probe's. A plan outliving a program upload re-admits
+its unsubmitted units against the field the next step dispatches. The schedule
+still plans at least one whole item of each kind, so a heavy field keeps
+progressing.
+
+A field is refused only when one field query, or one indivisible unit with its
+item's fixed cost, exceeds the limit (`SdfIndirectCost.RefusalOf`). The residency
+then retires that program's cache: it renders without indirect lighting at an
+effective tier of Off, nothing waits for an indirect solve, and the refusal is
+printed once per program on standard error and named by `world.lighting`. A light
+map's indivisible unit is one 8 by 8 workgroup of light texels; a field too heavy
+for one leaves every map invalid, and readers keep the bounded per-hit visibility
+ray that shade admission already prices.
 
 Each residency also shares a produced-frame allowance of 134,217,728 estimated
 visits: one submission allowance for cache work and one for auxiliary work.
-Transport's placement, classification and trace passes reserve their combined
-chunk once. A light rectangle reserves its primary and beam work together, and
-shade reserves the pinned source's field queries and cache traversal. Shared
+Transport's placement, classification and trace passes reserve their frame's
+step of chunks once. A light rectangle reserves its primary and beam work together, and
+shade reserves its chunk's pinned-source field queries and cache traversal. Shared
 receiver proofs reserve their allowance once across all views. These reservations
 compete for the same total. A whole chunk that does not fit stays pending until
 a later produced frame; an unadmitted receiver allowance defers unfinished proofs.

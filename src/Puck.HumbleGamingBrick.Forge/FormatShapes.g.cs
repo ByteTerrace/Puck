@@ -8,6 +8,6 @@ namespace Puck.HumbleGamingBrick.Forge.Framework {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>PbakBundle.SupportedVersion</c>, declared in <c>src/Puck.HumbleGamingBrick.Forge/Framework/PbakBundle.cs</c>.</summary>
-        public const string PbakBundleSupportedVersion = "ed0da7a07389a53d";
+        public const string PbakBundleSupportedVersion = "b854d69da30847d2";
     }
 }

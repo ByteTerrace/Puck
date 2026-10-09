@@ -261,6 +261,15 @@ which is how the derived-cache helpers use `derived/<kind>`.
 input. `TryResolveDerived` performs the inverse lookup, allowing a build tool
 to skip work while the input content remains unchanged.
 
+A store opened with a `CacheBound` (`new ContentAddressedStore(root, retention)`)
+is a cache. `TryGet` and `TryResolveRef` stamp what they find as used, and a
+write keeps the objects within the bound and the refs within its entry count,
+least recently used out, through `CacheRetention` in `Puck.Abstractions`. A ref
+whose object was evicted resolves to a pin `TryGet` no longer finds, which the
+cache's owner treats as a miss. The creation-bake and projection caches open
+their stores this way. A store opened without a bound keeps everything, as a
+release store must.
+
 ## Replacing a file atomically
 
 `AtomicFile` replaces one file so that a reader, or a process that crashes

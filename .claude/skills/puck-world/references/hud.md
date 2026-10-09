@@ -357,10 +357,13 @@ can open a fourth. All four charge the one Hud reservation.
 
 ## Verbs
 
-All in `WorldHudCommandModule`, unbindable. Writes are `Simulation`-routed,
-submit a mutation, and return `CommandResult.None` — NO synchronous echo;
-the outcome arrives a tick later through `WorldServer.EchoTap` (toast,
-console mirror, stderr), and a rejection increments `wire.errors`.
+Writes go through the document's one door, `world.row.set`/`world.row.remove`
+over `hud.*` (`WorldRowCommandModule`, see [console.md](console.md)):
+Simulation-routed, submitting a mutation and returning `CommandResult.None` —
+NO synchronous echo; the outcome arrives a tick later through
+`WorldServer.EchoTap` (toast, console mirror, stderr), and a rejection
+increments `wire.errors`. The read-backs `world.hud` and `world.hud.template`
+live in `WorldHudCommandModule`, unbindable.
 
 - `world.row.set hud.panels <panel-json>` → `UpsertHudPanel` (whole row,
   elements included — the cross-row transaction boundary).
@@ -385,7 +388,7 @@ destroy quotes) and parsed through `WorldJsonPayload.TryParse` against
 `WorldJsonContext` — the exact wire shape of the document row; a parse
 failure echoes inline (`IsError`) and submits nothing.
 
-**The player-scope panel is edited elsewhere.** `world.hud.*` writes only the
+**The player-scope panel is edited elsewhere.** `world.row.set hud.*` writes only the
 WORLD-scope section; an identity's private panel is edited through the owned
 identity's own door — `identity.hud <panel-json> [player]`
 (`IdentityCommandModule`) — not through this module and not through a
@@ -399,7 +402,10 @@ no `EchoTap` tick-later arrival, and a refusal leaves the document untouched.
 
 ## Verifying
 
-No committed battery covers the HUD document. Validate by RUNNING THE APP;
+`HudFrameElementValidationLawTests`/`HudBindingTargetFacetTests` (`tests/Puck.World.Schema.Tests`),
+`HudFrameSourceGenerationLawTests` (`tests/Puck.World.Client.Tests`), `WorldHudRoutedSeatLawTests`
+(`tests/Puck.World.Tests`) and the `hud-frame-slots` canary cover parts of the HUD; validate the
+rest by RUNNING THE APP;
 the ad hoc recipes below are the live method.
 Ad hoc, world scope: `world.row.set hud.panels` a panel with a bound gauge,
 `world.wait`, read `world.hud`, screenshot for the pixel assertion, then

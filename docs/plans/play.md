@@ -462,8 +462,8 @@ body reuse, observe denial, cancellation, and saturation against the real
 host; concurrent document edits and malformed candidates, disk failures, codec
 declines, drops, stale recording handles, timeout after dispatch, and replay
 arming refusal, with the console available throughout. The Operator half is
-checked by the `McpAdversarialTests`, `McpInteropTests` and `RemoteMcp*Tests`
-suites in `tests/Puck.Cli.Tests`.
+checked by the `McpAdversarialTests` and `RemoteMcp*Tests` suites in
+`tests/Puck.Mcp.Tests` and `McpInteropTests` in `tests/Puck.Cli.Tests`.
 
 ### MCP — the remote surface
 

@@ -48,14 +48,23 @@ bool sdfIndirectShadeHit(float3 surfacePoint, float3 direction, uint4 hit, uint 
     return true;
 }
 
+// One stored ray's source word in the split-probe scratch.
+uint sdfIndirectShadeScratchAddress(uint ray, uint source) {
+    return sdfIndirectShadeScratchWordOffset(passGroup.indirectTier) + ray * SdfIndirectRadianceWords + source;
+}
+
 // All lanes enter, including dormant and inactive probes. No field query classifies a probe during shading.
+// Rays [rayFirst, rayEnd) run. A probe split across chunks stores each ray's packed sources, unresolved as the
+// reserved sample, and its last chunk reduces every stored ray, the same values the whole probe reduces.
 void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint readGeneration, uint readPublication,
-    uint writeGeneration, uint writePublication, float feedbackGain) {
+    uint writeGeneration, uint writePublication, float feedbackGain, uint rayFirst, uint rayEnd) {
     SdfIndirectPlacement probe = sdfIndirectReadProbe((int)index);
     bool active = probe.classification == SdfIndirectClassActive || probe.classification == SdfIndirectClassRelocated;
     uint rays = sdfIndirectRaysPerProbe(passGroup.indirectTier);
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
+    bool split = rayFirst != 0u || rayEnd < rays;
     [loop] for (uint ray = lane; ray < SdfIndirectMaximumRaysPerProbe && ray < rays; ray += 64u) {
+        if (ray < rayFirst || ray >= rayEnd) { continue; }
         float3 direction = sdfIndirectDirection(lattice, level, ray);
         uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + (index * rays + ray) * SdfIndirectHitWords;
         uint4 hit = active ? uint4(sdfIndirectLoad(address), sdfIndirectLoad(address + 1u),
@@ -78,14 +87,34 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
         // Unresolved rays contribute no source and never enter the cosine denominator.
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
             uint packed = sdfIndirectPackRadiance((passGroup.indirectSources & (1u << source)) != 0u ? result.values[source] : 0.0);
+            uint stored = kind == SdfIndirectKindUnresolved ? SdfIndirectUnresolvedSample : packed;
             sdfIndirectShaded[ray].values[source] = sdfIndirectUnpackRadiance(packed);
             if (index >= sdfIndirectRadianceProbeOffset(passGroup.indirectTier)) {
-                sdfIndirectStore(sdfIndirectRadianceAddress(index, ray, writeGeneration) + source,
-                    kind == SdfIndirectKindUnresolved ? SdfIndirectUnresolvedSample : packed);
+                sdfIndirectStore(sdfIndirectRadianceAddress(index, ray, writeGeneration) + source, stored);
             }
+            if (split) { sdfIndirectStore(sdfIndirectShadeScratchAddress(ray, source), stored); }
         }
         sdfIndirectShadedDirections[ray] = direction;
         sdfIndirectShadedKinds[ray] = kind;
+    }
+    if (split && rayEnd < rays) {
+        // Not the probe's last chunk: its rays wait in the scratch, and no irradiance texel is written yet.
+        puckCountDetail(detail, 0u, 0u, 0u, sdfIndirectHashes, sdfIndirectLoads);
+        if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; }
+        puckCountWork(sdfWorkSteps, 0u);
+        return;
+    }
+    if (split) {
+        DeviceMemoryBarrierWithGroupSync();
+        [loop] for (uint stored = lane; stored < SdfIndirectMaximumRaysPerProbe && stored < rays; stored += 64u) {
+            bool resolved = sdfIndirectLoad(sdfIndirectShadeScratchAddress(stored, 0u)) != SdfIndirectUnresolvedSample;
+            [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
+                uint word = sdfIndirectLoad(sdfIndirectShadeScratchAddress(stored, source));
+                sdfIndirectShaded[stored].values[source] = resolved ? sdfIndirectUnpackRadiance(word) : 0.0;
+            }
+            sdfIndirectShadedDirections[stored] = sdfIndirectDirection(lattice, level, stored);
+            sdfIndirectShadedKinds[stored] = resolved ? SdfIndirectKindHit : SdfIndirectKindUnresolved;
+        }
     }
     GroupMemoryBarrierWithGroupSync();
     uint2 texel = uint2(lane % SdfIndirectIrradianceEdge, lane / SdfIndirectIrradianceEdge);

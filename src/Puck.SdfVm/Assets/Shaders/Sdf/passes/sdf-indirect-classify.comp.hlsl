@@ -15,11 +15,14 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     if (passGroup.indirectTier == SdfIndirectTierOff) { return; }
     bool placing = passGroup.indirectPhase == 0u;
     uint count = placing ? passGroup.indirectPlaceCount : passGroup.indirectClassifyCount;
-    if (group.x >= count || group.x >= sdfIndirectClassifyBudget(passGroup.indirectTier)
+    uint item = passGroup.indirectItemFirst + group.x;
+    // Each lane is one admission unit: a probe's placement or a cell's partition, run only inside the chunk.
+    if (item >= count || item >= sdfIndirectClassifyBudget(passGroup.indirectTier)
         || passGroup.indirectPlaceCount > sdfIndirectClassifyBudget(passGroup.indirectTier)
-        || !sdfIndirectRange(0u, sdfIndirectWordCount(passGroup.indirectTier))) { return; }
+        || !sdfIndirectRange(0u, sdfIndirectWordCount(passGroup.indirectTier))
+        || !sdfIndirectChunkUnit(group.x, lane, SdfIndirectProbesPerBrick)) { return; }
     sdfProgramLayout = sdfLoadProgramLayout();
-    uint row = group.x + (placing ? 0u : passGroup.indirectPlaceCount);
+    uint row = item + (placing ? 0u : passGroup.indirectPlaceCount);
     uint length, stride;
     indirectUpdates.GetDimensions(length, stride);
     if (row >= length) { return; }

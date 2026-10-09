@@ -284,7 +284,7 @@ in `tests/Puck.World.Games.Tests` ignores a mismatched
 header, re-derives a chunk whose version or asset input moved while keeping the
 rest, admits byte for byte the definition a fresh draw admits, and pins each
 derivation's product to its version; `WorldDocumentOutputLawTests` in
-`tests/Puck.Cli.Tests` holds every shipped compiled world to what its document
+`tests/Puck.Cli.Worlds.Tests` holds every shipped compiled world to what its document
 derives fresh, byte for byte. Still open:
 
 - A hit still validates and compiles rules like a miss. Admitting a compiled

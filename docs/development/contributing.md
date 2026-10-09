@@ -70,30 +70,46 @@ Puck keeps per-user state and caches in one directory, `Puck` under your local
 application data: `%LOCALAPPDATA%/Puck` on Windows and `~/.local/share/Puck` on
 Linux, or the temporary directory when the platform names no such folder
 (`PuckUserDirectory` in `Puck.Abstractions`). Each owner keeps one lower-case
-subdirectory there:
+subdirectory there. Every cache among them is bounded:
 
-| Subdirectory | Owner |
-|---|---|
-| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) |
-| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds |
-| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
-| `bakes` | The creation bakes presentations make, shared the same way |
-| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
-| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` |
-| `compilations` | The `.puck` compile cache the game and the CLI share |
-| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) |
-| `corpora` | The conformance corpora the emulator batteries fetch |
+| Subdirectory | Owner | Bound |
+|---|---|---|
+| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipeline-cache` keeps 8 files per backend, and its `pipelines` shader cache is bounded as `shaders` is |
+| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds | 4096 objects, 256 MiB |
+| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root | 1024 files, 256 MiB |
+| `bakes` | The creation bakes the game's build, `puck compile --tree`, `puck parity` and presentations make, shared by every checkout | 8192 objects, 512 MiB |
+| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run | 4 builds |
+| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
+| `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
+| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) | 4096 files, 1 GiB |
+| `corpora` | The conformance corpora the emulator batteries fetch | none: a fixed fetched set |
+
+Every bound follows one policy, `CacheRetention` in `Puck.Abstractions`: least
+recently used out. An entry's last use is its stamp, the last write time of the
+file or directory that stands for it; an owner stamps an entry when it reads
+it, and writing one stamps it. When an owner writes, it removes the least
+recently used entries beyond its bound, keeps the entry it is using whatever its
+stamp, and leaves an entry another process holds open. A process lists a
+directory for this at most once a minute, so a build that publishes many
+entries pays for one listing. Every cache is content-addressed, so an evicted
+entry costs its next reader a derivation, never a different answer.
+`puck shaders cache prune` applies the same policy with an age bound instead.
 
 ## Temporary directories
 
 Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
-into file apps. A directory gets a prefix that names its owner and a unique
-suffix. A run that passes deletes it. A run that fails keeps it and names its
-absolute path in a `run directory kept: <path>` line. The first directory a
-process creates under a prefix deletes that prefix's directories older than six
-hours, which clears a killed run's leftovers. The
+into file apps. A directory is named `<kind><process id>-<token>`: its kind,
+which starts with `puck-` and names its owner, the process that created it, and
+a unique token. A run that passes deletes it. A run that fails keeps it, names
+its absolute path in a `run directory kept: <path>` line, and trims its kind: of
+the kind's directories whose process has finished, the newest four stay and the
+rest go. The first directory a process creates sweeps every kind the same way
+and also removes any finished process's directory older than six hours, which
+clears a killed run's leftovers and the evidence of kinds that never run again.
+A directory whose process still runs is never removed, however old, and a
+process id that a later process reuses is told apart by its start time. The
 [CLI conventions](../reference/cli.md#conventions) list the verbs that follow
 it and the directories that are deleted whatever the outcome.
 
@@ -107,6 +123,31 @@ verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
 law ends. A deletion failure fails a passing law, so a handle the code under
 test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
 host may still hold a file as it is disposed.
+
+## Build output and hard links
+
+Every project copies its dependency closure into its own `bin`, so a built
+tree would hold each package and Puck assembly many times over.
+`Directory.Build.props` makes those copies hard links instead: each package
+file links to the NuGet global cache, each project reference to the referenced
+project's `bin`, and each `None` or `Content` item with `CopyToOutputDirectory`
+(assets, fonts, shader bytecode, world outputs) to the file the item names. A
+built tree therefore holds one file per distinct output.
+
+A hard link is the same file under another name, so writing an output file in
+place writes every name at once: the NuGet global cache, other projects'
+outputs, and the repository's own sources. Never open a file under `bin`, a
+publish directory, or a file a build ships as content for writing, truncating
+or appending. Replace it instead: write the new bytes with `AtomicFile`, or
+delete the file before writing a new one. An inline MSBuild task, which cannot
+reference `AtomicFile`, writes a temporary file beside the destination and moves
+it over the destination. The compiler is the one writer that rewrites its
+outputs in place (`obj/<name>.dll`, `.pdb` and `.xml`), so the copy from `obj` to
+`bin` and the copy into a publish directory stay plain copies;
+`BuildOutputLinkLawTests` fails when a `bin` file shares its file with a
+compiler output. A build into a directory that outlives it, such as the World
+builds in `world-builds`, passes `--output` and links no content items, since
+an editor saving a source in place would otherwise rewrite the kept build.
 
 ## C# file apps
 
@@ -427,13 +468,13 @@ one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
 
-`tests/Puck.Cli.Tests/Official/OfficialBuildCommandTests.cs` builds a real
+`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real
 `puck.official.manifest.v1` tree from this checkout's own worlds and the
 browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
@@ -490,11 +531,11 @@ must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
 describes. The build compiles through the runtime's `ShaderCompiler` into the
 per-user shader cache, keyed by each source's include closure, its options and
-the DXC, not by the checkout. A cold machine compiles every kernel once, many at
-a time on the cores MSBuild grants, the longest first. After that, a fresh
-worktree on any commit compiles only the outputs whose closure it changed, and
-editing one `.hlsli` recompiles only the outputs that include it, so no special
-build flags are needed. The [shader reference](../reference/shaders.md#freshness)
+the DXC, not by the checkout. A cold machine compiles missing outputs on the
+cores MSBuild grants, the longest first. A fresh worktree reuses valid entries
+with matching closures, options, and toolchain; editing one `.hlsli`
+invalidates only the outputs that include it. No special build flags are
+needed. The [shader reference](../reference/shaders.md#freshness)
 owns the cache, its `PuckShaderCacheDirectory` override and the publication rules.
 The `Puck.World` build also packages every pipeline source a shipped
 world names into the [package store](../reference/shaders.md#the-builds-package-store)
@@ -654,6 +695,13 @@ meant to establish.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
+- xUnit runs the laws of one class one after another and runs classes side by
+  side, so a suite takes at least as long as its slowest class. When a class's
+  laws each start processes, builds or scratch repositories, put its fixtures
+  and helpers in an abstract base and its laws in sealed classes over it
+  (`GateRunLaws`, `ShaderBuildTargetsLaws`). A law that proves a real process
+  boundary keeps the process; share its cost instead, for example by planning a
+  gate's change once and executing it under each runner.
 
 ## Code and documentation conventions
 
@@ -726,6 +774,24 @@ meant to establish.
   `EnvironmentReadAllowlist`, and on any read whose name is not a compile-time
   constant. Make a switch a flag, a document or profile setting, or a test
   fixture instead ([configuration and diagnostics](#configuration-and-diagnostics)).
+- A listener takes its address from configuration and defaults to loopback
+  (`127.0.0.1`, or `::1` where the code is IPv6-first). A QUIC listener is the
+  one the address cannot narrow: on Windows, msquic opens its UDP port on
+  `0.0.0.0` and `[::]` whatever address it is given, and Windows Firewall asks
+  about every interface bind once per executable image path. So every process
+  the repository starts locally that may listen runs under the shared host,
+  `dotnet <assembly>.dll`, never a per-worktree apphost. `Directory.Build.targets`
+  points `dotnet test` and `dotnet run` of every test project, and of an
+  executable that sets `PuckRunUnderDotnetHost` (the silo), at
+  `dotnet exec <assembly>.dll`; the apphost is still built, because xUnit v3
+  requires one and a published executable ships its own. Every `puck` runner
+  starts `dotnet <suite>.dll`, and canaries, parity, counters and `puck test`
+  start `dotnet Puck.World.dll`. One firewall decision for `dotnet.exe` then
+  covers every worktree and run. `Puck.Analyzers` fails the build with NET001
+  on `IPAddress.Any`, `IPAddress.IPv6Any`, Kestrel's `ListenAnyIP`, a
+  port-only `TcpListener` or `UdpClient`, and any literal spelling `0.0.0.0`,
+  `[::]` or a `*`/`+` wildcard URL host, outside the deployment sites
+  `AnyAddressBindAllowlist` names with their reasons.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered

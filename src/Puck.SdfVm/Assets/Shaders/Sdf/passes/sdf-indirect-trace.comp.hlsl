@@ -131,13 +131,17 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         puckCountDetail(4u, 0u, 1u, 0u, 0u, 0u);
         if (passGroup.workCounterRowDetail == 0u) { puckCountWork(0u, 1u); }
     }
-    if (group.x >= passGroup.indirectTraceCount || group.x >= sdfIndirectTraceBudget(passGroup.indirectTier)
+    uint item = passGroup.indirectItemFirst + group.x;
+    if (item >= passGroup.indirectTraceCount || item >= sdfIndirectTraceBudget(passGroup.indirectTier)
         || passGroup.indirectPlaceCount > sdfIndirectClassifyBudget(passGroup.indirectTier)
-        || passGroup.indirectClassifyCount > sdfIndirectClassifyBudget(passGroup.indirectTier)) { return; }
+        || passGroup.indirectClassifyCount > sdfIndirectClassifyBudget(passGroup.indirectTier)
+        || !sdfIndirectChunkTouches(group.x, 64u)) { return; }
+    // Each lane is one admission unit, a ray of the stratum; every lane still joins the group's gather and barrier.
+    bool active = sdfIndirectChunkUnit(group.x, lane, 64u);
     sdfProgramLayout = sdfLoadProgramLayout();
     uint4 update;
     int3 lattice;
-    if (!sdfIndirectProbeUpdate(passGroup.indirectPlaceCount + passGroup.indirectClassifyCount + group.x, update, lattice)
+    if (!sdfIndirectProbeUpdate(passGroup.indirectPlaceCount + passGroup.indirectClassifyCount + item, update, lattice)
         || update.y >= sdfIndirectRaysPerProbe(passGroup.indirectTier) / 64u) { return; }
     uint index = update.x;
     uint level = update.z;
@@ -145,28 +149,33 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     float reach = sdfIndirectReach(passGroup.indirectTier, level);
     uint gather = sdfIndirectGather(probe.position, reach, lane);
     if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) { return; }
-    uint ordinal = lane * (sdfIndirectRaysPerProbe(passGroup.indirectTier) / 64u) + update.y;
-    sdfIndirectProofOwner = ordinal == 0u ? index : 0xffffffffu;
-    float3 direction = sdfIndirectDirection(lattice, level, ordinal);
-    sdfIndirectRun(sdfIndirectTraceBegin(probe.position, direction, reach, gather, level));
-    SdfIndirectRay ray = sdfIndirectTraceProc.ray;
-    uint mask = sdfIndirectTraceProc.mask;
-    uint proofLevel = sdfIndirectTraceProc.proofLevel;
-    if (ray.kind == SdfIndirectKindUnresolved || ray.kind == SdfIndirectKindExit) { mask = 0u; }
-    uint4 packed = sdfIndirectPackRay(ray, mask, proofLevel);
-    uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + (index * sdfIndirectRaysPerProbe(passGroup.indirectTier) + ordinal) * SdfIndirectHitWords;
-    sdfIndirectStore(address, packed.x);
-    sdfIndirectStore(address + 1u, packed.y);
-    sdfIndirectStore(address + 2u, packed.z);
-    sdfIndirectStore(address + 3u, packed.w);
+    SdfIndirectRay ray = (SdfIndirectRay)0;
+    ray.kind = SdfIndirectKindUnresolved;
+    if (active) {
+        uint ordinal = lane * (sdfIndirectRaysPerProbe(passGroup.indirectTier) / 64u) + update.y;
+        sdfIndirectProofOwner = ordinal == 0u ? index : 0xffffffffu;
+        float3 direction = sdfIndirectDirection(lattice, level, ordinal);
+        sdfIndirectRun(sdfIndirectTraceBegin(probe.position, direction, reach, gather, level));
+        ray = sdfIndirectTraceProc.ray;
+        uint mask = sdfIndirectTraceProc.mask;
+        uint proofLevel = sdfIndirectTraceProc.proofLevel;
+        if (ray.kind == SdfIndirectKindUnresolved || ray.kind == SdfIndirectKindExit) { mask = 0u; }
+        uint4 packed = sdfIndirectPackRay(ray, mask, proofLevel);
+        uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + (index * sdfIndirectRaysPerProbe(passGroup.indirectTier) + ordinal) * SdfIndirectHitWords;
+        sdfIndirectStore(address, packed.x);
+        sdfIndirectStore(address + 1u, packed.y);
+        sdfIndirectStore(address + 2u, packed.z);
+        sdfIndirectStore(address + 3u, packed.w);
+    }
     DeviceMemoryBarrierWithGroupSync();
-    if (lane == 0u) { InterlockedOr(indirectCacheRW[index * SdfIndirectProbeWords + 3u], 1u << (SdfIndirectTracedShift + update.y)); }
+    // The stratum's last ray marks it traced: every earlier ray was written by this group or an earlier chunk.
+    if (active && lane == 63u) { InterlockedOr(indirectCacheRW[index * SdfIndirectProbeWords + 3u], 1u << (SdfIndirectTracedShift + update.y)); }
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
-    sdfWorkTexels = 1u;
+    sdfWorkTexels = active ? 1u : 0u;
     puckCountDetail(detail, sdfIndirectEvaluations - sdfIndirectLaunchEvaluations - sdfIndirectProofEvaluations, sdfWorkTexels, 0u, 0u, 0u);
     puckCountDetail(3u, sdfIndirectLaunchEvaluations, 0u, 0u, 0u, 0u);
     puckCountDetail(4u, sdfIndirectProofEvaluations, 0u, 0u, 0u, 0u);
-    puckCountIndirect(detail, 0u, 0u, ray.kind == SdfIndirectKindUnresolved ? 1u : 0u);
+    puckCountIndirect(detail, 0u, 0u, (active && ray.kind == SdfIndirectKindUnresolved) ? 1u : 0u);
     // A detail row holds this lane's work when the pass has detail rows; the plain row then adds none of it.
     if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);

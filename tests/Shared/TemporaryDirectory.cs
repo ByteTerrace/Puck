@@ -19,7 +19,8 @@ namespace Puck.Testing;
 /// </para>
 /// <para>
 /// The verdict decides the rest (<see cref="Conclude"/>). A law that fails keeps the directory and writes its absolute
-/// path to the law's output as a <see cref="RunDirectory.KeptLine"/>, so the evidence survives. A law that passes deletes
+/// path to the law's output as a <see cref="RunDirectory.KeptLine"/>, so the evidence survives, and trims its kind to the
+/// newest directories of finished runs (<see cref="RunDirectory.Trim"/>). A law that passes deletes
 /// it, retrying while a handle closes, within the same bound; a delete that never completes fails the law naming its
 /// last error and what is still present. Nothing is deleted until every file has been read through a handle that no
 /// writer can hold beside, so each read is the file's final state, and a file that is new or changed since the owners
@@ -326,6 +327,7 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
         if (!passed || m_shutDownFailed) {
             if (Directory.Exists(path: RootPath)) {
                 Xunit.TestContext.Current.TestOutputHelper?.WriteLine(message: RunDirectory.KeptLine(path: RootPath));
+                _ = RunDirectory.Trim(kept: RootPath);
             }
 
             return;

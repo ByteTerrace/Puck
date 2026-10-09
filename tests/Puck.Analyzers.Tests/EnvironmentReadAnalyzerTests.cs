@@ -76,7 +76,7 @@ public sealed class EnvironmentReadAnalyzerTests {
             """;
 
         Assert.Empty(collection: Run(
-            assemblyName: "Puck.Cli",
+            assemblyName: "Puck.Cli.Core",
             body: Body
         ).Analyzer);
         Assert.Contains(

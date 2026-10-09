@@ -22,16 +22,15 @@ change you were asked to make is stale; correct it in the same change.
 
 A document's own `schema:` field selects its vocabulary — never the filename.
 Every tracked `.puck` file is spelled as a bare `*.puck`; the shipped
-cartridges additionally carry `.cgb.` in their name as an author convention,
-not a parser rule. `.puck` authors every shipped CGB cartridge
-(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, each gated byte-for-byte against
+cartridges additionally carry `.cgb.` or `.agb.` in their name as an author
+convention, not a parser rule. `.puck` authors every shipped cartridge
+(`tetromino.cgb.puck`, `hgb-mirror.cgb.puck`, `light-gun.cgb.puck`, `pip.agb.puck`, each gated byte-for-byte against
 its committed `.cartridge.json` twin — see below), the worlds under
 `src/Puck.World/Assets/worlds/` (avatars, games, tools, `moth-courtyard.puck`),
 the asset packages under `worlds/`, and the `Puck.World.Transpiler` test
 fixtures; `git ls-files '*.puck'` is the current list. **The live game's own document,
-`Assets/worlds/puck.world.json`, and the one AGB cartridge,
-`Assets/cartridges/pip.agb.cartridge.json`, have no `.puck` source at all** —
-they are authored and shipped as raw JSON. Say so plainly rather than treating
+`Assets/worlds/puck.world.json`, has no `.puck` source at all** — it is
+authored and shipped as raw JSON. Say so plainly rather than treating
 "DSL is the primary authoring surface" as already true everywhere.
 
 **Cartridge sources are regeneration-gated; world sources are not paired.**
@@ -67,7 +66,7 @@ worlds under `src/Puck.World/Assets/worlds`, the packages under `worlds/`
 importers) and the transpiler samples — less a shrinking exemption ledger whose
 every row is held to its reason.
 
-**Every shipped source is lint- and format-gated.** `tests/Puck.Cli.Tests/ShippedSourceLintLawTests.cs`
+**Every shipped source is lint- and format-gated.** `tests/Puck.Cli.Worlds.Tests/ShippedSourceLintLawTests.cs`
 runs `puck lint --strict` over every tracked source under `worlds/`,
 `src/Puck.World/Assets` (cartridges included) and `tests/Puck.World.Verdicts`, and
 `FormatProjectionLawTests` holds every tracked source to what `puck format` prints. A
@@ -112,8 +111,8 @@ through the emulator battery, never a standalone driver (`gaming-bricks`,
 `rom-forge`). A committed source additionally owes the byte-for-byte
 regeneration gate above before merge.
 
-`puck format` (`src/Puck.Cli/Format/FormatCommand.cs`) formats every source kind Puck owns: a `.puck` file goes
-through `PuckPrinter` (`src/Puck.Cli/Format/PuckSourcePhase.cs`, the `puck` pass), a `.cs` file through the C#
+`puck format` (`src/Puck.Cli.Format/Format/FormatCommand.cs`) formats every source kind Puck owns: a `.puck` file goes
+through `PuckPrinter` (`src/Puck.Cli.Format/Format/PuckSourcePhase.cs`, the `puck` pass), a `.cs` file through the C#
 phases `boy-scout` describes. The language server's formatting request prints through the same `PuckPrinter`, so
 the editor and the CLI write identical text. The printer has one layout: `PuckPrinter.IndentWidth` (2) spaces a
 level, with no indent or tab option anywhere, and the editor's `tabSize`/`insertSpaces` are ignored.
@@ -158,7 +157,8 @@ for a run that succeeded; `build/WorldAssets.targets` ships exactly that report
 (`TreeCompileReportLawTests`), since the run is what wrote them.
 `--bake-cache <directory>` reads and keeps the run's creation bakes in that
 content-addressed cache, so only keys the cache lacks are baked and the pack's
-bytes do not change; the build passes `obj/bakes`, and `--check` refuses it
+bytes do not change; the build passes the per-user `bakes` cache every checkout
+shares, and `--check` refuses it
 (`TreeBakeCacheLawTests`). `asset "path"` references use one `<stem>.assets.json` lock
 beside the root source; ordinary compilation verifies its full SHA-256 pins,
 while `--update-assets` is the only compile mode that replaces them. Every

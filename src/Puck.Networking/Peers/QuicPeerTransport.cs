@@ -70,6 +70,24 @@ public sealed class QuicPeerTransport : IPeerTransport {
         QuicConnection.IsSupported
     );
 
+    /// <summary>Returns the local endpoint a dial to <paramref name="remote"/> binds: the loopback address of the
+    /// remote's family when the remote is on loopback, so a local dial opens no socket on a network interface, and
+    /// <see langword="null"/> otherwise, letting the operating system choose the interface that routes to it.</summary>
+    /// <param name="remote">The endpoint being dialed.</param>
+    /// <returns>The loopback endpoint on an ephemeral port, or <see langword="null"/>.</returns>
+    private static IPEndPoint? LocalEndPointFor(EndPoint remote) => ((
+        (remote is IPEndPoint { Address: { IsIPv4MappedToIPv6: false } address }) &&
+        IPAddress.IsLoopback(address: address)
+    )
+        ? new IPEndPoint(
+            address: ((address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+                ? IPAddress.IPv6Loopback
+                : IPAddress.Loopback
+            ),
+            port: 0
+        )
+        : null
+    );
     private static bool AcceptAnyPresentedCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors) => (certificate is not null);
     private static ReadOnlyMemory<byte> TransportKeyOf(QuicConnection connection) {
         // Reading RemoteCertificate transfers ownership of the certificate object to the caller, so it is disposed
@@ -99,6 +117,7 @@ public sealed class QuicPeerTransport : IPeerTransport {
                 DefaultStreamErrorCode = 0,
                 HandshakeTimeout = m_handshakeTimeout,
                 KeepAliveInterval = KeepAliveInterval,
+                LocalEndPoint = LocalEndPointFor(remote: endpoint),
                 MaxInboundBidirectionalStreams = MaxInboundStreams,
                 RemoteEndPoint = endpoint,
             }

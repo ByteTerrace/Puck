@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The shader verbs (`puck shaders`): declarations, packages, the compiler cache, comparison and collection. -->
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Shaders</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
+        <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+    </ItemGroup>
+</Project>

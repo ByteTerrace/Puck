@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.Shaders;
 
@@ -10,7 +11,7 @@ public sealed partial class ShaderBuild {
 
     private const int Attempts = 20;
 
-    private readonly Lock m_publication = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lock> PublicationGates = new(comparer: PuckPaths.Comparer);
 
     /// <summary>Returns the text of the sidecar a build publishes beside an output.</summary>
     /// <param name="plan">The output's plan.</param>
@@ -27,11 +28,13 @@ public sealed partial class ShaderBuild {
     // the holder ends, so a crashed build leaves no lock behind. Another process's hold is waited for, up to five
     // minutes. Every hold is a synchronous block, released on the thread that took it.
     private PublicationLock AcquireLock() {
-        m_publication.Enter();
+        var gate = PublicationGates.GetOrAdd(key: m_lockFile, valueFactory: static _ => new Lock());
+
+        gate.Enter();
         try {
-            return new PublicationLock(file: OpenLock(), gate: m_publication);
+            return new PublicationLock(file: OpenLock(), gate: gate);
         } catch {
-            m_publication.Exit();
+            gate.Exit();
 
             throw;
         }

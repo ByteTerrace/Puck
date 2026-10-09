@@ -3,7 +3,8 @@
         The shared shader build. DXC compiles HLSL to SPIR-V (Vulkan) and DXIL (DirectX) from whatever
         @(VertexShaderSource)/@(FragmentShaderSource)/@(ComputeShaderSource) items a consuming project declares in its
         own csproj; this file adds no stage sources and no project-specific branching. Imported once by
-        Directory.Build.targets into every project; a project declaring none of the three item types runs nothing here.
+        Directory.Build.targets into every project; a project declaring none of the three item types runs nothing here
+        unless bytecode remains under its Assets/Shaders, which the build then removes as it removes any deleted source's.
         Per-project knobs, set in a project's own PropertyGroup before this file imports: $(DxcCommand) (default "dxc",
         a bare name resolved on the search path or a path to the executable), $(PuckShaderDxilEnabled) (default true:
         vertex and fragment DXIL), $(PuckComputeShaderDxilEnabled) (default true: compute DXIL) and
@@ -29,7 +30,7 @@
             <ProjectDirectory ParameterType="System.String" Required="true" />
             <LockFile ParameterType="System.String" Required="true" />
             <RequestFile ParameterType="System.String" Required="true" />
-            <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+            <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <CacheDirectory ParameterType="System.String" />
             <DxcCommand ParameterType="System.String" />
         </ParameterGroup>
@@ -82,6 +83,7 @@
     <!-- One output a stage source and enabled target, written beside the source as <stem>.spv or <stem>.dxil with a
          <stem>.<target>.hash sidecar. -->
     <ItemGroup>
+        <_PuckExistingShaderBytecode Include="$(MSBuildProjectDirectory)/Assets/Shaders/**/*.spv;$(MSBuildProjectDirectory)/Assets/Shaders/**/*.dxil" />
         <PuckShaderOutput Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')" Condition="'$(PuckShaderSpirvEnabled)' == 'true'">
             <Stage>Vertex</Stage>
             <Backend>Spirv</Backend>
@@ -114,7 +116,7 @@
         </PuckShaderOutput>
     </ItemGroup>
 
-    <Target Name="ResolveShaderBuildTool" Condition="'@(PuckShaderOutput)' != '' and '$(PuckShaderBuildTool)' == ''">
+    <Target Name="ResolveShaderBuildTool" Condition="('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '') and '$(PuckShaderBuildTool)' == ''">
         <MSBuild Projects="$(_PuckShaderBuildToolProject)" Targets="GetTargetPath" RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained">
             <Output PropertyName="PuckShaderBuildTool" TaskParameter="TargetOutputs" />
         </MSBuild>
@@ -123,7 +125,7 @@
     <!-- Makes every output current: publishes what the cache holds and compiles the rest, with no compiler run while the
          project's publication lock is held. A kernel may include a declaration generated from C# (sdf-isa.hlsli, a
          *.interface.hlsli): the generator writes those as it builds, which ResolveProjectReferences finishes first. -->
-    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'@(PuckShaderOutput)' != ''" DependsOnTargets="ResolveShaderBuildTool">
+    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != ''" DependsOnTargets="ResolveShaderBuildTool">
         <PuckShaderBuild CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
         <PropertyGroup>
             <_PuckShadersCompiled>true</_PuckShadersCompiled>
@@ -133,7 +135,7 @@
     <!-- Ships every output as content. A build has just made each one current under the publication lock; a pack that
          skips the build (CI packs over a finished build) instead checks that each is on disk with the sidecar its
          current closure and options publish, compiling nothing, so it ships exactly what a build would. -->
-    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'@(PuckShaderOutput)' != ''" DependsOnTargets="ResolveShaderBuildTool">
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != ''" DependsOnTargets="ResolveShaderBuildTool">
         <PuckShaderBuild Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
         <ItemGroup>
             <Content Include="@(PuckShaderOutput)" CopyToOutputDirectory="PreserveNewest" RemoveMetadata="Stage;Backend;SourcePath" />

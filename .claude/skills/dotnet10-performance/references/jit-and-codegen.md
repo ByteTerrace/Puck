@@ -205,7 +205,7 @@ All FREE; the actionable takeaway is to STOP hand-restructuring code for branch 
 
 All FREE on capable hardware unless marked API; existing binaries speed up when new CPUs arrive.
 
-- **Intel APX** (dotnet/runtime#106557, #108796, #113237 encodings; #108799 32 GPRs; #116035 push/pop; #111072, #112153, #116445 `ccmp`): 16 → 32 general-purpose registers (fewer spills) and conditional-compare instructions (fewer branches). Hardware barely shipping as of the post.
+- **Intel APX** (dotnet/runtime#106557, #108796, #113237 encodings; #108799 32 GPRs; #116035 push/pop; #111072, #112153, #116445 `ccmp`): 16 → 32 general-purpose registers (fewer spills) and conditional-compare instructions (fewer branches). Nothing to do; existing binaries benefit on APX hardware.
 - **AVX512 batch**: EVEX embedded broadcasts in more places (#109258, #109267, #108824); `Vector.Max/Min` (#116117); widening-intrinsic containment (#109474, #110736, #111778); `Vector128/256/512.Dot` (#111853); better k-mask handling (#110195, #110307, #117118); 32-byte fallback in frame zeroing (#115981); `ExtractMostSignificantBits` for `short`/`ushort`/`char` via EVEX masks (#110662 — feeds core-library `IndexOf` and friends); `ConditionalSelect` without masks (#113864). Guidance: prefer portable `Vector128/256/512` APIs — they keep inheriting better AVX512 codegen for free.
 - **AVX10.2** (dotnet/runtime#111209; #112535 FP min/max; #111775 FP conversions): single-instruction FP min/max with proper NaN semantics and conversions. FREE + API for the new intrinsics.
 - **GFNI intrinsics** (dotnet/runtime#109537) — API. GF(2^8) hardware ops for Reed-Solomon/erasure coding/AES-adjacent transforms; check these before table-based implementations.
@@ -225,7 +225,7 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 
 ## Folklore to delete
 
-Hand-optimizations .NET 10 makes obsolete (or actively harmful — they add unsafety and obscure code for zero or negative gain). Verify with BenchmarkDotNet across `--runtimes net9.0 net10.0` when it matters, but the default is: delete.
+Hand-optimizations .NET 10 makes obsolete (or actively harmful — they add unsafety and obscure code for zero or negative gain). Confirm with disassembly when it matters, but the default is: delete.
 
 - **"Use `Unsafe.Add`/pointers to skip bounds checks on masked/shifted or `Log2`-bounded table indices."** The JIT proves these in range; the BCL deleted its own unsafe versions (`Log2SoftwareFallback`, `CountDigits`) and got simpler *and* faster.
 - **"Lambdas/`Func<>` in hot paths always cost a 64 B delegate allocation."** Non-escaping delegates with inlined consumers are elided. (Captured-state display classes still allocate — that half survives.)

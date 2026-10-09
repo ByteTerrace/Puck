@@ -37,14 +37,16 @@ public sealed class WorldIndirectCostLawTests(ITestOutputHelper output) {
             Assert.InRange(actual: shadeCost, high: SdfIndirectCost.SubmissionCostLimit, low: 1);
             Assert.True(condition: (shade < queryOnly), userMessage: "The actual parity field must split both tiers' query-only shade batches.");
 
-            var classifyQueries = (SdfIndirectCost.ClassifyQueries + SdfIndirectCost.PlaceQueries);
-            var classify = SdfIndirectCost.Admit(layout.ClassifyBudget, classifyQueries, instructions);
-            var trace = SdfIndirectCost.Admit(layout.TraceBudget, SdfIndirectCost.TraceQueries, instructions);
+            var place = SdfIndirectCost.WholeItems(count: layout.ClassifyBudget, instructionCount: instructions, units: SdfIndirectCost.PlaceUnits);
+            var classify = SdfIndirectCost.WholeItems(count: layout.ClassifyBudget, instructionCount: instructions, units: SdfIndirectCost.ClassifyUnits);
+            var trace = SdfIndirectCost.WholeItems(count: layout.TraceBudget, instructionCount: instructions, units: SdfIndirectCost.TraceUnits);
 
-            output.WriteLine(message: $"{tier}: classify bricks={classify}; trace strata={trace}");
+            output.WriteLine(message: $"{tier}: place bricks={place}; classify bricks={classify}; trace strata={trace}");
+            Assert.InRange(place, 1, layout.ClassifyBudget);
             Assert.InRange(classify, 1, layout.ClassifyBudget);
             Assert.InRange(trace, 1, layout.TraceBudget);
-            Assert.InRange(SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: (((long)classify) * classifyQueries)), 1, SdfIndirectCost.SubmissionCostLimit);
+            Assert.InRange(SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: (((long)place) * SdfIndirectCost.PlaceQueries)), 1, SdfIndirectCost.SubmissionCostLimit);
+            Assert.InRange(SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: (((long)classify) * SdfIndirectCost.ClassifyQueries)), 1, SdfIndirectCost.SubmissionCostLimit);
             Assert.InRange(SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: (((long)trace) * SdfIndirectCost.TraceQueries)), 1, SdfIndirectCost.SubmissionCostLimit);
         }
     }

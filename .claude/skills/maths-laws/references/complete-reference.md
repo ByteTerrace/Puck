@@ -437,8 +437,9 @@ Details that decide a declaration:
   declaration.
 - **A waiver is a category argument, not an apology.** Write one shared reason
   per category and cite it verbatim from every member of it; name the gate of
-  record that *does* pin the member (a battery section, a Post stage). An
-  individual reason appears only where the category does not honestly fit.
+  record that *does* pin the member (a law id, or an emulator battery stage).
+  `Puck.Post` is quarantined in `experimental/` and is never a gate of record.
+  An individual reason appears only where the category does not honestly fit.
 - Presentation boundaries — the points where a value leaves the deterministic
   world for the renderer — are **not** automatically waivable: lane order and
   narrowing rounding are decidable in integers, so they take laws. A lossy map
@@ -564,12 +565,6 @@ what actually executed rather than assuming a filter composed with the tier
 gate the way you expected, and remember that a filtered run regenerates only
 the artifacts of the checks it ran; the run that produces what you commit is
 the unfiltered Default tier, recorded with `puck baselines maths-ledger`.
-
-**Machine gotcha — `-c Release` must PRECEDE the file path** in any file-based
-`dotnet run <script>.cs`. Put it after and the script is silently built and run
-as Debug; Windows App Control then blocks loading the never-seen Debug binary
-(`FileLoadException 0x800711C7`) and the tool fails outright. Release outputs
-load cleanly.
 
 **Reading a failure.** The enriched message carries the domain key, the derived
 seed, the frontier index `k` and the raw operands, so it reproduces without

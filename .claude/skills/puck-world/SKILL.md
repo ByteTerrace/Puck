@@ -123,8 +123,8 @@ The agent projects are an optional extension family, not members of the base wor
 | `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter and the `agent.harness` participant | `WorldAgentHarness`, `WorldAgentHarnessOptions`, `WorldAgentParticipant`, `ChatClientProvider` (kind keyed by provider name, `AddChatClient`); constrained `puck_*` tools over the bridge, the configured `approval` decides whether the action tools are offered at all (`refuse`, the default, offers only observation; `allow` offers move, press and stop unattended), caller-supplied skills, no credentials |
 | `src/Puck.World.AgentHarness.Azure` | The optional `azure.openai` chat client provider | `AzureOpenAiChatClientExtension`; `DefaultAzureCredential`, settings `endpoint`/`deployment`/`tenantId`/`managedIdentityClientId`, no key member |
 
-`Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
-project. How a host runs an agent participant, the Operator MCP adapter, remote MCP, and their verification are in
+`Puck.World`, `tests/Puck.World.Tests` and the Server, Client, Games, Machines and Presentation suites, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
+project (`tests/Puck.World.Agents.Tests` owns the agent laws, and `tests/Puck.World.Silo.Tests` references `Puck.World.AgentHarness.Azure` only to compose extensions). How a host runs an agent participant, the Operator MCP adapter, remote MCP, and their verification are in
 [references/hosting-and-release.md](references/hosting-and-release.md#agent-participants-and-the-mcp-attachment).
 
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
@@ -314,7 +314,7 @@ reserved-prefix (`$`/`_`) keys. Adding a top-level section refuses at boot
 until every shipped world carries it; adding a nested member silently
 defaults at parse and (usually) refuses at validation — sweep the shipped
 worlds in the same change either way. `ShippedSourceLintLawTests`
-(`tests/Puck.Cli.Tests`) runs `puck lint --strict` over every shipped `.puck`
+(`tests/Puck.Cli.Worlds.Tests`) runs `puck lint --strict` over every shipped `.puck`
 source, so a sweep that leaves one red fails the suite. Any change to the
 document model is regenerated with `puck schema`, which writes the JSON
 Schemas, the dashboard portal's `worldDefinition.generated.ts` and the engine's
@@ -416,7 +416,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `WorldCacheRoots`, both handed to the boot (`WorldBootInputs`) and taken by
   every consumer from its host; only `Program.cs` names their per-user
   defaults (`world`, `bakes`, `compiled-worlds`, `compilations`), and
-  `WorldStateRootIsolationLawTests` (one per `tests/Puck.World*.Tests` suite) holds
+  `WorldStateRootIsolationLawTests` (one in `tests/Puck.World.Tests` and in each of the Server, Client, Games, Machines, Presentation and Silo suites) holds
   every assembly its suite links to that, so a fixture hands its own temporary
   roots. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.
@@ -584,7 +584,7 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
   least 4096 instances under the 65536 ceiling
   ([references/documents-render.md](references/documents-render.md#render-validation-and-stamp-capacity)).
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
-  `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
+  `bodies.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is single-sourced from it (`= WorldBodiesLimits.CapacityCeiling`), so the
   validator's admitted capacity and the client's fixed per-entity view arrays
   are the same number by construction. The client reserves detailed rigs for

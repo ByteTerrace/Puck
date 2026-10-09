@@ -29,8 +29,9 @@ public sealed class CreationBakeLawTests {
             { "id": "glint", "document": { "schema": "puck.creation.v1", "name": "glint", "palette": [{ "color": "#FFFFFF", "emissive": 0, "specular": 0, "roughness": 0 }], "shapes": [{ "id": 0, "name": "glint", "type": "Sphere", "position": [0, 0.2, 0], "rotation": [0, 0, 0, 1], "scale": [0.2, 0.2, 0.2], "material": 0, "blend": "Union", "detail": true }] } }
         ],
         """;
-    // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
-    private const string PinnedProduct = "sha256-64/0f33faf2a1689b91";
+    // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin, and so does a moved
+    // WorldBakePack shape fingerprint, which the pack's header carries.
+    private const string PinnedProduct = "sha256-64/b7b19fef3129ee10";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 

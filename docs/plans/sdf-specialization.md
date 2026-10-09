@@ -578,7 +578,7 @@ Residencies render specialized wherever a compiler can build their set.
 Shipped worlds boot specialized with no compiler, so the generic fallback no
 longer needs its per-program variants.
 
-- `src/Puck.Cli/Transpiler/CompileCommand.Tree.cs` writes each compiled world's
+- `src/Puck.Cli.Worlds/Transpiler/CompileCommand.Tree.cs` writes each compiled world's
   specialization into the store beside `WritePipelinePackages`, and
   `build/WorldAssets.targets` prunes stale entries as it does for packages.
 - `WorldSpecializationClosure` in `Puck.World.Client` computes a world's set

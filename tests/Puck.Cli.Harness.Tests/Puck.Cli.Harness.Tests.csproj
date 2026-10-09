@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Harness.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- What stages and describes a World run: artifacts, canary manifests, the refusal census. -->
+        <ProjectReference Include="../../src/Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+</Project>

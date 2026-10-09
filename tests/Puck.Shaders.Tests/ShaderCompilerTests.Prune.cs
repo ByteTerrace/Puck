@@ -1,9 +1,12 @@
+using Puck.Hosting;
+
 namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// A cache file's last write time is when a compile last used it: a hit stamps the entries it reads, planning stamps the
-/// duration record it reads and checking a plan stamps its entry, and a prune removes exactly the entries, duration records
-/// and abandoned staged publications no compile used since its cutoff, so what it keeps still answers the next compile.
+/// duration record it reads, checking a plan stamps its entry and a publication a peer won stamps the entry it found, and a
+/// prune removes exactly the entries, duration records and abandoned staged publications no compile used since its
+/// cutoff, so what it keeps still answers the next compile.
 /// </summary>
 public sealed partial class ShaderCompilerTests {
     private static readonly DateTime LongAgo = new(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2000);
@@ -84,10 +87,10 @@ public sealed partial class ShaderCompilerTests {
         var result = ShaderCompiler.Prune(cacheDirectory: cache, cutoffUtc: DateTime.UtcNow.AddMinutes(value: -1));
 
         // The unused stage's two entries, all four duration records (a hit reads none) and the abandoned staging file go;
-        // the used stage's two entries, four bytes each from the fake compiler, stay.
+        // the used stage's two entries stay, each the 64-byte key and digest header and the fake compiler's four bytes.
         Assert.Equal(expected: 7, actual: result.Removed);
         Assert.Equal(expected: 2, actual: result.Kept);
-        Assert.Equal(expected: 8, actual: result.KeptBytes);
+        Assert.Equal(expected: (2 * (64 + 4)), actual: result.KeptBytes);
         Assert.Equal(expected: 2, actual: Entries(directory: cache).Length);
         Assert.Empty(collection: Directory.GetFiles(path: cache, searchPattern: "*.tmp"));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: cache, path2: "notes.txt")), userMessage: "Prune removed a file the compiler never writes.");
@@ -96,5 +99,48 @@ public sealed partial class ShaderCompilerTests {
         Assert.Equal(expected: 4, actual: runner.Calls.Count);
         Assert.True(condition: (await compiler.CompileAsync(unused, TestContext.Current.CancellationToken)).IsSuccess);
         Assert.Equal(expected: 6, actual: runner.Calls.Count);
+    }
+    [Fact]
+    public async Task A_publication_a_peer_won_stamps_the_entry_it_found() {
+        using var fixture = new Fixture();
+        var cache = Path.Combine(path1: fixture.Path, path2: "cache");
+        var request = ComputeRequest(body: "[numthreads(8,8,1)] void main() { }", directory: Path.Combine(path1: fixture.Path, path2: "src"), name: "raced");
+
+        Assert.True(condition: (await new ShaderCompiler(cache, new FakeRunner()).CompileAsync(request, TestContext.Current.CancellationToken)).IsSuccess);
+
+        var published = Entries(directory: cache).ToDictionary(elementSelector: static path => File.ReadAllBytes(path: path), keySelector: static path => path);
+
+        foreach (var path in published.Keys) {
+            File.Delete(path: path);
+        }
+
+        // The peer publishes each entry, last used long ago, while this compiler's tool runs, so this compiler's own
+        // publication finds the name already holding a valid entry.
+        var runner = new PeerPublishingRunner(publish: () => {
+            foreach (var (path, bytes) in published) {
+                File.WriteAllBytes(bytes: bytes, path: path);
+                File.SetLastWriteTimeUtc(lastWriteTimeUtc: LongAgo, path: path);
+            }
+        });
+
+        Assert.True(condition: (await new ShaderCompiler(cache, runner).CompileAsync(request, TestContext.Current.CancellationToken)).IsSuccess);
+
+        Assert.True(condition: (runner.Inner.Calls.Count > 0), userMessage: "The second compile read the cache instead of racing the peer.");
+        Assert.Equal(expected: published.Count, actual: Entries(directory: cache).Length);
+        Assert.All(collection: Entries(directory: cache), action: static entry => Assert.True(condition: IsStamped(path: entry), userMessage: $"{entry} was published by a peer first, and this compile's publication found it, but it still carries the peer's old last write time."));
+    }
+
+    private sealed class PeerPublishingRunner(Action publish) : IShaderProcessRunner {
+        private int m_published;
+
+        public FakeRunner Inner { get; } = new();
+
+        public Task<ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+            if (Interlocked.Exchange(location1: ref m_published, value: 1) == 0) {
+                publish();
+            }
+
+            return Inner.RunAsync(arguments: arguments, cancellationToken: cancellationToken, fileName: fileName);
+        }
     }
 }

@@ -8,68 +8,71 @@ namespace Puck.Analyzers;
 /// </summary>
 public static class EnvironmentReadAllowlist {
     private static readonly string[] Anywhere = [];
-    private static readonly string[] Cli = ["Puck.Cli"];
+    // The puck verb assemblies that read a variable, each named: CliGitHub in Puck.Cli.Core serves every CI-facing verb,
+    // and a verb assembly reads a variable of its own only where it names one.
+    private static readonly string[] CliCore = ["Puck.Cli.Core"];
+    private static readonly string[] CliCoreAndRelease = ["Puck.Cli.Core", "Puck.Cli.Release"];
     // The identity team's file-based bootstrap app compiles as its own program and carries no analyzer; its reads are
     // listed so the list stays the whole inventory.
-    private static readonly string[] CliAndBootstrap = ["Puck.Cli", "bootstrap"];
+    private static readonly string[] CliCoreAndBootstrap = ["Puck.Cli.Core", "bootstrap"];
     private static readonly string[] Platform = ["Puck.Platform"];
 
     /// <summary>Gets every allowlisted variable, keyed by its exact (case-sensitive) name.</summary>
     public static IReadOnlyDictionary<string, EnvironmentReadEntry> Entries { get; } = new Dictionary<string, EnvironmentReadEntry>(comparer: StringComparer.Ordinal) {
         ["CI"] = new(
-            Assemblies: CliAndBootstrap,
+            Assemblies: ["Puck.Cli.Harness", "bootstrap"],
             Reason: "Set by every CI host; the World artifact key keys a CI build apart, and the bootstrap app refuses to run under CI."
         ),
         ["GH_TOKEN"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "The GitHub CLI's token variable, which the workflow sets from the run's own token; the pull-request formatter authenticates with it."
         ),
         ["GITHUB_ACTIONS"] = new(
-            Assemblies: CliAndBootstrap,
+            Assemblies: CliCoreAndBootstrap,
             Reason: "Defined by GitHub Actions; the CI-facing verbs mask secrets and write step outputs only there."
         ),
         ["GITHUB_API_URL"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "Defined by GitHub Actions; the REST endpoint the pull-request formatter calls."
         ),
         ["GITHUB_GRAPHQL_URL"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "Defined by GitHub Actions; the GraphQL endpoint the pull-request formatter calls."
         ),
         ["GITHUB_OUTPUT"] = new(
-            Assemblies: Cli,
+            Assemblies: ["Puck.Cli.Core", "Puck.Cli.Format"],
             Reason: "Defined by GitHub Actions; the file a step writes its outputs to."
         ),
         ["GITHUB_REF"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "Defined by GitHub Actions; the branch a deployment or a release is cut from."
         ),
         ["GITHUB_REPOSITORY"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "Defined by GitHub Actions; the repository a release tag or a formatting commit is written to."
         ),
         ["GITHUB_RUN_ATTEMPT"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCoreAndRelease,
             Reason: "Defined by GitHub Actions; names a run's release record and deployment tags apart from a retry's."
         ),
         ["GITHUB_RUN_ID"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCoreAndRelease,
             Reason: "Defined by GitHub Actions; names a run's release record and deployment tags."
         ),
         ["GITHUB_SHA"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCoreAndRelease,
             Reason: "Defined by GitHub Actions; the commit a deployment or a package publication must match."
         ),
         ["GITHUB_STEP_SUMMARY"] = new(
-            Assemblies: Cli,
+            Assemblies: CliCore,
             Reason: "Defined by GitHub Actions; the file a step writes its job summary to."
         ),
         ["NUGET_API_KEY"] = new(
-            Assemblies: Cli,
+            Assemblies: ["Puck.Cli.Release"],
             Reason: "The short-lived key the NuGet trusted-publishing login issues; the SDK reads it itself, and the publish verb only refuses to push without it."
         ),
         ["NUGET_PACKAGES"] = new(
-            Assemblies: Cli,
+            Assemblies: ["Puck.Cli.Bench"],
             Reason: "The .NET SDK's package-cache override; the bench reference capture finds the cache where the SDK does."
         ),
         ["PATH"] = new(

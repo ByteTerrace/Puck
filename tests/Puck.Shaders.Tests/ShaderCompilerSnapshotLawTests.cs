@@ -15,6 +15,10 @@ public sealed class ShaderCompilerSnapshotLawTests {
     [InlineData(true)]
     [Theory]
     public void AnIncludeThatClimbsOutOfADeepDirectoryCompilesIntoADeepCacheAndReportsAtItsOwnPath(bool broken) {
+        Assert.SkipWhen(
+            condition: (new ShaderToolchain().Locate(name: ShaderCompiler.DxcTool) is null),
+            reason: "DXC is required to compile the deep snapshot."
+        );
         using var scratch = new TemporaryDirectory(prefix: "puck-deep-");
         var root = scratch.RootPath;
 
