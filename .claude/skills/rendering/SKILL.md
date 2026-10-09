@@ -56,10 +56,11 @@ path, and count traversal scratch and constant rings beside the depth bank in
 owns the geometry support limits.
 
 The receiver pass owns the receiver approach (`indirect/sdf-indirect-approach.hlsli`,
-marched in `sdf-indirect-receiver.hlsli`): at most four complete-field samples
-per uncertified field receiver, the surface first, then a short march along the
-camera ray from half the finest spacing back, accepted when a sample's clear
-ball joins the surface's within half a spacing. Do not derive a ball from a
+marched in `sdf-indirect-receiver.hlsli`): per uncertified field receiver, a
+complete-field surface sample, then at most eight sphere-traced samples along
+the camera ray from half the finest spacing back, whose overlapping balls join
+the surface point within the larger of its clearance and primary's acceptance
+threshold; the chain's first sample is the launch. Do not derive a ball from a
 camera mask, tape or independent part, and never move the approach back into
 primary: primary marches alike with indirect on and off, and visibility L.y is
 spare. The approach is fixed per-pixel work outside the shared receiver

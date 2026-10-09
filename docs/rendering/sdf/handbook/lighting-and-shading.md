@@ -570,13 +570,17 @@ The receiver pass certifies each field receiver's approach before its proof.
 Primary keeps its camera masks, tape and independent parts whatever the tier,
 so it marches alike with indirect on and off; those exclusions cannot certify a
 ball, so the approach takes the complete field. It samples the surface, then
-marches along the camera ray from half the finest spacing back, and accepts the
-first positive sample whose clear ball joins the surface sample's, within half
-a spacing. The approach takes at most four samples per uncertified receiver,
-a fixed per-pixel cost outside the shared receiver admission, so a receiver
-whose canonical proof is published spends no admitted work. A receiver whose
-approach joins no sample, at a grazing angle or behind thin geometry, and a
-mesh receiver take the bounded normal launch under that admission.
+sphere-traces along the camera ray from half the finest spacing back, each step
+landing on the previous sample's clear ball, so consecutive balls overlap. The
+chain joins the receiver when a sample's ball reaches the surface point within
+its slack: the larger of the surface sample's clearance and the threshold
+primary accepted the surface within. The chain's first sample, the widest ball,
+is then the receiver's launch. The approach takes the surface sample and at
+most eight chain samples per uncertified receiver, a fixed per-pixel cost
+outside the shared receiver admission, so a receiver whose canonical proof is
+published spends no admitted work. A receiver whose chain never joins, at a
+grazing angle or behind thin geometry, and a mesh receiver take the bounded
+normal launch under that admission.
 
 A converging capture counts a sample, and is served, only once the fenced
 receiver scope belongs to the sample its next render takes. Completion of the

@@ -57,6 +57,7 @@ struct SdfIndirectReceiveProc {
     float approachDistance;
     float surfaceClearance;
     uint approachStep;
+    float approachLaunch;
     float3 approach;
     float approachClearance;
     uint level;
@@ -157,24 +158,27 @@ uint sdfIndirectReceiveStep() {
         float3 direction = sdfIndirectReceiveProc.rayDirection;
         bool marching = false;
         if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveSurface) {
-            sdfIndirectReceiveProc.surfaceClearance = ball;
+            // surfaceClearance holds the surface point's slack; the launch is the chain's first sample.
+            sdfIndirectReceiveProc.surfaceClearance = sdfIndirectApproachSlack(ball, sdfIndirectReceiveProc.receiver.threshold);
             precise float3 retreat = direction * (spacing * SdfIndirectApproachRetreat);
             precise float3 start = sdfIndirectReceiveProc.surfacePoint - retreat;
             sdfIndirectReceiveProc.approachStart = start;
             sdfIndirectReceiveProc.approachDistance = 0.0;
-            marching = ball >= 0.0 && isfinite(ball) && all(isfinite(start));
-        } else {
+            marching = sdfIndirectReceiveProc.surfaceClearance >= 0.0 && all(isfinite(start));
+        } else if (ball > 0.0 && isfinite(ball)) {
             float3 sample = sdfIndirectPointAt(sdfIndirectReceiveProc.approachStart, direction, sdfIndirectReceiveProc.approachDistance);
-            if (sdfIndirectApproachJoined(sdfIndirectReceiveProc.surfacePoint, sample, ball, sdfIndirectReceiveProc.surfaceClearance, spacing)) {
-                sdfIndirectReceiveProc.approach = sample;
-                sdfIndirectReceiveProc.approachClearance = ball;
-            } else if (ball > 0.0 && isfinite(ball)) {
+            if (sdfIndirectReceiveProc.approachStep == 1u) { sdfIndirectReceiveProc.approachLaunch = ball; }
+            if (sdfIndirectApproachJoined(sdfIndirectReceiveProc.surfacePoint, sample, ball, sdfIndirectReceiveProc.surfaceClearance)) {
+                sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.approachStart;
+                sdfIndirectReceiveProc.approachClearance = sdfIndirectReceiveProc.approachLaunch;
+            } else {
+                // Each step lands on its sample's ball, so consecutive balls overlap and the chain stays connected.
                 sdfIndirectReceiveProc.approachDistance += ball;
                 marching = true;
             }
         }
         sdfIndirectReceiveProc.approachStep++;
-        if (marching && sdfIndirectReceiveProc.approachStep < SdfIndirectApproachSteps) {
+        if (marching && sdfIndirectReceiveProc.approachStep <= SdfIndirectApproachSteps) {
             sdfIndirectReceiveProc.phase = SdfIndirectReceiveApproach;
             return sdfIndirectAsk(sdfIndirectPointAt(sdfIndirectReceiveProc.approachStart, direction, sdfIndirectReceiveProc.approachDistance), SDF_INSTANCE_MASK_ALL);
         }
