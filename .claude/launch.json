@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-portal-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "src/Puck.Dashboard/src/portal",
+        "run",
+        "preview"
+      ],
+      "port": 61101
+    },
+    {
+      "name": "dashboard-host-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "src/Puck.Dashboard/src/host",
+        "run",
+        "preview"
+      ],
+      "port": 61100
+    },
+    {
+      "name": "official-serve",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll",
+        "official",
+        "serve",
+        "--tree",
+        "artifacts/official",
+        "--port",
+        "61102"
+      ],
+      "port": 61102
+    }
+  ]
+}

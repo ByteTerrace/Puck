@@ -30,11 +30,14 @@ coverage.cobertura.xml
 *.userosscache
 *.sln.docstates
 
-# Claude Code local-only files (skills and orchestration state are shared and versioned)
+# Claude Code local-only files (project settings, launch configurations, hooks, skills and orchestration state are
+# shared and versioned; settings.local.json and worktrees stay local)
 .claude/*
 !.claude/hooks/
-!.claude/skills/
+!.claude/launch.json
 !.claude/orchestration/
+!.claude/settings.json
+!.claude/skills/
 
 # VS Code local-only files
 .vscode/*
