@@ -21,6 +21,10 @@
         shares. Point $(PuckShaderCacheDirectory) at another directory to share a cache on purpose, or at an empty one to
         compile everything afresh, as the cross-host shader comparison does. Every compile stamps the entries it uses,
         which is what `puck shaders cache prune` evicts by.
+
+        A design-time build (DesignTimeBuild=true: an IDE, Roslyn's MSBuildWorkspace under docfx and the CLI's analysis
+        verbs) compiles and collects nothing here. It builds no project reference, so the generator it would run may not
+        exist, and a workspace needs no bytecode.
     -->
     <UsingTask AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" TaskFactory="RoslynCodeTaskFactory" TaskName="PuckShaderBuild">
         <ParameterGroup>
@@ -116,7 +120,7 @@
         </PuckShaderOutput>
     </ItemGroup>
 
-    <Target Name="ResolveShaderBuildTool" Condition="('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '') and '$(PuckShaderBuildTool)' == ''">
+    <Target Name="ResolveShaderBuildTool" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '') and '$(PuckShaderBuildTool)' == ''">
         <MSBuild Projects="$(_PuckShaderBuildToolProject)" Targets="GetTargetPath" RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained">
             <Output PropertyName="PuckShaderBuildTool" TaskParameter="TargetOutputs" />
         </MSBuild>
@@ -125,7 +129,7 @@
     <!-- Makes every output current: publishes what the cache holds and compiles the rest, with no compiler run while the
          project's publication lock is held. A kernel may include a declaration generated from C# (sdf-isa.hlsli, a
          *.interface.hlsli): the generator writes those as it builds, which ResolveProjectReferences finishes first. -->
-    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != ''" DependsOnTargets="ResolveShaderBuildTool">
+    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool">
         <PuckShaderBuild CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
         <PropertyGroup>
             <_PuckShadersCompiled>true</_PuckShadersCompiled>
@@ -135,7 +139,7 @@
     <!-- Ships every output as content. A build has just made each one current under the publication lock; a pack that
          skips the build (CI packs over a finished build) instead checks that each is on disk with the sidecar its
          current closure and options publish, compiling nothing, so it ships exactly what a build would. -->
-    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != ''" DependsOnTargets="ResolveShaderBuildTool">
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool">
         <PuckShaderBuild Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
         <ItemGroup>
             <Content Include="@(PuckShaderOutput)" CopyToOutputDirectory="PreserveNewest" RemoveMetadata="Stage;Backend;SourcePath" />
@@ -147,12 +151,12 @@
          cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
          from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
          bytecode. Compilation is a build operation; packing collects and validates existing outputs separately. -->
-    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths">
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
         <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
         </PuckCompileDirect3D11Kernels>
     </Target>
-    <Target Name="CollectDirect3D11KernelBytecode" AfterTargets="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles">
+    <Target Name="CollectDirect3D11KernelBytecode" AfterTargets="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true'">
         <PuckCollectDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckCollectedDirect3D11KernelBytecode" TaskParameter="Bytecode" />
         </PuckCollectDirect3D11Kernels>

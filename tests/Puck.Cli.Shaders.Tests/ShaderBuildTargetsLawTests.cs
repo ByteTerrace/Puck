@@ -68,7 +68,7 @@ public abstract class ShaderBuildTargetsLaws {
 }
 /// <summary>The shipped shader targets publish from the cache, recompile only what an edited include reaches,
 /// compile again into an empty cache, gate a pack on the publication lock and the commit record, and remove only the
-/// bytecode they wrote.</summary>
+/// bytecode they wrote; a design-time build runs none of it.</summary>
 public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
     [Fact]
     public void AWarmBuildOfAnotherCheckoutPublishesFromTheCacheAndRunsNoCompiler() {
@@ -254,6 +254,27 @@ public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Equal(expected: ["a.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 2));
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+    }
+    // A design-time build (Roslyn's MSBuildWorkspace under docfx, an IDE, the CLI's analysis verbs) builds no project
+    // reference, so the generator may not exist; it runs no shader build and writes no bytecode. A real build after it
+    // still compiles every output.
+    [Fact]
+    public void ADesignTimeBuildRunsNoShaderBuild() {
+        using var fixture = new ShaderBuildFixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
+        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
+        fixture.ShaderProject(body: ShaderBuildFixture.Sources);
+
+        var design = fixture.Run(properties: ["DesignTimeBuild=true", "BuildProjectReferences=false", "BuildingProject=false", $"PuckShaderBuildTool={fixture.PathOf(path: "absent/Puck.Shaders.Generator.dll")}"], target: "Build");
+
+        fixture.RequireSuccess(run: design);
+        Assert.DoesNotContain(expectedSubstring: "shader output(s)", actualString: design.Stdout);
+        Assert.Equal(expected: 0, actual: fixture.Compiles());
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets/Shaders"), searchPattern: "*.spv"));
+
+        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
     }
     [Fact]
     public void DeletingTheLastStageSourceStillSweepsItsPublishedBytecode() {
