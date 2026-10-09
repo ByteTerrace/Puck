@@ -1,0 +1,15 @@
+# The shadow workload script: the debug world's one wide soft-shadowed key light over its ground, avatar and cubes at
+# the medium preset's exact shadow march, with temporal reuse and the indirect cache off so every frame marches every
+# lit pixel afresh. Its ceilings hold the shadow pass's shape evaluations and march steps, which a field walk that
+# stops rejecting far candidates multiplies.
+world.cadence off
+world.quality medium
+world.temporal off
+world.indirect off
+world.shadow-mask exact
+world.shadow-march exact
+world.rate pause
+world.wait ready 180
+world.rate resume
+world.wait 120
+world.counters --json
