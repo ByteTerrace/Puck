@@ -287,10 +287,11 @@ public static class ArtifactsCommand {
         if (Directory.Exists(path: Results)) { throw new IOException(message: $"Use a fresh test result directory: {Results}"); }
         Directory.CreateDirectory(path: Results);
         // Two assemblies at a time, largest first, so the longest suite runs alongside the others instead of after
-        // them. Each run's output is printed whole when it finishes, so two runs never interleave, and a failure
-        // cancels the other run. The platform exits nonzero for a run that discovered no test; a hardware-only
-        // assembly may still skip every case.
+        // them. Each run's output is printed whole when it finishes, so two runs never interleave. Every assembly runs
+        // whatever another one did, so one CI run names every failing assembly instead of the first. The platform
+        // exits nonzero for a run that discovered no test; a hardware-only assembly may still skip every case.
         var console = new Lock();
+        var failures = new List<string>();
         var ordered = selected.Order(comparer: StringComparer.Ordinal).Select(selector: (assembly, index) => (assembly, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.assembly).Length);
 
         await Parallel.ForEachAsync(
@@ -307,12 +308,18 @@ public static class ArtifactsCommand {
                 lock (console) {
                     Console.Write(value: run.Stdout);
                     Console.Error.Write(value: run.Stderr);
+                    if (run.ExitCode != 0) { failures.Add(item: $"{Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
                 }
-                if (run.ExitCode != 0) { throw new InvalidOperationException(message: $"{Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
             },
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = 2 },
             source: ordered
         );
+        if (failures.Count != 0) {
+            failures.Sort(comparer: StringComparer.Ordinal);
+            Console.Error.WriteLine(value: $"{failures.Count} of {selected.Count} compiled test assemblies failed:");
+            foreach (var failure in failures) { Console.Error.WriteLine(value: $"  {failure}"); }
+            return 1;
+        }
         Console.WriteLine(value: $"Verified {selected.Count} compiled test assemblies without solution restore or workload installation.");
         return 0;
     }
