@@ -18,8 +18,11 @@ public sealed partial class WorkflowGraphLawTests {
     private static partial Regex Expression();
     [GeneratedRegex(pattern: @"\bneeds\.([A-Za-z0-9_-]+)\.")]
     private static partial Regex NeedsReference();
+    [GeneratedRegex(pattern: @"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")]
+    private static partial Regex MatrixReference();
 
-    private sealed record Step(string File, string Job, YamlMappingNode Node, bool Matrix);
+    // A step and the matrix of its job, if the job runs once per matrix entry.
+    private sealed record Step(string File, string Job, YamlMappingNode Node, YamlMappingNode? Matrix);
 
     private static IEnumerable<(string File, YamlMappingNode Document)> Documents() {
         var github = Path.Combine(path1: Root, path2: ".github");
@@ -45,12 +48,12 @@ public sealed partial class WorkflowGraphLawTests {
     private static IEnumerable<Step> Steps() {
         foreach (var (file, document) in Documents()) {
             foreach (var (id, job) in Jobs(document: document)) {
-                var matrix = (((Child(key: "strategy", node: job) as YamlMappingNode) is { } strategy) && (Child(key: "matrix", node: strategy) is not null));
+                var matrix = (((Child(key: "strategy", node: job) as YamlMappingNode) is { } strategy) ? (Child(key: "matrix", node: strategy) as YamlMappingNode) : null);
 
                 foreach (var step in ((Child(key: "steps", node: job) as YamlSequenceNode)?.Children.Cast<YamlMappingNode>() ?? [])) { yield return new Step(File: file, Job: id, Matrix: matrix, Node: step); }
             }
             if ((Child(key: "runs", node: document) as YamlMappingNode) is { } runs) {
-                foreach (var step in ((Child(key: "steps", node: runs) as YamlSequenceNode)?.Children.Cast<YamlMappingNode>() ?? [])) { yield return new Step(File: file, Job: "(composite)", Matrix: false, Node: step); }
+                foreach (var step in ((Child(key: "steps", node: runs) as YamlSequenceNode)?.Children.Cast<YamlMappingNode>() ?? [])) { yield return new Step(File: file, Job: "(composite)", Matrix: null, Node: step); }
             }
         }
     }
@@ -64,6 +67,23 @@ public sealed partial class WorkflowGraphLawTests {
     private static string? With(Step step, string key) => (((Child(node: step.Node, key: "with") as YamlMappingNode) is { } with) ? Scalar(key: key, node: with) : null);
     // An artifact name with an expression in it names a family: the expression stands for any nonempty text.
     private static Regex Family(string name) => new(pattern: (("^" + string.Join(separator: ".+", values: Expression().Split(input: name).Select(selector: Regex.Escape))) + "$"));
+    // The names one upload step writes: each matrix value its job runs with stands in for the expression that reads it,
+    // and a name that is nothing but expressions after that could be any name, so it names none.
+    private static IEnumerable<string> UploadNames(Step step) {
+        IEnumerable<string> names = [With(key: "name", step: step)!];
+
+        foreach (var key in MatrixReference().Matches(input: names.Single()).Select(selector: match => match.Groups[1].Value).Distinct()) {
+            var values = ((step.Matrix is { } matrix)
+                ? ((Child(key: key, node: matrix) is YamlSequenceNode axis) ? axis.Children.OfType<YamlScalarNode>().Select(selector: value => value.Value!) : [])
+                    .Concat(second: ((Child(key: "include", node: matrix) as YamlSequenceNode)?.Children.OfType<YamlMappingNode>().Select(selector: entry => Scalar(key: key, node: entry)).OfType<string>() ?? []))
+                    .ToArray()
+                : []);
+            var reference = new Regex(pattern: ((@"\$\{\{\s*matrix\." + Regex.Escape(str: key)) + @"\s*\}\}"));
+
+            names = names.SelectMany(selector: name => values.Select(selector: value => reference.Replace(input: name, replacement: value.Replace(newValue: "$$", oldValue: "$")))).ToArray();
+        }
+        return names.Where(predicate: name => (Expression().Replace(input: name, replacement: "").Length != 0));
+    }
 
     [Fact]
     public void EveryJobWaitsOnlyOnJobsOfItsWorkflowAndReadsOnlyThoseItWaitsOn() {
@@ -98,7 +118,7 @@ public sealed partial class WorkflowGraphLawTests {
     [Fact]
     public void EveryDownloadedArtifactHasAProducer() {
         var steps = Steps().ToArray();
-        var uploads = steps.Where(predicate: step => Uses(action: "actions/upload-artifact", step: step)).Select(selector: step => With(key: "name", step: step)!).ToArray();
+        var uploads = steps.Where(predicate: step => Uses(action: "actions/upload-artifact", step: step)).SelectMany(selector: UploadNames).ToArray();
         // setup-puck downloads the artifact its caller names.
         var downloads = steps.Where(predicate: step => Uses(action: "actions/download-artifact", step: step)).Select(selector: step => (step, name: (With(key: "name", step: step) ?? With(key: "pattern", step: step))))
             .Concat(second: steps.Where(predicate: step => (Scalar(node: step.Node, key: "uses") == "./.github/actions/setup-puck")).Select(selector: step => (step, name: With(key: "artifact", step: step))))
@@ -116,7 +136,7 @@ public sealed partial class WorkflowGraphLawTests {
     }
     [Fact]
     public void AMatrixJobUploadsUnderANamePerEntry() {
-        foreach (var step in Steps().Where(predicate: step => (step.Matrix && Uses(action: "actions/upload-artifact", step: step)))) {
+        foreach (var step in Steps().Where(predicate: step => ((step.Matrix is not null) && Uses(action: "actions/upload-artifact", step: step)))) {
             Assert.Matches(expectedRegexPattern: @"\$\{\{\s*matrix\.", actualString: With(key: "name", step: step)!);
         }
     }
