@@ -38,7 +38,8 @@
 
     <ItemGroup>
         <!-- SPIR-V for the Vulkan SDF renderer and DXIL for the DirectX one: the shared build/Shaders.targets compiles
-             every stage source to both (neither DXIL opt-out is set) and ships the bytecode. -->
+             every stage source to both on Windows (neither DXIL opt-out is set), and to SPIR-V alone on any other host,
+             and ships the bytecode. -->
         <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />

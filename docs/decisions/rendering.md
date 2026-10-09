@@ -113,8 +113,8 @@ display is not run package by package. Each is listed in
 and they run together when the programme ends, on the code it finally ships.
 They are P1a's windowed boot on a machine with no GPU driver; P1b's
 qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
-driver-removal exercise; P7's comparison of the shader bytecode that Linux and
-Windows CI build; the recorded camera run of P12b-4; the recorded Windows
+driver-removal exercise; P7's comparison of the SPIR-V that Linux and Windows
+CI build; the recorded camera run of P12b-4; the recorded Windows
 editor click of P13b-4; P10's floor-tier parity leg; P15's recorded Steam Deck run; and P16's checks on an
 HDR display. For the GPU checks each change runs, whether the two backends
 agree is judged in one final review pass rather than change by change.
@@ -519,7 +519,10 @@ package whose include is missing, so a committed include cannot fall behind
 the model. A world's own pipeline passes commit nothing: the loader generates
 their declarations in memory, and a package carries them. Compiled `.dxil` and
 `.spv` files are ignored by Git and built by `build/Shaders.targets`, and CI
-builds the packages that ship. Every build host already needs DXC.
+builds the packages that ship. Every build host already needs DXC. DXIL is built
+on Windows alone: Direct3D 12 is its one reader, and DXC's DXIL is not
+byte-stable across hosts, so a build elsewhere compiles SPIR-V only and the
+cross-host check compares SPIR-V ([freshness](../reference/shaders.md#freshness)).
 
 **A kernel nothing dispatches is deleted rather than kept for the sweep.**
 `sdf-child`, `pixelate` and `viewport-composite` compiled into shipped

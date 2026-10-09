@@ -9,7 +9,7 @@ draws every view of it reads), and `SdfWorldPasses` records each view as an
 tile pruning, then the per-view render
 into the instance's own output image. The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
-(Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
+(Vulkan) and, on Windows, DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
 
 **Depends on [`Puck.SignedDistance`](../Puck.SignedDistance/README.md) for
@@ -22,8 +22,8 @@ never a Vulkan or DirectX type by name.
 
 ## Key features
 
-- *One HLSL source, two backends:* every kernel compiles to SPIR-V and DXIL
-  from the same file, so there is exactly one march implementation
+- *One HLSL source, two backends:* every kernel compiles to SPIR-V and, on
+  Windows, DXIL from the same file, so there is exactly one march implementation
   to reason about, not two that can silently diverge.
 - *Mask-first culling:* a host-built CSR uniform grid (`SdfInstanceGrid`, in
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam

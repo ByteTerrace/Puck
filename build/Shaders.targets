@@ -11,6 +11,11 @@
         $(PuckShaderSpirvEnabled) (default true: SPIR-V for every stage). A project with no DirectX consumer sheds the
         DXIL, and one whose shaders run only on Direct3D 12 sheds the SPIR-V, it would otherwise ship unread.
 
+        DXIL is built on Windows alone, whatever a project sets: Direct3D 12 is its one reader and exists only on
+        Windows, so a build on any other host (a Linux container, CI's cross-host shader comparison) plans no DXIL
+        output and ships none. DXC on Linux emits DXIL that differs from the Windows build's in a few large outputs,
+        so the cross-host comparison holds SPIR-V alone (`puck shaders compare`).
+
         Every output compiles through Puck.Shaders.ShaderCompiler, the compiler the runtime and the CLI run, in its
         content-addressed cache: $(PuckShaderCacheDirectory), by default `shaders` in the per-user Puck directory
         (ShaderCompiler.DefaultCacheDirectory). An output is keyed by its stage source's precise include closure
@@ -77,6 +82,9 @@
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
         <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">true</PuckShaderSpirvEnabled>
+        <!-- Whether this host builds DXIL: Windows alone (see above). It is the host's fact, not a project knob; a law
+             sets it to stand in for another host. -->
+        <_PuckShaderHostBuildsDxil>$([MSBuild]::IsOSPlatform('Windows'))</_PuckShaderHostBuildsDxil>
         <!-- The build-only host that runs the shader build; every shader project references it with
              ReferenceOutputAssembly="false", so it is built before CompileShaders runs. -->
         <_PuckShaderBuildToolProject>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'src', 'Puck.Shaders.Generator', 'Puck.Shaders.Generator.csproj'))</_PuckShaderBuildToolProject>
@@ -93,7 +101,7 @@
             <Backend>Spirv</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
         </PuckShaderOutput>
-        <PuckShaderOutput Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckShaderDxilEnabled)' == 'true'">
+        <PuckShaderOutput Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(_PuckShaderHostBuildsDxil)' == 'true'">
             <Stage>Vertex</Stage>
             <Backend>Dxil</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
@@ -103,7 +111,7 @@
             <Backend>Spirv</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
         </PuckShaderOutput>
-        <PuckShaderOutput Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckShaderDxilEnabled)' == 'true'">
+        <PuckShaderOutput Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(_PuckShaderHostBuildsDxil)' == 'true'">
             <Stage>Fragment</Stage>
             <Backend>Dxil</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
@@ -113,7 +121,7 @@
             <Backend>Spirv</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>
         </PuckShaderOutput>
-        <PuckShaderOutput Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'">
+        <PuckShaderOutput Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(_PuckShaderHostBuildsDxil)' == 'true'">
             <Stage>Compute</Stage>
             <Backend>Dxil</Backend>
             <SourcePath>$([System.IO.Path]::ChangeExtension('%(FullPath)', '.hlsl'))</SourcePath>

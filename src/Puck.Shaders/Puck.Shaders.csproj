@@ -21,7 +21,7 @@
         <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy, the
              graph's place package, and the display encode under Runtime (SurfaceEncoder: the fullscreen triangle and the
              encode every swapchain compositor, the float preview and a capture of a float output draw with), compiled to
-             SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode target. -->
+             SPIR-V and, on Windows, DXIL at build and shipped by the shared CollectShaderBytecode target. -->
         <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />

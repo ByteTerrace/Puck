@@ -34,8 +34,9 @@
     </ItemGroup>
     <ItemGroup>
         <!-- The film grain package's deployed stages, where its declaration (RenderGraphPackageCatalog.SdfFilmGrain)
-             says they ship. -->
-        <Content Include="../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.spv;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.dxil;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.spv;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.dxil" Link="Assets/Shaders/Sdf/passes/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+             says they ship; DXIL only where the shader build compiles it, on Windows (build/Shaders.targets). -->
+        <Content Include="../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.spv;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.spv" Link="Assets/Shaders/Sdf/passes/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Content Condition="$([MSBuild]::IsOSPlatform('Windows'))" Include="../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.dxil;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.dxil" Link="Assets/Shaders/Sdf/passes/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
