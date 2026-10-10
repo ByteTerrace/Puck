@@ -314,9 +314,10 @@ retain their own lifetimes. Local Operator `quit` and reload retain their normal
 
 ## SDK and verification
 
-The adapter uses official **ModelContextProtocol.Core/ASP.NET Core 2.2.0** and
-ASP.NET Core JWT bearer authentication 10.0.12, with explicit schemas and low-level
-handlers. It installs no Harness or model provider.
+The adapter uses the official **ModelContextProtocol.Core and
+ModelContextProtocol.AspNetCore** packages and ASP.NET Core JWT bearer
+authentication, at the version ranges `Puck.Mcp.csproj` declares, with explicit
+schemas and low-level handlers. It installs no Harness or model provider.
 Result metadata uses a typed, source-generated serializer; standalone schemas use
 .NET 10's `JsonElement.Parse`. The SDK owns the asynchronous message channel.
 Admission counters bound that transport without adding another queue; a single
@@ -340,8 +341,8 @@ Clean EOF exits successfully. The adapter owns both streams and closes them on
 shutdown, including when a pending read ignores cancellation. Stdout is protocol-only;
 diagnostics use stderr.
 
-The process tests launch the real CLI and connect the official C# SDK 2.2.0
-client over its stdio, pinned to a World and through `--attach latest`: listing,
+The process tests launch the real CLI and connect the official C# SDK client
+over its stdio, pinned to a World and through `--attach latest`: listing,
 exec, images and argument errors, plus EOF and oversized-input exits that leave
 the World serving. Each gives the child a private temporary directory, so
 `latest` can only find that test's World. Each connection ends as the stdio

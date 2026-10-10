@@ -7,8 +7,8 @@ from an admitted commit, refusal during unfinished maintenance, and finalization
 `WorldReleaseGuestGuardTests` checks the Python guest guard against the C# durable group wire format, including stale
 operations and recovery roles. It requires Python 3 on PATH (`python` on Windows, `python3` elsewhere).
 `WorldReleaseAzureLeaseTests` uses the actual Azure SDK against an isolated local Azurite container. Load
-`mcr.microsoft.com/azure-storage/azurite:3.35.0` and start Docker to run that law; it reports an asset-gated skip when
-the image or Docker is unavailable. It does not contact a production storage account.
+the `mcr.microsoft.com/azure-storage/azurite` image at the tag the test's `Image` constant pins and start Docker
+to run that law; it reports an asset-gated skip when the image or Docker is unavailable. It does not contact a production storage account.
 
 `WorldReleaseFixtureBuilderTests` covers bootstrap and captured exports, distinct test keys, retained checkpoint bytes
 and machine identity, incomplete-export refusal, metadata publication in both directions, and refusal of simulation

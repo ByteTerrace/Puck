@@ -18,18 +18,19 @@ cumulative whole-job limits, overflow-safe reservations, and cancellation.
 `CffDistanceOracleTests` compares real Source Serif CFF and CFF2 fonts with
 independent mapping, metric, outline-bound, and signed-distance samples.
 
-The oracle fixture is derived from the vendored OFL font with fontTools
-4.53.0. Its exact command and expected values are recorded in
+The oracle fixture is derived from the vendored OFL font with fontTools. Its
+exact command, the fontTools version, and expected values are recorded in
 `Assets/Fonts/jetbrains-mono-oracle.json`; normal test runs are fully offline
 and do not require Python, FreeType, or another native runtime.
 
 The two unmodified Source Serif fonts and their OFL license come from
 [Adobe's pinned release](https://github.com/adobe-fonts/source-serif/tree/5f220b17d27ed64873f22cde0dd593685387bd19).
-`source-serif-oracle.json` pins both complete SHA-256 hashes. Its external
-derivation used fontTools 4.53.0's default-coordinate glyph set and BoundsPen
-for A, g, and O at a 32px em. Each cubic was sampled into 1,024 uniform chords;
-Shapely 2.1.2 noded and polygonized those segments, retained faces with nonzero
-winding, unioned them, and measured distance to that union's boundary. The
+`source-serif-oracle.json` pins both complete SHA-256 hashes and records the
+fontTools and Shapely versions of its external derivation, which used
+fontTools' default-coordinate glyph set and BoundsPen for A, g, and O at a
+32px em. Each cubic was sampled into 1,024 uniform chords; Shapely noded and
+polygonized those segments, retained faces with nonzero winding, unioned them,
+and measured distance to that union's boundary. The
 half-pixel sample lattice has a three-pixel stride and extends two pixels beyond
 the rounded ink bounds. Distances are positive inside, in atlas pixels.
 

@@ -61,8 +61,8 @@ graph TB
 
 - An [Azure](https://azure.microsoft.com/en-us/resources/cloud-computing-dictionary/what-is-azure) subscription with the permissions required to create a resource group and assign roles.
 - An [Azure DevOps](https://learn.microsoft.com/en-us/azure/devops/user-guide/what-is-azure-devops) organization that is [integrated with Microsoft Entra ID](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/connect-organization-to-azure-ad) and a project that one has ownership rights to.
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/what-is-azure-cli) v2.70 (or greater) installed.
-- [PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/overview) v7.2 (or greater) installed.
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/what-is-azure-cli) installed.
+- [PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/overview) (`pwsh`) installed.
 
 ## Usage
 
@@ -70,7 +70,8 @@ Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
 The current monorepo entry point is the
 [Azure GitHub Actions workflow](../../docs/development/ci.md#azure-production-deployment).
-It pins Bicep 0.47.16 and authenticates with the CI managed identity before
+It pins Bicep (`az bicep install --version` in `.github/workflows/azure.yml`)
+and authenticates with the CI managed identity before
 restoring the published, versioned `ts/bvm` Template Specs. The `bvm` alias in
 `bicepconfig.json` selects their subscription and resource group; the local
 `avm` sources do not replace those published deployment dependencies. The
@@ -135,7 +136,8 @@ The root exposes delegated `user_impersonation` on the existing Entra applicatio
 supplies the World managed identity's federated credential. The existing Function
 onboarding endpoint and ARM delegation still require user consent.
 
-The existing load balancer maps public TCP 443 to Caddy 2.11.6 on 8443. Caddy uses
+The existing load balancer maps public TCP 443 to Caddy on 8443 (the image
+`src/Puck.World.Silo/Dockerfile` pins by digest). Caddy uses
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
 the loopback MCP listener. No DNS plugin, stored Azure credential, PFX secret,
 port 80 listener or renewal restart is needed. Certificate/account state persists

@@ -469,7 +469,7 @@ section explains—`JsonNode` tree merging and rule-table interpretation, not
 numeric vector loops—makes SIMD an unlikely win regardless.
 
 There is no separate interpreter-tiering/PGO MSBuild property in this SDK
-(`Microsoft.NET.Runtime.WebAssembly.Sdk/10.0.11`)—`RunAOTCompilation` is the
+(`Microsoft.NET.Runtime.WebAssembly.Sdk`)—`RunAOTCompilation` is the
 only lever `BrowserWasmApp.targets`/`WasmApp.Common.targets` expose for
 interpreter speed. `EventSourceSupport` already defaults to `false` for a
 browser-wasm publish (the SDK's own default, unrelated to this project's
