@@ -27,6 +27,7 @@ public sealed class ClockAndSequenceTests {
     }
     private static AttestationVerifyResult VerifyAt(CborAttestationCodec codec, SignedAttestation[] chain, TrustList trust, SignedAttestation attestation, DateTimeOffset now, ReplayTestStore? store) {
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: attestation,
             chain: chain,
@@ -319,6 +320,7 @@ public sealed class ClockAndSequenceTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -439,6 +441,7 @@ public sealed class ClockAndSequenceTests {
             fromInclusive: 0,
             toExclusive: 4,
             body: index => contendedResults[index] = contendedStore.Commit(result: AttestationVerifier.VerifyChain(
+                profile: AttestationProfile.Base,
                 codec: codec,
                 claim: bearerOnce,
                 chain: chain,
@@ -474,6 +477,7 @@ public sealed class ClockAndSequenceTests {
             fromInclusive: 0,
             toExclusive: 4,
             body: index => contendedResults[index] = brokenStore.Commit(result: AttestationVerifier.VerifyChain(
+                profile: AttestationProfile.Base,
                 codec: codec,
                 claim: bearerOnce,
                 chain: chain,
@@ -505,6 +509,7 @@ public sealed class ClockAndSequenceTests {
         var uncontendedStore = new ReplayTestStore(participants: 1);
 
         var result = uncontendedStore.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearerOnce,
             chain: chain,

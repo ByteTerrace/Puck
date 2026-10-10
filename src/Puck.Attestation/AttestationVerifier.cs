@@ -240,7 +240,7 @@ public static class AttestationVerifier {
     /// attacker-controlled sealed payload is not decoded and its ephemeral EC key is not imported before
     /// the signature check succeeds. The profile's nested constraints run here, on this one decode.
     /// </summary>
-    private static string? ValidateAuthenticatedClaimPayload(IAttestationCodec codec, SignedAttestation claim, AttestationProfile? profile) {
+    private static string? ValidateAuthenticatedClaimPayload(IAttestationCodec codec, SignedAttestation claim, AttestationProfile profile) {
         if (claim.PayloadKind != AttestationPayloadKind.Sealed) {
             return null;
         }
@@ -258,14 +258,11 @@ public static class AttestationVerifier {
             return $"sealed claim payload is malformed: {exception.Message}";
         }
 
-        if (
-            (profile is not null) &&
-            !profile.TryValidateSealedPayload(
+        if (!profile.TryValidateSealedPayload(
             label: "claim",
             payload: payload,
             refusal: out var refusal
-        )
-        ) {
+        )) {
             return refusal;
         }
 
@@ -280,7 +277,7 @@ public static class AttestationVerifier {
         DateTimeOffset now,
         TimeSpan? maximumAge,
         string hopLabel,
-        AttestationProfile? profile
+        AttestationProfile profile
     ) {
         if (!HasCoherentProjection(
             attestation: binding,
@@ -399,14 +396,11 @@ public static class AttestationVerifier {
             );
         }
 
-        if (
-            (profile is not null) &&
-            !profile.TryValidateKeyBindingPayload(
+        if (!profile.TryValidateKeyBindingPayload(
             label: hopLabel,
             payload: payload,
             refusal: out var profileRefusal
-        )
-        ) {
+        )) {
             return new BindingHopResult(
                 Refusal: profileRefusal,
                 TargetId: null,
@@ -441,7 +435,7 @@ public static class AttestationVerifier {
         TrustList trustList,
         DateTimeOffset now,
         string? expectedAudience,
-        AttestationProfile? profile
+        AttestationProfile profile
     ) {
         if (
             (chain is not null) &&
@@ -558,7 +552,7 @@ public static class AttestationVerifier {
         TrustList trustList,
         DateTimeOffset now,
         string? expectedAudience,
-        AttestationProfile? profile
+        AttestationProfile profile
     ) {
         if (
             (chain is null) ||
@@ -728,7 +722,7 @@ public static class AttestationVerifier {
     /// </param>
     /// <param name="expectedPurpose">The purpose this call expects the claim to declare. Must be non-blank, and must not be <see cref="AttestationPurposes.KeyBinding"/> — that purpose is refused unconditionally, which is what stops a binding being replayed as a claim.</param>
     /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="AttestationHeader.Audience"/>.</param>
-    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> when a caller, such as the adversarial tests, drives this verifier directly rather than through the facade.</param>
+    /// <param name="profile">The receiver-selected profile. It is required: every verification runs under an explicit profile, whose constraints validate each authenticated binding target and sealed claim payload and stop a binding from selecting a disabled algorithm for the following hop. A null argument throws <see cref="ArgumentNullException"/>.</param>
     public static AttestationVerifyResult VerifyChain(
         IAttestationCodec codec,
         SignedAttestation claim,
@@ -737,8 +731,9 @@ public static class AttestationVerifier {
         DateTimeOffset now,
         string expectedPurpose,
         string? expectedAudience,
-        AttestationProfile? profile = null
+        AttestationProfile profile
     ) {
+        ArgumentNullException.ThrowIfNull(argument: profile);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedPurpose);
 
         if (!HasCoherentProjection(

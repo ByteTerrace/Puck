@@ -72,6 +72,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: [rootToTailedIssuing, chain[1]],
@@ -136,6 +137,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: [rootVouchesItself, rootVouchesSubject],
@@ -188,6 +190,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: delegateClaim,
             chain: [chain[0], chain[1], subjectToDelegate],
@@ -207,6 +210,7 @@ public sealed class ChainTests {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -234,6 +238,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -264,6 +269,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: null,
@@ -287,6 +293,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: unknownKind,
             chain: chain,
@@ -313,6 +320,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: kindConfused,
             chain: chain,
@@ -346,6 +354,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: foreignDomainClaim,
             chain: chain,
@@ -365,6 +374,7 @@ public sealed class ChainTests {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -384,6 +394,7 @@ public sealed class ChainTests {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -406,6 +417,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -429,6 +441,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -447,6 +460,7 @@ public sealed class ChainTests {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -465,6 +479,7 @@ public sealed class ChainTests {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -487,6 +502,7 @@ public sealed class ChainTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,

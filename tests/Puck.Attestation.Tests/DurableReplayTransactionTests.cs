@@ -46,6 +46,7 @@ public sealed class DurableReplayTransactionTests {
             text: "credit wallet exactly once"
         );
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: [],

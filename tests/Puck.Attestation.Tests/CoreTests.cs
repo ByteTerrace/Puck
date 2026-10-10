@@ -43,6 +43,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: confusedClaim,
             chain: chain,
@@ -85,6 +86,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: marketClaim,
             chain: chain,
@@ -127,6 +129,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: marketClaim,
             chain: chain,
@@ -177,6 +180,7 @@ public sealed class CoreTests {
         );
 
         _ = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearer10,
             chain: chain,
@@ -186,6 +190,7 @@ public sealed class CoreTests {
             expectedAudience: null
         ));
         var result = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearerEqual,
             chain: chain,
@@ -229,6 +234,7 @@ public sealed class CoreTests {
         );
 
         var result = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearer10,
             chain: chain,
@@ -279,6 +285,7 @@ public sealed class CoreTests {
         );
 
         _ = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearer10,
             chain: chain,
@@ -288,6 +295,7 @@ public sealed class CoreTests {
             expectedAudience: null
         ));
         var result = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearer11,
             chain: chain,
@@ -338,6 +346,7 @@ public sealed class CoreTests {
         );
 
         _ = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearer10,
             chain: chain,
@@ -347,6 +356,7 @@ public sealed class CoreTests {
             expectedAudience: null
         ));
         var result = store.Commit(result: AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: bearerLower,
             chain: chain,
@@ -389,6 +399,7 @@ public sealed class CoreTests {
         var brokenChain = new[] { rootToIssuing };
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: happyClaim,
             chain: brokenChain,
@@ -432,6 +443,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: domainBClaim,
             chain: chainB,
@@ -474,6 +486,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: domainBClaim,
             chain: chainB,
@@ -513,6 +526,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: expiredClaim,
             chain: chain,
@@ -555,6 +569,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: freshClaim,
             chain: chain,
@@ -594,6 +609,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: claim,
             chain: chain,
@@ -625,6 +641,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: happyClaim,
             chain: null,
@@ -657,6 +674,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: issuingToSubject,
             chain: chain,
@@ -708,6 +726,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: tightVerifierClaim,
             chain: chain,
@@ -750,6 +769,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: tightIssuerClaim,
             chain: chain,
@@ -790,6 +810,7 @@ public sealed class CoreTests {
         var laterNow = DateTimeOffset.FromUnixTimeSeconds(seconds: (Epoch + 200));
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: tightIssuerClaim,
             chain: chain,
@@ -832,6 +853,7 @@ public sealed class CoreTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: tightVerifierClaim,
             chain: chain,
@@ -872,6 +894,7 @@ public sealed class CoreTests {
         var muchLaterNow = DateTimeOffset.FromUnixTimeSeconds(seconds: (Epoch + 7_200));
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: tightVerifierClaim,
             chain: chain,

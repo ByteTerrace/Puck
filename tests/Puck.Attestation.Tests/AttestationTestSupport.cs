@@ -235,12 +235,15 @@ public static class AttestationTestSupport {
             signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
         );
 
-        return SignedAttestation.FromSignedPortion(
+        return SignedAttestation.Reencode(
+            codec: new PresetSignedPortionCodec(
+                inner: codec,
+                signedPortion: signedPortion
+            ),
             header: header,
-            payloadBytes: claimBytes,
             payloadKind: AttestationPayloadKind.Opaque,
-            signature: signature,
-            signedPortion: signedPortion
+            payloadBytes: claimBytes,
+            signature: signature
         );
     }
 
@@ -410,4 +413,31 @@ internal sealed class SplitReplayTestStore(int participants) {
 
         return result;
     }
+}
+
+/// <summary>
+/// A codec that behaves as its inner codec in every respect except that it reports one preset byte string
+/// as the signed portion. <see cref="SignedAttestation.Reencode"/> through it builds an attestation whose
+/// projected fields and signed bytes disagree — the hostile arrived shape the public API otherwise refuses
+/// to construct.
+/// </summary>
+internal sealed class PresetSignedPortionCodec(IAttestationCodec inner, byte[] signedPortion) : IAttestationCodec {
+    public string Name => inner.Name;
+
+    public SignedAttestation DecodeAttestation(ReadOnlySpan<byte> wire) =>
+        inner.DecodeAttestation(wire: wire);
+    public KeyBindingPayload DecodeKeyBindingPayload(ReadOnlySpan<byte> bytes) =>
+        inner.DecodeKeyBindingPayload(bytes: bytes);
+    public SealedPayload DecodeSealedPayload(ReadOnlySpan<byte> bytes) =>
+        inner.DecodeSealedPayload(bytes: bytes);
+    public byte[] EncodeAttestation(SignedAttestation attestation) =>
+        inner.EncodeAttestation(attestation: attestation);
+    public byte[] EncodeHeader(AttestationHeader header) =>
+        inner.EncodeHeader(header: header);
+    public byte[] EncodeKeyBindingPayload(KeyBindingPayload payload) =>
+        inner.EncodeKeyBindingPayload(payload: payload);
+    public byte[] EncodeSealedPayload(SealedPayload payload) =>
+        inner.EncodeSealedPayload(payload: payload);
+    public byte[] EncodeSignedPortion(AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) =>
+        signedPortion;
 }
