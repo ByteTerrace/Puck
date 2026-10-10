@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 namespace Puck.Mcp;
 
 // One typed value supplies structured content and JSON text without an intermediate mutable DOM.
-internal readonly record struct OperatorMcpResultMetadata(string? RequestId, string Status, string Output, bool IsError, bool ClearTranscript);
+internal readonly record struct OperatorMcpResultMetadata(string? RequestId, string Status, string Output, bool IsError, bool ClearTranscript, bool Truncated);
 [JsonSerializable(typeof(OperatorMcpResultMetadata))]
 [JsonSerializable(typeof(RemoteMcpOptions))]
 [JsonSerializable(typeof(RemoteAttachmentMetadata))]

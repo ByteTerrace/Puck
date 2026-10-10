@@ -233,6 +233,28 @@ public sealed class WorldViewGraphLawTests {
             expected: "views.layouts[0].slots[0].instance 'lobby' names no views.graphs row."
         );
     }
+    // A row may name a one-off shader as well as a graph document; it plans as the one-pass graph the host renders,
+    // never as a document parsed out of HLSL.
+    [Fact]
+    public void TheServerPricesAOneOffShaderRowAsItsOnePassGraph() {
+        using var directory = new TemporaryDirectory();
+
+        directory.WriteText(
+            name: "pipelines/tint.hlsl",
+            text: "[numthreads(8, 8, 1)] void main(uint3 id : SV_DispatchThreadID) { }\n"
+        );
+
+        var presentation = WorldPresentationCost.Measure(
+            definition: Document((Row(name: "tint") with { Source = "pipelines/tint.hlsl" })),
+            passes: new WorldPipelineSources(documentDirectory: directory.RootPath).PlanGraph
+        );
+
+        Assert.Equal(expected: (((int?)1), ((string?)null)), actual: (presentation.Instances[0].Passes, presentation.Instances[0].Issue));
+        Assert.Contains(
+            expectedSubstring: "tint (pipelines/tint.hlsl) extent<=display rate every frame passes 1",
+            actualString: presentation.Describe()
+        );
+    }
     [Fact]
     public void TheServerPricesEachGraphByPlanningItsSource() {
         using var directory = new TemporaryDirectory();

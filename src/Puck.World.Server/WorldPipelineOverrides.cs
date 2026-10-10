@@ -90,7 +90,8 @@ public sealed class WorldPipelineSources(string? documentDirectory) {
             source: out source
         );
     }
-    /// <summary>Plans the graph document a <c>views.graphs</c> row names against the packages this build ships, for
+    /// <summary>Plans the source a <c>views.graphs</c> row names (a graph document, a one-off shader or a package
+    /// directory, read as <see cref="TryRead"/> reads it) against the packages this build ships, for
     /// the cost report's presentation dimension.</summary>
     /// <param name="graph">The graph row.</param>
     /// <returns>The passes one render records, or <see langword="null"/> with why the graph could not be planned. A
@@ -112,6 +113,7 @@ public sealed class WorldPipelineSources(string? documentDirectory) {
         }
 
         if (!RenderGraphSource.TryPlan(
+            name: graph.Name,
             packages: RenderGraphPackageCatalog.Engine,
             path: path,
             plan: out var plan,

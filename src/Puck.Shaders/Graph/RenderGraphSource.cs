@@ -1,36 +1,37 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 
 namespace Puck.Shaders;
 
-/// <summary>Reads and plans the graph document a world's graph row names.</summary>
+/// <summary>Reads and plans the source a world's graph row names.</summary>
 public static class RenderGraphSource {
-    /// <summary>Reads the graph document at <paramref name="path"/> and plans it against the engine's packages.</summary>
-    /// <param name="path">The full path of a <c>puck.render.graph.v1</c> document.</param>
+    /// <summary>Reads the source at <paramref name="path"/> the way every reader of a pipeline source reads it
+    /// (<see cref="ShaderPipelineSource.TryRead"/>: a graph document, a one-off shader or a package directory) and plans
+    /// its definition against the engine's packages.</summary>
+    /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
+    /// <param name="path">The full path of the source.</param>
     /// <param name="packages">The packages the host offers.</param>
     /// <param name="plan">The plan, when this returns <see langword="true"/>.</param>
-    /// <param name="reason">Why the document could not be read or planned, naming every diagnostic.</param>
-    /// <returns><see langword="true"/> when the document planned.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="packages"/> is
-    /// <see langword="null"/>.</exception>
-    public static bool TryPlan(string path, RenderGraphPackageCatalog packages, [NotNullWhen(returnValue: true)] out RenderGraphPlan? plan, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: path);
+    /// <param name="reason">Why the source could not be read or planned, naming every diagnostic.</param>
+    /// <returns><see langword="true"/> when the source planned.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="path"/> is
+    /// <see langword="null"/> or blank.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
+    public static bool TryPlan(string name, string path, RenderGraphPackageCatalog packages, [NotNullWhen(returnValue: true)] out RenderGraphPlan? plan, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
         plan = null;
 
-        RenderGraphDefinition definition;
-
-        try {
-            definition = RenderGraphDefinition.Parse(json: File.ReadAllText(path: path));
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)) {
-            reason = exception.Message;
-
+        if (!ShaderPipelineSource.TryRead(
+            name: name,
+            path: path,
+            reason: out reason,
+            source: out var source
+        )) {
             return false;
         }
 
         if (!new RenderGraphCompiler(packages: packages).TryCompile(
-            definition: definition,
+            definition: source.Definition,
             diagnostics: out var diagnostics,
             plan: out plan
         )) {

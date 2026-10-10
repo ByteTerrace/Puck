@@ -129,9 +129,15 @@ var updateConfigFileOption = new Option<string?>(name: "--update-config-file") {
 var extensionsConfigFileOption = new Option<string?>(name: "--extensions-config-file") {
     Description = "Host-approved service extension composition (puck.world.extensions.v1). Absent disables external services. The file selects installed provider types, bindings, grants, and state connections; it never loads executable code.",
 };
+// An operator's per-run opt-in, never world-authored: a document cannot open a control endpoint on whoever boots it.
+var controlOption = new Option<bool>(name: "--control") {
+    DefaultValueFactory = static _ => false,
+    Description = "Start the local trusted Operator control endpoint at boot, as a first console line `world.control start` would, and print its attachment file on standard error. `puck mcp --profile operator` then attaches to this World. Absent, the endpoint stays closed until a console line starts it.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
+    controlOption,
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
@@ -416,6 +422,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
 ) {
     CaptureDirectory = parseResult.GetValue(option: captureDirOption),
     ConnectionSubject = connectionSubject,
+    Control = parseResult.GetValue(option: controlOption),
     DebugLayers = parseResult.GetValue(option: debugLayersOption),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),

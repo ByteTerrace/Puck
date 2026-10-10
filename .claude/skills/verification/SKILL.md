@@ -209,8 +209,8 @@ brief requires a manual proof, use these steps:
 6. Record in the commit message which laws were proved red and how.
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
-`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
-(verified on xUnit 4.0.1). A law that wraps a call which can skip, such as a
+`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception.
+A law that wraps a call which can skip, such as a
 device or capability probe, can therefore report **Skipped** with its fix
 withheld and pin nothing. In such laws, catch the exception directly with a
 `try`/`catch` and assert on it.

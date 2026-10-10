@@ -28,7 +28,9 @@ RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,r
     && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp \
     && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure
 
-FROM caddy:2.11.6 AS tls
+# The official caddy image, through the Docker Official Images mirror on ECR Public rather than Docker Hub, whose
+# anonymous pulls rate-limit and time out on shared CI runners; the index digest pins the exact build.
+FROM public.ecr.aws/docker/library/caddy:2.11.6@sha256:3422ce6de165df66534f9b9ba50efaf457114ec961763cc52f5dbdaac2972d73 AS tls
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
 RUN setcap -r /usr/bin/caddy
 

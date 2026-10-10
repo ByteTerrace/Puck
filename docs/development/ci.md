@@ -72,6 +72,8 @@ the NuGet release call it beside the artifact producer; a standalone
 `verify.yml` run calls it too. Native compilation and trimming remain part of its
 one publish operation. The solution build's own browser AppBundle, the one the
 compiled archive carries, is the build's rather than the AOT publish's.
+Its duration is not a CI-time target: it runs in parallel and is off the
+critical path, so CI speed work leaves its AOT and optimisation settings alone.
 
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
 a fresh Windows checkout on each of four runners, verifies its commit and
@@ -747,8 +749,8 @@ metadata and resource tags so placement and ownership changes do not rename a
 world. Connection information still carries the federation address and expected
 server identity: DNS alone does not select a world on a shared host.
 
-World workers use the pinned Azure Linux 3.0 Marketplace image selected in
-`main.bicepparam`. The silo container retains its Ubuntu-based .NET runtime;
+World workers use the Azure Linux Marketplace image `main.bicepparam` pins
+(`imageReference`). The silo container retains its Ubuntu-based .NET runtime;
 the host OS and container libraries are upgraded independently. The bootstrap
 installs Microsoft's Moby packages on Azure Linux and retains Ubuntu support
 for rollback. It preserves the host firewall policy and installs only the
@@ -777,8 +779,8 @@ Runtime verification runs the compiled Entra admission, silo schema, and lifecyc
 recovery laws on Linux. Container verification boots the saved candidate image
 twice to verify checkpoint recovery and QUIC. Deployment uses the existing `zzz`
 identity and production concurrency group. The runner's QUIC installer is the
-`setup-quic` action, pinned to Microsoft's checksum-verified Ubuntu 24.04 package
-source; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
+`setup-quic` action, pinned to Microsoft's checksum-verified package source for
+the one Ubuntu release the action accepts; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
 `puck world release deploy` templates) remains separate because it must run before
 Docker and the runtime are ready.
 `puck azure deploy-world-platform` creates the

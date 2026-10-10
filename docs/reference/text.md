@@ -412,8 +412,9 @@ dotnet test tests/Puck.Text.Tests/Puck.Text.Tests.csproj
 CFF/CFF2 readers (including face selection and GPOS/`kern` kerning) against
 synthetic fonts built in-process. `IndependentFontOracleTests` adds an offline
 JetBrains Mono TrueType snapshot of glyph IDs, advances, and vertical metrics
-recorded with fontTools 4.53.0; it is a table-fact oracle, not a claim that
-Puck's raster pixels match another renderer. `CffDistanceOracleTests` adds real
+recorded with fontTools at the version `jetbrains-mono-oracle.json` names; it
+is a table-fact oracle, not a claim that Puck's raster pixels match another
+renderer. `CffDistanceOracleTests` adds real
 Source Serif CFF/CFF2 geometry and alpha-distance samples independently derived
 with fontTools and Shapely; its test fixtures and OFL license are checked in.
 `MtsdfContractTests` pins the

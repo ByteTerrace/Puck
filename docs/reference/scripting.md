@@ -26,7 +26,7 @@ test host that runs a guest and then raises a division fault on other threads.
 ```text
 namespace Puck.Scripting
 target     net10.0
-deps       Puck.Assets, Puck.Maths + Wasmtime [48.0.2] (exact pin)
+deps       Puck.Assets, Puck.Maths + Wasmtime (exact pin in Puck.Scripting.csproj)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
@@ -693,8 +693,9 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table)—a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[48.0.2]`. Nothing in the
-  build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to the exact version
+  `Puck.Scripting.csproj` pins. Nothing in the build asserts the loaded assembly's major version,
+  so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
 
@@ -713,7 +714,8 @@ dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj
 
 `ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
 `Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
-`[48.0.2]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
+exact pin in `Puck.Scripting.csproj` (a real, flowing runtime dependency—not a build-only
+generator). It carries
 no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
 depend on it for the addon host and reference the wire vocabulary this file defines.
 

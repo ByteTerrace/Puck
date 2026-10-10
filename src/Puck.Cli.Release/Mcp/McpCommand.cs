@@ -30,6 +30,15 @@ public static class McpCommand {
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
 
+            // An MCP client launches the installed tool, which can lag the checkout it serves; the warning reaches the
+            // client's server log before the first call does.
+            if (await CliRevision.StaleWarningAsync(
+                built: Puck.World.WorldSchema.SourceRevision,
+                cancellationToken: stop.Token
+            ).ConfigureAwait(continueOnCapturedContext: false) is { } warning) {
+                Console.Error.WriteLine(value: warning);
+            }
+
             // Worlds publish their capability files in the user's temporary directory, so following the newest World
             // is following that directory.
             await OperatorMcpServer
