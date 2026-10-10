@@ -134,6 +134,38 @@ public sealed partial class WorkflowGraphLawTests {
             );
         }
     }
+    // A composite action runs without the `vars` and `secrets` contexts, so the runner refuses the whole action when it
+    // loads one that reads them; a calling job reads them and passes them in as inputs instead.
+    [Fact]
+    public void ACompositeActionReadsNoContextItCannotSee() {
+        foreach (var (file, document) in Documents().Where(predicate: entry => entry.File.StartsWith(comparisonType: StringComparison.Ordinal, value: ".github/actions/"))) {
+            foreach (var expression in Scalars(node: document).SelectMany(selector: scalar => Expression().Matches(input: scalar).Select(selector: match => match.Value))) {
+                Assert.False(condition: Regex.IsMatch(input: expression, pattern: @"\b(vars|secrets)\."), userMessage: $"{file} reads {expression}, which a composite action cannot see; pass it in as an input.");
+            }
+        }
+    }
+    [Fact]
+    public void EveryLocalActionCallPassesItsRequiredInputs() {
+        var required = Documents()
+            .Where(predicate: entry => entry.File.StartsWith(comparisonType: StringComparison.Ordinal, value: ".github/actions/"))
+            .ToDictionary(
+                elementSelector: entry => (((Child(key: "inputs", node: entry.Document) as YamlMappingNode)?.Children.AsEnumerable() ?? [])
+                    .Where(predicate: input => ((input.Value is YamlMappingNode spec) && (Scalar(key: "required", node: spec) == "true") && (Child(key: "default", node: spec) is null)))
+                    .Select(selector: input => ((YamlScalarNode)input.Key).Value!)
+                    .ToArray()),
+                keySelector: entry => ("./" + Path.GetDirectoryName(path: entry.File)!.Replace(newChar: '/', oldChar: '\\'))
+            );
+
+        foreach (var step in Steps()) {
+            var uses = Scalar(key: "uses", node: step.Node);
+
+            if ((uses is not null) && required.TryGetValue(key: uses, value: out var inputs)) {
+                foreach (var input in inputs) {
+                    Assert.True(condition: (With(key: input, step: step) is not null), userMessage: $"{step.File}: job {step.Job} calls {uses} without its required input {input}.");
+                }
+            }
+        }
+    }
     [Fact]
     public void AMatrixJobUploadsUnderANamePerEntry() {
         foreach (var step in Steps().Where(predicate: step => ((step.Matrix is not null) && Uses(action: "actions/upload-artifact", step: step)))) {
