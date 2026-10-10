@@ -80,9 +80,10 @@ simulation ticks) → replay `NoteTick` when armed, looping for a
 fast-forwarding drive's burst. `WorldSimulation` wraps it with seat-intent submission before the
 shell and seat-context sync plus the per-tick analog clear after it. The launcher
 owns time, pacing off `IFixedStepSimulation.RatePerSecond` (authored per world
-via the document's `simulation.rateHz` field — the shipped worlds author 30 Hz
-themselves, and a world authoring no section is rate-0 resident; see
-[documents.md](documents.md)). A `.puckreplay` tape carries its OWN
+via the document's `simulation.rateHz` field — a world authoring no `simulation`
+section runs at 30 Hz (`WorldDefinition.UnauthoredSimulationRateHz`), and only an
+authored `rateHz: 0` is the resident, non-stepping rate; see
+[documents-composition.md](documents-composition.md)). A `.puckreplay` tape carries its OWN
 `SimulationRate`, stamped at record time from the live world's own rate, and
 `Drive` refuses a disagreement with the embedded definition's own
 `SimulationRateHz` by name, right after deserializing it, rather than
@@ -158,9 +159,8 @@ table — a row added there grants nothing until relaunch.
   the constructor and `world.grant` use) → every currently-admitted peer
   connection's admission grant re-mints (see [authority.md](authority.md)).
   Reset targets `m_base` WITHOUT moving it; Load/Reload REPLACE it. Fully
-  replay-compatible: the trio rides the tape, CAS-pinned, and no
-  longer refuses while a `replay.record` is armed — see
-  [replay.md](replay.md).
+  replay-compatible: the trio rides the tape, CAS-pinned, and applies while a
+  `replay.record` is armed — see [replay.md](replay.md).
 - **Undo** (`ApplyUndo`, the `world.undo [count]` path): Mutate over every
   section; `count` clamps to `1..journal.Count`. Restores the base and
   deterministically replays journal-minus-tail through the SAME per-entry
@@ -171,7 +171,7 @@ table — a row added there grants nothing until relaunch.
   stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
   (an acceptance as `dropped <n>, <m> remaining`), so `world.undo` answers
   its own line like every registered verb. There is no per-mutation inverse. Proven
-  in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
+  in-process by `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
 - **Save** (`world.save`): writes the authored document and compacts the
@@ -186,8 +186,8 @@ table — a row added there grants nothing until relaunch.
   section, except that moved render ceilings, view quality and editor values
   create their valid section when absent. `world.status`'s drift hint names
   each section the snapshot replaced (`WorldSessionCapture.DescribeDrift`).
-  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Tests`) saves every
-  shipped, fixture (`tests/Puck.World.Tests/Fixtures`), and canary world and
+  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Presentation.Tests`) saves every
+  shipped, fixture (`tests/Puck.World.Fixtures`), and canary world and
   reloads it.
 
 Named machine rows use the same mutation and undo pipeline. UpsertMachine and

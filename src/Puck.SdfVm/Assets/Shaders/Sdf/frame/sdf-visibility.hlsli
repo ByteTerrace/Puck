@@ -9,8 +9,8 @@
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
 //    in bits 0..14 and its other material plus one in bits 15..31, so every material from -1 up is exact.
 // L (4 words): the winning SDF shape's transform slot (SDF_TRANSFORM_SLOT_NONE for static geometry), or a mesh hit's
-//    triangle, in the first word; the indirect approach's two halves (camera-ray retreat and certified clearance),
-//    then the ambient and shadow passes' replaceable query tallies. Zero clearance means no certified approach.
+//    triangle, in the first word; a second word no stage writes; then the ambient and shadow passes' replaceable
+//    query tallies.
 //    Anonymous lanes are read exactly from the winning transform row.
 // N (2 words): the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel), and the
 //    gradient magnitude.
@@ -41,7 +41,7 @@
 #include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
-#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else
@@ -199,9 +199,6 @@ float4 sdfLoadVisibilityShadows(uint record) {
 uint sdfVisibilityMeshTriangle(uint record) {
     return sdfVisibilityRecordBuffer[record + SdfVisibilityRowL];
 }
-uint sdfVisibilityApproach(uint record) {
-    return sdfVisibilityRecordBuffer[record + SdfVisibilityRowL + 1u];
-}
 SdfVisibilitySurface sdfLoadVisibilitySurface(uint record) {
     uint word = (record + SdfVisibilityRowS);
     uint shading = sdfVisibilityRecordBuffer[word];
@@ -296,9 +293,6 @@ void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
 }
 void sdfStoreVisibilityFrameSlot(uint record, int frameSlot) {
     sdfVisibilityStoreWord(record + SdfVisibilityRowL, asuint(frameSlot));
-}
-void sdfStoreVisibilityApproach(uint record, uint approach) {
-    sdfVisibilityStoreWord(record + SdfVisibilityRowL + 1u, approach);
 }
 void sdfStoreVisibilityShadows(uint record, float4 visibility) {
     sdfVisibilityStoreWord(record + SdfVisibilityRowK, sdfPackShadowVisibility(visibility));

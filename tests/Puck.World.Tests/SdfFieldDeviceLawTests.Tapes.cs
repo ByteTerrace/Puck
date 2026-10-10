@@ -36,6 +36,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     private static void VerifyTileTapes(GpuDeviceServices services, string extension) {
         var programs = TapePrograms().ToArray();
         var results = Run(kernel: GradientKernel(extension: extension, name: "sdf-tape.comp"), services: services,
+            tapeBuildKernel: GradientKernel(extension: extension, name: "sdf-tape-build.comp"),
             legs: programs.Select(selector: static pair => GradientLeg(name: pair.Name, program: pair.Program)).ToArray(),
             transforms: GradientTransforms,
             tapeWordsPerCase: programs.Max(selector: static pair => SdfWorldPackage.SegmentTapeWordCountFor(segments: pair.Program.SkipSegmentCount, tokens: pair.Program.TapeTokenCount)));
@@ -53,6 +54,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     private static void VerifyNexusTapes(GpuDeviceServices services, string extension) {
         var (program, transforms, directions, parameters) = NexusFieldProbe();
         var results = Run(kernel: GradientKernel(extension: extension, name: "sdf-tape-rays.comp"), services: services,
+            tapeBuildKernel: GradientKernel(extension: extension, name: "sdf-tape-rays-build.comp"),
             legs: [GradientLeg(name: "Nexus", program: program)], points: directions, parameters: parameters,
             transforms: transforms,
             tapeWordsPerCase: SdfWorldPackage.SegmentTapeWordCountFor(segments: program.SkipSegmentCount, tokens: program.TapeTokenCount));

@@ -973,6 +973,10 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.FusedArithmetic",
+        "Name": "RawMagnitude"
       }
     ],
     "Legs": [
@@ -1564,6 +1568,10 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "Atan2"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Atan2HalfPiQ61"
       }
     ],
     "Legs": [

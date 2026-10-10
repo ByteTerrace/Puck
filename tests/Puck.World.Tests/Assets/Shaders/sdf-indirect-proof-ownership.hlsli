@@ -2,8 +2,8 @@
 // query, lease and publication; this fixture supplies only their field, cell directory and bounded storage.
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-indirect-layout.hlsli"
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u5, space3);
-[[vk::binding(60, 3)]] StructuredBuffer<float4> proofCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> proofCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> proofResults : register(u127, space3);
 struct ProofProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ProofProbeIndex> proofIndex : register(b0, space4);
 struct ProofParameters { uint indirectTier; uint indirectFrame; uint indirectReceiverProofs; };
@@ -14,7 +14,6 @@ static uint sdfIndirectEvaluations = 0u;
 static uint sdfIndirectSteps = 0u;
 static uint sdfIndirectProofEvaluations = 0u;
 static uint sdfIndirectHashes = 0u;
-static uint sdfIndirectProofOwner = 0xffffffffu;
 static bool sdfIndirectReceiverPermit = false;
 static bool sdfIndirectReceiverDeferred = false;
 static const uint SDF_INSTANCE_MASK_ALL = 0xffffffffu;
@@ -41,23 +40,28 @@ bool sdfIndirectCellAt(float3 position, float spacing, out int3 cell) {
     cell = int3(scaled);
     return true;
 }
-SdfHit sdfIndirectSample(float3 position, uint mask) {
+// The fixture's field: every sample counts in word 101 and reads its scripted distance; every gradient is +y.
+#define SDF_INDIRECT_FIELD_HLSLI
+// The production proof and its segments run as procedures over the fixture's field, through one run.
+#define SDF_INDIRECT_PROC_PROVE
+#define SDF_INDIRECT_PROC_SEGMENT
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-run.hlsli"
+void sdfIndirectServe(uint kind, float3 position, uint mask, out SdfHit hit, out float3 normal) {
+    hit = (SdfHit)0;
+    normal = float3(0.0, 1.0, 0.0);
+    if (kind == SdfIndirectQueryGradient) { return; }
     sdfIndirectEvaluations++;
     uint ignored;
     InterlockedAdd(indirectCacheRW[101u], 1u, ignored);
-    SdfHit sample;
-    sample.distance = fixturePhase == 0u && fixtureMode == 7u ? 0.0
+    hit.distance = fixturePhase == 0u && fixtureMode == 7u ? 0.0
         : (fixturePhase == 0u && fixtureMode == 9u && sdfIndirectEvaluations == 2u ? asfloat(0x7fc00000u) : 10.0);
-    sample.material = 0;
-    return sample;
+    hit.material = 0;
 }
 float sdfMapBallClearance(float distance) { return distance; }
-float3 sdfIndirectGradient(float3 position) { return float3(0.0, 1.0, 0.0); }
 bool sdfIndirectMasked(float travelled, float reach, uint mask) { return false; }
 float sdfIndirectAdvance(float clearance, float travelled, float reach, float farDistance, uint mask) {
     return max(0.0, min(clearance, farDistance - travelled));
 }
-#define SDF_INDIRECT_FIELD_HLSLI
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
 int3 sdfIndirectCorner(uint corner) { return int3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u); }
 int sdfIndirectProbeIndex(int3 cell, uint level) { return cell.x | (cell.y << 1) | (cell.z << 2); }
@@ -84,6 +88,7 @@ uint fixtureProofOffset(uint tier) { return 16u; }
 #define sdfIndirectCellWordOffset fixtureCellOffset
 #define sdfIndirectProofWordOffset fixtureProofOffset
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-proof.hlsli"
+#include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-procedures.hlsli"
 groupshared uint proofMasks[64];
 groupshared uint proofDeferred[64];
 
@@ -100,7 +105,7 @@ void CSMain(uint lane : SV_GroupIndex) {
     uint proof = 16u + entry * SdfIndirectProofWords;
     if (lane == 0u) {
         [loop] for (uint word = 0u; word < 128u; word++) { indirectCacheRW[word] = 0u; }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
         if (fixtureMode >= 1u && fixtureMode <= 6u) {
             indirectCacheRW[proof] = asuint(fixtureMode == 3u ? 0.09375 : (fixtureMode == 4u ? 0.35 : 0.25));
             indirectCacheRW[proof + 1u] = asuint(fixtureMode == 3u ? 0.46875 : 0.25);
@@ -124,12 +129,13 @@ void CSMain(uint lane : SV_GroupIndex) {
         sdfIndirectEvaluations = 0u;
         sdfIndirectReceiverDeferred = false;
         sdfIndirectReceiverPermit = fixtureMode == 10u;
-#ifdef SDF_INDIRECT_PASS
-        sdfIndirectProofOwner = lane == 0u && fixtureMode == 0u ? 0u : 0xffffffffu;
-#endif
         uint budget = phase == 0u && fixtureMode == 14u ? 0u : 32u;
         float clearance = fixtureMode == 9u && phase == 0u ? 0.0 : (fixtureMode == 4u ? 0.001 : 1.0);
+#ifdef SDF_RECEIVER_PASS
+        proofMasks[lane] = sdfIndirectProve(position, 0u, budget, clearance, true);
+#else
         proofMasks[lane] = sdfIndirectProve(position, 0u, budget, clearance);
+#endif
         proofDeferred[lane] = sdfIndirectReceiverDeferred ? 1u : 0u;
         AllMemoryBarrierWithGroupSync();
         if (lane == 0u) {

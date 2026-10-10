@@ -1,0 +1,21 @@
+{
+  "seed": 3945145102,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (4 draws in all) until train held 7 or 8 of the 12 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "train": [
+    "s01-blocky-pauldron",
+    "s02-damage-plates",
+    "s03-wrong-shoulder-and-soft-model",
+    "s05-hull-seam",
+    "s07-over-budget",
+    "s10-morph-blend",
+    "s12-live-tweak-and-capture"
+  ],
+  "test": [
+    "s04-flat-plastic",
+    "s06-fin-stack",
+    "s08-subtraction-trap",
+    "s09-contact-mismatch",
+    "s11-sweep-cable"
+  ]
+}

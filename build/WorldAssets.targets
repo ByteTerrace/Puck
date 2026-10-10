@@ -1,6 +1,6 @@
 <Project>
     <!-- The game's shipped worlds. The build hands every .puck source and every .world.json document under Assets/worlds
-         to one tree-mode run of the CLI's compile verb, which writes the documents the game ships, beside each that
+         to one tree-mode run of the CLI's compile verb (Puck.Cli.Worlds, the world-authoring verbs' own executable), which writes the documents the game ships, beside each that
          draws as a world its compiled world (<name>.puckb), and at the root the one bake pack (bakes.puckbake) holding
          the creation bakes those compiled worlds name and the package store (packages/) holding one compiled shader
          package per graph source their views.graphs rows name, so no device compiles a shipped pipeline and the
@@ -13,6 +13,14 @@
          it from the sources' names. The CLI is a build-time tool here, never a runtime dependency. -->
     <PropertyGroup>
         <PuckWorldSourceDirectory>$(MSBuildProjectDirectory)/Assets/worlds</PuckWorldSourceDirectory>
+        <!-- The bake cache is the per-user one (PuckUserDirectory.Resolve("bakes"): Puck under the local application data
+             folder, or under the temporary directory where the platform names none), which `puck parity` and the World
+             read and fill too, so every checkout and configuration on the machine bakes a creation once. That is safe
+             because a bake's key carries the bake code's full fingerprint (DerivationFingerprint.Bake), so checkouts whose
+             bake code differs never share a key. -p:PuckWorldBakeCache=<dir> names another. -->
+        <PuckUserLocalData>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))</PuckUserLocalData>
+        <PuckUserLocalData Condition="'$(PuckUserLocalData)' == ''">$([System.IO.Path]::GetTempPath())</PuckUserLocalData>
+        <PuckWorldBakeCache Condition="'$(PuckWorldBakeCache)' == ''">$([System.IO.Path]::TrimEndingDirectorySeparator('$(PuckUserLocalData)'))/Puck/bakes</PuckWorldBakeCache>
     </PropertyGroup>
     <ItemGroup>
         <PuckWorldSource Include="$(PuckWorldSourceDirectory)/**/*.puck;$(PuckWorldSourceDirectory)/**/*.world.json" />
@@ -21,7 +29,7 @@
         <PuckWorldPipelineSource Include="Assets/**/*.hlsl;Assets/**/*.hlsli;Assets/**/*.graph.json" Exclude="Assets/worlds/**" />
         <!-- Every world document, compiled world and bake pack under Assets/worlds ships from the tree run's report instead. -->
         <Content Include="Assets/**" Exclude="Assets/worlds/**/*.puck;Assets/worlds/**/*.world.json;Assets/worlds/**/*.puckb;Assets/worlds/**/*.puckbake" CopyToOutputDirectory="PreserveNewest" />
-        <ProjectReference Include="$(MSBuildThisFileDirectory)../src/Puck.Cli/Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)../src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <UsingTask
         AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
@@ -40,13 +48,11 @@
     <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
          A run is repeated when a file the last run reported is gone: the report is removed, and it is the run's one
          output. The report alone is the output because a run keeps a stored package it finds already built, so the
-         package's time says nothing about when the run last succeeded; the report is written last, by every run.
-         The bake cache sits beside the configuration directories, so every configuration shares it. -->
+         package's time says nothing about when the run last succeeded; the report is written last, by every run. -->
     <Target Name="PuckNameWorldReport">
         <PropertyGroup>
             <PuckWorldDocumentDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)worlds'))</PuckWorldDocumentDirectory>
             <PuckWorldReport>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)worlds.written'))</PuckWorldReport>
-            <PuckWorldBakeCache>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)bakes'))</PuckWorldBakeCache>
         </PropertyGroup>
         <ReadLinesFromFile File="$(PuckWorldReport)" Condition="Exists('$(PuckWorldReport)')">
             <Output TaskParameter="Lines" ItemName="PuckWorldReportedLine" />
@@ -61,7 +67,7 @@
         <!-- The project instance the reference built, so the path is the CLI that build produced. -->
         <MSBuild
             Projects="@(_MSBuildProjectReferenceExistent)"
-            Condition="'%(Filename)' == 'Puck.Cli'"
+            Condition="'%(Filename)' == 'Puck.Cli.Worlds'"
             Targets="GetTargetPath"
             BuildInParallel="$(BuildInParallel)"
             Properties="%(_MSBuildProjectReferenceExistent.SetConfiguration); %(_MSBuildProjectReferenceExistent.SetPlatform); %(_MSBuildProjectReferenceExistent.SetTargetFramework)"

@@ -13,29 +13,27 @@ public sealed partial class SdfWorldResidency {
 
     internal bool AdmitIndirect(string part, SdfIndirectCache cache) {
         if (part == SdfWorldPackage.IndirectShade) {
-            if (cache.ShadeBatch is not { } shade) { return true; }
-            var source = cache.Lighting!.Frame;
-            var cost = (SdfIndirectCost.EstimateCost((((long)shade.Probes.Count) * SdfIndirectCost.ShadeQueries(cache.Layout, source)), source.Program.InstructionCount)
-                + (shade.Probes.Count * SdfIndirectCost.ShadeCacheCost(layout: cache.Layout)));
-
-            return IndirectFrameBudget.TryAdmit(chunk: shade, cost: cost);
+            return ((cache.ShadeChunk is not { } shade) || IndirectFrameBudget.TryAdmitDevice(chunk: shade, cost: cache.ShadeChunkCost));
         }
-        var queries = (((((long)cache.PlaceCount) * SdfIndirectCost.PlaceQueries)
-            + (((long)cache.ClassifyCount) * SdfIndirectCost.ClassifyQueries)) + (((long)cache.TraceCount) * SdfIndirectCost.TraceQueries));
-
-        return IndirectFrameBudget.TryAdmit(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: SdfIndirectCost.EstimateCost(queries, cache.InstructionCount));
+        return IndirectFrameBudget.TryAdmitDevice(chunk: (cache.TransportBatch ?? m_emptyTransport), cost: cache.TransportStepCost);
     }
     internal bool AdmitLightView() => IndirectFrameBudget.TryAdmit(chunk: IndirectLightViews,
         cost: SdfIndirectCost.EstimateCost(IndirectLightViews.EstimatedQueries, Frame!.Program.InstructionCount));
     internal int AdmitReceiverProofs(SdfIndirectCache cache) {
         var count = (cache.Frozen ? 0 : cache.ReceiverProofBudget);
 
-        return (IndirectFrameBudget.TryAdmit(chunk: m_receiverBudget, cost: SdfIndirectCost.EstimateCost((((long)count) * SdfIndirectCost.ReceiverQueries), cache.InstructionCount)) ? count : 0);
+        return (IndirectFrameBudget.TryAdmit(chunk: m_receiverBudget, cost: ReceiverCost(cache: cache, count: count)) ? count : 0);
     }
     internal void LogReceiverProofs(SdfIndirectCache cache) {
         var count = AdmitReceiverProofs(cache: cache);
+        var logged = (m_receiverBudgetLogged ? 0 : count);
+        var queries = (((long)logged) * SdfIndirectCost.ReceiverQueries);
 
-        LogIndirectSubmission("receiver-proofs", (((long)(m_receiverBudgetLogged ? 0 : count)) * SdfIndirectCost.ReceiverQueries), cache.InstructionCount, cache.Frame);
+        LogIndirectSubmission("receiver-proofs", queries, cache.InstructionCount, cache.Frame,
+            (ReceiverCost(cache: cache, count: logged) - SdfIndirectCost.EstimateCost(queries: queries, instructionCount: cache.InstructionCount)));
         m_receiverBudgetLogged = true;
     }
+
+    // The shared allowance at the admitted receiver's measured price.
+    private static long ReceiverCost(SdfIndirectCache cache, int count) => checked((((long)count) * cache.ReceiverUnits.ItemCost(instructionCount: cache.InstructionCount)));
 }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions;
 using Puck.Assets;
 using Puck.SignedDistance.Baking;
 using Puck.World.Authoring;
@@ -23,6 +24,10 @@ public readonly record struct WorldBakeRequest(string PrototypeId, CreationBakeK
 public sealed class WorldBakeStore {
     /// <summary>The derived-entry kind a bake is recorded under in the content-addressed store.</summary>
     public const string DerivedKind = "creation-bake";
+
+    /// <summary>The bound the store under <see cref="Directory"/> is held to: a cache of bakes every checkout's build,
+    /// <c>puck parity</c> and the World share, least recently used out.</summary>
+    public static readonly CacheBound Retention = new(MaxBytes: (512L << 20), MaxEntries: 8192);
 
     private static readonly ConcurrentDictionary<string, WorldBakeStore> Opened = new(comparer: StringComparer.Ordinal);
     private static readonly ConditionalWeakTable<WorldPrototype, string> Pins = new();
@@ -48,7 +53,7 @@ public sealed class WorldBakeStore {
             }
 
             try {
-                return new ContentAddressedStore(root: Directory);
+                return new ContentAddressedStore(retention: Retention, root: Directory);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 return null;
             }

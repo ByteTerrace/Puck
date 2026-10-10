@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <RootNamespace>Puck.Cli.Gate.Tests</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The verbs that choose and run verification: affected, gate, host, baselines and locks. -->
+        <ProjectReference Include="../../src/Puck.Cli.Gate/Puck.Cli.Gate.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/Cli/AffectedMemoryTree.cs" Link="AffectedMemoryTree.cs" />
+        <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
+        <Compile Include="../Shared/Cli/SchedulingCohorts.cs" Link="SchedulingCohorts.cs" />
+        <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- AffectedWorkflowReadersLawTests selects over every workflow and composite action: a change under .github/ selects
+             this suite in `puck affected`, which reaches that tree through such a declaration alone. -->
+        <PuckAffectedInput Include="../../.github/**" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.Cli.Testing" />
+    </ItemGroup>
+</Project>

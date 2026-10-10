@@ -17,14 +17,14 @@ or the `$parked:` reserved rule channel.
 
 ## The two join/leave doors
 
-- **Local seats** (`WorldPopulation.LocalSeatCount` = 4, indices `0..3`):
+- **Local seats** (`WorldPopulation.LocalSeatCount`, the document's authored `bodies.localSeats`, at most `WorldBodiesLimits.LocalSeatCount` = 4; indices `0..LocalSeatCount-1`):
   `SessionRequest.Join`/`Leave` → `WorldServer.ApplySession`, applied
   SYNCHRONOUSLY (loopback delivers inline, no tick gating) →
   `WorldPopulation.ActivateSeat`/`DeactivateSeat`. `player.join`/`player.leave`
   are the console verbs; `PlayerRoster.JoinActive`/`Leave` are the client-side
   callers. A seat's `IdentityName` (a `WorldIdentity.Name`) is the durable
   identity a re-Join is matched against — see below.
-- **Peers** (indices `4..Capacity-1`): `WorldServer.TryAdmitPeerConnection`/
+- **Peers** (indices `LocalSeatCount..Capacity-1`; a zero-seat world admits peer 0): `WorldServer.TryAdmitPeerConnection`/
   `DisconnectPeerConnection` → the ordered-domain `WorldServerEvent.PeerAdmitted`/
   `PeerDisconnected` → `ApplyServerEvent` → `WorldPopulation.ApplyPeerAdmitted`/
   `ApplyPeerDisconnected`. `Server.WorldPeerHost`'s Hello door is the one live
@@ -36,7 +36,7 @@ or the `$parked:` reserved rule channel.
 
 When the compiled `definition.PopulationReconnectGraceTicks` (a
 `CompiledTickDuration` derived from the authored
-`population.reconnectGraceSeconds` field at the world's own simulation rate;
+`bodies.reconnectGraceSeconds` field at the world's own simulation rate;
 default 3.0 s = 90 ticks at the unauthored 30 Hz) is `IsZero`, both doors'
 leave/disconnect path tears down immediately: it nulls `Entry.Body` and clears
 `Entry.Active` (and, for a peer, `Entry.IsRemoteHuman`). Any other grace parks
@@ -83,7 +83,7 @@ generation's connection did not survive the restore, so its rows and exclusive
 reservations go before the first step. A local seat's park leaves its rows
 entirely alone (the one participant whose table survives intact to a resume).
 
-Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
+Proved by `tests/Puck.World.Server.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
 releases an exclusively-held subject to a rival immediately (positive grace,
 authored-zero grace, and rate 0 alike) while the body stays parked; a local
 seat's rows survive park and resume — and the same restore untouched; a

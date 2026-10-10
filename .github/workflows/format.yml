@@ -42,6 +42,15 @@ jobs:
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
+      # The caches the artifacts job saves; this job only reads them.
+      - name: Restore the shader compiler cache
+        uses: ./.github/actions/shader-cache
+        with:
+          mode: restore
+      - name: Restore the creation bake cache
+        uses: ./.github/actions/bake-cache
+        with:
+          mode: restore
       - name: Restore locked dependencies
         run: dotnet restore Puck.slnx --locked-mode
       # The candidate CLI is this checkout's own, packed by setup-puck, and is also the formatter below.
@@ -55,7 +64,10 @@ jobs:
       - name: Build semantic context
         run: dotnet build Puck.slnx -c Release --no-restore
       - name: Test formatter safety
-        run: dotnet test --project tests/Puck.Cli.Tests -c Release --no-build --filter-method "*Format*"
+        run: dotnet test --project tests/Puck.Cli.Format.Tests -c Release --no-build
+      # Formatting every tracked .puck source leaves its compiled document unchanged; the law needs the compiler.
+      - name: Test formatter projection
+        run: dotnet test --project tests/Puck.Cli.Worlds.Tests -c Release --no-build --filter-class "*FormatProjectionLawTests"
       - env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -73,7 +85,8 @@ jobs:
           name: puck-format
           path: artifacts/format
           retention-days: 7
-    timeout-minutes: 60
+    # As the artifacts job's: a change that re-keys every shader compiles them all cold here too.
+    timeout-minutes: 90
   check:
     if: always()
     name: Formatting

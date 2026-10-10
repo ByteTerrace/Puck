@@ -7,71 +7,31 @@
         <IsPackable>false</IsPackable>
         <!-- SharedFenceLawTests drives its Direct3D 11 writer through the device's vtable, with no interop generator. -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <!-- The document/protocol/server surface this project exercises is read directly (public members only —
-             see AGENTS.md's InternalsVisibleTo ruling), never through reflection, so AOT/trim analysis holds. -->
+        <!-- The surface this project exercises is read directly (public members only; see AGENTS.md's
+             InternalsVisibleTo ruling), never through reflection, so AOT/trim analysis holds. -->
         <IsAotCompatible>false</IsAotCompatible>
         <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite
-             drives the real routed store (IObjectBlobStoreBackend is internal to Puck.Storage) rather than a second,
-             hand-rolled dispatch. -->
-        <PackageReference Include="FSharp.Core" Version="[11.*, )" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
-        <PackageReference Include="Resharp" Version="[1.*, )" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- Reference the engine seams directly. -->
-        <ProjectReference Include="../../src/Puck.Networking/Puck.Networking.csproj" />
-        <!-- The Schema-to-presentation capacity seam: Puck.World.Client's bridge derives Puck.Overlays' capacity from
-             Schema's ceilings, and the lease table it builds must fit the overlay's backstops — a property neither
-             assembly can state alone. -->
-        <ProjectReference Include="../../src/Puck.Overlays/Puck.Overlays.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
-        <ProjectReference Include="../../src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
-        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
-        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
-        <ProjectReference Include="../../src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Addons/Puck.World.Addons.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Azure/Puck.World.Azure.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Client/Puck.World.Client.csproj" />
-        <!-- The generic world.row.step field walker (public, no InternalsVisibleTo needed) — see
-             WorldRowFieldStepperLawTests. -->
-        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />
-        <ProjectReference Include="../../src/Puck.World.Server/Puck.World.Server.csproj" />
-        <!-- Canonical .puck gameplay laws compile and compose their authored basis graph through the same
-             PuckDocumentComposer path as the executable host. -->
-        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
-        <!-- Retirement must close the real silo routing session, including work awaiting a row's clock. -->
-        <ProjectReference Include="../../src/Puck.World.Silo/Puck.World.Silo.csproj" />
-        <ProjectReference Include="../../src/Puck.Launcher/Puck.Launcher.csproj" />
-        <ProjectReference Include="../../src/Puck.Hosting/Puck.Hosting.csproj" />
-        <ProjectReference Include="../../src/Puck.Mcp/Puck.Mcp.csproj" />
-        <ProjectReference Include="../../src/Puck.Mcp.Azure/Puck.Mcp.Azure.csproj" />
         <!-- The desktop composition root, linked so WorldBootCompositionLawTests builds each boot shape's service
              collection through the public WorldBootComposition with no device created; MachineHostSeamLawTests
-             also reads the assembly out of its own build output. -->
+             also reads the assembly out of its own build output. Its closure carries the client, the server, the
+             graphics backends and the Gaming Brick cores the device laws and full hosts here drive. -->
         <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" />
-        <ProjectReference Include="../../src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj" />
-        <ProjectReference Include="../../src/Puck.World.AgentHarness.Azure/Puck.World.AgentHarness.Azure.csproj" />
+        <!-- MachineHostSeamLawTests holds the silo's references beside the World's. -->
+        <ProjectReference Include="../../src/Puck.World.Silo/Puck.World.Silo.csproj" />
+        <!-- Build-only: it runs this project's shader build (build/Shaders.targets). -->
+        <ProjectReference Include="../../src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
+        <Using Include="Puck.World.Testing" />
     </ItemGroup>
     <ItemGroup>
-        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader recipe like any shipped
+        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader build like any shipped
              kernel, and it samples the bake fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
-        <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
-        <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
-        <!-- The device-law kernels include the engine's SdfVm modules, so those modules key their bytecode's freshness:
-             without them an edited module leaves the laws running the bytecode of its old text. -->
-        <ShaderInclude Include="../../src/Puck.SdfVm/Assets/Shaders/**/*.hlsli" />
-        <ShaderInclude Include="../../src/Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli" />
         <Content Include="../Puck.SignedDistance.Tests/Fixtures/bake-sampling.json" Link="Fixtures/bake-sampling.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
@@ -79,28 +39,53 @@
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
-        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
-        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
-        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
-        <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
-        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
-        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
-        <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
-        <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
-        <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
-        <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
-        <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
         <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
-        <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
         <Compile Include="../Shared/IrradianceLightFixture.cs" Link="IrradianceLightFixture.cs" />
+        <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
+        <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
+        <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
+        <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
+        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
+        <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
+        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EditorPlacementFixtures.cs" Link="World/EditorPlacementFixtures.cs" />
+        <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
+        <Compile Include="../Shared/World/FrustumFitFixtures.cs" Link="World/FrustumFitFixtures.cs" />
+        <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
+        <Compile Include="../Shared/World/JournalDepthFixtures.cs" Link="World/JournalDepthFixtures.cs" />
+        <Compile Include="../Shared/World/MachineOperationFixtures.cs" Link="World/MachineOperationFixtures.cs" />
+        <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
+        <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
+        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
+        <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
+        <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
+        <Compile Include="../Shared/World/TimelineLeverFixtures.cs" Link="World/TimelineLeverFixtures.cs" />
+        <Compile Include="../Shared/World/ValueDomainFixtures.cs" Link="World/ValueDomainFixtures.cs" />
+        <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
+        <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
     <ItemGroup>
         <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
-             the game ships Assets/worlds (WorldAssetRowLoader). WorldSaveAuthoredDocumentLawTests boots the worlds that
-             author them, so the suite carries the same files at the same relative paths. -->
+             the game ships Assets/worlds (WorldAssetRowLoader); the full hosts here boot worlds that author them, so the
+             suite carries the same files at the same relative paths. -->
         <None Include="../../src/Puck.World/Assets/worlds/music/**" LinkBase="Assets/worlds/music" CopyToOutputDirectory="PreserveNewest" />
         <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
         <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />

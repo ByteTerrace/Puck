@@ -16,11 +16,9 @@ namespace Puck.World.Tests;
 /// acceptance distance, and samples the next shell there. Each march case samples within a few thousandths of a wall,
 /// where a step floored at a thousandth of the radius, or a soft shadow's minimum stride, jumps the copy. The field
 /// cases evaluate <c>map()</c> under every wallpaper group a program accepts and hold it to the CPU fold.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfLogSphereMarchDeviceLawTests {
-    private const string Kernel = "sdf-march-log-sphere.comp";
     private const float Footprint = (1f / 1024);
     // The shadow's penumbra sharpness: a key light's 1 / penumbra slope, the slope of a light with none authored.
     private const float ShadowSharpness = 9;
@@ -139,13 +137,7 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
             new GpuGroupBinding(binding: 60, kind: GpuBindingKind.ReadOnlyBuffer),
             new GpuGroupBinding(binding: 61, kind: GpuBindingKind.StorageImage),
         ]);
-        var description = new GpuComputePipelineDescription(Bindings: [], Layout: new GpuPipelineLayoutDescription(groups: [world, pass], pushesIndex: true, stages: GpuShaderStage.Compute),
-            Name: Kernel, PushConstantBinding: null);
-        using var module = services.ShaderModuleFactory.Create(
-            bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))),
-            stage: GpuShaderStage.Compute
-        );
-        using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
+        var modes = Enum.GetValues<MarchMode>();
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R32G32B32A32Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: ((uint)cases.Length));
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
@@ -160,17 +152,16 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
         }
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
+        var modules = new List<IGpuShaderModule>();
+        var pipelines = new List<IGpuComputePipeline>();
         var pool = services.Bindings.CreatePool(
             name: default,
             sizes: Enumerable.Repeat(element: GpuDescriptorPoolSizes.ForGroups(groups: [world]), count: cases.Length)
-                .Aggregate(seed: GpuDescriptorPoolSizes.ForGroups(groups: [pass]), func: static (sum, sizes) => (sum + sizes))
+                .Aggregate(seed: Enumerable.Repeat(element: GpuDescriptorPoolSizes.ForGroups(groups: [pass]), count: modes.Length)
+                    .Aggregate(func: static (sum, sizes) => (sum + sizes)), func: static (sum, sizes) => (sum + sizes))
         );
 
         try {
-            var set = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[3], name: default, poolHandle: pool);
-
-            services.Bindings.WriteBuffer(binding: 60, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
-            services.Bindings.WriteStorageImage(arrayElement: 0, binding: 61, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 
@@ -178,23 +169,46 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
             recorder.TransitionImageLayout(commandBufferHandle: command, destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: output.ImageHandle, newLayout: GpuImageLayout.General, oldLayout: GpuImageLayout.Undefined, sourceAccessMask: GpuAccess.None,
                 sourceStageMask: GpuStage.TopOfPipe);
-            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
-            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: 3, pipelineLayoutHandle: pipeline.LayoutHandle);
 
-            for (var index = 0; (index < cases.Length); index++) {
-                var program = cases[index].Field;
-                var buffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: program.Words), name: default, usage: GpuBufferUsage.Storage);
+            // Each mode is its own kernel, so each inlines the one march or field read it runs.
+            foreach (var mode in modes) {
+                var kernel = KernelOf(mode: mode);
+                var description = new GpuComputePipelineDescription(Bindings: [], Layout: new GpuPipelineLayoutDescription(groups: [world, pass], pushesIndex: true, stages: GpuShaderStage.Compute),
+                    Name: kernel, PushConstantBinding: null);
+                var module = services.ShaderModuleFactory.Create(
+                    bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (kernel + extension))),
+                    stage: GpuShaderStage.Compute
+                );
 
-                buffers.Add(item: buffer);
-                var worldSet = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[1], name: default, poolHandle: pool);
+                modules.Add(item: module);
+                var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
 
-                services.Bindings.WriteBuffer(binding: 0, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
-                recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: worldSet, group: 1, pipelineLayoutHandle: pipeline.LayoutHandle);
-                ReadOnlySpan<uint> pushed = [((uint)index)];
+                pipelines.Add(item: pipeline);
+                var set = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[3], name: default, poolHandle: pool);
 
-                recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: MemoryMarshal.AsBytes(span: pushed), offset: 0,
-                    pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
-                recorder.Dispatch(commandBufferHandle: command, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                services.Bindings.WriteBuffer(binding: 60, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
+                services.Bindings.WriteStorageImage(arrayElement: 0, binding: 61, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
+                recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
+                recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: 3, pipelineLayoutHandle: pipeline.LayoutHandle);
+
+                for (var index = 0; (index < cases.Length); index++) {
+                    if (cases[index].Mode != mode) {
+                        continue;
+                    }
+                    var program = cases[index].Field;
+                    var buffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: program.Words), name: default, usage: GpuBufferUsage.Storage);
+
+                    buffers.Add(item: buffer);
+                    var worldSet = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[1], name: default, poolHandle: pool);
+
+                    services.Bindings.WriteBuffer(binding: 0, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
+                    recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: worldSet, group: 1, pipelineLayoutHandle: pipeline.LayoutHandle);
+                    ReadOnlySpan<uint> pushed = [((uint)index)];
+
+                    recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: MemoryMarshal.AsBytes(span: pushed), offset: 0,
+                        pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+                    recorder.Dispatch(commandBufferHandle: command, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
+                }
             }
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
@@ -207,9 +221,19 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
             foreach (var buffer in buffers) {
                 buffer.Dispose();
             }
+            foreach (var pipeline in pipelines) {
+                pipeline.Dispose();
+            }
+            foreach (var module in modules) {
+                module.Dispose();
+            }
         }
     }
-    // Shells of ratio two about the origin, each holding the sphere of radius 0.0003125 at x = 1.41406 scaled by its shell.
+    private static string KernelOf(MarchMode mode) => mode switch {
+        MarchMode.Primary => "sdf-march-log-sphere-primary.comp",
+        MarchMode.Shadow => "sdf-march-log-sphere-shadow.comp",
+        _ => "sdf-march-log-sphere-field.comp",
+    };    // Shells of ratio two about the origin, each holding the sphere of radius 0.0003125 at x = 1.41406 scaled by its shell.
     private static SdfProgram DrosteProgram() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

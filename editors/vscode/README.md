@@ -57,8 +57,10 @@ From `editors/vscode`, run:
 ```sh
 npm ci
 npm run package
-code --install-extension vscode-puck-1.0.0.vsix --force
+code --install-extension vscode-puck-<version>.vsix --force
 ```
+
+The package step names the file after the `version` in `package.json`.
 
 The VSIX bundles the language client; the Puck CLI is installed separately. Packaging runs the build automatically.
 

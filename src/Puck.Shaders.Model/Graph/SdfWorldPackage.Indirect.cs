@@ -3,8 +3,18 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The per-view transfer pass clearing its deferred receiver diagnostic before Views executes.</summary>
+    /// <summary>The per-view transfer pass clearing its deferred receiver diagnostic before the receiver executes.</summary>
     public const string IndirectReceiverReset = "indirectReceiverReset";
+    /// <summary>The per-pixel receiver answers views reads (<c>indirect/sdf-indirect-answer.hlsli</c>): status,
+    /// replacement and field evaluations, then the replacing answer's source-masked total.</summary>
+    public const string IndirectAnswer = "indirectAnswer";
+    /// <summary>The receiver answers as the receiver kernel writes them.</summary>
+    public const string IndirectAnswerWritten = "indirectAnswerRW";
+    /// <summary>The bytes of one pixel's receiver answer: four words.</summary>
+    public const uint IndirectAnswerByteLength = (4 * sizeof(uint));
+    /// <summary>The selected receiver record after views writes its part beside the receiver's near ray and
+    /// replacing sources.</summary>
+    public const string IndirectPickShaded = "indirectPickShaded";
     /// <summary>The cleared per-view receiver diagnostic.</summary>
     public const string IndirectDeferredClear = "indirectDeferredClear";
     /// <summary>The per-view deferred and reader counts, copied only after their Views submission.</summary>
@@ -35,9 +45,9 @@ public static partial class SdfWorldPackage {
     public const string IndirectAllocation = "indirectAllocation";
     /// <summary>The exact transport and slot revision qualifying a receiver certificate.</summary>
     public const string IndirectCertificateRevision = "indirectCertificateRevision";
-    /// <summary>Whether Primary rewrites the same submitted surface inputs in the same visibility allocation.</summary>
+    /// <summary>Whether Primary rewrites the same visibility storage: recorder, buffer, binding and extent.</summary>
     public const string PreserveIndirectReceivers = "preserveIndirectReceivers";
-    /// <summary>The visibility version after views publishes only its receiver-certificate fields.</summary>
+    /// <summary>The visibility version after the receiver publishes only its receiver-certificate fields.</summary>
     public const string IndirectVisibility = "indirectVisibility";
     /// <summary>The submitted cache update sequence, for reading only completed proof publications.</summary>
     public const string IndirectFrame = "indirectFrame";
@@ -49,6 +59,14 @@ public static partial class SdfWorldPackage {
     public const string IndirectTraceCount = "indirectTraceCount";
     /// <summary>Zero places probes; one partitions their cells.</summary>
     public const string IndirectPhase = "indirectPhase";
+    /// <summary>The first item of the pass's admitted chunk, counted from its kind's first scheduled entry. Each
+    /// workgroup runs the item this value plus its group index names.</summary>
+    public const string IndirectItemFirst = "indirectItemFirst";
+    /// <summary>The chunk's first admitted unit within its first item: a probe, cell or ray of a transport item, or a
+    /// ray of a shaded probe.</summary>
+    public const string IndirectUnitFirst = "indirectUnitFirst";
+    /// <summary>The chunk's admitted units, counted across item boundaries; units outside the range do not run.</summary>
+    public const string IndirectUnitCount = "indirectUnitCount";
     /// <summary>The probes in the current finite shade batch.</summary>
     public const string IndirectShadeCount = "indirectShadeCount";
     /// <summary>The completed generation the feedback sweep reads.</summary>
@@ -61,6 +79,9 @@ public static partial class SdfWorldPackage {
     public const string IndirectWritePublication = "indirectWritePublication";
     /// <summary>The finite solve's feedback gain, zero during its direct sweep.</summary>
     public const string IndirectFeedback = "indirectFeedback";
+    /// <summary>Whether transport past a level's near reach, and the coarsest level's, omits moving casters: one for a program
+    /// whose root operands are independently unioned (the static far field, SdfIndirectCache.MarkGeometry), zero otherwise.</summary>
+    public const string IndirectStaticFar = "indirectStaticFar";
     /// <summary>The maximum new receiver proofs admitted by all views this frame; zero freezes proof writes.</summary>
     public const string IndirectReceiverProofs = "indirectReceiverProofs";
     /// <summary>Whether this view has fenced the exact current source and may replace a High cache sample.</summary>
@@ -122,12 +143,16 @@ public static partial class SdfWorldPackage {
         Value(name: IndirectClassifyCount, type: ShaderValueType.Uint),
         Value(name: IndirectTraceCount, type: ShaderValueType.Uint),
         Value(name: IndirectPhase, type: ShaderValueType.Uint),
+        Value(name: IndirectItemFirst, type: ShaderValueType.Uint),
+        Value(name: IndirectUnitFirst, type: ShaderValueType.Uint),
+        Value(name: IndirectUnitCount, type: ShaderValueType.Uint),
         Value(name: IndirectShadeCount, type: ShaderValueType.Uint),
         Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
         Value(name: IndirectWriteGeneration, type: ShaderValueType.Uint),
         Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
         Value(name: IndirectWritePublication, type: ShaderValueType.Uint),
         Value(name: IndirectFeedback, type: ShaderValueType.Float),
+        Value(name: IndirectStaticFar, type: ShaderValueType.Uint),
         Read(element: ShaderValueType.Int4, name: IndirectBricks),
         Read(element: ShaderValueType.Uint4, name: IndirectUpdates),
         Read(element: ShaderValueType.Float4, name: IndirectDirections),
@@ -155,37 +180,60 @@ public static partial class SdfWorldPackage {
             new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
-    /// <summary>Adds the cache's buffer edge, selected-receiver diagnostic and per-view deferred completion counter.
-    /// One transfer reset precedes each Views execution; Primary has no dependency on mutable cache contents.</summary>
+    /// <summary>Adds the cache's buffer edge, the receiver pass, the selected-receiver diagnostic and the per-view
+    /// deferred completion counter. One transfer reset precedes each receiver execution; the receiver proves every
+    /// shaded pixel against the cache, publishes its certificate in the visibility record and its answer, and views reads
+    /// both and the cache. Primary has no dependency on mutable cache contents.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>
     /// <param name="bytes">The residency's cache size.</param>
     /// <returns>The view fragment with its external cache dependency.</returns>
-    public static RenderGraphPackageFragment WithIndirect(RenderGraphPackageFragment fragment, ulong bytes) => fragment with {
-        InputVersions = [.. fragment.InputVersions, IndirectCache],
-        Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
-            Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
-            new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: (IndirectPickWords * sizeof(uint)), StrideBytes: sizeof(uint)),
-            new ShaderPipelineResource(Name: IndirectDeferredClear, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: (2 * sizeof(uint)), StrideBytes: sizeof(uint), Retained: true),
-            new ShaderPipelineResource(Name: IndirectDeferred, Kind: ShaderPipelineResourceKind.Buffer,
-                SizeBytes: (2 * sizeof(uint)), StrideBytes: sizeof(uint), From: IndirectDeferredClear, PreservesPredecessor: true)],
-        Passes = [.. fragment.Passes.SelectMany(selector: WithReceiverCompletion)],
-    };
+    public static RenderGraphPackageFragment WithIndirect(RenderGraphPackageFragment fragment, ulong bytes) {
+        // The certificate version and the answers follow the visibility records' own extent, the render grid in a reduced view.
+        var shadow = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.ShadowVisibility));
 
-    private static RenderGraphFragmentPass[] WithReceiverCompletion(RenderGraphFragmentPass pass) {
+        return fragment with {
+            InputVersions = [.. fragment.InputVersions, IndirectCache],
+            Resources = [.. fragment.Resources, new ShaderPipelineResource(Name: IndirectCache,
+                Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint), Initialization: ShaderPipelineInitialization.External),
+                shadow with { Name = IndirectVisibility, From = Parts.ShadowVisibility },
+                shadow with { Name = IndirectAnswer, From = null, StrideBytes = IndirectAnswerByteLength, Retained = true, PreservesPredecessor = false },
+                new ShaderPipelineResource(Name: IndirectPick, Kind: ShaderPipelineResourceKind.Buffer,
+                    SizeBytes: (IndirectPickWords * sizeof(uint)), StrideBytes: sizeof(uint), Retained: true),
+                new ShaderPipelineResource(Name: IndirectPickShaded, Kind: ShaderPipelineResourceKind.Buffer,
+                    SizeBytes: (IndirectPickWords * sizeof(uint)), StrideBytes: sizeof(uint), From: IndirectPick, PreservesPredecessor: true),
+                new ShaderPipelineResource(Name: IndirectDeferredClear, Kind: ShaderPipelineResourceKind.Buffer,
+                    SizeBytes: (2 * sizeof(uint)), StrideBytes: sizeof(uint), Retained: true),
+                new ShaderPipelineResource(Name: IndirectDeferred, Kind: ShaderPipelineResourceKind.Buffer,
+                    SizeBytes: (2 * sizeof(uint)), StrideBytes: sizeof(uint), From: IndirectDeferredClear, PreservesPredecessor: true)],
+            Passes = [.. fragment.Passes.SelectMany(selector: WithReceiver)],
+        };
+    }
+
+    private static RenderGraphFragmentPass[] WithReceiver(RenderGraphFragmentPass pass) {
         if (pass.Name != Parts.Views) { return [pass]; }
-        // The reset precedes the same shading inputs. Its recorder executes whenever this node renders, as Views
-        // must while its mutable residency input is bound; the whole view can still stand when complete.
+        // The reset precedes the same shading inputs. Its recorder executes whenever this node renders, as the receiver
+        // and views must while their mutable residency input is bound; the whole view can still stand when complete.
+        // The receiver reads what views reads and writes the certificate, the answers, the near ray and replacing
+        // sources of the selected pixel, and the deferred counts; views reads the certified records, the answers, the
+        // cache and the counts, which its readback copies, and finishes the selected pixel's record.
+        var shaded = pass.Inputs.Select(selector: static input => ((input.Name == Parts.ShadowVisibility) ? new ResourceReference(Name: IndirectVisibility) : input));
+
         return [
             new RenderGraphFragmentPass(Name: IndirectReceiverReset,
                 Inputs: pass.Inputs, InputAccesses: pass.InputAccesses,
                 Outputs: [IndirectDeferredClear], OutputAccesses: [RenderGraphPortAccess.TransferWrite], Members: []),
             pass with {
+                Name = Parts.Receiver,
                 Inputs = [.. pass.Inputs, new ResourceReference(Name: IndirectCache), new ResourceReference(Name: IndirectDeferredClear)],
                 InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeReadWrite, RenderGraphPortAccess.ComputeRead],
-                Outputs = [.. pass.Outputs, IndirectPick, IndirectDeferred],
-                OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+                Outputs = [IndirectVisibility, IndirectAnswer, IndirectPick, IndirectDeferred],
+                OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+            },
+            pass with {
+                Inputs = [.. shaded, new ResourceReference(Name: IndirectAnswer), new ResourceReference(Name: IndirectCache), new ResourceReference(Name: IndirectDeferred)],
+                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+                Outputs = [.. pass.Outputs, IndirectPickShaded],
+                OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
             },
         ];
     }

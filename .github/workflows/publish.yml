@@ -33,6 +33,9 @@ jobs:
   artifacts:
     name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
+  browser:
+    name: Build the WebAssembly payload
+    uses: ./.github/workflows/browser.yml
   pack:
     name: Verify package installation
     needs: artifacts
@@ -53,10 +56,7 @@ jobs:
       prebuilt: true
   docs:
     name: Build API documentation
-    needs: artifacts
     uses: ./.github/workflows/docs.yml
-    with:
-      prebuilt: true
   prepare:
     name: Validate the release source and prepare the selected package batch
     needs: pack
@@ -97,7 +97,7 @@ jobs:
       url: https://www.nuget.org/profiles/ByteTerrace
     if: inputs.publish
     name: Publish the verified package batch
-    needs: [prepare, build, verify, docs]
+    needs: [prepare, build, verify, docs, browser]
     permissions:
       contents: write
       id-token: write

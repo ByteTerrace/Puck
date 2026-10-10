@@ -164,10 +164,13 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
 /// <summary>A row loaded from cloud storage under an owner identity's own container — the composed definition its
 /// authority root names (<see cref="WorldAuthorityBlobStore.RootAddress"/>), resolved through
 /// <see cref="WorldStorageNeighbourResolver"/>'s hosted arm. A hosted document is always stored already composed
-/// (basis folded), so <see cref="TryLoad"/> never resolves a chain, and it has no directory: a relative path it
-/// authors is refused by name (<see cref="WorldDocumentPaths"/>).</summary>
+/// (basis folded), so <see cref="TryLoad"/> never resolves a chain. Its directory is the host's: the one the host
+/// lays its hosted documents' relative paths out beside (a silo document's
+/// <see cref="WorldSiloDefinition.DocumentDirectory"/>), or none, when a relative path it authors is refused by name
+/// (<see cref="WorldDocumentPaths"/>).</summary>
 public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     private readonly TimeProvider m_clock;
+    private readonly string? m_documentDirectory;
     private readonly Guid m_owner;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
@@ -180,12 +183,15 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     /// <param name="target">The storage target (the identity's own hosted endpoint).</param>
     /// <param name="timeProvider">The host clock the definition read's <see cref="OperationTimeout"/> and every
     /// neighbour read run on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+    /// <param name="documentDirectory">The directory the hosted document's relative paths resolve beside, or
+    /// <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldHostedOrigin(Guid owner, SafeName world, IObjectBlobStore store, ObjectStorageTarget target, TimeProvider? timeProvider = null) {
+    public WorldHostedOrigin(Guid owner, SafeName world, IObjectBlobStore store, ObjectStorageTarget target, TimeProvider? timeProvider = null, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
         m_clock = (timeProvider ?? TimeProvider.System);
+        m_documentDirectory = documentDirectory;
         m_owner = owner;
         m_store = store;
         m_target = target;
@@ -252,7 +258,8 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
             address.Key,
             instanceIdentity,
             neighbours.ResolveHostedAsync,
-            cancellationToken
+            cancellationToken,
+            documentDirectory: m_documentDirectory
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return (loaded.Admission?.Definition, loaded.Reason);
@@ -278,6 +285,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         }
 
         sibling = new WorldHostedOrigin(
+            documentDirectory: m_documentDirectory,
             owner: m_owner,
             store: m_store,
             target: m_target,

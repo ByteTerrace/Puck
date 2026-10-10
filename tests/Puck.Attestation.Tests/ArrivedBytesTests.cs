@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 
 using Xunit;
@@ -33,6 +32,7 @@ public sealed class ArrivedBytesTests {
     }
     private static AttestationVerifyResult VerifyWire(CborAttestationCodec codec, TrustList trust, byte[] bytes) =>
         AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: codec.DecodeAttestation(wire: bytes),
             chain: null,
@@ -114,6 +114,7 @@ public sealed class ArrivedBytesTests {
         callerOwnedPayload.AsSpan().Fill(value: 0xA5);
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: isolatedClaim,
             chain: null,
@@ -124,15 +125,6 @@ public sealed class ArrivedBytesTests {
         );
 
         AssertAccepted(result: result);
-    }
-    [Fact]
-    public void RawSignedPortionConstruction_IsNotPublic() {
-        var method = typeof(SignedAttestation).GetMethod(
-            name: nameof(SignedAttestation.FromSignedPortion),
-            bindingAttr: BindingFlags.Public | BindingFlags.Static
-        );
-
-        Assert.Null(@object: method);
     }
     // The general property, checked rather than argued: every byte of a valid attestation is inside either the
     // signed portion or the signature, so no single-byte change can produce an accepted claim.
@@ -191,15 +183,19 @@ public sealed class ArrivedBytesTests {
     [Fact]
     public void SubstitutedPayloadProjection_CannotRideAValidSignedPortion() {
         var (codec, _, trust, claim, _) = BuildFixture();
-        var forgedProjection = SignedAttestation.FromSignedPortion(
+        var forgedProjection = SignedAttestation.Reencode(
+            codec: new PresetSignedPortionCodec(
+                inner: codec,
+                signedPortion: claim.SignedPortion.ToArray()
+            ),
             header: claim.Header,
             payloadKind: claim.PayloadKind,
             payloadBytes: Encoding.UTF8.GetBytes(s: "attacker-substituted payload"),
-            signature: claim.Signature,
-            signedPortion: claim.SignedPortion
+            signature: claim.Signature
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: forgedProjection,
             chain: null,

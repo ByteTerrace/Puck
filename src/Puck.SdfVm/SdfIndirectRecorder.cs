@@ -5,7 +5,7 @@ using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
+internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: member => (
         ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)), ((int)SdfWorldInterfaces.IndirectParameters.BlockOffsetOf(member: member.Name)),
         checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
@@ -17,6 +17,8 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
     private readonly RenderGraphPackageWorkCounters m_work;
     private readonly string m_prefix;
     private readonly string m_lightDepthVersion;
+    // The trace pass copies the measured-cost counters after its dispatch; the other passes copy nothing.
+    private readonly SdfIndirectCostReadback? m_costs;
 
     private bool m_environmentRecorded;
 
@@ -28,14 +30,17 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
         m_prefix = context.Pass[..^context.Part!.Length];
         m_lightDepthVersion = (m_prefix + SdfWorldPackage.IndirectLightDepth);
+        if (context.Part == SdfWorldPackage.IndirectTrace) {
+            m_costs = new SdfIndirectCostReadback(context: context);
+            built.Cache.AttachCostReadback(readback: m_costs);
+        }
     }
 
-    private int Count => m_context.Part switch {
-        SdfWorldPackage.IndirectPlace => m_built.Cache.PlaceCount,
-        SdfWorldPackage.IndirectClassify => m_built.Cache.ClassifyCount,
-        SdfWorldPackage.IndirectShade => m_built.Cache.ShadeCount,
-        _ => m_built.Cache.TraceCount,
-    };
+    // The pass's admitted chunk this frame: a transport step's chunk of its kind, or the shade batch's current chunk.
+    private SdfIndirectChunk? Chunk => (IsShade ? m_built.Cache.ShadeChunk : m_built.Cache.TransportChunk(part: m_context.Part!));
+    private SdfIndirectUnits Units => (IsShade ? m_built.Cache.ShadeUnits : m_built.Cache.TransportUnits(part: m_context.Part!));
+    // The workgroups the chunk touches, one per item.
+    private int Count => ((Chunk is { } chunk) ? chunk.Items(unitsPerItem: Units.UnitsPerItem) : 0);
     private bool IsEnvironmentPin => (m_context.Part == SdfSkyEnvironmentGraph.Pin);
     private bool IsShade => (m_context.Part == SdfWorldPackage.IndirectShade);
     private SdfKernel Kernel => m_context.Part switch {
@@ -82,6 +87,11 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectClassifyCount, value: ((uint)cache.ClassifyCount));
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectTraceCount, value: ((uint)cache.TraceCount));
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectPhase, value: ((m_context.Part == SdfWorldPackage.IndirectPlace) ? 0u : 1u));
+        var chunk = Chunk;
+
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectItemFirst, value: ((uint)(chunk?.ItemFirst ?? 0)));
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectUnitFirst, value: ((uint)(chunk?.UnitFirst ?? 0)));
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectUnitCount, value: ((uint)(chunk?.UnitCount ?? 0)));
         var batch = cache.ShadeBatch;
 
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectShadeCount, value: ((uint)cache.ShadeCount));
@@ -90,6 +100,7 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectReadPublication, value: ((batch is { Sweep: > 0 }) ? cache.PublishedStamp : 0u));
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectWritePublication, value: cache.WriteLightingStamp);
         Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectFeedback, value: BitConverter.SingleToUInt32Bits(value: ((batch is { Sweep: > 0 }) ? 1f : 0f)));
+        Write(block: recording.PassBlock, member: SdfWorldPackage.IndirectStaticFar, value: (SdfIndirectCache.StaticFarField(program: (pinned?.Frame ?? m_built.Residency.Frame!).Program) ? 1u : 0u));
         var set = m_sets.PassSet(slot: recording.Slot);
         var layout = SdfWorldInterfaces.IndirectParameters.Layout;
 
@@ -114,16 +125,13 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         m_sets.Bind(recording.Recorder, recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, recording.Slot);
         recording.Recorder.BindDescriptorSet(recording.CommandBuffer, GpuBindPoint.Compute, pipeline.LayoutHandle, ((uint)ShaderInterfaceGroup.World), (pinned?.WorldSet(slot: tables.CurrentSlot) ?? tables.WorldSet(slot: tables.CurrentSlot)));
         var sourceFrame = (pinned?.Frame ?? m_built.Residency.Frame!);
-        var queries = m_context.Part switch {
-            SdfWorldPackage.IndirectPlace => (((long)Count) * SdfIndirectCost.PlaceQueries),
-            SdfWorldPackage.IndirectClassify => (((long)Count) * SdfIndirectCost.ClassifyQueries),
-            SdfWorldPackage.IndirectShade => (((long)Count) * SdfIndirectCost.ShadeQueries(cache.Layout, sourceFrame)),
-            _ => (((long)Count) * SdfIndirectCost.TraceQueries),
-        };
+        var instructions = (IsShade ? sourceFrame.Program.InstructionCount : cache.InstructionCount);
+        var queries = ((chunk is null) ? 0 : checked((chunk.UnitCount * Units.QueriesPerUnit)));
+        var fixedCost = ((chunk is null) ? 0 : (Units.CostOf(chunk: chunk, instructionCount: instructions) - SdfIndirectCost.EstimateCost(instructionCount: instructions, queries: queries)));
 
-        m_built.Residency.LogIndirectSubmission(m_context.Part!, queries, sourceFrame.Program.InstructionCount, cache.Frame,
-            (IsShade ? (Count * SdfIndirectCost.ShadeCacheCost(layout: cache.Layout)) : 0));
+        m_built.Residency.LogIndirectSubmission(m_context.Part!, queries, instructions, cache.Frame, fixedCost);
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((uint)Math.Max(val1: 1, val2: Count)), groupCountY: 1, groupCountZ: 1);
+        m_costs?.Prepare(cache: cache, offsetBytes: (((ulong)cache.Layout.CostWordOffset) * sizeof(uint)), slot: recording.Slot, version: recording.Outputs[0].Version);
         return RenderGraphPackageOutcome.Drew;
     }
     public void Submitted() {
@@ -134,7 +142,22 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder {
         if (m_context.Part == SdfWorldPackage.IndirectTrace) { m_built.Cache.Submitted(); }
         if (IsShade) { m_built.Cache.SubmittedLighting(); }
     }
-    public void Dispose() => m_built.Dispose();
+
+    public ulong ReadbackBytes => (m_costs?.ReadbackBytes ?? 0UL);
+
+    public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
+        if (m_costs is { } costs) { return costs.Take(index: index, readback: out readback, slot: slot); }
+        readback = default;
+        return false;
+    }
+    public void Submitted(int slot, IGpuSubmissionFence fence) => m_costs?.Submitted(fence: fence, slot: slot);
+    public void Dispose() {
+        if (m_costs is { } costs) {
+            m_built.Cache.DetachCostReadback(readback: costs);
+            costs.Dispose();
+        }
+        m_built.Dispose();
+    }
 
     private static void Write(Span<byte> block, string member, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(destination: block[((int)SdfWorldInterfaces.IndirectParameters.BlockOffsetOf(member: member))..], value: value);
 }

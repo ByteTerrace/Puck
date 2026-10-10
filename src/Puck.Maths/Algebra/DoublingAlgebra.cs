@@ -149,14 +149,14 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
         var c6 = r.Right.Right.Left.Value.Value;
         var c7 = r.Right.Right.Right.Value.Value;
         const ulong NarrowLimit = (1UL << 29);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: a0) | FixedVectorMath.RawMagnitude(value: a1) |
-                                 FixedVectorMath.RawMagnitude(value: a2) | FixedVectorMath.RawMagnitude(value: a3) |
-                                 FixedVectorMath.RawMagnitude(value: a4) | FixedVectorMath.RawMagnitude(value: a5) |
-                                 FixedVectorMath.RawMagnitude(value: a6) | FixedVectorMath.RawMagnitude(value: a7) |
-                                 FixedVectorMath.RawMagnitude(value: c0) | FixedVectorMath.RawMagnitude(value: c1) |
-                                 FixedVectorMath.RawMagnitude(value: c2) | FixedVectorMath.RawMagnitude(value: c3) |
-                                 FixedVectorMath.RawMagnitude(value: c4) | FixedVectorMath.RawMagnitude(value: c5) |
-                                 FixedVectorMath.RawMagnitude(value: c6) | FixedVectorMath.RawMagnitude(value: c7);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: a0) | FusedArithmetic.RawMagnitude(value: a1) |
+                                 FusedArithmetic.RawMagnitude(value: a2) | FusedArithmetic.RawMagnitude(value: a3) |
+                                 FusedArithmetic.RawMagnitude(value: a4) | FusedArithmetic.RawMagnitude(value: a5) |
+                                 FusedArithmetic.RawMagnitude(value: a6) | FusedArithmetic.RawMagnitude(value: a7) |
+                                 FusedArithmetic.RawMagnitude(value: c0) | FusedArithmetic.RawMagnitude(value: c1) |
+                                 FusedArithmetic.RawMagnitude(value: c2) | FusedArithmetic.RawMagnitude(value: c3) |
+                                 FusedArithmetic.RawMagnitude(value: c4) | FusedArithmetic.RawMagnitude(value: c5) |
+                                 FusedArithmetic.RawMagnitude(value: c6) | FusedArithmetic.RawMagnitude(value: c7);
         long o0;
         long o1;
         long o2;
@@ -265,10 +265,10 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
         var o7 = v.Right.Right.Right.Value.Value;
         long norm;
 
-        if ((FixedVectorMath.RawMagnitude(value: o0) | FixedVectorMath.RawMagnitude(value: o1) |
-             FixedVectorMath.RawMagnitude(value: o2) | FixedVectorMath.RawMagnitude(value: o3) |
-             FixedVectorMath.RawMagnitude(value: o4) | FixedVectorMath.RawMagnitude(value: o5) |
-             FixedVectorMath.RawMagnitude(value: o6) | FixedVectorMath.RawMagnitude(value: o7)) < (1UL << 29)) {
+        if ((FusedArithmetic.RawMagnitude(value: o0) | FusedArithmetic.RawMagnitude(value: o1) |
+             FusedArithmetic.RawMagnitude(value: o2) | FusedArithmetic.RawMagnitude(value: o3) |
+             FusedArithmetic.RawMagnitude(value: o4) | FusedArithmetic.RawMagnitude(value: o5) |
+             FusedArithmetic.RawMagnitude(value: o6) | FusedArithmetic.RawMagnitude(value: o7)) < (1UL << 29)) {
             norm = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((o0 * o0) + (o1 * o1)) + (o2 * o2)) + (o3 * o3)) + (o4 * o4)) + (o5 * o5)) + (o6 * o6)) + (o7 * o7))));
         } else {
             norm = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)o0) * o0) + (((Int128)o1) * o1)) + (((Int128)o2) * o2)) + (((Int128)o3) * o3)) + (((Int128)o4) * o4)) + (((Int128)o5) * o5)) + (((Int128)o6) * o6)) + (((Int128)o7) * o7))));

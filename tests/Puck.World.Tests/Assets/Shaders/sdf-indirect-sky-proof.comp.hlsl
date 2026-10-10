@@ -1,8 +1,8 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/indirect.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-sky.hlsli"
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> skyCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> skyResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> skyCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> skyResults : register(u127, space3);
 struct SkyProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<SkyProbeIndex> skyProbeIndex : register(b0, space4);
 

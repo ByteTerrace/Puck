@@ -74,6 +74,12 @@ public static class WorldSiloDefinitionValidator {
             return false;
         }
 
+        if ((definition.DocumentDirectory is { } documentDirectory) && string.IsNullOrWhiteSpace(value: documentDirectory)) {
+            reason = "documentDirectory, when present, names a directory";
+
+            return false;
+        }
+
         if (
             string.IsNullOrWhiteSpace(value: definition.Store.Type) ||
             (definition.Store.Settings.ValueKind != JsonValueKind.Object)
@@ -134,6 +140,13 @@ public static class WorldSiloDefinitionValidator {
                 (lifecycle.HealthPort is < 1 or > 65535)
             ) {
                 reason = "lifecycle requires a positive shutdownSeconds and valid healthPort";
+                return false;
+            }
+            if (!System.Net.IPAddress.TryParse(
+                address: out _,
+                ipString: lifecycle.HealthAddress
+            )) {
+                reason = $"lifecycle.healthAddress '{lifecycle.HealthAddress}' is not an IP address literal";
                 return false;
             }
             if (

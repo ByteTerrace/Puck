@@ -8,7 +8,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Production receiver certificates preserve exact scopes and completed outcomes without quantizing launch data.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectReceiverDeviceLawTests {
@@ -49,7 +48,7 @@ public sealed class SdfIndirectReceiverDeviceLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var program = builder.Sphere(radius: 1, material: material).Build();
-        var results = SdfIndirectDeviceProbe.Run(services, extension, "sdf-indirect-receiver-proof.comp", 3,
+        var results = SdfIndirectDeviceProbe.Run(services, extension, "sdf-indirect-receiver-proof.comp", 5,
             Enumerable.Repeat(program, cases.Length).ToArray(), rows);
 
         for (var index = 0; (index < cases.Length); index++) {
@@ -59,6 +58,11 @@ public sealed class SdfIndirectReceiverDeviceLawTests {
                 y: (item.Completed ? 2 : 0), z: (item.Completed ? item.Mask : 0)), results[index]);
             Assert.Equal((item.Valid ? new Vector4(w: 0.03125f, x: 1.25f, y: -0.125f, z: 8192f) : Vector4.Zero), results[(cases.Length + index)]);
             Assert.Equal(new Vector4(w: 0, x: 12345, y: 0, z: 0), results[((2 * cases.Length) + index)]);
+            // A moved surface point keeps the certificate within its launch ball plus the acceptance threshold, never
+            // beyond it, and an unresolved certificate (no clearance) only within the threshold.
+            Assert.Equal(new Vector4(w: 0, x: 1, y: 0, z: 1), results[((3 * cases.Length) + index)]);
+            // A withdrawn certificate is invalid even in its own scope.
+            Assert.Equal(Vector4.Zero, results[((4 * cases.Length) + index)]);
         }
     }
 }

@@ -5,42 +5,46 @@ using System.Runtime.InteropServices;
 namespace Puck.Maths;
 
 public static partial class PrimeExploration {
-    internal interface IPacketResidue {
+    /// <summary>Names one prime residue channel of the thirty-wheel as a type, so the marking loop specializes per channel.</summary>
+    /// <remarks>Public so a law can compare each channel's packed masks with the wheel derivation; only the sieve's own loops use them.</remarks>
+    public interface IPacketResidue {
+        /// <summary>Gets the eight clear masks of the channel, one per ascending multiplier phase, packed from the lowest byte.</summary>
         static abstract ulong Masks { get; }
+        /// <summary>Gets the channel's residue modulo thirty.</summary>
         static abstract uint Residue { get; }
     }
     // Byte i clears the bit PrimeWheel30.TargetBit(r, i) of (r * s_i) mod 30, for ascending multiplier residues s_i. The
     // words are written out so a constant-residue instantiation folds them while importing;
     // prime-exploration.wheel-tables-match-their-derivation proves they equal the derivation.
-    internal readonly struct PacketResidue1 : IPacketResidue {
+    public readonly struct PacketResidue1 : IPacketResidue {
         public static uint Residue => 1;
         public static ulong Masks => 0x7FBFDFEFF7FBFDFEUL;
     }
-    internal readonly struct PacketResidue7 : IPacketResidue {
+    public readonly struct PacketResidue7 : IPacketResidue {
         public static uint Residue => 7;
         public static ulong Masks => 0xBFFBF77FFEEFDFFDUL;
     }
-    internal readonly struct PacketResidue19 : IPacketResidue {
+    public readonly struct PacketResidue19 : IPacketResidue {
         public static uint Residue => 19;
         public static ulong Masks => 0xFBEFFEBFFD7FF7DFUL;
     }
-    internal readonly struct PacketResidue13 : IPacketResidue {
+    public readonly struct PacketResidue13 : IPacketResidue {
         public static uint Residue => 13;
         public static ulong Masks => 0xEF7FFDFBDFBFFEF7UL;
     }
-    internal readonly struct PacketResidue11 : IPacketResidue {
+    public readonly struct PacketResidue11 : IPacketResidue {
         public static uint Residue => 11;
         public static ulong Masks => 0xDFF77FFDBFFEEFFBUL;
     }
-    internal readonly struct PacketResidue17 : IPacketResidue {
+    public readonly struct PacketResidue17 : IPacketResidue {
         public static uint Residue => 17;
         public static ulong Masks => 0xF7FEBFDFFBFD7FEFUL;
     }
-    internal readonly struct PacketResidue29 : IPacketResidue {
+    public readonly struct PacketResidue29 : IPacketResidue {
         public static uint Residue => 29;
         public static ulong Masks => 0xFEFDFBF7EFDFBF7FUL;
     }
-    internal readonly struct PacketResidue23 : IPacketResidue {
+    public readonly struct PacketResidue23 : IPacketResidue {
         public static uint Residue => 23;
         public static ulong Masks => 0xFDDFEFFE7FF7FBBFUL;
     }

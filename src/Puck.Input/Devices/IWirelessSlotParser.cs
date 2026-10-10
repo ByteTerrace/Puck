@@ -6,7 +6,7 @@ namespace Puck.Input.Devices;
 /// for the freshly paired pad) and park it again on disconnect, instead of inferring pairing from stream
 /// silence.
 /// </summary>
-internal interface IWirelessSlotParser {
+public interface IWirelessSlotParser {
     /// <summary>
     /// Classifies a report that was not a state report (<see cref="IGamepadParser.TryParse"/> returned
     /// <see langword="false"/>) as a pairing event, when it is one.

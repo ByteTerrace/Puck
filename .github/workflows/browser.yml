@@ -1,0 +1,73 @@
+name: Build the WebAssembly payload
+run-name: WebAssembly payload — ${{ github.ref_name }}
+
+# The browser engine's AppBundle is the one payload whose publish compiles ahead of time: Mono's AOT compiler and
+# Emscripten turn every managed assembly it ships into WebAssembly, which takes longer than the rest of the managed
+# packaging together. It is therefore its own producer, which starts beside the solution build (artifacts.yml) rather
+# than after it, so neither the solution's tests nor its other payloads wait for it. It restores and compiles only
+# Puck.World.Browser's own dependency closure, which declares no shader and no world compile, and publishes it once; the
+# uploaded AppBundle is the exact payload the application bundle ships and the Node harness below runs.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  publish:
+    name: Publish the WebAssembly payload (Windows)
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As in artifacts.yml: the SDK goes into a directory of its own, so installing wasm-tools does not reinstall every
+      # workload the image ships. The closure's few packages restore faster from the feed than the solution-wide NuGet
+      # cache downloads.
+      - env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}\dotnet
+        name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Restore locked dependencies
+        run: dotnet restore src/Puck.World.Browser --locked-mode
+      - name: Publish the browser AppBundle ahead of time
+        run: dotnet publish src/Puck.World.Browser -c Release --no-restore
+      - name: Upload the WebAssembly payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          include-hidden-files: true
+          name: browser-payload
+          path: src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
+    # The ahead-of-time publish alone measured nine to eleven minutes on this runner.
+    timeout-minutes: 45
+  verify:
+    name: Verify the deployed WebAssembly payload
+    needs: publish
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: Download the exact browser payload that will be deployed
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: browser-payload
+          path: src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
+      # The harness skips itself by name when it finds no AppBundle; a payload without its entry fails here instead.
+      - name: Require the payload's entry module
+        run: test -f src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle/main.mjs
+      - name: Run the Node harness against the AppBundle
+        run: node --test tests/engine-wasm.test.cjs
+        working-directory: src/Puck.Dashboard/src/portal
+    timeout-minutes: 10

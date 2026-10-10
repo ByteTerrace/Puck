@@ -3,6 +3,18 @@
 #define FIELD_SDF_PROGRAM_HLSLI
 static uint sdfWorkShapes = 0u;
 static uint sdfWorkGradients = 0u;
+// The field walk's visits: one per instance it reads, one per directory segment it tests, and every instruction of each
+// segment it does not cull and part leaf it composes. The indirect kernels report them so the cache admits its work at
+// its measured price (SdfIndirectCost).
+static uint sdfFieldVisits = 0u;
+// A point query's sparse instance mask (indirect/sdf-indirect-field.hlsli, sdfIndirectGridBlock): the instances binned in
+// the query's block of grid cells and the always-list, as distinct 32-instance mask words and their bits. While active,
+// the visible-instance walk enumerates these words in ascending order instead of every instance.
+#define SDF_GRID_SPARSE_WORDS 16u
+static bool sdfGridSparseActive = false;
+static uint sdfGridSparseCount = 0u;
+static uint sdfGridSparseWords[SDF_GRID_SPARSE_WORDS];
+static uint sdfGridSparseBits[SDF_GRID_SPARSE_WORDS];
 uint sdfProgramVectorCount() {
     uint count;
     uint stride;
@@ -92,6 +104,16 @@ float4 sdfDynamicTransformRow(uint index) {
 #define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
 groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
 groupshared uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
+// The group mask's word summary (sdfSummarizeGroupMask): for each of the first SDF_GROUP_MASK_SUMMARY_WORDS mask words,
+// one sphere enclosing the current bounds of the ordinary-sized instances its set bits name (radius < 0 when it
+// summarizes none), the smallest field-rescale inverse among them, and the bits of the oversized ones (a ground, a
+// building) it leaves out. mapCore rejects every summarized instance of a word against its running minimum at once, so a
+// march whose group mask holds a many-instance body tests the body once per word rather than once per instance.
+#define SDF_GROUP_MASK_SUMMARY_WORDS 128u
+groupshared float4 sdfGroupMaskSpheres[SDF_GROUP_MASK_SUMMARY_WORDS];
+groupshared float sdfGroupMaskScales[SDF_GROUP_MASK_SUMMARY_WORDS];
+groupshared uint sdfGroupMaskKept[SDF_GROUP_MASK_SUMMARY_WORDS];
+static bool sdfGroupMaskSummarized = false;
 #else
 #define SDF_SHADOW_MASK_WORDS 32u
 static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
@@ -112,6 +134,10 @@ static bool sdfShadowParticipationActive = false;
 
 // Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
 static bool sdfIndirectParticipationActive = false;
+// The static far field: a probe's transport past its level's near reach, and every query of the coarsest level, sees the
+// field without its moving casters, so a moving body only reaches the transport of probes near it
+// (SdfIndirectCache.MarkGeometry). Set only for a program whose root operands are independently unioned.
+static bool sdfIndirectStaticField = false;
 uint sdfIndirectPolicy(uint policy, bool isDynamic) {
     if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
     if (!isDynamic) { return SDF_INDIRECT_PARTICIPATION_CAST; }

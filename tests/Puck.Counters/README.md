@@ -18,6 +18,7 @@ work each render pass performs. The measurements count work, not elapsed time.
 | `counters.puck` | Two blocks and their caps | `counters.script.txt` | `counters.ceilings.json` |
 | `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` | `nexus.ceilings.json` |
 | `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` | `courtyard.ceilings.json` |
+| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground, cubes and Moth, inherited from `debug.puck` | `shadow.script.txt` | `debug.ceilings.json` |
 | `sky-still.puck` | An unchanging sky | `sky.script.txt` | `sky-still.ceilings.json` |
 | `sky-drift.puck` | Moving clouds | `sky.script.txt` | `sky-drift.ceilings.json` |
 | `sky-twinkle.puck` | Twinkling stars | `sky.script.txt` | `sky-twinkle.ceilings.json` |
@@ -30,6 +31,13 @@ grid. Temporal reconstruction and dynamic resolution are off, so the hit
 samples share one camera and extent across comparisons. The script disables
 cadence, pauses simulation until the renderer is ready, and then advances 120
 ticks before its one reading.
+
+The debug workload uses the same camera at the medium preset instead, with
+temporal reconstruction and indirect lighting off and the exact shadow mask and
+march, so every frame marches every lit pixel's shadow afresh. Its ceilings
+hold the shadow pass's shape evaluations: a field walk that stops rejecting far
+candidates per sample multiplies them twentyfold (2,359,732,255 against a
+recorded 117,530,472 on the RTX 2060's Vulkan driver).
 
 Run these commands from the repository root using a private copy of the
 candidate's built CLI. Each command runs both GPU backends; run them serially
@@ -124,7 +132,7 @@ the same hit samples; CPU document loading alone does not establish them.
 The CPU inventory and camera study run without a device:
 
 ```text
-dotnet test tests/Puck.World.Tests -c Release --no-build --no-restore --filter-class Puck.World.Tests.SdfTapeInventoryLawTests Puck.World.Tests.SdfTapePredictionLawTests --output Detailed
+dotnet test tests/Puck.World.Presentation.Tests -c Release --no-build --no-restore --filter-class Puck.World.Presentation.Tests.SdfTapeInventoryLawTests Puck.World.Presentation.Tests.SdfTapePredictionLawTests --output Detailed
 ```
 
 The study counts every tile and slab of the initial composed frame using the

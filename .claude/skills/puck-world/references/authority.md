@@ -88,7 +88,7 @@ ONE server-side table authorizes every write: `WorldGrants`
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
   naming a state row — there is no `profile:<id>` kind; `GrantSubjectKind`
   declares All/Body/Screen/Section/Composition/State/Region/Seat/Creation/
-  Placement/Adjacency/Machine and nothing else), `machine:<name>` (a named
+  Placement/Adjacency/Machine/History and nothing else), `machine:<name>` (a named
   machine instance, `Control`-only), `creation:<id>`/`placement:<id>` (one
   creations/placements row apiece — the ROW-SCOPED `Mutate` subjects, an
   ALTERNATIVE to the section hold rather than a narrowing beneath it; the id
@@ -512,7 +512,7 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 
 The acting-principal/administration contract is proved by
 `AuthorityAdministrationLawTests` and the compose/dissolve-authority contract by
-`EngageAuthorityLawTests` and `ControlApplicationLawTests`, both in `tests/Puck.World.Tests` with code-built
+`EngageAuthorityLawTests` and `ControlApplicationLawTests`, all in `tests/Puck.World.Server.Tests` with code-built
 furniture. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and

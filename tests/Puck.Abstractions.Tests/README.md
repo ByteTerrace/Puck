@@ -26,6 +26,18 @@ policy for each of four synthetic devices, and reads one `GpuRegion`'s bytes
 back under all three policies through `UploadModelGpu`, the shared memory model
 in `tests/Shared` that runs the copy kernel.
 
+`CacheRetentionLawTests` holds the per-user caches' one retention policy: least
+recently used out under a count and a byte bound, the entry in use kept and
+counted first, an age bound, an enforcement that leaves a file a reader holds,
+and a writer that lists a directory at most once an interval.
+`BuildOutputLinkLawTests` reads this suite's own built output: each project
+reference is a hard link to the referenced project's `bin`, and no file shares
+its file with a compiler output under `obj`, which the compiler rewrites in
+place. It reads file identities through the Windows file API and skips
+elsewhere. It carries the `BuildTree` trait: `puck gate` runs it in the checkout
+it built, and CI's test job, which restores an archive of `bin` outputs rather
+than building, leaves it out.
+
 ## Running
 
 ```powershell

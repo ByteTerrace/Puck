@@ -34,7 +34,8 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
 
         // The engine creates no pipeline, shader module, render pass or framebuffer: it records with the set and the mesh
         // pass pipeline it is handed, and the first frame that draws a mesh creates the mesh pass's attachments and the
-        // framebuffer binding them. It creates buffers, its two filler images, a command pool per ring slot, its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
+        // framebuffer binding them. It creates buffers, its three filler images (sampled, storage and the incoming handoff
+        // storage filler), a command pool per ring slot, its own descriptor pool, and whatever policy the device selects the one copy pool it reserves for all its
         // regions: the eight tables, the mesh region and the brick staging.
         Assert.Equal(actual: expected[GpuCreationKind.Pipeline], expected: 0L);
         Assert.Equal(actual: expected[GpuCreationKind.ShaderModule], expected: 0L);
@@ -43,7 +44,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
         Assert.Equal(actual: expected[GpuCreationKind.CommandPool], expected: ((long)SdfWorldTables.FrameRingSize));
         Assert.Equal(actual: expected[GpuCreationKind.BindingsPool], expected: 2L);
         Assert.True(condition: (expected[GpuCreationKind.Buffer] > SdfBrickPoolLayout.MaxBricks));
-        Assert.Equal(actual: expected[GpuCreationKind.Image], expected: 2L);
+        Assert.Equal(actual: expected[GpuCreationKind.Image], expected: 3L);
 
         var faulted = 0;
 

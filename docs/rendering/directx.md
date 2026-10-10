@@ -162,6 +162,15 @@ it like any other Puck handle owner.
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
 | Binding capabilities | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (options, root signature, shader model, options 19) | `GpuDeviceCapabilities` |
 
+Device creation names its adapter by LUID. Zero selects the first hardware
+adapter in DXGI's order and never a software renderer
+(`DirectXAdapterDescription.IsSelectedBy`): once Windows stops letting a process
+use the GPU after repeated device faults, the process enumerates only the
+Microsoft Basic Render Driver, and a device there would run every kernel on the
+CPU.
+With no hardware adapter left, creation refuses and names the adapters the
+process sees.
+
 Every feature query goes through `DirectXFeatureReads` over an
 `IDirectXFeatureSupport`, which returns the query's `HRESULT` rather than
 throwing. A runtime that does not know a feature, root signature version or

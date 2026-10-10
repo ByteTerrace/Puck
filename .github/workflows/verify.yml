@@ -18,8 +18,11 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # digest of its codec, and CanaryCeilings.json records the canary gates' planned cost, so a merge that combines two lanes'
 # changes fails here until the ledger is regenerated.
 # `shader-bytecode` is the binding contract's cross-host gate leg: it compiles every shader with the pinned Linux DXC
-# through the build's own CompileShaders target and holds each SPIR-V and DXIL output byte for byte to the Windows
-# build's, which the artifacts job collected (`puck shaders compare --build`).
+# through the build's own CompileShaders target and holds each SPIR-V output byte for byte to the Windows build's,
+# which the artifacts job collected (`puck shaders compare --build`). DXIL is no part of it: Direct3D 12 is its one
+# reader, so build/Shaders.targets compiles DXIL on Windows alone and this Linux build compiles none. Once a comparison passes, it saves those
+# Linux compiles as the Linux shader cache under the key of every shader input and both DXC pins; a later run whose key
+# already has that cache skips the comparison and says so, and the silo container build restores the cache.
 # `determinism` is the simulation's cross-host leg: it records every scenario of tests/Puck.Determinism/determinism.json
 # on Linux and compares the stream with the one the Windows artifacts job recorded (`puck determinism compare`),
 # failing on the first tick, system or document hash where the two hosts differ.
@@ -149,32 +152,12 @@ jobs:
           name: hgb-post-frontier
           path: artifacts/hgb-post
     timeout-minutes: 60
+  # The WebAssembly payload is its own producer, which verifies what it publishes; a release calls it beside this
+  # workflow, and a standalone run calls it here.
   browser:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    name: Verify the deployed WebAssembly payload
-    needs: artifacts
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-      - name: Download Functions and browser payloads
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: runtime-payloads
-          path: artifacts/runtime
-      - name: Stage the exact browser payload that will be deployed
-        run: |
-          mkdir -p src/Puck.World.Browser/bin/Release/net10.0/browser-wasm
-          cp -R artifacts/runtime/browser src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
-          test -f src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle/main.mjs
-      - name: Run the Node harness against the AppBundle
-        run: node --test tests/engine-wasm.test.cjs
-        working-directory: src/Puck.Dashboard/src/portal
-    timeout-minutes: 10
+    if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
+    name: Build and verify the WebAssembly payload
+    uses: ./.github/workflows/browser.yml
   world:
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify world authentication and recovery (Linux)
@@ -237,27 +220,64 @@ jobs:
     timeout-minutes: 15
   shader-bytecode:
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    name: Compare Linux DXC output with the Windows build
+    name: Compare Linux SPIR-V with the Windows build
     needs: artifacts
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install the pinned .NET SDK
+      # The Linux shader cache is saved under its key only after a comparison of exactly those inputs passed, so a cache
+      # under this run's key means there is nothing new to compare.
+      - id: compared
+        name: Look up a passing comparison of these shader inputs
+        uses: ./.github/actions/shader-cache
+        with:
+          mode: lookup
+      - env:
+          KEY: ${{ steps.compared.outputs.key }}
+        if: steps.compared.outputs.cache-hit == 'true'
+        name: Skip the comparison these shader inputs already passed
+        run: |
+          echo "Skipped: a previous run compared Linux and Windows DXC output for exactly these shader inputs and saved $KEY once it passed." | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: steps.compared.outputs.cache-hit != 'true'
+        name: Install the pinned .NET SDK
         uses: ./.github/actions/setup-dotnet
-      - name: Install pinned DXC
+      - if: steps.compared.outputs.cache-hit != 'true'
+        name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
-      - name: Download the Windows build's shader bytecode
+      - if: steps.compared.outputs.cache-hit != 'true'
+        name: Download the Windows build's SPIR-V
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: shader-bytecode-windows
           path: ${{ runner.temp }}/shader-bytecode-windows
-      - name: Install Puck CLI
+      - if: steps.compared.outputs.cache-hit != 'true'
+        name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
-      - name: Compile the shaders with Linux DXC and compare every output byte for byte
-        run: puck shaders compare --build "$RUNNER_TEMP/shader-bytecode-windows"
+      # --cache compiles into the absent directory the shader-cache action saves, and keeps it.
+      - id: compare
+        if: steps.compared.outputs.cache-hit != 'true'
+        name: Compile the shaders with Linux DXC and compare every SPIR-V module byte for byte
+        run: puck shaders compare --build "$RUNNER_TEMP/shader-bytecode-windows" --cache .tmp/shader-cache
+      # A difference is read from both hosts' bytes: spirv-dis disassembles either host's SPIR-V.
+      - if: failure() && steps.compare.outcome == 'failure'
+        name: Collect the Linux build's SPIR-V a failed comparison read
+        run: puck shaders collect "$RUNNER_TEMP/shader-bytecode-linux"
+      - if: failure() && steps.compare.outcome == 'failure'
+        name: Upload the Linux build's SPIR-V
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: shader-bytecode-linux
+          path: ${{ runner.temp }}/shader-bytecode-linux
+      - if: steps.compared.outputs.cache-hit != 'true'
+        name: Save this comparison's Linux compiles as the Linux shader cache
+        uses: ./.github/actions/shader-cache
+        with:
+          key: ${{ steps.compared.outputs.key }}
+          mode: save
     timeout-minutes: 30
   determinism:
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}

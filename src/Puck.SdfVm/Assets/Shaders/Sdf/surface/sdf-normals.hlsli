@@ -37,35 +37,57 @@ struct SdfFieldProbes {
     float3 softenSum;
 };
 
-// Runs any of the surface's field probes through ONE interpreter call site, in this order: the four NormalProbeEpsilon
-// tetrahedron taps, the centre tap at p itself, and the four SdfSoftenProbeEpsilon soften taps. Every map call DXC sees
-// is a whole inlined interpreter, so a kernel that needs several probes asks for them in one call with its flags, never
-// in a call per probe: the loop stays rolled, and each probe's samples and sums are the ones its own loop would take.
-// The caller counts the evaluations it asked for.
+// The probe slots, in the order every probe runs: slots 0 to 3 are the four NormalProbeEpsilon tetrahedron taps, slot 4
+// the centre tap at the probed point itself, and slots 5 to 8 the four SdfSoftenProbeEpsilon soften taps. A run asks for
+// the slots from `first` up to `end`, skipping the centre tap unless it was asked for (sdfProbeSlotSkipped).
+void sdfProbeSlots(bool gradientTaps, bool centerTap, bool softenTaps, out uint first, out uint end) {
+    first = (gradientTaps ? 0u : (centerTap ? 4u : 5u));
+    end = (softenTaps ? 9u : (centerTap ? 5u : 4u));
+}
+bool sdfProbeSlotSkipped(uint slot, bool centerTap) {
+    return ((slot == 4u) && !centerTap);
+}
+// Where a probe slot samples the field around p.
+float3 sdfProbeSlotPoint(float3 p, uint slot) {
+    bool soften = (slot >= 5u);
+    float3 direction = sdfTetrahedronDirection(soften ? (slot - 5u) : slot);
+
+    return ((slot == 4u) ? p : (p + (direction * (soften ? SdfSoftenProbeEpsilon : NormalProbeEpsilon))));
+}
+// Adds one probe slot's distance to the probes it measures.
+void sdfProbeSlotTake(inout SdfFieldProbes probes, uint slot, float distance) {
+    bool soften = (slot >= 5u);
+    float3 direction = sdfTetrahedronDirection(soften ? (slot - 5u) : slot);
+
+    if (slot < 4u) {
+        probes.gradientSum += (direction * distance);
+        probes.tapTotal += distance;
+    } else if (slot == 4u) {
+        probes.center = distance;
+    } else {
+        probes.softenSum += (direction * distance);
+    }
+}
+
+// Runs any of the surface's field probes through ONE interpreter call site, in slot order (sdfProbeSlots). Every map
+// call DXC sees is a whole inlined interpreter, so a kernel that needs several probes asks for them in one call with its
+// flags, never in a call per probe: the loop stays rolled, and each probe's samples and sums are the ones its own loop
+// would take. The caller counts the evaluations it asked for. A kernel with other field reads runs the same slots
+// through its own one field loop instead (sdfViewsFieldReads).
 SdfFieldProbes sdfProbeField(float3 p, uint instanceMaskBase, bool gradientTaps, bool centerTap, bool softenTaps) {
     SdfFieldProbes probes = (SdfFieldProbes)0;
-    uint first = (gradientTaps ? 0u : (centerTap ? 4u : 5u));
-    uint end = (softenTaps ? 9u : (centerTap ? 5u : 4u));
+    uint first;
+    uint end;
+
+    sdfProbeSlots(gradientTaps, centerTap, softenTaps, first, end);
 
     [loop]
     for (uint slot = first; (slot < end); slot++) {
-        if ((slot == 4u) && !centerTap) {
+        if (sdfProbeSlotSkipped(slot, centerTap)) {
             continue;
         }
 
-        bool soften = (slot >= 5u);
-        float3 direction = sdfTetrahedronDirection(soften ? (slot - 5u) : slot);
-        float3 at = ((slot == 4u) ? p : (p + (direction * (soften ? SdfSoftenProbeEpsilon : NormalProbeEpsilon))));
-        float distance = mapDistanceMasked(at, instanceMaskBase);
-
-        if (slot < 4u) {
-            probes.gradientSum += (direction * distance);
-            probes.tapTotal += distance;
-        } else if (slot == 4u) {
-            probes.center = distance;
-        } else {
-            probes.softenSum += (direction * distance);
-        }
+        sdfProbeSlotTake(probes, slot, mapDistanceMasked(sdfProbeSlotPoint(p, slot), instanceMaskBase));
     }
 
     return probes;

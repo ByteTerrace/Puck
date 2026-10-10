@@ -351,6 +351,10 @@
       {
         "Type": "Puck.Maths.FixedPointRounding",
         "Name": "TryRoundRational"
+      },
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "RoundRational"
       }
     ],
     "Legs": [
@@ -359,6 +363,36 @@
         "Flavor": "None",
         "Subject": "FixedPointRounding.TryRoundRational (public) — the SCALE SHIFT, the ties-to-even decision, the sign, and every refusal, over a cross product of numerators, denominators and fraction bit counts in [0, 63], plus the signed-64-bit boundary, negative and zero refusals, and an int.MaxValue shift that must refuse an obviously overflowing nonzero value without attempting an enormous allocation while still accepting exact zero. The scaling branch is reached only from here: mass-properties.volumes-vs-oracle calls the helper exclusively at a zero fraction bit count, and Physics's nonzero-shift caller has no law of its own.",
         "Against": "Oracles.RoundedRational — the same rational taken independently, scaling by a BigInteger.Pow multiply rather than a shift and deciding the tie by doubling the remainder against the divisor rather than comparing it with the distance to the next multiple",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.raw-magnitude-vs-big-integer",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FusedArithmetic",
+        "Name": "RawMagnitude"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.RawMagnitude, the sign-magnitude primitive every fixed-point fast-path gate and sign-magnitude kernel reads, at zero, both long extremes and their neighbours, every power of two below 2^63 with its two neighbours in both signs, and 4096 SplitMix64 draws",
+        "Against": "BigInteger.Abs of the same long, narrowed to ulong: an exact absolute value with no two's-complement trick shared with the subject's branch-free sign mask",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "long.MinValue, the one operand whose magnitude the signed carrier cannot hold, maps to exactly 2^63 rather than wrapping or saturating",
+        "Against": "",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

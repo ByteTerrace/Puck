@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
+using Puck.DirectX.Messages;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -33,8 +34,9 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             featureLevel: minimumFeatureLevel
         );
     }
-    // Returns an owned adapter pointer the caller must Release, or null if no adapter matches the LUID.
-    private static IDXGIAdapter1* FindAdapter(IDXGIFactory4* factory, long adapterLuid) {
+    // Returns an owned adapter pointer the caller must Release, or null if no adapter is selected by the LUID
+    // (DirectXAdapterDescription.IsSelectedBy); every adapter enumerated is described into `seen`.
+    private static IDXGIAdapter1* FindAdapter(IDXGIFactory4* factory, long adapterLuid, List<DirectXAdapterDescription> seen) {
         for (var index = 0U; ; index++) {
             IDXGIAdapter1* adapter = null;
             var result = factory->EnumAdapters1(
@@ -49,8 +51,10 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             result.ThrowIfFailed(operation: "IDXGIFactory4::EnumAdapters1");
 
             var description = adapter->GetDesc1();
+            var described = DirectXNativeAdapterApi.Describe(description: in description);
 
-            if (adapterLuid == DxgiInterop.ToLuid(luid: in description.AdapterLuid)) {
+            seen.Add(item: described);
+            if (described.IsSelectedBy(adapterLuid: adapterLuid)) {
                 return adapter;
             }
 
@@ -63,14 +67,23 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         var factory = DxgiInterop.CreateFactory();
 
         try {
+            var seen = new List<DirectXAdapterDescription>();
             var adapter = FindAdapter(
                 adapterLuid: adapterLuid,
-                factory: factory
+                factory: factory,
+                seen: seen
             );
 
             if (adapter is null) {
+                var adapters = string.Join(separator: ", ", values: seen.Select(selector: static description =>
+                    $"{description.Description} (0x{description.AdapterLuid:X16}{(description.IsSoftware ? ", software" : "")})"));
+
+                if (0L == adapterLuid) {
+                    throw new InvalidOperationException(message: $"No hardware DXGI adapter is enumerated in this process; it sees {((seen.Count == 0) ? "none" : adapters)}.");
+                }
+
                 throw new ArgumentException(
-                    message: $"No DXGI adapter was found with LUID 0x{adapterLuid:X16}.",
+                    message: $"No DXGI adapter was found with LUID 0x{adapterLuid:X16}; this process sees {((seen.Count == 0) ? "none" : adapters)}.",
                     paramName: nameof(adapterLuid)
                 );
             }
@@ -170,7 +183,8 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         try {
             var adapter = FindAdapter(
                 adapterLuid: adapterLuid,
-                factory: factory
+                factory: factory,
+                seen: []
             );
 
             if (adapter is null) {

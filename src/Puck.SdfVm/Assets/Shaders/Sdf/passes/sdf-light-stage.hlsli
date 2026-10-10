@@ -13,7 +13,10 @@
 #ifdef SDF_VIEWS_PASS
 #include "../indirect/sdf-indirect-apply.hlsli"
 
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out float reactivity) {
+// The stage shades with what the views stage resolved before it (sdfViewsStage): the hit's surface point, whether the
+// view shades finally, a shaded mesh pixel's surface (sdfLightMeshAt) and the stage's field reads (sdfViewsFieldReads),
+// so the views kernel's one field call site serves the detail re-resolve and the probes.
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, SdfLightMesh mesh, SdfViewsFieldReads reads, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
     float3 emission = float3(0.0, 0.0, 0.0);
 
@@ -24,8 +27,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
     }
     coverage = 1.0;
 
-    precise float3 rayTravel = p.rayDirection * s.t;
-    precise float3 surfacePoint = p.rayOrigin + rayTravel;
     float3 normal = s.normal;
     float curvature = s.curvature;
     int material = s.material;
@@ -33,8 +34,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
     int hitFrameSlot = s.frameSlot;
     float materialBlendWeight = s.blendWeight;
     int materialBlendOther = s.blendOther;
-    bool curvatureShading = worldCurvatureShadingEnabled();
-    bool useFinalShading = worldFinalShadingMode(p.viewMode) || p.viewMode == DebugViewModeIndirect;
     bool sampledScreen = false;
     reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
 
@@ -60,11 +59,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
 #if SDF_SHADOW_FADE_SLOTS > 0
             if (passGroup.shadowFadeCount > 0u) {
-#if SDF_SHADOW_FADE_SLOTS == 1
-                incoming.x = incomingVisibility.Load(int3(p.pixel, 0));
-#else
                 incoming = incomingVisibility.Load(int3(p.pixel, 0));
-#endif
             }
 #endif
         }
@@ -78,35 +73,19 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
         } else {
             // The detail re-resolve, ahead of the occlusion and the lights, since the material's wrap, soften and eye
             // lanes need the resolved material: one more hit-only field evaluation with the detail shapes included, so a
-            // rivet or seam's own material wins its footprint. When the host proves there are no detail shapes, the
-            // record's attributes and seam stand. A mesh pixel's surface is its triangle's, never the field's: a textured
-            // mesh reads its texel's material, albedo and emission from the atlases.
-            bool meshTextured = false;
-            bool meshImpostor = false;
-            SdfMeshTexel meshTexel = (SdfMeshTexel)0;
-            SdfImpostorSurface impostorSurface = (SdfImpostorSurface)0;
+            // rivet or seam's own material wins its footprint (sdfViewsFieldReads). When the host proves there are no
+            // detail shapes, the record's attributes and seam stand. A mesh pixel's surface is its triangle's, never the
+            // field's: a textured mesh reads its texel's material, albedo and emission from the atlases (sdfLightMeshAt).
+            bool meshTextured = mesh.textured;
+            bool meshImpostor = mesh.impostor;
+            SdfMeshTexel meshTexel = mesh.texel;
+            SdfImpostorSurface impostorSurface = mesh.impostorSurface;
 
-            if (s.mesh) {
-                if (sdfMeshIsImpostor(s.meshDraw)) {
-                    meshImpostor = true;
-                    impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, p.pixelFootprint);
-                } else if (sdfMeshTextured(s.meshDraw)) {
-                    meshTextured = true;
-                    meshTexel = sdfMeshTexelAt(s.meshDraw, s.meshTriangle, surfacePoint, (p.pixelFootprint * s.t));
-                    material = sdfMeshTexelMaterial(s.meshDraw, meshTexel);
-                }
-            } else if (!sdfProgramLayout.noDetailShapes) {
-                sdfDetailShadingActive = true;
-                SdfHit detailHit = mapMasked(surfacePoint, p.instanceMaskBase);
-                sdfEvalCount += 1.0;
-                sdfWorkSteps += 1u;
-                sdfDetailShadingActive = false;
-                material = detailHit.material;
-                hitLanes = detailHit.lanes;
-                hitFrameSlot = detailHit.frameSlot;
-                materialBlendWeight = sdfMaterialBlendWeight;
-                materialBlendOther = sdfMaterialBlendOther;
-            }
+            material = reads.material;
+            hitLanes = reads.lanes;
+            hitFrameSlot = reads.frameSlot;
+            materialBlendWeight = reads.blendWeight;
+            materialBlendOther = reads.blendOther;
 
             // The material blend at a seam: the smooth blend eases the distance across it, but the material is one integer
             // winner, so the winner's albedo cross-fades toward the losing operand by the clamped seam weight (0 at and
@@ -146,30 +125,22 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
 
             // The weathering's curvature (when the surface stage did not measure it) and the soften's wide-stencil
-            // gradient come from one probe call, so the kernel inlines the interpreter once for both.
-            bool weatheringCurvature = ((shadeMaterial.weathering.x > 0.0) && !curvatureShading);
-            bool softens = !(shadeMaterial.soften <= 0.0);
-            SdfFieldProbes probes = (SdfFieldProbes)0;
+            // gradient come from the probes the stage's field reads took for this material.
+            SdfFieldProbes probes = reads.probes;
 
-            if (weatheringCurvature || softens) {
-                bool centerTap = (weatheringCurvature && !sdfProgramLayout.noDetailShapes);
+            if (reads.weatheringCurvature) {
+                float center = s.terminalRadius;
 
-                probes = sdfProbeField(surfacePoint, p.instanceMaskBase, weatheringCurvature, centerTap, softens);
+                sdfEvalCount += 4.0;
+                sdfWorkSteps += 4u;
 
-                if (weatheringCurvature) {
-                    float center = s.terminalRadius;
-
-                    sdfEvalCount += 4.0;
-                    sdfWorkSteps += 4u;
-
-                    if (centerTap) {
-                        center = probes.center;
-                        sdfEvalCount += 1.0;
-                        sdfWorkSteps += 1u;
-                    }
-
-                    curvature = sdfProbeCurvature(probes, center);
+                if (reads.centerTap) {
+                    center = probes.center;
+                    sdfEvalCount += 1.0;
+                    sdfWorkSteps += 1u;
                 }
+
+                curvature = sdfProbeCurvature(probes, center);
             }
 
             applyWeathering(layerPoint, layerNormal, normal.y, curvature, p.pixelFootprint * s.t, hitLanes, shadeMaterial);
@@ -222,8 +193,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
-            SdfIndirectSources indirect = sdfIndirectApply(p, s, surfacePoint, normal);
-            color += sdfIndirectSourceTotal(indirect) * shadeMaterial.albedo
+            float3 indirect = sdfIndirectApply(p, s, surfacePoint, normal);
+            color += indirect * shadeMaterial.albedo
                 * passGroup.indirectApply.rgb
                 * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                     * lerp(1.0, ambientOcclusion, passGroup.indirectContact));

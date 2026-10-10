@@ -6,15 +6,25 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldResidency {
     private readonly WorkCounterSet m_indirectWork = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
 
+    private static readonly SdfIndirectLayout MediumLayout = new(tier: SdfIndirectTier.Medium);
+    private static readonly SdfIndirectLayout HighLayout = new(tier: SdfIndirectTier.High);
+
     private int m_indirectResetRequested;
     private bool m_captureLightingReset;
+    private string? m_indirectRefusal;
+    private SdfProgram? m_refusedIndirectProgram;
 
     /// <summary>Gets the deterministic schedule counters retained across cache rebuilds.</summary>
     public IWorkCounterSource IndirectWork => m_indirectWork;
     /// <summary>Gets or sets the host lever applied to this residency, including nested views.</summary>
     public SdfIndirectTier? IndirectTierOverride { get; set; }
-    /// <summary>Gets the effective cache tier.</summary>
-    public SdfIndirectTier IndirectTier => (IndirectTierOverride ?? (m_frame?.IndirectTier ?? SdfIndirectTier.Off));
+    /// <summary>Gets the effective cache tier: Off while the frame's field is refused (<see cref="IndirectRefusal"/>).</summary>
+    public SdfIndirectTier IndirectTier => ((m_indirectRefusal is null) ? (IndirectTierOverride ?? (m_frame?.IndirectTier ?? SdfIndirectTier.Off)) : SdfIndirectTier.Off);
+    /// <summary>Gets why the requested tier cannot run against the current field, or null. A single field query or an
+    /// indivisible unit of indirect work that exceeds one submission's cost cap retires the cache: the program renders
+    /// without indirect lighting and nothing waits for an indirect solve. Every other over-budget item is split into
+    /// chunks across submissions (<see cref="SdfIndirectCost.Admit"/>).</summary>
+    public string? IndirectRefusal => m_indirectRefusal;
     /// <summary>Gets this residency's sole indirect producer name.</summary>
     public string IndirectInstanceName => $"{Name}.indirect";
     /// <summary>Gets or sets whether new indirect updates are paused after the already admitted frame. This residency
@@ -36,6 +46,19 @@ public sealed partial class SdfWorldResidency {
     /// state; while frozen it withdraws old lighting without admitting replacement updates.</summary>
     public void RequestIndirectReset() => Interlocked.Exchange(location1: ref m_indirectResetRequested, value: 1);
 
+    // Decides each newly prepared frame's refusal before its tier is resolved; a packed frame keeps its decision.
+    // The refusal is printed once per refused program and reported by world.lighting.
+    private void RefuseIndirect(SdfFrame frame) {
+        if (ReferenceEquals(objA: frame, objB: m_packedFrame)) { return; }
+        m_indirectRefusal = null;
+        var requested = IndirectTier;
+
+        if ((requested == SdfIndirectTier.Off) || (SdfIndirectCost.RefusalOf(frame: frame, layout: ((requested == SdfIndirectTier.High) ? HighLayout : MediumLayout)) is not { } refusal)) { return; }
+        m_indirectRefusal = refusal;
+        if (ReferenceEquals(objA: m_refusedIndirectProgram, objB: frame.Program)) { return; }
+        m_refusedIndirectProgram = frame.Program;
+        Console.Error.WriteLine(value: $"[sdf-indirect] residency={Name} tier={requested.ToString().ToLowerInvariant()} refused, rendering without indirect lighting: {refusal}");
+    }
     private void PrepareIndirect(SdfWorldTables tables, SdfFrame frame) {
         tables.SetIndirect(tier: IndirectTier, farDistance: frame.FarDistance, work: m_indirectWork);
         if (tables.Indirect is { } cache) { cache.Frozen = IndirectFrozen; }

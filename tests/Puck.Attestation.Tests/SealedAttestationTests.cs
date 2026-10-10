@@ -320,6 +320,7 @@ public sealed class SealedAttestationTests {
         badSignature[^1] ^= 0xFF;
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: (malformed with { Signature = badSignature }),
             chain: chain,
@@ -347,6 +348,7 @@ public sealed class SealedAttestationTests {
         );
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: malformed,
             chain: chain,
@@ -408,6 +410,7 @@ public sealed class SealedAttestationTests {
         var decoded = codec.DecodeAttestation(wire: codec.EncodeAttestation(attestation: attestation));
 
         var result = AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1),
             codec: codec,
             claim: decoded,
             chain: chain,

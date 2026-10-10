@@ -3,19 +3,6 @@
 
 // Full-scene and independent whole-part queries share this marcher, and the primary stage runs it.
 #include "sdf-pixel.hlsli"
-#include "../indirect/sdf-indirect-approach.hlsli"
-#include "../isa/sdf-indirect-layout.hlsli"
-static bool sdfPrimaryApproachActive = false;
-
-// A camera mask or independent part cannot certify the whole ball around its sample. Indirect receivers use the
-// existing complete-field march instead; its samples furnish the approach without another interpreter evaluation.
-uint sdfPrimaryApproachWord(float3 surfacePoint, float3 direction, float3 previousPoint,
-    float previousClearance, float surfaceClearance) {
-    if (!sdfPrimaryApproachActive || !(surfaceClearance >= 0.0)) { return 0u; }
-    float spacing = sdfIndirectSpacing(passGroup.indirectTier, 0u);
-    uint approach = sdfIndirectPackApproach(surfacePoint, direction, previousPoint, previousClearance, surfaceClearance, spacing);
-    return approach != 0u ? approach : sdfIndirectPackApproach(surfacePoint, direction, surfacePoint, surfaceClearance, surfaceClearance, spacing);
-}
 // One ray's primary march: what the primary pass stores into its pixel's visibility record's V, C and L rows.
 struct SdfPrimaryMarch {
     float traveled;
@@ -28,15 +15,10 @@ struct SdfPrimaryMarch {
     float blendWeight;
     int blendOther;
     uint steps;
-    uint approach;
     bool found;
 };
 
 SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) {
-    if (sdfPrimaryApproachActive) {
-        sdfTapeActive = false;
-        mask = SDF_INSTANCE_MASK_ALL;
-    }
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
     if (localPart) {
         sdfTapeTrackMaterial = true;
@@ -75,9 +57,6 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     int marchStep = 0;
     float terminalRadius = 0.0;
     float terminalHitThreshold = SurfaceEpsilon;
-    uint approach = 0u;
-    float3 approachPoint = rayOrigin;
-    float approachClearance = 0.0;
     // Sphere-trace to the surface with a footprint-ADAPTIVE hit threshold. The field mapMasked returns is already
     // Lipschitz-clamped (SdfProgram stepScale; <= 1-Lipschitz along the ray), so over-relaxing stays
     // safe. DEFAULT: Bán & Valasek 2023 AUTO-RELAXED tracing — a per-ray slope EMA `slopeM` drives an adaptive
@@ -126,7 +105,6 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
             materialBlendOther = sdfMaterialBlendOther;
             terminalRadius = hit.distance;
             terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
-            approach = sdfPrimaryApproachWord(samplePosition, rayDirection, approachPoint, approachClearance, sdfMapBallClearance(hit.distance));
             break;
         }
 
@@ -209,13 +187,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
             materialBlendOther = sdfMaterialBlendOther;
             terminalRadius = fieldDistance;
             terminalHitThreshold = hitThreshold;
-            approach = sdfPrimaryApproachWord(samplePosition, rayDirection, approachPoint, approachClearance, radius);
             break;
-        }
-
-        if (!overshoot && radius > 0.0) {
-            approachPoint = samplePosition;
-            approachClearance = radius;
         }
 
         // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
@@ -359,7 +331,6 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     result.blendWeight = materialBlendWeight;
     result.blendOther = materialBlendOther;
     result.steps = (uint)marchStep;
-    result.approach = approach;
     result.found = hitSurface;
     return result;
 }
@@ -393,7 +364,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
     float pixelFootprint) {
     bool independent = false;
 #if defined(SDF_PRIMARY_PASS) && !defined(SDF_VM_DISABLE_PART_PROGRAMS)
-    independent = !sdfPrimaryApproachActive && sdfCanTracePartsIndependently();
+    independent = sdfCanTracePartsIndependently();
 #endif
     SdfPrimaryMarch result = (SdfPrimaryMarch)0;
     SdfPrimarySurface best = (SdfPrimarySurface)0;
@@ -442,7 +413,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         [loop]
         while (first != SDF_SEGMENT_NONE) {
             uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + index];
-            bool ready = (part.z & 0x7FFFFFFFu) != 0u;
+            bool ready = (part.z & SDF_PART_LEAF_COUNT_MASK) != 0u;
     #ifndef SDF_DYNAMIC_TRANSFORMS
             ready = ready && (part.z & 0x80000000u) == 0u;
     #endif
@@ -498,7 +469,6 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
 // the mask reads the tile masks, and the overshoot view runs its own two marches.
 void sdfPrimaryStage(SdfPixel p) {
     sdfEvalCount = 0.0;
-    sdfPrimaryApproachActive = passGroup.indirectTier != SdfIndirectTierOff && !sdfLightCamera();
 
     float traveled = max(p.marchStart, 0.0);
     bool hitSurface = false;
@@ -509,7 +479,6 @@ void sdfPrimaryStage(SdfPixel p) {
     float materialBlendWeight = 0.0;
     int materialBlendOther = 0;
     int marchStep = 0;
-    uint approach = 0u;
     // The clamped field at the accepted hit and the footprint-adaptive threshold it was accepted against, in the clamped
     // units of the termination test: the light stage's coverage is their ratio.
     float terminalRadius = 0.0;
@@ -555,7 +524,6 @@ void sdfPrimaryStage(SdfPixel p) {
         materialBlendOther = primary.blendOther;
         marchStep = (int)primary.steps;
         hitSurface = primary.found;
-        approach = primary.approach;
 #endif
     }
 
@@ -606,8 +574,8 @@ void sdfPrimaryStage(SdfPixel p) {
     coverage.blendWeight = materialBlendWeight;
     coverage.blendOther = materialBlendOther;
     sdfStoreVisibility(record, visibility);
-    // Repeating the same submitted surface does not discard bounded receiver work merely because cadence is off.
-    // New geometry, camera samples or visibility storage still clear the completed certificate before shading.
+    // A pixel's completed certificate outlives a new camera sample or geometry: the receiver pass keeps it only while its
+    // certified launch still joins the pixel's new surface point. New visibility storage clears it before shading.
     if (passGroup.preserveIndirectReceivers == 0u) { sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u); }
     sdfStoreVisibilityCoverage(record, coverage);
 
@@ -616,7 +584,6 @@ void sdfPrimaryStage(SdfPixel p) {
     } else {
         sdfStoreVisibilityFrameSlot(record, hitFrameSlot);
     }
-    sdfStoreVisibilityApproach(record, hitSurface && !meshPixel ? approach : 0u);
 }
 #endif
 

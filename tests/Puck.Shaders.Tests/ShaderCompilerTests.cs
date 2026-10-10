@@ -231,7 +231,7 @@ public sealed partial class ShaderCompilerTests {
     }
     /// <summary>Separate compiler instances share no gate, so racing them over one cache directory is the same race
     /// separate processes run: the file system is all they have in common. Each round is a fresh key that every
-    /// racer builds at once while a reader keeps opening whatever the cache has published.</summary>
+    /// racer builds at once while a reader keeps opening whatever the cache has published, each entry one whole output.</summary>
     [Fact]
     public async Task Separate_compiler_instances_racing_one_key_all_succeed_and_publish_only_complete_entries() {
         const int Racers = 4;
@@ -250,20 +250,16 @@ public sealed partial class ShaderCompilerTests {
         var reader = Task.Run(
             action: () => {
                 while (!reading.IsCancellationRequested) {
-                    foreach (var marker in Directory.GetFiles(
-                        fixture.Path,
-                        "*.complete",
-                        SearchOption.TopDirectoryOnly
-                    )) {
-                        var stem = marker[..^".complete".Length];
+                    foreach (var bytecode in Entries(directory: fixture.Path)) {
+                        try {
+                            var entry = AtomicFile.ReadAllBytes(path: bytecode);
 
-                        foreach (var target in ((string[])["spv", "dxil"])) {
-                            var bytecode = $"{stem}.comp.{target}";
-
-                            if (
-                                !File.Exists(path: bytecode) ||
-                                (AtomicFile.ReadAllBytes(path: bytecode).Length != 4)
-                            ) { incomplete.Add(item: bytecode); }
+                            if ((entry.Length != 68) || !entry.AsSpan(length: 32, start: 32).SequenceEqual(other: System.Security.Cryptography.SHA256.HashData(source: entry.AsSpan(start: 64)))) {
+                                incomplete.Add(item: bytecode);
+                            }
+                        } catch (FileNotFoundException) {
+                            // Entries are never removed once published, so a vanished one is incomplete too.
+                            incomplete.Add(item: bytecode);
                         }
                     }
                 }
@@ -300,12 +296,8 @@ public sealed partial class ShaderCompilerTests {
 
         Assert.Empty(collection: incomplete);
         Assert.Equal(
-            Rounds,
-            Directory.GetFiles(
-                fixture.Path,
-                "*.complete",
-                SearchOption.TopDirectoryOnly
-            ).Length
+            (Rounds * 2),
+            Entries(directory: fixture.Path).Length
         );
         Assert.Empty(collection: Directory.GetFiles(
             fixture.Path,
@@ -318,6 +310,12 @@ public sealed partial class ShaderCompilerTests {
             SearchOption.TopDirectoryOnly
         ));
     }
+
+    // The cache's published entries: one file an output, its key and its target's extension.
+    private static string[] Entries(string directory) => [
+        .. Directory.GetFiles(path: directory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.spv"),
+        .. Directory.GetFiles(path: directory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.dxil"),
+    ];
 
     private sealed class Fixture : IDisposable {
         private readonly TemporaryDirectory m_directory = new(

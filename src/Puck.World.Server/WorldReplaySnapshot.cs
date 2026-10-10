@@ -288,7 +288,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
 /// (and <see cref="WorldReplaySeat"/>/<see cref="WorldIdentityProjection"/>/<see cref="WorldReplayTickInput"/>/the
 /// <see cref="WorldReplayEntry"/> base it composes with) had not caught up. Widened so
-/// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
+/// <c>tests/Puck.World.Server.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
@@ -1725,7 +1725,7 @@ public sealed partial class WorldReplaySnapshot {
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
     /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
-    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) => DriveTraces(
+    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) => DriveTraces(
         addonHostFactory: addonHostFactory,
         documents: documents,
         engines: engines,
@@ -1745,7 +1745,7 @@ public sealed partial class WorldReplaySnapshot {
     /// <returns>Both traces, one entry per recorded tick.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
     /// <paramref name="machineHostFactory"/>, or <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null) {
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
@@ -1763,7 +1763,6 @@ public sealed partial class WorldReplaySnapshot {
         using var machines = machineHostFactory(
             definition.Screens,
             engines,
-            DocumentPath,
             null
         );
 

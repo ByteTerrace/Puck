@@ -5,7 +5,7 @@
 //
 // This is a module: a host supplies the seat, the 'attack' channel the serve press arrives on, the
 // 'walk' motion program the kits name, the three looks, and the population the five bodies need.
-// tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck is the smallest one that completes it.
+// tests/Puck.World.Fixtures/minimal-paddleball-host.puck is the smallest one that completes it.
 //
 // What makes this paddleball rather than a board game is that the court is physical. The ball is a rigid
 // body on a solid floor, served by a real impulse down the court, and the three things the rules

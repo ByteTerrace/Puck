@@ -30,7 +30,7 @@ public sealed class WorldTimelineLeverGpuLawTests {
     }
 
     private static void Verify(IGpuDeviceContext device, string extension) {
-        var definition = WorldTimelineLeverLawTests.Definition();
+        var definition = TimelineLeverFixtures.Definition();
         var mirror = ClientFixtures.StateMirror(definition);
 
         Assert.True(condition: mirror.ControlClock(name: "tide", operation: WorldTimelineOperation.At, rate: 1d, refusal: out var refusal, tick: 12600UL), userMessage: refusal);

@@ -23,7 +23,7 @@ namespace Puck.World.Tests;
 /// destination's <see cref="WorldRoutedScene"/>, emits exactly the program the destination's delivered definition
 /// composes through the session emitter, not the boot world's, and frames it with the seat's own camera.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldRoutedPresentationLawTests {
     private const string Away = "north";
     private const string Home = "boot";
@@ -93,7 +93,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     );
     // The destination runs a document of its own, and stands a door the home world has not.
     private static WorldDefinition AwayDocument() => (Fixtures.BuildDocument() with {
-        CreationsRaw = [PortalArrivalValidationLawTests.BuildDoorCreation()],
+        CreationsRaw = [PortalFixtures.BuildDoorCreation()],
         DocumentId = "away",
         PlacementRowsRaw = [new WorldPlacement(
             Id: "door",

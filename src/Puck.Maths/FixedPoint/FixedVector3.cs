@@ -216,12 +216,12 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
     /// rounds once to Q16.</returns>
     public static FixedVector3 Cross(FixedVector3 left, FixedVector3 right) {
         const ulong NarrowLimit = (1UL << 31);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: left.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Z.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Z.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: left.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Z.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Z.Value);
 
         if (combinedMagnitude < NarrowLimit) {
             return new(
@@ -255,12 +255,12 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
     /// <returns>The scalar dot product, with all three Q32 products accumulated before a single Q16 rounding.</returns>
     public static FixedQ4816 Dot(FixedVector3 left, FixedVector3 right) {
         const ulong NarrowLimit = (1UL << 30);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: left.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Z.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Z.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: left.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Z.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Z.Value);
 
         if (combinedMagnitude < NarrowLimit) {
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(
@@ -308,9 +308,9 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         }
         if (
             !FusedArithmetic.TryDivideMagnitudeRounded(
-                denominatorMagnitude: FixedVectorMath.RawMagnitude(value: denominator),
+                denominatorMagnitude: FusedArithmetic.RawMagnitude(value: denominator),
                 fractionBitCount: FixedQ4816.FractionBitCount,
-                numeratorMagnitude: FixedVectorMath.RawMagnitude(value: numerator),
+                numeratorMagnitude: FusedArithmetic.RawMagnitude(value: numerator),
                 quotient: out var magnitude
             ) ||
             !FusedArithmetic.TryNarrowSignedMagnitude(

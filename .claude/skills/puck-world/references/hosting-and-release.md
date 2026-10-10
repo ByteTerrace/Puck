@@ -19,13 +19,16 @@ A host runs an agent as an extension-configuration `participants` row (`WorldPar
 `puck mcp --silo <silo.json> --http <remote.json>` runs); the silo exposes only Hosting's neutral
 `IControlSessionHost`. A `services` member in that configuration selects exactly one installed
 `McpServicesProvider` (`Puck.Mcp.Azure` ships the `azure` one) and is refused by name with none or two. World installs the `Puck.Hosting` local control endpoint only
-when the host Console issues `world.control start`; `stop` and `status` manage its live lifetime. Attach with
+when the host Console issues `world.control start`, or when the run was launched with `--control` (the same start at
+boot, announced on stderr, wired through `WorldBootInputs.Control`); `stop` and `status` manage its live lifetime. Attach with
 `puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. The file protects a mutual-authenticated
 loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
 one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
 session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary
 artifact cleanup. Host deadlines remain enforced even when an injected session ignores cancellation; invalid
-host results are `unknown`. MCP results carry the same schema-backed metadata as JSON text and structured
+host results are `unknown`. A console answer is delivered whole up to `ControlLimits.OutputCharacters` (1 Mi UTF-16
+code units) and cut past it to a head ending in a marker, flagged `truncated`, under the command's own status
+(`ControlResponse.Bounded`); a long read is never an unknown outcome. MCP results carry the same schema-backed metadata as JSON text and structured
 content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
 closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
 Cancellation/EOF close ingress without stopping World or its recordings. The local adapter outlives Worlds: each
@@ -48,7 +51,7 @@ and observation providers through request-confined OBO with federated managed id
 never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
 persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
-Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
+Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in
 [`Puck.Mcp`](../../../../src/Puck.Mcp/README.md) when changing this attachment seam.
 
 ## Host provider boundary
@@ -73,7 +76,7 @@ consumes `IWorldHostRetirementObserver`. Metadata polling, event types and crede
 `Puck.World.Azure`, an Optional extensions project no shipped host references.
 The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
 owns provider-neutral configuration; the Azure README owns Azure provider keys. Verify with
-`ExtensionModelLawTests` (`tests/Puck.World.Tests`).
+`ExtensionModelLawTests` (`tests/Puck.World.Silo.Tests`).
 
 ## Production silo verification
 
@@ -178,7 +181,9 @@ unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
 Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived
 bytes, never `LoadDefinitionAsync`'s initialized result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds
-directory, preserving the image's asset layout. Colocated silo rows with neither
+directory, preserving the image's asset layout; the silo resolves those paths beside its document's
+`documentDirectory` (the image's `/app/worlds`), which becomes every hosted definition's `DocumentDirectory`,
+and the machine host reads content beside the directory of the definition it prepares. Colocated silo rows with neither
 authority nor listen endpoint sign with the stable instance name, matching the
 server's authority identity; listening rows still require an advertised endpoint.
 Run release bootstrap/preparation/publication and silo lifecycle controls for these seams.

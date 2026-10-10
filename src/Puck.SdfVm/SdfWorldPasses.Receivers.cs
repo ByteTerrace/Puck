@@ -5,8 +5,10 @@ namespace Puck.SdfVm;
 
 // A completed zero belongs to this exact allocation, transport scope and submitted surface sample.
 internal readonly record struct SdfIndirectReceiverScope(long Allocation, uint Certificate, long Surface);
+// Converging and ConvergedSample name the converging capture and the sample index (RenderGraphConvergence.Samples) the
+// surface's render took, or null and zero outside convergence: the exact sample a converging capture serves.
 internal readonly record struct SdfIndirectReceiverSurface(object Recorder, IGpuBuffer Buffer, long Binding,
-    ulong Geometry, SdfReprojectionView Sample, long Cut, double Scale, bool Temporal);
+    ulong Geometry, SdfReprojectionView Sample, long Cut, double Scale, bool Temporal, RenderGraphConvergence? Converging, int ConvergedSample);
 
 public sealed partial class SdfWorldPasses {
     internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame, bool readsIndirect) => ((tables is not null) && (frame is not null) &&
@@ -50,18 +52,26 @@ public sealed partial class SdfWorldPasses {
         return !found;
     }
 
+    // Returns whether the visibility storage repeats: the same recorder, buffer, binding and extent, so every pixel's
+    // retained certificate still belongs to that pixel. A new camera sample or geometry keeps the certificates; the
+    // receiver pass keeps each only while its certified launch still joins the pixel's new surface point. A changed
+    // surface still opens a new receiver scope, whose census the capture and readiness waits judge.
     internal bool PrepareReceiverSurface(string instance, object recorder, IGpuBuffer buffer, ulong geometry, SdfReprojectionView sample, long cut, bool stableGeometry) {
         var entry = Refresh(instance: instance);
-        var surface = new SdfIndirectReceiverSurface(recorder, buffer, entry.Bindings, geometry, sample, cut, entry.CurrentScale, entry.RequestsTemporal);
+        var converging = ((entry.Convergence is { IsActive: true } active) ? active : null);
+        var surface = new SdfIndirectReceiverSurface(recorder, buffer, entry.Bindings, geometry, sample, cut, entry.CurrentScale, entry.RequestsTemporal,
+            converging, (converging?.Samples ?? 0));
+        var previous = entry.ReceiverSubmittedSurface;
 
         entry.ReceiverRecordedSurface = (stableGeometry ? surface : null);
-        var preserve = (stableGeometry && (entry.ReceiverSubmittedSurface is { } submitted) &&
-            ReferenceEquals(objA: submitted.Recorder, objB: recorder) && ReferenceEquals(objA: submitted.Buffer, objB: buffer) &&
-            (submitted.Binding == surface.Binding) && (submitted.Geometry == geometry) && (submitted.Sample == sample) &&
-            (submitted.Cut == cut) && (submitted.Scale == surface.Scale) && (submitted.Temporal == surface.Temporal));
+        var storage = (stableGeometry && (previous is { } stored) && ReferenceEquals(objA: stored.Recorder, objB: recorder) && ReferenceEquals(objA: stored.Buffer, objB: buffer) &&
+            (stored.Binding == surface.Binding) && (stored.Scale == surface.Scale) &&
+            ((stored.Sample.Width, stored.Sample.Height) == (sample.Width, sample.Height)));
+        var preserve = (storage && (previous is { } submitted) && (submitted.Geometry == geometry) && (submitted.Sample == sample) &&
+            (submitted.Cut == cut) && (submitted.Temporal == surface.Temporal));
 
         if (!preserve) { entry.ReceiverSurface = checked((entry.ReceiverSurface + 1)); }
-        return preserve;
+        return storage;
     }
     internal void SubmittedReceiverSurface(string instance) {
         var entry = Refresh(instance: instance);

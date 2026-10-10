@@ -36,7 +36,11 @@ public static class WorldIndirectDiagnosticText {
         var memory = DescribeMemory(cache?.Layout, bytes, (cache?.Bytes ?? default), (cache?.LightViewBytes ?? 0UL), (light?.OwnedBytes ?? 0UL));
         var control = $"frozen={residency.IndirectFrozen} reset-pending={residency.IndirectResetPending}";
 
-        if (cache is null) { return $"indirect {residency.Name} tier={residency.IndirectTier.ToString().ToLowerInvariant()} {control} cache=unallocated {memory}"; }
+        if (cache is null) {
+            var refusal = ((residency.IndirectRefusal is { } reason) ? $" refused=\"{reason}\"" : string.Empty);
+
+            return $"indirect {residency.Name} tier={residency.IndirectTier.ToString().ToLowerInvariant()} {control} cache=unallocated{refusal} {memory}";
+        }
         var snapshot = cache.Snapshot();
         var levels = snapshot.Levels.Select(selector: (level, index) => {
             var bricks = snapshot.Bricks.Where(predicate: brick => (brick.Key.Level == index)).ToArray();
@@ -60,11 +64,19 @@ public static class WorldIndirectDiagnosticText {
         });
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"indirect {residency.Name} tier={snapshot.Tier.ToString().ToLowerInvariant()} allocation={snapshot.Allocation} epoch={snapshot.Epoch} submission={snapshot.Submission} lighting-publication={cache.LightingPublication} {control} trace-complete={snapshot.TraceComplete} pending-place={snapshot.PendingPlacements} pending-classify={snapshot.PendingClassifications} pending-trace={snapshot.PendingTraces} pending-shade={snapshot.PendingShades} sweeps={snapshot.CompletedSweeps} lighting-complete={snapshot.LightingComplete} published-generation={snapshot.PublishedGeneration} published-stamp={snapshot.PublishedStamp} published-source={(cache.PublishedLightingSource?.Sequence ?? 0)} levels={string.Join(separator: ',', values: levels)} light-maps={valid}/{maps.MapCount} light-pending={maps.Pending} light-publications={maps.Publications} maps={string.Join(separator: ',', values: mapRows)} gpu-probe-classes=unread gpu-irradiance=unread {memory}");
+            $"indirect {residency.Name} tier={snapshot.Tier.ToString().ToLowerInvariant()} allocation={snapshot.Allocation} epoch={snapshot.Epoch} submission={snapshot.Submission} lighting-publication={cache.LightingPublication} {control} trace-complete={snapshot.TraceComplete} pending-place={snapshot.PendingPlacements} pending-classify={snapshot.PendingClassifications} pending-trace={snapshot.PendingTraces} pending-transport-chunks={cache.PendingTransportChunks} pending-shade={snapshot.PendingShades} invalidations={cache.Invalidations} remaining-frames={(cache.RemainingFrames?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "unmeasured")} prices={Prices(cache: cache)} sweeps={snapshot.CompletedSweeps} lighting-complete={snapshot.LightingComplete} published-generation={snapshot.PublishedGeneration} published-stamp={snapshot.PublishedStamp} published-source={(cache.PublishedLightingSource?.Sequence ?? 0)} levels={string.Join(separator: ',', values: levels)} light-maps={valid}/{maps.MapCount} light-pending={maps.Pending} light-publications={maps.Publications} maps={string.Join(separator: ',', values: mapRows)} gpu-probe-classes=unread gpu-irradiance=unread {memory}");
+    }
+    // Each measured kind's field visits per unit, or "-" before its first measurement: what admission prices it at.
+    private static string Prices(SdfIndirectCache cache) {
+        string[] names = ["place", "classify", "trace", "shade", "receiver"];
+
+        return string.Join(separator: ',', values: names.Select(selector: (name, kind) => string.Create(CultureInfo.InvariantCulture,
+            $"{name}:{(cache.MeasuredFieldCost(kind: kind)?.ToString(provider: CultureInfo.InvariantCulture) ?? "-")}")));
     }
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
-    /// allocations. Probe-publication stamps and the shared receiver admission word occupy separate cache slices.
+    /// allocations. Probe-publication stamps, the shared receiver admission word and the split-probe shade scratch
+    /// occupy separate cache slices.
     /// Per-view receiver completion words belong to graph storage outside these slices. The active cache includes
     /// its borrowed light banks; the light fragment counts only its own scratch and regions.</summary>
     /// <param name="layout">The active cache's word layout, or null when no active cache is allocated.</param>
@@ -84,13 +96,15 @@ public static class WorldIndirectDiagnosticText {
         var radiance = ((layout is null) ? 0UL : Slice(layout.RadianceWordOffset, layout.IrradianceWordOffset));
         var irradiance = ((layout is null) ? 0UL : Slice(layout.IrradianceWordOffset, layout.PublicationWordOffset));
         var publication = ((layout is null) ? 0UL : Slice(layout.PublicationWordOffset, layout.ReceiverProofWordOffset));
-        var receiverProofs = ((layout is null) ? 0UL : Slice(layout.ReceiverProofWordOffset, layout.WordCount));
+        var receiverProofs = ((layout is null) ? 0UL : Slice(layout.ReceiverProofWordOffset, layout.ShadeScratchWordOffset));
+        var shadeScratch = ((layout is null) ? 0UL : Slice(layout.ShadeScratchWordOffset, layout.CostWordOffset));
+        var costCounters = ((layout is null) ? 0UL : Slice(layout.CostWordOffset, layout.WordCount));
         var regions = checked(((activeCache.DeviceLocal - (layout?.ByteLength ?? 0UL)) - lightDepth));
         var retiringDevice = checked((allCaches.DeviceLocal - activeCache.DeviceLocal));
         var retiringHost = checked((allCaches.HostVisible - activeCache.HostVisible));
         var total = checked(((allCaches.DeviceLocal + allCaches.HostVisible) + lightFragment));
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} receiver-proofs={receiverProofs} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
+            $"hits={hits} cells={cells} state={state} proofs={proofs} irradiance={irradiance} radiance={radiance} publication={publication} receiver-proofs={receiverProofs} shade-scratch={shadeScratch} cost-counters={costCounters} regions-device={regions} regions-host={activeCache.HostVisible} retiring-device={retiringDevice} retiring-host={retiringHost} cache-device={allCaches.DeviceLocal} cache-host={allCaches.HostVisible} light-view={lightDepth} light-fragment={lightFragment} total={total} byte(s)");
     }
 }

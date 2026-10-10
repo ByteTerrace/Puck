@@ -8,11 +8,11 @@ namespace Puck.Physics;
 /// already expose, called directly at their public faces: the rounded-up magnitude and product bounds conservative
 /// tests read. The state digest folds through <see cref="Fnv1aHash"/>.
 /// </summary>
-internal static class FixedRigidArithmetic {
+public static class FixedRigidArithmetic {
     /// <summary>Returns the least raw at or above the exact magnitude of a vector, at the components' own scale.</summary>
     /// <param name="value">The vector whose magnitude is bounded from above.</param>
     /// <returns>The rounded-up magnitude; <see cref="FixedQ4816.MaxValue"/> when the bound leaves the raw carrier.</returns>
-    internal static FixedQ4816 CeilingMagnitude(FixedVector3 value) =>
+    public static FixedQ4816 CeilingMagnitude(FixedVector3 value) =>
         (FixedDirectedRounding.TryCeilingMagnitude(
             x: value.X.Value,
             y: value.Y.Value,
@@ -26,7 +26,7 @@ internal static class FixedRigidArithmetic {
     /// <param name="left">The first non-negative factor.</param>
     /// <param name="right">The second non-negative factor.</param>
     /// <returns>The rounded-up product; <see cref="FixedQ4816.MaxValue"/> when the bound leaves the raw carrier.</returns>
-    internal static FixedQ4816 CeilingProduct(FixedQ4816 left, FixedQ4816 right) =>
+    public static FixedQ4816 CeilingProduct(FixedQ4816 left, FixedQ4816 right) =>
         (FixedDirectedRounding.TryCeilingProduct(
             a: left.Value,
             fractionBitsA: FixedQ4816.FractionBitCount,
@@ -43,7 +43,7 @@ internal static class FixedRigidArithmetic {
     /// <param name="right">The second non-negative factor.</param>
     /// <param name="addend">The non-negative addend.</param>
     /// <returns>The rounded-up sum; <see cref="FixedQ4816.MaxValue"/> when the bound leaves the raw carrier.</returns>
-    internal static FixedQ4816 CeilingProductSum(FixedQ4816 left, FixedQ4816 right, FixedQ4816 addend) =>
+    public static FixedQ4816 CeilingProductSum(FixedQ4816 left, FixedQ4816 right, FixedQ4816 addend) =>
         (FixedDirectedRounding.TryCeilingProductSum(
             a: left.Value,
             fractionBitsA: FixedQ4816.FractionBitCount,

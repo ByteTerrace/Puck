@@ -12,7 +12,6 @@ namespace Puck.World.Tests;
 
 /// <summary>The production terminal-source helper reads physical radiance only for an enabled certified exit.
 /// A constant full map has an exact directional oracle; a different reflection plane exposes a wrong-plane read.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectSkyDeviceLawTests {

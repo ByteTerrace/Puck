@@ -87,7 +87,8 @@ public sealed partial class SdfWorldTables {
     }
     // Moves the fillers from their first, undefined layout to the ones a pass binds them in, once, before any pass can
     // bind them: the sampled filler shader-readable and the storage filler General, both cleared, so a screen whose source
-    // is missing from a frame samples black.
+    // is missing from a frame samples black. The incoming storage filler moves to General uncleared: a pass binding it
+    // reads a zero fade count (SdfFrameBlock.WriteWithoutFades), so no kernel reads or writes it.
     private void InitializeFillers(nint commandBuffer) {
         var recorder = m_gpu.Recorder;
 
@@ -128,6 +129,16 @@ public sealed partial class SdfWorldTables {
             oldLayout: GpuImageLayout.General,
             sourceAccessMask: GpuAccess.TransferWrite,
             sourceStageMask: GpuStage.Transfer
+        );
+        recorder.TransitionImageLayout(
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+            destinationStageMask: GpuStage.ComputeShader,
+            imageHandle: m_incomingStorageFiller.ImageHandle,
+            newLayout: GpuImageLayout.General,
+            oldLayout: GpuImageLayout.Undefined,
+            sourceAccessMask: GpuAccess.None,
+            sourceStageMask: GpuStage.TopOfPipe
         );
         m_fillersInitialized = true;
     }

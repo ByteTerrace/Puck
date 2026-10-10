@@ -167,11 +167,11 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 |---|---:|---:|---|
 | `AddCellStatementNode` | 83 | 1 | `games/arena`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/poker` and 8 more |
 | `AndPredicateNode` | 204 | 1 | `avatars/moth`, `games/arena`, `games/billiards`, `games/freecell`, `games/go` and 18 more |
-| `ArgumentNode` | 1773 | 53 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 30 more |
-| `ArrayExpressionNode` | 2742 | 16 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 30 more |
+| `ArgumentNode` | 1816 | 53 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 31 more |
+| `ArrayExpressionNode` | 2779 | 16 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 31 more |
 | `BinaryExpressionNode` | 413 | 1 | `avatars/moth`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 5 more |
-| `BlockNode` | 1555 | 34 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 31 more |
-| `CallExpressionNode` | 763 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 29 more |
+| `BlockNode` | 1596 | 34 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 32 more |
+| `CallExpressionNode` | 775 | 8 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 30 more |
 | `CellSetDeclarationNode` | 5 | 0 | `games/go` |
 | `ClaimStatementNode` | 1 | 0 | `games/arena` |
 | `ColorExpressionNode` | 0 | 2 |  |
@@ -179,32 +179,32 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `ConditionalExpressionNode` | 5 | 0 | `games/backgammon`, `games/tetromino`, `moth-courtyard` |
 | `DealStatementNode` | 3 | 0 | `games/poker` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 37 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 32 more |
+| `DocumentNode` | 38 | 6 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 33 more |
 | `DrawStatementNode` | 6 | 0 | `games/freecell`, `games/klondike`, `games/spider` |
 | `EmbeddedBlockNode` | 1 | 1 | `games/wordspy` |
 | `EnumDeclarationNode` | 6 | 0 | `games/arena`, `games/paddleball`, `games/spider` |
 | `EnumMemberNode` | 18 | 0 | `games/arena`, `games/paddleball`, `games/spider` |
 | `ExportNode` | 63 | 0 | `games/arena`, `games/billiards`, `games/bowling`, `games/dominoes`, `games/freecell` and 18 more |
-| `ExpressionStatementNode` | 88 | 1 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/go`, `games/mancala` and 10 more |
-| `FlagStatementNode` | 33 | 1 | `avatars/moth`, `games/billiards`, `games/bowling`, `games/hexlines`, `games/paddleball` and 9 more |
+| `ExpressionStatementNode` | 90 | 1 | `avatars/moth`, `debug`, `games/backgammon`, `games/billiards`, `games/go` and 11 more |
+| `FlagStatementNode` | 36 | 1 | `avatars/moth`, `debug`, `games/billiards`, `games/bowling`, `games/hexlines` and 10 more |
 | `ForStatementNode` | 40 | 0 | `avatars/moth`, `games/go`, `games/tetromino`, `moth-courtyard`, `tools/hgb-mirror` |
-| `IdentifierExpressionNode` | 1962 | 31 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 30 more |
+| `IdentifierExpressionNode` | 1973 | 31 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 31 more |
 | `IfStatementNode` | 51 | 1 | `games/go`, `games/hiddenranks`, `games/reversi`, `games/snake`, `games/tetromino`, `games/wordspy` |
-| `ImportNode` | 9 | 2 | `avatars/moth`, `games/solitaire`, `games/tetromino`, `pipeline`, `standard` and 2 more |
+| `ImportNode` | 10 | 2 | `avatars/moth`, `debug`, `games/solitaire`, `games/tetromino`, `pipeline` and 3 more |
 | `IndexExpressionNode` | 205 | 2 | `avatars/moth`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
 | `InterpolatedStringNode` | 84 | 0 | `avatars/moth`, `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike` and 6 more |
 | `LambdaExpressionNode` | 46 | 0 | `games/freecell`, `games/hiddenranks`, `games/klondike`, `games/reversi`, `games/spider` and 3 more |
 | `LetNode` | 173 | 8 | `avatars/moth`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/reversi` and 7 more |
-| `LiteralExpressionNode` | 14959 | 173 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 32 more |
+| `LiteralExpressionNode` | 15127 | 173 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 33 more |
 | `LocalStatementNode` | 131 | 1 | `games/go`, `games/hiddenranks`, `games/mancala`, `games/poker`, `games/snake` and 2 more |
 | `NotPredicateNode` | 4 | 1 | `modules/granaries` |
-| `ObjectExpressionNode` | 1474 | 15 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 30 more |
+| `ObjectExpressionNode` | 1492 | 15 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 31 more |
 | `OperandExpressionNode` | 3256 | 39 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 23 more |
 | `OptionBlockNode` | 0 | 1 |  |
 | `OrPredicateNode` | 22 | 0 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
 | `PatternDeclarationNode` | 1 | 0 | `games/tetromino` |
 | `PatternSymbolDeclarationNode` | 1 | 0 | `games/tetromino` |
-| `PropertyNode` | 10203 | 115 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 31 more |
+| `PropertyNode` | 10305 | 115 | `avatars/moth`, `debug`, `games/arena`, `games/backgammon`, `games/billiards` and 32 more |
 | `PushStatementNode` | 18 | 0 | `games/go`, `games/poker`, `games/snake`, `games/tetromino` |
 | `RangeExpressionNode` | 174 | 3 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 12 more |
 | `RecordDeclarationNode` | 4 | 0 | `games/arena`, `games/paddleball` |
@@ -227,8 +227,8 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `StatePoolDeclarationNode` | 4 | 0 | `games/arena`, `games/paddleball` |
 | `StateSlotDeclarationNode` | 154 | 6 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 12 more |
 | `StateTableDeclarationNode` | 69 | 12 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/freecell`, `games/go` and 12 more |
-| `TemplateNode` | 14 | 1 | `avatars/moth`, `games/go`, `games/tetromino`, `skies` |
-| `TemplateParameterNode` | 30 | 3 | `avatars/moth`, `games/go`, `games/tetromino`, `skies` |
+| `TemplateNode` | 20 | 1 | `avatars/moth`, `debug`, `games/go`, `games/tetromino`, `skies` |
+| `TemplateParameterNode` | 39 | 3 | `avatars/moth`, `debug`, `games/go`, `games/tetromino`, `skies` |
 | `TestDeclarationNode` | 21 | 0 | `games/go`, `games/reversi`, `games/tetromino` |
 | `TestExpectBlockNode` | 21 | 0 | `games/go`, `games/reversi`, `games/tetromino` |
 | `TestExpectationNode` | 101 | 0 | `games/go`, `games/reversi`, `games/tetromino` |

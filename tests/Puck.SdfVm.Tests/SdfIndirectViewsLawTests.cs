@@ -7,8 +7,10 @@ namespace Puck.SdfVm.Tests;
 /// The indirect probe and cell diagnostics read stored records without evaluating the field. Every field call site is
 /// an inlined interpreter, so these debug views (<c>indirect/sdf-indirect-read.hlsli</c>, called
 /// from <c>debug/</c>) read stored records alone. The evaluating functions are derived from the tree: the indirect
-/// module's two field calls (<c>sdfIndirectSample</c>, <c>sdfIndirectGradient</c>) and every indirect function that
-/// reaches one of them.
+/// module's field query (<c>sdfIndirectServe</c>) and its blocking forms (<c>sdfIndirectSample</c>,
+/// <c>sdfIndirectGradient</c>), a procedure's queries (<c>sdfIndirectAsk</c>, <c>sdfIndirectAskGradient</c>,
+/// <c>sdfIndirectAskPlain</c>), running or calling a procedure (<c>sdfIndirectRun</c>, <c>sdfIndirectCall</c>), and every
+/// indirect function that reaches one of them.
 /// </summary>
 public sealed partial class SdfIndirectViewsLawTests {
     private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
@@ -29,7 +31,7 @@ public sealed partial class SdfIndirectViewsLawTests {
         return functions;
     }
     private static HashSet<string> Evaluators(Dictionary<string, string> functions) {
-        var evaluators = new HashSet<string>(collection: ["sdfIndirectSample", "sdfIndirectGradient"], comparer: StringComparer.Ordinal);
+        var evaluators = new HashSet<string>(collection: ["sdfIndirectServe", "sdfIndirectSample", "sdfIndirectGradient", "sdfIndirectAsk", "sdfIndirectAskGradient", "sdfIndirectAskPlain", "sdfIndirectRun", "sdfIndirectCall"], comparer: StringComparer.Ordinal);
         var grew = true;
 
         while (grew) {
@@ -50,12 +52,25 @@ public sealed partial class SdfIndirectViewsLawTests {
         var evaluators = Evaluators(functions: functions);
 
         // The derivation reaches the trace's evaluating entry points, so an empty set never passes the law vacuously.
-        Assert.Superset(new HashSet<string>(collection: ["sdfIndirectMarch", "sdfIndirectSegment", "sdfIndirectLaunch", "sdfIndirectProve"]), evaluators);
+        Assert.Superset(new HashSet<string>(collection: ["sdfIndirectMarchStep", "sdfIndirectSegmentStep", "sdfIndirectLaunchStep", "sdfIndirectProveStep"]), evaluators);
         var read = Functions(paths: ["indirect/sdf-indirect-read.hlsli"]);
         var views = SourcesIn(directory: "debug").Select(selector: CodeOf).Concat(second: read.Values);
         var violations = views.SelectMany(selector: code => evaluators.Where(predicate: evaluator => Calls(body: code, name: evaluator))).Distinct().Order(comparer: StringComparer.Ordinal);
 
         Assert.Empty(collection: violations);
+    }
+    [Fact]
+    public void ViewsAppliesIndirectLightWithoutEvaluatingTheField() {
+        var functions = Functions(paths: SourcesIn(directory: "indirect"));
+        var evaluators = Evaluators(functions: functions);
+        // The receiver pass owns every field query of indirect light; views reads its answer and the bank.
+        var apply = CodeOf(path: "indirect/sdf-indirect-apply.hlsli");
+        var violations = evaluators.Where(predicate: evaluator => Calls(body: apply, name: evaluator)).Order(comparer: StringComparer.Ordinal);
+
+        Assert.Empty(collection: violations);
+        Assert.Contains(expectedSubstring: "uint sdfIndirectReceiveStep(", actualString: CodeOf(path: "indirect/sdf-indirect-receiver.hlsli"));
+        Assert.Contains(collection: evaluators, expected: "sdfIndirectReceiveStep");
+        Assert.DoesNotContain(actualString: apply, expectedSubstring: "#include \"sdf-indirect-near.hlsli\"");
     }
 
     [GeneratedRegex(pattern: @"^[A-Za-z_][\w<>]*\s+(?<name>sdfIndirect\w+)\([^)]*\)\s*\{(?<body>.*?)^\}", options: RegexOptions.Multiline | RegexOptions.Singleline)]

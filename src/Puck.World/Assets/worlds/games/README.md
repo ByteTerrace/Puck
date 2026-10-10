@@ -7,7 +7,7 @@ and rules; the console is their playing surface.
 Every game in this directory is authored as `.puck` source, and the directory
 holds sources only. The game's build compiles each one into its own output
 (`build/WorldAssets.targets`), where
-[WorldDocumentOutputLawTests](../../../../../tests/Puck.Cli.Tests/WorldDocumentOutputLawTests.cs)
+[WorldDocumentOutputLawTests](../../../../../tests/Puck.Cli.Worlds.Tests/WorldDocumentOutputLawTests.cs)
 holds every shipped document to exactly what its source compiles to. A document
 names a game by its document name (`games/poker`), never a file.
 
@@ -144,7 +144,7 @@ per-tick budget. A table switch suspends those
 phases and resumes them on return.
 
 The executable rules are exercised by
-[SolitaireLawTests](../../../../../tests/Puck.World.Tests/SolitaireLawTests.cs).
+[SolitaireLawTests](../../../../../tests/Puck.World.Games.Tests/SolitaireLawTests.cs).
 The shared dynamic keys and a firing's rollback are exercised by
 [PointerKeyLawTests](../../../../../tests/Puck.State.Rules.Tests/PointerKeyLawTests.cs)
 and
@@ -213,7 +213,7 @@ proves the chance mechanism itself—an expectiminimax value over a two-outcome
 chance equalling the hand-computed average, and a `Method: Tree` job's playout
 drawing from the job's own stream so two independently built runtimes with the
 same seed make the same choice.
-[BackgammonLawTests](../../../../../tests/Puck.World.Tests/BackgammonLawTests.cs)
+[BackgammonLawTests](../../../../../tests/Puck.World.Games.Tests/BackgammonLawTests.cs)
 proves the document: the bar-occupied refusal (with its control—a checker's
 own bar entry stays legal) and the same position with a clear bar.
 ## Chinese Checkers—physical marbles and jump chains
@@ -256,7 +256,7 @@ than enumerating every possible hop sequence. The AI considers at most
 Run `puck test worlds/parlor/chinese-checkers.puck` from the repository root
 for physical settling and AI scenarios through the real executable. The CLI
 suite runs these package scenarios automatically.
-[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs)
+[ChineseCheckersLawTests](../../../../../tests/Puck.World.Games.Tests/ChineseCheckersLawTests.cs)
 loads the package source directly and compares its judge with an independent
 endpoint oracle, including physical correction, AI turns and stale answers.
 
@@ -315,7 +315,7 @@ console.
 The source's `test` blocks prove a one-direction flip for each colour and a
 two-direction flip: `puck test src/Puck.World/Assets/worlds/games/reversi.puck`.
 
-[ShippedWorldStateBaselines](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/README.md)
+[ShippedWorldStateBaselines](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
 holds the recorded trajectory: five accepted moves, one refused, ending on a
 two-direction flip whose `reversiRay` shows `W` and `SW` at 2.
 
@@ -378,7 +378,7 @@ The source's `test` blocks cover a lone stone's liberties, an atari, a single
 and a group capture, a suicide refusal, a ko refusal and the exchange that
 lifts it, the area count, and one CPU move: `puck test
 src/Puck.World/Assets/worlds/games/go.puck --reproduce`.
-[GoMoveLawTests](../../../../../tests/Puck.World.Tests/GoMoveLawTests.cs) pins a
+[GoMoveLawTests](../../../../../tests/Puck.World.Games.Tests/GoMoveLawTests.cs) pins a
 move's tick, the flood's passes and the CPU's work by the rule and search
 counters, and the
 [`go-capture`](../../../../../tests/Puck.World.Canaries/go-capture/canary.json)
@@ -449,7 +449,7 @@ with an upright I, deal a bag of seven, lock a resting piece when its deadline
 passes, saturate the score, end the game on a blocked spawn, kick a turn off the
 wall, hold once per piece, and soft-drop: `puck test
 src/Puck.World/Assets/worlds/games/tetromino.puck --reproduce`.
-[TetrominoTickLawTests](../../../../../tests/Puck.World.Tests/TetrominoTickLawTests.cs)
+[TetrominoTickLawTests](../../../../../tests/Puck.World.Games.Tests/TetrominoTickLawTests.cs)
 pins a piece's life by the rule counters: a quiet tick fires nothing, a hard
 drop to the next piece is five firings over four ticks, and the worst-case tick
 is priced at about 109,000 of the 4,000,000 work units a tick admits. The
@@ -467,7 +467,7 @@ of the well.
 board, the two armies and the rules, over a 10×10 `grid` topology
 (`hiddenRanksField`, cell ordinal = row × 10 + column counting from red's back
 rank). `minimal-hiddenranks-host.puck` under
-[`tests/Puck.World.Tests/Fixtures`](../../../../../tests/Puck.World.Tests/Fixtures)
+[`tests/Puck.World.Fixtures`](../../../../../tests/Puck.World.Fixtures)
 supplies the two local seats and the `attack` channel the module's rules read.
 
 The rule set: ranks 1 Marshal through 10 Spy with a lower
@@ -518,7 +518,7 @@ authored in the document rather than chosen by the players, so the setup phase i
 a readiness handshake rather than a placement interface.
 
 `hiddenranks.state.json` under
-[`ShippedWorldStateBaselines`](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines)
+[`ShippedWorldStateBaselines`](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines)
 records the export after the committed sequence: twelve requests, nine of them
 accepted, three of those nine strikes—one won, one lost, one mutual—and three
 refused outright, a Bomb asked to move, a move into a lake, and a move onto one's
@@ -583,7 +583,7 @@ sorting, canonical arrangement, trick history and phase tags.
 Run `puck test worlds/parlor/hearts.puck` from the repository root for real-host
 dealing, physical AI play and scoring scenarios. The CLI suite runs these
 package scenarios automatically.
-[HeartsLawTests](../../../../../tests/Puck.World.Tests/HeartsLawTests.cs) loads
+[HeartsLawTests](../../../../../tests/Puck.World.Games.Tests/HeartsLawTests.cs) loads
 the package source directly and checks every card against an independent
 legality oracle across sampled hands, five-hand conservation, private AI
 decisions, physical correction, and completion of a full AI hand.
@@ -634,19 +634,19 @@ composed from shared part prototypes and a ruled-out bust lies down in grey.
 
 Run `puck test worlds/parlor/lineup.puck` for the real-host answers, eliminations,
 wins and losses, the disclosure refusals, the keys and the computer.
-[LineupLawTests](../../../../../tests/Puck.World.Tests/LineupLawTests.cs) holds the
+[LineupLawTests](../../../../../tests/Puck.World.Games.Tests/LineupLawTests.cs) holds the
 roster to one hair and one eye colour a bust and no two busts alike, every answer
 to a brute-force filter of the roster, and the computer to naming every possible
 bust within six turns. The
 [`lineup`](../../../../../tests/Puck.World.Canaries/lineup/canary.json) canary
 plays to a win through the real `Puck.World` and proves a wrong name loses, and
-[lineup.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/lineup.sequence.json)
+[lineup.sequence.json](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/lineup.sequence.json)
 pins the export after a three-question game.
 ## Snake—a ring body on a tick-indexed beat
 
 [snake.puck](snake.puck) is a module, not a bootable document: it declares the
 state and rules and leaves the seat, the input channels and the population to a
-host. [minimal-snake-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck)
+host. [minimal-snake-host.puck](../../../../../tests/Puck.World.Fixtures/minimal-snake-host.puck)
 is the smallest host that completes it—one local seat on the shared `walk` kit,
 plus the `forward`/`strafe` bipolar channels the four turn presses arrive on.
 
@@ -692,7 +692,7 @@ world.state snakeHeadingLog
 
 —where the request is the heading (0 east, 1 south, 2 west, 3 north) and the
 serial is what makes it a new submission. The recorded trajectory is
-[snake.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/snake.sequence.json):
+[snake.sequence.json](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/snake.sequence.json):
 it joins the seat, is refused one reversal, eats four times (the third and fourth
 each evicting a meal), dies on its own body, waits out the deadline, plays a
 second run, and dies again — ending before the second deadline passes, so
@@ -702,7 +702,7 @@ second run, and dies again — ending before the second deadline passes, so
 [paddleball.puck](paddleball.puck) is a module, not a bootable document: it declares a court,
 three bodies that play on it, and the rules that judge them, and leaves the seat,
 the `attack` channel and the population to a host.
-[minimal-paddleball-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck)
+[minimal-paddleball-host.puck](../../../../../tests/Puck.World.Fixtures/minimal-paddleball-host.puck)
 is the smallest host that completes it—one local seat, the `walk` program, the
 three looks and a population of six.
 
@@ -745,7 +745,7 @@ Two facts the document works inside, both engine behavior rather than style:
   supply a heading. The serve therefore aims along a pair of fixed posts standing
   in the court's far corners, which nothing ever moves.
 
-[paddleball.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/paddleball.sequence.json)
+[paddleball.sequence.json](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/paddleball.sequence.json)
 plays a whole game through those doors: a rally the physics plays by itself (the
 ball is served, returned by the east paddle and turned again by the west one,
 `paddleballLongestRally` 2) ending in a let, a dead ball, three refused serves, and
@@ -759,7 +759,7 @@ conceding side serves, the points alternate and the recorded game ends 11-10 wit
 [wordspy.puck](wordspy.puck) is a module fragment, not a bootable world: a
 5x5 word grid, a key card the two spymasters alone may read, and the rules for
 touching cards.
-[minimal-wordspy-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.puck)
+[minimal-wordspy-host.puck](../../../../../tests/Puck.World.Fixtures/minimal-wordspy-host.puck)
 is the smallest host that completes it—four local seats and nothing else, since
 this module reads no channel and owns no placement. The seats are the four
 roles: 1 red spymaster, 2 red guesser, 3 blue spymaster, 4 blue guesser.
@@ -838,7 +838,7 @@ is no human spymaster interface. A clue's word and number are published but the
 guess is the guesser's own choice through the door above, not taken from the
 shortlist. And the game plays one board rather than a match.
 
-[wordspy.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/wordspy.sequence.json)
+[wordspy.sequence.json](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/wordspy.sequence.json)
 drives a real game through that door: four seats join, three clues are given,
 four guesses land—an own word, a neutral card that ends red's turn, blue's own
 word, and the trap, which ends the game with `wordSpyWinner` at 2—and
@@ -853,7 +853,7 @@ three clues: the third was within 0.9 cosine of one already on file and
 [arena.puck](arena.puck) is a module, not a bootable document: two fighters,
 two health pickups and the rules that score them, left to a host for its seats,
 its `attack` channel and its population.
-[minimal-arena-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.puck)
+[minimal-arena-host.puck](../../../../../tests/Puck.World.Fixtures/minimal-arena-host.puck)
 is the smallest one that completes it—two local seats on one floating kit, the
 `attack` channel the fighters shoot on, a four-body population (seats 0 and 1,
 the two items) and the `arenaItem` look the item placements wear.
@@ -916,7 +916,7 @@ limit; and health regenerates on the trait's own clock even while a fighter is
 waiting to respawn, which never matters because the respawn write rebases it to
 full.
 
-[arena.sequence.json](../../../../../tests/Puck.World.Tests/ShippedWorldStateBaselines/arena.sequence.json)
+[arena.sequence.json](../../../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/arena.sequence.json)
 drives a whole match through those doors: seat 1 joins, seat 2 takes its seat
 and then enters the roster, the two trade fire on the same tick twice, each
 kills the other at least once, each is refused a shot it tries to take while

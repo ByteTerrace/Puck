@@ -17,6 +17,8 @@ static const uint SdfIndirectTraceSteps = 64u;
 static const uint SdfIndirectFeedbackSteps = 40u;
 static const uint SdfIndirectLaunchSteps = 8u;
 static const uint SdfIndirectSegmentSteps = 16u;
+static const uint SdfIndirectCanonicalProofSteps = 33u;
+static const uint SdfIndirectReceiverProofSteps = 32u;
 static const uint SdfIndirectClassMask = 3u;
 static const uint SdfIndirectTracedShift = 4u;
 static const uint SdfIndirectEpochShift = 8u;
@@ -32,6 +34,13 @@ static const uint SdfIndirectIrradianceTexels = 64u;
 static const uint SdfIndirectSourceCount = 5u;
 static const uint SdfIndirectRadianceWords = 5u;
 static const uint SdfIndirectMaximumRaysPerProbe = 256u;
+static const uint SdfIndirectCostPlace = 0u;
+static const uint SdfIndirectCostClassify = 1u;
+static const uint SdfIndirectCostTrace = 2u;
+static const uint SdfIndirectCostShade = 3u;
+static const uint SdfIndirectCostReceiver = 4u;
+static const uint SdfIndirectCostKinds = 5u;
+static const uint SdfIndirectCostWords = 10u;
 static const uint SdfIndirectLightRegionsPerLight = 2u;
 static const uint SdfIndirectLightResolution = 512u;
 static const uint SdfIndirectLightMaxMaps = 12u;
@@ -111,6 +120,7 @@ uint sdfIndirectTraceBudget(uint tier) { return tier == SdfIndirectTierHigh ? 51
 uint sdfIndirectClassifyBudget(uint tier) { return tier == SdfIndirectTierHigh ? 8u : (tier == SdfIndirectTierMedium ? 4u : 0u); }
 uint sdfIndirectShadeBudget(uint tier) { return tier == SdfIndirectTierHigh ? 8192u : (tier == SdfIndirectTierMedium ? 4096u : 0u); }
 uint sdfIndirectReceiverProofBudget(uint tier) { return tier == SdfIndirectTierHigh ? 65536u : (tier == SdfIndirectTierMedium ? 32768u : 0u); }
+uint sdfIndirectFrameMicroseconds(uint tier) { return tier == SdfIndirectTierHigh ? 4000u : (tier == SdfIndirectTierMedium ? 2000u : 0u); }
 uint sdfIndirectBounceLimit(uint tier) { return tier == SdfIndirectTierHigh ? 4u : (tier == SdfIndirectTierMedium ? 2u : 0u); }
 uint sdfIndirectProofCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 262144u : (tier == SdfIndirectTierMedium ? 131072u : 0u); }
 uint sdfIndirectProbeWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 0u : (tier == SdfIndirectTierMedium ? 0u : 0u); }
@@ -125,7 +135,9 @@ uint sdfIndirectIrradianceWordOffset(uint tier) { return tier == SdfIndirectTier
 uint sdfIndirectIrradianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 10485760u : (tier == SdfIndirectTierMedium ? 5242880u : 0u); }
 uint sdfIndirectPublicationWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140476416u : (tier == SdfIndirectTierMedium ? 25149440u : 0u); }
 uint sdfIndirectReceiverProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140541952u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
-uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 140541953u : (tier == SdfIndirectTierMedium ? 25182209u : 0u); }
+uint sdfIndirectShadeScratchWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140541953u : (tier == SdfIndirectTierMedium ? 25182209u : 0u); }
+uint sdfIndirectCostWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 140543233u : (tier == SdfIndirectTierMedium ? 25182849u : 0u); }
+uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 140543243u : (tier == SdfIndirectTierMedium ? 25182859u : 0u); }
 uint sdfIndirectTraceEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 3440640u : (tier == SdfIndirectTierMedium ? 860160u : 0u); }
 uint sdfIndirectClassifyEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 460288u : (tier == SdfIndirectTierMedium ? 230144u : 0u); }
 static const float SdfIndirectSurfaceEpsilon = 0.001;

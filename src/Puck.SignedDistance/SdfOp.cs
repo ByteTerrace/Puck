@@ -1,8 +1,9 @@
 namespace Puck.SignedDistance;
 
 /// <summary>Identifies an SDF VM instruction operation. The kernels read each member as <c>SDF_OP_*</c> from the
-/// generated <c>sdf-isa.hlsli</c> (<c>Puck.SdfVm.SdfIsaHlsl</c>); reserved gaps preserve the packed wire
-/// format.</summary>
+/// generated <c>sdf-isa.hlsli</c> (<c>Puck.SdfVm.SdfIsaHlsl</c>). Members are numbered densely in declaration order and
+/// no id is reserved: removing a member renumbers the ones after it, and regenerating carries the new numbers to the
+/// kernels.</summary>
 public enum SdfOp : uint {
     ResetPoint = 0,
     Translate = 1,
@@ -19,19 +20,16 @@ public enum SdfOp : uint {
     RotatePlane = 5,
     /// <summary>Elongates the shape that follows by clamping the point into a box (Data0.xyz = extents): the shape's
     /// cross-section is swept over <c>±extents</c> — the classic capsule-from-sphere operator.</summary>
-    Elongate = 8,
-    ShapeBlend = 9,
-    Repeat = 11,
-    RepeatLimited = 12,
-    // 13–15 (the axis-aligned SymmetryX/Y/Z folds) were collapsed into SymmetryPlane (id 26), which reproduces each
-    // bit-for-bit with an axis normal; the builder keeps SymmetryX()/Y()/Z() as sugar that emits it. The ids stay
-    // retired (the ISA numbering is non-sequential — never reuse them).
+    Elongate = 6,
+    ShapeBlend = 7,
+    Repeat = 8,
+    RepeatLimited = 9,
     /// <summary>Shells the entire field accumulated so far: <c>d = abs(d) − thickness</c> (Data0.x = thickness) turns
     /// solids into hollow skins. A field op, not a point op — order objects so it follows everything it should shell.</summary>
-    Onion = 16,
+    Onion = 10,
     /// <summary>Inflates the entire field accumulated so far by a radius: <c>d −= radius</c> (Data0.x = radius) rounds
     /// and fattens everything before it. A field operation, not a point operation.</summary>
-    Dilate = 17,
+    Dilate = 11,
     /// <summary>Folds the evaluation point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry
     /// group (all 17 IUC groups; square/rectangular lattices plus the equilateral hex lattice for P3 and up). The
     /// lattice reduction is <see cref="RepeatLimited"/> restricted to two axes (P1 is bit-identical to it); the
@@ -42,7 +40,7 @@ public enum SdfOp : uint {
     /// Data0.xy = cell extents (hex: pitch = x), Data0.zw = their exact reciprocals (<see cref="SdfWallpaperFold.InverseCell"/>),
     /// Data1.xy = the cell limits (<see cref="SdfWallpaperFold.LimitRefusal"/>: whole numbers on a square lattice,
     /// unbounded on a hex lattice); Data1.zw are unused.</summary>
-    WallpaperFold = 18,
+    WallpaperFold = 12,
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells by folding the
     /// radial log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform scaling
     /// in Cartesian space, so one authored prototype shell repeats outward/inward as scaled copies from a handful of
@@ -53,7 +51,7 @@ public enum SdfOp : uint {
     /// <c>exp(w/2)</c> step clamp so the over-relaxed march cannot tunnel through a shell boundary. Folds only the
     /// radial coordinate (theta/phi are preserved, so there is no polar pinching); like <see cref="Repeat"/>, prototype
     /// content should respect the shell cell (radii within a factor of <c>shellRatio</c>).</summary>
-    LogSphere = 21,
+    LogSphere = 13,
     /// <summary>Stochastic domain-repeat fold: tiles space into cells like <see cref="Repeat"/>, then per cell applies a
     /// hashed position displacement, an optional hashed orientation ("tumble"), and an optional hashed material variant —
     /// scattering one prototype into a jittered field from a single instruction. Both the displacement and the tumble are
@@ -69,7 +67,7 @@ public enum SdfOp : uint {
     /// on the two's-complement cell index xored with the seed), so it is bit-identical across DXC's SPIR-V and DXIL
     /// targets — only the final uint→float and the tumble trig carry the usual ±1 LSB warp noise. Like <see cref="Repeat"/>,
     /// keep the in-cell content clear of the <c>round()</c> boundary: jitter/2 + prototype radius ≤ min(spacing)/2.</summary>
-    CellJitter = 22,
+    CellJitter = 14,
     /// <summary>Angular domain-repeat fold: folds the plane perpendicular to a chosen axis into <c>count</c> equal
     /// sectors, so one authored prototype repeats rotationally around the axis (gears, wheels, columns of a rotunda,
     /// clock ticks, flower petals) from a single instruction — the rotational sibling of the linear <see cref="Repeat"/>
@@ -85,7 +83,7 @@ public enum SdfOp : uint {
     /// the optional per-sector material can flip at a seam exactly as <see cref="WallpaperFold"/>'s can). Like
     /// <see cref="Repeat"/>, keep the prototype clear of the sector walls (the two radial half-planes through the axis)
     /// — content that overspills a wall is clipped by the neighbouring sector.</summary>
-    RepeatPolar = 23,
+    RepeatPolar = 15,
     /// <summary>Adds a bounded sinusoidal displacement to the field accumulated so far — surface relief (bumps,
     /// corrugation, a rippled skin), the SDF-native answer to height/parallax mapping (the relief is real geometry, so
     /// it shadows and self-occludes correctly). A field op (like <see cref="Onion"/>/<see cref="Dilate"/>), evaluated at
@@ -95,7 +93,7 @@ public enum SdfOp : uint {
     /// 1-Lipschitz: the added relief's gradient reaches <c>amp·‖freq‖</c>, so the field can overestimate true distance by
     /// up to <c>1 + amp·‖freq‖</c> — <c>AnalyzeLipschitz</c> bakes that as a conservative step clamp (reach-independent,
     /// folded like the log-spherical product). amp = 0 is an exact identity (byte-identical).</summary>
-    Displace = 24,
+    Displace = 16,
     /// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field before the shapes evaluate — organic
     /// bulging / wobble / terrain. A point op (like the fold ops). Data0.xyz = per-axis angular frequency, Data0.w =
     /// amplitude; the point moves by <c>amp·(sin(fx·y), sin(fy·z), sin(fz·x))</c> — cross-coupled (each axis driven by the
@@ -103,7 +101,7 @@ public enum SdfOp : uint {
     /// Jacobian is <c>I</c> plus a perturbation of spectral norm ≤ <c>amp·‖freq‖</c>, so the metric stretches by up to
     /// <c>1 + amp·‖freq‖</c> — <c>AnalyzeLipschitz</c> bakes that step clamp (reach-independent) and folds the point's max
     /// travel (<c>amp·√3</c>) into a downstream twist/bend's reach. amp = 0 is an exact identity (byte-identical).</summary>
-    DomainWarp = 25,
+    DomainWarp = 17,
     /// <summary>Reflection fold across an arbitrary plane — the general-normal superset of the axis-aligned
     /// <c>SymmetryX</c>/<c>SymmetryY</c>/<c>SymmetryZ</c> builder methods:
     /// everything on the plane's negative side
@@ -114,7 +112,7 @@ public enum SdfOp : uint {
     /// so distances are preserved: the field stays 1-Lipschitz (factor 1, no step clamp) and no cull bound changes. Like
     /// the axis symmetries, keep authored content on the plane's positive side (the kept half); content straddling the
     /// plane is folded onto itself.</summary>
-    SymmetryPlane = 26,
+    SymmetryPlane = 18,
     /// <summary>Opens a scoped field accumulator — the first half of the <see cref="PushField"/>/<see cref="PopField"/>
     /// pair (<see cref="SdfProgramBuilder.PushField"/>). Saves the running nearest-surface distance onto a bounded stack
     /// and reseeds a fresh accumulator (<c>SDF_FAR_DISTANCE</c>), so every accumulator-reading op emitted until the
@@ -126,7 +124,7 @@ public enum SdfOp : uint {
     /// cull bounds after the Push in the same chain stay sound. Depth is capped at
     /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/> (a shader-constant + validator rule, not part of the packed
     /// layout). Op-unused (scope-free) programs are byte-identical.</summary>
-    PushField = 27,
+    PushField = 19,
     /// <summary>Closes the scope opened by the matching <see cref="PushField"/> and composes the scope's accumulated
     /// field back into the saved parent accumulator as a single candidate — reusing the shape blend tail (a pop is just
     /// another candidate), so it costs no second copy of the blend switch. The compose blend + smooth radius are carried
@@ -138,7 +136,7 @@ public enum SdfOp : uint {
     /// compare — the parent keeps its material on a tie). A chamfer compose is the one non-1-Lipschitz case: it enters
     /// <see cref="SdfProgram.StepScale"/> through the same per-composition recurrence a chamfer
     /// <see cref="ShapeBlend"/> does, so repeated pops accumulate.</summary>
-    PopField = 28,
+    PopField = 20,
     /// <summary>Adds bounded hash-lattice fBm value noise to the field accumulated so far — irregular surface relief
     /// (terrain crags, bark, rock) where <see cref="Displace"/>'s periodic sine product would read as corrugation. A
     /// field op (like <see cref="Onion"/>/<see cref="Dilate"/>/<see cref="Displace"/>), evaluated at the current folded
@@ -153,20 +151,20 @@ public enum SdfOp : uint {
     /// <c>AnalyzeLipschitz</c> bakes it as a conservative step clamp (reach-independent, folded like
     /// <see cref="Displace"/>'s). The outward surface reach is at most <c>|amplitude|</c> (the normalized sum is
     /// bounded by 1) — the scoped-field margin and cull channels read that. amplitude = 0 is an exact identity.</summary>
-    NoiseDisplace = 29,
+    NoiseDisplace = 21,
     /// <summary>Divides both coordinates perpendicular to Shape (axis 0..2) by an axial profile.
     /// Data0=(amount, bulge, origin, inverseSpan); Data1=(distanceCorrection, startScale, 0, 0).
     /// s(t)=startScale+amount*t+bulge*sin(pi*t), t=clamp((origin-p[axis])*inverseSpan,0,1).
     /// The shader floors s at FlareMinScale; the host bounds the resulting Jacobian. Render-only.</summary>
-    AxialProfile = 30,
+    AxialProfile = 22,
     /// <summary>Adds a cubic polynomial of the Blend-selected driver coordinate to the Shape-selected
     /// target coordinate. Data0.xyz=(linear, quadratic, cubic); both selectors are distinct axes in [0,2].
     /// The host bounds its derivative over the composed chain reach. Render-only.</summary>
-    Shear = 31,
+    Shear = 23,
     /// <summary>An anisotropic Gaussian domain displacement: p -= push * exp(-|(p-center)/radii|²).
     /// Data0 = center.xyz, push.x; Data1 = radii.xyz, push.y; Shape stores push.z as float bits.
     /// Its reach-independent Jacobian bound is 1 + |push| * sqrt(2/e) / min(radii). Render-only.</summary>
-    GaussianPush = 32,
+    GaussianPush = 24,
     /// <summary>Per-shape lane-driven erosion, ordered immediately before the <see cref="ShapeBlend"/> it targets
     /// (whatever ordinary point ops the shape's own chain still applies in between). Data0 = (lane index 0..3 — see
     /// an integer in [0, 3], from, to, noiseScale), Data1.x = the target shape's HOST-BAKED reach (its bound
@@ -179,9 +177,9 @@ public enum SdfOp : uint {
     /// family ops: <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret this op (it carries no
     /// dynamic-transform table in its signature to read a lane from), so a shape carrying it is unreachable for
     /// deterministic field contact.</summary>
-    LaneErode = 34,
+    LaneErode = 25,
     /// <summary>Adds amplitude*(F(localPoint*frequency)-0.5) to the running field.
     /// Data0=(frequency, amplitude, randomness, 0), Shape=seed, Blend=SdfCellMode.
     /// The 27-cell PCG3D neighborhood is exact within the mode's admitted randomness range.</summary>
-    CellDisplace = 35,
+    CellDisplace = 26,
 }

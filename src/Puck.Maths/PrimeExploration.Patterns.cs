@@ -14,24 +14,40 @@ public static partial class PrimeExploration {
     // integers coprime to that primorial, never leaves more than 491 consecutive non-candidates: at most two consecutive
     // all-zero 64-bit words, and a candidate in any 17 consecutive wheel bytes. Restoring the primes themselves in the
     // first blocks only adds candidates.
-    internal const uint PreSievePrimeLimit = 163;
+    public const uint PreSievePrimeLimit = 163;
 
     // Pairing large primes with smaller ones keeps the combined periods compact. The grouping is inspired by
     // primesieve's PreSieve.cpp; every byte here is generated from divisibility, rather than copied upstream data.
-    internal static readonly (int First, int Second, int Third)[] SmallPrimeGroups = [
+    private static readonly (int First, int Second, int Third)[] SmallPrimeGroupTable = [
         (7, 23, 37), (11, 19, 31), (13, 17, 29), (41, 163, 1),
         (43, 157, 1), (47, 151, 1), (53, 149, 1), (59, 139, 1),
         (61, 137, 1), (67, 131, 1), (71, 127, 1), (73, 113, 1),
         (79, 109, 1), (83, 107, 1), (89, 103, 1), (97, 101, 1),
     ];
 
-    // One period of each group's pattern, built on first use.
-    internal static class SmallPrimePatterns {
-        internal static readonly byte[][] Periods = CreateSmallPrimePatterns();
+    /// <summary>Gets the presieve's prime groups, each a triple whose product is one pattern's period.</summary>
+    /// <remarks>A third prime of one pads a pair. Together the groups hold each prime from 7 through
+    /// <see cref="PreSievePrimeLimit"/> exactly once. The view is read-only: no caller can change a group.</remarks>
+    public static ReadOnlySpan<(int First, int Second, int Third)> SmallPrimeGroups => SmallPrimeGroupTable;
+
+    /// <summary>Holds one period of each <see cref="SmallPrimeGroups"/> pattern, built on first use.</summary>
+    public static class SmallPrimePatterns {
+        private static readonly byte[][] PeriodTable = CreateSmallPrimePatterns();
+
+        /// <summary>Gets the number of patterns, one for each group in <see cref="SmallPrimeGroups"/>.</summary>
+        public static int Count => PeriodTable.Length;
+
+        /// <summary>Gets one period of a group's pattern.</summary>
+        /// <param name="group">The index into <see cref="SmallPrimeGroups"/>, below <see cref="Count"/>.</param>
+        /// <returns>
+        /// The pattern as a read-only view, <c>First · Second · Third</c> bytes long; bit <c>b</c> of byte <c>i</c> is set
+        /// exactly when <c>30 · i + </c><see cref="PrimeWheel30.NumericResidues"/><c>[b]</c> is coprime to the group's primes.
+        /// </returns>
+        public static ReadOnlySpan<byte> Period(int group) => PeriodTable[group];
     }
 
     private static byte[][] CreateSmallPrimePatterns() {
-        var groups = SmallPrimeGroups;
+        var groups = SmallPrimeGroupTable;
         var patterns = new byte[groups.Length][];
         var residues = PrimeWheel30.NumericResidues;
 
@@ -57,14 +73,14 @@ public static partial class PrimeExploration {
         return patterns;
     }
 
-    internal static void FilterSmallPrimes(Span<byte> segment, ulong blockLow) {
-        var patterns = SmallPrimePatterns.Periods;
+    public static void FilterSmallPrimes(Span<byte> segment, ulong blockLow) {
+        var count = SmallPrimePatterns.Count;
 
-        for (var group = 0; (group < patterns.Length); group += 4) {
-            var first = patterns[group];
-            var second = patterns[(group + 1)];
-            var third = patterns[(group + 2)];
-            var fourth = patterns[(group + 3)];
+        for (var group = 0; (group < count); group += 4) {
+            var first = SmallPrimePatterns.Period(group: group);
+            var second = SmallPrimePatterns.Period(group: (group + 1));
+            var third = SmallPrimePatterns.Period(group: (group + 2));
+            var fourth = SmallPrimePatterns.Period(group: (group + 3));
             var a = ((int)(blockLow % ((ulong)first.Length)));
             var b = ((int)(blockLow % ((ulong)second.Length)));
             var c = ((int)(blockLow % ((ulong)third.Length)));
@@ -74,10 +90,10 @@ public static partial class PrimeExploration {
             while (offset < segment.Length) {
                 var length = Math.Min(val1: (segment.Length - offset), val2: Math.Min(val1: Math.Min(val1: (first.Length - a), val2: (second.Length - b)), val2: Math.Min(val1: (third.Length - c), val2: (fourth.Length - d))));
                 var destination = segment.Slice(length: length, start: offset);
-                var one = first.AsSpan(length: length, start: a);
-                var two = second.AsSpan(length: length, start: b);
-                var three = third.AsSpan(length: length, start: c);
-                var four = fourth.AsSpan(length: length, start: d);
+                var one = first.Slice(length: length, start: a);
+                var two = second.Slice(length: length, start: b);
+                var three = third.Slice(length: length, start: c);
+                var four = fourth.Slice(length: length, start: d);
 
                 if (group == 0) { FilterPatternGroup<InitializePattern>(destination: destination, first: one, fourth: four, second: two, third: three); } else { FilterPatternGroup<IntersectPattern>(destination: destination, first: one, fourth: four, second: two, third: three); }
                 offset += length;

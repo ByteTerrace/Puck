@@ -230,7 +230,7 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
     /// <summary>Returns the unit complex number along the same direction; zero normalizes to <see cref="MultiplicativeIdentity"/>.</summary>
     /// <returns>The normalized complex number.</returns>
     public FixedComplex Normalize() {
-        var rawMagnitude = FixedVectorMath.RawMagnitude(value: Real.Value) | FixedVectorMath.RawMagnitude(value: Imaginary.Value);
+        var rawMagnitude = FusedArithmetic.RawMagnitude(value: Real.Value) | FusedArithmetic.RawMagnitude(value: Imaginary.Value);
 
         if (rawMagnitude == 0UL) {
             return MultiplicativeIdentity;

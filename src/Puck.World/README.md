@@ -90,9 +90,12 @@ to the windowed presentation.
 ## Operator access
 
 For AI pairing, `world.control start|stop|status` manages an authenticated
-Operator attachment without restarting World. CLI serves console exec and
-completed PNG tools over local stdio or OAuth-protected remote HTTP; see
-[setup and trust](../Puck.Mcp/README.md).
+Operator attachment without restarting World. `--control` starts the same
+endpoint at boot, as a first console line `world.control start` would, and
+prints its `[world.control: operator attachment <file>]` line on stderr; it is
+a per-run choice, never a document field, and absent the endpoint stays closed.
+CLI serves console exec and completed PNG tools over local stdio or
+OAuth-protected remote HTTP; see [setup and trust](../Puck.Mcp/README.md).
 
 ## Usage
 
@@ -254,7 +257,15 @@ by that remote authority. Listening and connecting may coexist on the shared
 while the host starts and narrates `[world.listen: bound <ip:port> …]`; port 0
 binds any free port, and that line names the one bound. An endpoint that is not
 an `ip:port` pair refuses the boot with exit 1, and one this host cannot bind
-exits 2 as described under the exit codes above. The networking
+exits 2 as described under the exit codes above. A local run names `127.0.0.1`
+(or `::1`); only a deployment's document names `0.0.0.0`. On Windows, msquic
+still opens the listener's UDP port on every interface whatever address the
+endpoint names, so a QUIC door can raise a firewall prompt that the address does
+not prevent. Windows asks once per executable image path, so start a listening
+World as `dotnet Puck.World.dll`, the way every `puck` verb does, and one decision
+for the shared `dotnet` host covers every worktree
+([conventions](../../docs/development/contributing.md#code-and-documentation-conventions)).
+A dial to a loopback endpoint binds its own socket on loopback. The networking
 library owns TLS, certificate-bound identity, and bounded message delivery;
 there is no TCP fallback. `PeerStream` adapts those messages to World's byte
 codecs. After that peer handshake, an interactive connection crosses two
@@ -839,7 +850,9 @@ refusals and server narration on stderr, all mirrored onto the in-game panel
 (the terminal's `ConsoleTape` in `Puck.Hosting`, drawn by `Puck.Overlays`'
 console-panel writer). Every capability is a verb. **Type `help` for the
 live, self-documenting verb list**—it is generated from the registered
-commands, so this README does not catalog verbs.
+commands, so this README does not catalog verbs. `help <prefix>` keeps the
+verbs whose names start with the prefix (`help world.state`), and
+`help --names` lists the names alone.
 
 Each local seat has its own text session, editor, history, tape, and allowed
 command surface. Backtick is a terminal-owned, always-active binding rather
@@ -876,12 +889,14 @@ Facts a script needs:
   `[captures: settled at tick T]` on standard error. A script that takes one
   capture after another waits on it between them, since `world.screenshot`
   refuses while a capture is still pending and frames can trail ticks on a busy
-  machine. `world.wait indirect <seconds>` instead waits for a frame produced
+  machine. `world.wait indirect` instead waits for a frame produced
   after arming and every active shared indirect cache's actual current-source
   completion fence. Its settled stderr verdict retains each residency's
   allocation, epoch, generation, publication stamp and source sequence. This
   proves shared-cache convergence, not every view's receiver admission. It
-  refuses without an active indirect cache; a deadline reports not-settled.
+  takes no deadline: produced frames bound it, a solve that cannot finish refuses
+  by name at once, a cache selected just before arming is awaited, and with no
+  cache active a few frames after arming it refuses.
   Pause simulation through that warm-up, then resume before a fixed tick wait.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
@@ -1309,7 +1324,7 @@ rank; the top-k of a mask is
 highest-rank index, never mixed, so the plain integer comparison the showdown
 makes IS the poker comparison. No sort, no per-rank pattern row, no scratch
 copy of the hand, and a live rank on every street for the seat that may see
-it. `tests/Puck.World.Tests/PokerHandStrengthLawTests.cs` feeds authored
+it. `tests/Puck.World.Games.Tests/PokerHandStrengthLawTests.cs` feeds authored
 seven-card hands through the shipped rules on a real server and pins the
 exact word for every category, the near-miss controls, the ordering, a full
 hand to showdown (chip and card conservation, the reveal, the collection back
@@ -2023,7 +2038,8 @@ counted once, including while a retiring graph's readers still hold it.
 `world.indirect-method [cache|screen|cone]` reads or selects the live indirect
 comparison method for every consuming view. It starts at `cache`; `screen` and
 `cone` select the engine's comparison paths with the residency cache as their
-fallback. This operator presentation override changes no cache tier, saved
+fallback. The first selection builds the comparison receiver kernel, and the view
+waits for it. This operator presentation override changes no cache tier, saved
 document or authoritative session state. Camera and session views keep the
 method while applying their quality restrictions, and infinity views retain
 each consuming camera's method alongside the layer's own shading levers.
@@ -2406,7 +2422,8 @@ binding-narration) among them—see the
 for the `stream` override that lets a `world.grant` claim bind its
 stderr-narrated confirmation. Strict-parse and mutation-all-or-nothing are
 proved in-process by
-`tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
+`tests/Puck.World.Schema.Tests/StrictParseLawTests.cs` and
+`tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`,
 and cited repository paths are checked by `puck docs links`.
 `four-corners-sharded` is the stronger five-authority federation proof: four
 ground worlds plus the floating island, each its own real process on its own
@@ -2416,7 +2433,7 @@ now lives. Ordered-domain submission order, the headless boot, the HUD
 document, and engagement dissolution have no committed battery at all—validate
 them by running the app. Principal/grant enforcement and engage/disengage authority
 are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
-`ControlApplicationLawTests` in `tests/Puck.World.Tests`.
+`ControlApplicationLawTests` in `tests/Puck.World.Server.Tests`.
 
 The [discrete state contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 covers tabletop/card rules and turn-based tactics. `world.state.transform`

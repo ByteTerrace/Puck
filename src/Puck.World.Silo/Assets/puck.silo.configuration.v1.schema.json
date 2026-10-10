@@ -162,6 +162,11 @@
           "description": "HTTP health port; retirement requests are accepted only from loopback.",
           "type": "integer"
         },
+        "healthAddress": {
+          "description": "The IP address literal the health listener binds. Loopback by default, so a local silo listens on no network interface; a deployment whose load balancer probes the port names its interface, or 0.0.0.0 for every one, here.",
+          "type": "string",
+          "default": "127.0.0.1"
+        },
         "observer": {
           "description": "Optional installed extension supplying host retirement deadlines; absent means no external observation.",
           "type": [
@@ -248,6 +253,14 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldSiloReleaseManagement"
+    },
+    "documentDirectory": {
+      "description": "The directory every hosted world document\u0027s relative paths (machine content, assets) resolve beside, as a local World resolves them beside its document\u0027s file: the directory puck world prepare wrote the composed documents into, inside the authored asset layout the image ships. A relative value resolves against the silo\u0027s working directory. null gives hosted documents no directory, and a relative path one authors is refused by name.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",

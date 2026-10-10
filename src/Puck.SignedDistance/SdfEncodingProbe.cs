@@ -236,11 +236,12 @@ public static class SdfEncodingProbe {
                     .ResetPoint()
                     .Sphere(material: m, radius: v[1])
                     .ResetPoint()
-                    .Scale(scale: new Vector3(value: v[2]))
+                    .Scale(scale: new Vector3(x: v[2], y: 1f, z: 1f))
                     .Box(halfExtents: new Vector3(x: v[3], y: v[4], z: v[5]), material: m, round: 0.05f)
                     .PopField()
             ),
-            inputs: [2.5f, 0.6f, 1.25f, 0.35f, 0.45f, 0.55f],
+            // Perturbing the identity's X axis also exercises the packed no-distance-bound flag.
+            inputs: [2.5f, 0.6f, 1f, 0.35f, 0.45f, 0.55f],
             name: "part-programs"
         );
 

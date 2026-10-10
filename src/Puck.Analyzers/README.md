@@ -3,7 +3,8 @@
 Puck.Analyzers provides the Roslyn analyzers and code fixes used when building
 the repository. It checks verified-code declarations, source-file length
 limits, comment smells, strict-enum usage, unmanaged function-pointer calls,
-environment reads, and the GPU trait on test classes. It is a
+environment reads, any-address listeners, the GPU trait on test classes, and
+`InternalsVisibleTo` grants. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -31,9 +32,22 @@ switched by an environment variable; the
 [configuration guide](../../docs/development/contributing.md#configuration-and-diagnostics)
 names what replaces one.
 
+NET001 refuses a listener bound to every network interface: `IPAddress.Any`,
+`IPAddress.IPv6Any` or `IPAddress.IPv6None`, Kestrel's `ListenAnyIP`,
+`TcpListener.Create` or a `TcpListener` or `UdpClient` built from a port alone,
+an `IPAddress` or `IPEndPoint` built from address 0, Orleans'
+`listenOnAnyHostAddress: true`, and any string literal spelling `0.0.0.0`,
+`[::]`, a bare `::` or a URL whose host is the `*` or `+` wildcard. Such a
+listener raises a firewall prompt on every local run. A listener takes its
+address from configuration and defaults to loopback. Only the deployment sites
+in `AnyAddressBindAllowlist`, each named by assembly, file and member with its
+reason, may name the any-address.
+
 GPU001 refuses a test class that reaches the host's GPU without
 `[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out
-with `--filter-not-trait Category=Gpu`. The ways onto the GPU carry
+with `--filter-not-trait Category=Gpu` and that runs the class in its suite's
+one serial collection of
+[device laws](../../docs/development/contributing.md#device-laws). The ways onto the GPU carry
 `[OpensGpuDevice]` (`build/OpensGpuDeviceAttribute.cs`, linked into every
 project): the native device APIs and the test helpers that bring a device up.
 Every member of a marked type is a way onto the GPU too. A helper that reaches
@@ -54,6 +68,12 @@ mentions a type parameter anywhere but behind a pointer, because that call throw
 `MarshalDirectiveException` at run time. The
 [code conventions](../../docs/development/contributing.md#code-and-documentation-conventions)
 state the rule.
+
+IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
+reads the compiled assembly's attributes, so it sees an
+`[assembly: InternalsVisibleTo(...)]` written in source and a csproj
+`<InternalsVisibleTo>` item alike, which the SDK generates into the same
+attribute. A member another assembly needs is public instead.
 
 ## Verification
 

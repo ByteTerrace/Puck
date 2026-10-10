@@ -45,6 +45,12 @@ public sealed class SdfIndirectLayout {
     public const int LaunchSteps = 8;
     /// <summary>The allowance for each directed partition segment.</summary>
     public const int SegmentSteps = 16;
+    /// <summary>The fixed allowance of a shared receiver proof's canonical record: two component attempts from its
+    /// bin's centre and that anchor's clearance. It is independent of every caller, so the record is a pure function of
+    /// the bin, whichever receiver computes or reads it.</summary>
+    public const int CanonicalProofSteps = ((2 * SegmentSteps) + 1);
+    /// <summary>A receiver's own proof allowance, used when its bin's canonical record does not reach its point.</summary>
+    public const int ReceiverProofSteps = (2 * SegmentSteps);
     /// <summary>The probe class occupies the low two bits.</summary>
     public const int ClassMask = 3;
     /// <summary>The first traced-stratum bit.</summary>
@@ -75,6 +81,21 @@ public sealed class SdfIndirectLayout {
     public const int RadianceWords = SourceCount;
     /// <summary>The largest supported probe ray count, bounding a shade group's shared storage.</summary>
     public const int MaximumRaysPerProbe = 256;
+    /// <summary>The measured-cost pair of placement units: a probe's placement.</summary>
+    public const int CostPlace = 0;
+    /// <summary>The measured-cost pair of partition units: a cell's partition.</summary>
+    public const int CostClassify = 1;
+    /// <summary>The measured-cost pair of trace units: a probe ray's transport.</summary>
+    public const int CostTrace = 2;
+    /// <summary>The measured-cost pair of shade units: a probe ray's shading.</summary>
+    public const int CostShade = 3;
+    /// <summary>The measured-cost pair of receiver units: an admitted receiver's launch and proofs.</summary>
+    public const int CostReceiver = 4;
+    /// <summary>The measured kinds.</summary>
+    public const int CostKinds = 5;
+    /// <summary>The measured-cost counters: per kind, the field instruction visits its kernels counted and the units
+    /// they ran. Both wrap modulo 2^32 and are read as differences between fenced readbacks.</summary>
+    public const int CostWords = (2 * CostKinds);
 
     /// <summary>Creates the layout for a tier.</summary>
     /// <param name="tier">The requested cache tier.</param>
@@ -97,6 +118,7 @@ public sealed class SdfIndirectLayout {
         ClassifyBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4, _ => 8 };
         ShadeBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 4096, _ => 8192 };
         ReceiverProofBudget = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 32768, _ => 65536 };
+        FrameMicroseconds = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2000, _ => 4000 };
         BounceLimit = tier switch { SdfIndirectTier.Off => 0, SdfIndirectTier.Medium => 2, _ => MaximumBounces };
         ProofCapacity = (ProbeCapacity * ProofsPerCell);
         CellWordOffset = (ProbeCapacity * ProbeWords);
@@ -110,7 +132,9 @@ public sealed class SdfIndirectLayout {
         IrradianceGenerationWords = ((ProbeCapacity * IrradianceTexels) * RadianceWords);
         PublicationWordOffset = (IrradianceWordOffset + (LightingGenerations * IrradianceGenerationWords));
         ReceiverProofWordOffset = (PublicationWordOffset + (LightingGenerations * ProbeCapacity));
-        WordCount = (ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1));
+        ShadeScratchWordOffset = (ReceiverProofWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : 1));
+        CostWordOffset = (ShadeScratchWordOffset + (RaysPerProbe * RadianceWords));
+        WordCount = (CostWordOffset + ((tier == SdfIndirectTier.Off) ? 0 : CostWords));
     }
 
     /// <summary>Gets the selected tier.</summary>
@@ -133,6 +157,10 @@ public sealed class SdfIndirectLayout {
     public int ShadeBudget { get; }
     /// <summary>Gets the new receiver proofs all views may request in one frame.</summary>
     public int ReceiverProofBudget { get; }
+    /// <summary>Gets the device time, in microseconds, one produced frame gives the cache's transport and lighting solve:
+    /// an eighth of a 60 FPS frame at Medium (2 ms of 16.7) and twice that at High. The renderer holds it in counted
+    /// field visits at a calibrated device rate, so admission stays load-independent.</summary>
+    public int FrameMicroseconds { get; }
     /// <summary>Gets the maximum feedback sweeps after the direct sweep.</summary>
     public int BounceLimit { get; }
     /// <summary>Gets the proof hash slots.</summary>
@@ -162,6 +190,12 @@ public sealed class SdfIndirectLayout {
     public int PublicationWordOffset { get; }
     /// <summary>Gets the shared receiver-proof admission counter, reset before admitted views. Deferred counts belong to each view.</summary>
     public int ReceiverProofWordOffset { get; }
+    /// <summary>Gets the first word of one probe's stored ray radiance: a probe whose shading exceeds one submission is
+    /// shaded in ray chunks, each storing its rays' sources here until the probe's last chunk reduces them all.</summary>
+    public int ShadeScratchWordOffset { get; }
+    /// <summary>Gets the first measured-cost counter word: the kernels' field instruction visits by kind, which the
+    /// host reads back to price admission at the work the device actually counted.</summary>
+    public int CostWordOffset { get; }
     /// <summary>Gets the total storage words.</summary>
     public int WordCount { get; }
     /// <summary>Gets the cache allocation's bytes, excluding host regions and descriptor storage.</summary>

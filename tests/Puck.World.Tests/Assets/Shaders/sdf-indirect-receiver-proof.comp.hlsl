@@ -1,6 +1,8 @@
+// The receiver pass owns the certificate store.
+#define SDF_RECEIVER_PASS
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> receiverRecords : register(u5, space3);
-[[vk::binding(60, 3)]] StructuredBuffer<float4> receiverCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> receiverResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> receiverCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> receiverResults : register(u127, space3);
 struct ReceiverProbeIndex { [[vk::offset(0)]] uint index; };
 [[vk::push_constant]] ConstantBuffer<ReceiverProbeIndex> receiverProbeIndex : register(b0, space4);
 struct ReceiverParameters { uint2 indirectAllocation; uint indirectCertificateRevision; };
@@ -36,4 +38,20 @@ void CSMain() {
     receiverResults[uint2(index, 0u)] = float4(valid ? 1.0 : 0.0, (float)level, (float)mask, (float)receiverWrites);
     receiverResults[uint2(index, 1u)] = float4(launched, clearance);
     receiverResults[uint2(index, 2u)] = float4((float)receiverRecords[15u], 0.0, 0.0, 0.0);
+    // A retained certificate joins a moved surface point only within its launch ball widened by the acceptance threshold.
+    float3 x = float3(1.0, 0.0, 0.0);
+    receiverResults[uint2(index, 3u)] = float4(
+        sdfIndirectCertificateJoins(launched + x * (clearance + 0.005), launched, clearance, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * (clearance + 0.02), launched, clearance, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * 0.005, launched, 0.0, 0.01) ? 1.0 : 0.0,
+        sdfIndirectCertificateJoins(launched + x * 0.02, launched, 0.0, 0.01) ? 1.0 : 0.0);
+    // Withdrawing a certificate leaves it invalid in every scope.
+    sdfIndirectWithdrawReceiverCertificate(0u);
+    DeviceMemoryBarrier();
+    uint withdrawnLevel, withdrawnMask;
+    float3 withdrawnLaunch;
+    float withdrawnClearance;
+    passGroup.indirectAllocation = uint2(9u, 7u);
+    passGroup.indirectCertificateRevision = 13u;
+    receiverResults[uint2(index, 4u)] = float4(sdfIndirectReceiverCertificate(0u, withdrawnLevel, withdrawnMask, withdrawnLaunch, withdrawnClearance) ? 1.0 : 0.0, 0.0, 0.0, 0.0);
 }

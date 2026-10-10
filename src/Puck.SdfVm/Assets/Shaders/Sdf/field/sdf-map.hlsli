@@ -3,7 +3,12 @@
 #define FIELD_SDF_MAP_HLSLI
 // Only the primary whole-part traversal sets this. Other query paths keep the complete field.
 static bool sdfPrimaryOmitParts = false;
-static float sdfAmbientDistanceCeiling = SDF_FAR_DISTANCE;
+// A distance-only query's ceiling, in mapCore's units before the program's step scale: the walk starts its running
+// minimum here, so it returns min(field, ceiling) and every skip sphere and part bound rejects against it. Only a
+// caller that saturates at the ceiling sets it, and only when sdfCanTracePartsIndependently certifies that the root is
+// a hard union of independent operands (any other root composition would read the ceiling as an operand): the exact
+// ambient rungs and the soft-shadow march. Callers restore SDF_FAR_DISTANCE.
+static float sdfQueryDistanceCeiling = SDF_FAR_DISTANCE;
 #if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
 bool sdfPartCannotImprove(uint instance, float3 p, float distance);
 #endif
@@ -126,6 +131,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint instanceSegment = SDF_SEGMENT_NONE;
     uint instanceSegmentEnd = SDF_SEGMENT_NONE;
     uint pendingInstance = SDF_SEGMENT_NONE;
+    // The instance whose whole-instance skip was last decided (sdfInstanceCannotWin), and whether the root is a hard
+    // union of independent operands, which admits that skip for an instance the part table does not compile.
+    uint testedInstance = SDF_SEGMENT_NONE;
+    uint testedWord = SDF_SEGMENT_NONE;
+#ifndef SDF_VM_DISABLE_PART_PROGRAMS
+    bool rootUnion = sdfCanTracePartsIndependently();
+#else
+    bool rootUnion = false;
+#endif
 
     if (hasInstances) {
         worldCount = SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset));
@@ -166,7 +180,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     int parityMaterialDelta = 0;
     SdfHit result;
 
-    result.distance = sdfAmbientDistanceCeiling;
+    result.distance = sdfQueryDistanceCeiling;
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
@@ -216,16 +230,49 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
             ) {
                 uint4 part = sdfProgramWord(sdfProgramLayout.partProgramOffset + 1u + pendingInstance);
-                bool partReady = ((part.z & 0x7FFFFFFFu) != 0u);
+                bool partReady = ((part.z & SDF_PART_LEAF_COUNT_MASK) != 0u);
 #ifndef SDF_DYNAMIC_TRANSFORMS
                 partReady = partReady && ((part.z & 0x80000000u) == 0u);
 #endif
+                // Each visible instance is tested once, at its first segment, against the running minimum: a compiled
+                // part always joins as a hard union, and under the root-union certificate so does every generic one.
+                if (pendingInstance != testedInstance) {
+                    testedInstance = pendingInstance;
+#if defined(SDF_SCREEN_SOURCES) && defined(SDF_GROUP_SHADOW_GATHER)
+                    // A group mask's word summary rejects every summarized instance still pending in this word at once:
+                    // the sphere encloses all of them and its scale is their smallest, so each would fail
+                    // sdfInstanceCannotWin. The oversized instances it left out stay pending.
+                    if (rootUnion && sdfGroupMaskSummarized && (sdfShadowMaskActive || sdfAmbientMaskActive) &&
+                        (maskWordIndex != testedWord) && (maskWordIndex < SDF_GROUP_MASK_SUMMARY_WORDS)) {
+                        testedWord = maskWordIndex;
+                        float4 sphere = sdfGroupMaskSpheres[maskWordIndex];
+                        float gap = (length(worldPosition - sphere.xyz) - sphere.w);
+                        if ((sphere.w >= 0.0) && (result.distance < SDF_FAR_DISTANCE * sdfGroupMaskScales[maskWordIndex]) && (gap > 0.0) &&
+                            ((gap * sdfGroupMaskScales[maskWordIndex]) >= result.distance)) {
+                            uint kept = sdfGroupMaskKept[maskWordIndex];
+                            maskWordBits &= kept;
+                            if (((kept >> (pendingInstance & 31u)) & 1u) == 0u) {
+                                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                                    maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                                continue;
+                            }
+                        }
+                    }
+#endif
+                    if ((partReady || rootUnion) && (part.z & SDF_PART_NO_DISTANCE_BOUND) == 0u &&
+                        sdfInstanceCannotWin(instanceOffset, pendingInstance, asfloat(part.w), worldPosition, result.distance)) {
+                        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                            maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                        continue;
+                    }
+                }
                 if (partReady) {
                     if (!sdfPrimaryOmitParts
 #if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
                         && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
 #endif
                     ) {
+                        sdfFieldVisits += (part.z & SDF_PART_LEAF_COUNT_MASK);
                         sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
@@ -252,7 +299,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
         uint4 segmentMeta = sdfProgramWord(segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u);
         if (segmentMeta.z > segmentMeta.w || segmentMeta.w > sdfProgramLayout.instructionCount) { return sdfIsaErrorHit(); }
+        sdfFieldVisits++;
         uint segmentBoundMode = (segmentMeta.x & SDF_SEGMENT_BOUND_MASK);
+        // The static far field omits every segment a moving transform places (sdfIndirectStaticField).
+        if (sdfIndirectParticipationActive && sdfIndirectStaticField && (segmentBoundMode == SDF_BOUND_DYNAMIC)) { continue; }
 
         [branch]
         if (segmentBoundMode != SDF_BOUND_NONE
@@ -290,6 +340,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         // loop/switch/PHI lattice for common articulated geometry. One dynamic slot is shared by the run, so a
         // multi-primitive bone loads once. KEEP-IN-SYNC PAIR: mapGradCore has the parallel rigid-leaf dual walk (same
         // segment/plan decode, same tight-sphere rejects, same pose math) — the two rigid walks must stay twins.
+        sdfFieldVisits += (segmentMeta.w - segmentMeta.z);
 #ifndef SDF_VM_DISABLE_RIGID_PLAN
         [branch]
         if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) != 0u) {

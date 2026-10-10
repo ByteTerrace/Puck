@@ -90,7 +90,7 @@ The native contracts are documented in Microsoft's
 and Linux's [openat](https://man7.org/linux/man-pages/man2/openat.2.html) and
 [rename](https://man7.org/linux/man-pages/man2/rename.2.html) references.
 `ConfinedStorageLawTests` exercises real directories, links, concurrent
-replacement, conditional writes, and namespace revocation in `Puck.World.Tests`.
+replacement, conditional writes, and namespace revocation in `Puck.World.Server.Tests`.
 
 ## Documentation
 

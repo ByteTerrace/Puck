@@ -8,9 +8,9 @@ namespace Puck.Assets {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AutomaticIntegerSequenceCodec.Magic</c>, declared in <c>src/Puck.Assets/AutomaticSequenceCodec.cs</c>.</summary>
-        public const string AutomaticIntegerSequenceCodecMagic = "ac9a04238960cd51";
+        public const string AutomaticIntegerSequenceCodecMagic = "2191675f60663a9f";
         /// <summary>The shape fingerprint of <c>AutomaticIntegerSequenceCodec.Version</c>, declared in <c>src/Puck.Assets/AutomaticSequenceCodec.cs</c>.</summary>
-        public const string AutomaticIntegerSequenceCodecVersion = "ac9a04238960cd51";
+        public const string AutomaticIntegerSequenceCodecVersion = "2191675f60663a9f";
     }
 }
 

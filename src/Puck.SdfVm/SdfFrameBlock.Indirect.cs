@@ -48,9 +48,10 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectPreviousPublication), value: 0u);
         WriteIndirectPick(block: block, enabled: false, x: 0u, y: 0u);
     }
-    /// <summary>Preserves completed receiver certificates only when Primary repeats its submitted surface inputs.</summary>
+    /// <summary>Preserves completed receiver certificates while Primary repeats its visibility storage; the receiver pass keeps
+    /// each only while its launch still joins the pixel's surface.</summary>
     /// <param name="block">The world pass block.</param>
-    /// <param name="preserve">Whether the geometry, camera sample and visibility allocation are unchanged.</param>
+    /// <param name="preserve">Whether the visibility recorder, buffer, binding and extent are unchanged.</param>
     public static void WriteIndirectReceiverPreservation(Span<byte> block, bool preserve) =>
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.PreserveIndirectReceivers), value: (preserve ? 1u : 0u));
     /// <summary>Writes the frame-admitted shared proof allowance; zero defers unfinished receivers.</summary>

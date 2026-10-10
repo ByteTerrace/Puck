@@ -764,7 +764,7 @@
         "name": "indirect-every-member-reads-back-its-sentinel",
         "capture": "indirect.png",
         "extent": [
-          98,
+          102,
           1
         ],
         "region": [
@@ -1862,7 +1862,7 @@
         "name": "indirect-every-member-reads-back-its-sentinel",
         "capture": "indirect.png",
         "extent": [
-          98,
+          102,
           1
         ],
         "region": [
@@ -1922,13 +1922,13 @@
         "name": "indirect-the-members-before-the-last-read-back",
         "capture": "indirect.png",
         "extent": [
-          98,
+          102,
           1
         ],
         "region": [
           0,
           0,
-          0.9897959183673469,
+          0.9901960784313726,
           1
         ],
         "reduce": "every",

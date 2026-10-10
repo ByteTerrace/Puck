@@ -252,7 +252,7 @@ a small union carrying its own material (a rivet) that stays a crisp mark at any
 march-carved groove thinner than the footprint-relative acceptance produces. Refused by name alongside `panel` or
 `trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
 `secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
-ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`/`calcFastAO`, gated on
+ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`, gated on
 `sdfSecondaryMarchActive`) — it still marches for the camera, still carves the silhouette, and
 `CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` still hold it as ordinary contact geometry. No Panel/
 Trims restriction, since it packs its own bit on the SAME instruction rather than composing a second shape. A shape's
@@ -371,8 +371,8 @@ its full radius applies there) still reaches roughly 0.4 m from its own center, 
 the pieces) without risking contact; a proof keeps the body at a safe standoff beside the
 table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having the body touch
 one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
-`world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
-board rendering are this lane's; painting `plan` is deliberately left to a future addon.
+`world.tabletop` echoes them back, but no client code paints a highlight from it; a
+highlight is an addon's to draw.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name. The loader is
 `src/Puck.World.Schema/WorldDefinitionLoader.cs`.
 
@@ -472,9 +472,9 @@ site spelling a private name, quoting the JSON path and the export list that wou
 bindings are `bindings`; every other read position is `reads`). The member is stripped from the composed tree, a
 document loaded as a world with `exports` on it refuses at validation, and `world.imports` prints each layer's
 `exports[...]`. Law suites:
-`tests/Puck.World.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Tests/ModuleExportsLawTests.cs`,
+`tests/Puck.World.Games.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
 `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldExportsLawTests.cs`.
-Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
+Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **`standard.puck` — the standard library, not a world.** The engine ships
@@ -489,7 +489,7 @@ absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
 property non-null between parse and validation which the validator refuses for
-any document whose `population.capacity` is nonzero — the same derived refusal
+any document whose `bodies.capacity` is nonzero — the same derived refusal
 `kits` carries, so a seatless document may still author neither. A world takes
 the standard set by naming `standard` as its `basis`; a world that
 wants only its own `layouts` and other prototype-specific sections over that
@@ -509,7 +509,7 @@ refusal: an absent required section resolves through its accessor to the
 section's own `Absent`/empty placeholder (`Hud`, `Views`, `Kits`, …), and the
 validator refuses it BY NAME from whatever derived rule that placeholder
 violates — `views` and `kits` refuse for any document whose
-`population.capacity` is nonzero, so a seatless document may author neither.
+`bodies.capacity` is nonzero, so a seatless document may author neither.
 
 Notable validator constants:
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are

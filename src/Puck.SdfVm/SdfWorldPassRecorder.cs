@@ -20,7 +20,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // Views attribute analytic sky lighting by layer; the shadow pass attributes secondary pixels by decision.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
-        SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
+        SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.Receiver => m_view.Residency.SkyDetails.Labels,
         SdfWorldPackage.Parts.Shadow => SdfShadowDecisions.Labels,
         _ => [],
     };
@@ -45,11 +45,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.IndirectCacheWritten,
         SdfWorldPackage.IndirectPickWritten,
         SdfWorldPackage.IndirectDeferredWritten,
+        SdfWorldPackage.IndirectAnswer,
+        SdfWorldPackage.IndirectAnswerWritten,
         SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.IndirectLightDepthWritten,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
+    private static readonly uint IncomingVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.IncomingVisibility);
+    private static readonly uint IncomingVisibilityWrittenBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.IncomingVisibilityWritten);
     private static readonly uint ScreenSourcesBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ScreenSources);
 
     private readonly RenderGraphPackageRecorderContext m_context;
@@ -60,8 +64,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
     private readonly bool m_resolved;
-    private readonly int m_fadeCapacity;
+    // Whether the planned graph allocates the incoming handoff image (a policy allowing fades). Without it the passes
+    // bind the tables' fillers and read a zero fade count, whatever the live frame's handoffs.
+    private readonly bool m_incoming;
 
+    // Whether the receiver records the comparison receiver this frame: its view selects a comparison method.
+    private bool m_comparison;
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
     private SdfWorldView m_view;
@@ -131,11 +139,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         var incoming = context.Inputs.Concat(second: context.Outputs).SingleOrDefault(predicate: resource => (LocalName(resource: resource) == SdfWorldPackage.IncomingVisibility));
 
-        m_fadeCapacity = ((incoming is null) ? 0 : ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) switch {
-            GpuPixelFormat.R8Unorm => 1,
-            GpuPixelFormat.R8G8Unorm => 2,
-            _ => throw new InvalidOperationException(message: $"Pass '{context.Pass}' has an unsupported incoming visibility format '{incoming.Format}'."),
-        });
+        if ((incoming is not null) && (ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) != SdfWorldPackage.IncomingVisibilityFormat)) {
+            throw new InvalidOperationException(message: $"Pass '{context.Pass}' has an unsupported incoming visibility format '{incoming.Format}'.");
+        }
+        m_incoming = (incoming is not null);
 
         DeclareScreens(residency: view.Residency);
 
@@ -158,7 +165,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
-                groupLayoutHandles: tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)).GroupLayoutHandles,
+                groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Shadow).GroupLayoutHandles,
                 groups: groups
             );
 
@@ -314,7 +321,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((m_part == SdfWorldPackage.IndirectReceiverReset)
         ? null : ((m_view.LightView && !m_owner.HasIndirectReaders(residency: m_view.Residency))
             ? m_view.Residency.IndirectLightViews.Revision
-            : m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context)));
+            : m_owner.SignatureOf(instance: m_context.Instance, part: SignaturePart, temporal: m_temporal, context: in context)));
+
+    // The receiver executes exactly when views does: it reads what views reads, and views reads its answers.
+    private string SignaturePart => ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.Parts.Views : m_part);
+
     public void Submitted() {
         if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Primary)) { m_owner.SubmittedReceiverSurface(instance: m_context.Instance); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_view.LightView) {
@@ -359,6 +370,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             view: view,
             width: width
         );
+        // A graph planned without the incoming image marches and reads no incoming slot, as its policy requires, until a
+        // replanned graph allocates the image a live handoff needs.
+        if (!m_incoming) { SdfFrameBlock.WriteWithoutFades(block: recording.PassBlock); }
 
         var temporal = m_owner.TemporalOf(
             instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: width, renderHeight: height
@@ -384,11 +398,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             SdfFrameBlock.WriteIndirectReceiverPreservation(block: recording.PassBlock, preserve: preserve);
         }
+        if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Receiver)) {
+            var boundIndirect = BoundIndirect(recording: recording, tables: tables);
+
+            m_comparison = (frame.Views[view].Quality.IndirectMethod != SdfIndirectMethod.Cache);
+            SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
+            SdfFrameBlock.WriteIndirectNear(block: recording.PassBlock, cache: boundIndirect, frame: frame, ready: residency.IsIndirectReady);
+            // The selected pixel's near ray and replacing sources are the receiver's part of its record; views takes
+            // the same armed request when it records next.
+            if ((boundIndirect is not null) && m_owner.PickerOf(instance: m_context.Instance).Arm(height: height, width: width, x: out var pickX, y: out var pickY)) {
+                SdfFrameBlock.WriteIndirectPick(block: recording.PassBlock, enabled: true, x: pickX, y: pickY);
+            }
+        }
         if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Views)) {
             var boundIndirect = BoundIndirect(recording: recording, tables: tables);
 
-            SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
-            SdfFrameBlock.WriteIndirectNear(block: recording.PassBlock, cache: boundIndirect, frame: frame, ready: residency.IsIndirectReady);
             m_recordedLighting = new(boundIndirect?.PublishedLightingSource, (boundIndirect?.PublishedStamp ?? 0u),
                 m_owner.ClosureEpochOf(residency: residency), (tables.SubmittedSkyEnvironment?.Publication ?? default),
                 (tables.SubmittedScreenEmission?.Publication ?? default));
@@ -415,20 +439,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WriteWorkCounterDetailRow(block: recording.PassBlock, row: recording.WorkDetailRow);
 
         if (m_pick is not null) {
+            // Build ports carry the storage declaration; the recording carries the version this pass reads or writes.
+            var deferredPort = Array.IndexOf(array: m_inputs, value: SdfWorldPackage.IndirectDeferredClear);
+
             m_pick.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
-                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecordsWritten)].Version,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
                 box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
-                cut: frame.Views[view].CutRevision);
+                cut: frame.Views[view].CutRevision, armedOnly: (deferredPort >= 0));
             var cachePort = Array.IndexOf(array: m_inputs, value: SdfWorldPackage.IndirectCache);
             var pickPort = Array.IndexOf(array: m_outputs, value: SdfWorldPackage.IndirectPick);
-            // Build ports carry the storage declaration; the recording carries its written successor version.
-            var deferredPort = Array.IndexOf(array: m_outputs, value: SdfWorldPackage.IndirectDeferredClear);
             var indirect = BoundIndirect(recording: recording, tables: tables);
             var receiverScope = ((indirect is null) ? default : m_owner.PrepareReceivers(m_context.Instance, indirect));
 
             m_pick.PrepareReceivers(recording.Slot, indirect,
-                ((deferredPort < 0) ? null : recording.Outputs[deferredPort].Version), receiverScope);
+                ((deferredPort < 0) ? null : recording.Inputs[deferredPort].Version), receiverScope);
             m_pick.PrepareIndirect(recording.Slot, indirect,
                 ((cachePort < 0) ? null : recording.Inputs[cachePort].Version),
                 ((pickPort < 0) ? null : recording.Outputs[pickPort].Version), recording.PassBlock);
@@ -532,8 +557,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.LightDepth => tables.Pipeline(kernel: SdfKernel.LightDepth),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
-            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)),
-            _ => tables.ViewsPipelineFor(fadeCapacity: m_fadeCapacity),
+            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
+            SdfWorldPackage.Parts.Receiver => tables.ReceiverPipeline(comparison: m_comparison),
+            _ => tables.ViewsPipeline,
         };
 
         BindPorts(
@@ -582,7 +608,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             };
 
             residency.LogIndirectSubmission(("light-" + m_part), queries, residency.Frame!.Program.InstructionCount, (tables.Indirect?.Frame ?? 0));
-        } else if ((m_part == SdfWorldPackage.Parts.Views) && (tables.Indirect is { } cache)) {
+        } else if ((m_part == SdfWorldPackage.Parts.Receiver) && (tables.Indirect is { } cache)) {
             residency.LogReceiverProofs(cache: cache);
         }
 
@@ -821,8 +847,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var bindings = tables.Bindings;
         var output = tables.StorageFiller.ImageViewHandle;
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
+        // Every per-view interface declares the incoming handoff image; a graph without one binds the fillers.
         var incomingVisibility = tables.SampledFiller.ImageViewHandle;
-        var incomingWritten = tables.StorageFiller.ImageViewHandle;
+        var incomingWritten = tables.IncomingStorageFiller.ImageViewHandle;
 
         foreach (var member in ScratchMembers) {
             tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
@@ -875,16 +902,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             descriptorSetHandle: set,
             imageViewHandle: meshVisibility
         );
-        if (m_fadeCapacity != 0) {
-            var layout = SdfWorldInterfaces.WorldFadeParameters[m_fadeCapacity].Layout;
-
-            bindings.WriteSampledImage(arrayElement: 0,
-                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibility),
-                descriptorSetHandle: set, imageViewHandle: incomingVisibility);
-            bindings.WriteStorageImage(arrayElement: 0,
-                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibilityWritten),
-                descriptorSetHandle: set, imageViewHandle: incomingWritten);
-        }
+        bindings.WriteSampledImage(arrayElement: 0, binding: IncomingVisibilityBinding,
+            descriptorSetHandle: set, imageViewHandle: incomingVisibility);
+        bindings.WriteStorageImage(arrayElement: 0, binding: IncomingVisibilityWrittenBinding,
+            descriptorSetHandle: set, imageViewHandle: incomingWritten);
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
         m_shadowPorts[slot] = shadowPorts;
@@ -930,14 +951,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
-        SdfWorldPackage.IndirectCache => ((m_part == SdfWorldPackage.Parts.Views) ? SdfWorldPackage.IndirectCacheWritten : SdfWorldPackage.IndirectCache),
+        SdfWorldPackage.IndirectCache => ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.IndirectCacheWritten : SdfWorldPackage.IndirectCache),
+        SdfWorldPackage.IndirectAnswer => SdfWorldPackage.IndirectAnswer,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepth,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.SegmentTapes => SdfWorldPackage.SegmentTapes,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility =>
-            ((m_part == SdfWorldPackage.Parts.Views) ? SdfWorldPackage.VisibilityRecordsWritten : SdfWorldPackage.VisibilityRecords),
+            ((m_part == SdfWorldPackage.Parts.Receiver) ? SdfWorldPackage.VisibilityRecordsWritten : SdfWorldPackage.VisibilityRecords),
         _ => null,
     };
     // A graph may still retain an old allocation while a tier or far-distance replacement installs. Never combine
@@ -952,6 +974,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.IndirectPick => SdfWorldPackage.IndirectPickWritten,
+        SdfWorldPackage.IndirectAnswer => SdfWorldPackage.IndirectAnswerWritten,
         SdfWorldPackage.IndirectDeferredClear => SdfWorldPackage.IndirectDeferredWritten,
         SdfWorldPackage.IndirectVisibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.IndirectLightDepth => SdfWorldPackage.IndirectLightDepthWritten,

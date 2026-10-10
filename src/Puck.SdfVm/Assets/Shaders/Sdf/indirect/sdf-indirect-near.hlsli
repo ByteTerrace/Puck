@@ -8,43 +8,8 @@
 static uint sdfIndirectNearOutcome = SdfIndirectNearOutcomeNotAttempted;
 static float3 sdfIndirectNearDirection = 0.0;
 
-#ifdef __spirv__
-[noinline]
+// The receiver's near-field sample replaces its cache answer when answered (sdfIndirectNearResult) and keeps every cache
+// source when not admitted or unresolved. The receiver procedure runs it (sdfIndirectReceiverStep): the outcome and
+// direction above are what the pick reports.
 #endif
-SdfIndirectSources sdfIndirectNear(SdfPixel p, SdfSurfaceSample receiver, float3 launched,
-    SdfIndirectSources fallback, out uint countedLoads) {
-    countedLoads = 0u;
-    if (passGroup.indirectNearEnabled == 0u || !sdfIndirectNearAdmitted(passGroup.indirectTier, passGroup.indirectMethod, p.pixel, passGroup.historyFrames)) { return fallback; }
-    // The selected pixel sees every radial stratum over four visits, rather than the same ray on every fourth frame.
-    uint visit = passGroup.historyFrames / SdfIndirectNearPhases;
-    float3 direction = sdfIndirectAlternativeDirection(receiver.normal, visit % SdfIndirectAlternativeRays,
-        (visit / SdfIndirectAlternativeRays) % SdfIndirectAlternativePhases);
-    sdfIndirectNearDirection = direction;
-    bool previousSecondary = sdfSecondaryMarchActive;
-    bool previousShadow = sdfShadowParticipationActive;
-    bool previousPermit = sdfIndirectReceiverPermit;
-    bool previousDeferred = sdfIndirectReceiverDeferred;
-    bool previousPick = sdfIndirectPickActive;
-    // Secondary feedback reads must not replace the primary receiver's corner provenance.
-    sdfIndirectPickActive = false;
-    sdfSecondaryMarchActive = true;
-    sdfShadowParticipationActive = true;
-    uint beforeLoads = sdfIndirectLoads;
-    uint beforeHashes = sdfIndirectHashes;
-    SdfIndirectSources incoming;
-    bool hitSurface;
-    uint evaluations;
-    bool answered = sdfIndirectNearIncoming(launched, direction, incoming, hitSurface, evaluations);
-    sdfIndirectPickActive = previousPick;
-    sdfIndirectReceiverDeferred = previousDeferred;
-    sdfIndirectReceiverPermit = previousPermit;
-    sdfShadowParticipationActive = previousShadow;
-    sdfSecondaryMarchActive = previousSecondary;
-    sdfIndirectNearOutcome = answered ? (hitSurface ? SdfIndirectNearOutcomeHit : SdfIndirectNearOutcomeContinuation) : SdfIndirectNearOutcomeUnresolved;
-    countedLoads = sdfIndirectLoads - beforeLoads;
-    puckCountDetail(SDF_SKY_DETAIL_INDIRECT_NEAR, evaluations, 0u, 0u, sdfIndirectHashes - beforeHashes, countedLoads);
-    puckCountIndirect(SDF_SKY_DETAIL_INDIRECT_NEAR, answered && hitSurface ? 1u : 0u, 1u, answered ? 0u : 1u);
-    if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps -= evaluations; }
-    return sdfIndirectNearResult(answered, incoming, fallback);
-}
-#endif
+

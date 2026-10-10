@@ -30,19 +30,49 @@ jobs:
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
+      # Every build below compiles shaders through the per-user cache, which this restores: each output a restored entry
+      # holds is published from it and runs no DXC.
+      - id: shader-cache
+        name: Restore the shader compiler cache
+        uses: ./.github/actions/shader-cache
+        with:
+          mode: restore
+      # Puck.World's build compiles the world tree through the per-user bake cache, which this restores: a creation whose
+      # bake an earlier run of the same bake code kept is read rather than baked, which is most of a cold build's world
+      # compile.
+      - id: bake-cache
+        name: Restore the creation bake cache
+        uses: ./.github/actions/bake-cache
+        with:
+          mode: restore
       - name: Restore locked dependencies
         run: dotnet restore Puck.slnx --locked-mode
-      - name: Install the candidate CLI
-        uses: ./.github/actions/setup-puck
-      # Before the solution build: a build writes every generated declaration the model has changed, so the check also
-      # holds each file to what the commit carries.
-      - name: puck shaders generate --check
-        run: puck shaders generate --check
-        shell: bash
       - name: Compile the platform bootstrap program without running it
         run: dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
+      # The solution build compiles the candidate CLI the steps below run; nuget pack packs it once, without rebuilding.
       - name: Compile the solution once
         run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
+      # A build writes every generated declaration the model has changed, so the check holds each file to the commit's
+      # staged copy as well as to the model.
+      - name: Check the generated shader declarations
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders generate --check
+      # Every build stamps each entry it reads or writes, so a bound at least this job's timeout keeps exactly what this
+      # commit's builds used, and the saved cache does not grow with every commit before it.
+      - if: steps.shader-cache.outputs.cache-hit != 'true'
+        name: Prune shader cache entries this job's builds did not use
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders cache prune --unused-minutes 90
+      - if: steps.shader-cache.outputs.cache-hit != 'true'
+        name: Save the shader compiler cache
+        uses: ./.github/actions/shader-cache
+        with:
+          key: ${{ steps.shader-cache.outputs.key }}
+          mode: save
+      - if: steps.bake-cache.outputs.cache-hit != 'true'
+        name: Save the creation bake cache
+        uses: ./.github/actions/bake-cache
+        with:
+          key: ${{ steps.bake-cache.outputs.key }}
+          mode: save
       - name: Verify bake derivation fingerprints
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll derivations --check
       # The shaders the build just compiled with the pinned DXC, at their repository paths, for the Linux job that holds
@@ -55,10 +85,11 @@ jobs:
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll determinism record tests/Puck.Determinism/determinism.json --output artifacts/determinism/windows.stream
       - name: Package the compiled assemblies without rebuilding
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack --output artifacts/packages --no-build
+      # The WebAssembly payload's ahead-of-time publish is its own producer (browser.yml), which runs beside this job
+      # rather than ahead of every consumer of this one.
       - name: Publish the compiled application payloads
         run: |
           dotnet publish src/Puck.Azure.Functions -c Release --no-build --no-restore -o artifacts/runtime/functions
-          dotnet publish src/Puck.World.Browser -c Release --no-build --no-restore
           dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
       - name: Verify the published World host
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll bench startup worlds/parlor/chess.puck --headless --samples 1 --world-artifact artifacts/world/Puck.World.dll --output artifacts/world-startup
@@ -78,12 +109,6 @@ jobs:
           if-no-files-found: error
           name: nuget-packages
           path: artifacts/packages/*.*nupkg
-      - name: Upload the compiled Roslyn analyzers
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          if-no-files-found: error
-          name: compiler-analyzers
-          path: src/Puck.Analyzers/bin/Release/netstandard2.0
       - name: Upload the compiled shader bytecode
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -96,7 +121,7 @@ jobs:
           if-no-files-found: error
           name: determinism-windows
           path: artifacts/determinism
-      - name: Upload Functions and browser payloads
+      - name: Upload the Functions payload and its source identity
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           if-no-files-found: error
@@ -129,4 +154,7 @@ jobs:
           if-no-files-found: warn
           name: build-diagnostics
           path: artifacts/build.binlog
-    timeout-minutes: 60
+    # A run that compiles every shader cold (a DXC or compiler change re-keys them all) must still finish and save its
+    # cache, or every later run would compile cold again: the cold solution build measured 33.5 minutes on 6 loaded cores,
+    # about 50 on this runner's 4, plus some 10 minutes of setup, packaging and publishing.
+    timeout-minutes: 90

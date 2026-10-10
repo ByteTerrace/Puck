@@ -8,6 +8,7 @@
 #include "../frame/sdf-reprojection.hlsli"
 #include "../indirect/sdf-indirect-read.hlsli"
 #include "../indirect/sdf-indirect-light.hlsli"
+#include "sdf-debug-reads.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
 // in the material-id debug view.
@@ -18,55 +19,14 @@ float3 materialPalette(int material) {
     return saturate(ramp);
 }
 
-float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
+float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color, SdfDebugSlice slice, float firstRead, float secondRead) {
     float3 viewColor = color;
-
-    // The slice's plane (case 7). Default plane: through the WORLD ORIGIN with normal = camera forward (the debug subject
-    // sits at the origin — a camera-locked slice). The pass block's slice axis and offset optionally select a world-axis
-    // plane instead (the `sdf.slice` verb; camera-locked while the axis is 0).
-    bool slicing = (p.viewMode == 7);
-    bool sliceParallel = false;
-    float planeT = 0.0;
-
-    if (slicing) {
-        float3 sliceNormal = p.view.forward.xyz; // already unit (the camera basis)
-        float planeOffset = 0.0;               // the plane is dot(p, n) = planeOffset
-        int sliceAxis = (int)round(passGroup.debugSliceAxis);
-
-        if (sliceAxis == 1) { sliceNormal = float3(1.0, 0.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
-        else if (sliceAxis == 2) { sliceNormal = float3(0.0, 1.0, 0.0); planeOffset = passGroup.debugSliceOffset; }
-        else if (sliceAxis == 3) { sliceNormal = float3(0.0, 0.0, 1.0); planeOffset = passGroup.debugSliceOffset; }
-
-        float denominator = dot(p.rayDirection, sliceNormal);
-
-        sliceParallel = (abs(denominator) < 1.0e-4);
-
-        if (!sliceParallel) {
-            planeT = ((planeOffset - dot(p.rayOrigin, sliceNormal)) / denominator);
-        }
-    }
-
-    // The debug views' field reads run through one loop, so the views kernel inlines the interpreter once for all of
-    // them: the slice's one sample of the UNMASKED field at its plane (case 7), and the overshoot detector's two marches,
-    // clamped then unclamped (case 9).
-    float firstRead = 0.0;
-    float secondRead = 0.0;
-    uint reads = ((p.viewMode == 9) ? 2u : ((slicing && !sliceParallel && !(planeT < 0.0)) ? 1u : 0u));
-
-    [loop]
-    for (uint read = 0u; (read < reads); read++) {
-        float value = marchOvershootDepth(p.rayOrigin, p.rayDirection, (slicing ? planeT : p.marchStart), p.firstExit, p.secondEntry, p.farDistance, (slicing ? SDF_INSTANCE_MASK_ALL : p.instanceMaskBase), p.pixelFootprint, ((read == 0u) ? 1.0 : (1.0 / sdfStepScale())), slicing);
-
-        if (read == 0u) {
-            firstRead = value;
-        } else {
-            secondRead = value;
-        }
-    }
+    bool sliceParallel = slice.parallel;
+    float planeT = slice.planeT;
 
     switch (p.viewMode) {
         case DebugViewModeIndirect: {
-            viewColor = sdfIndirectSourceTotal(sdfIndirectReceiverSources);
+            viewColor = sdfIndirectReceiverTotal;
             break;
         }
         case 1: { // depth

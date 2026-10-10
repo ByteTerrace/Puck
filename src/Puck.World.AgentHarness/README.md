@@ -9,8 +9,9 @@ An `IChatClient` is Microsoft's common C# interface for a model provider. The
 library takes one from its caller; the hosted participant below takes one from an
 installed `ChatClientProvider`. Puck never reads an API key or turns provider
 settings into world state. The integration pins
-`Microsoft.Agents.AI.Harness` 1.23.0 because that package is evolving quickly
-and an unreviewed package update should not silently change the agent runtime.
+`Microsoft.Agents.AI.Harness` to an exact version (`Puck.World.AgentHarness.csproj`)
+because that package is evolving quickly and an unreviewed package update should
+not silently change the agent runtime.
 
 ## Safe default composition
 
@@ -145,7 +146,7 @@ body, provider, state, completed turns, and the last failure.
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter-class "*WorldSiloExtensionLawTests" --filter-class "*ExtensionModelLawTests"
+dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --filter-class "*WorldSiloExtensionLawTests" --filter-class "*ExtensionModelLawTests"
 ```
 
 The focused tests drive the harness and the participant with scripted
@@ -153,7 +154,7 @@ The focused tests drive the harness and the participant with scripted
 `ApprovalRequiredAIFunction` values by default, that the loop observes its body
 only when the host pumps it, that `allow` offers the actions and submits one and
 `refuse` offers none, that disposal stops the loop between turns, and that bad configuration is
-refused by name. The World tests show a local World and a silo composing the same
+refused by name. The World suites (`tests/Puck.World.Silo.Tests`, `tests/Puck.World.Tests`) show a local World and a silo composing the same
 participant from one configuration, and an installed harness selecting an
 installed provider across load contexts. No test reaches a live model.
 ## Documentation

@@ -120,7 +120,7 @@ public sealed partial record ProbeKindManifest(
     public string Directory { get; private init; } = "";
 
     /// <summary>Returns where the build wrote one kernel entry point's Direct3D 11 compute bytecode: beside the kernel
-    /// source, as <c>&lt;source stem&gt;.&lt;entry&gt;.dxbc</c>, the name the shared shader recipe's
+    /// source, as <c>&lt;source stem&gt;.&lt;entry&gt;.dxbc</c>, the name the shared shader build's
     /// <c>CompileDirect3D11Kernels</c> target writes. A build off Windows writes none.</summary>
     /// <param name="entry">The entry point, <see cref="ProbeKindKernel.Accumulate"/> or
     /// <see cref="ProbeKindKernel.Finalize"/>.</param>
@@ -451,9 +451,8 @@ public sealed partial record ProbeKindManifest(
 
     private static string Format(double value) => value.ToString(provider: CultureInfo.InvariantCulture);
 }
-
 /// <summary>The source-generated (AOT/trim-safe) serialization context for <see cref="ProbeKindManifest"/>.</summary>
 [JsonSerializable(typeof(ProbeKindManifest))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
-internal sealed partial class ProbeKindManifestJsonContext : JsonSerializerContext {
+public sealed partial class ProbeKindManifestJsonContext : JsonSerializerContext {
 }

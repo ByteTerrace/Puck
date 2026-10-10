@@ -9,6 +9,11 @@ using Puck.SignedDistance;
 namespace Puck.World.Tests;
 
 internal static class SdfIndirectDeviceProbe {
+    // The probe kernels' case buffer and result image, in group 3 past every binding the per-view world interface
+    // declares there (its own pass members end in the low sixties), so a world-parameter probe binds both beside them.
+    private const uint CasesBinding = 126U;
+    private const uint ResultsBinding = 127U;
+
     public static Vector4[] Run(GpuDeviceServices services, string extension, string kernel, int resultRows,
         IReadOnlyList<SdfProgram> programs, Vector4[] rows, Vector4[]? transforms = null, uint cacheWords = 128,
         ReadOnlyMemory<byte> passValues = default, ReadOnlyMemory<byte> environment = default, bool worldParameters = false,
@@ -47,8 +52,8 @@ internal static class SdfIndirectDeviceProbe {
             new GpuGroupBinding(binding: cacheBinding, kind: GpuBindingKind.ReadWriteBuffer),
             .. ((environment.IsEmpty && !worldParameters) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: counterBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
             .. nearPassBindings.Select(selector: binding => new GpuGroupBinding(binding.Binding, GpuBindingKind.ReadOnlyBuffer)),
-            new GpuGroupBinding(binding: 60, kind: GpuBindingKind.ReadOnlyBuffer),
-            new GpuGroupBinding(binding: 61, kind: GpuBindingKind.StorageImage),
+            new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+            new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
         ]);
         var description = new GpuComputePipelineDescription(Bindings: [], Layout: new GpuPipelineLayoutDescription(groups: [world, pass], pushesIndex: true, stages: GpuShaderStage.Compute),
             Name: kernel, PushConstantBinding: null);
@@ -107,8 +112,8 @@ internal static class SdfIndirectDeviceProbe {
             if (nearInputs is not null) {
                 foreach (var binding in nearPassBindings) { WriteNearBuffer(binding: binding, set: set, bricks: (binding.Binding == bricksBinding)); }
             }
-            services.Bindings.WriteBuffer(binding: 60, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
-            services.Bindings.WriteStorageImage(arrayElement: 0, binding: 61, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
+            services.Bindings.WriteBuffer(binding: CasesBinding, bufferHandle: inputs.BufferHandle, bufferSize: inputs.SizeBytes, descriptorSetHandle: set, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
+            services.Bindings.WriteStorageImage(arrayElement: 0, binding: ResultsBinding, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 

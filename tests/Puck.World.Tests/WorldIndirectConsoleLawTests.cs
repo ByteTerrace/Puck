@@ -141,17 +141,17 @@ public sealed class WorldIndirectConsoleLawTests {
             Assert.Equal("indirect off, 0 byte(s)", WorldIndirectDiagnosticText.Describe(probe));
         } finally { reader?.Dispose(); }
     }
-    [InlineData(SdfIndirectTier.Medium, 20_971_520UL, 41_943_040UL, 131_072UL, 100_735_645UL)]
-    [InlineData(SdfIndirectTier.High, 335_544_320UL, 83_886_080UL, 262_144UL, 562_174_621UL)]
+    [InlineData(SdfIndirectTier.Medium, 20_971_520UL, 41_943_040UL, 131_072UL, 2_560UL, 100_738_245UL)]
+    [InlineData(SdfIndirectTier.High, 335_544_320UL, 83_886_080UL, 262_144UL, 5_120UL, 562_179_781UL)]
     [Theory]
     public void BudgetIncludesBothLightingGenerationsRetiringCachesAndTheWholeLightFragmentOnce(SdfIndirectTier tier,
-        ulong radiance, ulong irradiance, ulong publication, ulong total) {
+        ulong radiance, ulong irradiance, ulong publication, ulong shadeScratch, ulong total) {
         var layout = new SdfIndirectLayout(tier: tier);
         var active = new GpuMemoryBytes(DeviceLocal: ((layout.ByteLength + 123) + 1024), HostVisible: 456);
         var all = (active + new GpuMemoryBytes(DeviceLocal: 789, HostVisible: 321));
         var output = WorldIndirectDiagnosticText.DescribeMemory(layout, all, active, lightDepth: 1024, lightFragment: 4096);
 
-        foreach (var (field, value) in new[] { ("radiance", radiance), ("irradiance", irradiance), ("publication", publication), ("receiver-proofs", 4UL),
+        foreach (var (field, value) in new[] { ("radiance", radiance), ("irradiance", irradiance), ("publication", publication), ("receiver-proofs", 4UL), ("shade-scratch", shadeScratch), ("cost-counters", 40UL),
             ("regions-device", 123UL), ("regions-host", 456UL), ("retiring-device", 789UL), ("retiring-host", 321UL),
             ("light-view", 1024UL), ("light-fragment", 4096UL), ("total", total) }) {
             Assert.Contains(((field + "=") + value.ToString(provider: CultureInfo.InvariantCulture)), output);

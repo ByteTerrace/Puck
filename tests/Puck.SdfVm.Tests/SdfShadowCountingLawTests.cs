@@ -37,7 +37,7 @@ public sealed class SdfShadowCountingLawTests {
 
         Assert.Contains(actualString: shadow, expectedSubstring: "sdfStoreVisibilityShadows(record, stableVisibility);");
         Assert.Matches(actualString: visibility, expectedRegexPattern: @"sdfVisibilityStoreWord\(record \+ SdfVisibilityRowK, sdfPackShadowVisibility\(visibility\)\);");
-        Assert.Matches(actualString: shadow, expectedRegexPattern: @"(?s)#if SDF_SHADOW_FADE_SLOTS > 0\s*if \(passGroup.shadowFadeCount > 0u\)\s*\{.*incomingVisibilityRW\[p.pixel\] = incoming.x;.*incomingVisibilityRW\[p.pixel\] = incoming;.*sdfWorkTexels \+= 1u;");
+        Assert.Matches(actualString: shadow, expectedRegexPattern: @"(?s)#if SDF_SHADOW_FADE_SLOTS > 0\s*if \(passGroup.shadowFadeCount > 0u\)\s*\{\s*incomingVisibilityRW\[p.pixel\] = incoming;\s*sdfWorkTexels \+= 1u;");
     }
     [Fact]
     public void EachLightsOwnDeficitIsWeightedWithoutCrossfadingRadiance() {

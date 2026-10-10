@@ -1,0 +1,12 @@
+{
+  "seed": 3753168886,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the 3 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "train": [
+    "d01-move-and-retire-a-doc",
+    "d03-skill-for-database-migrations"
+  ],
+  "test": [
+    "d02-xml-docs-for-a-native-method"
+  ]
+}

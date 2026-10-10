@@ -1,0 +1,353 @@
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Puck.Assets;
+using Puck.Cli.Architecture;
+
+namespace Puck.Cli.Affected;
+
+/// <summary>
+/// The canary coverage index: which World source files each canary executes. Recording builds a World that carries
+/// its method recorder (<c>-p:PuckRecordMethods=true</c>), runs the full canary set on it, maps every method each
+/// leg's World compiled to its source file through the build's portable PDBs, and writes
+/// <see cref="AffectedCommand.CoveragePath"/>. Reading inverts it into each source file with the canaries that
+/// executed it.
+/// </summary>
+public static partial class AffectedCoverage {
+    /// <summary>The coverage index's schema id.</summary>
+    public const string Schema = "puck.canary.coverage.v1";
+    /// <summary>The file in a recording's run directory that holds the inner canary run's exit code and streams.</summary>
+    public const string CanaryTranscriptName = "canary.transcript.txt";
+
+    [GeneratedRegex(pattern: @"^canary (?<id>\S+) .*transcripts (?<directory>.+)$")]
+    private static partial Regex TranscriptLine();
+
+    /// <summary>Reads the index, inverted: every World source it recorded, with the canary ids that executed it.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <returns>The inverted index; empty when none has been recorded.</returns>
+    /// <exception cref="InvalidDataException">The index exists and is not a <see cref="Schema"/> document.</exception>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> Read(string repositoryRoot) {
+        var path = Path.Combine(
+            path1: repositoryRoot,
+            path2: AffectedCommand.CoveragePath
+        );
+
+        return (File.Exists(path: path)
+            ? Parse(utf8: File.ReadAllBytes(path: path))
+            : new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal));
+    }
+    /// <summary>Reads the index as a revision recorded it, inverted: the entries a file deleted since that revision still
+    /// has there.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="revision">The revision.</param>
+    /// <returns>The inverted index; empty when the revision holds none.</returns>
+    /// <exception cref="InvalidDataException">The revision's index is not a <see cref="Schema"/> document.</exception>
+    public static IReadOnlyDictionary<string, IReadOnlySet<string>> ReadAt(string repositoryRoot, string revision) {
+        var shown = CliGit.Run(repositoryRoot, "show", $"{revision}:{AffectedCommand.CoveragePath}");
+
+        return ((shown.ExitCode == 0)
+            ? Parse(utf8: Encoding.UTF8.GetBytes(s: shown.Stdout))
+            : new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal));
+    }
+
+    // Inverts one index document into each source file with the canary ids that executed it.
+    private static Dictionary<string, IReadOnlySet<string>> Parse(byte[] utf8) {
+        var coverage = new Dictionary<string, IReadOnlySet<string>>(comparer: StringComparer.Ordinal);
+
+        using var document = JsonDocument.Parse(utf8Json: utf8);
+        var root = document.RootElement;
+
+        if (
+            !root.TryGetProperty(propertyName: "schema", value: out var schema) ||
+            (schema.GetString() != Schema) ||
+            !root.TryGetProperty(propertyName: "sources", value: out var sources) ||
+            !root.TryGetProperty(propertyName: "runs", value: out var runs)
+        ) {
+            throw new InvalidDataException(message: $"{AffectedCommand.CoveragePath} is not a {Schema} document; record it again with `puck affected --record`.");
+        }
+
+        var files = sources.EnumerateArray().Select(selector: static source => source.GetString()!).ToArray();
+        var sets = files.Select(selector: static _ => new HashSet<string>(comparer: StringComparer.Ordinal)).ToArray();
+
+        foreach (var run in runs.EnumerateObject()) {
+            foreach (var index in run.Value.EnumerateArray()) {
+                _ = sets[index.GetInt32()].Add(item: run.Name);
+            }
+        }
+
+        for (var index = 0; (index < files.Length); index++) {
+            coverage[files[index]] = sets[index];
+        }
+
+        return coverage;
+    }
+    // Every C# source of the projects the World is built from, repository-relative: the files the index answers for.
+    private static SortedSet<string> WorldSources(string repositoryRoot) {
+        var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
+        var closure = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>(collection: ["Puck.World"]);
+        var sources = new SortedSet<string>(comparer: StringComparer.Ordinal);
+
+        while (pending.TryPop(result: out var name)) {
+            if (!closure.Add(item: name) || !model.Projects.TryGetValue(key: name, value: out var project)) {
+                continue;
+            }
+
+            foreach (var reference in project.References) {
+                pending.Push(item: reference);
+            }
+
+            var tracked = CliGit.Run(repositoryRoot, "ls-files", "--", Path.GetRelativePath(path: Path.GetDirectoryName(path: project.File)!, relativeTo: repositoryRoot).Replace(newChar: '/', oldChar: '\\'));
+
+            foreach (var line in tracked.Stdout.Split(separator: '\n')) {
+                var file = line.TrimEnd(trimChar: '\r');
+
+                if (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs")) {
+                    _ = sources.Add(item: file);
+                }
+            }
+        }
+
+        return sources;
+    }
+
+    // The repository-relative source file each (assembly, token) method was compiled from, read off the build's
+    // portable PDBs; a method with no sequence points (compiler-generated) or outside the repository maps to none.
+    private sealed class SourceMap(string buildDirectory, string repositoryRoot) : IDisposable {
+        private readonly Dictionary<string, (MetadataReaderProvider Provider, MetadataReader Reader)?> m_readers = new(comparer: StringComparer.Ordinal);
+        private readonly string m_root = (Path.GetFullPath(path: repositoryRoot).Replace(newChar: '/', oldChar: '\\').TrimEnd(trimChar: '/') + "/");
+
+        public void Dispose() {
+            foreach (var entry in m_readers.Values) {
+                entry?.Provider.Dispose();
+            }
+        }
+        public string? FileOf(string assembly, int token) {
+            if (!m_readers.TryGetValue(key: assembly, value: out var entry)) {
+                var pdb = Path.Combine(path1: buildDirectory, path2: (assembly + ".pdb"));
+
+                entry = null;
+
+                if (File.Exists(path: pdb)) {
+                    var provider = MetadataReaderProvider.FromPortablePdbStream(stream: File.OpenRead(path: pdb));
+
+                    try {
+                        entry = (provider, provider.GetMetadataReader());
+                    } catch {
+                        provider.Dispose();
+                        throw;
+                    }
+                }
+
+                m_readers[assembly] = entry;
+            }
+
+            if (entry is not { } found) {
+                return null;
+            }
+
+            var handle = MetadataTokens.MethodDefinitionHandle(rowNumber: token & 0x00FFFFFF);
+            var information = found.Reader.GetMethodDebugInformation(handle: handle);
+            var documentHandle = information.Document;
+
+            if (documentHandle.IsNil) {
+                foreach (var point in information.GetSequencePoints()) {
+                    documentHandle = point.Document;
+
+                    break;
+                }
+            }
+
+            if (documentHandle.IsNil) {
+                return null;
+            }
+
+            var path = found.Reader.GetString(handle: found.Reader.GetDocument(handle: documentHandle).Name).Replace(newChar: '/', oldChar: '\\');
+
+            return (path.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: m_root)
+                ? path[m_root.Length..]
+                : null
+            );
+        }
+    }
+
+    /// <summary>Records the index: builds the recording World, runs the full canary set on it through this CLI, and
+    /// writes <see cref="AffectedCommand.CoveragePath"/> only when the inner run succeeds.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="cli">This CLI's entry assembly, which runs the canaries as a child process.</param>
+    /// <param name="scratch">The recording's run directory: the recording World is built into it, and the inner canary
+    /// run's transcript is written to <see cref="CanaryTranscriptName"/> in it.</param>
+    /// <param name="canaryExit">The inner canary run's exit code, or <see cref="CliExit.Refused"/> when it never ran.</param>
+    /// <param name="error">The refusal, or empty.</param>
+    /// <param name="execute">The build and canary process boundary, substituted by laws.</param>
+    /// <returns><see langword="true"/> when the index was written.</returns>
+    public static bool TryRecord(string repositoryRoot, string cli, string scratch, out int canaryExit, out string error, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? execute = null) {
+        canaryExit = CliExit.Refused;
+
+        var build = Path.Combine(path1: scratch, path2: "world");
+
+        execute ??= (arguments, timeout) => CliProcess.RunCaptured(fileName: "dotnet", arguments: arguments,
+            input: string.Empty, timeout: timeout, workingDirectory: repositoryRoot);
+        var compile = execute(
+            arg1: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
+            arg2: TimeSpan.FromMinutes(minutes: 30)
+        );
+
+        if (compile.TimedOut || (compile.ExitCode != 0)) {
+            error = $"the recording World did not build:{Environment.NewLine}{compile.Stdout}";
+
+            return false;
+        }
+
+        Console.Error.WriteLine(value: "affected: running the full canary set on the recording World.");
+
+        var run = execute(
+            arg1: [cli, "canary", "--merge", "--keep-transcripts", "--world-artifact", Path.Combine(path1: build, path2: WorldArtifactBuild.ArtifactName)],
+            arg2: TimeSpan.FromHours(hours: 3)
+        );
+
+        canaryExit = run.ExitCode;
+        KeepCanaryTranscript(
+            directory: scratch,
+            run: run
+        );
+
+        if (run.TimedOut || (run.ExitCode != 0)) {
+            error = $"the inner canary run exited {run.ExitCode}{(run.TimedOut ? " (timed out)" : string.Empty)}; coverage is unchanged; transcript kept: {CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch, path2: CanaryTranscriptName))}.";
+            return false;
+        }
+
+        var legs = new List<string>();
+        var report = string.Empty;
+        bool published;
+
+        try {
+            published = Publish(repositoryRoot: repositoryRoot, build: build, output: run.Stdout, legs: legs, report: out report, error: out error);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or BadImageFormatException)) {
+            published = false;
+            error = $"could not read or publish coverage: {exception.Message}";
+        }
+        if (!published) {
+            error += $"; coverage is unchanged; transcript kept: {CliPaths.ToDisplay(fullPath: Path.Combine(path1: scratch, path2: CanaryTranscriptName))}.";
+            return false;
+        }
+        // Reading and publishing must both succeed before any leg evidence is discarded.
+        foreach (var leg in legs) {
+            RunDirectory.Conclude(passed: true, path: leg, report: Console.Error);
+        }
+        Console.Out.WriteLine(value: report);
+        return true;
+    }
+
+    private static bool Publish(string repositoryRoot, string build, string output, List<string> legs, out string report, out string error) {
+        report = string.Empty;
+        var runs = new SortedDictionary<string, SortedSet<string>>(comparer: StringComparer.Ordinal);
+        using var map = new SourceMap(buildDirectory: build, repositoryRoot: repositoryRoot);
+
+        foreach (var line in output.Split(separator: '\n')) {
+            var match = TranscriptLine().Match(input: line.TrimEnd(trimChar: '\r'));
+
+            if (!match.Success) { continue; }
+            if (!Directory.Exists(path: match.Groups["directory"].Value)) {
+                error = $"the named leg transcript directory is missing or unreadable: {CliPaths.ToDisplay(fullPath: match.Groups["directory"].Value)}";
+                return false;
+            }
+
+            legs.Add(item: match.Groups["directory"].Value);
+
+            var id = match.Groups["id"].Value;
+
+            if (!runs.TryGetValue(key: id, value: out var files)) {
+                files = new SortedSet<string>(comparer: StringComparer.Ordinal);
+                runs[id] = files;
+            }
+
+            foreach (var record in Directory.EnumerateFiles(path: match.Groups["directory"].Value, searchOption: SearchOption.AllDirectories, searchPattern: "methods.*.txt")) {
+                foreach (var entry in File.ReadLines(path: record)) {
+                    var fields = entry.Split(separator: '\t');
+
+                    if (
+                        (fields.Length == 2) &&
+                        int.TryParse(s: fields[1], style: System.Globalization.NumberStyles.HexNumber, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var token) &&
+                        (map.FileOf(assembly: fields[0], token: token) is { } file)
+                    ) {
+                        _ = files.Add(item: file);
+                    }
+                }
+            }
+        }
+
+        if (runs.Count == 0) {
+            error = "the canary run named no leg transcripts, so nothing was recorded.";
+
+            return false;
+        }
+
+        var sources = WorldSources(repositoryRoot: repositoryRoot);
+        var positions = sources.Select(selector: static (source, index) => (source, index)).ToDictionary(elementSelector: static entry => entry.index, keySelector: static entry => entry.source, comparer: StringComparer.Ordinal);
+        var index = Path.Combine(path1: repositoryRoot, path2: AffectedCommand.CoveragePath);
+
+        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: index)!);
+
+        using var stream = new MemoryStream();
+
+        {
+            using var writer = new Utf8JsonWriter(utf8Json: stream);
+
+            writer.WriteStartObject();
+            writer.WriteString(propertyName: "schema", value: Schema);
+            writer.WriteStartArray(propertyName: "sources");
+
+            foreach (var source in sources) {
+                writer.WriteStringValue(value: source);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteStartObject(propertyName: "runs");
+
+            foreach (var (id, files) in runs) {
+                writer.WriteStartArray(propertyName: id);
+
+                foreach (var file in files) {
+                    if (positions.TryGetValue(key: file, value: out var position)) {
+                        writer.WriteNumberValue(value: position);
+                    }
+                }
+
+                writer.WriteEndArray();
+            }
+
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        stream.WriteByte(value: ((byte)'\n'));
+        AtomicFile.WriteAllBytes(bytes: stream.GetBuffer().AsSpan(start: 0, length: checked((int)stream.Length)), path: index);
+        report = $"affected: recorded {runs.Count} canary run(s) over {sources.Count} World source(s) into {AffectedCommand.CoveragePath}.";
+        error = string.Empty;
+
+        return true;
+    }
+
+    /// <summary>Writes the inner canary run's exit code, standard output and standard error to
+    /// <see cref="CanaryTranscriptName"/> in <paramref name="directory"/>.</summary>
+    /// <param name="directory">The recording's run directory.</param>
+    /// <param name="run">The finished canary run.</param>
+    /// <returns>The transcript's path.</returns>
+    public static string KeepCanaryTranscript(string directory, CliProcessResult run) {
+        var path = Path.Combine(
+            path1: directory,
+            path2: CanaryTranscriptName
+        );
+
+        File.WriteAllText(
+            contents: $"exit {run.ExitCode}{(run.TimedOut ? " (timed out)" : string.Empty)}\n--- stdout\n{run.Stdout}\n--- stderr\n{run.Stderr}\n",
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            path: path
+        );
+
+        return path;
+    }
+}

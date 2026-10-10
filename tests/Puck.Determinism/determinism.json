@@ -70,7 +70,7 @@
         },
         {
             "name": "billiards",
-            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.puck",
+            "world": "../Puck.World.Fixtures/minimal-billiards-host.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [],
@@ -137,7 +137,7 @@
         },
         {
             "name": "interactions",
-            "world": "../Puck.World.Tests/Fixtures/minimal-paddleball-host.puck",
+            "world": "../Puck.World.Fixtures/minimal-paddleball-host.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [],

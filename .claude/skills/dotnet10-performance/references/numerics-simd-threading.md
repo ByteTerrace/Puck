@@ -106,7 +106,7 @@ Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128
 
 - **GFNI** (dotnet/runtime#109537): hardware GF(2^8) instructions. Implementing Reed-Solomon, erasure coding, AES-adjacent transforms? Check the GFNI intrinsic classes before table-based implementations. New API; GFNI hardware required.
 - **VPCLMULQDQ** (dotnet/runtime#109137): vectorized carry-less 64-bit multiply — the core primitive of CRC and GHASH/GCM. Custom CRC/GHASH kernels can now be vector-width. New API; hardware required.
-- **AVX10.2** (dotnet/runtime#111209 + follow-ups): FP min/max with proper NaN semantics and FP conversions as single instructions. FREE on AVX10.2 hardware (barely shipping); nothing to do.
+- **AVX10.2** (dotnet/runtime#111209 + follow-ups): FP min/max with proper NaN semantics and FP conversions as single instructions. FREE on AVX10.2 hardware; nothing to do.
 - **Arm SVE**: `BitwiseSelect`, `MaxPairwise`/`MinPairwise`, `VectorTableLookup` added, but SVE remains **experimental** in .NET 10 — portable `Vector<T>`/`Vector128<T>` code stays the safe default on Arm.
 - **Intel APX**: JIT groundwork (32 GPRs, `ccmp`) — existing binaries speed up automatically when APX CPUs arrive. Nothing to do.
 

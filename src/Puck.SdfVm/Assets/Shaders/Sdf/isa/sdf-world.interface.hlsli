@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/c3791c946bd2e61ee8fe80ddf7554c9ef5db73e06af605fa3cbff8ad3618e061). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/c85b11a8e07147b7eac24cdc6d2768339419b8923615d281fa0fb0610edc3d87). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -245,8 +245,8 @@ struct SdfWorldPass {
     [[vk::offset(2000)]] uint workCounterRow;
     [[vk::offset(2004)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa14B71DE7 : register(b0, space3);
-#define passGroup passGroupIsa14B71DE7
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa4917E94D : register(b0, space3);
+#define passGroup passGroupIsa4917E94D
 [[vk::binding(1, 3)]] StructuredBuffer<float> indirectLightDepth : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> indirectLightDepthRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> indirectCache : register(t3, space3);
@@ -274,6 +274,10 @@ struct SdfWorldPass {
 [[vk::binding(25, 3)]] Texture2D<float4> screenSources[32] : register(t25, space3);
 [[vk::binding(57, 3)]] Texture2D<float4> meshVisibility : register(t57, space3);
 [[vk::binding(58, 3)]] RWStructuredBuffer<uint> workCounters : register(u58, space3);
+[[vk::binding(59, 3)]] Texture2D<float2> incomingVisibility : register(t59, space3);
+[[vk::binding(60, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u60, space3);
+[[vk::binding(61, 3)]] StructuredBuffer<uint4> indirectAnswer : register(t61, space3);
+[[vk::binding(62, 3)]] RWStructuredBuffer<uint4> indirectAnswerRW : register(u62, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

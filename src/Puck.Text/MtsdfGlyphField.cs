@@ -14,7 +14,7 @@ namespace Puck.Text;
 /// with that fill, or drifts from the true distance by more than <see cref="ClashThresholdRangeFraction"/> of the
 /// band, is flattened to the alpha value so channel clashes cannot override the sampled fill classification.
 /// </remarks>
-internal static class MtsdfGlyphField {
+public static class MtsdfGlyphField {
     // Corner reconstruction legitimately overshoots true distance by (1/sin(θ/2) − 1)·|d| — ~0.41·|d| at a right
     // angle — so only divergence beyond half the band is a clash worth flattening.
     private const float ClashThresholdRangeFraction = 0.5f;

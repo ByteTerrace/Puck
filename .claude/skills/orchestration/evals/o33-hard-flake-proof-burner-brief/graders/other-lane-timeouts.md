@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says contention that overlaps another lane's GPU leg makes that lane's timeouts untrustworthy.
+The response says a leg of another lane that times out under the burner is re-run once alone and reported as a flake.

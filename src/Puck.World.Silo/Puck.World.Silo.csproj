@@ -2,6 +2,9 @@
     <PropertyGroup>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>
+        <!-- A silo row's QUIC door listens, so `dotnet run` starts the silo under the shared dotnet host
+             (Directory.Build.targets); the Docker image already runs `dotnet Puck.World.Silo.dll`. -->
+        <PuckRunUnderDotnetHost>true</PuckRunUnderDotnetHost>
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>

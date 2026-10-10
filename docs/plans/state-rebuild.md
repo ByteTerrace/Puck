@@ -162,8 +162,8 @@ Operating rules every package and review follows, learned the expensive way:
   points and delete the links with `[System.IO.Directory]::Delete`.
 - Every `dotnet test` and every `puck` verb run is a background task with a
   timeout of at most ten minutes; `dotnet test` carries
-  `--hangdump --hangdump-timeout 3m --hangdump-type None`. The World suite
-  takes about 100 seconds; a run past five minutes is hung, and the hang dump's report names
+  `--hangdump --hangdump-timeout 3m --hangdump-type None`. The slowest World
+  suites take about five minutes; a run past ten minutes is hung, and the hang dump's report names
   the tests still running. Never wait on a shell that has stopped
   producing output.
 - Run `puck` from a copy of the CLI's Release build output: a running
@@ -293,7 +293,7 @@ that already exists rather than becoming one of its own.
 | Candidate | Adopted, where |
 |---|---|
 | `puck test` with `test` blocks in `.puck` | [S8](state-and-language.md#s8--tests-are-worlds), which is that package |
-| Cross-host determinism in `puck test` | S8 compares two server legs of every test world byte for byte (`puck test --reproduce`). `--host browser` is refused by name in `src/Puck.Cli/Test/TestCommand.cs`, so server against browser is an open gap; native Windows against Linux is [`puck determinism`](../reference/cli.md#puck-determinismcross-host-determinism-attestation) |
+| Cross-host determinism in `puck test` | S8 compares two server legs of every test world byte for byte (`puck test --reproduce`). `--host browser` is refused by name in `src/Puck.Cli.Worlds/Test/TestCommand.cs`, so server against browser is an open gap; native Windows against Linux is [`puck determinism`](../reference/cli.md#puck-determinismcross-host-determinism-attestation) |
 | Retire colon-channel spellings from `.puck` in favor of function forms | [S3](state-and-language.md#s3--operands-as-grammar), which is that package |
 | Every ceiling refuses at compile time, naming the limit and the alternative | [C1](state-and-language.md#c1--ceilings-as-prices); [S6](state-and-language.md#s6--modules-and-the-forcing-world) names the module instance that crossed it |
 | Refusals name the authored span | S6 for the attribution through module instances, [S4](state-and-language.md#s4--one-description-per-construct) for the span every described construct carries, both through the emitter's `SourceMap` |

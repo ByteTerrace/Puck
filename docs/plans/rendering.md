@@ -37,8 +37,8 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P4, P5, P8, P9 and P11 are complete. P1a, P1b, P6, P7, P10, P12, P13 and
-P14 to P18 are open. A package closes only when nothing it promises remains
+P2, P3, P4, P5, P7, P8, P9 and P11 are complete. P1a, P1b, P6, P10, P12, P13
+and P14 to P18 are open. A package closes only when nothing it promises remains
 open: a check that waits for a particular machine, device or environment keeps
 its package open and is listed under [deferred to the end](#deferred-to-the-end)
 beside the package that owns it. The open parts are:
@@ -52,8 +52,6 @@ beside the package that owns it. The open parts are:
   views, finite lighting solve, change classes, source closure, diagnostics,
   near field and comparison methods are implemented. Their remaining physical
   qualification and the counted choice of defaults keep G2 to G10 open.
-- **P7:** every step of P7b has landed; the Linux and Windows shader-bytecode
-  comparison has not run.
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
   floor hardware have not run.
 - **P12:** every step of P12b has landed; P12b-4's recorded camera run on both
@@ -371,10 +369,9 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg is not yet proven, and keeps P7 open: one build on Linux compared byte
-for byte with the Windows build of the same commit, which CI runs as
-`verify.yml`'s `shader-bytecode` job (see P7's gate). It is listed under
-[deferred to the end](#deferred-to-the-end).
+The last leg holds too: `verify.yml`'s `shader-bytecode` job compares one
+build's SPIR-V on Linux byte for byte with the Windows build of the same commit
+and passes (see P7's gate), so P7 is complete.
 
 P8 is complete: the `interface-echo` canary echoes every shipped interface
 family, the SDF engine's two among them, and holds on both backends under the
@@ -562,10 +559,9 @@ group at set 1 and the pass group at set 3, each register number the Vulkan
 binding and each group's ordinal its register space, so no pass source assigns
 a register by hand.
 
-P7 stays open on one check. Its adapter memory profile, residency selector,
-consumer migration and binding groups have landed, all twenty-two steps of P7b
-among them; the gate's Linux bytecode leg is listed under
-[deferred to the end](#deferred-to-the-end).
+P7 is complete. Its adapter memory profile, residency selector, consumer
+migration and binding groups have landed, all twenty-two steps of P7b among
+them, and its gate holds on every leg, the Linux SPIR-V comparison included.
 `IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
@@ -1597,7 +1593,7 @@ the first observable. Source entry points: planning and loading in
 `RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
-`src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
+`src/Puck.Cli.Harness/Canary` and `src/Puck.Cli.Runs/Canary`; authoring in `WorldPipelineCommandModule`,
 `WorldViewGraphHost`, `WorldViewGraph`; work counting in
 `src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
 graphics in `src/Puck.Abstractions/Gpu`,
@@ -3472,21 +3468,27 @@ compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
-station (step 16). One leg remains, not yet proven: one build on Linux compared
-byte for byte with the Windows build of the same commit. The artifacts job
-collects the Windows build's shaders (`puck shaders collect`, the
-`shader-bytecode-windows` artifact) without rebuilding them, and `verify.yml`'s
+station (step 16). Its last leg holds: one build's SPIR-V on Linux compared
+byte for byte with the Windows build of the same commit. The artifacts
+job collects the Windows build's SPIR-V (`puck shaders collect`, the
+`shader-bytecode-windows` artifact) without rebuilding it, and `verify.yml`'s
 `shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
 compiles every shader through the build's own `CompileShaders` target and holds
-each SPIR-V and DXIL output to the Windows one (`puck shaders compare --build`).
-It runs only in CI: on every pull request and every push to `main`, through
-**Release Azure**, or by dispatching **Verify runtime behavior** by hand. The leg
-is proven when that job passes; a difference it names, such as DXIL the Linux
-compiler hashes or signs differently, is the gate's failure toward Slang. The
-leg's run is listed under [deferred to the end](#deferred-to-the-end).
+each SPIR-V output to the Windows one (`puck shaders compare --build`). DXIL is
+outside the leg: Direct3D 12 is its one reader, so the shader build compiles
+DXIL on Windows alone (`build/Shaders.targets`) and no Linux build or artifact
+holds any. DXC's DXIL is not byte-stable across hosts; since nothing built off
+Windows ships DXIL, that difference is no evidence about the binding contract
+and does not count toward Slang.
+It runs only in CI: through **Release Azure** on every pull request and every
+push to `main`, or by dispatching **Verify runtime behavior** by hand, and it
+compares only when its shader inputs or a DXC pin differ from the last passing
+comparison, whose saved Linux shader cache records it. That job passes, which
+proves the leg; a SPIR-V difference it names is the gate's failure toward
+Slang, and a failed run uploads the Linux SPIR-V as `shader-bytecode-linux`.
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
-Slang when DXC output is not byte-stable across hosts, or when the second group
+Slang when DXC's SPIR-V is not byte-stable across hosts, or when the second group
 cannot run identically on both backends from generated annotations; anything
 resembling a register remap surviving into the new design is that failure.
 
@@ -4072,9 +4074,8 @@ destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups
 landed with P7b-20, and P12b-8 made the screens one image array read through a
 sampler array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. The gate's Linux build, which CI's
-`shader-bytecode` job runs, keeps P7 open and is listed under
-[deferred to the end](#deferred-to-the-end).
+consolidate as the surface shrinks. CI's `shader-bytecode` job holds the gate's
+Linux SPIR-V comparison, so P7 is complete.
 
 ### P8 — The shader package, and one source language
 
@@ -6039,7 +6040,7 @@ counted rows recorded in the same change.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
-     `src/Puck.Cli/Counters`,
+     `src/Puck.Cli.Runs/Counters`,
      `tests/Puck.Counters`, `SdfPassPlanLawTests`, `SdfWorldResidencyWorkLawTests`.
    - Done when: a law over the fake device holds the readback's placement in the
      plan and the kinds' classes; the ceilings file states, for every pass, what
@@ -6557,9 +6558,9 @@ are chosen by measured cost.
 applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
 two visits to the handover band, settled draw-count observations, and a paused
 authoritative-hash comparison around `world.bakes`. Those World observations
-still require both backends. The creation-bake product pin is checked after the
-final bake derivation fingerprint is current; a successful shader build alone
-does not establish that product.
+still require both backends. The creation-bake outcome pins are checked after
+the final bake derivation fingerprint is current; a successful shader build alone
+does not establish those bytes.
 
 **Manifold extraction.** The extractor places one vertex per surface patch of a
 cell, not one per cell: a cell's patches are the connected pieces of the
@@ -7757,10 +7758,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      applies them to each light's own visibility in `shade/sdf-light.hlsli`.
      A directional outside every stable and active incoming slot is unshadowed,
      scaled by ambient occlusion.
-   - GPU storage: incoming fade visibility uses an R8 texture at
-     F = 1 (1 byte per pixel), an R8G8 texture at F = 2 (2 bytes per pixel),
-     and no texture, bytes or read binding at F = 0. Its memory is counted in
-     `GpuWorkReport` as transient-aliased storage, provisioned by the policy
+   - GPU storage: incoming fade visibility uses one R8G8 texture (2 bytes per
+     pixel) at every nonzero F, since one shadow kernel writes both channels,
+     and no texture at F = 0, where every pass binds the tables' 1×1 fillers
+     and reads a zero fade count. Its memory is counted in
+     `GpuWorkReport` as retained graph storage, provisioned by the policy
      before a handoff and never allocated mid-handoff. Each active handoff's
      16-byte `SdfShadowHandoff` control record uploads through the counted
      region path: outgoing light index, incoming light index and stable slot
@@ -7769,15 +7771,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      and the active incoming slots, with one gather and one march per slot.
      Stable visibility occupies four 8-bit lanes in the existing K word;
      neither the record size nor the allocator's decisions change.
-   - GPU pipelines: the boot policy and every authored quality row declare
-     the reachable fade capacities. Each nonzero capacity adds four pipelines:
-     shadow and the full, core and folds shading variants. Worlds whose rows
-     use F = 0 create none of these. A definition edit, a session shadow-policy
-     lever or following another world requests a newly reachable capacity
-     through the background pipeline cache. Readiness holds the previous frame
-     until that policy's shadow and shading pipelines are usable, before the
-     new F replans the graph and its incoming visibility image. Handoffs create
-     no pipelines. Requested variants remain leased for the residency's lifetime.
+   - GPU pipelines: one shadow kernel and one kernel per shading variant
+     (full, core and folds) serve every fade capacity. Each compiles both fade
+     slots and reads the active fade count from the pass block, so a policy
+     change and a handoff create no pipelines and wait for none. A change
+     between F = 0 and a nonzero F replans the graph and its incoming
+     visibility image; until the new graph installs, a pass planned without
+     the image writes a zero fade count.
    - Remaining: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
      motions (direction, orbit, keys, a state row), binding to a named light,
      and illumination by other bodies. Candidates remain light-keyed: a body
@@ -7811,7 +7811,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      settings change without an invalid intermediate. GPU integration has a
      CPU packing law and a device law that pack and unpack four visibilities
      exactly to 8 bits, layout laws for the control upload, and laws for
-     slot-table readers, absent F = 0 storage and per-slot counting. The
+     slot-table readers, F = 0 storage bound to fillers and per-slot counting. The
      `shadow-slots` canary observes two marched slots at `high` and one at
      `medium` over two suns and distinct-shadow geometry. Two disjoint floor
      regions compare against a shadows-off reference: both suns cast at high,
@@ -7826,8 +7826,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      on any frame, with fade slots' steps only while a fade runs, and required
      zeros past K + F. The incoming texture's
      bytes and the 16-byte active controls are counted as specified above;
-     F = 0 has zero incoming-visibility bytes, control uploads and image read
-     bindings. At the current `low`
+     F = 0 has zero incoming-visibility graph bytes and control uploads, and
+     binds the tables' fillers. At the current `low`
      preset every shadow row is zero. Final tier counts remain P18-14's call.
      The counter ledger also publishes `GpuWorkDetail` rows within a pass:
      the sky and composite name their layers (`gradient`, `disc`, `stars`,
@@ -8361,9 +8361,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 - **Shadow fades.** CPU reads inspect at most F active handoffs, deriving one
   progress value for each without allocating or advancing state. The
   GPU loop adds a march only while a handoff runs, bounded by K + F, and
-  scales each light's own occlusion deficit. Its incoming texture uses 0, 1
-  or 2 bytes per pixel at F = 0, 1 or 2, with counted 16-byte controls for
-  active handoffs. This is transient-aliased storage allocated with the policy,
+  scales each light's own occlusion deficit. Its incoming texture uses 0 bytes
+  per pixel at F = 0 and 2 at F = 1 or 2, with counted 16-byte controls for
+  active handoffs. This is retained storage allocated with the policy,
   so starting a handoff allocates nothing. Every visibility write counts.
   P18-14 chooses the tier values and their counted ceilings; floor-device
   measurement re-records moved ceilings for the delivered loop and counters.
@@ -8528,9 +8528,9 @@ Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7 is open on one check: its memory profile, its residency
-selector and every step of P7b have landed, and the gate's Linux bytecode leg is
-listed under [deferred to the end](#deferred-to-the-end). P8 is complete; its frame group
+**Contracts.** P7 is complete: its memory profile, its residency selector and
+every step of P7b have landed, and its gate holds on every leg, the Linux
+SPIR-V comparison included. P8 is complete; its frame group
 became a descriptor set when step 15 put pipelines on groups, and its echo of
 the SDF engine's two interfaces landed with P14-5.
 P7 and P8 do not read simulation state, so they do not wait on the state
@@ -8629,9 +8629,6 @@ programme is done.
 - **Hardware: P1b's driver-removal exercise.** Keeps P1b open. A
   driver-initiated removal (a timeout detection and recovery) recovers as an
   injected loss does.
-- **Environment: P7's shader-bytecode comparison.** Keeps P7 open. CI's
-  `shader-bytecode` job passes, holding a Linux build's SPIR-V and DXIL byte for
-  byte to the Windows build of the same commit.
 - **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
   run at `low` on floor hardware.
 - **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14

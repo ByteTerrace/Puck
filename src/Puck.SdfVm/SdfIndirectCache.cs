@@ -76,7 +76,10 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the current complete field's instruction count, used by every admission path.</summary>
     public int InstructionCount { get; private set; } = 1;
     /// <summary>Gets the shared receiver admission for this field across all views in one frame.</summary>
-    public int ReceiverProofBudget => SdfIndirectCost.Admit(Layout.ReceiverProofBudget, SdfIndirectCost.ReceiverQueries, InstructionCount);
+    public int ReceiverProofBudget => SdfIndirectCost.WholeItems(count: Layout.ReceiverProofBudget, instructionCount: InstructionCount, units: ReceiverUnits);
+    /// <summary>Gets the counted visits one produced frame admits for transport and the lighting solve: the tier's
+    /// device-time slice (<see cref="SdfIndirectCost.FrameCost"/>).</summary>
+    public long FrameCost => Math.Max(val1: 1L, val2: SdfIndirectCost.FrameCost(layout: Layout));
     /// <summary>Gets the residency-owned allocation published by the graph.</summary>
     public IGpuBuffer Buffer { get; }
     /// <summary>Gets the brick, transport-update, direction, submitted-strata and shade-update regions.</summary>
@@ -103,7 +106,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
-    public bool IsComplete => (m_schedule.IsComplete && (m_pending is null) && (m_changedGeometry is null));
+    public bool IsComplete => (TransportComplete && (m_changedGeometry.Count == 0));
+    /// <summary>Gets whether the admitted transport is complete, even while geometry changes queue for the next plan.</summary>
+    public bool TransportComplete => (m_schedule.IsComplete && (m_pending is null));
 
     /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
     /// <param name="level">The running level index.</param>
@@ -126,7 +131,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public GpuMemoryBytes Bytes => (Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: checked((Buffer.SizeBytes + LightViewBytes)), HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default));
 
     internal bool IsDisposed => (Volatile.Read(location: ref m_holds) <= 0);
-    internal object? TransportBatch => m_pending;
+    internal object? TransportBatch => m_step;
 
     /// <summary>Retains the allocation for a graph's lifetime.</summary>
     public SdfIndirectCache Retain() {
@@ -153,11 +158,14 @@ public sealed partial class SdfIndirectCache : IDisposable {
         CertificateRevision = checked((CertificateRevision + 1u));
         Epoch = epoch;
         Frame = 1;
+        ClearCostCounters();
+        CountInvalidation();
         InvalidateLighting();
         m_schedule = NewSchedule();
         m_pending = null;
+        ClearTransportChunks();
         m_receiverAdmission = false;
-        m_changedGeometry = null;
+        m_changedGeometry.Clear();
         m_slots.Clear();
         m_placed.Clear();
         Array.Clear(array: m_traceStates);
@@ -172,14 +180,20 @@ public sealed partial class SdfIndirectCache : IDisposable {
         ClearBricks();
         Regions[0].Write(bytes: m_bricks, offset: 0);
     }
-    /// <summary>Plans once until a successful submission commits the same list.</summary>
+    /// <summary>Plans once until successful submissions of every chunk commit the same list. A pending plan's next
+    /// step of chunks is selected here, before the frame's upload, with the brick table that step may read.</summary>
+    /// <exception cref="SdfIndirectCostRefusedException">One field query or indivisible unit exceeds a submission;
+    /// the residency refuses such a field before planning.</exception>
     public void Plan(IrradianceFrameInputs inputs, int instructionCount = 1) {
-        if ((m_pending is not null) || Frozen) { return; }
-        if ((m_changedGeometry is not null) && (m_shade is not null)) { return; }
+        if (m_pending is not null) {
+            if (!Frozen && ((instructionCount != InstructionCount) || (m_transportPrices != PriceRevision))) { RechunkTransport(instructionCount: instructionCount); }
+            PlanTransportStep();
+            return;
+        }
+        if (Frozen) { return; }
         InstructionCount = instructionCount;
         ApplyGeometryChanges();
-        _ = SdfIndirectCost.Admit(1, SdfIndirectCost.ClassifyQueries, instructionCount);
-        m_pending = m_schedule.Frame(inputs: inputs, evaluationBudget: ((int)(SdfIndirectCost.SubmissionCostLimit / Math.Max(val1: 1, val2: instructionCount))));
+        m_pending = m_schedule.Frame(inputs: inputs, prices: PlanPrices(instructionCount: instructionCount));
         if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Placed.Count != 0) ||
             (m_pending.Classified.Count != 0) || (m_pending.Traces.Count != 0)) {
             CertificateRevision = checked((CertificateRevision + 1u));
@@ -195,17 +209,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
             m_free[key.Level].Remove(item: slot);
             m_slots.Add(key: key, value: slot);
         }
-        ClearBricks();
         m_placed.UnionWith(other: m_pending.Placed);
-        foreach (var (key, slot) in m_slots) {
-            if (m_placed.Contains(item: key)) {
-                var state = key.Level | (m_schedule.IsClassified(key: key) ? SdfIndirectLayout.BrickClassified : 0);
-
-                Write(m_bricks, slot, key.X, key.Y, key.Z, state);
-            }
-        }
-        SdfIndirectBrickTable.Index(m_bricks, Layout.BrickCapacity);
-        Regions[0].Write(bytes: m_bricks, offset: 0);
         var row = 0;
 
         foreach (var key in m_pending.Placed) { Write(m_updates, row++, m_slots[key], 0, key.Level, 0); }
@@ -215,14 +219,25 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         Regions[1].Write(offset: 0, bytes: m_updates.AsSpan(length: (row * 16), start: 0));
         Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
-        if ((((PlaceCount + ClassifyCount) + TraceCount) == 0) && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
+        if ((((PlaceCount + ClassifyCount) + TraceCount) == 0) && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) {
+            m_pending = null;
+            WriteBrickTable(flagPlanned: true, listPlanned: true);
+            return;
+        }
+        BeginTransportChunks(instructionCount: instructionCount, plan: m_pending);
     }
     /// <summary>Requests the shared receiver allowance for the next actual frame. Frozen caches admit no new proofs.</summary>
     public void AdmitReceivers() { if (!Frozen) { m_receiverAdmission = true; } }
-    /// <summary>Counts and commits only the schedule and receiver allowance actually submitted.</summary>
+    /// <summary>Counts and commits only the schedule and receiver allowance actually submitted. A submitted step
+    /// advances the plan's chunks; the plan commits with the submission of its last chunk.</summary>
     public void Submitted() {
-        if (m_pending is not { } plan) {
+        if ((m_pending is not { } plan) || !SubmitTransportStep(completes: out var completes)) {
             if (m_receiverAdmission) { m_receiverAdmission = false; Frame++; }
+            return;
+        }
+        if (!completes) {
+            m_receiverAdmission = false;
+            Frame++;
             return;
         }
         foreach (var update in plan.Traces) {
@@ -235,6 +250,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
             for (var level = 0; (level < Layout.Levels.Count); level++) { Count($"indirect.bricks.{action}.{Layout.Levels[level].Name}", keys.Count(predicate: key => (key.Level == level))); }
         }
         m_pending = null;
+        ClearTransportChunks();
         m_receiverAdmission = false;
         Frame++;
     }

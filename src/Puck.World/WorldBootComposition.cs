@@ -406,7 +406,6 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldMachineHost(
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
-            documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
             narrationHub: sp.GetRequiredService<WorldOutputHub>(),
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
@@ -418,12 +417,11 @@ public static class WorldBootComposition {
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
         // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
-        // A host built with no document path of its own (a tape's re-drive of the booted world) resolves its
-        // cabinets' content beside the booted document, as the live host does.
-        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationFactory: static sp => (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
+        // Every host resolves a cabinet's relative content beside the directory of the definition it prepares
+        // (WorldDefinition.DocumentDirectory), as the live host does.
+        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(implementationFactory: static sp => (screens, engines, narrationHub) => new WorldMachineHost(
             screens: screens,
             catalog: sp.GetRequiredService<WorldMachineCatalog>(),
-            documentPath: (documentPath ?? sp.GetRequiredService<WorldDefinitionSource>().SourcePath),
             narrationHub: narrationHub,
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
@@ -621,7 +619,7 @@ public static class WorldBootComposition {
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             transport: sp.GetRequiredService<LoopbackTransport>(),
             engines: sp.GetServices<IMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
             stateRoot: sp.GetRequiredService<WorldStateRoot>()
         ));
@@ -630,7 +628,7 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldReplayInspector(
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             engines: sp.GetServices<IMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
             documents: sp.GetRequiredService<IWorldDocumentSource>()
         ));
@@ -641,7 +639,7 @@ public static class WorldBootComposition {
         // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.
         services.AddSingleton(implementationFactory: static sp => new WorldHistory(
             engines: sp.GetServices<IMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
             server: sp.GetRequiredService<WorldServer>(),
             stateRoot: sp.GetRequiredService<WorldStateRoot>(),
             tape: sp.GetRequiredService<WorldReplayTape>()
@@ -798,7 +796,7 @@ public static class WorldBootComposition {
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
                 stateRoot: sp.GetRequiredService<WorldStateRoot>(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
-                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true,
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()
@@ -878,11 +876,12 @@ public static class WorldBootComposition {
         // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
         // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
-        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
+        services.AddSingleton<WorldControlCommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
             () => sp.GetRequiredService<TextCommandSource>(),
             sp.GetRequiredService<WorldCaptureScheduler>(),
             sp.GetService<WorldRenderProbe>()
         ));
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => sp.GetRequiredService<WorldControlCommandModule>());
 
         // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
         // AddWorldPresentation below for WorldWheelFeed/WheelStore, the genuinely presentation-only pointer/viewport
@@ -982,6 +981,11 @@ public static class WorldBootComposition {
             TargetRenderRate = hostSettings.TargetRenderRate,
             Unpaced = inputs.Unpaced,
         });
+        // --control: the operator's explicit launch-time opt-in to the endpoint world.control start opens; absent, it
+        // stays closed until a console line starts it.
+        if (inputs.Control) {
+            services.AddHostedService(implementationFactory: static sp => new WorldControlBootStart(control: sp.GetRequiredService<WorldControlCommandModule>()));
+        }
 
         // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
         // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit

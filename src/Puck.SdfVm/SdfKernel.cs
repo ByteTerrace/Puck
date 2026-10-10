@@ -28,8 +28,15 @@ public enum SdfKernel {
     Surface,
     /// <summary>Ambient occlusion, updating the record's S row.</summary>
     Ambient,
-    /// <summary>The stable and incoming soft shadows, writing the record's K row.</summary>
+    /// <summary>The stable and incoming soft shadows, writing the record's K row and, at a nonzero fade capacity, the
+    /// incoming visibility image; one kernel serves every capacity.</summary>
     Shadow,
+    /// <summary>The indirect receiver: each shaded pixel's proof against the residency's cache, its certificate and the
+    /// near-field answer that replaces its cache sample, which views reads. Full instruction set.</summary>
+    Receiver,
+    /// <summary>The indirect receiver with the screen-space and cone comparison methods instead of the near-field sample, whose
+    /// pipeline is acquired once a view first selects a comparison method.</summary>
+    ReceiverComparison,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
     /// <summary>Shading with the exotic ops and shapes compiled out.</summary>
@@ -40,8 +47,8 @@ public enum SdfKernel {
     Sky,
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
     Composite,
-    /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's upload
-    /// when lighting-visible irradiance crosses one display code.</summary>
+    /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's
+    /// <c>sdf.environment</c> graph producer when lighting-visible irradiance crosses one display code.</summary>
     SkyEnvironment,
     /// <summary>The environment map's reduction to its spherical-harmonic coefficients, dispatched after the map.</summary>
     SkyEnvironmentReduce,
@@ -51,20 +58,4 @@ public enum SdfKernel {
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
-    /// <summary>Shadows with one incoming handoff visibility channel.</summary>
-    ShadowFade1,
-    /// <summary>Shadows with two incoming handoff visibility channels.</summary>
-    ShadowFade2,
-    /// <summary>Full shading with one incoming handoff visibility channel.</summary>
-    ViewsFade1,
-    /// <summary>Core shading with one incoming handoff visibility channel.</summary>
-    ViewsCoreFade1,
-    /// <summary>Fold shading with one incoming handoff visibility channel.</summary>
-    ViewsFoldsFade1,
-    /// <summary>Full shading with two incoming handoff visibility channels.</summary>
-    ViewsFade2,
-    /// <summary>Core shading with two incoming handoff visibility channels.</summary>
-    ViewsCoreFade2,
-    /// <summary>Fold shading with two incoming handoff visibility channels.</summary>
-    ViewsFoldsFade2,
 }

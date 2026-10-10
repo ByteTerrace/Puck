@@ -2,12 +2,17 @@
   {
     "Id": "symmetric-solve.solve2-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 (internal) — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TrySolveSymmetric2 — the exact BigInteger Cramer's-rule solve, with no intermediate rounding, no wrapping, and no power-of-two preconditioning of any kind: every entry is read at its own raw magnitude, so a defect in the subject's shift selection or bit budget cannot also appear in the oracle",
         "Shared": "",
         "Citation": "",
@@ -27,12 +32,17 @@
   {
     "Id": "symmetric-solve.solve3-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 (internal) — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band — the primary exercise of the six-term triple-product determinant's bit budget (k ≤ 41)",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band — the primary exercise of the six-term triple-product determinant's bit budget (k ≤ 41)",
         "Against": "Oracles.TrySolveSymmetric3 — the exact BigInteger Cramer's-rule solve (adf − ae² − b²f + 2bce − c²d and its adjugate cofactors), with no intermediate rounding, no wrapping, and no power-of-two preconditioning of any kind: every entry is read at its own raw magnitude, so a defect in the subject's shift target (for example reusing FixedVectorMath.DirectionShift's bit 45) or its widening cannot also appear in the oracle",
         "Shared": "",
         "Citation": "",
@@ -52,12 +62,17 @@
   {
     "Id": "symmetric-solve.solve2-vs-bareiss",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 (internal) — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryBareissSolveSymmetric2 — fraction-free (Bareiss) Gaussian elimination with partial pivoting in BigInteger: it row-reduces the augmented matrix directly and never expands a determinant or names a cofactor, so it shares no formula with either the subject's adjugate path or with Oracles.TrySolveSymmetric2's own adjugate transcription. It catches a determinant or numerator sign/transcription error shared by those two 2x2 adjugate paths. The concrete C13 mutation is 3x3 evidence and belongs to symmetric-solve.solve3-vs-bareiss; it is deliberately not attributed to this law",
         "Shared": "",
         "Citation": "",
@@ -77,12 +92,17 @@
   {
     "Id": "symmetric-solve.solve3-vs-bareiss",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 (internal) — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryBareissSolveSymmetric3 — fraction-free (Bareiss) Gaussian elimination with partial pivoting in BigInteger, sharing no cofactor (C11..C33), adjugate, or expanded-determinant formula with the subject or with Oracles.TrySolveSymmetric3's own adjugate transcription. This is the primary defence against a shared sign error in any one of the six cofactors, which solve3-vs-oracle and the residual envelope cannot reliably catch. The concrete C13 witness is K=[[-3,-3,-3],[-3,-3,-2],[-3,-2,-3]], rhs=(-1,-2,1): a shared C13 flip returns the wrong vector (1,2,-3) while both older checks pass — the third symmetric-solve validation's Finding 2",
         "Shared": "",
         "Citation": "",
@@ -129,12 +149,17 @@
   {
     "Id": "symmetric-solve.invert3-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 (internal) — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryInvertSymmetric3 — the exact BigInteger adjugate-over-determinant, with no intermediate rounding, no wrapping, and no preconditioning of any kind",
         "Shared": "",
         "Citation": "",
@@ -181,12 +206,17 @@
   {
     "Id": "symmetric-solve.invert3-vs-bareiss",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 (internal) — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryBareissInvertSymmetric3 — fraction-free (Bareiss) Gaussian elimination on [K | I] with partial pivoting in BigInteger, sharing no cofactor (C11..C33), adjugate, or expanded-determinant formula with the subject or with Oracles.TryInvertSymmetric3's own adjugate transcription. The Invert sibling of solve3-vs-bareiss's defence against a shared cofactor sign error",
         "Shared": "",
         "Citation": "",
@@ -206,7 +236,12 @@
   {
     "Id": "symmetric-solve.solve3-extreme-magnitude-agrees",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
@@ -231,7 +266,20 @@
   {
     "Id": "symmetric-solve.singular-matrices-refuse",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      },
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      },
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -247,7 +295,16 @@
   {
     "Id": "symmetric-solve.invert-large-magnitude-envelope-refuses",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      },
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -272,7 +329,12 @@
   {
     "Id": "symmetric-solve.lossy-rank-one-singular-refuses",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -288,7 +350,16 @@
   {
     "Id": "symmetric-solve.lossless-boundary-is-exact",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      },
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "Symmetric2TargetLeadingBit"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -331,7 +402,12 @@
   {
     "Id": "symmetric-solve.refusal-leaves-no-stale-output",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -347,7 +423,12 @@
   {
     "Id": "symmetric-solve.solve2-residual-within-envelope",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric2"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -363,7 +444,12 @@
   {
     "Id": "symmetric-solve.solve3-residual-within-envelope",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -395,7 +481,12 @@
   {
     "Id": "symmetric-solve.invert3-residual-within-envelope",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TryInvertSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -411,7 +502,12 @@
   {
     "Id": "symmetric-solve.solve3-non-diagonal-exact-value",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -497,7 +593,12 @@
   {
     "Id": "symmetric-solve.solve3-all-cofactors-exact-value",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSymmetricSolve",
+        "Name": "TrySolveSymmetric3"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",

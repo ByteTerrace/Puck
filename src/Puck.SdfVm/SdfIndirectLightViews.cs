@@ -31,6 +31,10 @@ public sealed class SdfIndirectLightViews {
     private SdfLightGeometry m_geometry;
     private ulong m_geometryGeneration;
 
+    /// <summary>Gets whether this frame left an invalid map unscheduled because one workgroup of light texels exceeds
+    /// a submission's cost cap against the current field. Its readers keep the bounded per-hit visibility ray.</summary>
+    public bool Unadmitted { get; private set; }
+
     /// <summary>Gets the region scheduled this frame, or -1 when all usable regions stand.</summary>
     public int Pending { get; private set; } = -1;
 
@@ -99,6 +103,7 @@ public sealed class SdfIndirectLightViews {
         IReadOnlyList<SdfLightRegion?> regions, SdfLightRegion? casters, bool forceGeometry, SdfIndirectLayout layout, int instructionCount = 1) {
         if (m_frame == frame) { return; }
         m_frame = frame;
+        Unadmitted = false;
         Pending = -1;
         FirstRow = 0;
         RowCount = 0;
@@ -178,7 +183,15 @@ public sealed class SdfIndirectLightViews {
                     ColumnCount = columns;
                     return;
                 }
-                throw new InvalidOperationException(message: $"Indirect light field with {instructionCount} instructions exceeds the submission cost limit for one workgroup.");
+                // One workgroup's texels are this camera's indivisible unit. A field too heavy for one submits no
+                // rectangle: every map stays invalid, and readers take the bounded per-hit ray shade admission prices.
+                Pending = -1;
+                FirstRow = 0;
+                RowCount = 0;
+                FirstColumn = 0;
+                ColumnCount = 0;
+                Unadmitted = true;
+                return;
             }
         }
     }

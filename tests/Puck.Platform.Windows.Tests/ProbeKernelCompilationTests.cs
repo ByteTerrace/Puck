@@ -5,8 +5,12 @@ namespace Puck.Platform.Windows.Tests;
 
 /// <summary>A kernel-class probe compiles at build, never on the camera's device: every entry point a shipped kind's
 /// manifest names has Direct3D 11 compute bytecode where <see cref="ProbeKindManifest.KernelBytecodePath"/> looks for
-/// it.</summary>
+/// it, in the deployed tree the build ships (this suite's output under <c>Assets/Probes</c>).</summary>
 public sealed class ProbeKernelCompilationTests {
+    // The kinds the build shipped to this suite's output, the tree a deployed host loads them from.
+    private static readonly string ShippedProbes = Path.Combine(paths: [AppContext.BaseDirectory, "Assets", "Probes"]);
+
+    // Every kind the source declares, so a kind the build failed to ship fails by name rather than drops out.
     public static TheoryData<string> ShippedKinds => new(values: Directory.EnumerateFiles(
         path: RepositoryPaths.Resolve(relativePath: "src/Puck.Shaders/Assets/Probes"),
         searchPattern: ("*" + ProbeKindManifest.FileSuffix)
@@ -17,7 +21,7 @@ public sealed class ProbeKernelCompilationTests {
     public void Every_kernel_entry_point_a_shipped_kind_names_has_precompiled_bytecode(string manifestName) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Direct3D 11 kernels compile at build only on Windows."); return; }
 
-        var manifest = ProbeKindManifest.Load(manifestPath: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{manifestName}"));
+        var manifest = ProbeKindManifest.Load(manifestPath: Path.Combine(path1: ShippedProbes, path2: manifestName));
 
         if (manifest.Kernel is not { } kernel) {
             return;

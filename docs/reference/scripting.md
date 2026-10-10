@@ -26,7 +26,7 @@ test host that runs a guest and then raises a division fault on other threads.
 ```text
 namespace Puck.Scripting
 target     net10.0
-deps       Puck.Assets, Puck.Maths + Wasmtime [48.0.2] (exact pin)
+deps       Puck.Assets, Puck.Maths + Wasmtime (exact pin in Puck.Scripting.csproj)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
@@ -132,8 +132,8 @@ regenerates, the hash pins move) while the token stays `1`. What tells two layou
 fingerprint `puck formats` records for the host's side of the ABI (`AddonAbi.AbiShapeFingerprint`): every
 guest returns it, as one word, from `puck_abi_shape`, and a guest of another shape faults `AbiMismatch`
 naming both. The generated Rust constants (`ABI_SHAPE`) move with it, so a guest built before the ABI changed
-is refused at mount, and `puck wasm build` plus the fixture rebuilds are owed after any change to the
-host's ABI source.
+is refused at mount, and `puck wasm-stdlib` then `puck wasm build`, which rebuilds every committed guest, are owed after
+any change to the host's ABI source.
 
 ### Guest exports
 
@@ -693,27 +693,29 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table)—a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[48.0.2]`. Nothing in the
-  build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to the exact version
+  `Puck.Scripting.csproj` pins. Nothing in the build asserts the loaded assembly's major version,
+  so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
 
 ## Verification
 
 There is no dedicated `Puck.Scripting.Tests` project: the ABI is exercised through its consumers,
-`tests/Puck.World.Tests` in particular (addon attach/replay/admission law tests). The guest-side
+`tests/Puck.World.Server.Tests` in particular (addon attach/replay/admission law tests). The guest-side
 Rust workspace ([`wasm/README.md`](../../wasm/README.md)) carries its own build and test story for
 authored modules.
 
 ```powershell
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj
 ```
 
 ## Packaging
 
 `ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
 `Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
-`[48.0.2]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
+exact pin in `Puck.Scripting.csproj` (a real, flowing runtime dependency—not a build-only
+generator). It carries
 no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
 depend on it for the addon host and reference the wire vocabulary this file defines.
 

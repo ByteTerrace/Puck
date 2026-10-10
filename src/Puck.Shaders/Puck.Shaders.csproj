@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Backend-neutral shader definitions, connected multi-pass pipelines, and live shader compilation. Documents declare resources, dependencies, history, configuration, and named outputs; the shared compiler targets SPIR-V and DXIL, and the executor uses the registered GPU backend. Includes the build-time HLSL shader packaging recipe.</Description>
+        <Description>Backend-neutral shader definitions, connected multi-pass pipelines, and live shader compilation. Documents declare resources, dependencies, history, configuration, and named outputs; the shared compiler targets SPIR-V and DXIL, and the executor uses the registered GPU backend.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Shaders</PackageId>
         <PackageTags>bytecode;dxil;manifest;post-process;shaders;spir-v;validation</PackageTags>
@@ -12,28 +12,19 @@
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
-        <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, before they
-             compile (build/Shaders.targets compiles kernels after ResolveProjectReferences). -->
+        <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, and it runs their
+             shader build (build/Shaders.targets compiles kernels after ResolveProjectReferences). -->
         <ProjectReference Include="../Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
     </ItemGroup>
-    <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)../../build/PuckCompileShaderBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckCompileShaderBytecode.cs" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)../../build/PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive/PuckShaderHashSidecars.cs" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)../../build/PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive/PuckDirect3D11KernelBytecode.cs" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)../../build/Shaders.targets" Pack="true" PackagePath="buildTransitive/ByteTerrace.Puck.Shaders.targets" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)../../build/ShaderRecipe.targets" Pack="true" PackagePath="buildTransitive/ShaderRecipe.targets" Visible="false" />
-    </ItemGroup>
+
     <ItemGroup>
         <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy, the
              graph's place package, and the display encode under Runtime (SurfaceEncoder: the fullscreen triangle and the
              encode every swapchain compositor, the float preview and a capture of a float output draw with), compiled to
-             SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode target behind its freshness gate. -->
-        <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
-        <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
+             SPIR-V and, on Windows, DXIL at build and shipped by the shared CollectShaderBytecode target. -->
         <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
-        <ShaderInclude Include="Assets/Shaders/**/*.hlsli" />
     </ItemGroup>
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile

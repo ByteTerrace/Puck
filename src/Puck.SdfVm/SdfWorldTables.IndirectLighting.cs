@@ -70,6 +70,7 @@ public sealed partial class SdfWorldTables {
         }
 
         public SdfFrame Frame => (m_frame ?? throw new InvalidOperationException(message: "The indirect source has not been captured."));
+        public SdfFrame? CapturedFrame => m_frame;
         public SdfPassValues Values => m_values;
         public SdfIndirectLightingSnapshot? Snapshot { get; private set; }
         public IEnumerable<GpuRegion> Regions => m_regions.OfType<GpuRegion>();

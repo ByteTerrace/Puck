@@ -3,7 +3,7 @@
 The author-expression gate for the state system rebuild: every `.puck` source
 this repository ships compiles clean, decompiles, and recompiles to the same
 document. World documents are build output, with no committed document beside
-a world source; `WorldDocumentOutputLawTests` in `Puck.Cli.Tests` holds the
+a world source; `WorldDocumentOutputLawTests` in `Puck.Cli.Worlds.Tests` holds the
 output to what each source compiles to.
 
 The rebuild is free to change every C# type and the lowered document shape

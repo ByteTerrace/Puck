@@ -88,11 +88,25 @@ start World normally, then enter:
 world.control start
 ```
 
-It prints an attachment file path. The MCP client launches:
+It prints an attachment file path. A World launched with `--control` starts the
+same endpoint at boot and prints the same line on stderr, so a script or agent
+that launches World needs no console line. Without either, no endpoint exists.
+The MCP client launches:
 
 ```text
 puck mcp --profile operator
 ```
+
+The client runs the installed `puck`, not the checkout's code, so an install
+from an earlier revision serves that revision's adapter. `puck --version` prints
+the commit the tool was built at (`0.1.0-alpha+<commit>`), and both it and
+`puck mcp --profile operator` print a `puck: this CLI was built at …` warning on
+stderr when run inside a Puck checkout whose HEAD is another commit. An MCP
+client shows that line in its server log. When the server misbehaves (for
+example it closes the connection as soon as it starts), reinstall the tool from
+the checkout as the [CLI reference](../../docs/reference/cli.md#installing-the-checkouts-cli-on-path)
+describes, closing the MCP client first, since it holds the installed tool. The
+check needs no checkout: outside one, or without git, the tool says nothing.
 
 which follows the newest running World, so one configuration serves every run.
 The checkout carries it for both clients: `.mcp.json` at the root and
@@ -249,7 +263,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`. Empty output is `submitted`, not authoritative application. |
+| `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
 | `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`) and `timeoutMs`, same range/default. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
@@ -271,6 +285,16 @@ and matching JSON text, so clients that consume only text retain the same facts.
 `requestId` is null when no reliable host reply exists. `status` is `completed`,
 `submitted`, `refused` or `unknown`; an uncertain outcome is never certified as success.
 
+Console output arrives whole up to 1,048,576 UTF-16 code units, the control
+transport's `ControlLimits.OutputCharacters`. Longer output is cut to that
+length: `output` is its head, ending in a marker that names the full length,
+`truncated` is true, and `status` is still the command's own, because a long
+read is a completed read, never an unknown outcome. Narrow the command to read
+the rest. `help --names` lists every verb's name, `help <prefix>` describes
+the verbs whose names start with the prefix (`help world.state`), and verbs
+such as `world.counters <source>` take their own filters. An MCP client may
+cap a tool result well below this limit, so prefer the narrow forms.
+
 Invalid tool arguments, ordinary command errors and capture failures return
 `isError`; unknown tools remain protocol errors. Malformed JSON string escapes
 are invalid protocol parameters before tool dispatch. Timeout closes the attachment and reports an
@@ -290,9 +314,10 @@ retain their own lifetimes. Local Operator `quit` and reload retain their normal
 
 ## SDK and verification
 
-The adapter uses official **ModelContextProtocol.Core/ASP.NET Core 2.2.0** and
-ASP.NET Core JWT bearer authentication 10.0.12, with explicit schemas and low-level
-handlers. It installs no Harness or model provider.
+The adapter uses the official **ModelContextProtocol.Core and
+ModelContextProtocol.AspNetCore** packages and ASP.NET Core JWT bearer
+authentication, at the version ranges `Puck.Mcp.csproj` declares, with explicit
+schemas and low-level handlers. It installs no Harness or model provider.
 Result metadata uses a typed, source-generated serializer; standalone schemas use
 .NET 10's `JsonElement.Parse`. The SDK owns the asynchronous message channel.
 Admission counters bound that transport without adding another queue; a single
@@ -316,8 +341,8 @@ Clean EOF exits successfully. The adapter owns both streams and closes them on
 shutdown, including when a pending read ignores cancellation. Stdout is protocol-only;
 diagnostics use stderr.
 
-The process tests launch the real CLI and connect the official C# SDK 2.2.0
-client over its stdio, pinned to a World and through `--attach latest`: listing,
+The process tests launch the real CLI and connect the official C# SDK client
+over its stdio, pinned to a World and through `--attach latest`: listing,
 exec, images and argument errors, plus EOF and oversized-input exits that leave
 the World serving. Each gives the child a private temporary directory, so
 `latest` can only find that test's World. Each connection ends as the stdio
@@ -348,7 +373,7 @@ has been tested. The protocol contract is the
 Render writer boundary tests are in Commands, Abstractions and Shaders. No
 automated check covers a physical device-loss event or a live Entra deployment.
 
-Run `dotnet test tests/Puck.Cli.Tests -c Release` for SDK interop and the
+Run `dotnet test --project tests/Puck.Mcp.Tests -c Release` and the `McpInteropTests` in `tests/Puck.Cli.Tests` for SDK interop and the
 [Hosting tests](../../tests/Puck.Hosting.Tests/README.md) for engine attachment contracts.
 For a live smoke, edit a parameter through MCP and decode the captured PNG; hold
 this attachment with `world.wait` and confirm human input still answers. Close

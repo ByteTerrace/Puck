@@ -6,13 +6,29 @@
       {
         "Type": "Puck.Maths.FixedPointRounding",
         "Name": "TryRoundRational"
+      },
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TrySphereVolume"
+      },
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TryBoxVolume"
+      },
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TryCylinderVolume"
+      },
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TryCapsuleVolume"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TrySphereVolume, TryBoxVolume, TryCylinderVolume and TryCapsuleVolume (internal) — all four exercised on every draw, each one rounding of the exact rational volume at a swept output scale — together with the shared FixedPointRounding.TryRoundRational kernel each of those roundings divides, tie-breaks and narrows through",
+        "Subject": "FixedMassProperties.TrySphereVolume, TryBoxVolume, TryCylinderVolume and TryCapsuleVolume — all four exercised on every draw, each one rounding of the exact rational volume at a swept output scale — together with the shared FixedPointRounding.TryRoundRational kernel each of those roundings divides, tie-breaks and narrows through",
         "Against": "Oracles.TryPrimitiveVolume — the same four volumes assembled from the GEOMETRIC definition rather than from the subject's folded constants: the box from its FULL extents (2h in each axis) rather than three half-extents folded into a leading eight, and the capsule as a cylinder PLUS a whole sphere as two separate terms rather than as one collapsed fraction over three. A mis-folded constant in the subject therefore cannot be mirrored in the reference",
         "Shared": "",
         "Citation": "",
@@ -86,12 +102,17 @@
   {
     "Id": "mass-properties.cylinder-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TryCylinderBody"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TryCylinderBody (internal) — the mass, the axial moment and the perpendicular moment of a solid cylinder about its centre",
+        "Subject": "FixedMassProperties.TryCylinderBody — the mass, the axial moment and the perpendicular moment of a solid cylinder about its centre",
         "Against": "Oracles.TryCylinderBody, which forms the mass as an exact rational first and then takes (1/2)*M*r^2 and (M/12)(3r^2 + h^2) against it, where the subject folds the mass numerator straight into each moment's own single fraction",
         "Shared": "",
         "Citation": "",
@@ -181,12 +202,17 @@
   {
     "Id": "mass-properties.compound-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedMassProperties",
+        "Name": "TryCompound"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TryCompound (internal) — the summed mass, the composite centre of mass and the inertia tensor about that centre, for two swept parts; every part's parallel-axis contribution is taken against the EXACT rational centre rather than against the rounded centre the kernel reports",
+        "Subject": "FixedMassProperties.TryCompound — the summed mass, the composite centre of mass and the inertia tensor about that centre, for two swept parts; every part's parallel-axis contribution is taken against the EXACT rational centre rather than against the rounded centre the kernel reports",
         "Against": "Oracles.TryCompound, which accumulates in the OPPOSITE order: every part's tensor is carried OUT to the shared origin, the parts are summed there, and the total is carried back IN to the composite centre by one reverse transfer. The subject transfers each part directly to the centre. The two routes are algebraically equal and computationally disjoint — they agree only if the transfer, the centre and both scale bridges are all right",
         "Shared": "",
         "Citation": "",

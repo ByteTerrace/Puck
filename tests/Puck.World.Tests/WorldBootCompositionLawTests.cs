@@ -19,7 +19,7 @@ namespace Puck.World.Tests;
 /// records through resolve to a <see cref="FakeGpuDevice"/>, and every other service that owns or brings up a device
 /// throws when resolved, so a law that reached a device fails by name instead of creating one.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
     private const string WorkloadWorld = "tests/Puck.Counters/counters.puck";

@@ -7,6 +7,54 @@ public sealed partial class SdfProgram {
     // KEEP IN SYNC with sdfTracePrimary in sdf-primary.hlsli.
     private const uint IndependentPartTracingFlag = 0x80000000u;
 
+    /// <summary>The part entry's leaf-count bits, excluding its dynamic and distance-bound flags.</summary>
+    public const uint PartLeafCountMask = 0x3fffffffu;
+    /// <summary>The instance's influence sphere does not certify a lower bound on its field.</summary>
+    public const uint PartNoDistanceBoundFlag = 0x40000000u;
+
+    /// <summary>Whether an instance's field admits the packed influence sphere's distance lower bound.
+    /// Root composition and the scope rescale are separate requirements at the query site.</summary>
+    /// <param name="index">The instance index.</param>
+    /// <returns>False for approximate primitives, non-similarity domains, field modifiers and unknown compositions.</returns>
+    public bool InstanceHasDistanceLowerBound(int index) {
+        var instance = m_instances[index];
+
+        if (!instance.Active || IsUnmaskable(instance: instance)) { return false; }
+        for (var cursor = instance.First; (cursor < instance.End); cursor++) {
+            var instruction = m_instructions[cursor];
+
+            switch (instruction.Op) {
+                case SdfOp.ResetPoint:
+                case SdfOp.Translate:
+                case SdfOp.Rotate:
+                case SdfOp.TransformDynamic:
+                case SdfOp.PushField:
+                    break;
+                case SdfOp.Scale:
+                    var scale = instruction.Data0;
+
+                    if (!(scale.X > 0f) || (scale.X != scale.Y) || (scale.Y != scale.Z) || (scale.Z != scale.W)) { return false; }
+                    break;
+                case SdfOp.ShapeBlend:
+                    // The skip-sphere model deliberately excludes underestimating gauges. A capped primitive
+                    // also needs its domain's accumulated scale in the far guard; leave those on the full walk.
+                    if (instruction.Detail || !instruction.Secondary
+                        || (instruction.Shape is ((uint)SdfShapeType.Sweep) or ((uint)SdfShapeType.Path))
+                        || !TryGetLocalBound(center: out _, convexPolygonProfiles: m_convexPolygonProfiles,
+                            instruction: instruction, instructionIndex: cursor,
+                            radius: out _, sweepCurves: m_sweepCurves)) { return false; }
+                    goto case SdfOp.PopField;
+                case SdfOp.PopField:
+                    if (((SdfBlendOp)instruction.Blend) is not (SdfBlendOp.Union or SdfBlendOp.Subtraction or SdfBlendOp.Intersection
+                        or SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothSubtraction or SdfBlendOp.SmoothIntersection)) { return false; }
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return true;
+    }
+
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
     /// instruction and instance ceilings. Unlike <see cref="Words"/> length, this does not depend on which parts
     /// qualify for compilation or share geometry. Composition capacity probes reserve this value; their existing
@@ -273,15 +321,25 @@ public sealed partial class SdfProgram {
         }
 
         for (var index = 0; (index < plan.Instances.Length); index++) {
+            var entry = (((offset + 1) + index) * WordsPerVector);
+            var boundFlag = (InstanceHasDistanceLowerBound(index: index) ? 0u : PartNoDistanceBoundFlag);
+
+            m_words[(entry + 2)] = boundFlag;
+
             if (plan.Instances[index] is not { } placement) {
+                // An instance the table does not compile still carries its field rescale's inverse, so mapCore's
+                // whole-instance skip (sdfInstanceCannotWin) can reject it against its packed bound under the root-union
+                // certificate. Its zero leaf count keeps it on the generic walk.
+                var instance = m_instances[index];
+
+                m_words[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: (1f / FieldScopeExtent(first: instance.First, end: instance.End).Rescale));
                 continue;
             }
-            var entry = (((offset + 1) + index) * WordsPerVector);
 
             m_words[entry] = ((uint)assetOffsets[placement.Asset]);
             m_words[(entry + 1)] = ((uint)cursor);
             // A non-world shader without pose bindings must leave a dynamic part on its existing fallback path.
-            m_words[(entry + 2)] = ((uint)placement.Bindings.Length)
+            m_words[(entry + 2)] = ((uint)placement.Bindings.Length) | boundFlag
                 | (placement.Bindings.Any(predicate: binding => (binding.DynamicSlot != NoDynamicTransformSlot))
                 ? 0x80000000u
                 : 0u

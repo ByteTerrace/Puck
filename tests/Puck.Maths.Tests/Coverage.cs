@@ -247,6 +247,10 @@ internal static class Coverage {
     // the category reviewable as a category rather than as a pile of one-off prose.
     private const string FieldSeamCarrierReason = "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.";
     private const string FieldSeamReason = "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.";
+    private const string KernelShapeReason = "A static-abstract kernel shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. A generic kernel reaches each implementer's own static member, which is a separate reflected member under that implementer's type and answers to the laws that drive it by name: VectorLanes128, VectorLanes256 and VectorLanes512 at binary-field.region-tiers-vs-scalar-rung, binary-field.wide-region-tiers-vs-scalar-rung, binary-field.region-lengths-vs-scalar-rung, prime-selection.gourdon-hard-leaf-filter-rungs and signed-byte-vectors.dot-tiers-vs-scalar-rung, and the eight packet residues at prime-exploration.wheel-tables-match-their-derivation. A candidate decision's implementer is the caller's own type; prime-selection.custom-decision-mapping pins that TryRandomPrime consults the one it is given.";
+    private const string PositionalCarrierReason = "A positional record carrier the C# compiler generates: its constructor and properties are storage with no arithmetic of their own, so THIS member has no operand domain, subject shape or oracle. The one law that builds it, mass-properties.compound-vs-oracle, hands the same parts to the subject and to Oracles.TryCompound, which reads them back by the same names, so a storage defect would be shared and invisible there; what that law gates is the arithmetic over the parts, FixedMassProperties.TryCompound.";
+    private const string ReferenceRungLabelReason = "The label of the always-available reference rung. The rung laws reach that rung by calling its kernel by name (BinaryFieldKernels.MultiplyAccumulateRegionScalar, SignedByteVectorFunctions.DotScalar) and credit the kernel, which binary-field.region-tiers-vs-scalar-rung, binary-field.narrow-degree-regions-vs-oracle, signed-byte-vectors.dot-vs-oracle and signed-byte-vectors.dot-tiers-vs-scalar-rung gate. No dispatch selects a rung by passing this label, and each support predicate answers true for it unconditionally, so nothing a law could observe turns on it.";
+    private const string SecondOrderPrecisionBudgetReason = "A working-precision budget inside the exact BigInteger evaluation SecondOrderDynamics.Compile runs (the guard fraction bit count, the exponential's range-reduction shift and its underflow floor): it states no value of its own, and any setting at or past what the Q32 propagator needs leaves every public entry bit-identical, so no law can pin THIS number without pinning the implementation. What the budget buys is gated at the public result: dynamics.step-vs-evaluate-close-agreement holds Compile against the independently built Evaluate path, and dynamics.guard-scale-public-divergence-search transcribes these constants to reach the exact roundings Compile performs.";
     private const string SymmetryLatticeReason = "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.";
     private const string UnreachedCertificateReason = "Enumeration case with no producer: the guarded sum names the certificate it ATTEMPTED, and every attempt in the library is Nilpotent, Idempotent or FieldResolvent. A divisibility window is locally finite but reports the nilpotence it observed, so LocallyFinite is still issued nowhere, and None is the absence of any issued certificate rather than a certificate itself.";
 
@@ -559,7 +563,77 @@ internal static class Coverage {
             Name: "Advance",
             Type: typeof(IDrawGenerator)
         ), DrawGeneratorShapeReason),
+
+        // The lane, packet-residue and candidate-decision interfaces carry no body of their own: they exist so one
+        // generic kernel body runs over every vector width, residue or decision without a virtual call. Every concrete
+        // implementer in this assembly is credited to the laws that drive it by name, so only the declarations are
+        // waived here.
+        .. KernelShapeWaivers(
+            names: [
+                "AllBitsSet", "And", "AndNot", "Broadcast", "ByteCount", "GaloisFieldAffineTransform", "GreaterThanInt16Mask",
+                "Load", "Or", "Replicate", "ShiftRightLogicalUInt16ByNibble", "ShuffleWithinLanes", "Store", "SwapUInt16Bytes",
+                "Xor", "Zero",
+            ],
+            type: typeof(IByteVectorLanes<>)
+        ),
+        .. KernelShapeWaivers(
+            names: ["Add", "ByteCount", "Load", "Multiply", "Sum", "Widen"],
+            type: typeof(ISignedByteWideningLanes<,,>)
+        ),
+        .. KernelShapeWaivers(
+            names: ["Masks", "Residue"],
+            type: typeof(PrimeExploration.IPacketResidue)
+        ),
+        .. KernelShapeWaivers(
+            names: ["IsPrimeCandidate"],
+            type: typeof(IPrimeCandidateDecision)
+        ),
+
+        (new CoverRef(
+            Name: "Scalar",
+            Type: typeof(BinaryFieldRegionTier)
+        ), ReferenceRungLabelReason),
+        (new CoverRef(
+            Name: "Scalar",
+            Type: typeof(SignedByteVectorTier)
+        ), ReferenceRungLabelReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(BinaryFieldRegionTier)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(SignedByteVectorTier)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(PrimeCountRoute)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(PrimeRequestRoute)
+        ), EnumStorageReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(PrimeSieveMode)
+        ), EnumStorageReason),
+
+        .. new[] { ".ctor", "CenterX", "CenterY", "CenterZ", "Ixx", "Ixy", "Ixz", "Iyy", "Iyz", "Izz", "Mass" }.Select(selector: name => (new CoverRef(
+            Name: name,
+            Type: typeof(FixedMassProperties.CompoundPart)
+        ), PositionalCarrierReason)),
+
+        .. new[] { "ExpUnderflowExponent", "GuardFractionBitCount", "ResidualShift" }.Select(selector: name => (new CoverRef(
+            Name: name,
+            Type: typeof(SecondOrderExactMath)
+        ), SecondOrderPrecisionBudgetReason)),
     ];
+
+    private static IEnumerable<(CoverRef Reference, string Reason)> KernelShapeWaivers(Type type, string[] names) =>
+        names.Select(selector: name => (new CoverRef(
+            Name: name,
+            Type: type
+        ), KernelShapeReason));
 
     /// <summary>Counts the manifest states.</summary>
     /// <param name="manifest">The manifest.</param>

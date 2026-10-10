@@ -28,8 +28,9 @@ same change. The user's current instruction outranks it.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
   The affected map selects committed baseline checks from their owning projects
   and declared data inputs. Each runs after the repository checks and before GPU
-  steps; `affected --run` leaves them to the gate. Admission uses host load's
-  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  steps; `affected --run` leaves them to the gate. Admission uses the machine's host-load
+  thresholds, which scale with its installed memory and cores, before heavy
+  steps; `gate.log` and `gate.steps` retain output and the
   flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
@@ -37,16 +38,14 @@ same change. The user's current instruction outranks it.
   fix in a proof tree of its own (a persistent clone it builds incrementally,
   never your tree or a shared one), and refuses a proof when a build fails, a
   selected test is skipped or the two legs ran different tests.
-  The leased clone warms ignored shader bytecode from the caller or registered
-  worktrees sharing its common Git directory, through complete, hash-checked
-  artifact pairs and the existing publication locks. It captures the original
-  sidecar identities before withholding and rewarms only those exact pairs after
-  source restoration. Missing, changed or busy donors leave ordinary compilation
-  in charge; no separate bytecode cache or manual artifact-copy flag is needed.
-  Its normal build still validates source/include/recipe identities; do not
-  copy managed outputs or alter timestamps to make a proof appear incremental.
-  Native proof builds use `-m:1` with build servers and node reuse disabled;
-  shader worker counts still follow the project's recipe.
+  The clone's ordinary shader build reaches the same default per-user shader
+  cache as the caller. Valid entries with matching closures, options, and
+  toolchain publish without DXC; missing or invalid entries compile. A cache
+  override used only on the caller's build is not forwarded to the proof.
+  Do not copy bytecode or managed outputs, or alter timestamps, to make a proof
+  appear incremental. Native proof builds use `-m:1` with build servers
+  and node reuse disabled; shader compiles still run on the cores MSBuild
+  grants.
   For independent fixes in one project, repeat `--also-law <Class[.Method]>`
   with exact selectors and one reviewed production-only restoration. Each side
   builds once and retains a separate report for every selector; every selector
@@ -80,6 +79,9 @@ and `puck docs citations` when required below, under the GPU rules.
 - Send every build and test run's full output to a lane-named log
   (`<scratchpad>/<lane>-gate.log`) and stop at the first build error. A flake
   needs its failure message to be judged.
+- Build and test in Release (`-c Release`). The allocation laws' ceilings are
+  calibrated against Release code, so a Debug run's allocation failure is not a
+  finding.
 - Pass `-nodeReuse:false` to every build, and to `dotnet restore` as well:
   restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
 - A build interrupted under memory pressure can leave a corrupt assembly under
@@ -119,12 +121,15 @@ check form:
 | `docs/world-name-registry.md` | `puck registry --check` |
 | Generated schemas and model shape | `puck schema --check` |
 | A committed test baseline | `puck baselines <artifact> --check` |
+| Each project's `packages.lock.json` | `puck locks --check` |
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
 `puck formats` after editing a format's source (it records the shape and rewrites the generated
 `FormatShapes.g.cs` files; it never asks for a token bump), `puck canary-ceilings` after
-changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
+changing canary cost, `puck locks` after a package or project reference change (every restore is
+locked, so the build names the project whose lock file drifted), a baseline whose movement the change
+explains. Review the rewritten file's diff
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.
 
@@ -204,8 +209,8 @@ brief requires a manual proof, use these steps:
 6. Record in the commit message which laws were proved red and how.
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
-`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
-(verified on xUnit 4.0.1). A law that wraps a call which can skip, such as a
+`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception.
+A law that wraps a call which can skip, such as a
 device or capability probe, can therefore report **Skipped** with its fix
 withheld and pin nothing. In such laws, catch the exception directly with a
 `try`/`catch` and assert on it.
@@ -220,7 +225,9 @@ owed when your change relies on it.
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
-full `Puck.World.Tests` run: its `Gpu` classes open the GPU. `puck docs
+full `Puck.World.Tests` run: its `Gpu` classes open the GPU. A suite runs its
+own `Gpu` classes one law at a time, after its CPU laws
+(`tests/Shared/GpuDeviceCollection.cs`), so one run of a suite is one GPU leg. `puck docs
 citations` builds `Puck.World` and boots it headless and windowed to read its
 help vocabulary, so it waits for the GPU like any other GPU leg; given
 `--enumeration <file>`, a saved `help` listing, it boots nothing and may run
@@ -238,13 +245,17 @@ World run with effective `host.presentation: none` uses no GPU; the
   owed. Every class that opens a hardware GPU device carries
   `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
   that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
-  Keep the CPU-heavy work restriction below.
+- CPU work runs beside a GPU leg. A correctness leg (device laws, parity,
+  canaries, counted performance work) judges values that do not depend on load,
+  so solution builds, large CPU suites and other lanes' work keep running while
+  it does. Two GPU-bound jobs never overlap. Only wall-clock work (`puck bench`,
+  a timing spike) needs a quiet machine.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.
-- With a grant, run the granted legs serially, nothing else GPU-bound beside
-  them, and keep CPU-heavy work (solution builds, large suites) off the machine
-  while they run.
+- With a grant, run the granted legs serially, with nothing else GPU-bound
+  beside them, and start them as soon as the GPU is idle rather than waiting
+  for your CPU work to finish.
 - Qualify the merged head. Before a lane's GPU run, merge the current
   integration head into it: a stale lane can fail or pass because it lacks
   changes already on the integration branch.
@@ -266,15 +277,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 
 ### GPU process checks and script runs
 
-A detector that waits for the GPU to go idle by matching process command lines
-excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
-command line contains the strings it searches for; without this exclusion it
-waits on itself forever. Treat a match you cannot account for as suspect, not as
-proof of a busy GPU: exclude the search's own process by process id, or use a
-pattern that cannot match its own command line (a bracketed first letter), then
-confirm whether a real process remains. Never skip or postpone a granted GPU leg
-because of a match that was the search itself. Run such a
-detector once by hand on an idle machine before trusting it.
+Wait for an idle GPU with `puck host load` (`--watch` prints `GPU busy (<holder>)`
+and `GPU idle` transitions); its probe already excludes shells and builds. A
+detector of your own that matches command lines must exclude its own shell,
+since the query's command line contains the strings it searches for. Never skip
+or postpone a granted GPU leg because of a match that was the search itself.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
 script's own bash running. Before relaunching a GPU script, find every instance
@@ -288,13 +295,18 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
 
 - **Flake:** the first failure was a timeout, a bind, listener or port wait, a
   readiness wait, or a temporary-directory teardown error, and the leg passes
-  alone. Report it with the original message and the passing re-run.
+  alone. A leg that timed out because CPU work ran beside it is this case.
+  Report it with the original message and the passing re-run.
 - **Failure:** the leg fails again, or the first failure was a wrong value: a
   pixel or tile verdict, a state hash, a counted work line, a refusal reason, a
   content assertion, or a validation-layer message. Fix it. Never re-run a
   content failure hoping for green.
 
 The same rule applies to load-sensitive CPU tests.
+
+Before stopping a hung test host or World process, capture its managed stacks
+(`dotnet-stack report -p <pid>`, from the `dotnet-stack` global tool) and keep
+the report with the failure; a hang stopped without one cannot be judged.
 
 ## Tests that create a repository
 

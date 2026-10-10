@@ -128,7 +128,7 @@ public static partial class PrimeExtensions {
     private static ulong CountTinyPhi(ulong value) {
         var remainder = ((uint)(value % CombinatorialTinyPeriod));
         var word = (remainder / PrimeWheel30.WordIntegers);
-        var mask = CombinatorialTables.PrefixMasks[(remainder % PrimeWheel30.WordIntegers)];
+        var mask = CombinatorialTables.PrefixMasks[((int)(remainder % PrimeWheel30.WordIntegers))];
 
         return ((((value / CombinatorialTinyPeriod) * CombinatorialTinyTotient)
             + CombinatorialTables.TinyPrefix[word])
@@ -137,7 +137,7 @@ public static partial class PrimeExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CombinatorialCoordinate(uint value) {
         return (((((int)(value / PrimeWheel30.Modulus)) * PrimeWheel30.ChannelCount)
-            + BitOperations.PopCount(value: CombinatorialTables.PrefixMasks[(value % PrimeWheel30.Modulus)])) - 1);
+            + BitOperations.PopCount(value: CombinatorialTables.PrefixMasks[((int)(value % PrimeWheel30.Modulus))])) - 1);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint CombinatorialNumber(int coordinate) {
@@ -211,13 +211,13 @@ public static partial class PrimeExtensions {
             var word = (value / PrimeWheel30.WordIntegers);
 
             return (m_primePrefix[word] + ((uint)BitOperations.PopCount(value: m_primeBits[word]
-                & CombinatorialTables.PrefixMasks[(value % PrimeWheel30.WordIntegers)])));
+                & CombinatorialTables.PrefixMasks[((int)(value % PrimeWheel30.WordIntegers))])));
         }
 
         private void SieveFactor(uint prime, uint squareRoot, CancellationToken cancellationToken) {
             _ = PrimeWheel30.TryChannel(channel: out var channel, residue: ((byte)(prime % PrimeWheel30.Modulus)));
 
-            var steps = CombinatorialTables.Steps.AsSpan(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
+            var steps = CombinatorialTables.Steps.Slice(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
             var quotient = (prime / PrimeWheel30.Modulus);
             var cursor = quotient;
             var phase = 0;
@@ -245,7 +245,7 @@ public static partial class PrimeExtensions {
             var square = (prime * prime);
 
             _ = PrimeWheel30.TryChannel(channel: out channel, residue: ((byte)(square % PrimeWheel30.Modulus)));
-            steps = CombinatorialTables.Steps.AsSpan(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
+            steps = CombinatorialTables.Steps.Slice(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
             quotient = (square / PrimeWheel30.Modulus);
             cursor = quotient;
             phase = 0;
@@ -259,29 +259,106 @@ public static partial class PrimeExtensions {
         }
     }
 
-    internal readonly struct CombinatorialWheelStep {
-        internal readonly byte Bit;
-        internal readonly byte Gap;
-        internal readonly byte Carry;
+    /// <summary>One step of a prime's walk over the thirty-wheel: the bit its next multiple lands on and how far the byte cursor moves.</summary>
+    /// <remarks>Public so a law can compare the table with the wheel derivation entry by entry; the counting engine reads
+    /// the steps through <see cref="CombinatorialTables.Steps"/>.</remarks>
+    public readonly struct CombinatorialWheelStep {
+        /// <summary>The numeric bit, from zero through seven, that the multiple lands on within its wheel byte.</summary>
+        public readonly byte Bit;
+        /// <summary>The multiplier gap from this phase to the next, multiplied by the prime's quotient to give the byte advance.</summary>
+        public readonly byte Gap;
+        /// <summary>The bytes beyond <c>quotient · Gap</c> that the step advances.</summary>
+        public readonly byte Carry;
 
-        internal CombinatorialWheelStep(byte bit, byte gap, byte carry) {
+        /// <summary>Initializes a step.</summary>
+        /// <param name="bit">The numeric bit the multiple lands on.</param>
+        /// <param name="gap">The multiplier gap to the next phase.</param>
+        /// <param name="carry">The carry beyond the quotient's share of the gap.</param>
+        public CombinatorialWheelStep(byte bit, byte gap, byte carry) {
             Bit = bit;
             Gap = gap;
             Carry = carry;
         }
     }
-    internal static class CombinatorialTables {
-        internal static readonly ulong[] PrefixMasks = CreatePrefixMasks();
-        internal static readonly CombinatorialWheelStep[] Steps = CreateSteps();
+    /// <summary>Holds the constant tables the combinatorial prime counter reads, each exposed as a read-only view.</summary>
+    public static class CombinatorialTables {
+        private static readonly CombinatorialWheelStep[] StepTable = CreateSteps();
+
+        /// <summary>Gets, for every offset below <see cref="PrimeWheel30.WordIntegers"/>, the bits of a bitmap word that
+        /// hold the units of thirty at or below it.</summary>
+        /// <remarks>Entry <c>offset</c> equals <see cref="PrimeWheel30.WordPrefixMask(int)"/>. The values are written out
+        /// as constant data, so a read costs one load from a constant address and no caller can overwrite them; the law
+        /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves each equals the derivation.</remarks>
+        public static ReadOnlySpan<ulong> PrefixMasks => [
+        0x0000000000000000UL, 0x0000000000000001UL, 0x0000000000000001UL, 0x0000000000000001UL,
+        0x0000000000000001UL, 0x0000000000000001UL, 0x0000000000000001UL, 0x0000000000000003UL,
+        0x0000000000000003UL, 0x0000000000000003UL, 0x0000000000000003UL, 0x0000000000000007UL,
+        0x0000000000000007UL, 0x000000000000000FUL, 0x000000000000000FUL, 0x000000000000000FUL,
+        0x000000000000000FUL, 0x000000000000001FUL, 0x000000000000001FUL, 0x000000000000003FUL,
+        0x000000000000003FUL, 0x000000000000003FUL, 0x000000000000003FUL, 0x000000000000007FUL,
+        0x000000000000007FUL, 0x000000000000007FUL, 0x000000000000007FUL, 0x000000000000007FUL,
+        0x000000000000007FUL, 0x00000000000000FFUL, 0x00000000000000FFUL, 0x00000000000001FFUL,
+        0x00000000000001FFUL, 0x00000000000001FFUL, 0x00000000000001FFUL, 0x00000000000001FFUL,
+        0x00000000000001FFUL, 0x00000000000003FFUL, 0x00000000000003FFUL, 0x00000000000003FFUL,
+        0x00000000000003FFUL, 0x00000000000007FFUL, 0x00000000000007FFUL, 0x0000000000000FFFUL,
+        0x0000000000000FFFUL, 0x0000000000000FFFUL, 0x0000000000000FFFUL, 0x0000000000001FFFUL,
+        0x0000000000001FFFUL, 0x0000000000003FFFUL, 0x0000000000003FFFUL, 0x0000000000003FFFUL,
+        0x0000000000003FFFUL, 0x0000000000007FFFUL, 0x0000000000007FFFUL, 0x0000000000007FFFUL,
+        0x0000000000007FFFUL, 0x0000000000007FFFUL, 0x0000000000007FFFUL, 0x000000000000FFFFUL,
+        0x000000000000FFFFUL, 0x000000000001FFFFUL, 0x000000000001FFFFUL, 0x000000000001FFFFUL,
+        0x000000000001FFFFUL, 0x000000000001FFFFUL, 0x000000000001FFFFUL, 0x000000000003FFFFUL,
+        0x000000000003FFFFUL, 0x000000000003FFFFUL, 0x000000000003FFFFUL, 0x000000000007FFFFUL,
+        0x000000000007FFFFUL, 0x00000000000FFFFFUL, 0x00000000000FFFFFUL, 0x00000000000FFFFFUL,
+        0x00000000000FFFFFUL, 0x00000000001FFFFFUL, 0x00000000001FFFFFUL, 0x00000000003FFFFFUL,
+        0x00000000003FFFFFUL, 0x00000000003FFFFFUL, 0x00000000003FFFFFUL, 0x00000000007FFFFFUL,
+        0x00000000007FFFFFUL, 0x00000000007FFFFFUL, 0x00000000007FFFFFUL, 0x00000000007FFFFFUL,
+        0x00000000007FFFFFUL, 0x0000000000FFFFFFUL, 0x0000000000FFFFFFUL, 0x0000000001FFFFFFUL,
+        0x0000000001FFFFFFUL, 0x0000000001FFFFFFUL, 0x0000000001FFFFFFUL, 0x0000000001FFFFFFUL,
+        0x0000000001FFFFFFUL, 0x0000000003FFFFFFUL, 0x0000000003FFFFFFUL, 0x0000000003FFFFFFUL,
+        0x0000000003FFFFFFUL, 0x0000000007FFFFFFUL, 0x0000000007FFFFFFUL, 0x000000000FFFFFFFUL,
+        0x000000000FFFFFFFUL, 0x000000000FFFFFFFUL, 0x000000000FFFFFFFUL, 0x000000001FFFFFFFUL,
+        0x000000001FFFFFFFUL, 0x000000003FFFFFFFUL, 0x000000003FFFFFFFUL, 0x000000003FFFFFFFUL,
+        0x000000003FFFFFFFUL, 0x000000007FFFFFFFUL, 0x000000007FFFFFFFUL, 0x000000007FFFFFFFUL,
+        0x000000007FFFFFFFUL, 0x000000007FFFFFFFUL, 0x000000007FFFFFFFUL, 0x00000000FFFFFFFFUL,
+        0x00000000FFFFFFFFUL, 0x00000001FFFFFFFFUL, 0x00000001FFFFFFFFUL, 0x00000001FFFFFFFFUL,
+        0x00000001FFFFFFFFUL, 0x00000001FFFFFFFFUL, 0x00000001FFFFFFFFUL, 0x00000003FFFFFFFFUL,
+        0x00000003FFFFFFFFUL, 0x00000003FFFFFFFFUL, 0x00000003FFFFFFFFUL, 0x00000007FFFFFFFFUL,
+        0x00000007FFFFFFFFUL, 0x0000000FFFFFFFFFUL, 0x0000000FFFFFFFFFUL, 0x0000000FFFFFFFFFUL,
+        0x0000000FFFFFFFFFUL, 0x0000001FFFFFFFFFUL, 0x0000001FFFFFFFFFUL, 0x0000003FFFFFFFFFUL,
+        0x0000003FFFFFFFFFUL, 0x0000003FFFFFFFFFUL, 0x0000003FFFFFFFFFUL, 0x0000007FFFFFFFFFUL,
+        0x0000007FFFFFFFFFUL, 0x0000007FFFFFFFFFUL, 0x0000007FFFFFFFFFUL, 0x0000007FFFFFFFFFUL,
+        0x0000007FFFFFFFFFUL, 0x000000FFFFFFFFFFUL, 0x000000FFFFFFFFFFUL, 0x000001FFFFFFFFFFUL,
+        0x000001FFFFFFFFFFUL, 0x000001FFFFFFFFFFUL, 0x000001FFFFFFFFFFUL, 0x000001FFFFFFFFFFUL,
+        0x000001FFFFFFFFFFUL, 0x000003FFFFFFFFFFUL, 0x000003FFFFFFFFFFUL, 0x000003FFFFFFFFFFUL,
+        0x000003FFFFFFFFFFUL, 0x000007FFFFFFFFFFUL, 0x000007FFFFFFFFFFUL, 0x00000FFFFFFFFFFFUL,
+        0x00000FFFFFFFFFFFUL, 0x00000FFFFFFFFFFFUL, 0x00000FFFFFFFFFFFUL, 0x00001FFFFFFFFFFFUL,
+        0x00001FFFFFFFFFFFUL, 0x00003FFFFFFFFFFFUL, 0x00003FFFFFFFFFFFUL, 0x00003FFFFFFFFFFFUL,
+        0x00003FFFFFFFFFFFUL, 0x00007FFFFFFFFFFFUL, 0x00007FFFFFFFFFFFUL, 0x00007FFFFFFFFFFFUL,
+        0x00007FFFFFFFFFFFUL, 0x00007FFFFFFFFFFFUL, 0x00007FFFFFFFFFFFUL, 0x0000FFFFFFFFFFFFUL,
+        0x0000FFFFFFFFFFFFUL, 0x0001FFFFFFFFFFFFUL, 0x0001FFFFFFFFFFFFUL, 0x0001FFFFFFFFFFFFUL,
+        0x0001FFFFFFFFFFFFUL, 0x0001FFFFFFFFFFFFUL, 0x0001FFFFFFFFFFFFUL, 0x0003FFFFFFFFFFFFUL,
+        0x0003FFFFFFFFFFFFUL, 0x0003FFFFFFFFFFFFUL, 0x0003FFFFFFFFFFFFUL, 0x0007FFFFFFFFFFFFUL,
+        0x0007FFFFFFFFFFFFUL, 0x000FFFFFFFFFFFFFUL, 0x000FFFFFFFFFFFFFUL, 0x000FFFFFFFFFFFFFUL,
+        0x000FFFFFFFFFFFFFUL, 0x001FFFFFFFFFFFFFUL, 0x001FFFFFFFFFFFFFUL, 0x003FFFFFFFFFFFFFUL,
+        0x003FFFFFFFFFFFFFUL, 0x003FFFFFFFFFFFFFUL, 0x003FFFFFFFFFFFFFUL, 0x007FFFFFFFFFFFFFUL,
+        0x007FFFFFFFFFFFFFUL, 0x007FFFFFFFFFFFFFUL, 0x007FFFFFFFFFFFFFUL, 0x007FFFFFFFFFFFFFUL,
+        0x007FFFFFFFFFFFFFUL, 0x00FFFFFFFFFFFFFFUL, 0x00FFFFFFFFFFFFFFUL, 0x01FFFFFFFFFFFFFFUL,
+        0x01FFFFFFFFFFFFFFUL, 0x01FFFFFFFFFFFFFFUL, 0x01FFFFFFFFFFFFFFUL, 0x01FFFFFFFFFFFFFFUL,
+        0x01FFFFFFFFFFFFFFUL, 0x03FFFFFFFFFFFFFFUL, 0x03FFFFFFFFFFFFFFUL, 0x03FFFFFFFFFFFFFFUL,
+        0x03FFFFFFFFFFFFFFUL, 0x07FFFFFFFFFFFFFFUL, 0x07FFFFFFFFFFFFFFUL, 0x0FFFFFFFFFFFFFFFUL,
+        0x0FFFFFFFFFFFFFFFUL, 0x0FFFFFFFFFFFFFFFUL, 0x0FFFFFFFFFFFFFFFUL, 0x1FFFFFFFFFFFFFFFUL,
+        0x1FFFFFFFFFFFFFFFUL, 0x3FFFFFFFFFFFFFFFUL, 0x3FFFFFFFFFFFFFFFUL, 0x3FFFFFFFFFFFFFFFUL,
+        0x3FFFFFFFFFFFFFFFUL, 0x7FFFFFFFFFFFFFFFUL, 0x7FFFFFFFFFFFFFFFUL, 0x7FFFFFFFFFFFFFFFUL,
+        0x7FFFFFFFFFFFFFFFUL, 0x7FFFFFFFFFFFFFFFUL, 0x7FFFFFFFFFFFFFFFUL, 0xFFFFFFFFFFFFFFFFUL,
+        ];
+        /// <summary>Gets the wheel step for every prime channel and multiplier phase.</summary>
+        /// <remarks>Step <c>channel · ChannelCount + phase</c> carries the numeric bit, byte gap and byte carry
+        /// <see cref="PrimeWheel30"/> derives for that pair. The view is read-only: no caller can change a step.</remarks>
+        public static ReadOnlySpan<CombinatorialWheelStep> Steps => StepTable;
+
         internal static readonly ulong[] TinyWords = CreateTinyWords();
         internal static readonly uint[] TinyPrefix = CreateTinyPrefix();
 
-        private static ulong[] CreatePrefixMasks() {
-            var masks = new ulong[PrimeWheel30.WordIntegers];
-
-            for (var offset = 0; (offset < masks.Length); ++offset) { masks[offset] = PrimeWheel30.WordPrefixMask(offset: offset); }
-            return masks;
-        }
         private static CombinatorialWheelStep[] CreateSteps() {
             var steps = new CombinatorialWheelStep[(PrimeWheel30.ChannelCount * PrimeWheel30.ChannelCount)];
 
@@ -299,7 +376,7 @@ public static partial class PrimeExtensions {
             var words = new ulong[(((CombinatorialTinyPeriod + PrimeWheel30.WordIntegers) - 1U) / PrimeWheel30.WordIntegers)];
 
             Array.Fill(array: words, value: ulong.MaxValue);
-            words[^1] &= PrefixMasks[((CombinatorialTinyPeriod - 1U) % PrimeWheel30.WordIntegers)];
+            words[^1] &= PrefixMasks[((int)((CombinatorialTinyPeriod - 1U) % PrimeWheel30.WordIntegers))];
 
             ReadOnlySpan<uint> primes = [7, 11, 13, 17, 19];
 
@@ -309,7 +386,7 @@ public static partial class PrimeExtensions {
                 var quotient = (prime / PrimeWheel30.Modulus);
                 var cursor = quotient;
                 var phase = 0;
-                var steps = Steps.AsSpan(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
+                var steps = StepTable.AsSpan(length: PrimeWheel30.ChannelCount, start: (channel * PrimeWheel30.ChannelCount));
 
                 while (cursor < (CombinatorialTinyPeriod / PrimeWheel30.Modulus)) {
                     var step = steps[phase];
@@ -337,7 +414,15 @@ public static partial class PrimeExtensions {
     // sieve, crossing off p starts at p, not p*p: phi excludes the sieving primes too.
     // Block counters are decremented only when a bit was set. Within each prime, leaf
     // quotients are increasing, so a prefix cursor reuses both block and word prefixes.
-    internal sealed class CombinatorialLeafSieve {
+    /// <summary>Keeps the thirty-wheel bitmap of one window of integers coprime to the primes crossed off so far, with the prefix counts Gourdon's hard-leaf sum queries.</summary>
+    /// <remarks>
+    /// <para>This is the counting engine's own kernel. It is public so a law can drive it one crossing at a time and
+    /// compare every prefix count with a direct sieve: the aggregate <see cref="PrimeCountingFunction(ulong, CancellationToken)"/>
+    /// answer cannot isolate a miscount in one window, because errors in separate windows can cancel.</para>
+    /// <para>An instance is not thread-safe. Call <see cref="Reset"/> once for a prime list, then <see cref="Initialize"/>
+    /// for each window, then <see cref="CrossOff"/> for each prime in ascending order.</para>
+    /// </remarks>
+    public sealed class CombinatorialLeafSieve {
         private ulong[] m_words = [];
         private uint[] m_counters = [];
         private uint[] m_next = [];
@@ -346,9 +431,14 @@ public static partial class PrimeExtensions {
         private int m_counterShift;
         private uint m_total;
 
-        internal uint TotalCount => m_total;
+        /// <summary>Gets the number of integers in the current window still coprime to every prime crossed off.</summary>
+        public uint TotalCount => m_total;
 
-        internal void Reset(uint width, uint[] primes, int primeCount) {
+        /// <summary>Sizes the sieve for windows of one width and a prime list.</summary>
+        /// <param name="width">The largest window width, in integers.</param>
+        /// <param name="primes">The primes, one-based: entry zero is unused.</param>
+        /// <param name="primeCount">The number of primes in <paramref name="primes"/>.</param>
+        public void Reset(uint width, uint[] primes, int primeCount) {
             var words = ((int)(width / PrimeWheel30.WordIntegers));
 
             if (m_words.Length < words) {
@@ -367,7 +457,10 @@ public static partial class PrimeExtensions {
                 m_phase[index] = ((byte)(channel * PrimeWheel30.ChannelCount));
             }
         }
-        internal void Initialize(ulong low, uint width) {
+        /// <summary>Starts a window with the multiples of 2 through 19 already removed.</summary>
+        /// <param name="low">The first integer of the window.</param>
+        /// <param name="width">The number of integers in the window.</param>
+        public void Initialize(ulong low, uint width) {
             m_wordLength = ((int)(((width + PrimeWheel30.WordIntegers) - 1U) / PrimeWheel30.WordIntegers));
 
             var bytes = MemoryMarshal.AsBytes(span: m_words.AsSpan(length: m_wordLength, start: 0));
@@ -382,7 +475,7 @@ public static partial class PrimeExtensions {
                 copied += length;
                 source = 0;
             }
-            m_words[(m_wordLength - 1)] &= CombinatorialTables.PrefixMasks[((width - 1U) % PrimeWheel30.WordIntegers)];
+            m_words[(m_wordLength - 1)] &= CombinatorialTables.PrefixMasks[((int)((width - 1U) % PrimeWheel30.WordIntegers))];
 
             // Balance coarse counter reads against POPCNT tails. The integer fourth
             // root changes only block size; the minimum block contains sixteen words.
@@ -400,10 +493,15 @@ public static partial class PrimeExtensions {
             }
         }
         // Starts nondecreasing prefix queries over the current bitmap; the cursor is stale after the next crossing.
-        internal CombinatorialPrefixCursor StartPrefix() =>
+        /// <summary>Starts nondecreasing prefix queries over the current bitmap.</summary>
+        /// <returns>A cursor that is stale after the next crossing.</returns>
+        public CombinatorialPrefixCursor StartPrefix() =>
             new(counters: m_counters, shift: m_counterShift, wordLength: m_wordLength, words: m_words);
+        /// <summary>Removes the multiples of one prime, from the prime itself, from the window.</summary>
+        /// <param name="prime">The prime.</param>
+        /// <param name="index">The prime's one-based position in the list given to <see cref="Reset"/>.</param>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal void CrossOff(uint prime, int index) {
+        public void CrossOff(uint prime, int index) {
             var state = m_phase[index];
             var cursor = m_next[index];
             var phase = state & (PrimeWheel30.ChannelCount - 1);
@@ -551,10 +649,11 @@ public static partial class PrimeExtensions {
     }
     // Reads prefix counts of one leaf-sieve bitmap for nondecreasing offsets below its width. The hard-leaf loop keeps
     // one cursor per prime as a local; a batch copies it into registers and writes it back.
-    internal ref struct CombinatorialPrefixCursor {
+    /// <summary>Reads prefix counts of a <see cref="CombinatorialLeafSieve"/> bitmap for nondecreasing offsets.</summary>
+    public ref struct CombinatorialPrefixCursor {
         private readonly ref ulong m_words;
         private readonly ref uint m_counters;
-        private readonly ref ulong m_masks;
+        private readonly ref readonly ulong m_masks;
         private readonly int m_shift;
         private readonly int m_wordLength;
 
@@ -563,16 +662,24 @@ public static partial class PrimeExtensions {
         private uint m_counterSum;
         private uint m_wordSum;
 
-        internal CombinatorialPrefixCursor(ulong[] words, uint[] counters, int shift, int wordLength) {
+        /// <summary>Starts a cursor over a bitmap and its block counters.</summary>
+        /// <param name="words">The bitmap words.</param>
+        /// <param name="counters">The per-block bit counts.</param>
+        /// <param name="shift">The base-two logarithm of the words per block.</param>
+        /// <param name="wordLength">The number of words in use.</param>
+        public CombinatorialPrefixCursor(ulong[] words, uint[] counters, int shift, int wordLength) {
             m_words = ref MemoryMarshal.GetArrayDataReference(array: words);
             m_counters = ref MemoryMarshal.GetArrayDataReference(array: counters);
-            m_masks = ref MemoryMarshal.GetArrayDataReference(array: CombinatorialTables.PrefixMasks);
+            m_masks = ref MemoryMarshal.GetReference(span: CombinatorialTables.PrefixMasks);
             m_shift = shift;
             m_wordLength = wordLength;
         }
 
+        /// <summary>Counts the integers at or below an offset that are still coprime to every prime crossed off.</summary>
+        /// <param name="offset">The offset from the window's first integer, not below the previous query's.</param>
+        /// <returns>The count of surviving integers from the window's start through <paramref name="offset"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal uint Count(uint offset) {
+        public uint Count(uint offset) {
             var targetWord = ((int)(offset / PrimeWheel30.WordIntegers));
             var targetCounter = (targetWord >> m_shift);
 
@@ -598,7 +705,7 @@ public static partial class PrimeExtensions {
             var residue = (offset - (((uint)targetWord) * PrimeWheel30.WordIntegers));
 
             return ((m_counterSum + m_wordSum) + ((uint)BitOperations.PopCount(value: Unsafe.Add(elementOffset: targetWord, source: ref m_words)
-                & Unsafe.Add(elementOffset: ((nint)residue), source: ref m_masks))));
+                & Unsafe.Add(elementOffset: ((nint)residue), source: ref Unsafe.AsRef(source: in m_masks)))));
         }
     }
 

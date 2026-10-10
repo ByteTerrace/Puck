@@ -278,9 +278,11 @@ ISA still includes `RegularPolygon` and `Star`; they remain candidates for exact
 composition provides and therefore earns a real case. The compiled core-ops views
 variant strips unused exotic vocabulary for programs that do not reference it.
 
-Enum numbering is non-sequential because wire values remain stable; values 13–15
-are reserved after the three axis-aligned symmetry folds were represented by the
-general `SymmetryPlane` operation. The instruction set grows only
+The operations and shapes are numbered densely in declaration order, and no id is
+reserved: removing an operation renumbers the ones after it, and regenerating the
+kernel declarations carries the new numbers to the GPU. The three axis-aligned
+symmetry folds, for example, are builder methods that emit the general
+`SymmetryPlane` operation. The instruction set grows only
 when a capability is genuinely *uncomposable*—the discipline that keeps the
 per-pixel interpreter fast.
 

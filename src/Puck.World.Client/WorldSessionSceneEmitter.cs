@@ -563,7 +563,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectBounces = environment.Indirect.Bounces,
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
-            ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_mirror.Definition.Render),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,

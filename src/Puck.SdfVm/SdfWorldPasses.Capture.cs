@@ -41,6 +41,16 @@ public sealed partial class SdfWorldPasses {
         if (view.Residency.IndirectFrozen) {
             return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete a cold capture solve while indirect updates are frozen");
         }
+        if (!view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } solving) &&
+            (solving.CannotFinishReason(since: entry.ConvergenceInvalidations) is { } unfinishable)) {
+            return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete its capture's indirect solve: {unfinishable}");
+        }
+        // A converging capture's fenced receivers must belong to the sample the next render takes. Completion of the
+        // preceding sample says nothing about a new sample's certificates, which its first render proves afresh.
+        if ((entry.Convergence is { IsActive: true } convergence) && ((entry.ReceiverSubmittedSurface is not { } submitted) ||
+            !ReferenceEquals(objA: submitted.Converging, objB: convergence) || (submitted.ConvergedSample != convergence.Samples))) {
+            return FrameRender.Waiting(reason: $"the instance '{instance}' awaits the receiver certificates of its converging sample {convergence.Samples}");
+        }
         return ((view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } cache) && ReceiversComplete(cache: cache, entry: entry) &&
             (cache.PublishedLightingSource is { Tainted: false }))
             ? FrameRender.Rendered

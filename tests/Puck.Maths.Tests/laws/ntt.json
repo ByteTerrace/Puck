@@ -90,7 +90,15 @@
     "Id": "ntt.convolution-vs-oracle",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" }
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" },
+      {
+        "Type": "Puck.Maths.NumberTheoreticTransformPlan",
+        "Name": "ForwardTwiddles"
+      },
+      {
+        "Type": "Puck.Maths.NumberTheoreticTransformPlan",
+        "Name": "InverseTwiddles"
+      }
     ],
     "Legs": [
       {

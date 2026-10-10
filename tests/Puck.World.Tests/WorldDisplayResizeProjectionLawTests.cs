@@ -21,7 +21,7 @@ namespace Puck.World.Tests;
 /// the root's extent too. Every frame the root renders is judged: the aspect of the camera it rendered with against the
 /// extent its installed graph rendered at.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
     private const string Instance = "world";
     private const ulong StepTicks = 1680;

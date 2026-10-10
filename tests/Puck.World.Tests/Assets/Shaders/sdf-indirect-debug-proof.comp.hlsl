@@ -1,7 +1,7 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-view-domain.hlsli"
 
-[[vk::binding(60, 3)]] StructuredBuffer<float4> debugCases : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> debugResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<float4> debugCases : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> debugResults : register(u127, space3);
 struct DebugProbeIndex {
     [[vk::offset(0)]] uint index;
 };

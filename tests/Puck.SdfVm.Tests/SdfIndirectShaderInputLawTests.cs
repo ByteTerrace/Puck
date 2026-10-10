@@ -56,7 +56,7 @@ public sealed class SdfIndirectShaderInputLawTests {
     [Fact]
     public void ReceiverRecordsAndShadowSlotsHaveFiniteResourceBounds() {
         var certificate = Source(file: "indirect/sdf-indirect-receiver-certificate.hlsli");
-        var receiver = Source(file: "indirect/sdf-indirect-apply.hlsli");
+        var receiver = Source(file: "indirect/sdf-indirect-receiver.hlsli");
         var diffuse = Source(file: "indirect/sdf-indirect-diffuse.hlsli");
 
         Assert.Contains(actualString: certificate, expectedSubstring: "sdfVisibilityRecordBuffer.GetDimensions(count, stride)");
@@ -100,7 +100,7 @@ public sealed class SdfIndirectShaderInputLawTests {
     public void ConeTransportKeepsAnIndependentStaticTripBound() {
         var source = Source(file: "indirect/sdf-indirect-alternatives.hlsli");
 
-        Assert.Contains(actualString: source, expectedSubstring: "step < SdfIndirectAlternativeConeSteps && budget > 0u");
+        Assert.Contains(actualString: source, expectedSubstring: "sdfIndirectConeBounceProc.step < SdfIndirectAlternativeConeSteps && sdfIndirectConeBounceProc.budget > 0u");
         Assert.DoesNotContain(actualString: source, expectedSubstring: "while (budget > 0u)");
     }
 

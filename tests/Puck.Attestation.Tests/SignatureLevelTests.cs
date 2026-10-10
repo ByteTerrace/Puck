@@ -39,6 +39,7 @@ public sealed class SignatureLevelTests {
     }
     private static AttestationVerifyResult VerifyWithSignature(CborAttestationCodec codec, SignedAttestation[] chain, TrustList trust, SignedAttestation claim, ReadOnlyMemory<byte> signature) =>
         AttestationVerifier.VerifyChain(
+            profile: AttestationProfile.Base,
             codec: codec,
             claim: (claim with { Signature = signature }),
             chain: chain,

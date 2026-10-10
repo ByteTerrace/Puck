@@ -12,7 +12,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The independent field scale reaches live cameras and authored presets without changing scene resolution.</summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed class WorldSkyFieldScaleLawTests {
     [Fact]
     public void CommandPresetFrameAndSavedBootKeepTheSameFieldFraction() {

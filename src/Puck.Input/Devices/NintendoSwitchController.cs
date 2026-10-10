@@ -4,7 +4,7 @@ using Puck.Input.Hid;
 
 namespace Puck.Input.Devices;
 
-internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
+public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     // The accelerometer reports ≈ 0.000244 g per LSB (≈ ±8g full scale). Nominal/uncalibrated.
     private const float AccelerometerGPerLsb = 0.000244f;
     private const int ButtonsLeftOffset = 5;    // Down, Up, Right, Left, SR, SL, L, ZL

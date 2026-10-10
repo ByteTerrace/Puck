@@ -10,13 +10,12 @@ public static partial class PrimeExploration {
 
     // Traverse [0, highExclusive) once, carrying the marking states and global pi offsets. The consumer reads
     // the current segment synchronously; no prime list is made, and each bitmap is copied once into padded words.
-    internal static void VisitPrimeCountSegments(uint highExclusive, int segmentBytes, ulong[] prefixMasks,
+    internal static void VisitPrimeCountSegments(uint highExclusive, int segmentBytes,
         PrimeCountSegmentVisitor visitor, CancellationToken cancellationToken) {
         ArgumentOutOfRangeException.ThrowIfLessThan(highExclusive, 8U);
         ArgumentOutOfRangeException.ThrowIfLessThan(segmentBytes, 8);
         Debug.Assert(((segmentBytes % sizeof(ulong)) == 0));
-        Debug.Assert((prefixMasks.Length == PrimeWheel30.WordIntegers));
-        var counter = new PrimeCountSegmentBuilder(prefixMasks: prefixMasks, segmentBytes: segmentBytes, visitor: visitor);
+        var counter = new PrimeCountSegmentBuilder(segmentBytes: segmentBytes, visitor: visitor);
 
         _ = Explore(cancellationToken: cancellationToken, high: (highExclusive - 1U),
             low: 0, mode: PrimeSieveMode.Eratosthenes, onPrime: null, onSegment: counter.Consume,
@@ -63,7 +62,7 @@ public static partial class PrimeExploration {
         }
     }
 
-    private sealed class PrimeCountSegmentBuilder(int segmentBytes, ulong[] prefixMasks, PrimeCountSegmentVisitor visitor) {
+    private sealed class PrimeCountSegmentBuilder(int segmentBytes, PrimeCountSegmentVisitor visitor) {
         private readonly ulong[] m_words = new ulong[((segmentBytes / sizeof(ulong)) + 1)];
         private readonly uint[] m_prefix = new uint[((segmentBytes / sizeof(ulong)) + 1)];
         private uint m_count = 3;
@@ -82,7 +81,7 @@ public static partial class PrimeExploration {
                 m_count += ((uint)BitOperations.PopCount(value: words[index]));
             }
             visitor(new(bitmapBytes: bitmap.Length, high: ((uint)(segmentHigh + 1UL)), low: ((uint)(blockLow * PrimeWheel30.Modulus)),
-                masks: prefixMasks, prefix: m_prefix, words: words));
+                masks: PrimeExtensions.CombinatorialTables.PrefixMasks, prefix: m_prefix, words: words));
             return true;
         }
     }

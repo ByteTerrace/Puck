@@ -1,9 +1,9 @@
 <Project>
-    <ItemGroup Condition="('$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR '$(MSBuildProjectName)' == 'Puck.Cli') AND '$(MSBuildProjectName)' != 'Puck.Cli.Tests'">
+    <ItemGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR ('$(PuckKind)' == 'Tool' AND $(MSBuildProjectName.StartsWith('Puck.Cli')))">
         <!-- Repository-only executables resolve live files from their checkout,
              independently of deterministic compiler source-path mapping, and create every per-run directory
-             through the one run-directory policy. Puck.Cli.Tests reads the CLI's own copies, which its subject's
-             internals already expose; a second copy there is a type conflict. -->
+             through the one run-directory policy. Each puck verb assembly and each suite compiles its own internal copy:
+             no assembly grants another its internals. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="Properties/RepositoryPaths.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="Properties/RunDirectory.cs" />
     </ItemGroup>
@@ -12,17 +12,34 @@
          teardown waits under the one liveness bound TestLiveness states, so both are linked together. -->
     <!-- Every test project is an xUnit v3 executable on Microsoft.Testing.Platform, the runner global.json selects for
          `dotnet test`; the reference is declared once here, so no suite can drift onto another framework version. The
-         executable speaks only the platform's command line, whether `dotnet test` starts it or a caller runs it
-         directly, so one test selection spelling serves both. The hang-dump extension gives a run that stops making
+         test application speaks only the platform's command line, whether `dotnet test` starts it or a caller runs
+         `dotnet <suite>.dll` directly, so one test selection spelling serves both. The hang-dump extension gives a run that stops making
          progress a mini dump (`puck artifacts test-windows` asks for one). -->
     <PropertyGroup Condition="'$(PuckKind)' == 'Test'">
         <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    </PropertyGroup>
+    <!-- A test host, and a local run of an executable that opts in because it listens (PuckRunUnderDotnetHost), runs
+         under the shared dotnet host, never its apphost: Windows Firewall asks once per executable image path, every
+         worktree's bin directory is a new path, and msquic opens a QUIC listener's UDP port on every interface
+         whatever address it names. Under dotnet.exe one decision covers every worktree and run. The apphost is still
+         built (xUnit v3 refuses a test project without one, and a published executable ships its own), so only
+         `dotnet test` and `dotnet run` are pointed past it at `dotnet exec <assembly>.dll`; every repository runner
+         starts the dll the same way. -->
+    <PropertyGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckRunUnderDotnetHost)' == 'true'">
+        <RunCommand Condition="'$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</RunCommand>
+        <RunCommand Condition="'$(DOTNET_HOST_PATH)' == ''">dotnet</RunCommand>
+        <RunArguments>exec &quot;$(TargetPath)&quot;</RunArguments>
     </PropertyGroup>
     <ItemGroup Condition="'$(PuckKind)' == 'Test'">
         <PackageReference Include="Microsoft.Testing.Extensions.HangDump" Version="[2.*, )" />
         <PackageReference Include="xunit.v3" Version="[4.*, )" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TemporaryDirectory.cs" Link="Properties/TemporaryDirectory.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TestLiveness.cs" Link="Properties/TestLiveness.cs" />
+        <!-- A suite started through its per-checkout apphost refuses to run (see RunCommand above). -->
+        <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/SharedTestHost.cs" Link="Properties/SharedTestHost.cs" />
+        <!-- Every class carrying the Gpu trait runs in one serial collection, after the parallel ones, so a plain run of
+             a suite never puts two device laws, or a device law and the CPU laws, on the machine at once. -->
+        <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/GpuDeviceCollection.cs" Link="Properties/GpuDeviceCollection.cs" />
     </ItemGroup>
     <!-- Allocation laws and the emulator batteries' allocation stages read GC.GetAllocatedBytesForCurrentThread. A
          background collection retires every thread's allocation context without subtracting the unused remainder
@@ -31,6 +48,13 @@
          Declared here because PuckKind is set in each project's body, after Directory.Build.props. -->
     <PropertyGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation'">
         <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    </PropertyGroup>
+    <!-- A test host runs its classes side by side on every processor, and a suite's heap reaches gigabytes. A
+         workstation collection marks that heap on one thread while every test thread waits, so test hosts collect on
+         every processor (server GC, which sizes its heaps to the application's need). Collections stay blocking, so the
+         allocation counter above stays exact. -->
+    <PropertyGroup Condition="'$(PuckKind)' == 'Test'">
+        <ServerGarbageCollection>true</ServerGarbageCollection>
     </PropertyGroup>
     <PropertyGroup>
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
@@ -50,8 +74,8 @@
          transitively-arriving edge is checked the same as a declared one. -->
     <Import Project="$(MSBuildThisFileDirectory)build/Puck.Architecture.targets" />
 
-    <!-- The shared shader-compile recipe (DXC to SPIR-V + DXIL, item-driven, opt-out DXIL). Imported once for
-         every project; a project declaring no shader items never triggers a single Exec. -->
+    <!-- The shared shader build (DXC to SPIR-V and DXIL through the one shader compiler and its cache, item-driven,
+         opt-out DXIL). Imported once for every project; a project declaring no shader items runs nothing there. -->
     <Import Project="$(MSBuildThisFileDirectory)build/Shaders.targets" />
 
     <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a

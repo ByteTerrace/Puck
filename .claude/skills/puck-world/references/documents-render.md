@@ -42,8 +42,8 @@ so `world.row.set render {…}` lands on the next frame with no rebuild:
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40
-(`SdfFrame.DefaultFarDistance`) so an unauthored world marches exactly as
-before the field existed; an authored value must lie in
+(`SdfFrame.DefaultFarDistance`) so an unauthored world marches to 40;
+an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
 within [1, 8192].` Geometry past it is never marched, so an infinite plane
@@ -206,7 +206,7 @@ rank order.
 `MarchSlots` is stable count plus active handoff count, bounded by K + F.
 `SdfLights.ShadowSlots` carries that full selection to the counted GPU march.
 The K word holds four 8-bit stable visibilities. Active incoming marches use
-policy-sized transient storage, R8 at F = 1 and R8G8 at F = 2, absent at F = 0.
+retained R8G8 storage at every nonzero F, absent at F = 0.
 Each light's own occlusion deficit fades out or in with progress, leaving its
 radiance unchanged; a light outside the slots shades unshadowed. The per-slot
 march counters and counted 16-byte handoff uploads follow the

@@ -23,7 +23,6 @@ namespace Puck.World.Tests;
 /// (WARP) renderer, and skips by name where the host has none. It runs alone, because the debug layer removes every
 /// device the process already holds.
 /// </summary>
-[Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class StagedRegionDeviceLawTests {

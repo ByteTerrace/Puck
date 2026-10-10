@@ -125,7 +125,7 @@ public sealed record SignedAttestation {
 
     /// <summary>
     /// Builds an attestation around signed-portion bytes that already exist — a decoder's arrived bytes, or
-    /// the bytes a signer just put its pen to. This factory is deliberately assembly-only: accepting an
+    /// the bytes a signer just put its pen to. This factory is internal on purpose: accepting an
     /// independently supplied projection and signed portion at the public API boundary would let callers
     /// authenticate one message while presenting another. <paramref name="signedPortion"/> must be the
     /// encoding of the other three signed arguments; <see cref="AttestationVerifier"/> checks that invariant

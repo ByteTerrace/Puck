@@ -1,6 +1,6 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-indirect-layout.hlsli"
-[[vk::binding(60, 3)]] StructuredBuffer<int4> indirectBricks : register(t60, space3);
-[[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> brickResults : register(u61, space3);
+[[vk::binding(126, 3)]] StructuredBuffer<int4> indirectBricks : register(t126, space3);
+[[vk::binding(127, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> brickResults : register(u127, space3);
 struct BrickParameters { uint indirectTier; };
 [[vk::binding(0, 3)]] ConstantBuffer<BrickParameters> passGroup : register(b0, space3);
 struct BrickProbeIndex { [[vk::offset(0)]] uint index; };

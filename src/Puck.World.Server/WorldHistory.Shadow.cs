@@ -52,8 +52,8 @@ public sealed class WorldHistoryShadow : IDisposable {
 public sealed partial class WorldHistory {
     // A document-changing entry: what a replay-edit moves back in time.
     private static bool IsEdit(WorldReplayEntry entry) => (entry is WorldReplayEntry.Mutation or WorldReplayEntry.Undo or WorldReplayEntry.Composition or WorldReplayEntry.Rebuild);
-    // The machine-host factory consumes a file path only for its directory. Keep that context with the keyframe,
-    // even when the caller's current document lives elsewhere.
+    // A seek's rebuild origin names a file beside the keyframe's own document directory, even when the caller's
+    // current document lives elsewhere.
     private static string? KeyframeDocumentPath(Segment segment, string? documentPath) => ((segment.DocumentDirectory is { } directory)
         ? Puck.Abstractions.PuckPaths.Normalize(path: Path.Combine(path1: directory, path2: (Path.GetFileName(path: documentPath) ?? "history.world.json")))
         : null);
@@ -79,7 +79,6 @@ public sealed partial class WorldHistory {
         var machines = m_machineHostFactory(
             definition.Screens,
             m_engines,
-            KeyframeDocumentPath(documentPath: documentPath, segment: segment),
             null
         );
 

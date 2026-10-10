@@ -53,6 +53,9 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
 /// <summary>Deployment-owned lifecycle observation and local health configuration.</summary>
 /// <param name="ShutdownSeconds">Maximum time, on the silo's clock, allowed for operator or deployment retirement, a pinned reload, or a release control request.</param>
 /// <param name="HealthPort">HTTP health port; retirement requests are accepted only from loopback.</param>
+/// <param name="HealthAddress">The IP address literal the health listener binds. Loopback by default, so a local silo
+/// listens on no network interface; a deployment whose load balancer probes the port names its interface, or
+/// <c>0.0.0.0</c> for every one, here.</param>
 /// <param name="Observer">Optional installed extension supplying host retirement deadlines; absent means no external observation.</param>
 /// <param name="ProgressTimeoutSeconds">Maximum age, on the silo's clock, of a completed simulation step before liveness fails; also bounds each health request.</param>
 /// <param name="CheckpointTimeoutSeconds">Maximum age, on the silo's clock, of a successful checkpoint before readiness fails.</param>
@@ -61,12 +64,16 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
 public sealed record WorldSiloLifecycle(
     int ShutdownSeconds,
     int HealthPort,
+    string HealthAddress = WorldSiloLifecycle.LoopbackHealthAddress,
     WorldSiloExtension? Observer = null,
     int ProgressTimeoutSeconds = 30,
     int CheckpointTimeoutSeconds = 180,
     int JournalTimeoutSeconds = 30,
     int JournalBacklogLimit = 1024
-);
+) {
+    /// <summary>The health listener's default address: IPv4 loopback.</summary>
+    public const string LoopbackHealthAddress = "127.0.0.1";
+}
 /// <summary>
 /// The silo document (<c>puck.silo.configuration.v1</c>) — durable configuration for one <c>Puck.World.Silo</c> process: which
 /// worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own
@@ -82,6 +89,11 @@ public sealed record WorldSiloLifecycle(
 /// <param name="Clustering">Orleans cluster membership.</param>
 /// <param name="Lifecycle">Optional deployment-owned host lifecycle adapter.</param>
 /// <param name="Release">Optional managed release identity and private deployment-group admission binding.</param>
+/// <param name="DocumentDirectory">The directory every hosted world document's relative paths (machine content, assets)
+/// resolve beside, as a local World resolves them beside its document's file: the directory
+/// <c>puck world prepare</c> wrote the composed documents into, inside the authored asset layout the image ships. A
+/// relative value resolves against the silo's working directory. <see langword="null"/> gives hosted documents no
+/// directory, and a relative path one authors is refused by name.</param>
 public sealed record WorldSiloDefinition(
     IReadOnlyList<WorldSiloWorldRow> Worlds,
     WorldSiloDoors Doors,
@@ -89,7 +101,8 @@ public sealed record WorldSiloDefinition(
     string StateDir,
     WorldSiloClustering Clustering,
     WorldSiloLifecycle? Lifecycle = null,
-    WorldSiloReleaseManagement? Release = null
+    WorldSiloReleaseManagement? Release = null,
+    string? DocumentDirectory = null
 ) {
     /// <summary>The document schema tag every well-formed <c>puck.silo.configuration.v1</c> document carries.</summary>
     public const string SchemaVersion = "puck.silo.configuration.v1";

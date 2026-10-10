@@ -9,7 +9,7 @@ draws every view of it reads), and `SdfWorldPasses` records each view as an
 tile pruning, then the per-view render
 into the instance's own output image. The
 single-source HLSL kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V
-(Vulkan) and DXIL (Direct3D 12) from one shared source, and the C# side of the
+(Vulkan) and, on Windows, DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.
 
 **Depends on [`Puck.SignedDistance`](../Puck.SignedDistance/README.md) for
@@ -22,8 +22,8 @@ never a Vulkan or DirectX type by name.
 
 ## Key features
 
-- *One HLSL source, two backends:* every kernel compiles to SPIR-V and DXIL
-  from the same file, so there is exactly one march implementation
+- *One HLSL source, two backends:* every kernel compiles to SPIR-V and, on
+  Windows, DXIL from the same file, so there is exactly one march implementation
   to reason about, not two that can silently diverge.
 - *Mask-first culling:* a host-built CSR uniform grid (`SdfInstanceGrid`, in
   `Puck.SignedDistance`) prepasses each tile's instance mask before the beam
@@ -138,16 +138,21 @@ The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
 `SdfWorldPackage.VisibilityRecordByteLength`, 96 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
-data, dynamic frame/lanes, primary iteration/evaluation counts, and the
-indirect receiver's certified camera-ray approach in L.y. Surface adds
+data, dynamic frame/lanes and primary iteration/evaluation counts, and keeps
+a spare L.y word. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
 shadow four 8-bit stable visibilities in the one K word, each adding its queries
 to the combined count. Active handoffs add incoming marches, bounded by K + F,
-and write policy-sized retained visibility storage: R8 at F = 1, R8G8 at
-F = 2, absent at F = 0. Each light shades from its own visibility and each
+and write retained R8G8 visibility storage at every nonzero F, absent at F = 0,
+where the passes bind the tables' fillers; one shadow kernel and one kernel per
+views variant serve every F. Each light shades from its own visibility and each
 handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
-record writes before its consumer. Views reads those rows and, with indirect enabled,
-publishes a preserving version containing its eight-word receiver certificate.
+record writes before its consumer. With indirect enabled, the receiver pass between shadow and
+views makes every field query of indirect light and publishes a preserving version
+containing its eight-word receiver certificate, beside a four-word answer per pixel;
+views reads both and the lighting bank, and makes no field query.
+The comparison methods compile into a separate comparison receiver kernel, leased only
+once a view selects one, so the default receiver stays small.
 The certificate retains the launch, clearance, complete allocation identity,
 transport revision and resolved or unresolved outcome. Every hit pass binds the
 beam's tile planes read-only. These dispatches share indirect bounds and live view
@@ -519,16 +524,20 @@ reachable from a running world. Use `world.debug-view` for live diagnostics.
 
 ## Shader build
 
-`dotnet build src/Puck.SdfVm -c Release` runs the DirectX Shader Compiler
-in place in the source tree and requires `dxc` on the path (override with
-`/p:DxcCommand=path/to/dxc`). The `.spv`/`.dxil` bytecode and `.hash` sidecars
-are ignored build outputs; never commit them. When a `.hlsl` source is
-deleted, `ValidateShaderBytecodeSources` removes the bytecode and sidecars the
-build wrote for it and prints one line per file. Bytecode without a same-stem
-source that the build did not write (no sidecar recording its bytes) fails the
-build and stays in place. `CollectShaderBytecode` fails the build on
-bytecode stale against its source or its sidecar. The recipe is
-`build/Shaders.targets` (`Puck.Shaders`).
+`dotnet build src/Puck.SdfVm -c Release` compiles every kernel through
+`ShaderCompiler` and its per-user cache and publishes the bytecode beside each
+source. It needs `dxc` on the path (override with `/p:DxcCommand=path/to/dxc`)
+even when it compiles nothing, since the content of that `dxc` is part of every
+cache key. A valid entry with matching inputs can be published in another
+checkout without DXC, and an edit to one module invalidates only the kernels
+whose include closure reaches it. The `.spv`/`.dxil`
+bytecode and `.hash` sidecars are ignored build outputs; never commit them. When
+a `.hlsl` source is deleted, the build removes the bytecode and sidecars it
+wrote for it and prints one line per file. Bytecode without a same-stem source
+that the build did not write (no sidecar recording its bytes) fails the build
+and stays in place. A pack that skips the build fails on bytecode stale against
+its source or its sidecar. The shader build is `build/Shaders.targets`, and the
+[shader reference](../../docs/reference/shaders.md#freshness) owns its rules.
 
 ## Verification
 
@@ -631,8 +640,8 @@ names still reports an unavailable name.
 The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
 travels with the request. SDF identity names a program instance ordinal plus one,
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
-L.x, separate from its instance's conservative bound slot. L.y carries the certified
-indirect receiver approach, and anonymous lanes read the existing transform row. The record
+L.x, separate from its instance's conservative bound slot. L.y is spare,
+and anonymous lanes read the existing transform row. The record
 has a 64-byte surface prefix and a 32-byte retained indirect receiver certificate,
 for 96 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
 authority.

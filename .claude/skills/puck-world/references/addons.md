@@ -214,10 +214,10 @@ HUD arms already left capacity/authoring checks to it.
 `GrantedBody` — the disclosure of a minted handle over a granted body, not an
 event — plus the world-events verbs the "World events" section below
 documents in full: region enter/exit, seat join/leave, collision begin/end,
-control-application engaged/disengaged, machine-memory-changed, the per-mount
-`EventGap` overflow summary, and federation link established/dropped
-(`EventLinkEstablished`/`EventLinkDropped`) — the sixth, ADDON-scoped family
-alongside the five WORLD-scoped ones "World events" names.
+control-application engaged/disengaged, federation link established/dropped
+(`EventLinkEstablished`/`EventLinkDropped`), machine-memory-changed (the one
+ADDON-scoped family beside the five WORLD-scoped ones "World events" names),
+and the per-mount `EventGap` overflow summary.
 
 Ask resolution gates on the manifest BEFORE subject inspection — an
 unrequested or out-of-range ask answers `AttenuatedToEmpty`, never

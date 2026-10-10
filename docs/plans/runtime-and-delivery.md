@@ -268,7 +268,7 @@ stand in for the second.
 
 Check: a desktop boot, an instance start, and a checkpoint restore each run
 `ValidateCore` once and compile rules once, with state hashes unchanged —
-`WorldValidatedLoadLawTests` in `tests/Puck.World.Tests` and
+`WorldValidatedLoadLawTests` in `tests/Puck.World.Server.Tests` and
 `tests/Puck.World.Schema.Tests`, counting through the `world.boot` work source's
 `world.boot.validations` and `world.boot.rule-compilations` kinds (`WorldBootWork`).
 
@@ -277,13 +277,14 @@ shared home, `puck compile`, `WorldAssets.targets`, the runtime cache. The
 codec, the header, the chunk registry (`CompiledWorldChunks`), both chunks,
 the three producers, and the boot's use of them are in place, and
 [the worlds manual](../architecture/worlds.md#compiled-worlds) owns their
-contract. Check: `CompiledWorldLawTests` in `tests/Puck.World.Tests` boots
+contract. Check: `CompiledCatalogLawTests` in `tests/Puck.World.Tests` boots
 every compiled world the build shipped and counts a hit through the
-`world.boot` work source's `world.boot.compiled-hits`, ignores a mismatched
+`world.boot` work source's `world.boot.compiled-hits`; `CompiledWorldLawTests`
+in `tests/Puck.World.Games.Tests` ignores a mismatched
 header, re-derives a chunk whose version or asset input moved while keeping the
 rest, admits byte for byte the definition a fresh draw admits, and pins each
 derivation's product to its version; `WorldDocumentOutputLawTests` in
-`tests/Puck.Cli.Tests` holds every shipped compiled world to what its document
+`tests/Puck.Cli.Worlds.Tests` holds every shipped compiled world to what its document
 derives fresh, byte for byte. Still open:
 
 - A hit still validates and compiles rules like a miss. Admitting a compiled
@@ -593,6 +594,12 @@ puck parity
 ```
 
 ```bash
+dotnet test tests/Puck.World.Server.Tests -c Release
+dotnet test tests/Puck.World.Games.Tests -c Release
+dotnet test tests/Puck.World.Machines.Tests -c Release
+dotnet test tests/Puck.World.Client.Tests -c Release
+dotnet test tests/Puck.World.Presentation.Tests -c Release
+dotnet test tests/Puck.World.Silo.Tests -c Release
 dotnet test tests/Puck.World.Tests -c Release
 ```
 

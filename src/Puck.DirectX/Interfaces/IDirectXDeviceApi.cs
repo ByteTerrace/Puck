@@ -9,11 +9,16 @@ namespace Puck.DirectX.Interfaces;
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
 public interface IDirectXDeviceApi {
-    /// <summary>Creates a Direct3D 12 device on the hardware adapter identified by a LUID.</summary>
-    /// <param name="adapterLuid">The packed adapter LUID, as reported on a <see cref="Messages.DirectXAdapterDescription"/>.</param>
+    /// <summary>Creates a Direct3D 12 device on the adapter a LUID selects
+    /// (<see cref="Messages.DirectXAdapterDescription.IsSelectedBy"/>): the adapter carrying it, or, for zero, the first
+    /// hardware adapter in DXGI's order, never a software renderer.</summary>
+    /// <param name="adapterLuid">The packed adapter LUID, as reported on a <see cref="Messages.DirectXAdapterDescription"/>,
+    /// or zero for the first hardware adapter.</param>
     /// <param name="minimumFeatureLevel">The minimum feature level the device must support.</param>
     /// <returns>An owning device wrapper.</returns>
-    /// <exception cref="ArgumentException">No adapter with the given LUID was found.</exception>
+    /// <exception cref="ArgumentException">No adapter with the given nonzero LUID was found.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="adapterLuid"/> is zero and no hardware adapter is
+    /// enumerated; the message names every adapter the process sees.</exception>
     /// <exception cref="DirectXException">Device creation failed.</exception>
     DirectXDevice CreateDevice(long adapterLuid, DirectXFeatureLevel minimumFeatureLevel);
     /// <summary>Creates a Direct3D 12 device on the software (WARP) renderer, which is always available.</summary>

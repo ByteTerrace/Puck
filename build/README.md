@@ -1,26 +1,32 @@
 # Generated assets
 
 Keep authoritative sources in Git. Shader bytecode (`.spv`, `.dxil`) and its
-`.hash` sidecars are ignored local outputs; DXC generates them through
-`Shaders.targets`, with the options `ShaderRecipe.targets` holds for each stage;
-`puck shaders generate` writes that file from `ShaderCompiler.StepsOf`, the
-recipe the runtime shader compiler runs. CI packages the bytecode, so players
-do not need a compiler.
+`.hash` sidecars are ignored local outputs. `Shaders.targets` runs each shader
+project's build through the build-only `Puck.Shaders.Generator`, which compiles
+with `ShaderCompiler`, the compiler the runtime runs, so the options are
+`ShaderCompiler.StepsOf`'s alone. CI packages the bytecode, so players do not
+need a compiler.
+
+Every output compiles into one content-addressed cache, by default `shaders`
+under the per-user Puck directory, or the directory
+`-p:PuckShaderCacheDirectory=<dir>` names. An output's key hashes its stage
+source's include closure, its options and its `dxc`, not where the checkout
+lies. A valid entry with matching inputs can be published in another checkout
+without a compiler run, and an edited include invalidates only the outputs
+that reach it. Entries are checked against their key and bytecode digest before
+reuse; damaged entries compile again. Missing outputs compile concurrently on cores MSBuild grants
+through its own core budget, the longest first. Each project takes one initial
+grant and returns unused cores; it makes no blocking follow-up engine request. The
+[shader reference](../docs/reference/shaders.md#freshness) owns the details.
 
 Kernel projects build their declaration generator before compiling shaders.
 The generator reconciles on every build and leaves equal files untouched.
 CI runs `puck shaders generate --check` with its candidate CLI before the
 solution build; because a build may already have reconciled the tree, the check
 also refuses a generated file whose staged copy differs from the model's.
-Packing with `--no-build` collects built bytecode and refuses missing kernels;
-it compiles none.
-Before invoking DXC, the build checks each kernel's source and ordered includes,
-effective compiler command and backend options, and compiled bytes against its
-sidecar. Equal inputs restored or touched since compilation reuse their valid
-bytecode. Changed inputs, recipes, damaged bytes or incomplete sidecars compile
-again; only successful compilation publishes a new pair. The persistent law
-proof clone uses this same admission over its retained shader outputs and
-complete shader pairs warmed from its caller under the publication locks.
+Packing with `--no-build` compiles nothing: it checks each output against the
+sidecar its current closure and options would publish, refuses a missing or
+stale one, and collects the rest.
 
 `WorldAssets.targets`, imported by the game, hands every `.puck` source and
 `.world.json` document under `src/Puck.World/Assets/worlds` to one
@@ -29,10 +35,15 @@ documents the game ships, their compiled worlds, and the one bake pack holding
 the creation bakes those compiled worlds name there, and reports what it
 wrote (`--written`); the build copies exactly the reported files into the
 output's `Assets/worlds`. The run reads and keeps its bakes in the
-content-addressed cache `obj/bakes` (`--bake-cache`), which every configuration
-shares and `dotnet clean` keeps, so a run bakes only the creations whose keys
-it lacks: an engine change that reruns the compile bakes nothing, and an edited
-prototype bakes that prototype alone. The run's one incremental output is the
+content-addressed `bakes` cache under the per-user Puck directory
+(`--bake-cache`), which every configuration and every checkout shares with
+`puck parity` and the World, and `dotnet clean` keeps, so a run bakes only the
+creations whose keys no build on the machine has baked: a new worktree bakes
+nothing another has baked, an engine change that reruns the compile bakes
+nothing, and an edited prototype bakes that prototype alone. A bake's key
+carries the bake code's fingerprint (`DerivationFingerprint.Bake`), so two
+checkouts whose bake code differs never share a key. `-p:PuckWorldBakeCache=<dir>`
+names another cache. The run's one incremental output is the
 report, which every run writes last; a reported file that is gone removes the
 report, so the next build runs again. Only a compile knows which sources emit documents: a
 module library emits none, so a `.world.json` named like it ships, while a

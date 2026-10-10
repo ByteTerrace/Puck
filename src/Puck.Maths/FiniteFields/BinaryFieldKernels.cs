@@ -17,7 +17,7 @@ namespace Puck.Maths;
 /// carryless product — reduction, squaring, inversion, division, and exponentiation — is a single implementation
 /// shared by both tiers, which makes their agreement above the product structural rather than tested.
 /// </remarks>
-internal static class BinaryFieldKernels {
+public static class BinaryFieldKernels {
     /// <summary>The number of whole vectors a region must span before a byte-wide affine rung is preferred to the next rung down.</summary>
     /// <remarks>
     /// Building the transform matrix costs eight scalar field multiplies and sixty-four bit placements. A rung whose
@@ -424,7 +424,7 @@ internal static class BinaryFieldKernels {
     /// when the instruction set is absent — a correct but slow path that would outrank the 256-bit rung.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool IsRegionTierSupported(BinaryFieldRegionTier tier) =>
+    public static bool IsRegionTierSupported(BinaryFieldRegionTier tier) =>
         tier switch {
             BinaryFieldRegionTier.Affine512 => Gfni.V512.IsSupported,
             BinaryFieldRegionTier.Split512 => Avx512BW.IsSupported,
@@ -517,7 +517,7 @@ internal static class BinaryFieldKernels {
     /// measured in kilobytes.
     /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The Galois-field instruction set at this width is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionAffine<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
+    public static void MultiplyAccumulateRegionAffine<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
         where TLanes : IByteVectorLanes<TBytes>
         where TBytes : struct {
         var count = ((nuint)((uint)destination.Length));
@@ -576,7 +576,7 @@ internal static class BinaryFieldKernels {
          /// <param name="degree">The field's degree.</param>
          /// <param name="tail">The modulus tail.</param>
          /// <remarks>The reference rung. It queries no instruction-set support, runs at every carrier and degree, and is what every vector rung is compared against.</remarks>
-    internal static void MultiplyAccumulateRegionScalar<T>(Span<T> destination, ReadOnlySpan<T> source, T scalar, bool accumulate, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+    public static void MultiplyAccumulateRegionScalar<T>(Span<T> destination, ReadOnlySpan<T> source, T scalar, bool accumulate, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var count = destination.Length;
 
         if (accumulate) {
@@ -618,7 +618,7 @@ internal static class BinaryFieldKernels {
     /// crosses a lane and no lane's top bit is set.
     /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The byte-shuffle instruction set at this width is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionSplit<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
+    public static void MultiplyAccumulateRegionSplit<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
         where TLanes : IByteVectorLanes<TBytes>
         where TBytes : struct {
         Span<byte> highTable = stackalloc byte[16];
@@ -714,7 +714,7 @@ internal static class BinaryFieldKernels {
     /// four transforms and a lane-parity blend cover all four pieces.
     /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The Galois-field instruction set at this width is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionWideAffine<TLanes, TBytes>(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail)
+    public static void MultiplyAccumulateRegionWideAffine<TLanes, TBytes>(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail)
         where TLanes : IByteVectorLanes<TBytes>
         where TBytes : struct {
         var count = ((nuint)((uint)destination.Length));

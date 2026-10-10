@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 98,
+        "width": 102,
         "height": 1
       }
     }
@@ -281,6 +281,11 @@
           "default": 0,
           "description": "The indirect pass\u0027s indirectFrame sentinel."
         },
+        "indirectItemFirst": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectItemFirst sentinel."
+        },
         "indirectMethod": {
           "type": "uint",
           "default": 0,
@@ -326,6 +331,11 @@
           "default": 0,
           "description": "The indirect pass\u0027s indirectSources sentinel."
         },
+        "indirectStaticFar": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectStaticFar sentinel."
+        },
         "indirectTier": {
           "type": "uint",
           "default": 0,
@@ -335,6 +345,16 @@
           "type": "uint",
           "default": 0,
           "description": "The indirect pass\u0027s indirectTraceCount sentinel."
+        },
+        "indirectUnitCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectUnitCount sentinel."
+        },
+        "indirectUnitFirst": {
+          "type": "uint",
+          "default": 0,
+          "description": "The indirect pass\u0027s indirectUnitFirst sentinel."
         },
         "indirectWriteGeneration": {
           "type": "uint",

@@ -123,8 +123,8 @@ The agent projects are an optional extension family, not members of the base wor
 | `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter and the `agent.harness` participant | `WorldAgentHarness`, `WorldAgentHarnessOptions`, `WorldAgentParticipant`, `ChatClientProvider` (kind keyed by provider name, `AddChatClient`); constrained `puck_*` tools over the bridge, the configured `approval` decides whether the action tools are offered at all (`refuse`, the default, offers only observation; `allow` offers move, press and stop unattended), caller-supplied skills, no credentials |
 | `src/Puck.World.AgentHarness.Azure` | The optional `azure.openai` chat client provider | `AzureOpenAiChatClientExtension`; `DefaultAzureCredential`, settings `endpoint`/`deployment`/`tenantId`/`managedIdentityClientId`, no key member |
 
-`Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
-project. How a host runs an agent participant, the Operator MCP adapter, remote MCP, and their verification are in
+`Puck.World`, `tests/Puck.World.Tests` and the Server, Client, Games, Machines and Presentation suites, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
+project (`tests/Puck.World.Agents.Tests` owns the agent laws, and `tests/Puck.World.Silo.Tests` references `Puck.World.AgentHarness.Azure` only to compose extensions). How a host runs an agent participant, the Operator MCP adapter, remote MCP, and their verification are in
 [references/hosting-and-release.md](references/hosting-and-release.md#agent-participants-and-the-mcp-attachment).
 
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
@@ -314,7 +314,7 @@ reserved-prefix (`$`/`_`) keys. Adding a top-level section refuses at boot
 until every shipped world carries it; adding a nested member silently
 defaults at parse and (usually) refuses at validation — sweep the shipped
 worlds in the same change either way. `ShippedSourceLintLawTests`
-(`tests/Puck.Cli.Tests`) runs `puck lint --strict` over every shipped `.puck`
+(`tests/Puck.Cli.Worlds.Tests`) runs `puck lint --strict` over every shipped `.puck`
 source, so a sweep that leaves one red fails the suite. Any change to the
 document model is regenerated with `puck schema`, which writes the JSON
 Schemas, the dashboard portal's `worldDefinition.generated.ts` and the engine's
@@ -385,7 +385,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `--user-id`, `--state-dir`, `--headless`, `--capture-dir`, `--schedule-dir`,
   `--listen`, `--connect`, `--federation-key-file`,
   `--authentication-config-file`, `--extensions-config-file`,
-  `--update-config-file`, `--debug-layers`); host-related flags are nullable
+  `--update-config-file`, `--debug-layers`, `--control`); host-related flags are nullable
   deployment overrides. Absent host overrides leave the world document's
   `host` section in control. `--world` accepts a `.puck` path directly —
   `PuckWorldLoader` compiles it through the compile cache before boot — or an ordinary JSON
@@ -416,8 +416,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `WorldCacheRoots`, both handed to the boot (`WorldBootInputs`) and taken by
   every consumer from its host; only `Program.cs` names their per-user
   defaults (`world`, `bakes`, `compiled-worlds`, `compilations`), and
-  `WorldStateRootIsolationLawTests` holds every assembly
-  `tests/Puck.World.Tests` links to that, so a fixture hands its own temporary
+  `WorldStateRootIsolationLawTests` (one in `tests/Puck.World.Tests` and in each of the Server, Client, Games, Machines, Presentation and Silo suites) holds
+  every assembly its suite links to that, so a fixture hands its own temporary
   roots. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.
 - **Capture BOTH streams.** Read-back answers land on stdout; refusals,
@@ -510,14 +510,15 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
-  are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
+  are proved in `tests/Puck.World.Server.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
   behind — its history is in git, and its contract is validated by running
-  the app until a law or canary owns it. Ask before creating new persisted
-  runner/battery artifacts or other permanent verification infrastructure, and
-  do not repair a rotted fixture — quarantine it and move on (validation currency
-  is run-the-app, owner-in-the-loop). A retired runner is deleted with its
-  directory, never kept alive to announce that it no longer runs.
+  the app until a law or canary owns it. New verification needs no one's
+  permission: it lives as laws, canaries or `puck` verbs under the gate.
+  Standalone runners, record directories and `--validate-*` flags stay banned
+  (`AGENTS.md` rule 3). Do not repair a rotted fixture — quarantine it and move
+  on (validation currency is running the app). A retired runner is deleted with
+  its directory, never kept alive to announce that it no longer runs.
 
 A minimal smoke session:
 
@@ -584,7 +585,7 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
   least 4096 instances under the 65536 ceiling
   ([references/documents-render.md](references/documents-render.md#render-validation-and-stamp-capacity)).
 - `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
-  `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
+  `bodies.capacity` the validator admits), and `WorldClient.EntityCapacity`
   is single-sourced from it (`= WorldBodiesLimits.CapacityCeiling`), so the
   validator's admitted capacity and the client's fixed per-entity view arrays
   are the same number by construction. The client reserves detailed rigs for

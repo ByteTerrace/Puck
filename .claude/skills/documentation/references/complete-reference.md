@@ -271,8 +271,8 @@ checks; read `.editorconfig` for the current set rather than reciting it.
 
 **Missing documentation (CS1591) is deliberately a suggestion.**
 `.editorconfig` records the reason — low-level bindings expose large mechanical
-surfaces documented at the containing API level — and two projects suppress the
-diagnostic outright in their `.csproj`.
+surfaces documented at the containing API level — and `Puck.Cli` and most test
+projects suppress the diagnostic outright in their `.csproj`.
 
 Two consequences for the agent:
 
@@ -307,8 +307,8 @@ goal. The prose standard and purge list in §1 apply here in full: a `SKILL.md`
 written in manifesto cadence breaks them exactly as a README would.
 
 A skill records **settled facts and procedures**, not architecture that may not
-be questioned: [`docs/development/contributing.md`](../../../../docs/development/contributing.md) §
-*Verification practices* makes skills evidence, outranked by the current request.
+be questioned: `AGENTS.md` rule 2 makes skills evidence, outranked by the
+current request.
 
 ### Authoring a skill
 
@@ -449,10 +449,17 @@ document under `docs/` that names the skill.
    token audit against the pre-edit copy: keep a copy in the scratchpad, then
    diff the claim inventory. A voice edit that drops a fact has changed the
    content, and a heading edit requires checking and repairing its incoming links.
+   A rewrite tends to drop the sentence that says why and keep the one that says
+   what, so read its deleted lines for causes first.
 7. **`dotnet build Puck.slnx -c Release`** when the edit touched XML
    documentation — required for a changed `cref`, and the only check that the
    structural diagnostics in §4 still pass. A pure Markdown edit does not owe a
    build.
+8. **A retired verb is gone from runtime strings first.** `puck docs
+   citations` resolves a cited token against every verb-shaped string literal
+   under `src/`, so a stale refusal or help message keeps a dead verb's
+   citations green. When retiring a console verb, search `src/` for its name
+   and remove it there before trusting a citations pass.
 
 ---
 
@@ -494,11 +501,11 @@ changes materially, and treat a gap as a grader fault.
 **Never score an invalid run.** A reply that starts with "API Error" is not an
 answer. Re-run it, and report the number re-run.
 
-**Judge with sonnet for any result you act on.** Use `--judge-model sonnet`
-for every run whose score decides a change or goes in a report; use haiku only
-for smoke checks, such as whether a case parses and a grader can pass. A cheaper
-judge fails correct long answers that a stronger judge passes, and the
-calibration set cannot show it.
+**Judge with a stronger model for any result you act on.** Pass a Sonnet-class
+or stronger model to `--judge-model` for every run whose score decides a change
+or goes in a report; use a Haiku-class judge only for smoke checks, such as
+whether a case parses and a grader can pass. A cheaper judge fails correct long
+answers that a stronger judge passes, and the calibration set cannot show it.
 
 **Measure the noise floor before changing anything.** Run the unchanged skill
 at least three times, each with at least five runs per case, over the same case

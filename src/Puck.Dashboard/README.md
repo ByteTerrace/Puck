@@ -158,6 +158,15 @@ the same roles as the syntax colors, so both color schemes follow the brand.
 React Compiler runs over both applications' sources, so components do not add
 `useMemo` or `useCallback` for speed.
 
+Nothing moves under the pointer. Content that loads after the first paint
+reserves its final space (a skeleton at its final size, a fixed-height region,
+`scrollbar-gutter: stable`) rather than pushing its neighbours aside. A good
+Cumulative Layout Shift score is not enough, because CLS ignores shifts within
+500 ms of input, which are exactly the tab-switch, expand and load-more jumps
+that cause misclicks. Check a UI change by recording every `layout-shift` entry
+with its sources while exercising real interactions, and treat any shift near
+the pointer as a defect.
+
 ## Federation
 
 The host and portal are one application in two builds, joined by module
@@ -261,12 +270,12 @@ the file reads themselves.
 **The engine is a Puck build of DuckDB-Wasm.** Upstream DuckDB-Wasm's HTTP
 client ignores an HTTP secret's `BEARER_TOKEN`, which is how the engine reads
 storage with the user's token. Until the fix ships upstream, the portal
-installs `@duckdb/duckdb-wasm` `1.33.1-dev64.0.puck.1` from the
-[release on Kittoes0124/duckdb-wasm](https://github.com/Kittoes0124/duckdb-wasm/releases/tag/v1.33.1-dev64.0.puck.1):
-npm's `1.33.1-dev64.0` (DuckDB v1.5.5) rebuilt by the fork's CI with that one
-patch. Apart from the patched WebAssembly, the generated glue around it, and
-the version, the package is byte-identical to npm's, and the lockfile pins its
-hash. When upstream releases the fix, go back to npm's package and delete the
+installs `@duckdb/duckdb-wasm` from the
+[release on Kittoes0124/duckdb-wasm](https://github.com/Kittoes0124/duckdb-wasm/releases)
+that `src/portal/package.json` names: the npm package of the same version,
+rebuilt by the fork's CI with that one patch and suffixed `.puck.<n>`. Apart
+from the patched WebAssembly, the generated glue around it, and the version,
+the package is byte-identical to npm's, and the lockfile pins its hash. When upstream releases the fix, go back to npm's package and delete the
 release.
 
 **The engine and its extensions ship with the portal.** The package holds

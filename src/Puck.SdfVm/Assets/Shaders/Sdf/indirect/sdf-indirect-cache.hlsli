@@ -1,7 +1,7 @@
 #ifndef SDF_INDIRECT_CACHE_HLSLI
 #define SDF_INDIRECT_CACHE_HLSLI
 #include "sdf-indirect-cells.hlsli"
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 #define SDF_INDIRECT_WORDS indirectCacheRW
 #else
 #define SDF_INDIRECT_WORDS indirectCache
@@ -9,7 +9,6 @@
 
 static uint sdfIndirectLoads = 0u;
 static uint sdfIndirectHashes = 0u;
-static uint sdfIndirectProofOwner = 0xffffffffu;
 #include "sdf-indirect-bricks.hlsli"
 bool sdfIndirectRange(uint word, uint count) {
     uint length, stride;
@@ -21,12 +20,37 @@ uint sdfIndirectLoad(uint word) {
     if (!sdfIndirectRange(word, 1u)) { return 0xffffffffu; }
     return SDF_INDIRECT_WORDS[word];
 }
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 void sdfIndirectStore(uint word, uint value) {
     if (sdfIndirectRange(word, 1u)) { indirectCacheRW[word] = value; }
 }
+// Adds the active lanes' field instruction visits and work units to one kind's monotonic cost counters
+// (SdfIndirectLayout.Cost*), one atomic pair per wave. The counters wrap; the host reads their differences between
+// its fenced readbacks and prices that kind's admission by the visits per unit the device counted.
+void sdfIndirectReportCost(uint kind, uint visits, uint units) {
+    uint totalVisits = WaveActiveSum(visits);
+    uint totalUnits = WaveActiveSum(units);
+    uint word = sdfIndirectCostWordOffset(passGroup.indirectTier) + 2u * kind;
+    if (WaveIsFirstLane() && (totalVisits | totalUnits) != 0u && kind < SdfIndirectCostKinds && sdfIndirectRange(word, 2u)) {
+        uint ignored;
+        InterlockedAdd(indirectCacheRW[word], totalVisits, ignored);
+        InterlockedAdd(indirectCacheRW[word + 1u], totalUnits, ignored);
+    }
+}
 #endif
 #ifdef SDF_INDIRECT_PASS
+// SdfIndirectChunk: the dispatch runs one workgroup per item from indirectItemFirst, and only the units of the
+// admitted range, counted across item boundaries from indirectUnitFirst of the first item, execute.
+bool sdfIndirectChunkUnit(uint group, uint unit, uint unitsPerItem) {
+    uint flat = group * unitsPerItem + unit;
+    return flat >= passGroup.indirectUnitFirst && flat - passGroup.indirectUnitFirst < passGroup.indirectUnitCount;
+}
+// Whether any unit of this workgroup's item lies in the admitted range; uniform across the group.
+bool sdfIndirectChunkTouches(uint group, uint unitsPerItem) {
+    uint first = group * unitsPerItem;
+    return passGroup.indirectUnitCount != 0u && first < passGroup.indirectUnitFirst + passGroup.indirectUnitCount
+        && first + unitsPerItem > passGroup.indirectUnitFirst;
+}
 bool sdfIndirectProbeUpdate(uint row, out uint4 update, out int3 lattice) {
     update = 0u;
     lattice = 0;
@@ -54,9 +78,15 @@ bool sdfIndirectCellAt(float3 position, float spacing, out int3 cell) {
     cell = int3(scaled);
     return true;
 }
-#ifdef SDF_VIEWS_PASS
+#ifdef SDF_RECEIVER_PASS
 static bool sdfIndirectReceiverPermit = false;
 static bool sdfIndirectReceiverDeferred = false;
+// Whether this receiver took one unit of the shared allowance, and the field visits its launch and proof spent.
+static bool sdfIndirectReceiverAdmitted = false;
+static uint sdfIndirectReceiverVisits = 0u;
+// The field visits of the receiver's approach, per-pixel work outside the allowance its price measures.
+static uint sdfIndirectApproachBefore = 0u;
+static uint sdfIndirectApproachVisits = 0u;
 // The finite CAS loop never overflows the counter. Contention may defer a receiver, but cannot admit past the limit.
 bool sdfIndirectAdmitReceiver() {
     uint word = sdfIndirectReceiverProofWordOffset(passGroup.indirectTier);
@@ -66,7 +96,7 @@ bool sdfIndirectAdmitReceiver() {
     [loop] for (uint attempt = 0u; attempt < 64u && observed < limit; attempt++) {
         uint previous;
         InterlockedCompareExchange(indirectCacheRW[word], observed, observed + 1u, previous);
-        if (previous == observed) { return true; }
+        if (previous == observed) { sdfIndirectReceiverAdmitted = true; return true; }
         observed = previous;
     }
     sdfIndirectReceiverDeferred = true;
@@ -93,7 +123,7 @@ SdfIndirectPlacement sdfIndirectReadProbe(int index) {
     if (!sdfIndirectRange(address, SdfIndirectProbeWords)) { return placement; }
     uint state = sdfIndirectLoad(address + 3u);
     if ((state >> SdfIndirectEpochShift) == 0u) { return placement; }
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_VIEWS_PASS)
     if ((state >> SdfIndirectEpochShift) != passGroup.indirectEpoch) { return placement; }
 #endif
     placement.position = asfloat(uint3(sdfIndirectLoad(address), sdfIndirectLoad(address + 1u), sdfIndirectLoad(address + 2u)));
@@ -145,7 +175,7 @@ void sdfIndirectStoreCell(uint cell, uint proof, SdfIndirectCell value) {
 
 #include "sdf-indirect-proof.hlsli"
 
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
     uint length, stride;
     indirectDirections.GetDimensions(length, stride);
@@ -168,7 +198,7 @@ float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
 }
 #endif
 
-#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
 bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoint) {
     return dot(endpoint - handoff, direction) > 0.0;
 }

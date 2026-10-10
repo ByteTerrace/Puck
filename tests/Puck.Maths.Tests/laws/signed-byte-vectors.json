@@ -10,6 +10,10 @@
       {
         "Type": "Puck.Maths.SignedByteVectorFunctions",
         "Name": "SumOfSquares"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "DotScalar"
       }
     ],
     "Legs": [
@@ -27,7 +31,104 @@
   {
     "Id": "signed-byte-vectors.dot-tiers-vs-scalar-rung",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "DotScalar"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "DotVector"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "IsDotTierSupported"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorTier",
+        "Name": "Vector128"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorTier",
+        "Name": "Vector256"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorTier",
+        "Name": "Vector512"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Widen"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes128",
+        "Name": "Sum"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Widen"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes256",
+        "Name": "Sum"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "ByteCount"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Load"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Widen"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.VectorLanes512",
+        "Name": "Sum"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",

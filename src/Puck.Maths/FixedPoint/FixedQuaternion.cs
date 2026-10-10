@@ -108,10 +108,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         var (lx, ly, lz, lw) = (left.X.Value, left.Y.Value, left.Z.Value, left.W.Value);
         var (rx, ry, rz, rw) = (right.X.Value, right.Y.Value, right.Z.Value, right.W.Value);
         const ulong NarrowLimit = (1UL << 30);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: lx) | FixedVectorMath.RawMagnitude(value: ly) |
-                                 FixedVectorMath.RawMagnitude(value: lz) | FixedVectorMath.RawMagnitude(value: lw) |
-                                 FixedVectorMath.RawMagnitude(value: rx) | FixedVectorMath.RawMagnitude(value: ry) |
-                                 FixedVectorMath.RawMagnitude(value: rz) | FixedVectorMath.RawMagnitude(value: rw);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: lx) | FusedArithmetic.RawMagnitude(value: ly) |
+                                 FusedArithmetic.RawMagnitude(value: lz) | FusedArithmetic.RawMagnitude(value: lw) |
+                                 FusedArithmetic.RawMagnitude(value: rx) | FusedArithmetic.RawMagnitude(value: ry) |
+                                 FusedArithmetic.RawMagnitude(value: rz) | FusedArithmetic.RawMagnitude(value: rw);
         long x;
         long y;
         long z;
@@ -187,10 +187,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// <returns>The scalar dot product (four products accumulated exactly, one rounding).</returns>
     public static FixedQ4816 Dot(FixedQuaternion left, FixedQuaternion right) {
         const ulong NarrowLimit = (1UL << 30);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: left.X.Value) | FixedVectorMath.RawMagnitude(value: left.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Z.Value) | FixedVectorMath.RawMagnitude(value: left.W.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.X.Value) | FixedVectorMath.RawMagnitude(value: right.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Z.Value) | FixedVectorMath.RawMagnitude(value: right.W.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: left.X.Value) | FusedArithmetic.RawMagnitude(value: left.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Z.Value) | FusedArithmetic.RawMagnitude(value: left.W.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.X.Value) | FusedArithmetic.RawMagnitude(value: right.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Z.Value) | FusedArithmetic.RawMagnitude(value: right.W.Value);
 
         if (combinedMagnitude < NarrowLimit) {
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(
@@ -523,12 +523,12 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     public FixedQuaternion Normalize() {
         var rawMagnitude = Math.Max(
             val1: Math.Max(
-                val1: FixedVectorMath.RawMagnitude(value: X.Value),
-                val2: FixedVectorMath.RawMagnitude(value: Y.Value)
+                val1: FusedArithmetic.RawMagnitude(value: X.Value),
+                val2: FusedArithmetic.RawMagnitude(value: Y.Value)
             ),
             val2: Math.Max(
-                val1: FixedVectorMath.RawMagnitude(value: Z.Value),
-                val2: FixedVectorMath.RawMagnitude(value: W.Value)
+                val1: FusedArithmetic.RawMagnitude(value: Z.Value),
+                val2: FusedArithmetic.RawMagnitude(value: W.Value)
             )
         );
 
@@ -560,10 +560,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         var (vx, vy, vz) = (vector.X.Value, vector.Y.Value, vector.Z.Value);
         const ulong RotationLimit = (1UL << 17);
         const ulong VectorLimit = (1UL << 40);
-        var narrow = (((FixedVectorMath.RawMagnitude(value: ux) | FixedVectorMath.RawMagnitude(value: uy) |
-                        FixedVectorMath.RawMagnitude(value: uz) | FixedVectorMath.RawMagnitude(value: w)) < RotationLimit) &&
-                      ((FixedVectorMath.RawMagnitude(value: vx) | FixedVectorMath.RawMagnitude(value: vy) |
-                        FixedVectorMath.RawMagnitude(value: vz)) < VectorLimit));
+        var narrow = (((FusedArithmetic.RawMagnitude(value: ux) | FusedArithmetic.RawMagnitude(value: uy) |
+                        FusedArithmetic.RawMagnitude(value: uz) | FusedArithmetic.RawMagnitude(value: w)) < RotationLimit) &&
+                      ((FusedArithmetic.RawMagnitude(value: vx) | FusedArithmetic.RawMagnitude(value: vy) |
+                        FusedArithmetic.RawMagnitude(value: vz)) < VectorLimit));
         long tx;
         long ty;
         long tz;

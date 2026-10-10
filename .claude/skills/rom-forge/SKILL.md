@@ -12,12 +12,10 @@ in the same change rather than preserving an obsolete workflow.
 
 `.puck` is the cartridge's authorial source; `puck.cartridge.v1` JSON is the derived, engine-consumed
 artifact and stays committed beside it (`tetromino.cgb.puck` / `tetromino.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
-/ `hgb-mirror.cgb.cartridge.json`, and `light-gun.cgb.puck`, the target the `light-gun` canary aims at). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
+/ `hgb-mirror.cgb.cartridge.json`, `pip.agb.puck` / `pip.agb.cartridge.json`, and `light-gun.cgb.puck`, the target the `light-gun` canary aims at). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
 (`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`) compiles every committed
 source and byte-compares it against its committed document, so the two can never drift apart quietly.
-Never hand-edit the generated JSON: regenerate it from the source. `src/Puck.World/Assets/cartridges/pip.agb.cartridge.json`
-is the one exception today — no `.puck` source exists for it yet, so it is still authored and edited
-directly as JSON, by hand or through the `forge.set` JSON-Pointer editor below.
+Never hand-edit the generated JSON: regenerate it from the source.
 
 `Puck.GamingBricks.Transpiler` is the `puck.cartridge.v1` vocabulary: it knows what a cartridge's sections
 mean. The language itself — the one-spelling grammar, `let`/`template`/`for`, units, the compile-time
@@ -114,7 +112,8 @@ The loop from source to a running, observable cartridge:
 
 `src/Puck.GamingBricks.Forge` owns `puck.cartridge.v1`, validation,
 canonicalization, the `CartridgeDraft` JSON Pointer editor, graphics encoding,
-and `ICartridgeCompiler`. It depends only on Assets and is packable.
+and `ICartridgeCompiler`. It depends on Abstractions, Assets and `Puck.State` (whose comparison and opcode
+vocabularies its rules share), never on World, and is packable.
 Read its README for the source contract and runnable console walkthrough.
 
 `HgbCartridgeCompiler` in `Puck.HumbleGamingBrick.Forge` emits native CGB
@@ -331,10 +330,10 @@ both real emulators. Emitter probes and boot-image hash tests remain separate.
 Compiler validation cannot prove an arbitrary player's game correct; no
 hidden demo verifier runs during document compilation.
 
-Every SM83 verifier MUST call
-`VerifyMachineSettle.SettleOutOfOamDma` after stepping frames before bus reads.
-A fixed cycle boundary can land inside DMA and otherwise falsely read gated
-WRAM as 0xFF. `Framework.VerifyMachineDriver` already applies this rule.
+Every SM83 verifier calls `VerifyMachineSettle.SettleOutOfOamDma` after
+stepping frames and before bus reads: a fixed cycle boundary can land inside
+DMA and falsely read gated WRAM as 0xFF. `Framework.VerifyMachineDriver`
+already applies this rule.
 
 Wait on the observable fact, not a duration: both verify drivers' `RunFramesUntil`
 advance until a condition holds and fail at a frame cap, so a test pays only for

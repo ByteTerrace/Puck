@@ -10,6 +10,7 @@ using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Testing.FrustumFitFixtures;
 
 namespace Puck.World.Tests;
 
@@ -28,72 +29,13 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
-[Collection(AllocationCollection.Name)]
+[Collection(SceneProbeCollection.Name)]
 public sealed partial class WorldWindowFrustumFitLawTests {
-    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
-
-    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.puck";
     private const float Tolerance = 2e-3f;
-
-    // The destination's marker: a ball of radius 0.5 six units behind the arch.
-    internal static readonly Vector3 Marker = new(x: 0f, y: 1.5f, z: -6f);
 
     // The destination's occluder: a slab four units in front of the arch, between the first two eyes, mapped, and the
     // arch's glass.
     private static readonly Vector3 Occluder = new(x: 0f, y: 1.5f, z: 4f);
-
-    // The first two are the canary's eyes: the camera its seat's view renders with at each of its two body poses.
-    internal static readonly Vector3[] Eyes = [
-        new(x: 1f, y: 1.6f, z: 6f),
-        new(x: -1f, y: 1.6f, z: 6f),
-        new(x: 0.4f, y: 2.1f, z: 3f),
-    ];
-
-    private static (WorldFaceGeometry Source, WorldFaceGeometry Destination) Apertures() {
-        var local = AuthoredGameFixtures.Load(relativePath: Local);
-
-        Assert.True(condition: WorldWindowFrustumFit.TryResolveApertures(
-            counterpart: out var destination,
-            destination: AuthoredGameFixtures.Load(relativePath: Destination),
-            local: local,
-            screenIndex: DoorScreen(local: local),
-            source: out var source
-        ));
-
-        return (source, destination);
-    }
-
-    // The screen row the door's glass face derives, as the presenter hands it to the binder.
-    internal static WorldScreen DoorRow() {
-        var local = AuthoredGameFixtures.Load(relativePath: Local);
-        var screen = DoorScreen(local: local);
-
-        return Assert.Single(
-            collection: WorldPrototypeFacets.Derive(
-                definition: local,
-                derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
-                derivedFaceScreens: local.Authoring.DerivedFaceScreens
-            ).Faces,
-            predicate: row => (row.Index == screen)
-        );
-    }
-
-    // The screen index the door's glass face is seated at.
-    private static int DoorScreen(WorldDefinition local) => Assert.Single(collection: WorldFaceCatalog.For(definition: local).Rows).ScreenIndex;
-
-    internal static CameraSnapshot Fit(Vector3 eye) {
-        var (source, destination) = Apertures();
-
-        Assert.True(condition: WorldWindowFrustumFit.TryFitWindow(
-            camera: out var camera,
-            destination: destination,
-            glass: WorldWindowFrustumFit.Glass(screen: DoorRow()),
-            localEye: eye,
-            source: source
-        ));
-
-        return camera;
-    }
 
     // The point of a face at image coordinate (x, y): x across its Right, y down its Up, each in [0, 1].
     private static Vector3 FacePoint(WorldFaceGeometry face, float x, float y) =>

@@ -76,8 +76,9 @@ stops at the two factories MISSES the wrapper's registration sites.
   its own.
 
 `Bindability` is required (`Unspecified` throws at construction). The
-description IS the help text — `help` prints `name - description` for every
-registered command, which is why descriptions here are long. Both factories take
+description IS the help text — `help [--names] [<prefix>]` prints `name - description` for every
+registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
+when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take
 an `audience`: `CommandAudience.Operator` makes the registry refuse the verb for
 every principal but the console, before the handler runs, on every dispatch path
 (`CommandAudienceLawTests`). The evaluation diagnostics — `world.rule.trace`,
@@ -236,14 +237,16 @@ reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
 
-`world.wait indirect <seconds>` uses the existing session hold to await a newer
-produced frame and every active shared indirect cache's current-source fence.
+`world.wait indirect` uses the existing session hold to await a newer produced
+frame and every active shared indirect cache's current-source fence. It takes no
+deadline: produced frames bound it (`SdfIndirectCache.FinishFrameBound`), a solve
+that cannot finish refuses at once by name, and a seconds argument is refused.
 Its stderr settlement names the actual residency/allocation/epoch/generation/
 stamp/source identities once. It proves shared-cache completion, not each
 view's independent receiver admission. Pause simulation while warming, then
 resume for fixed input ticks; never replace the fence with guessed warm ticks.
-A deadline's not-settled verdict is diagnostic evidence and cannot qualify a
-counter observation.
+A not-settled verdict past the frame bound, or a refusal, is diagnostic evidence
+and cannot qualify a counter observation.
 
 Silo row retirement disposes its `TextCommandSession`, refusing work still
 queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`
@@ -450,9 +453,8 @@ refuses by name and enumerates its siblings.
 **Adding a section means adding a ROW to `BuildSections`, never a verb pair.**
 That table carries the only three facts the document model cannot supply: whether
 the section is a keyed list, which member is its key, and its
-upsert/remove `WorldMutation` pair. These two generic verbs replace separate per-section
-verbs; re-growing individual per-section verbs is the regression this design
-exists to prevent. `puck schema` documents payload shapes — cite it, but there is
+upsert/remove `WorldMutation` pair. These two generic verbs are the whole surface; a
+per-section verb is the regression this design exists to prevent. `puck schema` documents payload shapes — cite it, but there is
 deliberately NO runtime schema validation (owner deferred the gate; validation
 stays at the full-document revalidation on apply).
 

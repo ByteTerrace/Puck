@@ -28,3 +28,5 @@ SMELL003 | Puck.CommentSmell | Error | CommentSmellAnalyzer, [Documentation not 
 SMELL004 | Puck.CommentSmell | Error | CommentSmellAnalyzer, [Documentation not provided]
 ENV001 | Puck.Environment | Error | EnvironmentReadAnalyzer, [Documentation not provided]
 GPU001 | Puck.Testing | Error | GpuTraitAnalyzer, [Documentation not provided]
+NET001 | Puck.Network | Error | AnyAddressBindAnalyzer, [Documentation not provided]
+IVT001 | Puck.Accessibility | Error | InternalsVisibleToAnalyzer, [Documentation not provided]

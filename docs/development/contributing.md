@@ -21,6 +21,65 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
   snapshots. Wall-clock time, ambient randomness, and floating-point state do
   not enter replay-bearing simulation.
 
+## Setting up a machine
+
+A machine builds and verifies Puck once it carries the toolchain below. The
+list is the same for a person and for an agent; the Claude Code and Codex items
+apply to any machine an agent session runs on. CI runs on Windows and Ubuntu
+runners, so a Linux machine differs only where this list says; no runner is
+macOS, and nothing here is verified there.
+
+- **The .NET SDK `global.json` pins.** Roll-forward is disabled, so install
+  exactly that version; `dotnet --version` run inside the checkout prints it.
+  The full build also needs the `wasm-tools` workload
+  (`dotnet workload install wasm-tools`), which `Puck.World.Browser` compiles
+  with; the [CI guide](ci.md#shared-repository-tooling) shows the full local
+  build with it.
+- **DXC on `PATH`.** Every build compiles the shaders, so a machine with no GPU
+  needs it too. Install the release CI pins (`.github/actions/setup-dxc/action.yml`
+  names the version, the Windows and Linux archives and their checksums);
+  [GPU support and shader builds](#gpu-support-and-shader-builds) explains what
+  the build does with it. Only Windows builds DXIL.
+- **`git`, and `gh` signed in** (`gh auth status`): the release verbs call
+  `gh`, and agent sessions use it for pull requests and workflow runs.
+- **Node.js** at the version CI pins (`node-version` in
+  `.github/workflows/browser.yml` and `azure.yml`), for the dashboard's npm
+  projects, which `.claude/launch.json`'s previews run, and the browser
+  payload's Node harness.
+- **PowerShell (`pwsh`).** The versioned `.claude/settings.json` runs the
+  hooks under `.claude/hooks/` through `pwsh`, so a machine without it reports
+  a hook error on every shell command and every edit. Windows PowerShell is
+  not `pwsh`; on Linux, install PowerShell from Microsoft's package feed.
+- **The global `puck` tool, installed from the checkout**, as
+  [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
+  describes. An installed tool keeps its commit while the checkout moves on:
+  `puck --version` and `puck mcp` warn on stderr when the two differ, so
+  reinstall after pulling.
+- **Claude Code.** The project's settings are shared and versioned:
+  `.claude/settings.json` turns auto memory off, enables the Codex plugin and
+  names its marketplace, and registers the hooks, and `.claude/launch.json`
+  holds the preview configurations. Trust the folder when Claude Code asks,
+  because the marketplace entry loads only in a trusted project. Personal
+  overrides go in `.claude/settings.local.json`, which `.gitignore` keeps
+  untracked. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
+  ([documentation policy](#documentation-policy)).
+- **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
+  (`codex login`), and install the Claude Code plugin `codex@openai-codex` on
+  each machine: `.claude/settings.json` enables it and names its marketplace,
+  so Claude Code offers the install when it loads the project, and
+  `/codex:setup` checks the CLI afterwards. The Windows sandbox's permission
+  cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
+- **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
+  and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
+  and runs GPU gates one at a time per GPU under the
+  [verification skill](../../.claude/skills/verification/SKILL.md)'s rules.
+- **A checkout older than the versioned Claude Code files.**
+  `.claude/settings.json`, `.claude/launch.json` and `.claude/hooks/` were once
+  ignored, so a checkout from then may hold untracked copies, and `git pull`
+  refuses to overwrite them. Move them aside, pull, and fold anything personal
+  from the old copies into `.claude/settings.local.json`.
+
 ## Find code and references
 
 Use text search for file discovery, literals, JSON, HLSL, and project files. Use the
@@ -70,29 +129,46 @@ Puck keeps per-user state and caches in one directory, `Puck` under your local
 application data: `%LOCALAPPDATA%/Puck` on Windows and `~/.local/share/Puck` on
 Linux, or the temporary directory when the platform names no such folder
 (`PuckUserDirectory` in `Puck.Abstractions`). Each owner keeps one lower-case
-subdirectory there:
+subdirectory there. Every cache among them is bounded:
 
-| Subdirectory | Owner |
-|---|---|
-| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) |
-| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds |
-| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
-| `bakes` | The creation bakes presentations make, shared the same way |
-| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
-| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` |
-| `compilations` | The `.puck` compile cache the game and the CLI share |
-| `corpora` | The conformance corpora the emulator batteries fetch |
+| Subdirectory | Owner | Bound |
+|---|---|---|
+| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipeline-cache` keeps 8 files per backend, and its `pipelines` shader cache is bounded as `shaders` is |
+| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds | 4096 objects, 256 MiB |
+| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root | 1024 files, 256 MiB |
+| `bakes` | The creation bakes the game's build, `puck compile --tree`, `puck parity` and presentations make, shared by every checkout | 8192 objects, 512 MiB |
+| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run | 4 builds |
+| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
+| `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
+| `shaders` | The shader compile cache the build and the CLI share ([freshness](../reference/shaders.md#freshness)) | 4096 files, 1 GiB |
+| `corpora` | The conformance corpora the emulator batteries fetch | none: a fixed fetched set |
+
+Every bound follows one policy, `CacheRetention` in `Puck.Abstractions`: least
+recently used out. An entry's last use is its stamp, the last write time of the
+file or directory that stands for it; an owner stamps an entry when it reads
+it, and writing one stamps it. When an owner writes, it removes the least
+recently used entries beyond its bound, keeps the entry it is using whatever its
+stamp, and leaves an entry another process holds open. A process lists a
+directory for this at most once a minute, so a build that publishes many
+entries pays for one listing. Every cache is content-addressed, so an evicted
+entry costs its next reader a derivation, never a different answer.
+`puck shaders cache prune` applies the same policy with an age bound instead.
 
 ## Temporary directories
 
 Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
-into file apps. A directory gets a prefix that names its owner and a unique
-suffix. A run that passes deletes it. A run that fails keeps it and names its
-absolute path in a `run directory kept: <path>` line. The first directory a
-process creates under a prefix deletes that prefix's directories older than six
-hours, which clears a killed run's leftovers. The
+into file apps. A directory is named `<kind><process id>-<token>`: its kind,
+which starts with `puck-` and names its owner, the process that created it, and
+a unique token. A run that passes deletes it. A run that fails keeps it, names
+its absolute path in a `run directory kept: <path>` line, and trims its kind: of
+the kind's directories whose process has finished, the newest four stay and the
+rest go. The first directory a process creates sweeps every kind the same way
+and also removes any finished process's directory older than six hours, which
+clears a killed run's leftovers and the evidence of kinds that never run again.
+A directory whose process still runs is never removed, however old, and a
+process id that a later process reuses is told apart by its start time. The
 [CLI conventions](../reference/cli.md#conventions) list the verbs that follow
 it and the directories that are deleted whatever the outcome.
 
@@ -106,6 +182,31 @@ verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
 law ends. A deletion failure fails a passing law, so a handle the code under
 test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
 host may still hold a file as it is disposed.
+
+## Build output and hard links
+
+Every project copies its dependency closure into its own `bin`, so a built
+tree would hold each package and Puck assembly many times over.
+`Directory.Build.props` makes those copies hard links instead: each package
+file links to the NuGet global cache, each project reference to the referenced
+project's `bin`, and each `None` or `Content` item with `CopyToOutputDirectory`
+(assets, fonts, shader bytecode, world outputs) to the file the item names. A
+built tree therefore holds one file per distinct output.
+
+A hard link is the same file under another name, so writing an output file in
+place writes every name at once: the NuGet global cache, other projects'
+outputs, and the repository's own sources. Never open a file under `bin`, a
+publish directory, or a file a build ships as content for writing, truncating
+or appending. Replace it instead: write the new bytes with `AtomicFile`, or
+delete the file before writing a new one. An inline MSBuild task, which cannot
+reference `AtomicFile`, writes a temporary file beside the destination and moves
+it over the destination. The compiler is the one writer that rewrites its
+outputs in place (`obj/<name>.dll`, `.pdb` and `.xml`), so the copy from `obj` to
+`bin` and the copy into a publish directory stay plain copies;
+`BuildOutputLinkLawTests` fails when a `bin` file shares its file with a
+compiler output. A build into a directory that outlives it, such as the World
+builds in `world-builds`, passes `--output` and links no content items, since
+an editor saving a source in place would otherwise rewrite the kept build.
 
 ## C# file apps
 
@@ -150,9 +251,14 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 ### Verify a change
 
 `puck gate` is the batch qualification, run from a copy of the candidate's own
-CLI outside the checkout. It builds the solution, copies the CLI it built,
-runs the affected selection against the merge base, and checks the repository's
-ledgers and generated files. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
+CLI outside the checkout. It checks every lock file with a locked restore
+before anything builds, builds the solution and the file app, copies the CLI it
+built, runs the affected selection against the merge base, and checks the
+repository's ledgers and generated files: every cheap static check CI runs
+([which CI checks the gate runs](ci.md#which-ci-checks-the-local-gate-runs)).
+Every restore is locked, so a package or project reference change fails the
+build until [`puck locks`](../reference/cli.md#puck-locksrestore-lock-files)
+re-records the lock files it drifted. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
 is shared with help and held by laws. The affected suites run side by side
 (`--suite-jobs`). `--gpu` adds the affected canaries, side by side up to
 `--gpu-jobs` legs on the GPU, then parity, device suites, every recorded
@@ -181,7 +287,7 @@ solution. Its historical stages are prior art, not current verification. Use
 the live checks appropriate to the changed contract and report what remains
 untested; no single check covers the complete engine.
 
-The [World tests](../../tests/Puck.World.Tests/README.md) cover documents,
+The [World suites](../../tests/Puck.World.Tests/README.md) cover documents,
 protocol, authoritative simulation, and shipped game state programs. The
 architecture gate runs during builds, including `PUCKARCH008`: it rejects a
 compiled dependency denied by `PuckArchitectureDeniedApi` in
@@ -277,6 +383,30 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit
 Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
 test; one law of a tier is selected by its id, the case's display name
 (`--explicit on --filter-display-name <law-id>`).
+
+### Device laws
+
+A test class that opens a hardware GPU device carries
+`[Trait("Category", "Gpu")]`, which the build requires of it (`GPU001`, from
+`Puck.Analyzers`). The same trait schedules it. Every test project links
+`tests/Shared/GpuDeviceCollection.cs`, whose collection factory puts every
+class with the trait into one collection that disables parallelization. xUnit
+runs that collection after all the parallel ones have finished, one law at a
+time. A device law therefore never shares the GPU, the driver's shader
+compiler or the processors with another law, and a law that turns on the
+Direct3D 12 debug layer, which removes every device the process holds, runs
+with no other device alive. A plain `dotnet test` of a suite needs no option to
+keep its device laws apart. A class that names a collection of its own keeps
+it, and that collection must disable parallelization too.
+
+A run beside another GPU leg leaves the device laws out with
+`--filter-not-trait Category=Gpu`; `puck affected` runs its suites that way, as
+does CI's test job on its GPU-less runner, and `puck gate --gpu` runs the device
+laws alone with `--filter-trait Category=Gpu`. CI's runner has no GPU yet
+exposes a Direct3D 12 adapter that DXGI does not flag software, so
+`DirectXTestDevices.Hardware()` does not skip there, and an SDF interpreter
+kernel on it does not finish: the trait, not the skip, keeps a device law off
+that runner.
 
 ### Game changes
 
@@ -375,9 +505,9 @@ dotnet publish src/Puck.World.Browser -c Release
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
-package declares no `engines` requirement, and CI runs it on Node 24.21.0
-(the `browser` job in `.github/workflows/verify.yml`). Use the system install,
-not a version manager:
+package declares no `engines` requirement, and CI runs it on the Node version
+the `verify` job in `.github/workflows/browser.yml` pins (`node-version`). Use
+the system install, not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
@@ -407,17 +537,19 @@ one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
 
-`tests/Puck.Cli.Tests/Official/OfficialBuildCommandTests.cs` builds a real
+`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real
 `puck.official.manifest.v1` tree from this checkout's own worlds and the
 browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
+dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
-CI's `artifacts` workflow always publishes the browser before any test project
-runs, so this is a local-run-only step. Without the bundle the tree-building
+In CI the compiled archive carries the AppBundle the solution build generates
+(the `artifacts` workflow installs `wasm-tools`), so the test job has one without
+a publish and this is a local-run-only step; the ahead-of-time publish CI ships is
+the WebAssembly producer's (`browser.yml`). Without the bundle the tree-building
 tests skip by name, and the skip reason names the publish command; they never
 fail for the missing prerequisite.
 
@@ -465,10 +597,19 @@ The supported GPU floor covers RTX 2060, RTX 4070, the RDNA3 Steam Machine,
 and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
-DXC compiles the same HLSL sources to SPIR-V and DXIL during the build. `dxc`
+DXC compiles the same HLSL sources to SPIR-V and, on Windows, DXIL during the
+build ([freshness](../reference/shaders.md#freshness)). `dxc`
 must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
-describes. The `Puck.World` build also packages every pipeline source a shipped
+describes. The build compiles through the runtime's `ShaderCompiler` into the
+per-user shader cache, keyed by each source's include closure, its options and
+the DXC, not by the checkout. A cold machine compiles missing outputs on the
+cores MSBuild grants, the longest first. A fresh worktree reuses valid entries
+with matching closures, options, and toolchain; editing one `.hlsli`
+invalidates only the outputs that include it. No special build flags are
+needed. The [shader reference](../reference/shaders.md#freshness)
+owns the cache, its `PuckShaderCacheDirectory` override and the publication rules.
+The `Puck.World` build also packages every pipeline source a shipped
 world names into the [package store](../reference/shaders.md#the-builds-package-store)
 beside the worlds, so a pipeline source row does one of two things. In a
 developer checkout with DXC, an unedited shipped source loads its stored package
@@ -482,9 +623,10 @@ SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
-Only the RTX 4070 is normally available for local testing. Claims about the
-other supported GPUs require vendor or driver documentation and should be
-framed as unverified when no device run exists.
+The RTX 2060 and the RTX 4070 are the GPUs available for local testing, and
+the RTX 2060 records every counted-cost ceiling. Claims about the other
+supported GPUs require vendor or driver documentation and should be framed as
+unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
@@ -499,7 +641,29 @@ framed as unverified when no device run exists.
   `ToolLocationHelper.GetPlatformSDKLocation`, and NuGet with
   "Failed to read NuGet.Config due to unauthorized access". The machine's
   owner fixes the folder's permissions by re-enabling inheritance or granting
-  `CodexSandboxUsers` read and execute on that folder.
+  `CodexSandboxUsers` read and execute on that folder. A folder a sandboxed run
+  created, such as the checkout's ignored `.codex/`, can end up owned by a
+  `CodexSandbox*` account (`(Get-Acl <path>).Owner`); every sandboxed job then
+  fails within seconds with `windows sandbox failed: helper_unknown_error`, and
+  the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,
+  recreate it as the user, and copy its contents back.
+- A workspace-only sandbox cannot write the per-user `Puck` caches just because
+  it can build the checkout. Shader and world-asset builds accept the
+  `PuckShaderCacheDirectory` and `PuckWorldBakeCache` MSBuild overrides.
+  `puck parity` and `puck counters` also need a writable `world-builds` store:
+  `WorldArtifactStore` retries an access-denied lock open as contention until
+  its deadline, so a quiet wait before any World process starts can be a cache
+  permission block. `puck laws prove` needs its `law-trees` cache or writable
+  Git metadata for its fallback worktree. Report these as setup blocks, with
+  no GPU or red-law verdict, and run them in an environment with those writes
+  available; changing `LOCALAPPDATA` does not override Windows known folders.
+- Git Bash's `kill` and `pkill` do not reach native Windows processes, even
+  when they report success. Stop a process with PowerShell
+  `Stop-Process -Id <pid>` and confirm it is gone. Never search from `/` in Git
+  Bash: it walks every mounted drive.
+- A physical controller connected when `Puck.World` boots writes `[gamepad]`
+  diagnostics to standard error. A canary or manual check that asserts on
+  standard error must allow for them.
 - On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
   layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type
@@ -527,10 +691,17 @@ framed as unverified when no device run exists.
 - GBA co-simulation compares instruction deltas because mGBA rebases cumulative
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.
-- Windows App Control on the reference system blocks loading never-seen Debug
-  binaries (`FileLoadException` `0x800711C7`). A file-based app run at its
-  default Debug configuration fails to load, and relocating the runfile cache
-  does not help; build or run it with `-c Release`.
+- Windows Smart App Control, when it is on, blocks unsigned assemblies a build
+  has just produced (`FileLoadException` `0x800711C7`), including a file-based
+  app's never-seen Debug build; relocating the runfile cache does not help, so
+  build or run those with `-c Release`. When a dependency is blocked rather
+  than the entry assembly, `Puck.World` reports `[world] definition refused: …
+  The type initializer for 'Puck.World.WorldJsonContext' threw an exception.`,
+  which is not a document defect. Confirm a block in the
+  `Microsoft-Windows-CodeIntegrity/Operational` log (event 3077). Rebuilding does
+  not help, because deterministic builds reproduce the blocked bytes. Smart App
+  Control has no exclusion list; the machine's owner turns it off in Windows
+  Security.
 - A machine with a Cosmocc toolchain installed may carry `C_INCLUDE_PATH`
   pointing at its `include` directory in the ambient shell environment. That
   path leaks into every `clang`/emscripten invocation a `Puck.World.Browser`
@@ -585,6 +756,20 @@ meant to establish.
   anything.
 - When correcting a claim, update its tables, examples, summaries, comments,
   and cross-references in the same change so no contradictory source remains.
+  Before a commit message claims every instance was corrected, search for the
+  old text and confirm none remains, and re-read the whole edited paragraph: a
+  replacement that matched mid-paragraph can leave the old claim standing
+  beside the new one.
+- Loop a first-error-wins instrument until a pass finds nothing new. A loader,
+  parser, validator or compiler reports the first problem in each input and
+  stops, so one pass samples a defect surface rather than exhausting it. Report
+  how many passes the surface took.
+- A check must be able to fail visibly. Never suppress a command's error stream
+  inside a check, and read a program's exit status from the program itself,
+  never from a pipeline added to format its output: a bash pipeline reports its
+  last command's status unless `pipefail` is set. Commit before a checkout, so a
+  dirty tree cannot silently refuse it, and assert the state you believe you set
+  up.
 - Allocation laws, Post stages and bench diagnostics measure through
   `AllocationWindow` (`Puck.Abstractions.Counting`), the one helper over
   `GC.GetAllocatedBytesForCurrentThread`; nothing else reads the counter.
@@ -626,12 +811,24 @@ meant to establish.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
+- xUnit runs the laws of one class one after another and runs classes side by
+  side, so a suite takes at least as long as its slowest class. When a class's
+  laws each start processes, builds or scratch repositories, put its fixtures
+  and helpers in an abstract base and its laws in sealed classes over it
+  (`GateRunLaws`, `ShaderBuildTargetsLaws`). A law that proves a real process
+  boundary keeps the process; share its cost instead, for example by planning a
+  gate's change once and executing it under each runner.
 
 ## Code and documentation conventions
 
 - Public APIs use XML documentation that describes current behavior, parameter
   units, ownership, lifetime, failure behavior, and determinism where relevant.
   Do not narrate the change that introduced the API.
+- Name files, types, tests and law ids for their subject, never their history:
+  no `Port`, `Migrated`, `Remediation` or retired-tool names, and no prose
+  saying where code came from ("ported from", "moved from"). Retiring a surface
+  deletes its name rather than calling it "the retired X". Provenance belongs
+  in the commit message.
 - A comment earns its place by stating what the code cannot and a reader would
   act on wrongly without: an invariant, a sign convention or unit, a packing
   layout, an external specification or hardware citation, or a coupling the
@@ -698,6 +895,26 @@ meant to establish.
   `EnvironmentReadAllowlist`, and on any read whose name is not a compile-time
   constant. Make a switch a flag, a document or profile setting, or a test
   fixture instead ([configuration and diagnostics](#configuration-and-diagnostics)).
+- A listener takes its address from configuration and defaults to loopback
+  (`127.0.0.1`, or `::1` where the code is IPv6-first). A QUIC listener is the
+  one the address cannot narrow: on Windows, msquic opens its UDP port on
+  `0.0.0.0` and `[::]` whatever address it is given, and Windows Firewall asks
+  about every interface bind once per executable image path. So every process
+  the repository starts locally that may listen runs under the shared host,
+  `dotnet <assembly>.dll`, never a per-worktree apphost. `Directory.Build.targets`
+  points `dotnet test` and `dotnet run` of every test project, and of an
+  executable that sets `PuckRunUnderDotnetHost` (the silo), at
+  `dotnet exec <assembly>.dll`; the apphost is still built, because xUnit v3
+  requires one and a published executable ships its own, but every test
+  assembly refuses to run under it (`tests/Shared/SharedTestHost.cs`, exit 87),
+  so never start a suite's `.exe` directly. Every `puck` runner
+  starts `dotnet <suite>.dll`, and canaries, parity, counters and `puck test`
+  start `dotnet Puck.World.dll`. One firewall decision for `dotnet.exe` then
+  covers every worktree and run. `Puck.Analyzers` fails the build with NET001
+  on `IPAddress.Any`, `IPAddress.IPv6Any`, Kestrel's `ListenAnyIP`, a
+  port-only `TcpListener` or `UdpClient`, and any literal spelling `0.0.0.0`,
+  `[::]` or a `*`/`+` wildcard URL host, outside the deployment sites
+  `AnyAddressBindAllowlist` names with their reasons.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
@@ -727,7 +944,6 @@ The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
 
 The rules for coding agents live in one file, the root
-[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
-or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.

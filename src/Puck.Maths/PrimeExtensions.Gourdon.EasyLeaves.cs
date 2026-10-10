@@ -17,7 +17,7 @@ public static partial class PrimeExtensions {
         // A 16-KiB U(30) bitmap plus its 8-KiB word prefixes stays within a 32-KiB L1.
         // One persistent sieve serves every A/C query below sqrt(x), including the final partial word.
         PrimeExploration.VisitPrimeCountSegments(highExclusive: ((uint)value.SquareRoot()), segmentBytes: 16384,
-            prefixMasks: CombinatorialTables.PrefixMasks, visitor: counter.Consume, cancellationToken: cancellationToken);
+            visitor: counter.Consume, cancellationToken: cancellationToken);
         return counter.Sum;
     }
 

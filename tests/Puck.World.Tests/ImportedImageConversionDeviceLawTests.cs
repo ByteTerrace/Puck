@@ -23,7 +23,6 @@ namespace Puck.World.Tests;
 /// fill kernel (<c>Assets/Shaders/scrgb-fill.comp.hlsl</c>) wrote. It skips by name where the host has no such device,
 /// and runs alone, because the debug layer removes every device the process already holds.
 /// </summary>
-[Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class ImportedImageConversionDeviceLawTests {

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The plumbing every puck verb shares: exit codes, processes, git, paths, help, the invocation every root composes its verbs through, and the repository project graph. -->
+    <PropertyGroup>
+        <AssemblyName>Puck.Cli.Core</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+        <PuckKind>Tool</PuckKind>
+        <RootNamespace>Puck.Cli</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Core" Version="[11.*, )" />
+        <PackageReference Include="Resharp" Version="[1.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Networking/Puck.Networking.csproj" />
+    </ItemGroup>
+</Project>

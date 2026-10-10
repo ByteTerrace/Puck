@@ -9,7 +9,7 @@ world.wait ready 180
 world.rate resume
 # Warm the same stationary cache before changing this leg's one input class.
 world.rate pause
-world.wait indirect 180
+world.wait indirect
 world.rate resume
 world.state.cell.set dayRunning $value 1
 world.wait 120

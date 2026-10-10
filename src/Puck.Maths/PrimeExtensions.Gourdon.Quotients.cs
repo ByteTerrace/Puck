@@ -26,7 +26,7 @@ public static partial class PrimeExtensions {
     private const double GourdonQuotientBiasValue = 4_503_599_627_370_496D;
 
     /// <summary>The exclusive bound on every quotient the leaf-quotient rungs accept: 2^48.</summary>
-    internal const ulong GourdonQuotientLimit = (1UL << 48);
+    public const ulong GourdonQuotientLimit = (1UL << 48);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void DivideGourdonQuotients(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
@@ -41,10 +41,11 @@ public static partial class PrimeExtensions {
             DivideGourdonQuotientsScalar(dividend: dividend, divisors: divisors, quotients: quotients, start: 0);
         }
     }
+
     // Writes quotients[i]=floor(dividend/divisors[i]). Requires quotients.Length>=divisors.Length, every divisor
     // positive, and every quotient below GourdonQuotientLimit.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static void DivideGourdonQuotients512(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
+    public static void DivideGourdonQuotients512(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
         Debug.Assert((quotients.Length >= divisors.Length));
         ref var divisor = ref MemoryMarshal.GetReference(span: divisors);
         ref var quotient = ref MemoryMarshal.GetReference(span: quotients);
@@ -65,7 +66,7 @@ public static partial class PrimeExtensions {
         DivideGourdonQuotientsScalar(dividend: dividend, divisors: divisors, quotients: quotients, start: index);
     }
     // The 256-bit rung of DivideGourdonQuotients512, same contract.
-    internal static void DivideGourdonQuotients256(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
+    public static void DivideGourdonQuotients256(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
         Debug.Assert((quotients.Length >= divisors.Length));
         ref var divisor = ref MemoryMarshal.GetReference(span: divisors);
         ref var quotient = ref MemoryMarshal.GetReference(span: quotients);
@@ -86,7 +87,7 @@ public static partial class PrimeExtensions {
         DivideGourdonQuotientsScalar(dividend: dividend, divisors: divisors, quotients: quotients, start: index);
     }
     // The 128-bit rung of DivideGourdonQuotients512, same contract.
-    internal static void DivideGourdonQuotients128(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
+    public static void DivideGourdonQuotients128(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients) {
         Debug.Assert((quotients.Length >= divisors.Length));
         ref var divisor = ref MemoryMarshal.GetReference(span: divisors);
         ref var quotient = ref MemoryMarshal.GetReference(span: quotients);
@@ -109,7 +110,7 @@ public static partial class PrimeExtensions {
     }
     // The scalar rung, and every vector rung's tail from start, same contract.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static void DivideGourdonQuotientsScalar(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients, int start) {
+    public static void DivideGourdonQuotientsScalar(ulong dividend, ReadOnlySpan<uint> divisors, Span<ulong> quotients, int start) {
         Debug.Assert((quotients.Length >= divisors.Length));
         var estimate = ((double)dividend);
 

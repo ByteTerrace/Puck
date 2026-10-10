@@ -4,10 +4,10 @@ world.quality medium
 world.indirect medium
 world.wait ready 25
 world.timeline at change 0
-world.wait indirect 25
+world.wait indirect
 world.counters sdf.indirect
 world.timeline at change 0
-world.wait indirect 25
+world.wait indirect
 world.counters sdf.indirect
 world.screenshot {run}/control.png
 world.wait captures 5

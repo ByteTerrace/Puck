@@ -6,8 +6,9 @@
 #include "sdf-world.hlsli"
 #include "../field/sdf-tape-build.hlsli"
 
-[numthreads(1, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
+// One workgroup a tile, as the beam dispatches; its invocations build the tile's slabs in parallel.
+[numthreads(SDF_TAPE_SLAB_COUNT, 1, 1)]
+void CSMain(uint3 id : SV_GroupID, uint3 lane : SV_GroupThreadID) {
     uint viewIndex = worldViewOf(id.z);
     if (viewIndex >= passGroup.viewportCount || id.x >= passGroup.tileGrid.x || id.y >= passGroup.tileGrid.y) { return; }
     sdfProgramLayout = sdfLoadProgramLayout();
@@ -17,7 +18,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float2 minimum = float2(id.xy) * float(WorldTileSize);
     float2 maximum = min(minimum + float(WorldTileSize), extent);
     TileCone cone = buildTileCone(view, minimum / extent, maximum / extent);
-    sdfBuildTileTape(tile, worldInstanceMaskBase(tile), view.position.xyz, cone.centerDirection, cone.chord,
+    sdfBuildTileTape(tile, lane.x, worldInstanceMaskBase(tile), view.position.xyz, cone.centerDirection, cone.chord,
         tiles[worldTileMarchStartIndex(tile)], tiles[worldTileFarBoundIndex(tile)]);
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountShapes(sdfWorkShapes, sdfWorkGradients);

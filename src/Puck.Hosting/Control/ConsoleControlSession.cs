@@ -193,7 +193,9 @@ public sealed class ConsoleControlSession : IControlSession {
             m_session.Enqueue(line: request.Command!);
             var result = await completion.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
-            return new(
+            // A console answer longer than the transport carries is still the command's answer: it is delivered cut,
+            // with a marker, under the command's own status.
+            return new ControlResponse(
                 request.Id,
                 (result.IsError
                 ? "refused"
@@ -203,7 +205,7 @@ public sealed class ConsoleControlSession : IControlSession {
                 result.Output,
                 result.IsError,
                 result.ClearTranscript
-            );
+            ).Bounded();
         } catch (Exception error) when ((error is IOException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException)) {
             return new(
                 request.Id,

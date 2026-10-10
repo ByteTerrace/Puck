@@ -32,7 +32,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.op_Multiply — sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2³⁰ FixedVectorMath.RawMagnitude gate",
+        "Subject": "FixedQuaternion.op_Multiply — sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2³⁰ FusedArithmetic.RawMagnitude gate",
         "Against": "Oracles.CayleyDicksonProduct at two floors — the same product reached from the other end of the theory: the twisted group algebra over (ℤ/2)² whose target key is an exclusive-or and whose 2-cochain is Oracles.CayleyDicksonCharge, i.e. the doubling recursion (a,b)(c,d) = (a·c − d̄·b, d·a + b·c̄) walked down to basis vectors. ONE Oracles.RoundDyadic at shift 16 per lane. NOTE on CayleyDicksonCharge's own transcription label: it is a transcription with respect to Presentations' sign rule, which it restates — FixedQuaternion has no doubling recursion, no charge and no basis indexing anywhere, so with respect to THIS subject the leg is classical. The only shared convention is the lane permutation (X,Y,Z,W) ↔ (e₁,e₂,e₃,e₀), declared once in Subjects.QuaternionToDoublingLanes and checked by hand at e₁e₂ = +e₃, e₂e₁ = −e₃, e₁² = e₃² = −e₀ and e₂e₃ = +e₁",
         "Shared": "",
         "Citation": "",
@@ -359,6 +359,10 @@
       {
         "Type": "Puck.Maths.FixedQuaternion",
         "Name": "TryLengthSquared"
+      },
+      {
+        "Type": "Puck.Maths.FixedVectorMath",
+        "Name": "TryMagnitude"
       }
     ],
     "Legs": [
@@ -803,7 +807,7 @@
         "Subject": "Exp's and Log's transcendentals",
         "Against": "FixedQ4816.SinCosRaw and FixedQ4816.Atan2",
         "Shared": "the entire sine/cosine and arctangent computation, plus FixedVectorMath.TryNormalizeWithMagnitude's one-pass axis-and-norm",
-        "Citation": "scalar.atan2-vs-series pins Atan2 against Oracles.EncloseAtan2, and scalar.sincos-vs-series pins the public SinCos against Oracles.EncloseSinCos; SinCosRaw is the same turn-domain body reached at full unsigned width and is no longer UNGATED: quaternion.sincos-raw-full-unsigned-width stands it against an angle-addition carriage of Oracles.EncloseSinCos over the whole sixty-four-bit width at a derived envelope, and quaternion.sincos-raw-width-sweep repeats that over a dense one-turn span. It is internal, so coverage-manifest.json still cannot name it, which is exactly why a gate over it can go missing without the ratchet noticing and why the statement is spelled out at length there. FixedVectorMath.TryNormalizeWithMagnitude is gated too now, by the vector family case vector.normalize-with-magnitude-full-unsigned-width, whose magnitude statement is an EXACT identity against Oracles.NearestIntegerRoot rather than a tolerance",
+        "Citation": "scalar.atan2-vs-series pins Atan2 against Oracles.EncloseAtan2, and scalar.sincos-vs-series pins the public SinCos against Oracles.EncloseSinCos; SinCosRaw is the same turn-domain body reached at full unsigned width and is no longer UNGATED: quaternion.sincos-raw-full-unsigned-width stands it against an angle-addition carriage of Oracles.EncloseSinCos over the whole sixty-four-bit width at a derived envelope, and quaternion.sincos-raw-width-sweep repeats that over a dense one-turn span. The coverage manifest credits SinCosRaw to both cases, so the ratchet notices if either gate goes missing. FixedVectorMath.TryNormalizeWithMagnitude is gated too now, by the vector family case vector.normalize-with-magnitude-full-unsigned-width, whose magnitude statement is an EXACT identity against Oracles.NearestIntegerRoot rather than a tolerance",
         "Absolute": ""
       }
     ]
@@ -815,13 +819,17 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosRaw"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.SinCosRaw over the WHOLE unsigned 64-bit angle width - the turn-domain entry point FixedQuaternion.FromAxisAngle, FixedQuaternion.Exp and FixedRigidTransform.Exp all reach their sine and cosine through, and the one regime the public SinCos cannot name at all, because its argument is a signed long. The member is INTERNAL, so coverage-manifest.json cannot name it and the ratchet cannot notice a gate over it disappearing; this case is homed in the quaternion family because the quaternion campaign is where the hole was declared, and it is reached through Puck.Maths.Tests' InternalsVisibleTo",
+        "Subject": "FixedQ4816.SinCosRaw over the WHOLE unsigned 64-bit angle width - the turn-domain entry point FixedQuaternion.FromAxisAngle, FixedQuaternion.Exp and FixedRigidTransform.Exp all reach their sine and cosine through, and the one regime the public SinCos cannot name at all, because its argument is a signed long. The member is public and the coverage manifest credits it to this case; it is homed in the quaternion family because the quaternion campaign is where the hole was declared",
         "Against": "Oracles.EncloseSinCos, carried past the signed carrier by the ANGLE-ADDITION IDENTITY: the angle is split exactly at u = floor(u/2) + ceil(u/2) - plus one further raw at the single word 2^64-1, where no two representable halves suffice - each part enclosed by the oracle's own radian-domain alternating series over a Machin-derived pi at 384 working bits, and the parts recombined by sin(a+b) = sin a*cos b + cos a*sin b and cos(a+b) = cos a*cos b - sin a*sin b in interval arithmetic with directed narrowing at each step. The split is EXACT, so it introduces no error of its own; only the interval arithmetic widens. Nothing on the reference side calls the subject and no floating-point value is formed anywhere",
         "Shared": "",
         "Citation": "",
@@ -859,12 +867,17 @@
   {
     "Id": "quaternion.sincos-raw-width-sweep",
     "Tier": "Exhaustive",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosRaw"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.SinCosRaw at VOLUME. MIRROR of quaternion.sincos-raw-full-unsigned-width at strictly stronger operands: every raw of one whole turn - 0 through 411775 - and 250000 further draws across the entire unsigned width, against the same enclosure and the same derived envelope. No public member is credited: the subject is internal, so the manifest cannot name it, and a Members list naming a public neighbour this case never calls would record coverage the evidence does not support",
+        "Subject": "FixedQ4816.SinCosRaw at VOLUME. MIRROR of quaternion.sincos-raw-full-unsigned-width at strictly stronger operands: every raw of one whole turn - 0 through 411775 - and 250000 further draws across the entire unsigned width, against the same enclosure and the same derived envelope. The manifest credits FixedQ4816.SinCosRaw, the one member this case calls; a Members list naming a neighbour this case never calls would record coverage the evidence does not support",
         "Against": "the same angle-addition carriage of Oracles.EncloseSinCos its Default sibling stands against, at the same derived per-angle envelope",
         "Shared": "",
         "Citation": "",

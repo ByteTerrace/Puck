@@ -124,10 +124,10 @@ public sealed partial class SdfWorldPassesLawTests {
                 _ = work.TryGetPassCount(column: dispatches, pass: pass, value: out var directCount);
                 _ = work.TryGetPassCount(column: indirect, pass: pass, value: out var indirectCount);
                 Assert.Equal(actual: (directCount + indirectCount), expected: 1L);
-                if (work.PassLabels[pass].EndsWith(comparisonType: StringComparison.Ordinal, value: "$views")) {
+                if (work.PassLabels[pass].EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Parts.Receiver}")) {
                     var transition = (work.TryGetPassCount(column: barriers, pass: pass, value: out var count) && (count > 0));
 
-                    // Views publishes receiver certificates even when its geometry predecessors stand.
+                    // The receiver publishes receiver certificates even when its geometry predecessors stand.
                     Assert.True(condition: transition);
                 }
             } else {

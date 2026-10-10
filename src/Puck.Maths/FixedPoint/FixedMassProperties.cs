@@ -47,7 +47,7 @@ public static class FixedMassProperties {
     /// <param name="Ixy">The part's <c>(0,1)</c> inertia raw, about its own centre.</param>
     /// <param name="Ixz">The part's <c>(0,2)</c> inertia raw, about its own centre.</param>
     /// <param name="Iyz">The part's <c>(1,2)</c> inertia raw, about its own centre.</param>
-    internal readonly record struct CompoundPart(
+    public readonly record struct CompoundPart(
         long Mass,
         long CenterX,
         long CenterY,
@@ -68,7 +68,7 @@ public static class FixedMassProperties {
     /// <param name="fractionBitsVolume">The volume's fraction bit count.</param>
     /// <param name="volume">The volume raw on success; zero on refusal.</param>
     /// <returns><see langword="false"/> under the same conditions as <see cref="TrySphereVolume"/>.</returns>
-    internal static bool TryBoxVolume(long halfX, long halfY, long halfZ, int fractionBitsLength, int fractionBitsVolume, out long volume) {
+    public static bool TryBoxVolume(long halfX, long halfY, long halfZ, int fractionBitsLength, int fractionBitsVolume, out long volume) {
         if (
             (halfX < 0L) ||
             (halfY < 0L) ||
@@ -100,7 +100,7 @@ public static class FixedMassProperties {
     /// <param name="fractionBitsVolume">The volume's fraction bit count.</param>
     /// <param name="volume">The volume raw on success; zero on refusal.</param>
     /// <returns><see langword="false"/> under the same conditions as <see cref="TrySphereVolume"/>.</returns>
-    internal static bool TryCapsuleVolume(long radius, long centerDistance, int fractionBitsLength, int fractionBitsVolume, out long volume) {
+    public static bool TryCapsuleVolume(long radius, long centerDistance, int fractionBitsLength, int fractionBitsVolume, out long volume) {
         if (
             (radius < 0L) ||
             (centerDistance < 0L) ||
@@ -147,7 +147,7 @@ public static class FixedMassProperties {
     /// <remarks>Every part's parallel-axis contribution is taken against the exact rational composite centre, never
     /// against the rounded centre this returns, so no part inherits the centre's rounding. The composite mass is an
     /// exact integer sum of raws at one scale, so it rounds nothing at all.</remarks>
-    internal static bool TryCompound(
+    public static bool TryCompound(
         ReadOnlySpan<CompoundPart> parts,
         int fractionBitsMass,
         int fractionBitsLength,
@@ -345,7 +345,7 @@ public static class FixedMassProperties {
     /// <param name="perpendicular">The moment about <c>X</c> and <c>Z</c> alike on success; zero on refusal.</param>
     /// <returns><see langword="false"/> under the same conditions as <see cref="TrySphereBody"/>; every
     /// <see langword="out"/> parameter is zero in that case.</returns>
-    internal static bool TryCylinderBody(
+    public static bool TryCylinderBody(
         long density,
         int fractionBitsDensity,
         long radius,
@@ -425,7 +425,7 @@ public static class FixedMassProperties {
     /// <param name="fractionBitsVolume">The volume's fraction bit count.</param>
     /// <param name="volume">The volume raw on success; zero on refusal.</param>
     /// <returns><see langword="false"/> under the same conditions as <see cref="TrySphereVolume"/>.</returns>
-    internal static bool TryCylinderVolume(long radius, long height, int fractionBitsLength, int fractionBitsVolume, out long volume) {
+    public static bool TryCylinderVolume(long radius, long height, int fractionBitsLength, int fractionBitsVolume, out long volume) {
         if (
             (radius < 0L) ||
             (height < 0L) ||
@@ -454,7 +454,7 @@ public static class FixedMassProperties {
     /// <param name="volume">The volume raw on success; zero on refusal.</param>
     /// <returns><see langword="false"/> when an operand is negative, a fraction bit count is out of range, or the
     /// rounded volume does not fit the signed 64-bit raw.</returns>
-    internal static bool TrySphereVolume(long radius, int fractionBitsLength, int fractionBitsVolume, out long volume) {
+    public static bool TrySphereVolume(long radius, int fractionBitsLength, int fractionBitsVolume, out long volume) {
         if (
             (radius < 0L) ||
             !ScalesValid(

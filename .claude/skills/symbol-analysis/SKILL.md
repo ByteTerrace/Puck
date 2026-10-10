@@ -29,7 +29,7 @@ the running tool never locks the build output another build needs:
 dotnet <scratch-copy>/Puck.Cli.dll <verb> <arguments>
 ```
 
-If that build is absent, build it (`dotnet build src/Puck.Cli -c Release`) or
+If that build is absent, build it (`dotnet build src/Puck.Cli -c Release -nodeReuse:false`) or
 run the tracked project directly:
 
 ```text

@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.World.Client;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Testing.FrustumFitFixtures;
 
 namespace Puck.World.Tests;
 

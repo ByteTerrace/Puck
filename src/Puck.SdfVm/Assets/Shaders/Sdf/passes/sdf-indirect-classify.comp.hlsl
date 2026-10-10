@@ -2,18 +2,27 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// A probe's placement and a cell's partition are procedures one run serves, so the kernel inlines the interpreter once.
+#define SDF_INDIRECT_PROCS_CUSTOM
+#define SDF_INDIRECT_PROC_PLACE
+#define SDF_INDIRECT_PROC_PARTITION
+#define SDF_INDIRECT_PROC_SEGMENT
 #include "../indirect/sdf-indirect-cache.hlsli"
+#include "../indirect/sdf-indirect-procedures.hlsli"
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     if (passGroup.indirectTier == SdfIndirectTierOff) { return; }
     bool placing = passGroup.indirectPhase == 0u;
     uint count = placing ? passGroup.indirectPlaceCount : passGroup.indirectClassifyCount;
-    if (group.x >= count || group.x >= sdfIndirectClassifyBudget(passGroup.indirectTier)
+    uint item = passGroup.indirectItemFirst + group.x;
+    // Each lane is one admission unit: a probe's placement or a cell's partition, run only inside the chunk.
+    if (item >= count || item >= sdfIndirectClassifyBudget(passGroup.indirectTier)
         || passGroup.indirectPlaceCount > sdfIndirectClassifyBudget(passGroup.indirectTier)
-        || !sdfIndirectRange(0u, sdfIndirectWordCount(passGroup.indirectTier))) { return; }
+        || !sdfIndirectRange(0u, sdfIndirectWordCount(passGroup.indirectTier))
+        || !sdfIndirectChunkUnit(group.x, lane, SdfIndirectProbesPerBrick)) { return; }
     sdfProgramLayout = sdfLoadProgramLayout();
-    uint row = group.x + (placing ? 0u : passGroup.indirectPlaceCount);
+    uint row = item + (placing ? 0u : passGroup.indirectPlaceCount);
     uint length, stride;
     indirectUpdates.GetDimensions(length, stride);
     if (row >= length) { return; }
@@ -29,8 +38,18 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint index = slot * SdfIndirectProbesPerBrick + lane;
     uint cell = sdfIndirectCellWordOffset(passGroup.indirectTier) + index * SdfIndirectCellWords;
     uint proof = sdfIndirectProofWordOffset(passGroup.indirectTier) + index * SdfIndirectProofsPerCell * SdfIndirectProofWords;
+    uint procedure;
     if (placing) {
-        SdfIndirectPlacement placement = sdfIndirectPlace(float3(lattice) * spacing, spacing);
+        procedure = sdfIndirectPlaceBegin(float3(lattice) * spacing, spacing);
+    } else {
+        if (any(lattice == 2147483647)) { return; }
+        SdfIndirectPlacement corners[8];
+        [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(lattice + sdfIndirectCorner(c), level)); }
+        procedure = sdfIndirectPartitionBegin(corners, spacing);
+    }
+    sdfIndirectRun(procedure);
+    if (placing) {
+        SdfIndirectPlacement placement = sdfIndirectPlaceProc.result;
         uint address = index * SdfIndirectProbeWords;
         sdfIndirectStore(address, asuint(placement.position.x));
         sdfIndirectStore(address + 1u, asuint(placement.position.y));
@@ -44,12 +63,9 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         empty.components = 0xffffffffu;
         sdfIndirectStoreCell(cell, proof, empty);
     } else {
-        if (any(lattice == 2147483647)) { return; }
-        SdfIndirectPlacement corners[8];
-        [unroll] for (uint c = 0u; c < 8u; c++) { corners[c] = sdfIndirectReadProbe(sdfIndirectProbeIndex(lattice + sdfIndirectCorner(c), level)); }
-        SdfIndirectCell partition = sdfIndirectPartition(corners, spacing);
-        sdfIndirectStoreCell(cell, proof, partition);
+        sdfIndirectStoreCell(cell, proof, sdfIndirectPartitionProc.result);
     }
+    sdfIndirectReportCost(placing ? SdfIndirectCostPlace : SdfIndirectCostClassify, sdfFieldVisits, 1u);
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
     sdfWorkTexels = 1u;
     puckCountDetail(detail, sdfWorkSteps, sdfWorkTexels, 0u, 0u, 0u);

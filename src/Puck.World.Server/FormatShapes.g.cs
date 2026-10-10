@@ -8,9 +8,9 @@ namespace Puck.World {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReplaySnapshot.Magic</c>, declared in <c>src/Puck.World.Server/WorldReplaySnapshot.cs</c>.</summary>
-        public const string WorldReplaySnapshotMagic = "e22bd1890d42de5a";
+        public const string WorldReplaySnapshotMagic = "d54d4b714792839b";
         /// <summary>The shape fingerprint of <c>WorldReplaySnapshot.ShapeToken</c>, declared in <c>src/Puck.World.Server/WorldReplaySnapshot.cs</c>.</summary>
-        public const string WorldReplaySnapshotShapeToken = "e22bd1890d42de5a";
+        public const string WorldReplaySnapshotShapeToken = "d54d4b714792839b";
     }
 }
 
@@ -19,26 +19,26 @@ namespace Puck.World.Server {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.Magic</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecMagic = "26ca6e51a19084ae";
+        public const string WorldAuthorityCheckpointCodecMagic = "ca888193ec7fd97f";
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.SupportedVersion</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecSupportedVersion = "26ca6e51a19084ae";
+        public const string WorldAuthorityCheckpointCodecSupportedVersion = "ca888193ec7fd97f";
         /// <summary>The shape fingerprint of <c>WorldAuthorityReceiptSnapshot.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs</c>.</summary>
-        public const string WorldAuthorityReceiptSnapshotCurrentSchema = "3a0c5447cbb2974e";
+        public const string WorldAuthorityReceiptSnapshotCurrentSchema = "c183de8b3205c9de";
         /// <summary>The shape fingerprint of <c>WorldAuthorityRecoveryRootCodec.Schema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs</c>.</summary>
-        public const string WorldAuthorityRecoveryRootCodecSchema = "9ca50fccc8488fab";
+        public const string WorldAuthorityRecoveryRootCodecSchema = "6f051ab0a2334bf1";
         /// <summary>The shape fingerprint of <c>WorldExtensionConfiguration.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldExtensionConfiguration.cs</c>.</summary>
         public const string WorldExtensionConfigurationCurrentSchema = "0b62a86407948a18";
         /// <summary>The shape fingerprint of <c>WorldFederationCodec.WireKey</c>, declared in <c>src/Puck.World.Server/WorldFederationCodec.cs</c>.</summary>
-        public const string WorldFederationCodecWireKey = "16821813bfcfbfc5";
+        public const string WorldFederationCodecWireKey = "c55b7e61877e9e8b";
         /// <summary>The shape fingerprint of <c>WorldReleaseFixtureArchive.Schema</c>, declared in <c>src/Puck.World.Server/WorldReleaseFixtureArchive.cs</c>.</summary>
-        public const string WorldReleaseFixtureArchiveSchema = "3cf61011848000ae";
+        public const string WorldReleaseFixtureArchiveSchema = "5f44f74354bccbdc";
         /// <summary>The shape fingerprint of <c>WorldReleaseGroupStore.Schema</c>, declared in <c>src/Puck.World.Server/WorldReleaseGroup.cs</c>.</summary>
-        public const string WorldReleaseGroupStoreSchema = "ab1f8207c38413bd";
+        public const string WorldReleaseGroupStoreSchema = "ffd540cca2861dca";
         /// <summary>The shape fingerprint of <c>WorldReleaseManifest.CurrentCoordinatorContract</c>, declared in <c>src/Puck.World.Server/WorldReleaseManifest.cs</c>.</summary>
-        public const string WorldReleaseManifestCurrentCoordinatorContract = "2ca9381c4b89d4f7";
+        public const string WorldReleaseManifestCurrentCoordinatorContract = "f702ae85f241ac43";
         /// <summary>The shape fingerprint of <c>WorldReleaseManifest.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldReleaseManifest.cs</c>.</summary>
         public const string WorldReleaseManifestCurrentSchema = "ae1ed0295451662b";
         /// <summary>The shape fingerprint of <c>WorldReleaseRewindBoundary.Contract</c>, declared in <c>src/Puck.World.Server/WorldReleaseRewindBoundary.cs</c>.</summary>
-        public const string WorldReleaseRewindBoundaryContract = "2726ffdc715614c4";
+        public const string WorldReleaseRewindBoundaryContract = "372dd430c5a053b2";
     }
 }

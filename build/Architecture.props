@@ -311,59 +311,6 @@
     -->
 
     <!--
-        INTERNALS-VISIBLE-TO, declared-vs-actual.
-
-        The gate's declarations here are checked against each assembly's ACTUAL friend set read from the
-        compiled PE, because scanning declarations trusts the thing being checked. Reading the PE is also the
-        only form that sees both shapes this repository has used — [assembly: InternalsVisibleTo] in
-        Properties/AssemblyInfo.cs, and <InternalsVisibleTo> csproj items — and a scan of either form alone
-        returns a confident, wrong answer, measured by getting it wrong. Only the attribute form survives
-        today; the PE read is kept because the csproj form costs one line to reintroduce.
-
-        THE POLICY THIS TABLE ENFORCES: internals-visible-to is not endorsed here, and a TEST project is the
-        only comfortable exception. Anywhere else, a member reached across a grant should be public instead —
-        publicity is reviewable, a grant is a standing privilege nobody re-reads. So the shortness of this
-        list is the point of it, and every row that is not a test project owes the reason it is not public.
-
-        Puck.World HAD two friends — the file-based audio proofs — and they were the most privileged
-        consumers in the tree, holding internals access to a composition root. They were also exactly what an
-        analyzer-hosted gate could not have seen, since analyzer injection is off for $(IsFileBasedProgram),
-        and a gate whose coverage silently excludes its most privileged consumers is worse than no gate. That
-        argument is why the gate hooks where it does and is kept for it. Both grants were removed under the
-        quarantine: the scripts left the build, so the privilege was dead config that this ledger
-        would have kept blessing. If those proofs are ever re-homed in a real project, the grant is re-issued
-        to THAT assembly and named here — never restored to a file name.
-
-        Gone with them: every grant naming Puck.Post (Puck.Maths, Puck.Platform and Puck.Scripting each held
-        one), privilege pointing at an assembly the build no longer produces. Puck.Platform and
-        Puck.Scripting held nothing else once Puck.Cli's grant became publicity on
-        Puck.Scripting.WasmStdlibSources, so both AssemblyInfo.cs files are deleted rather than emptied and
-        neither project appears below at all.
-
-        Puck.Maths has one test-only friend, Puck.Maths.Tests, which reaches internal kernels to prove their
-        individual rungs directly.
-
-        Puck.Physics grants Puck.Physics.Tests its internal contact-solver state (the manifold slot table and
-        speculative activation), so the ordering and contact laws can assert on solver internals the public
-        surface deliberately does not expose. Test-only, like the Maths grant beside it.
-
-        Puck.Networking grants nothing: its peer refusal tests drive an unsigned, wrongly-signed, or tampered
-        message frame onto an otherwise-honest link through the public IPeerTransport seam (a test-side transport
-        decorator hands the test the control stream), so no unattested-send member exists to befriend.
-
-        Puck.Cli grants Puck.Cli.Tests its parity comparator internals (the manifest/contract loaders, the
-        per-tile pixel comparer, the gate/state/pixel outcome model) — a CLI verb's own plumbing, never a public
-        API. Test-only, like every other grant here.
-    -->
-    <ItemGroup>
-        <PuckArchitectureFriends Include="Puck.Attestation" Friends="Puck.Attestation.Tests" />
-        <PuckArchitectureFriends Include="Puck.Cli" Friends="Puck.Cli.Tests" />
-        <PuckArchitectureFriends Include="Puck.Input" Friends="Puck.Input.Tests" />
-        <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
-        <PuckArchitectureFriends Include="Puck.Physics" Friends="Puck.Physics.Tests" />
-    </ItemGroup>
-
-    <!--
         The System.Console denial for Puck.World.Server, armed: PuckArchitectureDeniedApiGate reads this item
         after Puck.World.Server compiles and fails PUCKARCH008 if the output assembly references System.Console.
         Every narration line under Puck.World.Server is a WorldNarration delivered through WorldOutputHub; the one

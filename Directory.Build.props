@@ -31,9 +31,33 @@
              Native AOT set PublishAot in their own project deliberately. -->
         <IsAotCompatible>true</IsAotCompatible>
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-        <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+        <!-- Every restore is locked, locally as in CI: a restore never rewrites a lock file, so a package or project
+             reference change fails the build that made it (NU1004, naming the project) instead of rewriting the lock
+             file silently and failing CI's locked restore later. `puck locks` re-records the lock files after such a
+             change, and its update option takes newer packages within the floating ranges; both pass
+             RestoreLockedMode=false, the one way to restore unlocked. -->
+        <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>
         <TargetFramework>net10.0</TargetFramework>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- Build output is hard-linked rather than copied wherever the copy's source is replaced, never rewritten, when it
+             changes. Every project otherwise copies its whole dependency closure into its own bin, so one built tree held
+             each package and Puck assembly about seven times over. CopyLocal links each package file to the NuGet global
+             cache and each project reference to the referenced project's bin; AdditionalFiles links None and Content
+             items with CopyToOutputDirectory (assets, fonts, shader bytecode, world outputs, mimalloc) to the file the item
+             names; CopyAdditionalFiles covers added modules and native references. MSBuild's Copy deletes a destination
+             before it copies or links, so a rebuild replaces a link instead of writing through it, and a link it cannot
+             make (another volume, the link-count limit) falls back to a copy with a message, not a warning.
+             The hazard: a hard link is the same file under another name, so anything that writes an output file in place
+             (opens it for writing, truncates it, appends to it) changes every linked name at once: the NuGet global cache,
+             other projects' outputs, and the repository's own source files. Nothing in the tree does: output-side
+             writers replace the file (AtomicFile, or delete then write), and `contributing.md` states the rule. Two copy
+             paths stay plain copies because a writer they reach rewrites in place: the compiler truncates and rewrites
+             obj/<name>.dll, .pdb and .xml, so linking those into bin (CopyFilesToOutputDirectory) or into a publish
+             directory (PublishFiles, which publishes from obj) would let the next compile rewrite every copy, including
+             a kept World build or a published release. -->
+        <CreateHardLinksForAdditionalFilesIfPossible>true</CreateHardLinksForAdditionalFilesIfPossible>
+        <CreateHardLinksForCopyAdditionalFilesIfPossible>true</CreateHardLinksForCopyAdditionalFilesIfPossible>
+        <CreateHardLinksForCopyLocalIfPossible>true</CreateHardLinksForCopyLocalIfPossible>
         <!-- Single source of truth for the official C#/WinRT Windows SDK projection pack
              (microsoft.windows.sdk.net.ref). Puck.Platform PackageDownloads this exact pack for its
              own compile, and WindowsCaptureProjection.targets re-declares the pack's two runtime
@@ -107,8 +131,10 @@
     <!-- Every project except the analyzer itself (which would otherwise be a build-order cycle: the analyzer
          cannot reference itself as an analyzer before it has built) carries Puck.Analyzers as a compiler
          extension, never as a regular assembly reference — ReferenceOutputAssembly="false" means it neither
-         becomes a compile-time dependency nor ships in any output. -->
-    <ItemGroup Condition="('$(MSBuildProjectName)' != 'Puck.Analyzers') AND ('$(IsFileBasedProgram)' != 'true') AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Analyzers.csproj')))">
+         becomes a compile-time dependency nor ships in any output. The API reference's workspace
+         (docs/api/docfx.json sets PuckApiReference) reads declarations only, so it carries no analyzer: it
+         reads sources alone and starts before the analyzer is compiled. -->
+    <ItemGroup Condition="('$(MSBuildProjectName)' != 'Puck.Analyzers') AND ('$(IsFileBasedProgram)' != 'true') AND ('$(PuckApiReference)' != 'true') AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Analyzers.csproj')))">
         <ProjectReference
             Include="$(MSBuildThisFileDirectory)src/Puck.Analyzers/Puck.Analyzers.csproj"
             OutputItemType="Analyzer"

@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
@@ -7,13 +6,12 @@ namespace Puck.Maths;
 /// <remarks>The candidate is greater than <see cref="uint.MaxValue"/> and has no prime factor through 163.
 /// Implementations must return its exact primality. A false positive can return a composite; a false negative
 /// changes the selected distribution. The sampler supplies filtering, uniform candidate mapping and draw budgets.</remarks>
-internal interface IPrimeCandidateDecision {
+public interface IPrimeCandidateDecision {
     /// <summary>Decides primality of a filtered candidate above the unsigned-32-bit domain.</summary>
     /// <param name="value">The candidate, with no prime divisor through 163.</param>
     /// <returns>Whether <paramref name="value"/> is prime.</returns>
     static abstract bool IsPrimeCandidate(ulong value);
 }
-
 public static partial class PrimeExploration {
     /// <summary>The largest upper bound the shared base-prime table selects from directly.</summary>
     private const ulong TableSelectionCeiling = 65535UL;
@@ -51,7 +49,6 @@ public static partial class PrimeExploration {
     public static bool TryRandomPrime<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = 256)
         where TGenerator : struct, IDrawGenerator =>
         TryRandomPrime<TGenerator, BaillieSelectionDecision>(generator: ref generator, high: high, low: low, maxAttempts: maxAttempts, prime: out prime);
-
     /// <summary>Attempts uniform prime selection with a supplied exact decision for filtered wide candidates.</summary>
     /// <typeparam name="TGenerator">The caller-owned draw generator, specialized without boxing.</typeparam>
     /// <typeparam name="TDecision">The exact wide-candidate decision; see <see cref="IPrimeCandidateDecision"/>.</typeparam>
@@ -66,7 +63,7 @@ public static partial class PrimeExploration {
     /// draw order until one is accepted; all smaller candidates use the narrow production decision. Uniform-prime
     /// semantics require an exact supplied decision.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The interval is reversed or the attempt budget is not positive.</exception>
-    internal static bool TryRandomPrime<TGenerator, TDecision>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = 256)
+    public static bool TryRandomPrime<TGenerator, TDecision>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts = 256)
         where TGenerator : struct, IDrawGenerator where TDecision : struct, IPrimeCandidateDecision {
         ArgumentOutOfRangeException.ThrowIfLessThan(high, low);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxAttempts);
@@ -347,15 +344,14 @@ public static partial class PrimeExploration {
     }
 
     /// <summary>Holds, for each residue modulo thirty, the number of wheel units at or below it.</summary>
-    internal static class WheelUnitsThrough {
-        internal static readonly byte[] Counts = CreateCounts();
-
-        private static byte[] CreateCounts() {
-            var counts = new byte[PrimeWheel30.Modulus];
-
-            for (var residue = 0; (residue < counts.Length); ++residue) { counts[residue] = ((byte)BitOperations.PopCount(value: ((uint)PrimeWheel30.PrefixMask(remainder: residue)))); }
-
-            return counts;
-        }
+    public static class WheelUnitsThrough {
+        /// <summary>Gets, for every remainder from zero through twenty-nine, the number of units of thirty at or below it.</summary>
+        /// <remarks>The values are written out as constant data, so a read costs one load from a constant address and no
+        /// caller can overwrite them; the law <c>prime-exploration.wheel-tables-match-their-derivation</c> proves each
+        /// equals the population count of <see cref="PrimeWheel30.PrefixMask(int)"/>.</remarks>
+        public static ReadOnlySpan<byte> Counts => [
+            0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4,
+            4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8,
+        ];
     }
 }

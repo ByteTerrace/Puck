@@ -5,11 +5,11 @@
       "Microsoft.Testing.Extensions.HangDump": {
         "type": "Direct",
         "requested": "[2.*, )",
-        "resolved": "2.4.1",
-        "contentHash": "ViQa60PnKgnHsWI66CGPeYv71RSs1e1e6XJgNbP+aD+uaJMJ6jn6t+6/14OVvPC9luVtJwqWyvdJW942mSxQHg==",
+        "resolved": "2.5.1",
+        "contentHash": "z0PfgjBRMpIIxUipOXm8wI85IVBhDq46dBS6HP9LSZizcH2QWIDjCi09UMkvROaYFAhfwBVv1cAihFMquTw/bw==",
         "dependencies": {
           "Microsoft.Diagnostics.NETCore.Client": "0.2.607501",
-          "Microsoft.Testing.Platform": "[2.4.1, 3.0.0)"
+          "Microsoft.Testing.Platform": "[2.5.1, 3.0.0)"
         }
       },
       "xunit.v3": {
@@ -37,15 +37,15 @@
       },
       "Azure.Core": {
         "type": "Transitive",
-        "resolved": "1.62.0",
-        "contentHash": "C0ijs91ZW2uhF/VwGLXeayb+RwTWhDxKnrsmqPWg5HkYtPQ93mzaydyMCjAzE0AG5yHc1bpaPc+NPlZUgz3w8g==",
+        "resolved": "1.63.0",
+        "contentHash": "5egODg5yWcRV0kkAv22jQL7YmsfupX7intDYbxZMu8giASSQVfG5+mwC+BdJOWvhFT1Y+9KzuvbUGqAVEBzsfw==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "10.0.10",
           "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.10",
-          "Microsoft.Identity.Client": "4.84.2",
-          "Microsoft.Identity.Client.Extensions.Msal": "4.84.2",
-          "System.ClientModel": "1.15.0",
+          "Microsoft.Identity.Client": "4.90.0",
+          "Microsoft.Identity.Client.Extensions.Msal": "4.90.0",
+          "System.ClientModel": "1.16.0",
           "System.Memory.Data": "10.0.10"
         }
       },
@@ -112,10 +112,10 @@
       },
       "Azure.Monitor.OpenTelemetry.Exporter": {
         "type": "Transitive",
-        "resolved": "1.9.0",
-        "contentHash": "gXe64QuF30HQkuo1B+FqsekN9coca1vcFKDWCgioo39Hb5Yc0lMS6g8OAa7rGBIssQBoaQQAxIM6Dn4pJbXz+g==",
+        "resolved": "1.10.0",
+        "contentHash": "39Vc71fy1KYqU70j3sbGOqUU6wT5/eKskEuoW8R+H+J+srIyCewN6ooMTj+6lU4yFpJ0x5da2jx1GK9h48g6iw==",
         "dependencies": {
-          "Azure.Core": "1.62.0",
+          "Azure.Core": "1.63.0",
           "OpenTelemetry.Extensions.Hosting": "1.18.0",
           "OpenTelemetry.PersistentStorage.FileSystem": "1.1.1"
         }
@@ -138,8 +138,8 @@
       },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "12.30.0",
-        "contentHash": "pf6tqkzNANU5Fvfibse3fVRNWJol4jb9iA/wjHu1EHEpWpFHasHaiVNc11fncvOwnphzm4xaZwXzrg34yAI2hw==",
+        "resolved": "12.30.1",
+        "contentHash": "ywPqtDHLH5MY0Cp/wfLQgqhHOuJmD+bYVJawjXudtaQr9aJB+9orhk8oE6hHPy5s8H5bzq2q/mDkESf8w1rzBg==",
         "dependencies": {
           "Apache.Arrow": "22.1.0",
           "Azure.Core": "1.60.0",
@@ -277,8 +277,8 @@
       },
       "Microsoft.Build.Framework": {
         "type": "Transitive",
-        "resolved": "17.11.48",
-        "contentHash": "C3WIMt2wBl4++NX3jSEpTq5KXBhvAV154R4JrYHkfy9JSBcXWiL0mkgpspk5xSdOj+fS/uz7zluIy6bMM1fkkQ=="
+        "resolved": "17.14.28",
+        "contentHash": "wRcyTzGV0LRAtFdrddtioh59Ky4/zbvyraP0cQkDzRSRkhgAQb0K88D/JNC6VHLIXanRi3mtV1jU0uQkBwmiVg=="
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "Transitive",
@@ -747,8 +747,8 @@
       },
       "Microsoft.Graph": {
         "type": "Transitive",
-        "resolved": "6.7.0",
-        "contentHash": "TyW7c/4W1uHwqDoQ4HPb/fL6A16CUqM206djAcCSLlYNX3pi7mcLjrIgD0T5VETJp7eQ/LeEU/Yfy1W5239G9A==",
+        "resolved": "6.8.0",
+        "contentHash": "CBU0bRVkiYy8TLiGmGbIUTENCfPnXF+59FCZKCOATS+uN4RmoH350/2chiZheaWUWk22v7rOoWZaJWW4Qtbn7Q==",
         "dependencies": {
           "Microsoft.Graph.Core": "4.0.1"
         }
@@ -771,18 +771,18 @@
       },
       "Microsoft.Identity.Client": {
         "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "Va9FjmABSgj/lcUfHH0pBNQkmS7SNyepz2ERV7Yynp6QgEYpFdSqR6Vzy1WWipN8GS5pBHuXoZbqaDWuARCrHQ==",
+        "resolved": "4.90.0",
+        "contentHash": "oc5A0jmu083T3OW1JVYMrM1rekIL8SkBRB/byMMQjFuYlRZsMh3wDeCwwrz9sGI6XlP5BIqO7XWgjPpF3reF5A==",
         "dependencies": {
           "Microsoft.IdentityModel.Abstractions": "8.14.0"
         }
       },
       "Microsoft.Identity.Client.Extensions.Msal": {
         "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "+D98LaU3dOu/Nzs6kgbBJapMvH7iwYcAeC99XwSkpmEadsPv6rozecOl9P6m4A3RfpOuPt9e6J6TwwUUp3+M4w==",
+        "resolved": "4.90.0",
+        "contentHash": "/L7b+fNF+ITSw3SPlbgE7ax2MqVg/a60kHsDooKUbjYDdX88COTTwE20qRPT84fykehBTSmP7LSxh6b5hwIEOw==",
         "dependencies": {
-          "Microsoft.Identity.Client": "4.84.2",
+          "Microsoft.Identity.Client": "4.90.0",
           "System.Security.Cryptography.ProtectedData": "4.5.0"
         }
       },
@@ -1292,8 +1292,8 @@
       },
       "Microsoft.Testing.Platform": {
         "type": "Transitive",
-        "resolved": "2.4.1",
-        "contentHash": "3nW9NyhN1BnHRF994DCOOUQCqVA9pDT+gPpbuhI/xUntZnGnXO4ySovKxFlFuoT/48pnI74LK/DeKVlve1L3VQ=="
+        "resolved": "2.5.1",
+        "contentHash": "FAMaFFWnULW+hDHMb40Qzhcgz9cAU2/EtgRCBNX/DdQoKo0sPG2EiY+w7bQdl/BgHnf/DbpXLbf5Xy0o15M8NA=="
       },
       "Microsoft.Testing.Platform.MSBuild": {
         "type": "Transitive",
@@ -1461,8 +1461,8 @@
       },
       "Resharp": {
         "type": "Transitive",
-        "resolved": "1.0.5",
-        "contentHash": "2gnMKbuDxRxlnkMkl8w7aC+Nzkc2qxAOZd5FUKjgpgT2S7nOrf2ooYjp0zL7yRk2DUYLDpj+ewH/awxsGlXKsA=="
+        "resolved": "1.0.6",
+        "contentHash": "jyvtsZwPZeGN6PW8Gqv05QGWq2qQvZsDL0RQ6ZwSVeVDe7KRL5xI02KOKtBgr3/lXvBInJRAL6A2gVazk6DyRg=="
       },
       "Std.UriTemplate": {
         "type": "Transitive",
@@ -1471,13 +1471,13 @@
       },
       "System.ClientModel": {
         "type": "Transitive",
-        "resolved": "1.15.0",
-        "contentHash": "y6zQLInrpX+oGL1gXM04DrUSu1O1esWxt4rD/zrujTnzIFChn/noD1OiVVpTrU8ZvglwqO2Uw038svUR3SiAOg==",
+        "resolved": "1.16.0",
+        "contentHash": "vLljZON+8lXDUtsPP8uwsPvsBSQaUHhh8NvB+D9TQsXu5n622RLtuLyZAcyIFc98b8ixrwD0AhzUQhtg2NwJnQ==",
         "dependencies": {
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.9",
-          "Microsoft.Extensions.Hosting.Abstractions": "10.0.9",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.9",
-          "System.Memory.Data": "10.0.9"
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.10",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
+          "System.Memory.Data": "10.0.10"
         }
       },
       "System.CodeDom": {
@@ -1727,37 +1727,19 @@
       "ByteTerrace.Puck.Cli": {
         "type": "Project",
         "dependencies": {
-          "BenchmarkDotNet": "[0.15.*, )",
-          "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
-          "FSharp.Core": "[11.*, )",
-          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
-          "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
-          "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
-          "Puck.Analyzers": "[1.0.0, )",
-          "Puck.Launcher": "[1.0.0, )",
-          "Puck.Mcp": "[1.0.0, )",
-          "Puck.World.Client": "[1.0.0, )",
-          "Puck.World.Embeddings": "[1.0.0, )",
-          "Puck.World.Machines": "[1.0.0, )",
-          "Puck.World.Schema": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )",
-          "Puck.World.Silo": "[1.0.0, )",
-          "Puck.World.Transpiler": "[1.0.0, )",
-          "Resharp": "[1.*, )",
-          "System.CommandLine": "[2.*, )"
+          "Puck.Cli.Bench": "[1.0.0, )",
+          "Puck.Cli.Content": "[1.0.0, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Format": "[1.0.0, )",
+          "Puck.Cli.Gate": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Laws": "[1.0.0, )",
+          "Puck.Cli.Release": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Shaders": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.Cli.Worktrees": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )"
         }
       },
       "ByteTerrace.Puck.Commands": {
@@ -1958,7 +1940,6 @@
         "type": "Project",
         "dependencies": {
           "Azure.Identity": "[1.*, 2.0.0)",
-          "Azure.Monitor.OpenTelemetry.Exporter": "[1.*, 2.0.0)",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.*, 11.0.0)",
           "Microsoft.Azure.AppConfiguration.AspNetCore": "[8.*, 9.0.0)",
@@ -1986,6 +1967,137 @@
           "Azure.Monitor.OpenTelemetry.Exporter": "[1.*, 2.0.0)",
           "Azure.Storage.Blobs": "[12.*, 13.0.0)",
           "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
+        }
+      },
+      "puck.cli.bench": {
+        "type": "Project",
+        "dependencies": {
+          "BenchmarkDotNet": "[0.15.*, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )"
+        }
+      },
+      "puck.cli.content": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.core": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
+          "FSharp.Core": "[11.*, )",
+          "Resharp": "[1.*, )",
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.cli.format": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.World.Transpiler": "[1.0.0, )"
+        }
+      },
+      "puck.cli.gate": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.Extensions.FileSystemGlobbing": "[10.*, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.World.Transpiler": "[1.0.0, )"
+        }
+      },
+      "puck.cli.harness": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Launcher": "[1.0.0, )"
+        }
+      },
+      "puck.cli.laws": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Build.Framework": "[17.*, )",
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.release": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Runs": "[1.0.0, )",
+          "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.Mcp": "[1.0.0, )",
+          "Puck.World.Silo": "[1.0.0, )"
+        }
+      },
+      "puck.cli.runs": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.World.Console": "[1.0.0, )"
+        }
+      },
+      "puck.cli.shaders": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.SdfVm.Model": "[1.0.0, )"
+        }
+      },
+      "puck.cli.source": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
+          "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
+          "Puck.Analyzers": "[1.0.0, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )"
+        }
+      },
+      "puck.cli.worktrees": {
+        "type": "Project",
+        "dependencies": {
+          "Puck.Cli.Core": "[1.0.0, )"
+        }
+      },
+      "puck.cli.worlds": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Cli.Format": "[1.0.0, )",
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Cli.Shaders": "[1.0.0, )",
+          "Puck.World.Client": "[1.0.0, )",
+          "Puck.World.Machines": "[1.0.0, )",
+          "Puck.World.Server": "[1.0.0, )"
         }
       },
       "puck.launcher": {
@@ -2094,13 +2206,6 @@
           "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )"
-        }
-      },
-      "puck.world.embeddings": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
           "Puck.World.Server": "[1.0.0, )"
         }
       },

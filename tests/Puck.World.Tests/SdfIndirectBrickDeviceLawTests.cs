@@ -12,7 +12,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The production brick lookup preserves exact pool identities with logarithmic counted reads.</summary>
-[Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfIndirectBrickDeviceLawTests {
@@ -92,7 +91,12 @@ public sealed class SdfIndirectBrickDeviceLawTests {
                     var expected = (slots.TryGetValue(key: queries[index], value: out var slot) ? ((slot * 64) + 27) : -1);
 
                     Assert.Equal(((float)expected), results[index].X);
-                    Assert.InRange(results[index].Y, 1f, ((tier == SdfIndirectTier.Medium) ? 18f : 20f));
+                    // A level the tier does not keep is refused before the directory is read; every other key searches it.
+                    if (queries[index].Level >= layout.Levels.Count) {
+                        Assert.Equal(0f, results[index].Y);
+                    } else {
+                        Assert.InRange(results[index].Y, 1f, ((tier == SdfIndirectTier.Medium) ? 18f : 20f));
+                    }
                 }
             }
         }
