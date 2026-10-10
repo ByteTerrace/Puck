@@ -934,7 +934,6 @@ The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
 
 The rules for coding agents live in one file, the root
-[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
-or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.

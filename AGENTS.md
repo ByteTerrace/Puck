@@ -30,8 +30,9 @@ slashes too, held by `MsBuildPathSpellingLawTests`.
 | [docs/development/documentation.md](docs/development/documentation.md) | Prose, titles, filenames, README ownership and navigation. The `documentation` skill owns agent-side verification. |
 
 Docs state current behavior, limitations and open work in the present tense.
-They name no dates and no commit SHAs; verification evidence goes in the commit
-message. Update incoming links and routing, agent routing included, in the
+They name no dates, no commit SHAs and no versions of outside tools, unless the
+version itself adds something (a pin the build enforces, a minimum a feature
+needs); verification evidence goes in the commit message. Update incoming links and routing, agent routing included, in the
 change that moves a document.
 
 ## Enforcement
