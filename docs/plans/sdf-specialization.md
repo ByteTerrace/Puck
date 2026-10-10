@@ -441,6 +441,28 @@ machine; its instruction count does not explain that, so phase 3 measures it
 again on an idle machine. Generic and specialized SPIR-V compiled alike (the
 views `-core` kernel: 55 s and 1.27 MB generic, 45 s and 1.22 MB specialized).
 
+### Measured on the floor GPU
+
+The existing strip tiers give a lower bound on what a smaller interpreter buys
+in the hit passes, which today always compile the full instruction set (only
+views has tiers). On the debug world at the medium preset, windowed at
+1280×900 on the RTX 2060 under Vulkan, the primary and shadow kernels were
+reloaded with each tier's strip macro and timed with `world.gpu-timing`. The
+Moth needs the full set (Sweep, superellipsoid exponents, flare, shear), so the
+stripped columns render it wrongly; they measure the interpreter's cost, not a
+shippable result. March steps differed by less than ten per cent between
+columns.
+
+| Hit kernel | Full set | `SDF_FOLD_OPS` | `SDF_CORE_OPS` with scopes kept | `SDF_CORE_OPS` |
+|---|---|---|---|---|
+| `sdf-world-primary` | 27 ms | 21.8 ms | 12.4 ms | 8.6 ms |
+| `sdf-world-shadow` | 77–85 ms | 73 ms | 64 ms | 54 ms |
+
+Two thirds of the primary kernel's time sits in the cases beyond the core set,
+the fold tier the largest share. A fixed tier keeps a whole family for one
+member the Moth uses; a per-world specialization keeps only the cases its
+program reaches.
+
 ### Estimated from those measurements
 
 - **Build-time shader compile.** The build compiles only the generic kernels,
