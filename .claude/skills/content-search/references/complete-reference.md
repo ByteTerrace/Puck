@@ -396,7 +396,7 @@ the bare form wrongly also returns `gamma cat dog`). The span-mode analog uses
   UTF-16 files are full of NUL bytes, so the binary sniff silently drops them —
   even when named explicitly — exit 1, indistinguishable from "no match";
   `--files <file>` printing nothing is the tell. Re-encode such files to UTF-8
-  before searching (pwsh 7 `>` already writes UTF-8; Windows PowerShell 5.1 `>`
+  before searching (`pwsh`'s `>` already writes UTF-8; Windows PowerShell's `>`
   and `.reg` exports write UTF-16).
 - **Large counted repetitions stall at COMPILE time, silently.** Matching is
   linear, but compile time grows roughly quadratically with `{n}`/`{n,}`/`{n,m}`
