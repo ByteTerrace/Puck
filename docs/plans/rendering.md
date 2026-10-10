@@ -37,8 +37,8 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-P2, P3, P4, P5, P8, P9 and P11 are complete. P1a, P1b, P6, P7, P10, P12, P13 and
-P14 to P18 are open. A package closes only when nothing it promises remains
+P2, P3, P4, P5, P7, P8, P9 and P11 are complete. P1a, P1b, P6, P10, P12, P13
+and P14 to P18 are open. A package closes only when nothing it promises remains
 open: a check that waits for a particular machine, device or environment keeps
 its package open and is listed under [deferred to the end](#deferred-to-the-end)
 beside the package that owns it. The open parts are:
@@ -52,8 +52,6 @@ beside the package that owns it. The open parts are:
   views, finite lighting solve, change classes, source closure, diagnostics,
   near field and comparison methods are implemented. Their remaining physical
   qualification and the counted choice of defaults keep G2 to G10 open.
-- **P7:** every step of P7b has landed; the Linux and Windows SPIR-V comparison
-  has not yet passed in CI (see P7's gate).
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
   floor hardware have not run.
 - **P12:** every step of P12b has landed; P12b-4's recorded camera run on both
@@ -371,10 +369,9 @@ The capability report has been read too: each backend fills
 `IGpuDeviceContext.Capabilities` (`GpuDeviceCapabilities`) at device creation,
 `world.counters gpu` prints it on a `capabilities` line and in its JSON, and the
 floor and ceiling devices' readings on both backends are recorded under step 14.
-One leg is not yet proven, and keeps P7 open: one build's SPIR-V on Linux
-compared byte for byte with the Windows build of the same commit, which CI runs as
-`verify.yml`'s `shader-bytecode` job (see P7's gate). It is listed under
-[deferred to the end](#deferred-to-the-end).
+The last leg holds too: `verify.yml`'s `shader-bytecode` job compares one
+build's SPIR-V on Linux byte for byte with the Windows build of the same commit
+and passes (see P7's gate), so P7 is complete.
 
 P8 is complete: the `interface-echo` canary echoes every shipped interface
 family, the SDF engine's two among them, and holds on both backends under the
@@ -562,10 +559,9 @@ group at set 1 and the pass group at set 3, each register number the Vulkan
 binding and each group's ordinal its register space, so no pass source assigns
 a register by hand.
 
-P7 stays open on one check. Its adapter memory profile, residency selector,
-consumer migration and binding groups have landed, all twenty-two steps of P7b
-among them; the gate's Linux bytecode leg is listed under
-[deferred to the end](#deferred-to-the-end).
+P7 is complete. Its adapter memory profile, residency selector, consumer
+migration and binding groups have landed, all twenty-two steps of P7b among
+them, and its gate holds on every leg, the Linux SPIR-V comparison included.
 `IGpuDeviceContext`
 reports a `GpuMemoryProfile` beside its identity, filled at device creation
 from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
@@ -3472,8 +3468,8 @@ compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
 `tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
-station (step 16). One leg remains, not yet proven: one build's SPIR-V on Linux
-compared byte for byte with the Windows build of the same commit. The artifacts
+station (step 16). Its last leg holds: one build's SPIR-V on Linux compared
+byte for byte with the Windows build of the same commit. The artifacts
 job collects the Windows build's SPIR-V (`puck shaders collect`, the
 `shader-bytecode-windows` artifact) without rebuilding it, and `verify.yml`'s
 `shader-bytecode` job installs the pinned DXC on Ubuntu through `setup-dxc`,
@@ -3487,11 +3483,9 @@ and does not count toward Slang.
 It runs only in CI: through **Release Azure** on every pull request and every
 push to `main`, or by dispatching **Verify runtime behavior** by hand, and it
 compares only when its shader inputs or a DXC pin differ from the last passing
-comparison, whose saved Linux shader cache records it. The leg
-is proven when that job passes; a SPIR-V difference it names is the gate's
-failure toward Slang, and a failed run uploads the Linux SPIR-V as
-`shader-bytecode-linux`. The leg's run is listed under
-[deferred to the end](#deferred-to-the-end).
+comparison, whose saved Linux shader cache records it. That job passes, which
+proves the leg; a SPIR-V difference it names is the gate's failure toward
+Slang, and a failed run uploads the Linux SPIR-V as `shader-bytecode-linux`.
 Both backends' capability reports, read on the floor and ceiling devices, show that
 neither lacks what the grouped contract assumes. The gate still fails toward
 Slang when DXC's SPIR-V is not byte-stable across hosts, or when the second group
@@ -4080,9 +4074,8 @@ destination. A region's staging buffer states its copy (header, run table,
 words), so the region-copy kernel pushes nothing. The SDF engine's groups
 landed with P7b-20, and P12b-8 made the screens one image array read through a
 sampler array with per-screen filtering. The test fakes
-consolidate as the surface shrinks. The gate's Linux SPIR-V comparison, which
-CI's `shader-bytecode` job runs, keeps P7 open and is listed under
-[deferred to the end](#deferred-to-the-end).
+consolidate as the surface shrinks. CI's `shader-bytecode` job holds the gate's
+Linux SPIR-V comparison, so P7 is complete.
 
 ### P8 — The shader package, and one source language
 
@@ -8535,9 +8528,9 @@ Image-only packaging stays
 independent of placed-surface support, and shared GPU and World files have one
 owner at a time.
 
-**Contracts.** P7 is open on one check: its memory profile, its residency
-selector and every step of P7b have landed, and the gate's Linux bytecode leg is
-listed under [deferred to the end](#deferred-to-the-end). P8 is complete; its frame group
+**Contracts.** P7 is complete: its memory profile, its residency selector and
+every step of P7b have landed, and its gate holds on every leg, the Linux
+SPIR-V comparison included. P8 is complete; its frame group
 became a descriptor set when step 15 put pipelines on groups, and its echo of
 the SDF engine's two interfaces landed with P14-5.
 P7 and P8 do not read simulation state, so they do not wait on the state
@@ -8636,9 +8629,6 @@ programme is done.
 - **Hardware: P1b's driver-removal exercise.** Keeps P1b open. A
   driver-initiated removal (a timeout detection and recovery) recovers as an
   injected loss does.
-- **Environment: P7's shader-bytecode comparison.** Keeps P7 open. CI's
-  `shader-bytecode` job passes, holding a Linux build's SPIR-V byte for byte to
-  the Windows build of the same commit (see P7's gate).
 - **Hardware: P10's floor-tier parity leg.** Keeps P10 open. The parity stations
   run at `low` on floor hardware.
 - **Hardware: indirect and sky floor qualification.** G2 to G10 and P18-14

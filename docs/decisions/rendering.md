@@ -126,8 +126,7 @@ display is not run package by package. Each is listed in
 and they run together when the programme ends, on the code it finally ships.
 They are P1a's windowed boot on a machine with no GPU driver; P1b's
 qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
-driver-removal exercise; P7's comparison of the SPIR-V that Linux and Windows
-CI build; the recorded camera run of P12b-4; the recorded Windows
+driver-removal exercise; the recorded camera run of P12b-4; the recorded Windows
 editor click of P13b-4; P10's floor-tier parity leg; P15's recorded Steam Deck run; and P16's checks on an
 HDR display. For the GPU checks each change runs, whether the two backends
 agree is judged in one final review pass rather than change by change.
