@@ -127,7 +127,7 @@ public sealed partial class SdfFieldEvaluator {
         var centre = 0UL;
 
         foreach (var bound in evaluator.m_cullBounds) {
-            centre = Math.Max(val1: centre, val2: Math.Max(val1: RawMagnitude(raw: bound.CenterX.Value), val2: Math.Max(val1: RawMagnitude(raw: bound.CenterY.Value), val2: RawMagnitude(raw: bound.CenterZ.Value))));
+            centre = Math.Max(val1: centre, val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterX.Value), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterY.Value), val2: FusedArithmetic.RawMagnitude(value: bound.CenterZ.Value))));
         }
 
         var ceiling = ((centre >= ((ulong)long.MaxValue)) ? 0L : (long.MaxValue - ((long)centre)));
@@ -152,10 +152,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return frame;
     }
-    private static ulong RawMagnitude(long raw) =>
-        ((raw < 0L)
-            ? (0UL - unchecked((ulong)raw))
-            : ((ulong)raw));
     // The bounds over a box whose every point the frame holds, and the instructions the walk visited.
     private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded) {
         var local = world;

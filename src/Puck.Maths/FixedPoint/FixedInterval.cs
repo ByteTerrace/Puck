@@ -498,19 +498,15 @@ public readonly record struct FixedInterval {
 
         var magnitude = ((value.Lower.Value > 0L)
             ? ((ulong)value.Lower.Value)
-            : RawMagnitude(value: value.Upper.Value));
+            : FusedArithmetic.RawMagnitude(value: value.Upper.Value));
 
         return (((UInt128)magnitude) * magnitude);
     }
     private static UInt128 GreatestSquare(FixedInterval value) {
-        var magnitude = Math.Max(val1: RawMagnitude(value: value.Lower.Value), val2: RawMagnitude(value: value.Upper.Value));
+        var magnitude = Math.Max(val1: FusedArithmetic.RawMagnitude(value: value.Lower.Value), val2: FusedArithmetic.RawMagnitude(value: value.Upper.Value));
 
         return (((UInt128)magnitude) * magnitude);
     }
-    private static ulong RawMagnitude(long value) =>
-        ((value < 0L)
-            ? (0UL - unchecked((ulong)value))
-            : ((ulong)value));
     private static FixedInterval Circular(FixedInterval angle, bool cosine) {
         var unit = new FixedInterval(
             lower: FixedQ4816.FromRawBits(value: -RawOne),

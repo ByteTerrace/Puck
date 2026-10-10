@@ -10,7 +10,7 @@ namespace Puck.Maths.Tests;
 /// participates in both the ordinary test gate and the mechanically generated public-member coverage ledger.
 /// </summary>
 internal static class FixedPointContractClaims {
-    // FusedArithmetic.RawMagnitude and its FixedVectorMath forwarder: every fast-path gate in the fixed-point family
+    // FusedArithmetic.RawMagnitude, the one implementation: every fast-path gate in the fixed-point family
     // ORs these magnitudes together, and the text renderer and several sign-magnitude kernels take them as operands,
     // so the primitive is pinned on its own against an exact absolute value.
     public static string? RawMagnitudeMatchesBigIntegerAbs() {
@@ -31,14 +31,9 @@ internal static class FixedPointContractClaims {
         foreach (var value in operands) {
             var expected = ((ulong)BigInteger.Abs(value: new BigInteger(value: value)));
             var fused = FusedArithmetic.RawMagnitude(value: value);
-            var forwarded = FixedVectorMath.RawMagnitude(value: value);
 
             if (fused != expected) {
                 return $"FusedArithmetic.RawMagnitude({value}) = {fused}, expected {expected}";
-            }
-
-            if (forwarded != expected) {
-                return $"FixedVectorMath.RawMagnitude({value}) = {forwarded}, expected {expected}";
             }
         }
 

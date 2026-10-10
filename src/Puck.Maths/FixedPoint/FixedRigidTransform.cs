@@ -228,9 +228,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     // (Cauchy–Schwarz), which can exceed the signed carrier, so the half slide stays Int128.
     private static Int128 DotOverAngle(FixedVector3 real, FixedVector3 dual, ulong angleRaw) {
         const ulong NarrowLimit = (1UL << 30);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: real.X.Value) | FixedVectorMath.RawMagnitude(value: real.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: real.Z.Value) | FixedVectorMath.RawMagnitude(value: dual.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: dual.Y.Value) | FixedVectorMath.RawMagnitude(value: dual.Z.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: real.X.Value) | FusedArithmetic.RawMagnitude(value: real.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: real.Z.Value) | FusedArithmetic.RawMagnitude(value: dual.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: dual.Y.Value) | FusedArithmetic.RawMagnitude(value: dual.Z.Value);
         UInt128 magnitude;
         bool negative;
 
@@ -246,9 +246,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         } else {
             var positive = UInt128.Zero;
             var negativeSum = UInt128.Zero;
-            var px = (((UInt128)FixedVectorMath.RawMagnitude(value: real.X.Value)) * FixedVectorMath.RawMagnitude(value: dual.X.Value));
-            var py = (((UInt128)FixedVectorMath.RawMagnitude(value: real.Y.Value)) * FixedVectorMath.RawMagnitude(value: dual.Y.Value));
-            var pz = (((UInt128)FixedVectorMath.RawMagnitude(value: real.Z.Value)) * FixedVectorMath.RawMagnitude(value: dual.Z.Value));
+            var px = (((UInt128)FusedArithmetic.RawMagnitude(value: real.X.Value)) * FusedArithmetic.RawMagnitude(value: dual.X.Value));
+            var py = (((UInt128)FusedArithmetic.RawMagnitude(value: real.Y.Value)) * FusedArithmetic.RawMagnitude(value: dual.Y.Value));
+            var pz = (((UInt128)FusedArithmetic.RawMagnitude(value: real.Z.Value)) * FusedArithmetic.RawMagnitude(value: dual.Z.Value));
 
             if ((real.X.Value ^ dual.X.Value) < 0L) { negativeSum += px; } else { positive += px; }
             if ((real.Y.Value ^ dual.Y.Value) < 0L) { negativeSum += py; } else { positive += py; }
@@ -507,9 +507,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         var x = Value.Real.X.Value;
         var y = Value.Real.Y.Value;
         var z = Value.Real.Z.Value;
-        var sum = (((((UInt128)FixedVectorMath.RawMagnitude(value: x)) * FixedVectorMath.RawMagnitude(value: x)) +
-            (((UInt128)FixedVectorMath.RawMagnitude(value: y)) * FixedVectorMath.RawMagnitude(value: y))) +
-            (((UInt128)FixedVectorMath.RawMagnitude(value: z)) * FixedVectorMath.RawMagnitude(value: z)));
+        var sum = (((((UInt128)FusedArithmetic.RawMagnitude(value: x)) * FusedArithmetic.RawMagnitude(value: x)) +
+            (((UInt128)FusedArithmetic.RawMagnitude(value: y)) * FusedArithmetic.RawMagnitude(value: y))) +
+            (((UInt128)FusedArithmetic.RawMagnitude(value: z)) * FusedArithmetic.RawMagnitude(value: z)));
         var scalar = (Value.Real.W.Value << LogGuardBitCount);
 
         if ((sum >> 119) != UInt128.Zero) {

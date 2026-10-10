@@ -98,10 +98,10 @@ public readonly record struct FixedVector2(FixedQ4816 X, FixedQ4816 Y)
     /// <returns>The scalar dot product (two products accumulated exactly, one rounding).</returns>
     public static FixedQ4816 Dot(FixedVector2 left, FixedVector2 right) {
         const ulong NarrowLimit = (1UL << 31);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: left.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Y.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: left.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Y.Value);
 
         if (combinedMagnitude < NarrowLimit) {
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(
@@ -153,10 +153,10 @@ public readonly record struct FixedVector2(FixedQ4816 X, FixedQ4816 Y)
     /// the winding/orientation test, and the planar restriction of <see cref="FixedVector3.Cross"/>.</remarks>
     public static FixedQ4816 Wedge(FixedVector2 left, FixedVector2 right) {
         const ulong NarrowLimit = (1UL << 31);
-        var combinedMagnitude = FixedVectorMath.RawMagnitude(value: left.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: left.Y.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.X.Value) |
-                                 FixedVectorMath.RawMagnitude(value: right.Y.Value);
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: left.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: left.Y.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.X.Value) |
+                                 FusedArithmetic.RawMagnitude(value: right.Y.Value);
 
         if (combinedMagnitude < NarrowLimit) {
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(

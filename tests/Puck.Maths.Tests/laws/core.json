@@ -1344,5 +1344,21 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "core.public-static-tables-are-not-mutable",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "reflection over every exported type of the Puck.Maths assembly finds no public static field that is an array or is not read-only, and no public static property that is an array: a table is exposed as a ReadOnlySpan over constant data or through a method that returns a read-only view, so no caller can overwrite an element or replace the table that every other consumer reads",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

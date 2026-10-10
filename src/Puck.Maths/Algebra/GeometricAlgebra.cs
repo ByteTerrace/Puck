@@ -128,7 +128,7 @@ public readonly struct GeometricAlgebra : IEquatable<GeometricAlgebra> {
         var combinedMagnitude = 0UL;
 
         for (var i = 0; (i < dimension); ++i) {
-            combinedMagnitude |= FixedVectorMath.RawMagnitude(value: left[i].Value) | FixedVectorMath.RawMagnitude(value: right[i].Value);
+            combinedMagnitude |= FusedArithmetic.RawMagnitude(value: left[i].Value) | FusedArithmetic.RawMagnitude(value: right[i].Value);
         }
 
         if (combinedMagnitude < NarrowLimit) {

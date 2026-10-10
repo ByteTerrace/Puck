@@ -10203,13 +10203,6 @@
     },
     {
       "CoveredBy": [
-        "core.raw-magnitude-vs-big-integer"
-      ],
-      "Id": "Puck.Maths.FixedVectorMath.RawMagnitude(System.Int64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
         "complex.magnitude-vs-oracle",
         "quaternion.norm-vs-oracle",
         "vector.norm-vs-oracle"
@@ -18273,7 +18266,14 @@
       "CoveredBy": [
         "prime-exploration.presieve-jacobsthal-run-bound"
       ],
-      "Id": "Puck.Maths.PrimeExploration.SmallPrimePatterns.Periods",
+      "Id": "Puck.Maths.PrimeExploration.SmallPrimePatterns.Count",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-exploration.presieve-jacobsthal-run-bound"
+      ],
+      "Id": "Puck.Maths.PrimeExploration.SmallPrimePatterns.Period(System.Int32)",
       "State": "covered"
     },
     {

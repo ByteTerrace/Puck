@@ -187,8 +187,8 @@ internal static partial class Subjects {
     public static string? PresieveJacobsthalRunBound() {
         var units = Oracles.UnitsModulo(modulus: 30);
         var presieved = Oracles.PrimesBetween(high: ((int)PrimeExploration.PreSievePrimeLimit), low: 7);
-        var groups = PrimeExploration.SmallPrimeGroups;
-        var patterns = PrimeExploration.SmallPrimePatterns.Periods;
+        var groups = PrimeExploration.SmallPrimeGroups.ToArray();
+        var patterns = Enumerable.Range(start: 0, count: PrimeExploration.SmallPrimePatterns.Count).Select(selector: static group => PrimeExploration.SmallPrimePatterns.Period(group: group).ToArray()).ToArray();
         var grouped = groups.SelectMany(selector: static group => ((int[])[group.First, group.Second, group.Third])).Where(predicate: static prime => (prime != 1)).Order().ToArray();
 
         if (!grouped.SequenceEqual(second: presieved)) { return "the pattern groups do not hold each prime from 7 through PreSievePrimeLimit exactly once"; }

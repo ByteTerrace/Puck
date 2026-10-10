@@ -5,8 +5,12 @@ using System.Runtime.InteropServices;
 namespace Puck.Maths;
 
 public static partial class PrimeExploration {
+    /// <summary>Names one prime residue channel of the thirty-wheel as a type, so the marking loop specializes per channel.</summary>
+    /// <remarks>Public so a law can compare each channel's packed masks with the wheel derivation; only the sieve's own loops use them.</remarks>
     public interface IPacketResidue {
+        /// <summary>Gets the eight clear masks of the channel, one per ascending multiplier phase, packed from the lowest byte.</summary>
         static abstract ulong Masks { get; }
+        /// <summary>Gets the channel's residue modulo thirty.</summary>
         static abstract uint Residue { get; }
     }
     // Byte i clears the bit PrimeWheel30.TargetBit(r, i) of (r * s_i) mod 30, for ascending multiplier residues s_i. The

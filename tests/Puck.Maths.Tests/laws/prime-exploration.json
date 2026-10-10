@@ -463,14 +463,18 @@
       },
       {
         "Type": "Puck.Maths.PrimeExploration+SmallPrimePatterns",
-        "Name": "Periods"
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+SmallPrimePatterns",
+        "Name": "Period"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "every byte of every PrimeExploration.SmallPrimePatterns.Periods pattern over its whole period, and the primes SmallPrimeGroups holds",
+        "Subject": "every byte of every PrimeExploration.SmallPrimePatterns.Period pattern over its whole period, and the primes SmallPrimeGroups holds",
         "Against": "trial division of 30·index + unit by the group's primes, and the primes from 7 through PreSievePrimeLimit by trial division (Oracles.PrimesBetween), each held exactly once; so the patterns' intersection is exactly the set of integers coprime to 2·3·5·…·163, and a CRT translate argument makes every run of that set's complement appear in it",
         "Shared": "",
         "Citation": "",

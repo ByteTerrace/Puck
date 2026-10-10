@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
@@ -346,14 +345,13 @@ public static partial class PrimeExploration {
 
     /// <summary>Holds, for each residue modulo thirty, the number of wheel units at or below it.</summary>
     public static class WheelUnitsThrough {
-        public static readonly byte[] Counts = CreateCounts();
-
-        private static byte[] CreateCounts() {
-            var counts = new byte[PrimeWheel30.Modulus];
-
-            for (var residue = 0; (residue < counts.Length); ++residue) { counts[residue] = ((byte)BitOperations.PopCount(value: ((uint)PrimeWheel30.PrefixMask(remainder: residue)))); }
-
-            return counts;
-        }
+        /// <summary>Gets, for every remainder from zero through twenty-nine, the number of units of thirty at or below it.</summary>
+        /// <remarks>The values are written out as constant data, so a read costs one load from a constant address and no
+        /// caller can overwrite them; the law <c>prime-exploration.wheel-tables-match-their-derivation</c> proves each
+        /// equals the population count of <see cref="PrimeWheel30.PrefixMask(int)"/>.</remarks>
+        public static ReadOnlySpan<byte> Counts => [
+            0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4,
+            4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8,
+        ];
     }
 }

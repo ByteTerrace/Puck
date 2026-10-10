@@ -7,21 +7,25 @@ namespace Puck.Maths;
 
 /// <summary>Explores primes throughout the unsigned sixty-four-bit domain using thirty-wheel coordinates.</summary>
 public static partial class PrimeExploration {
-    public static readonly byte[] ClearMasks = CreateClearMasks();
-
-    // Row primeChannel clears, at each ascending multiplier phase, the numeric bit of the product's residue.
-    private static byte[] CreateClearMasks() {
-        var masks = new byte[(PrimeWheel30.ChannelCount * PrimeWheel30.ChannelCount)];
-
-        for (var primeChannel = 0; (primeChannel < PrimeWheel30.ChannelCount); ++primeChannel) {
-            var residue = PrimeWheel30.Residues[primeChannel];
-
-            for (var source = 0; (source < PrimeWheel30.ChannelCount); ++source) {
-                masks[((primeChannel * PrimeWheel30.ChannelCount) + source)] = ((byte)~(1 << PrimeWheel30.TargetBit(phase: source, residue: residue)));
-            }
-        }
-        return masks;
-    }
+    /// <summary>Gets the byte mask that clears one product's bit for every prime channel and multiplier phase.</summary>
+    /// <remarks>
+    /// <para>Row <c>primeChannel</c>, an index into <see cref="PrimeWheel30.Residues"/>, holds, at each ascending
+    /// multiplier phase <c>source</c>, the complement of the
+    /// numeric bit <see cref="PrimeWheel30.TargetBit(int, int)"/> of the product's residue, at index
+    /// <c>primeChannel · ChannelCount + source</c>. The values are written out as constant data, so a read costs one
+    /// load from a constant address and no caller can overwrite them; the law
+    /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves they equal the derivation.</para>
+    /// </remarks>
+    public static ReadOnlySpan<byte> ClearMasks => [
+        0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F,
+        0xFD, 0xDF, 0xEF, 0xFE, 0x7F, 0xF7, 0xFB, 0xBF,
+        0xDF, 0xF7, 0x7F, 0xFD, 0xBF, 0xFE, 0xEF, 0xFB,
+        0xF7, 0xFE, 0xBF, 0xDF, 0xFB, 0xFD, 0x7F, 0xEF,
+        0xFB, 0xEF, 0xFE, 0xBF, 0xFD, 0x7F, 0xF7, 0xDF,
+        0xEF, 0x7F, 0xFD, 0xFB, 0xDF, 0xBF, 0xFE, 0xF7,
+        0x7F, 0xBF, 0xDF, 0xEF, 0xF7, 0xFB, 0xFD, 0xFE,
+        0xBF, 0xFB, 0xF7, 0x7F, 0xFE, 0xEF, 0xDF, 0xFD,
+    ];
 
     /// <summary>Reports every prime in a closed interval in ascending numeric order.</summary>
     /// <param name="low">The inclusive lower bound.</param>
@@ -265,7 +269,7 @@ public static partial class PrimeExploration {
             var maximumMultiplier = (high / prime);
 
             _ = PrimeWheel30.TryChannel(channel: out var primeChannel, residue: ((byte)(prime % PrimeWheel30.Modulus)));
-            var clearMasks = ClearMasks.AsSpan(length: PrimeWheel30.ChannelCount, start: (primeChannel * PrimeWheel30.ChannelCount));
+            var clearMasks = ClearMasks.Slice(length: PrimeWheel30.ChannelCount, start: (primeChannel * PrimeWheel30.ChannelCount));
 
             MarkWheelSteps(blockLow: blockLow, clearMasks: clearMasks, maximumMultiplier: maximumMultiplier, multiplier: multiplier, prime: prime, segment: segment);
         }

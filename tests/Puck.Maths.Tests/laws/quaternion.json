@@ -32,7 +32,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.op_Multiply — sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2³⁰ FixedVectorMath.RawMagnitude gate",
+        "Subject": "FixedQuaternion.op_Multiply — sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2³⁰ FusedArithmetic.RawMagnitude gate",
         "Against": "Oracles.CayleyDicksonProduct at two floors — the same product reached from the other end of the theory: the twisted group algebra over (ℤ/2)² whose target key is an exclusive-or and whose 2-cochain is Oracles.CayleyDicksonCharge, i.e. the doubling recursion (a,b)(c,d) = (a·c − d̄·b, d·a + b·c̄) walked down to basis vectors. ONE Oracles.RoundDyadic at shift 16 per lane. NOTE on CayleyDicksonCharge's own transcription label: it is a transcription with respect to Presentations' sign rule, which it restates — FixedQuaternion has no doubling recursion, no charge and no basis indexing anywhere, so with respect to THIS subject the leg is classical. The only shared convention is the lane permutation (X,Y,Z,W) ↔ (e₁,e₂,e₃,e₀), declared once in Subjects.QuaternionToDoublingLanes and checked by hand at e₁e₂ = +e₃, e₂e₁ = −e₃, e₁² = e₃² = −e₀ and e₂e₃ = +e₁",
         "Shared": "",
         "Citation": "",

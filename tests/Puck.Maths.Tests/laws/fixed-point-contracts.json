@@ -376,17 +376,13 @@
       {
         "Type": "Puck.Maths.FusedArithmetic",
         "Name": "RawMagnitude"
-      },
-      {
-        "Type": "Puck.Maths.FixedVectorMath",
-        "Name": "RawMagnitude"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FusedArithmetic.RawMagnitude and FixedVectorMath.RawMagnitude, the sign-magnitude primitive every fixed-point fast-path gate and sign-magnitude kernel reads, at zero, both long extremes and their neighbours, every power of two below 2^63 with its two neighbours in both signs, and 4096 SplitMix64 draws",
+        "Subject": "FusedArithmetic.RawMagnitude, the sign-magnitude primitive every fixed-point fast-path gate and sign-magnitude kernel reads, at zero, both long extremes and their neighbours, every power of two below 2^63 with its two neighbours in both signs, and 4096 SplitMix64 draws",
         "Against": "BigInteger.Abs of the same long, narrowed to ulong: an exact absolute value with no two's-complement trick shared with the subject's branch-free sign mask",
         "Shared": "",
         "Citation": "",

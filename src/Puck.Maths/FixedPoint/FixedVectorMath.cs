@@ -33,7 +33,7 @@ public static class FixedVectorMath {
     /// quotient and remainder.</summary>
     internal static long DivideRounded(long value, UInt128 denominator, int shift) {
         var negative = (value < 0L);
-        var magnitude = RawMagnitude(value: value);
+        var magnitude = FusedArithmetic.RawMagnitude(value: value);
         UInt128 quotient;
         UInt128 remainder;
 
@@ -74,8 +74,8 @@ public static class FixedVectorMath {
     }
     internal static (long X, long Y) Normalize(long x, long y) {
         var max = Math.Max(
-            val1: RawMagnitude(value: x),
-            val2: RawMagnitude(value: y)
+            val1: FusedArithmetic.RawMagnitude(value: x),
+            val2: FusedArithmetic.RawMagnitude(value: y)
         );
 
         if (max == 0UL) {
@@ -108,10 +108,10 @@ public static class FixedVectorMath {
 
     public static (long X, long Y, long Z) Normalize(long x, long y, long z) {
         var max = Math.Max(
-            val1: RawMagnitude(value: x),
+            val1: FusedArithmetic.RawMagnitude(value: x),
             val2: Math.Max(
-                val1: RawMagnitude(value: y),
-                val2: RawMagnitude(value: z)
+                val1: FusedArithmetic.RawMagnitude(value: y),
+                val2: FusedArithmetic.RawMagnitude(value: z)
             )
         );
 
@@ -154,12 +154,12 @@ public static class FixedVectorMath {
     internal static (long X, long Y, long Z, long W) Normalize(long x, long y, long z, long w) {
         var max = Math.Max(
             val1: Math.Max(
-                val1: RawMagnitude(value: x),
-                val2: RawMagnitude(value: y)
+                val1: FusedArithmetic.RawMagnitude(value: x),
+                val2: FusedArithmetic.RawMagnitude(value: y)
             ),
             val2: Math.Max(
-                val1: RawMagnitude(value: z),
-                val2: RawMagnitude(value: w)
+                val1: FusedArithmetic.RawMagnitude(value: z),
+                val2: FusedArithmetic.RawMagnitude(value: w)
             )
         );
 
@@ -206,10 +206,6 @@ public static class FixedVectorMath {
         )
         );
     }
-
-    public static ulong RawMagnitude(long value) =>
-        FusedArithmetic.RawMagnitude(value: value);
-
     /// <summary>The exact separation between two raw carrier readings, independent of ordinary signed subtraction: the
     /// true difference between two <see cref="long"/> values always fits the unsigned 64-bit carrier (its magnitude is
     /// at most <c>2⁶⁴ − 1</c>, reached exactly at the opposing carrier extremes), so this never wraps regardless of how
@@ -256,7 +252,7 @@ public static class FixedVectorMath {
     }
     internal static long ScaleRaw(long value, int shift) {
         var negative = (value < 0L);
-        var magnitude = RawMagnitude(value: value);
+        var magnitude = FusedArithmetic.RawMagnitude(value: value);
         ulong scaled;
 
         if (shift >= 0) {
@@ -296,12 +292,12 @@ public static class FixedVectorMath {
     ) {
         var max = Math.Max(
             val1: Math.Max(
-                val1: RawMagnitude(value: x),
-                val2: RawMagnitude(value: y)
+                val1: FusedArithmetic.RawMagnitude(value: x),
+                val2: FusedArithmetic.RawMagnitude(value: y)
             ),
             val2: Math.Max(
-                val1: RawMagnitude(value: z),
-                val2: RawMagnitude(value: w)
+                val1: FusedArithmetic.RawMagnitude(value: z),
+                val2: FusedArithmetic.RawMagnitude(value: w)
             )
         );
 
@@ -553,7 +549,7 @@ public static class FixedVectorMath {
         );
     private static long ScaleByPowerOfTwoRatio(long value, int numeratorShift, ulong denominator) {
         var negative = (value < 0L);
-        var magnitude = RawMagnitude(value: value);
+        var magnitude = FusedArithmetic.RawMagnitude(value: value);
         var low = ((numeratorShift < 64)
             ? unchecked((magnitude << numeratorShift))
             : 0UL
@@ -604,7 +600,7 @@ public static class FixedVectorMath {
         );
     }
     private static UInt128 Square(long value) {
-        var magnitude = RawMagnitude(value: value);
+        var magnitude = FusedArithmetic.RawMagnitude(value: value);
 
         return (((UInt128)magnitude) * magnitude);
     }
