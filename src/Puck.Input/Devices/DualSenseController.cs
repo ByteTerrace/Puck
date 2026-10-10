@@ -13,7 +13,7 @@ namespace Puck.Input.Devices;
 /// LEDs. USB streams the full report immediately. Bluetooth uses output report 0x31 with a trailing seeded CRC32;
 /// reading calibration feature report 0x05 during initialization also selects the full Bluetooth input mode.
 /// </summary>
-internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser {
+public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser {
     private const float AccelerometerGPerLsb = (1f / 8192f);
     // DualSense accelerometer is 8192 LSB per g (DS_ACC_RES_PER_G); convert to g. The accel block follows the gyro block (gyro at
     // common 15..20, accel at 21..26), then a 32-bit sensor timestamp at common 27..30.

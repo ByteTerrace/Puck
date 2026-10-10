@@ -9,8 +9,9 @@ An `IChatClient` is Microsoft's common C# interface for a model provider. The
 library takes one from its caller; the hosted participant below takes one from an
 installed `ChatClientProvider`. Puck never reads an API key or turns provider
 settings into world state. The integration pins
-`Microsoft.Agents.AI.Harness` 1.23.0 because that package is evolving quickly
-and an unreviewed package update should not silently change the agent runtime.
+`Microsoft.Agents.AI.Harness` to an exact version (`Puck.World.AgentHarness.csproj`)
+because that package is evolving quickly and an unreviewed package update should
+not silently change the agent runtime.
 
 ## Safe default composition
 

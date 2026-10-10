@@ -17,8 +17,7 @@ public sealed record FontAtlasGenerationLimits {
     /// <summary>Gets the total work-unit ceiling. Defaults to two billion.</summary>
     public long MaxWork { get; init; } = 2_000_000_000;
 }
-
-internal sealed class FontGenerationBudget {
+public sealed class FontGenerationBudget {
     private readonly FontAtlasGenerationLimits m_limits;
 
     private int m_geometry;

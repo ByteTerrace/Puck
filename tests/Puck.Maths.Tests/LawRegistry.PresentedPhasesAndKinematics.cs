@@ -1571,7 +1571,7 @@ internal static partial class LawRegistry {
 
     ];
     private static LawCase[] SymmetricSolveCases() => [
-        // ---- FixedSymmetricSolve: scale-free 2×2/3×3 symmetric solve and invert (internal — see the type's own
+        // ---- FixedSymmetricSolve: scale-free 2×2/3×3 symmetric solve and invert (see the type's own
         // remarks for the bit budget and the Invert-only refusal envelope) ----
         SweptCase(
             claim: SymmetricSolveClaims.Solve2VsOracle,
@@ -1700,7 +1700,7 @@ internal static partial class LawRegistry {
 
     ];
     private static LawCase[] MixedScaleCases() => [
-        // ---- FusedArithmetic: public refusing mixed-scale operations and their internal wrapping siblings ----
+        // ---- FusedArithmetic: the refusing mixed-scale operations and their wrapping siblings ----
         SweptCase(
             claim: MixedScaleClaims.ProductVsOracle,
             domain: MixedScale,
@@ -1780,7 +1780,7 @@ internal static partial class LawRegistry {
 
     ];
     private static LawCase[] MassPropertiesCases() => [
-        // ---- FixedMassProperties: volumes, bodies, transfer, compound and the inversions (internal) ----
+        // ---- FixedMassProperties: volumes, bodies, transfer, compound and the inversions ----
         SweptCase(
             claim: MassPropertyClaims.VolumesVsOracle,
             domain: MassVolume,

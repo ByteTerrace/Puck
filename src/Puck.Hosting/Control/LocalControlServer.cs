@@ -199,7 +199,9 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
                         try { await operation.ConfigureAwait(continueOnCapturedContext: false); } catch (Exception error) when (IsConnectionError(error: error)) { }
                         return;
                     }
-                    var response = await operation.ConfigureAwait(continueOnCapturedContext: false);
+                    // Any session's long output is cut to the limit with its status kept; only a result that breaks the
+                    // contract (a mismatched id, an impossible status, a misplaced image) is an unknown outcome.
+                    var response = (await operation.ConfigureAwait(continueOnCapturedContext: false))?.Bounded();
 
                     if (
                         (response is null) ||
@@ -208,7 +210,7 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
                         response = new(
                             request.Id,
                             "unknown",
-                            "Operation ran but its result is invalid or exceeds its limit; inspect state before any retry.",
+                            "Operation ran but its host returned an invalid result; inspect state before any retry.",
                             true
                         );
                     }

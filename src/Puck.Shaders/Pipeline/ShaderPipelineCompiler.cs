@@ -790,7 +790,6 @@ public sealed partial class ShaderPipelineCompiler {
         definition: definition,
         packages: []
     );
-
     // A frame graph's package passes join its shader passes after them, each in a compute shape beside its port
     // accesses, so one planner orders, versions and barriers both. This is the only way package work enters planning: the graph
     // compiler checks a document's package passes against its host's packages and hands them here beside the document,
@@ -798,7 +797,7 @@ public sealed partial class ShaderPipelineCompiler {
     // are the passes whose planned kind is Package. Planning works on a copy whose passes are both and which names no
     // package rows, and the plan keeps the graph's shader passes and its package rows as written: a package's planned
     // pass carries its step, never its compute shape.
-    internal ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
+    public ShaderPipelinePlan Compile(RenderGraphDefinition definition, IReadOnlyList<ShaderPipelinePackagePass> packages) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: packages);
         var diagnostics = new List<ShaderPipelineDiagnostic>();

@@ -6,7 +6,7 @@ namespace Puck.Text;
 /// <remarks>Quadratics are subdivided to a 0.01 atlas-pixel chord tolerance. This is a sampled
 /// representation, not an exact curve or a promise about the Lipschitz bound of a filtered texture.
 /// Intersection and classification work is capped independently of font-program execution.</remarks>
-internal static class GlyphBoundaryNormalizer {
+public static class GlyphBoundaryNormalizer {
     private const double Epsilon = 1e-7;
     private const int MaximumCuts = 65_536;
     private const int MaximumEdges = 4096;

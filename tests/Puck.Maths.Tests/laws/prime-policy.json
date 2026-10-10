@@ -2,8 +2,37 @@
   {
     "Id": "prime-exploration.automatic-policy-boundaries",
     "Tier": "Default",
-    "Members": [],
-    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation for all three explicit policies, hand-calculated width crossover boundaries at squares 10^12 and 10^14 and at the ulong maximum (inclusive widths 67108864 windowed and 67108863 presieved, from ceil(4294967295/64)), complete proof boundary 65537 squared, carried prime-state admission at 10^16 and windowed refusal at 10^18 and the full ulong interval, empty intervals, interval bitmap resolution (twice the square root clamped and cache-rounded; automatic windowed requests raised to 16744448 bytes first, explicit windowed requests unchanged) and named invalid options of the internal ResolveMode and ResolveSegmentBytes. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "ResolveMode"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "ResolveSegmentBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "CacheSegmentBytes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Automatic"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Eratosthenes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Presieve"
+      },
+      {
+        "Type": "Puck.Maths.PrimeSieveMode",
+        "Name": "Windowed"
+      }
+    ],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Explicit mode preservation for all three explicit policies, hand-calculated width crossover boundaries at squares 10^12 and 10^14 and at the ulong maximum (inclusive widths 67108864 windowed and 67108863 presieved, from ceil(4294967295/64)), complete proof boundary 65537 squared, carried prime-state admission at 10^16 and windowed refusal at 10^18 and the full ulong interval, empty intervals, interval bitmap resolution (twice the square root clamped and cache-rounded; automatic windowed requests raised to 16744448 bytes first, explicit windowed requests unchanged) and named invalid options of PrimeExploration.ResolveMode and ResolveSegmentBytes. This pins a chosen cost policy, not a universal optimality assertion.", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
   },
   {
     "Id": "prime-exploration.segment-cancellation",
@@ -14,7 +43,7 @@
   {
     "Id": "prime-exploration.presieve-proof-boundary",
     "Tier": "Default",
-    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }],
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }, {"Type": "Puck.Maths.PrimeExploration", "Name": "FilterSmallPrimes"}],
     "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Count and ordered enumeration cross 65537 squared in tiny presieved segments; the square must be rejected while proven smaller survivors remain.", "Against": "Oracles.ExactPrimality uses integer trial division and BigInteger witnesses without the sieve, wheel coordinates or Lucas recurrence. ENVELOPE: correctness at the proof boundary is checked; the saved code inspection establishes omission of unnecessary decisions below it.", "Shared": "", "Citation": "", "Absolute": "" }]
   },
   {

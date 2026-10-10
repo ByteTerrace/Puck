@@ -23,6 +23,12 @@ stale and is corrected in the same change.
   state, fixed-point numerics, replay), a persisted format, or federation
   authority. Codex reviews Claude-written code; a Claude agent reviews
   Codex-written code. The pass verifies and fixes in one run.
+- Every pass is review-and-fix, never report-only: the owner prefers fixes
+  applied in the pass to findings handed back. Both Codex models, Astra
+  (`gpt-6-astra`) and Sol (`gpt-6-sol`), are free to use and encouraged for a
+  pass; neither is reserved. The installed Codex plugin's result-handling
+  guidance not to auto-apply a review's fixes does not apply in this
+  repository.
 - An explicit owner request also starts a review and takes precedence over the
   default trigger and cross-family selection. Use the owner's named model and
   effort, including a same-family reviewer, for both review and local fixes.
@@ -54,9 +60,19 @@ stale and is corrected in the same change.
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).
   Set `--cwd` to the review worktree and use the model and effort the lead
-  names. Pass the brief with `--prompt-file <path>`, never as command-line
-  prompt text. `task` has no `--help`: `task --help` is sent to the model as a
-  prompt. Launch a Claude pass as an agent working in that worktree. A pass
+  names, passing both `--model` and `--effort` on every launch: without them
+  the job runs the local Codex configuration's default model and effort.
+  `--effort` takes `none`, `minimal`, `low`, `medium`, `high` or `xhigh`.
+  Pass the brief with `--prompt-file <path>`, an absolute path because it
+  resolves against `--cwd`, never as command-line prompt text. `task` has no
+  `--help`: `task --help` is sent to the model as a prompt.
+- Wait for a background job with `status <job-id> --wait` (240 seconds by
+  default, `--timeout-ms` to change it) rather than a polling loop, and never
+  grep a job log for words such as "completed", which also match echoed
+  commands. `--resume-last` sees only jobs the current Claude session started;
+  another session continues a Codex thread with `codex exec resume
+  <session-id>`. A Codex sandbox cannot write `.git` or reach the network, so
+  merges, commits and restores run outside it. Launch a Claude pass as an agent working in that worktree. A pass
   cannot read this conversation, message a session or ask a question, so the
   brief carries every string, decision and path it needs, and tells it to answer
   its own questions from the code and the brief. A Codex pass that ends on a
@@ -121,7 +137,8 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    - laws whose red legs cannot fail.
 
    Add the author's own open questions, and the bug classes earlier passes
-   found in the same area.
+   found in the same area. Write the hunt list before reading the diff:
+   checks written after reading it inherit its blind spots.
 6. **Evidence gathered.** The suites, counts, gates and mutation proofs the
    lane already ran, so the pass reads instead of re-running them.
 7. **Rules block,** verbatim. Codex reads `AGENTS.md` from the worktree root
@@ -138,7 +155,7 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear, adding a law (test) that fails without the fix; otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Report every existing law you find that cannot fail. Don't commit. End with a list, one line per finding: <id> file:line - fixed (files; law) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
    ```
 
-   For a documentation-only pass, append: "Edit only Markdown, evals JSON,
+   For a documentation-only pass, append: "Edit only Markdown, eval case files,
    and XML comments. A documentation fix needs no law; do not add tests.
    Check changed Markdown links and anchors. Build only when XML comments
    change."
@@ -150,7 +167,9 @@ no brief, so it raises compatibility findings and tries to run tests.
 ## After the pass
 
 1. **Read the result.** Check every finding against the current files. A
-   finding is evidence, not a verdict. Dismiss a compatibility finding under
+   finding is evidence, not a verdict. Read the fix diff's deleted lines, not
+   only its net size, and check a fact by reading the file, never by searching
+   for your own phrasing of it. Dismiss a compatibility finding under
    `AGENTS.md` rule 5 once nothing checked in uses the old shape. A pass's
    build, test and format claims count only when its own environment could
    run them: a sandbox that could not reach the SDK proved nothing, so step 3

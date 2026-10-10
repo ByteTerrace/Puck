@@ -32,10 +32,9 @@ public sealed class AttestationVerifyResult {
     }
 
     /// <summary>The admitting trust entry's authored reach, or <see langword="null"/> after refusal.</summary>
-    internal IReadOnlySet<string>? Reach { get; }
+    public IReadOnlySet<string>? Reach { get; }
     /// <summary>The transaction requirement for a verified sequenced claim, or <see langword="null"/> for an unsequenced claim.</summary>
-    internal ReplayCommitRequirement? ReplayCommit { get; }
-
+    public ReplayCommitRequirement? ReplayCommit { get; }
     /// <summary>Why verification refused, or <see langword="null"/> after successful verification.</summary>
     public string? RefusalReason { get; }
     /// <summary>Whether this verified result is awaiting a receiver-side replay/effect transaction.</summary>
@@ -52,15 +51,15 @@ public sealed class AttestationVerifyResult {
         replayCommit: replayCommit,
         verified: true
     );
+
     /// <summary>Builds a refused result carrying why. A refusal never carries reach — there is no verified claim to scope.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>
-    internal static AttestationVerifyResult Refuse(string reason) => new(
+    public static AttestationVerifyResult Refuse(string reason) => new(
         reach: null,
         refusalReason: reason,
         replayCommit: null,
         verified: false
     );
-
     /// <summary>
     /// Whether this claim both verified AND was admitted by an entry whose authored reach covers
     /// <paramref name="slot"/>. This is the question a receiving world actually has, and asking it in one

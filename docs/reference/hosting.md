@@ -584,7 +584,7 @@ Client-side admission refusals carry ID zero and do not advance that sequence.
 | Admitted work | 1 operation per connection |
 | Request JSON payload | 16 KiB |
 | Console line | 8192 UTF-16 code units, also subject to encoded frame limit |
-| Console output | 65536 UTF-16 code units |
+| Console output | 1048576 UTF-16 code units, delivered whole; longer output is cut with a marker |
 | Completed PNG | 16 MiB |
 | Response JSON payload | 24 MiB |
 | Request deadline | 1–120000 milliseconds; client default 30000 |
@@ -605,7 +605,13 @@ before the unbounded text source.
 
 Console errors preserve `IsError`, `Output` and `ClearTranscript`. Empty output is
 conservatively `submitted`; even `completed` is a console handler result, not a
-new authoritative mutation receipt. Cancellation disposes only this text session:
+new authoritative mutation receipt. Output longer than the console-output limit
+is cut by `ControlResponse.Bounded` to a head ending in a marker that names the
+full length, with `Truncated` set and the status, error flag and transcript
+request kept: a long answer is a completed read, never an unknown outcome.
+`ConsoleControlSession` and the server both apply it, so any session's long
+answer crosses the wire that way. JSON escapes a code unit to at most six bytes,
+so the longest output encodes to 6 MiB, inside the response payload limit. Cancellation disposes only this text session:
 queued work is refused, but already-dispatched commands may have effects.
 The server enforces deadlines even when a supplied session ignores cancellation,
 disposes the session once, and observes late task failures. An invalid host result

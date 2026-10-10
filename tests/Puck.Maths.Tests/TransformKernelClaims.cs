@@ -11,9 +11,8 @@ namespace Puck.Maths.Tests;
 /// These gates cover <c>FixedQ4816.SinCosRaw</c> — the full-unsigned-width
 /// entry point <see cref="FixedQuaternion.FromAxisAngle"/>, <see cref="FixedQuaternion.Exp"/> and
 /// <see cref="FixedRigidTransform.Exp"/> all reach their sine and cosine through — and
-/// <c>FixedVectorMath.TryNormalizeWithMagnitude</c>, the one-pass axis-and-norm those same three call first. Both are
-/// internal, so <c>coverage-manifest.json</c> cannot name them and the ratchet cannot notice their gate disappearing;
-/// the laws here are what notices instead.
+/// <c>FixedVectorMath.TryNormalizeWithMagnitude</c>, the one-pass axis-and-norm those same three call first. The coverage
+/// manifest credits both to the laws here, so the ratchet notices if their gate disappears.
 /// </para>
 /// <para>
 /// Neither is measured against a <see cref="double"/> reference — no floating-point arithmetic may enter law logic —
@@ -86,8 +85,8 @@ internal static class TransformKernelClaims {
 
     /// <summary>
     /// The unit-direction bound over the full signed carrier, at full volume, for BOTH
-    /// normalizers: the public <see cref="FixedVector3.Normalize"/> and the internal one-pass
-    /// <c>FixedVectorMath.TryNormalizeWithMagnitude</c>.
+    /// normalizers: <see cref="FixedVector3.Normalize"/> and the one-pass
+    /// <see cref="FixedVectorMath.TryNormalizeWithMagnitude"/>.
     /// </summary>
     /// <returns>The counterexample, or <see langword="null"/> when the claim holds.</returns>
     /// <remarks>

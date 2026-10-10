@@ -208,7 +208,7 @@ bool sdfPartSublevelBox(uint4 part, float depth, float footprint, float minimumL
     float scopeScale = asfloat(part.w) * sdfProgramLayout.stepScale;
     if (!(scopeScale > 0.0) || !isfinite(scopeScale)) return false;
     float level = max(max(SurfaceEpsilon, footprint * depth), minimumLevel * sdfProgramLayout.stepScale) / scopeScale;
-    uint count = part.z & 0x7FFFFFFFu;
+    uint count = part.z & SDF_PART_LEAF_COUNT_MASK;
     float blendSlack = 0.0;
     [loop] for (uint leaf = 0u; leaf < count; leaf++) {
         uint4 code = sdfWords[part.x + leaf];
@@ -244,7 +244,7 @@ void sdfWritePartBound(uint viewport, uint instance, float3 origin, float farDis
     uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + instance];
     // Unbounded sentinel declines clipping; reversed corners describe an empty part.
     float3 lower = -1e20, upper = 1e20;
-    if ((part.z & 0x7FFFFFFFu) != 0u) {
+    if ((part.z & SDF_PART_LEAF_COUNT_MASK) != 0u) {
         float depth = farDistance;
         [loop] for (uint refinement = 0u; refinement < 3u; refinement++) {
             float3 nextLower, nextUpper;
@@ -262,7 +262,7 @@ void sdfWritePartBound(uint viewport, uint instance, float3 origin, float farDis
     worldTiles[base] = lower.x; worldTiles[base + 1u] = lower.y; worldTiles[base + 2u] = lower.z;
     worldTiles[base + 3u] = upper.x; worldTiles[base + 4u] = upper.y; worldTiles[base + 5u] = upper.z;
     bool contactBounded;
-    if ((part.z & 0x7FFFFFFFu) != 0u)
+    if ((part.z & SDF_PART_LEAF_COUNT_MASK) != 0u)
         contactBounded = sdfPartSublevelBox(part, 0.0, 0.0, SdfContactFieldLevel, lower, upper);
     else contactBounded = sdfFlatSublevelBox(instance, SdfContactFieldLevel, lower, upper);
     if (!contactBounded) { lower = -1e20; upper = 1e20; }

@@ -90,9 +90,12 @@ to the windowed presentation.
 ## Operator access
 
 For AI pairing, `world.control start|stop|status` manages an authenticated
-Operator attachment without restarting World. CLI serves console exec and
-completed PNG tools over local stdio or OAuth-protected remote HTTP; see
-[setup and trust](../Puck.Mcp/README.md).
+Operator attachment without restarting World. `--control` starts the same
+endpoint at boot, as a first console line `world.control start` would, and
+prints its `[world.control: operator attachment <file>]` line on stderr; it is
+a per-run choice, never a document field, and absent the endpoint stays closed.
+CLI serves console exec and completed PNG tools over local stdio or
+OAuth-protected remote HTTP; see [setup and trust](../Puck.Mcp/README.md).
 
 ## Usage
 
@@ -847,7 +850,9 @@ refusals and server narration on stderr, all mirrored onto the in-game panel
 (the terminal's `ConsoleTape` in `Puck.Hosting`, drawn by `Puck.Overlays`'
 console-panel writer). Every capability is a verb. **Type `help` for the
 live, self-documenting verb list**—it is generated from the registered
-commands, so this README does not catalog verbs.
+commands, so this README does not catalog verbs. `help <prefix>` keeps the
+verbs whose names start with the prefix (`help world.state`), and
+`help --names` lists the names alone.
 
 Each local seat has its own text session, editor, history, tape, and allowed
 command surface. Backtick is a terminal-owned, always-active binding rather

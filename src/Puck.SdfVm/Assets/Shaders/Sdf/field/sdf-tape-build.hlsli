@@ -28,17 +28,21 @@ uint sdfTapeMaskedInstructions(uint maskBase) {
     return count;
 }
 
-void sdfBuildTileTape(uint tileIndex, uint maskBase, float3 origin, float3 direction, float chord, float entry, float farBound) {
+// Builds one slab of a tile's tape. A tile's SDF_TAPE_SLAB_COUNT slabs are independent (each clears and writes only its own
+// mask, summary, instructions and ball), so the tape kernel builds them in parallel, one invocation a slab; slab 0 alone
+// writes the tile's header word, zero first and one once its own slab is written. The header is read by later
+// dispatches only, after every slab of the dispatch is complete.
+void sdfBuildTileTape(uint tileIndex, uint slab, uint maskBase, float3 origin, float3 direction, float chord, float entry, float farBound) {
     sdfTapeBase = tileIndex * sdfTapeStride();
     sdfTapeActive = false;
-    sdfSegmentTapesRW[sdfTapeBase] = 0u;
+    if (slab == 0u) { sdfSegmentTapesRW[sdfTapeBase] = 0u; }
     if (entry < 0.0 || !isfinite(entry) || !isfinite(farBound) || farBound < entry ||
         SDF_SEGMENT_TAPE_OFFSET(sdfWords[sdfProgramLayout.segmentOffset]) == 0u ||
         sdfTapeMaskedInstructions(maskBase) < SDF_TAPE_INSTRUCTION_THRESHOLD) { return; }
     uint words = sdfTapeMaskWords();
     sdfTapeBuilding = true;
-    [loop]
-    for (uint slab = 0u; slab < SDF_TAPE_SLAB_COUNT; slab++) {
+    {
+        // One slab: the invocation's own.
         sdfTapeSlab = slab;
         uint mask = sdfTapeMaskBase();
         [loop]
@@ -78,7 +82,7 @@ void sdfBuildTileTape(uint tileIndex, uint maskBase, float3 origin, float3 direc
         }
     }
     sdfTapeBuilding = false;
-    sdfSegmentTapesRW[sdfTapeBase] = 1u;
+    if (slab == 0u) { sdfSegmentTapesRW[sdfTapeBase] = 1u; }
 }
 #endif
 #endif

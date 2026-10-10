@@ -185,6 +185,42 @@
       {
         "Type": "Puck.Maths.PrimeField64",
         "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Encode"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Decode"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Power"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "ModulusInverse"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "RadixSquared"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "One"
       }
     ],
     "Legs": [
@@ -555,6 +591,34 @@
       {
         "Type": "Puck.Maths.PrimeField64",
         "Name": "IsStrongProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Encode"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Power"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Modulus"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "One"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "NegativeOne"
       }
     ],
     "Legs": [
@@ -616,6 +680,10 @@
       {
         "Type": "Puck.Maths.UnsignedNumberFunctions",
         "Name": "JacobiSymbol"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Subtract"
       }
     ],
     "Legs": [
@@ -690,6 +758,14 @@
       {
         "Type": "Puck.Maths.PrimeField64",
         "Name": "IsStrongLucasProbablePrime"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.ScaledResidueRing64",
+        "Name": "Subtract"
       }
     ],
     "Legs": [
@@ -1040,6 +1116,6 @@
     ]
   },
   {"Id": "prime-field.narrow-primality-bands", "Tier": "Default", "Members": [{"Type": "Puck.Maths.PrimeExtensions", "Name": "IsPrime"}], "Legs": [{"Kind": "Classical", "Flavor": "None", "Subject": "PrimeExtensions.IsPrime(uint) at every value of three contiguous windows of 2^20: the top of the carrier, where two residues of the lazily reduced base-two round come closest to filling the 64-bit word they multiply in; a window from zero, holding the trial-division ladder's own primes through 59, their multiples and the first values past its reach at 61^2; and a window from 3,000,000,000", "Against": "a SEGMENTED sieve of Eratosthenes written in PrimalityScaleClaims.cs, crossing out the multiples of every prime below 65,536; it shares no Montgomery arithmetic, no witness and no pseudoprime table with the subject. Both sides EXACT", "Shared": "", "Citation": "", "Absolute": ""}, {"Kind": "Structural", "Flavor": "None", "Subject": "ENVELOPE: three windows sample the narrow range; prime-field.baillie-psw-exhaustive is the gate of record for EVERY uint at the Exhaustive tier", "Against": "", "Shared": "", "Citation": "", "Absolute": ""}]},
-  {"Id": "prime-field.montgomery-reduction-vs-big-integer", "Tier": "Default", "Members": [], "Legs": [{"Kind": "Classical", "Flavor": "None", "Subject": "ScaledResidueRing64.Reduce, the subtractive masked REDC every Montgomery chain in the library multiplies through, at 60,000 drawn odd moduli across the carrier \\u2014 a third of them above 2^63, where the radix lies between the modulus and twice it, a third below 2^32, and 3, 2^63 \\u00B1 1 and ulong.MaxValue \\u2014 on reduced operand pairs including both at modulus \\u2212 1, and on one arbitrary word against a reduced operand; RadixResidue against 2^64 mod n; and ScaledResidueRing64.ReduceNarrow on operands in [1, n], each bound included, below 2^32", "Against": "BigInteger: the result must be reduced (or, narrow, lie in [1, n]) and its product with 2^64 must equal the operands\\u0027 product modulo n, which fixes the one exact answer because the radix is a unit modulo an odd modulus. EXACT on both sides, so condition (B) drops out", "Shared": "", "Citation": "", "Absolute": ""}, {"Kind": "Structural", "Flavor": "None", "Subject": "ENVELOPE: the BMI2 high multiply and its Math.BigMul fallback are a JIT-time choice, so a run exercises the one its processor selects; the scratch digest that accompanied the change ran the fallback with BMI2 disabled and matched", "Against": "", "Shared": "", "Citation": "", "Absolute": ""}]},
-  {"Id": "prime-field.selfridge-symbols-vs-reciprocity", "Tier": "Default", "Members": [{"Type": "Puck.Maths.PrimeField64", "Name": "IsStrongLucasProbablePrime"}], "Legs": [{"Kind": "Classical", "Flavor": "None", "Subject": "the Selfridge Method A symbol the strong Lucas test reads off its precomputed residue masks \\u2014 PrimeKernels.SelfridgeSymbol at the value modulo |D| \\u2014 for every odd magnitude 5 through 63 with D negative at magnitudes three modulo four, over every odd value below 6,000, the squares of every odd value below 2,000, 4,000 drawn odd words and ulong.MaxValue, so values the magnitude divides, values sharing a factor with it and squares all appear", "Against": "Oracles.JacobiSymbolReciprocity of the SIGNED discriminant over the value \\u2014 the suite\\u0027s own BigInteger reciprocity descent, which shares no line with the shipped JacobiSymbol the masks are derived from and never reduces the value modulo |D|. Agreement is the quadratic-reciprocity step the subject relies on, for every candidate congruent to one modulo four, zero symbols included. EXACT on both sides", "Shared": "", "Citation": "", "Absolute": ""}]}
+  {"Id": "prime-field.montgomery-reduction-vs-big-integer", "Tier": "Default", "Members": [{"Type": "Puck.Maths.ScaledResidueRing64", "Name": "RadixResidue"}, {"Type": "Puck.Maths.ScaledResidueRing64", "Name": "Reduce"}, {"Type": "Puck.Maths.ScaledResidueRing64", "Name": "ReduceNarrow"}, {"Type": "Puck.Maths.ScaledResidueRing64", "Name": "MultiplyHigh"}], "Legs": [{"Kind": "Classical", "Flavor": "None", "Subject": "ScaledResidueRing64.Reduce, the subtractive masked REDC every Montgomery chain in the library multiplies through, at 60,000 drawn odd moduli across the carrier \\u2014 a third of them above 2^63, where the radix lies between the modulus and twice it, a third below 2^32, and 3, 2^63 \\u00B1 1 and ulong.MaxValue \\u2014 on reduced operand pairs including both at modulus \\u2212 1, and on one arbitrary word against a reduced operand; RadixResidue against 2^64 mod n; and ScaledResidueRing64.ReduceNarrow on operands in [1, n], each bound included, below 2^32", "Against": "BigInteger: the result must be reduced (or, narrow, lie in [1, n]) and its product with 2^64 must equal the operands\\u0027 product modulo n, which fixes the one exact answer because the radix is a unit modulo an odd modulus. EXACT on both sides, so condition (B) drops out", "Shared": "", "Citation": "", "Absolute": ""}, {"Kind": "Structural", "Flavor": "None", "Subject": "ENVELOPE: the BMI2 high multiply and its Math.BigMul fallback are a JIT-time choice, so a run exercises the one its processor selects; the scratch digest that accompanied the change ran the fallback with BMI2 disabled and matched", "Against": "", "Shared": "", "Citation": "", "Absolute": ""}]},
+  {"Id": "prime-field.selfridge-symbols-vs-reciprocity", "Tier": "Default", "Members": [{"Type": "Puck.Maths.PrimeField64", "Name": "IsStrongLucasProbablePrime"}, {"Type": "Puck.Maths.PrimeKernels", "Name": "SelfridgeSymbol"}], "Legs": [{"Kind": "Classical", "Flavor": "None", "Subject": "the Selfridge Method A symbol the strong Lucas test reads off its precomputed residue masks \\u2014 PrimeKernels.SelfridgeSymbol at the value modulo |D| \\u2014 for every odd magnitude 5 through 63 with D negative at magnitudes three modulo four, over every odd value below 6,000, the squares of every odd value below 2,000, 4,000 drawn odd words and ulong.MaxValue, so values the magnitude divides, values sharing a factor with it and squares all appear", "Against": "Oracles.JacobiSymbolReciprocity of the SIGNED discriminant over the value \\u2014 the suite\\u0027s own BigInteger reciprocity descent, which shares no line with the shipped JacobiSymbol the masks are derived from and never reduces the value modulo |D|. Agreement is the quadratic-reciprocity step the subject relies on, for every candidate congruent to one modulo four, zero symbols included. EXACT on both sides", "Shared": "", "Citation": "", "Absolute": ""}]}
 ]

@@ -200,7 +200,7 @@ public static partial class PrimeExtensions {
     // widest W with ceil(W/span)*pass + W <= the count's work floor, where span is the selection window and pass
     // is one upper-base pass. Whole windows come first, then a partial window if it still pays. These are work
     // estimates in integer units; they assert neither prime gaps nor cycle costs.
-    internal static ulong LocalSieveBudget64(ulong high) {
+    public static ulong LocalSieveBudget64(ulong high) {
         var pass = PrimeExploration.UpperBasePassCost(root: ((uint)high.SquareRoot()));
         var countFloor = GlobalCountFloor64(value: high);
         var window = (PrimeExploration.SelectionSpanIntegers + pass);
@@ -209,6 +209,7 @@ public static partial class PrimeExtensions {
 
         return Math.Max(val1: 1UL, val2: ((windows * PrimeExploration.SelectionSpanIntegers) + ((remainder > pass) ? (remainder - pass) : 0UL)));
     }
+
     // A lower bound, in the same integer units, on the work of the global count CountPrimeBound64 dispatches
     // for a bound away from its checkpoint. The quotient recurrence divides the bound by every odd integer
     // below its square root while initializing; Gourdon's hard-leaf loop sieves every integer below

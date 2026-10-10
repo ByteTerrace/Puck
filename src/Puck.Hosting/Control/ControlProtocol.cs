@@ -7,8 +7,10 @@ namespace Puck.Hosting;
 public static class ControlLimits {
     /// <summary>Maximum completed PNG file size, in bytes.</summary>
     public const int ImageBytes = ((16 * 1024) * 1024);
-    /// <summary>Maximum console output length, in UTF-16 code units.</summary>
-    public const int OutputCharacters = (64 * 1024);
+    /// <summary>Maximum console output length, in UTF-16 code units. Output up to this length is delivered whole; longer
+    /// output is cut to it with a truncation marker (<see cref="ControlResponse.Bounded"/>). JSON escapes a code unit to
+    /// at most six bytes, so the largest output encodes to 6 MiB, inside <see cref="ResponseBytes"/>.</summary>
+    public const int OutputCharacters = (1024 * 1024);
     /// <summary>Maximum UTF-8 request JSON payload, in bytes, excluding the shared frame prefix.</summary>
     public const int RequestBytes = (16 * 1024);
     /// <summary>Maximum UTF-8 response JSON payload, including base64 image data but excluding the shared frame prefix.</summary>
@@ -29,8 +31,37 @@ public sealed record ControlRequest(long Id, string Operation, string? Command, 
 /// <param name="IsError">Whether the operation reports an error.</param>
 /// <param name="ClearTranscript">Whether the console handler requested transcript clearing.</param>
 /// <param name="Png">Completed PNG bytes, or null. Absent images are omitted from the wire.</param>
+/// <param name="Truncated">Whether <paramref name="Output"/> is the head of a longer console output, cut to
+/// <see cref="ControlLimits.OutputCharacters"/> and ending in a marker that names the full length. The status still
+/// reports the command's own outcome.</param>
 public sealed record ControlResponse(long Id, string Status, string Output, bool IsError = false, bool ClearTranscript = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] byte[]? Png = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] byte[]? Png = null, bool Truncated = false) {
+    /// <summary>Returns this response with output that fits <see cref="ControlLimits.OutputCharacters"/>: the response
+    /// itself when its output fits, otherwise a copy whose output is the longest head that fits beside a marker naming
+    /// the full length, marked <see cref="Truncated"/>. A long result is a completed read, never an unknown outcome, so
+    /// the status, error flag and transcript request are kept.</summary>
+    /// <returns>A response whose output is within the limit.</returns>
+    public ControlResponse Bounded() {
+        if (
+            (Output is null) ||
+            (Output.Length <= ControlLimits.OutputCharacters)
+        ) {
+            return this;
+        }
+
+        var marker = string.Create(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"\n[control: output truncated; its {Output.Length} characters exceed the {ControlLimits.OutputCharacters}-character limit. Narrow the command to read the rest, such as help <prefix> or a counter source.]"
+        );
+        var kept = (ControlLimits.OutputCharacters - marker.Length);
+
+        // A cut between the halves of a surrogate pair would leave an unpaired surrogate that JSON cannot carry.
+        if (char.IsHighSurrogate(c: Output[(kept - 1)])) {
+            kept--;
+        }
+
+        return (this with { Output = string.Concat(str0: Output.AsSpan(length: kept, start: 0), str1: marker), Truncated = true });
+    }
     /// <summary>Checks correlation, outcome semantics and bounded image/output data before exposing a host result.</summary>
     /// <param name="request">The admitted request that produced this response.</param>
     /// <returns>Whether the response satisfies the control contract.</returns>
@@ -40,7 +71,7 @@ public sealed record ControlResponse(long Id, string Status, string Output, bool
         : (Status is "completed" or "submitted")) &&
         ((Png is null)
         ? ((request.Operation != "capture") || IsError)
-        : ((request.Operation == "capture") && !IsError && (Status == "completed") && !ClearTranscript && (Png.Length is > 0 and <= ControlLimits.ImageBytes))));
+        : ((request.Operation == "capture") && !IsError && (Status == "completed") && !ClearTranscript && !Truncated && (Png.Length is > 0 and <= ControlLimits.ImageBytes))));
 }
 /// <summary>One authenticated connection's host operations. Calls are serial; disposal closes only this ingress.</summary>
 public interface IControlSession : IDisposable {

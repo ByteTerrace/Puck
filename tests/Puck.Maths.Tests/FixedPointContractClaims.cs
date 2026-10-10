@@ -10,6 +10,43 @@ namespace Puck.Maths.Tests;
 /// participates in both the ordinary test gate and the mechanically generated public-member coverage ledger.
 /// </summary>
 internal static class FixedPointContractClaims {
+    // FusedArithmetic.RawMagnitude and its FixedVectorMath forwarder: every fast-path gate in the fixed-point family
+    // ORs these magnitudes together, and the text renderer and several sign-magnitude kernels take them as operands,
+    // so the primitive is pinned on its own against an exact absolute value.
+    public static string? RawMagnitudeMatchesBigIntegerAbs() {
+        var operands = new List<long> { 0L, 1L, -1L, long.MaxValue, (long.MaxValue - 1L), long.MinValue, (long.MinValue + 1L) };
+
+        for (var bit = 0; (bit < 63); ++bit) {
+            var power = (1L << bit);
+
+            operands.AddRange(collection: [power, -power, (power - 1L), -(power - 1L), (power + 1L), -(power + 1L)]);
+        }
+
+        var state = 0x6A09E667F3BCC908UL;
+
+        for (var draw = 0; (draw < 4096); ++draw) {
+            operands.Add(item: unchecked((long)Domains.NextSplitMix64(state: ref state)));
+        }
+
+        foreach (var value in operands) {
+            var expected = ((ulong)BigInteger.Abs(value: new BigInteger(value: value)));
+            var fused = FusedArithmetic.RawMagnitude(value: value);
+            var forwarded = FixedVectorMath.RawMagnitude(value: value);
+
+            if (fused != expected) {
+                return $"FusedArithmetic.RawMagnitude({value}) = {fused}, expected {expected}";
+            }
+
+            if (forwarded != expected) {
+                return $"FixedVectorMath.RawMagnitude({value}) = {forwarded}, expected {expected}";
+            }
+        }
+
+        return ((FusedArithmetic.RawMagnitude(value: long.MinValue) == (1UL << 63))
+            ? null
+            : "long.MinValue did not map to exactly 2^63");
+    }
+
     // ---- FixedTickConversion: the seconds-to-engine-ticks round-up rule vs. exact BigInteger rational arithmetic ----
 
     /// <summary>Checks one raw Q48.16 duration against an INDEPENDENT BigInteger recomputation of the round-up rule —

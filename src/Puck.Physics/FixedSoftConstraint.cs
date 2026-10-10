@@ -44,7 +44,7 @@ public readonly record struct FixedSoftConstraint(
     /// <para>The frequency is clamped to <c>(rateHz · substepCount) / 8</c> — the bound derived from the EFFECTIVE
     /// substep rate, never from the step rate alone, which coincides with it only at two substeps.</para>
     /// </remarks>
-    internal static FixedSoftConstraint Create(int rateHz, int substepCount, FixedQ4816 hertz, FixedQ4816 dampingRatio, int fractionBitCount) {
+    public static FixedSoftConstraint Create(int rateHz, int substepCount, FixedQ4816 hertz, FixedQ4816 dampingRatio, int fractionBitCount) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: rateHz);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: substepCount);
         ArgumentOutOfRangeException.ThrowIfNegative(

@@ -2,12 +2,17 @@
   {
     "Id": "mixed-scale.product-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FusedArithmetic",
+        "Name": "MixedScaleProduct"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FusedArithmetic.MixedScaleProduct (internal) — the wrapping one-rounding product of two raws carried at DIFFERENT fixed-point scales, over the full signed range of both factors and every fraction bit count in [0, 64] for each of the three scales",
+        "Subject": "FusedArithmetic.MixedScaleProduct — the wrapping one-rounding product of two raws carried at DIFFERENT fixed-point scales, over the full signed range of both factors and every fraction bit count in [0, 64] for each of the three scales",
         "Against": "Oracles.MixedScaleProduct — the whole product formed in BigInteger at arbitrary width and rounded ONCE against an explicit power-of-two denominator by RoundRationalTiesToEven, which decides the tie by comparing 2r against d. The subject accumulates a sign-plus-UInt128 magnitude and decides the same tie by splitting the discarded bits against a half-unit it forms itself, then wraps the narrowed word; no width, no half-unit and no wrap is shared between the two",
         "Shared": "",
         "Citation": "",
@@ -151,7 +156,12 @@
   {
     "Id": "mixed-scale.extreme-scale-counts-are-congruent",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FusedArithmetic",
+        "Name": "MixedScaleProduct"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Structural",

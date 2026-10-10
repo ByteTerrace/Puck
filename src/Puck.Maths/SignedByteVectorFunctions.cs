@@ -84,9 +84,8 @@ public static class SignedByteVectorFunctions {
 
         return Math.Clamp(max: 65536L, min: -65536L, value: raw);
     }
-
     /// <summary>Scalar reference rung for the signed 8-bit vector dot product.</summary>
-    internal static long DotScalar(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
+    public static long DotScalar(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
         if (left.Length != right.Length) {
             throw new ArgumentException(message: "Vector lengths must match.", paramName: nameof(right));
         }
@@ -112,7 +111,7 @@ public static class SignedByteVectorFunctions {
     /// accumulator is drained into the sixty-four-bit sum every 256 blocks, long before it could wrap.
     /// </remarks>
     /// <exception cref="ArgumentException">The vector lengths differ.</exception>
-    internal static long DotVector<TLanes, TSignedBytes, TShorts, TInts>(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right)
+    public static long DotVector<TLanes, TSignedBytes, TShorts, TInts>(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right)
         where TLanes : ISignedByteWideningLanes<TSignedBytes, TShorts, TInts>
         where TSignedBytes : struct
         where TShorts : struct
@@ -159,6 +158,7 @@ public static class SignedByteVectorFunctions {
 
         return sum;
     }
+
     /// <summary>Reports the highest hardware acceleration tier available on the current host.</summary>
     internal static SignedByteVectorTier GetHardwareTier() {
         if (Vector512.IsHardwareAccelerated) {
@@ -175,15 +175,15 @@ public static class SignedByteVectorFunctions {
 
         return SignedByteVectorTier.Scalar;
     }
+
     /// <summary>Checks whether a given dot product hardware acceleration tier is supported.</summary>
-    internal static bool IsDotTierSupported(SignedByteVectorTier tier) => tier switch {
+    public static bool IsDotTierSupported(SignedByteVectorTier tier) => tier switch {
         SignedByteVectorTier.Scalar => true,
         SignedByteVectorTier.Vector128 => Vector128.IsHardwareAccelerated,
         SignedByteVectorTier.Vector256 => Vector256.IsHardwareAccelerated,
         SignedByteVectorTier.Vector512 => Vector512.IsHardwareAccelerated,
         _ => false,
     };
-
     /// <summary>Determines whether the given components represent an admissible unit vector.</summary>
     /// <param name="components">The vector components.</param>
     /// <returns><see langword="true"/> if the components are in [-127, 127], not all zero, and within tolerance of radius 127; otherwise <see langword="false"/>.</returns>

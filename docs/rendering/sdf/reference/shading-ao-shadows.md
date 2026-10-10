@@ -72,7 +72,14 @@ incoming light's grows from zero; each keeps its radiance. The
 [P18-7 contract](../../../plans/rendering.md#p18--sky-and-atmosphere) bounds the
 marches by K + F and provisions incoming visibility storage by policy.
 An 8×8 workgroup grid gather limits the candidate instance
-set for the shadow ray; each pixel then consumes the shared mask.
+set for the shadow ray; each pixel then consumes the shared mask. The gather
+also summarizes each mask word's certified distance bounds as one sphere, so a
+sample far from a body rejects those instances together. Oversized bounds and
+fields without a distance-bound certificate remain individual candidates:
+containing the geometry alone cannot bound an underestimating field. Each sample asks the field
+only up to the clearance at which neither the stride, hit decision nor penumbra estimate
+can change, so candidates beyond it are rejected before they are evaluated;
+the visibility is the full field's.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
 conservative sampled-region behavior as primary rays. The minimum stride steps
 through an occluder thinner than itself, but a stride that reaches a fold wall

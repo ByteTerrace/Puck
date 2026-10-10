@@ -274,7 +274,11 @@
     "Tier": "Default",
     "Members": [
       { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Create" },
-      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Compile" }
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Compile" },
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "RoundRational"
+      }
     ],
     "Legs": [
       {

@@ -46,7 +46,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #endif
 #ifdef SDF_TAPE_PROBE_BUILD
     sdfWorkShapes = 0u;
-    sdfBuildTileTape(slot, instanceMask, origin, direction, chord, entry, farBound);
+    [loop] for (uint slab = 0u; slab < SDF_TAPE_SLAB_COUNT; slab++) {
+        sdfBuildTileTape(slot, slab, instanceMask, origin, direction, chord, entry, farBound);
+    }
     fieldResults[texel] = float4(0.0, 0.0, 0.0, float(sdfWorkShapes));
 #else
     float tapeShapes = fieldResults[texel].w;

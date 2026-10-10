@@ -1667,9 +1667,9 @@ internal static partial class LawRegistry {
             id: "quaternion.exp-log-seam"
         ),
 
-        // SinCosRaw was gated by nothing until these two cases: the case above says so in its own leg text. It is
-        // internal, so the coverage manifest cannot name it and the hole was invisible to the ratchet. The reference
-        // is Oracles.EncloseSinCos carried past the signed carrier by the
+        // These two cases are SinCosRaw's full-width gate, and the coverage manifest credits FixedQ4816.SinCosRaw to
+        // both, so the ratchet notices if either disappears. The reference is Oracles.EncloseSinCos carried past the
+        // signed carrier by the
         // angle-addition identity, with the envelope derived from |c - 2^64/2pi| <= 1/2 rather than fitted to what the
         // subject happens to do. Proved by masking the top angle bit — the exact defect the member exists to avoid —
         // which reddens these two and NOTHING else in the tier.

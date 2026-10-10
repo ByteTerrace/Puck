@@ -28,8 +28,9 @@ same change. The user's current instruction outranks it.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
   The affected map selects committed baseline checks from their owning projects
   and declared data inputs. Each runs after the repository checks and before GPU
-  steps; `affected --run` leaves them to the gate. Admission uses host load's
-  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  steps; `affected --run` leaves them to the gate. Admission uses the machine's host-load
+  thresholds, which scale with its installed memory and cores, before heavy
+  steps; `gate.log` and `gate.steps` retain output and the
   flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
@@ -78,6 +79,9 @@ and `puck docs citations` when required below, under the GPU rules.
 - Send every build and test run's full output to a lane-named log
   (`<scratchpad>/<lane>-gate.log`) and stop at the first build error. A flake
   needs its failure message to be judged.
+- Build and test in Release (`-c Release`). The allocation laws' ceilings are
+  calibrated against Release code, so a Debug run's allocation failure is not a
+  finding.
 - Pass `-nodeReuse:false` to every build, and to `dotnet restore` as well:
   restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
 - A build interrupted under memory pressure can leave a corrupt assembly under
@@ -205,8 +209,8 @@ brief requires a manual proof, use these steps:
 6. Record in the commit message which laws were proved red and how.
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
-`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
-(verified on xUnit 4.0.1). A law that wraps a call which can skip, such as a
+`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception.
+A law that wraps a call which can skip, such as a
 device or capability probe, can therefore report **Skipped** with its fix
 withheld and pin nothing. In such laws, catch the exception directly with a
 `try`/`catch` and assert on it.
@@ -241,13 +245,17 @@ World run with effective `host.presentation: none` uses no GPU; the
   owed. Every class that opens a hardware GPU device carries
   `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
   that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
-  Keep the CPU-heavy work restriction below.
+- CPU work runs beside a GPU leg. A correctness leg (device laws, parity,
+  canaries, counted performance work) judges values that do not depend on load,
+  so solution builds, large CPU suites and other lanes' work keep running while
+  it does. Two GPU-bound jobs never overlap. Only wall-clock work (`puck bench`,
+  a timing spike) needs a quiet machine.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.
-- With a grant, run the granted legs serially, nothing else GPU-bound beside
-  them, and keep CPU-heavy work (solution builds, large suites) off the machine
-  while they run.
+- With a grant, run the granted legs serially, with nothing else GPU-bound
+  beside them, and start them as soon as the GPU is idle rather than waiting
+  for your CPU work to finish.
 - Qualify the merged head. Before a lane's GPU run, merge the current
   integration head into it: a stale lane can fail or pass because it lacks
   changes already on the integration branch.
@@ -287,13 +295,18 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
 
 - **Flake:** the first failure was a timeout, a bind, listener or port wait, a
   readiness wait, or a temporary-directory teardown error, and the leg passes
-  alone. Report it with the original message and the passing re-run.
+  alone. A leg that timed out because CPU work ran beside it is this case.
+  Report it with the original message and the passing re-run.
 - **Failure:** the leg fails again, or the first failure was a wrong value: a
   pixel or tile verdict, a state hash, a counted work line, a refusal reason, a
   content assertion, or a validation-layer message. Fix it. Never re-run a
   content failure hoping for green.
 
 The same rule applies to load-sensitive CPU tests.
+
+Before stopping a hung test host or World process, capture its managed stacks
+(`dotnet-stack report -p <pid>`, from the `dotnet-stack` global tool) and keep
+the report with the failure; a hang stopped without one cannot be judged.
 
 ## Tests that create a repository
 

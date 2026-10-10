@@ -7,7 +7,7 @@ public static partial class PrimeExtensions {
     // leaves and D reuse one compact square-free factor table without an MPF table.
     private const uint GourdonTableCapacityLimit = (1U << 27);
 
-    internal static uint ResolveGourdonCutoff(ulong value) {
+    public static uint ResolveGourdonCutoff(ulong value) {
         var root = CombinatorialCubeRoot(value: value);
         var logarithm = Math.Log(d: value);
         var alpha = ((((((0.007888745747017503D * logarithm) - 0.7610431057184933D) * logarithm)

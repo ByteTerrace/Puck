@@ -17,7 +17,7 @@ namespace Puck.Cli.Determinism {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>DeterminismManifest.Schema</c>, declared in <c>src/Puck.Cli.Runs/Determinism/DeterminismManifest.cs</c>.</summary>
-        public const string DeterminismManifestSchema = "6d0c53f770029e26";
+        public const string DeterminismManifestSchema = "77e0891a6dbf676d";
         /// <summary>The shape fingerprint of <c>DeterminismStream.Version</c>, declared in <c>src/Puck.Cli.Runs/Determinism/DeterminismStream.cs</c>.</summary>
         public const string DeterminismStreamVersion = "4144962243a7a7be";
     }

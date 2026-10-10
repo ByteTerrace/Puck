@@ -147,12 +147,12 @@ public static class PrimeWheel30 {
     /// index it by a variable phase.</summary>
     /// <remarks>The values are written out so a read costs one load from a constant address; the law
     /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves they equal the derivation.</remarks>
-    internal static ReadOnlySpan<byte> Gaps => [6, 4, 2, 4, 2, 4, 6, 2];
+    public static ReadOnlySpan<byte> Gaps => [6, 4, 2, 4, 2, 4, 6, 2];
     /// <summary>Gets <see cref="PrefixMask(int)"/> for every remainder from zero through twenty-nine, as constant data
     /// for loops that index it by a variable remainder.</summary>
     /// <remarks>The values are written out so a read costs one load from a constant address; the law
     /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves they equal the derivation.</remarks>
-    internal static ReadOnlySpan<byte> PrefixMasks => [
+    public static ReadOnlySpan<byte> PrefixMasks => [
         0, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 7, 7, 15, 15,
         15, 15, 31, 31, 63, 63, 63, 63, 127, 127, 127, 127, 127, 127, 255,
     ];
@@ -162,20 +162,20 @@ public static class PrimeWheel30 {
     /// <param name="phase">A phase from zero through <see cref="ChannelCount"/>.</param>
     /// <returns>The multiplier.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int Multiplier(int phase) =>
+    public static int Multiplier(int phase) =>
         ((phase < ChannelCount) ? NumericResidues[phase] : (Modulus + NumericResidues[0]));
     /// <summary>Gets the gap from one multiplier to the next, the step pattern 6, 4, 2, 4, 2, 4, 6, 2.</summary>
     /// <param name="phase">A phase from zero through seven.</param>
     /// <returns>The difference between the multipliers at <c>phase + 1</c> and <paramref name="phase"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int Gap(int phase) =>
+    public static int Gap(int phase) =>
         (Multiplier(phase: (phase + 1)) - Multiplier(phase: phase));
     /// <summary>Gets the whole wheel bytes the residue part of a product advances: <c>⌊r·m / 30⌋</c>.</summary>
     /// <param name="residue">The prime's residue <c>r</c>.</param>
     /// <param name="multiplier">The multiplier <c>m</c>.</param>
     /// <returns>The byte lift; <c>p·m</c> lies <c>q·m</c> plus this many bytes from the origin.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int Lift(int residue, int multiplier) =>
+    public static int Lift(int residue, int multiplier) =>
         ((residue * multiplier) / Modulus);
     /// <summary>Gets the carry of one wheel step: the bytes beyond <c>q·Gap(phase)</c> that moving from the multiplier at
     /// <paramref name="phase"/> to the next one advances.</summary>
@@ -183,13 +183,13 @@ public static class PrimeWheel30 {
     /// <param name="phase">A phase from zero through seven.</param>
     /// <returns><c>⌊r·m₍ₖ₊₁₎ / 30⌋ − ⌊r·mₖ / 30⌋</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int Carry(int residue, int phase) =>
+    public static int Carry(int residue, int phase) =>
         (((residue * Multiplier(phase: (phase + 1))) / Modulus) - ((residue * Multiplier(phase: phase)) / Modulus));
     /// <summary>Gets the numeric index of a unit residue: the number of smaller units.</summary>
     /// <param name="residue">A unit modulo thirty, from one through twenty-nine.</param>
     /// <returns>The ascending position from zero through seven.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int NumericBit(int residue) {
+    public static int NumericBit(int residue) {
         var numeric = NumericResidues;
 
         return ((((((((numeric[0] < residue) ? 1 : 0) + ((numeric[1] < residue) ? 1 : 0)) + ((numeric[2] < residue) ? 1 : 0))
@@ -202,17 +202,17 @@ public static class PrimeWheel30 {
     /// <param name="phase">A phase from zero through seven.</param>
     /// <returns>The numeric bit from zero through seven.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int TargetBit(int residue, int phase) =>
+    public static int TargetBit(int residue, int phase) =>
         NumericBit(residue: ((residue * Multiplier(phase: phase)) % Modulus));
     /// <summary>Gets the byte mask of the units no greater than a remainder, in numeric bit order.</summary>
     /// <param name="remainder">A remainder from zero through twenty-nine.</param>
     /// <returns>Bit <c>k</c> is set exactly when the <c>k</c>-th ascending unit is at most <paramref name="remainder"/>.</returns>
-    internal static byte PrefixMask(int remainder) =>
+    public static byte PrefixMask(int remainder) =>
         ((byte)((1 << NumericBit(residue: (remainder + 1))) - 1));
     /// <summary>Gets the word mask of the units no greater than an offset inside one 64-bit word of wheel bytes.</summary>
     /// <param name="offset">An offset from zero through <c><see cref="WordIntegers"/> − 1</c>.</param>
     /// <returns>Every bit of the bytes below the offset's byte, and that byte's <see cref="PrefixMask(int)"/>.</returns>
-    internal static ulong WordPrefixMask(int offset) {
+    public static ulong WordPrefixMask(int offset) {
         var shift = ((offset / Modulus) * ChannelCount);
 
         return (((1UL << shift) - 1UL)) | (((ulong)PrefixMask(remainder: (offset % Modulus))) << shift);

@@ -21,6 +21,65 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
   snapshots. Wall-clock time, ambient randomness, and floating-point state do
   not enter replay-bearing simulation.
 
+## Setting up a machine
+
+A machine builds and verifies Puck once it carries the toolchain below. The
+list is the same for a person and for an agent; the Claude Code and Codex items
+apply to any machine an agent session runs on. CI runs on Windows and Ubuntu
+runners, so a Linux machine differs only where this list says; no runner is
+macOS, and nothing here is verified there.
+
+- **The .NET SDK `global.json` pins.** Roll-forward is disabled, so install
+  exactly that version; `dotnet --version` run inside the checkout prints it.
+  The full build also needs the `wasm-tools` workload
+  (`dotnet workload install wasm-tools`), which `Puck.World.Browser` compiles
+  with; the [CI guide](ci.md#shared-repository-tooling) shows the full local
+  build with it.
+- **DXC on `PATH`.** Every build compiles the shaders, so a machine with no GPU
+  needs it too. Install the release CI pins (`.github/actions/setup-dxc/action.yml`
+  names the version, the Windows and Linux archives and their checksums);
+  [GPU support and shader builds](#gpu-support-and-shader-builds) explains what
+  the build does with it. Only Windows builds DXIL.
+- **`git`, and `gh` signed in** (`gh auth status`): the release verbs call
+  `gh`, and agent sessions use it for pull requests and workflow runs.
+- **Node.js** at the version CI pins (`node-version` in
+  `.github/workflows/browser.yml` and `azure.yml`), for the dashboard's npm
+  projects, which `.claude/launch.json`'s previews run, and the browser
+  payload's Node harness.
+- **PowerShell (`pwsh`).** The versioned `.claude/settings.json` runs the
+  hooks under `.claude/hooks/` through `pwsh`, so a machine without it reports
+  a hook error on every shell command and every edit. Windows PowerShell is
+  not `pwsh`; on Linux, install PowerShell from Microsoft's package feed.
+- **The global `puck` tool, installed from the checkout**, as
+  [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
+  describes. An installed tool keeps its commit while the checkout moves on:
+  `puck --version` and `puck mcp` warn on stderr when the two differ, so
+  reinstall after pulling.
+- **Claude Code.** The project's settings are shared and versioned:
+  `.claude/settings.json` turns auto memory off, enables the Codex plugin and
+  names its marketplace, and registers the hooks, and `.claude/launch.json`
+  holds the preview configurations. Trust the folder when Claude Code asks,
+  because the marketplace entry loads only in a trusted project. Personal
+  overrides go in `.claude/settings.local.json`, which `.gitignore` keeps
+  untracked. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
+  ([documentation policy](#documentation-policy)).
+- **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
+  (`codex login`), and install the Claude Code plugin `codex@openai-codex` on
+  each machine: `.claude/settings.json` enables it and names its marketplace,
+  so Claude Code offers the install when it loads the project, and
+  `/codex:setup` checks the CLI afterwards. The Windows sandbox's permission
+  cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
+- **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
+  and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
+  and runs GPU gates one at a time per GPU under the
+  [verification skill](../../.claude/skills/verification/SKILL.md)'s rules.
+- **A checkout older than the versioned Claude Code files.**
+  `.claude/settings.json`, `.claude/launch.json` and `.claude/hooks/` were once
+  ignored, so a checkout from then may hold untracked copies, and `git pull`
+  refuses to overwrite them. Move them aside, pull, and fold anything personal
+  from the old copies into `.claude/settings.local.json`.
+
 ## Find code and references
 
 Use text search for file discovery, literals, JSON, HLSL, and project files. Use the
@@ -446,9 +505,9 @@ dotnet publish src/Puck.World.Browser -c Release
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
-package declares no `engines` requirement, and CI runs it on Node 24.21.0
-(the `verify` job in `.github/workflows/browser.yml`). Use the system install,
-not a version manager:
+package declares no `engines` requirement, and CI runs it on the Node version
+the `verify` job in `.github/workflows/browser.yml` pins (`node-version`). Use
+the system install, not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
@@ -564,9 +623,10 @@ SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
-Only the RTX 4070 is normally available for local testing. Claims about the
-other supported GPUs require vendor or driver documentation and should be
-framed as unverified when no device run exists.
+The RTX 2060 and the RTX 4070 are the GPUs available for local testing, and
+the RTX 2060 records every counted-cost ceiling. Claims about the other
+supported GPUs require vendor or driver documentation and should be framed as
+unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
@@ -581,7 +641,29 @@ framed as unverified when no device run exists.
   `ToolLocationHelper.GetPlatformSDKLocation`, and NuGet with
   "Failed to read NuGet.Config due to unauthorized access". The machine's
   owner fixes the folder's permissions by re-enabling inheritance or granting
-  `CodexSandboxUsers` read and execute on that folder.
+  `CodexSandboxUsers` read and execute on that folder. A folder a sandboxed run
+  created, such as the checkout's ignored `.codex/`, can end up owned by a
+  `CodexSandbox*` account (`(Get-Acl <path>).Owner`); every sandboxed job then
+  fails within seconds with `windows sandbox failed: helper_unknown_error`, and
+  the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,
+  recreate it as the user, and copy its contents back.
+- A workspace-only sandbox cannot write the per-user `Puck` caches just because
+  it can build the checkout. Shader and world-asset builds accept the
+  `PuckShaderCacheDirectory` and `PuckWorldBakeCache` MSBuild overrides.
+  `puck parity` and `puck counters` also need a writable `world-builds` store:
+  `WorldArtifactStore` retries an access-denied lock open as contention until
+  its deadline, so a quiet wait before any World process starts can be a cache
+  permission block. `puck laws prove` needs its `law-trees` cache or writable
+  Git metadata for its fallback worktree. Report these as setup blocks, with
+  no GPU or red-law verdict, and run them in an environment with those writes
+  available; changing `LOCALAPPDATA` does not override Windows known folders.
+- Git Bash's `kill` and `pkill` do not reach native Windows processes, even
+  when they report success. Stop a process with PowerShell
+  `Stop-Process -Id <pid>` and confirm it is gone. Never search from `/` in Git
+  Bash: it walks every mounted drive.
+- A physical controller connected when `Puck.World` boots writes `[gamepad]`
+  diagnostics to standard error. A canary or manual check that asserts on
+  standard error must allow for them.
 - On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
   layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type
@@ -609,10 +691,17 @@ framed as unverified when no device run exists.
 - GBA co-simulation compares instruction deltas because mGBA rebases cumulative
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.
-- Windows App Control on the reference system blocks loading never-seen Debug
-  binaries (`FileLoadException` `0x800711C7`). A file-based app run at its
-  default Debug configuration fails to load, and relocating the runfile cache
-  does not help; build or run it with `-c Release`.
+- Windows Smart App Control, when it is on, blocks unsigned assemblies a build
+  has just produced (`FileLoadException` `0x800711C7`), including a file-based
+  app's never-seen Debug build; relocating the runfile cache does not help, so
+  build or run those with `-c Release`. When a dependency is blocked rather
+  than the entry assembly, `Puck.World` reports `[world] definition refused: …
+  The type initializer for 'Puck.World.WorldJsonContext' threw an exception.`,
+  which is not a document defect. Confirm a block in the
+  `Microsoft-Windows-CodeIntegrity/Operational` log (event 3077). Rebuilding does
+  not help, because deterministic builds reproduce the blocked bytes. Smart App
+  Control has no exclusion list; the machine's owner turns it off in Windows
+  Security.
 - A machine with a Cosmocc toolchain installed may carry `C_INCLUDE_PATH`
   pointing at its `include` directory in the ambient shell environment. That
   path leaks into every `clang`/emscripten invocation a `Puck.World.Browser`
@@ -667,6 +756,20 @@ meant to establish.
   anything.
 - When correcting a claim, update its tables, examples, summaries, comments,
   and cross-references in the same change so no contradictory source remains.
+  Before a commit message claims every instance was corrected, search for the
+  old text and confirm none remains, and re-read the whole edited paragraph: a
+  replacement that matched mid-paragraph can leave the old claim standing
+  beside the new one.
+- Loop a first-error-wins instrument until a pass finds nothing new. A loader,
+  parser, validator or compiler reports the first problem in each input and
+  stops, so one pass samples a defect surface rather than exhausting it. Report
+  how many passes the surface took.
+- A check must be able to fail visibly. Never suppress a command's error stream
+  inside a check, and read a program's exit status from the program itself,
+  never from a pipeline added to format its output: a bash pipeline reports its
+  last command's status unless `pipefail` is set. Commit before a checkout, so a
+  dirty tree cannot silently refuse it, and assert the state you believe you set
+  up.
 - Allocation laws, Post stages and bench diagnostics measure through
   `AllocationWindow` (`Puck.Abstractions.Counting`), the one helper over
   `GC.GetAllocatedBytesForCurrentThread`; nothing else reads the counter.
@@ -721,6 +824,11 @@ meant to establish.
 - Public APIs use XML documentation that describes current behavior, parameter
   units, ownership, lifetime, failure behavior, and determinism where relevant.
   Do not narrate the change that introduced the API.
+- Name files, types, tests and law ids for their subject, never their history:
+  no `Port`, `Migrated`, `Remediation` or retired-tool names, and no prose
+  saying where code came from ("ported from", "moved from"). Retiring a surface
+  deletes its name rather than calling it "the retired X". Provenance belongs
+  in the commit message.
 - A comment earns its place by stating what the code cannot and a reader would
   act on wrongly without: an invariant, a sign convention or unit, a packing
   layout, an external specification or hardware citation, or a coupling the
@@ -836,7 +944,6 @@ The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
 
 The rules for coding agents live in one file, the root
-[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
-or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code, which reads `AGENTS.md` natively only when no Claude Code memory
 file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
 directory or above it. The repository therefore commits none, at any level.

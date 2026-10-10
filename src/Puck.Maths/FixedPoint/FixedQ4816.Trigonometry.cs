@@ -5,24 +5,26 @@ namespace Puck.Maths;
 public readonly partial record struct FixedQ4816 {
     internal const int SinCosFractionBitCount = 60;
     internal const long SinCosQuarterTurnQ64 = (1L << 62);
-    internal const long SinCosTwoPiQ60 = 7244019458077122842L; // round(2π · 2^60)
+
+    public const long SinCosTwoPiQ60 = 7244019458077122842L; // round(2π · 2^60)
+
     internal const ulong SinCosInvTwoPiQ96High = 683565275UL;
     internal const ulong SinCosInvTwoPiQ96Low = 10633286012715521524UL;
 
-    internal static UInt128 SinCosInvTwoPiQ96 {
+    public static UInt128 SinCosInvTwoPiQ96 {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
         get => (((UInt128)SinCosInvTwoPiQ96High) << 64) | SinCosInvTwoPiQ96Low;
     }
 
     // Taylor coefficients for |residual| ≤ π/256: sine through degree five, cosine through degree four.
-    internal const long SinPolyC1Q60 = -192153584101141163L;
-    internal const long SinPolyC2Q60 = 9607679205057058L;
-    internal const long CosPolyC1Q60 = -576460752303423488L;
-    internal const long CosPolyC2Q60 = 48038396025285291L;
+    public const long SinPolyC1Q60 = -192153584101141163L;
+    public const long SinPolyC2Q60 = 9607679205057058L;
+    public const long CosPolyC1Q60 = -576460752303423488L;
+    public const long CosPolyC2Q60 = 48038396025285291L;
 
     // round(sin(i·π/128)·2^60), i = 0..64. Cosine reads the same table at 64 − i.
     // scalar.trigonometry-constants checks every entry against a Machin-derived interval series.
-    internal static ReadOnlySpan<long> SinCosTableQ60 => [
+    public static ReadOnlySpan<long> SinCosTableQ60 => [
         0L, 28294110113536504L, 56571176913125535L, 84814167351074653L,
         113006068906017470L, 141129899830620387L, 169168719380752196L, 197105638019954891L,
         224923827593068887L, 252606531462884448L, 280137074603713366L, 307498873645800920L,
@@ -85,22 +87,22 @@ public readonly partial record struct FixedQ4816 {
     /// and the same 0.50000001 raw Q16 ULP error envelope.</remarks>
     public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosTurns(ulong fractionalTurns) =>
         SinCosFromTurns(fractionalTurns: unchecked((long)fractionalTurns));
-
     /// <summary>Evaluates the exact half of a Q16 angle, including its low raw bit.</summary>
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
+    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
         SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(
             angle: angle.Value,
             fractionBitCount: (FractionBitCount + 1)
         ));
     /// <summary>Evaluates an angle carried at Q32 without first rounding it to Q16.</summary>
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosQ32(long angleQ32) =>
+    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosQ32(long angleQ32) =>
         SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(
             angle: angleQ32,
             fractionBitCount: (2 * FractionBitCount)
         ));
     /// <summary>Evaluates a nonnegative Q16 angle over the full unsigned raw range.</summary>
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) =>
+    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) =>
         SinCosFromTurns(fractionalTurns: RawAngleTurns(rawAngle: rawAngle));
+
     /// <summary>The Q60 sine and cosine <see cref="SinCosRaw"/> narrows, for a caller that divides by the angle and
     /// so needs the guard bits a Q16 sine has already lost.</summary>
     internal static (long SinQ60, long CosQ60) SinCosRawQ60(ulong rawAngle) =>
@@ -165,7 +167,7 @@ public readonly partial record struct FixedQ4816 {
 
     // Full signed Q60 results: the Gaussian sampler multiplies by its radius before narrowing, so the shared core
     // must retain its guard precision. The table's complementary indices exploit sine/cosine octant symmetry.
-    internal static (long SinQ60, long CosQ60) SinCosCore(long fractionalTurns) {
+    public static (long SinQ60, long CosQ60) SinCosCore(long fractionalTurns) {
         var quadrant = SinCosResidual(
             cos: out var cos,
             fractionalTurns: fractionalTurns,

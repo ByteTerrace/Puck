@@ -794,6 +794,38 @@ public sealed class CommandRegistryTests {
         );
     }
     [Fact]
+    public void HelpNarrowsToAPrefixAndListsNamesAlone() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+        var family = registry.Submit(line: "help wire.");
+
+        Assert.False(condition: family.IsError);
+        Assert.Equal(
+            actual: family.Output.Split(separator: '\n').Select(selector: static entry => entry.Split(separator: " - ")[0]),
+            expected: ["wire.ack", "wire.errors"]
+        );
+        Assert.StartsWith(
+            actualString: registry.Submit(line: "help WIRE.ERRORS").Output,
+            expectedStartString: "wire.errors - Reports"
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "help --names wire.").Output,
+            expected: "wire.ack\nwire.errors"
+        );
+        Assert.Equal(
+            actual: registry.Submit(line: "help --names").Output.Split(separator: '\n'),
+            expected: ["alpha", "beta", "help", "ping", "sum", "wire.ack", "wire.errors"]
+        );
+
+        var unmatched = registry.Submit(line: "help world.sky");
+
+        Assert.True(condition: unmatched.IsError);
+        Assert.Equal(
+            actual: unmatched.Output,
+            expected: "[help: no command is named 'world.sky' or starts with it]"
+        );
+        Assert.True(condition: registry.Submit(line: "help wire. sum").IsError);
+    }
+    [Fact]
     public void HelpListsEveryCommandInOrdinalNameOrder() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 

@@ -20,7 +20,51 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// <param name="PressureRamGb">PRESSURE when free memory is below this.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
 public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb) {
-    public static readonly HostLoadThresholds Default = new(CapacityCpuPercent: 50, CapacityRamGb: 5, PressureDiskGb: 10, PressureRamGb: 2);
+    /// <summary>The free disk, in gigabytes, below which every machine is under pressure. A build and a suite write the
+    /// same outputs whatever the machine's size, so this one threshold does not scale.</summary>
+    public const double DiskPressureGb = 10;
+    /// <summary>The installed memory, in gigabytes, a machine is judged by when it cannot report its own: the smallest
+    /// developer machine the thresholds are tuned for.</summary>
+    public const double UnreportedInstalledRamGb = 16;
+
+    private static readonly Lazy<HostLoadThresholds> MachineThresholds = new(valueFactory: static () => For(
+        installedRamGb: ((Puck.Hosting.HostMemory.InstalledPhysicalBytes() is { } installed) ? (installed / 1073741824.0) : UnreportedInstalledRamGb),
+        logicalProcessors: Environment.ProcessorCount
+    ));
+
+    /// <summary>The thresholds for the machine this process runs on (<see cref="For"/> of its installed memory and
+    /// logical processors), read once.</summary>
+    public static HostLoadThresholds ThisMachine => MachineThresholds.Value;
+
+    /// <summary>Returns the thresholds for a machine of a given size. Memory thresholds are fractions of the installed
+    /// memory, rounded up to whole gigabytes because firmware reservations make the reported size slightly less than
+    /// the nominal one: CAPACITY needs more than five sixteenths of it free, and PRESSURE begins below one eighth. The
+    /// CPU threshold leaves idle logical processors for the work being admitted: three, but never fewer than 40% of the
+    /// machine nor more than half of it. Free disk under <see cref="DiskPressureGb"/> is pressure on every machine. A
+    /// 16 GB, six-thread machine gets CPU below 50%, more than 5 GB free and pressure under 2 GB; a 32 GB, 16-thread
+    /// machine gets CPU below 60%, more than 10 GB free and pressure under 4 GB.</summary>
+    /// <param name="installedRamGb">The installed physical memory, in gigabytes.</param>
+    /// <param name="logicalProcessors">The logical processors.</param>
+    /// <returns>The thresholds.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="installedRamGb"/> is not a positive finite number,
+    /// or <paramref name="logicalProcessors"/> is less than one.</exception>
+    public static HostLoadThresholds For(double installedRamGb, int logicalProcessors) {
+        if (!double.IsFinite(d: installedRamGb) || (installedRamGb <= 0)) {
+            throw new ArgumentOutOfRangeException(actualValue: installedRamGb, message: "The installed memory must be a positive finite number of gigabytes.", paramName: nameof(installedRamGb));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfLessThan(other: 1, value: logicalProcessors);
+
+        var installed = Math.Ceiling(a: installedRamGb);
+        var idle = Math.Clamp(max: (0.5 * logicalProcessors), min: (0.4 * logicalProcessors), value: 3.0);
+
+        return new HostLoadThresholds(
+            CapacityCpuPercent: Math.Round(digits: 1, value: (100.0 * (1.0 - (idle / logicalProcessors)))),
+            CapacityRamGb: ((installed * 5.0) / 16.0),
+            PressureDiskGb: DiskPressureGb,
+            PressureRamGb: (installed / 8.0)
+        );
+    }
 }
 /// <summary>
 /// Turns a stream of <see cref="HostSample"/>s into the lines an agent admits or holds work by. It reads nothing itself,

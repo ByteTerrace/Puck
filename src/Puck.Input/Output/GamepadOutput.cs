@@ -46,7 +46,7 @@ public sealed class GamepadOutput : IGamepadOutput {
     public InputDeviceId DeviceId { get; }
 
     /// <summary>Resumes output after a wireless receiver slot begins streaming again.</summary>
-    internal void Resume() {
+    public void Resume() {
         lock (m_gate) {
             if (m_state == Suspended) {
                 m_state = Accepting;
@@ -54,7 +54,7 @@ public sealed class GamepadOutput : IGamepadOutput {
         }
     }
     /// <summary>Temporarily rejects and clears output while a wireless receiver slot is empty.</summary>
-    internal void Suspend() {
+    public void Suspend() {
         lock (m_gate) {
             if (m_state == Accepting) {
                 m_state = Suspended;

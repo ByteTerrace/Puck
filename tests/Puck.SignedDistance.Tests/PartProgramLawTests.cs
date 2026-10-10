@@ -1,9 +1,89 @@
 using System.Numerics;
+using Puck.Maths;
+using Puck.SignedDistance.Queries;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
 
 public sealed class PartProgramLawTests {
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [Theory]
+    public void AContainingSphereCannotRejectAnAnisotropicWinningField(bool compiled, bool domainScale) {
+        List<SdfInstruction> instructions = [Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(material: 0, radius: 15f), Op(SdfOp.PopField)];
+
+        instructions.AddRange(collection: [Op(SdfOp.PushField), Op(SdfOp.ResetPoint)]);
+        if (!compiled) { instructions.Add(item: Op(SdfOp.Translate)); }
+        if (domainScale) { instructions.AddRange(collection: [Op(SdfOp.Scale, new Vector4(w: 1f, x: 10f, y: 1f, z: 1f)), Shape(material: 1, radius: 1f)]); } else { instructions.Add(item: AnisotropicGauge()); }
+        instructions.Add(item: Op(SdfOp.PopField));
+        var program = Build(instructions, [
+            new SdfInstanceRange(First: 0, End: 4, IsDynamic: false, Center: Vector3.Zero, Radius: 15f, Slot: 0),
+            new SdfInstanceRange(First: 4, End: instructions.Count, IsDynamic: false, Center: Vector3.Zero, Radius: 10f, Slot: 0),
+        ]);
+        // The fixed-point evaluator refuses a non-uniform domain Scale. Its native exponent-two gauge
+        // is the same field, so use that spelling as the complete-field oracle for both GPU spellings.
+        var evaluator = new SdfFieldEvaluator(program: Build([
+            Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(material: 0, radius: 15f), Op(SdfOp.PopField),
+            Op(SdfOp.PushField), Op(SdfOp.ResetPoint), AnisotropicGauge(), Op(SdfOp.PopField)], []));
+
+        Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 20f, y: 0f, z: 0f))), out var distance, out var material));
+        Assert.Equal(actual: material, expected: 1);
+        Assert.Equal(actual: ((float)distance), expected: 1f, tolerance: 0.001f);
+        var words = program.Words;
+        var entry = (PartTable(words: words) + 8);
+
+        Assert.Equal(compiled, ((words[(entry + 2)] & 0x3fffffffu) != 0u));
+        // Mirror mapCore's packed admission and bound test against the incumbent sphere's distance of five.
+        var rejects = (((words[(entry + 2)] & 0x40000000u) == 0u)
+            && (((20f - program.InspectInstance(index: 1).BoundRadius) * BitConverter.UInt32BitsToSingle(value: words[(entry + 3)])) >= 5f));
+
+        Assert.False(condition: rejects, userMessage: "A geometric containment sphere must not reject a smaller anisotropic field value.");
+    }
+    [Fact]
+    public void TheCpuCullRetainsAnAnisotropicWinnerOutsideItsContainingSphere() {
+        List<SdfInstruction> instructions = [Op(SdfOp.ResetPoint), Shape(material: 0, radius: 15f),
+            Op(SdfOp.ResetPoint), AnisotropicGauge()];
+        var program = Build(instructions, [
+            new SdfInstanceRange(First: 0, End: 2, IsDynamic: false, Center: Vector3.Zero, Radius: 15f, Slot: 0),
+            new SdfInstanceRange(First: 2, End: 4, IsDynamic: false, Center: Vector3.Zero, Radius: 10f, Slot: 0),
+        ]);
+        var evaluator = new SdfFieldEvaluator(program: program);
+
+        Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 20f, y: 0f, z: 0f))), out var distance, out var material));
+        Assert.Equal(actual: material, expected: 1);
+        Assert.Equal(actual: ((float)distance), expected: 1f, tolerance: 0.001f);
+    }
+
+    private static SdfInstruction AnisotropicGauge() => Shape(material: 1, radius: 1f) with {
+        Shape = ((uint)SdfShapeType.Superellipsoid),
+        Data0 = new Vector4(w: 2f, x: 10f, y: 1f, z: 1f),
+        Data1 = new Vector4(w: 1f, x: 0f, y: 0.1f, z: 1f),
+    };
+
+    [Fact]
+    public void DisablingAScopedIntersectionCannotMakeItsPackedBoundRejectTheSubject() {
+        List<SdfInstruction> instructions = [Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(material: 0, radius: 5f), Op(SdfOp.PopField),
+            Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(material: 1, radius: 10f), Op(SdfOp.ResetPoint),
+            Shape(material: 2, radius: 1f) with { Blend = ((uint)SdfBlendOp.Intersection), Detail = true }, Op(SdfOp.PopField)];
+        var program = Build(instructions, [
+            new SdfInstanceRange(First: 0, End: 4, IsDynamic: false, Center: Vector3.Zero, Radius: 5f, Slot: 0),
+            new SdfInstanceRange(First: 4, End: instructions.Count, IsDynamic: false, Center: Vector3.Zero, Radius: 1f, Slot: 0),
+        ]);
+        var evaluator = new SdfFieldEvaluator(program: program);
+
+        Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 20f, y: 0f, z: 0f))), out var distance, out var material));
+        Assert.Equal(actual: material, expected: 1);
+        Assert.Equal(actual: ((float)distance), expected: 10f, tolerance: 0.001f);
+        var words = program.Words;
+        var entry = (PartTable(words: words) + 8);
+        var rejects = (((words[(entry + 2)] & 0x40000000u) == 0u)
+            && (((20f - program.InspectInstance(index: 1).BoundRadius) * BitConverter.UInt32BitsToSingle(value: words[(entry + 3)])) >= 15f));
+
+        Assert.False(condition: rejects, userMessage: "The bound of an optional intersection cannot reject the remaining subject.");
+    }
+
     private static SdfProgram Build(List<SdfInstruction> instructions, SdfInstanceRange[] instances) => new(
         instructions: instructions,
         instances: instances,
@@ -73,6 +153,50 @@ public sealed class PartProgramLawTests {
     )
         with { Shape = ((uint)SdfShapeType.Sphere), Material = material };
 
+    [Fact]
+    public void AnUncompiledInstanceCarriesItsFieldRescaleInverse() {
+        // Instance 0 is one scope of leaves and compiles. Instance 1 nests a scope, which the part compiler refuses, so
+        // it stays on the generic walk; its entry still carries 1 / FieldRescale, which mapCore's whole-instance and
+        // group-mask word rejections divide the gap to its bound by.
+        var instructions = Scope(
+            inner: 1,
+            materialA: 0,
+            materialB: 1,
+            outer: 2,
+            slotA: 1,
+            slotB: 2
+        );
+        var first = instructions.Count;
+
+        instructions.AddRange(collection: [
+            Op(SdfOp.PushField), Op(SdfOp.PushField), Op(SdfOp.ResetPoint), Shape(
+                material: 0,
+                radius: 1
+            ),
+            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.5f, z: 0) },
+            Op(SdfOp.PopField) with { Data1 = new Vector4(w: 0, x: 0, y: 0.8f, z: 0) },
+        ]);
+        var program = Build(
+            instructions,
+            [Range(
+                end: first,
+                first: 0
+            ), Range(
+                end: instructions.Count,
+                first: first
+            )]
+        );
+        var words = program.Words;
+        var table = PartTable(words: words);
+
+        Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & 0x3fffffffu);
+        Assert.Equal(expected: 0u, actual: words[((table + 8) + 2)] & 0x3fffffffu);
+        Assert.Equal(expected: 2.5f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
+        Assert.Equal(
+            expected: (1f / program.InspectInstance(index: 1).FieldRescale),
+            actual: BitConverter.UInt32BitsToSingle(value: words[((table + 8) + 3)])
+        );
+    }
     [Fact]
     public void CapacityDoesNotDependOnSharedGeometry() {
         var shared = Scope(

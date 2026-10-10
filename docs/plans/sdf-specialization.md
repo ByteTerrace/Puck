@@ -9,7 +9,7 @@ arrangement with **program specialization**: the field code a world renders is
 generated from the world's own program and compiled into its own kernels, the
 way engines turn material graphs into shaders. The generic interpreter remains
 as the fallback a residency renders with while a specialized pipeline builds,
-the pattern Godot 4.4 uses with its ubershaders and specialized pipelines.
+the pattern Godot uses with its ubershaders and specialized pipelines.
 
 The direction is decided. This page decides the unit of specialization, the
 generator, the compile and cache pipeline, what stays generic, how the gates
@@ -401,8 +401,9 @@ the slower form.
 
 The prototype generated the chain form for two sets, the island's static
 program (7 chains, 6 shape types) and the union of everything the census found
-(11 chains, 11 shape types), and compiled four field kernels with DXC 1.9 under
-the build's recipe (`cs_6_6`, `-O3`), one compile at a time. Part programs were
+(11 chains, 11 shape types), and compiled four field kernels with the pinned DXC
+(`.github/actions/setup-dxc`) under the build's recipe (`cs_6_6`, `-O3`), one
+compile at a time. Part programs were
 off in every column, since the prototype does not generate their steps, and
 `mapGradCore` stayed generic. Instruction counts come from the DXIL
 disassembly; sizes and counts do not depend on machine load, while the shared
@@ -439,6 +440,28 @@ slower than the generic kernel while another lane's compiles shared the
 machine; its instruction count does not explain that, so phase 3 measures it
 again on an idle machine. Generic and specialized SPIR-V compiled alike (the
 views `-core` kernel: 55 s and 1.27 MB generic, 45 s and 1.22 MB specialized).
+
+### Measured on the floor GPU
+
+The existing strip tiers give a lower bound on what a smaller interpreter buys
+in the hit passes, which today always compile the full instruction set (only
+views has tiers). On the debug world at the medium preset, windowed at
+1280×900 on the RTX 2060 under Vulkan, the primary and shadow kernels were
+reloaded with each tier's strip macro and timed with `world.gpu-timing`. The
+Moth needs the full set (Sweep, superellipsoid exponents, flare, shear), so the
+stripped columns render it wrongly; they measure the interpreter's cost, not a
+shippable result. March steps differed by less than ten per cent between
+columns.
+
+| Hit kernel | Full set | `SDF_FOLD_OPS` | `SDF_CORE_OPS` with scopes kept | `SDF_CORE_OPS` |
+|---|---|---|---|---|
+| `sdf-world-primary` | 27 ms | 21.8 ms | 12.4 ms | 8.6 ms |
+| `sdf-world-shadow` | 77–85 ms | 73 ms | 64 ms | 54 ms |
+
+Two thirds of the primary kernel's time sits in the cases beyond the core set,
+the fold tier the largest share. A fixed tier keeps a whole family for one
+member the Moth uses; a per-world specialization keeps only the cases its
+program reaches.
 
 ### Estimated from those measurements
 
@@ -610,21 +633,26 @@ the pipeline-cache store; E owns the compile tree, the closure, the chunk and
 the store reader. Both register services in `WorldBootComposition`, and E's
 deletions touch D's pipeline files, so D lands first and E merges it.
 
-## Decisions for the owner
+## Decisions
 
-The engineering choices above follow from the measurements. These remain
-product trade-offs:
+The engineering choices above follow from the measurements. The three product
+trade-offs they left are decided by the owner:
 
-- **Live specialization in a shipped World.** A shipped World carries no
-  compiler, so an edit that adds a chain or primitive renders generic until the
-  next package. Shipping `dxc` and `dxcompiler` with the World (tens of
-  megabytes) would let a player's creation specialize in the field.
-- **One set per world, or one for the shipped tree.** Per-world sets give the
-  smallest kernels (the island's cuts the field code by more than half) but cost
-  four to five CPU-minutes of cold compile each; one tree-wide union compiles
-  once and covers a portal or session into any shipped world without a second
-  set, at the measured cost of a field only 14 to 22 per cent smaller than the
-  generic interpreter's.
-- **What an editor session grows.** Growing the set across a session avoids
-  recompiling when an author toggles between two sculpts, at the cost of
-  kernels that only grow until the session ends.
+- **The World ships `dxc`.** A shipped World carries `dxc` and `dxcompiler`
+  (tens of megabytes), so an edit that adds a chain or primitive specializes in
+  the field instead of rendering generic until the next package. The
+  `no-device-compile` canary and qualification's hidden-compiler matrix keep
+  their meaning for the shipped sets: a shipped world still boots specialized
+  from its store with the compiler hidden, and the compiler serves only what the
+  store does not cover.
+- **One set per world.** Per-world sets give the smallest kernels (the
+  island's cuts the field code by more than half) at four to five CPU-minutes
+  of cold compile each; a tree-wide union, which would compile once and cover a
+  portal or session into any shipped world, was measured at a field only 14 to
+  22 per cent smaller than the generic interpreter's and is not taken. A portal
+  or session into another world therefore builds that world's set.
+- **An editor session's set only grows; a save rebuilds it to fit.** Growing
+  the set across a session avoids recompiling when an author toggles between
+  two sculpts; the kernels grow until the session ends. Saving the world
+  computes the set the saved document needs and rebuilds it to exactly that,
+  so a shipped set never carries a sculpt the author discarded.

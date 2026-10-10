@@ -116,11 +116,39 @@ public static class PuckRootCommand {
             .. WorldsRoot.Verbs(),
         ]);
 
-        return CliRoot.Compose(
+        var root = CliRoot.Compose(
             description: "The Puck developer CLI: every repository operation is a verb here.",
             verbs: verbs
         );
+
+        root.Options.OfType<VersionOption>().Single().Action = new RevisionVersionAction();
+
+        return root;
     }
+
+    // puck --version: the package version with the commit the build was made at as build metadata, then, on standard
+    // error, whether the checkout it runs in has moved past that commit. The commit is the one Puck.World.Schema embeds.
+    private sealed class RevisionVersionAction : System.CommandLine.Invocation.AsynchronousCommandLineAction {
+        public override async Task<int> InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken = default) {
+            var version = (System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(element: typeof(PuckRootCommand).Assembly)?.InformationalVersion ?? "0.0.0");
+            var revision = Puck.World.WorldSchema.SourceRevision;
+
+            Console.Out.WriteLine(value: CliRevision.Describe(
+                revision: revision,
+                version: version
+            ));
+
+            if (await CliRevision.StaleWarningAsync(
+                built: revision,
+                cancellationToken: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false) is { } warning) {
+                Console.Error.WriteLine(value: warning);
+            }
+
+            return 0;
+        }
+    }
+
     public static int Invoke(string[] args) => CliRoot.Invoke(
         args: args,
         root: Create(clock: TimeProvider.System)

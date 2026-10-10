@@ -579,10 +579,28 @@ These are one-line cautions; the owning pages hold the derivations.
 - **A subtraction is exact only where its subject is nearest.** Inside the
   carved void the contact field reads phantom surfaces; extend a carve past
   every point a body can reach, or build the void from union geometry.
-- **An instance bound is an influence sphere tested per tile cone, never per
+- **An instance bound is an influence sphere, tested per tile cone and per
   sample.** It must cover the primitive's reach, its field ops, and its blend
-  halo; a short bound clips geometry at tile edges. `Xor` is maskable with a
-  union-margin bound; do not add it to the unmaskable gate.
+  halo; a short bound clips geometry at tile edges and, through mapCore's
+  whole-instance rejection (`sdfInstanceCannotWin`), at any sample. That
+  rejection additionally requires `InstanceHasDistanceLowerBound`: containment
+  alone says nothing about an underestimating gauge, a non-uniform scale, a
+  warp or the field left after an optional intersection is disabled. The part
+  entry's `PartNoDistanceBoundFlag` keeps these instances on the full walk.
+  Eligible instances divide the bound gap by the field rescale: `.w` carries
+  the compiled scope's multiplier or the generic instance's inverse rescale.
+  Compiled parts join by hard union; generic instances additionally need the
+  root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
+  ambient group masks summarize each mask word as one sphere over its
+  eligible ordinary-sized instances (`sdfSummarizeGroupMask`, others kept), so a
+  many-instance body is rejected once per word. The soft-shadow march queries
+  `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
+  which neither its stride, hit decision nor estimate moves. Include the
+  shading-scaled hit threshold as well as stride and penumbra saturation;
+  `SdfShadowQuery.Ceiling` is the CPU arithmetic reference. A skipped instance publishes no fold wall, as a skipped
+  segment does not, so march sample positions can move while staying sound.
+  `Xor` is maskable with a union-margin bound; do not add it to the unmaskable
+  gate.
 - **A field scope is a real per-sample cost.** Scoped segments skip the
   segment early-out and rigid planning. Never open a scope around one primitive
   for its Lipschitz factor; make the primitive's field 1-Lipschitz instead.
@@ -638,8 +656,9 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal both read. A scope's compose radius reaches `L` times as far when the
   scope's field joins its parent divided by its Lipschitz factor
   (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
-  surface and the blends' influence, and the field outside it is at least its
-  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance. The
+  surface and the blends' influence. Only a certified distance-bound instance
+  can compare its field with distance to that bound over
+  `SdfInstanceCost.FieldRescale`; geometric containment alone cannot. The
   `sdf-lattice-cull` canary pins on the GPU what the CPU laws hold: a hex
   wallpaper with no edge clipped by a box in one scoped placement is bounded by
   the box and still draws across all of it.
@@ -677,8 +696,10 @@ These are one-line cautions; the owning pages hold the derivations.
   assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
   carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
   its first eight hexadecimal digits as an unsigned integer. Regenerate after
-  changing any reached declaration, re-record the product pin in
-  `CreationBakeLawTests`, and verify with `puck derivations --check`. A held
+  changing any reached declaration and verify with `puck derivations --check`.
+  `CreationBakeLawTests` pins each outcome's bytes, not the pack, so a
+  regenerated fingerprint or a moved pack shape moves no pin; re-record an
+  outcome pin there only when the change moves the bake's bytes. A held
   bake is keyed by the code that wrote it, so two lanes that change the bytes
   never share a key; a held bake this baker cannot decode draws the field,
   counted and named (`sdf.bakes.undecodable`).
@@ -1720,6 +1741,18 @@ a bounded-volume measurement, confirm with `world.budget` that the scene
 submits the volume count you expect. Disassembly and code-path inspection are
 the tools for a question `world.counters`' counts cannot answer directly.
 
+To settle whether an HLSL change altered the compiled arithmetic, compare
+modules rather than renders. Build base and head in separate worktrees, gather
+each one's bytecode with `puck shaders collect <dir>`, and disassemble each pair
+(`dxc -dumpbin <file>.dxil`, `spirv-dis <file>.spv`). Count the arithmetic ops on
+both sides (`OpFMul`, `OpFAdd`, `OpDot`, `InverseSqrt`; `fmul`, `fadd`,
+`dx.op.dot3`) and reconcile every delta to a source change; an unexplained delta
+is a finding. Commutative operand order that flips between backends is not a
+difference. A SPIR-V access chain names the buffer row and lane, which checks a
+packing claim against the artifact. This proves the module only: the driver's
+translation to native code stays invisible, so it never replaces a
+cross-backend capture.
+
 For a repeatable before-and-after reading, `puck counters` boots
 `tests/Puck.Counters/counters.puck` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
@@ -2654,7 +2687,14 @@ each as its own set every frame (`ShaderPipelineRenderNode.Groups.cs`). The
 declarations are generated into `<interface>.interface.hlsli`, which the loader
 supplies in memory
 (`ShaderPipelineLoader.GeneratedIncludeOf`) and a post-process package checks in
-(`puck shaders generate`, or `puck shaders interface <directory> --package <id> --write`). Never hand-declare a frame struct or a port
+(`puck shaders generate`, or `puck shaders interface <directory> --package <id> --write`).
+A changed package or shader-set interface leaves its checked-in
+`<name>.interface.hlsli` stale, and the kernels that include it then fail to
+compile, which can stop the build that hosts the generator. Build the CLI with
+shader compilation off (`-p:PuckShaderSpirvEnabled=false
+-p:PuckShaderDxilEnabled=false -p:PuckComputeShaderDxilEnabled=false`),
+regenerate, then build normally and confirm `puck shaders generate --check`
+passes. Never hand-declare a frame struct or a port
 binding: a load refuses a module whose reflected bindings differ from its layout
 (`SHADERPIPE_INTERFACE`). The host writes the frame group through
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`

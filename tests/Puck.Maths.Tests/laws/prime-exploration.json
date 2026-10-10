@@ -250,7 +250,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Enumeration validates a null callback through the public and the internal policy overloads; the policy overloads validate segment size and mode before returning an empty reversed interval; the internal PrimeSieveMode ordinals match their explicit dispatch contract.",
+        "Subject": "Enumeration validates a null callback through the default and the explicit policy overloads; the policy overloads validate segment size and mode before returning an empty reversed interval; the PrimeSieveMode ordinals match their explicit dispatch contract.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -277,13 +277,149 @@
       {
         "Type": "Puck.Maths.PrimeWheel30",
         "Name": "NumericResidues"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Multiplier"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Gap"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Gaps"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "PrefixMask"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "PrefixMasks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "WordPrefixMask"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Carry"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "Lift"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "TargetBit"
+      },
+      {
+        "Type": "Puck.Maths.PrimeWheel30",
+        "Name": "NumericBit"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "ClearMasks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+WheelUnitsThrough",
+        "Name": "Counts"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialTables",
+        "Name": "PrefixMasks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialTables",
+        "Name": "Steps"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialWheelStep",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialWheelStep",
+        "Name": "Bit"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialWheelStep",
+        "Name": "Gap"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions+CombinatorialWheelStep",
+        "Name": "Carry"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue1",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue1",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue7",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue7",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue11",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue11",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue13",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue13",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue17",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue17",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue19",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue19",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue23",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue23",
+        "Name": "Residue"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue29",
+        "Name": "Masks"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+PacketResidue29",
+        "Name": "Residue"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "PrimeWheel30's internal derivation (Multiplier, Gap, Lift, Carry, NumericBit, TargetBit, PrefixMask, WordPrefixMask) and every table built from it: PrimeWheel30.Gaps and PrefixMasks, PrimeExploration.ClearMasks and WheelUnitsThrough.Counts, and PrimeExtensions.CombinatorialTables.Steps and PrefixMasks",
+        "Subject": "PrimeWheel30's derivation (Multiplier, Gap, Lift, Carry, NumericBit, TargetBit, PrefixMask, WordPrefixMask) and every table built from it: PrimeWheel30.Gaps and PrefixMasks, PrimeExploration.ClearMasks and WheelUnitsThrough.Counts, and PrimeExtensions.CombinatorialTables.Steps and PrefixMasks",
         "Against": "a direct walk of the multiples p·m for p = 30q + r at four quotients q in every channel and the units m coprime to thirty (Oracles.UnitsModulo, with 31 closing the cycle): the byte floor(p·m / 30), its step beyond q times the gap, the residue p·m mod 30 located by Array.IndexOf over the units, and the units at or below each remainder counted bit by bit",
         "Shared": "",
         "Citation": "",
@@ -312,7 +448,24 @@
   {
     "Id": "prime-exploration.presieve-jacobsthal-run-bound",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "PreSievePrimeLimit"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "SmallPrimeGroups"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration",
+        "Name": "FilterSmallPrimes"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExploration+SmallPrimePatterns",
+        "Name": "Periods"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",

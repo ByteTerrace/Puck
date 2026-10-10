@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace Puck.Text;
 
-internal sealed class OpenTypeFontFace {
+public sealed class OpenTypeFontFace {
     private const ushort ArgsAreWords = 0x0001;
     private const ushort ArgsAreXyValues = 0x0002;
     private const ushort MoreComponents = 0x0020;
@@ -1435,6 +1435,7 @@ internal sealed class OpenTypeFontFace {
 
     private readonly record struct TableRecord(int Length, int Offset);
 }
+
 internal sealed record TrueTypeGlyphContour(IReadOnlyList<TrueTypeGlyphPoint> Points);
 internal sealed record TrueTypeGlyphOutline(
     IReadOnlyList<TrueTypeGlyphContour> Contours,

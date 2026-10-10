@@ -181,7 +181,7 @@ public static partial class PrimeExtensions {
     // and coordinates.Length>=lanes. The sign bit stores mu, not the factor. After masking, signed compares are
     // exact: factors <=32767 and the caller's p<=sqrt(y)<32767.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int FilterGourdonHardLeaves<TLanes, TBytes>(ReadOnlySpan<ushort> factors, ref int coordinate, int last,
+    public static int FilterGourdonHardLeaves<TLanes, TBytes>(ReadOnlySpan<ushort> factors, ref int coordinate, int last,
         uint prime, Span<int> coordinates)
         where TLanes : struct, IByteVectorLanes<TBytes>
         where TBytes : struct {
@@ -214,7 +214,7 @@ public static partial class PrimeExtensions {
             current: current, factors: factors, lanes: lanes, last: last, prime: prime);
     }
     // The scalar rung of FilterGourdonHardLeaves: four branch-free predicates per step, same contract.
-    internal static int FilterGourdonHardLeavesScalar(ReadOnlySpan<ushort> factors, ref int coordinate, int last, uint prime,
+    public static int FilterGourdonHardLeavesScalar(ReadOnlySpan<ushort> factors, ref int coordinate, int last, uint prime,
         Span<int> coordinates) {
         const int Lanes = 4;
         var limit = (coordinates.Length - Lanes);

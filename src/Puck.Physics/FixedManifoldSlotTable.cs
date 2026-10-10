@@ -11,59 +11,64 @@ internal enum FixedManifoldSlotDisposition {
     /// <summary>Routed to the bounded extraction path; no impulse is accumulated and none is warm started.</summary>
     Recovery,
 }
+
 /// <summary>One persistent manifold slot: the geometry a candidate wrote into it, and the impulse it accumulates
 /// across steps.</summary>
-internal struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
+public struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
     /// <summary>Whether the slot holds a live association.</summary>
-    internal bool Occupied;
+    public bool Occupied;
     /// <summary>The associated candidate's source identity.</summary>
-    internal int SourceId;
+    public int SourceId;
     /// <summary>The associated candidate's feature identity.</summary>
-    internal int FeatureId;
+    public int FeatureId;
     /// <summary>The contact point relative to the body's centre of mass, in world axes.</summary>
-    internal FixedVector3 Anchor;
+    public FixedVector3 Anchor;
     /// <summary>The unit contact normal, in world axes.</summary>
-    internal FixedVector3 Normal;
+    public FixedVector3 Normal;
     /// <summary>The separation the candidate reported this step.</summary>
-    internal FixedQ4816 Separation;
+    public FixedQ4816 Separation;
+
     /// <summary>The separation with the anchor's own normal component removed, so a substep can re-derive the current
     /// separation from the displacement it has accumulated.</summary>
     internal FixedQ4816 BaseSeparation;
+
     /// <summary>The accumulated normal impulse raw, at Q48.16; this is the warm-start carrier.</summary>
-    internal long NormalImpulseRaw;
+    public long NormalImpulseRaw;
     /// <summary>The constraint's effective mass raw, at <see cref="FixedRigidScales.EffectiveMass"/>.</summary>
-    internal long NormalMassRaw;
+    public long NormalMassRaw;
     /// <summary>The relative normal velocity captured before the step's first solve, for restitution.</summary>
-    internal FixedQ4816 RelativeVelocity;
+    public FixedQ4816 RelativeVelocity;
     /// <summary>The total normal impulse applied within the current step.</summary>
-    internal long TotalNormalImpulseRaw;
+    public long TotalNormalImpulseRaw;
     /// <summary>The step ordinal the slot was last associated on.</summary>
-    internal int LastTouchedStep;
+    public int LastTouchedStep;
+
     /// <summary>What the slot is doing this step.</summary>
     internal FixedManifoldSlotDisposition Disposition;
+
     /// <summary>The accumulated tangential impulse, world-space, at Q48.16 per component — this is the friction
     /// warm-start carrier. Persisted as a world-space vector rather than two scalars against the tangent basis,
     /// because that basis is rebuilt from <see cref="Normal"/> every <c>Prepare()</c> and a scalar pair tied to a
     /// stale basis would silently misapply the moment the normal rotates.</summary>
-    internal FixedVector3 FrictionImpulse;
+    public FixedVector3 FrictionImpulse;
     /// <summary>The first tangent direction, rebuilt every <c>Prepare()</c>; not persisted.</summary>
-    internal FixedVector3 Tangent1;
+    public FixedVector3 Tangent1;
     /// <summary>The second tangent direction, rebuilt every <c>Prepare()</c>; not persisted.</summary>
-    internal FixedVector3 Tangent2;
+    public FixedVector3 Tangent2;
     /// <summary>The coupled tangent effective-mass tensor's <c>(0,0)</c> entry, at
     /// <see cref="FixedRigidScales.EffectiveMass"/>; rebuilt every <c>Prepare()</c>, not persisted.</summary>
-    internal long TangentMassXXRaw;
+    public long TangentMassXXRaw;
     /// <summary>The coupled tangent effective-mass tensor's <c>(0,1) = (1,0)</c> entry, at
     /// <see cref="FixedRigidScales.EffectiveMass"/>; rebuilt every <c>Prepare()</c>, not persisted.</summary>
-    internal long TangentMassXYRaw;
+    public long TangentMassXYRaw;
     /// <summary>The coupled tangent effective-mass tensor's <c>(1,1)</c> entry, at
     /// <see cref="FixedRigidScales.EffectiveMass"/>; rebuilt every <c>Prepare()</c>, not persisted.</summary>
-    internal long TangentMassYYRaw;
+    public long TangentMassYYRaw;
     /// <summary>The per-step working tangential impulse raw along <see cref="Tangent1"/>, at Q48.16; seeded from
     /// <see cref="FrictionImpulse"/> each <c>Prepare()</c> and mutated in place through the relax iterations.</summary>
-    internal long TangentImpulseXRaw;
+    public long TangentImpulseXRaw;
     /// <summary>The per-step working tangential impulse raw along <see cref="Tangent2"/>, at Q48.16.</summary>
-    internal long TangentImpulseYRaw;
+    public long TangentImpulseYRaw;
 
     readonly int IManifoldSlotState.FeatureId => FeatureId;
     readonly bool IManifoldSlotState.IsIdle => (Disposition == FixedManifoldSlotDisposition.Idle);
@@ -113,7 +118,6 @@ internal struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
         );
     }
 }
-
 /// <summary>
 /// The persistent manifold slots one body carries, and the deterministic association that maps this step's candidates
 /// into them. The table is a fixed-capacity ORDERED array: association scans it in index order, solving reads it in
@@ -122,7 +126,8 @@ internal struct FixedManifoldSlot : IManifoldSlot<FixedContactCandidate> {
 /// </summary>
 public sealed class FixedManifoldSlotTable {
     /// <summary>The number of slots one body carries.</summary>
-    internal const int Capacity = 16;
+    public const int Capacity = 16;
+
     /// <summary>The number of steps a slot survives without being associated.</summary>
     internal const int IdleStepBudget = 4;
 
@@ -132,7 +137,7 @@ public sealed class FixedManifoldSlotTable {
     /// <summary>Gets the slot at an index.</summary>
     /// <param name="index">The slot index.</param>
     /// <returns>A reference to the slot.</returns>
-    internal ref FixedManifoldSlot this[int index] => ref m_slots[index];
+    public ref FixedManifoldSlot this[int index] => ref m_slots[index];
 
     /// <summary>Gets the number of slots associated with a candidate on the most recent step.</summary>
     public int ActiveCount => FixedManifoldSlotCore.ActiveCount(
@@ -160,12 +165,13 @@ public sealed class FixedManifoldSlotTable {
             slots: m_slots,
             step: step
         );
+
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
     /// <param name="digest">The running digest, advanced in place.</param>
     /// <param name="step">The current step ordinal, so the folded age is RELATIVE (<c>step - LastTouchedStep</c>)
     /// rather than absolute — two runs starting at different step offsets still fold the same age for the same
     /// history.</param>
-    internal void Fold(ref Fnv1aHash digest, int step) => FixedManifoldSlotCore.Fold(
+    public void Fold(ref Fnv1aHash digest, int step) => FixedManifoldSlotCore.Fold(
         capacity: Capacity,
         digest: ref digest,
         slots: m_slots,

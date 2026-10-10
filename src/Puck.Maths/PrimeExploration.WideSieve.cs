@@ -29,12 +29,16 @@ public static partial class PrimeExploration {
     private readonly struct WideStep(byte mask, byte factor, byte carry, uint next) {
         internal readonly byte Mask = mask;
         internal readonly byte Factor = factor;
-        internal readonly byte Carry = carry;
+
+        public readonly byte Carry = carry;
+
         internal readonly uint Next = next;
     }
     private static class WideWheelTables {
         internal static readonly byte[] Residues = CreateWideResidues();
-        internal static readonly WideStep[] Steps = CreateWideSteps();
+
+        public static readonly WideStep[] Steps = CreateWideSteps();
+
         internal static readonly byte[] FirstSources = CreateWideFirstSources();
     }
 
