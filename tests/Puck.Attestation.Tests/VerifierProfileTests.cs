@@ -60,14 +60,14 @@ public sealed class VerifierProfileTests {
         );
 
         var exception = Assert.Throws<ArgumentNullException>(testCode: () => AttestationVerifier.VerifyChain(
-            profile: null!,
-            codec: codec,
-            claim: claim,
             chain: null,
-            trustList: trust,
-            now: Now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: "world:home",
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home"
+            now: Now,
+            profile: null!,
+            trustList: trust
         ));
 
         Assert.Equal(
@@ -80,7 +80,7 @@ public sealed class VerifierProfileTests {
     [Fact]
     public void SignedAttestation_ExposesNoPublicFactoryThatTakesIndependentSignedPortionBytes() {
         var offenders = typeof(SignedAttestation)
-            .GetMembers(bindingAttr: (BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance))
+            .GetMembers(bindingAttr: BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
             .OfType<MethodBase>()
             .Where(predicate: method => method.GetParameters().Any(predicate: parameter => string.Equals(
                 a: parameter.Name,

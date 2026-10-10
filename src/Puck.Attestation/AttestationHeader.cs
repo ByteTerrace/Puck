@@ -150,6 +150,7 @@ public sealed record SignedAttestation {
             signature: signature,
             signedPortion: signedPortion
         );
+
     /// <summary>
     /// Builds an attestation by encoding the given fields under <paramref name="codec"/> — the wire form a
     /// party holding these values would actually transmit. This is how a modified attestation is constructed

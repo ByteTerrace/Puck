@@ -414,7 +414,6 @@ internal sealed class SplitReplayTestStore(int participants) {
         return result;
     }
 }
-
 /// <summary>
 /// A codec that behaves as its inner codec in every respect except that it reports one preset byte string
 /// as the signed portion. <see cref="SignedAttestation.Reencode"/> through it builds an attestation whose
