@@ -2723,12 +2723,12 @@ means at least one kernel source digest is stale or absent. Run it from the
 repository checkout; the command locates the checkout by ascending to `Puck.slnx`.
 
 Each kernel artifact campaign must use the inventory's exact source digest and the
-per-target `referenceBuild` settings in `ReferenceSchedule.json`: SDK 10.0.401,
-the recorded runtime pack and ILCompiler 10.0.12, Release Native AOT, explicit
-`IlcInstructionSet` (`x86-64-v3` or `armv8.2-a`), no method-body folding, and no
-PGO. Retain the complete disassembly for the named symbol and every reachable
-helper, including refusal paths. Run `llvm-mca` 19.1.6 with the target's recorded
-triple and CPU model. An x64 build is not evidence for an AArch64 target, and an
+per-target `referenceBuild` settings in `ReferenceSchedule.json`: the SDK
+`global.json` pins, the recorded runtime pack and ILCompiler, Release Native AOT,
+explicit `IlcInstructionSet` (`x86-64-v3` or `armv8.2-a`), no method-body
+folding, and no PGO. Retain the complete disassembly for the named symbol and
+every reachable helper, including refusal paths. Run `llvm-mca` at the version
+the target's `analysis` entry records, with its recorded triple and CPU model. An x64 build is not evidence for an AArch64 target, and an
 unresolved indirect call or loop remains unresolved.
 
 #### Capturing the evidence

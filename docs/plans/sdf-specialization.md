@@ -9,7 +9,7 @@ arrangement with **program specialization**: the field code a world renders is
 generated from the world's own program and compiled into its own kernels, the
 way engines turn material graphs into shaders. The generic interpreter remains
 as the fallback a residency renders with while a specialized pipeline builds,
-the pattern Godot 4.4 uses with its ubershaders and specialized pipelines.
+the pattern Godot uses with its ubershaders and specialized pipelines.
 
 The direction is decided. This page decides the unit of specialization, the
 generator, the compile and cache pipeline, what stays generic, how the gates
@@ -401,8 +401,9 @@ the slower form.
 
 The prototype generated the chain form for two sets, the island's static
 program (7 chains, 6 shape types) and the union of everything the census found
-(11 chains, 11 shape types), and compiled four field kernels with DXC 1.9 under
-the build's recipe (`cs_6_6`, `-O3`), one compile at a time. Part programs were
+(11 chains, 11 shape types), and compiled four field kernels with the pinned DXC
+(`.github/actions/setup-dxc`) under the build's recipe (`cs_6_6`, `-O3`), one
+compile at a time. Part programs were
 off in every column, since the prototype does not generate their steps, and
 `mapGradCore` stayed generic. Instruction counts come from the DXIL
 disassembly; sizes and counts do not depend on machine load, while the shared

@@ -46,9 +46,9 @@ macOS, and nothing here is verified there.
   `.github/workflows/browser.yml` and `azure.yml`), for the dashboard's npm
   projects, which `.claude/launch.json`'s previews run, and the browser
   payload's Node harness.
-- **PowerShell 7 (`pwsh`).** The versioned `.claude/settings.json` runs the
+- **PowerShell (`pwsh`).** The versioned `.claude/settings.json` runs the
   hooks under `.claude/hooks/` through `pwsh`, so a machine without it reports
-  a hook error on every shell command and every edit. Windows PowerShell 5 is
+  a hook error on every shell command and every edit. Windows PowerShell is
   not `pwsh`; on Linux, install PowerShell from Microsoft's package feed.
 - **The global `puck` tool, installed from the checkout**, as
   [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
@@ -505,9 +505,9 @@ dotnet publish src/Puck.World.Browser -c Release
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
-package declares no `engines` requirement, and CI runs it on Node 24.21.0
-(the `verify` job in `.github/workflows/browser.yml`). Use the system install,
-not a version manager:
+package declares no `engines` requirement, and CI runs it on the Node version
+the `verify` job in `.github/workflows/browser.yml` pins (`node-version`). Use
+the system install, not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
