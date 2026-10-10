@@ -413,7 +413,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         [loop]
         while (first != SDF_SEGMENT_NONE) {
             uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + index];
-            bool ready = (part.z & 0x7FFFFFFFu) != 0u;
+            bool ready = (part.z & SDF_PART_LEAF_COUNT_MASK) != 0u;
     #ifndef SDF_DYNAMIC_TRANSFORMS
             ready = ready && (part.z & 0x80000000u) == 0u;
     #endif

@@ -14,21 +14,23 @@ bool sdfCanTracePartsIndependently() {
 
 // Whether a whole visible instance cannot replace the incumbent at worldPosition: the per-sample twin of the segment
 // walk's skip sphere, read from the instance's packed bound (SdfProgram's instance directory entry). Outside that
-// bound the instance's field is at least the gap to it divided by its field rescale (SdfInstanceCost.FieldRescale,
-// whose inverse the part table's entry carries in .w for every instance, compiled or not), so a gap at least the
+// bound a certified instance's field is at least the gap to it divided by its field rescale (SdfInstanceCost.FieldRescale,
+// carried conservatively by min(part.w, 1): the compiled scope multiplier or the generic inverse rescale), so a gap at least the
 // incumbent loses a hard union's strict test exactly and skipping the instance changes no distance, material or seam.
-// The caller asks only where the instance joins as a hard union: a compiled part always does, and a generic instance
+// The caller excludes SDF_PART_NO_DISTANCE_BOUND: containment alone cannot bound a gauge, warp or optional clipper.
+// It asks only where the instance joins as a hard union: a compiled part always does, and a generic instance
 // does under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is skipped. A
 // shadow, ambient or normal probe far from a body skips all of its leaves, as primary's own ray bounds do.
 bool sdfInstanceCannotWin(uint instanceOffset, uint instance, float inverseRescale, float3 worldPosition, float incumbent) {
 #ifdef SDF_TAPE_BUILD
     if (sdfTapeBuilding) { return false; }
 #endif
-    if ((incumbent > SDF_FAR_DISTANCE) || !(inverseRescale > 0.0)) { return false; }
+    // A scope starts at the finite far sentinel before its rescale, even when every leaf lies farther away.
+    if (!(inverseRescale > 0.0) || incumbent >= SDF_FAR_DISTANCE * min(inverseRescale, 1.0)) { return false; }
     uint entry = sdfInstanceEntryOffset(instanceOffset, instance);
     uint4 meta = sdfProgramWord(entry + 1u);
     float4 bound = asfloat(sdfProgramWord(entry));
-    if (!(bound.w >= 0.0)) { return false; }
+    if (!(bound.w >= 0.0) || !all(isfinite(bound))) { return false; }
     if (meta.x == SDF_BOUND_DYNAMIC) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
         bound.xyz += sdfDynamicTransformRow(3u * meta.y).xyz;
@@ -42,7 +44,7 @@ bool sdfInstanceCannotWin(uint instanceOffset, uint instance, float inverseResca
     return ((gap > 0.0) && ((gap * min(inverseRescale, 1.0)) >= incumbent));
 }
 
-// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic flag, scope scale); an
+// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic|no-distance-bound, scope scale); an
 // instance the table does not compile has a zero count and carries its field rescale's inverse in the scale lane.
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
@@ -62,7 +64,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     child.instanceIndex = -1;
     child.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
-    uint leafCount = part.z & 0x7FFFFFFFu;
+    uint leafCount = part.z & SDF_PART_LEAF_COUNT_MASK;
     if (!sdfProgramRange(part.x, leafCount, 1u) || !sdfProgramRange(part.y, leafCount, 1u)) {
         parent = sdfIsaErrorHit();
         return;

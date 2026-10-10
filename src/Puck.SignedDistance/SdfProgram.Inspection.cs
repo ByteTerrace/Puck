@@ -13,8 +13,8 @@ namespace Puck.SignedDistance;
 /// <param name="Unmaskable">Whether no finite bound can mask this instance.</param>
 /// <param name="FieldRescale">The largest product of factors <c>L</c> along a nested scope path dividing its field before
 /// it joins the parent (<see cref="SdfFieldScopeClamp.StepScale"/> is <c>1/L</c>), or 1 when no scope does. The packed bound
-/// contains the instance's surface and its blends' influence whatever this is; the instance's field outside the bound is
-/// at least its distance to the bound divided by this, not the distance itself.</param>
+/// contains geometry and blend influence, but only <see cref="SdfProgram.InstanceHasDistanceLowerBound"/> admits
+/// comparison of the field with distance to that bound divided by this factor.</param>
 public readonly record struct SdfInstanceCost(int OwnedWords, int Shapes, int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, float FieldRescale);
 /// <summary>One packed skip sphere, as the kernels read it: <c>mapCore</c> skips the shape or segment it bounds when the
 /// sample's distance to the sphere cannot beat the running minimum.</summary>
@@ -81,7 +81,7 @@ public sealed partial class SdfProgram {
         var part = (((int)m_words[(instances + InstancePartProgramsLane)]) * WordsPerVector);
 
         if (part != 0) {
-            var bindings = ((int)(m_words[((part + ((1 + index) * WordsPerVector)) + 2)] & 0x7FFFFFFFu));
+            var bindings = ((int)(m_words[((part + ((1 + index) * WordsPerVector)) + 2)] & PartLeafCountMask));
 
             vectors += (1 + bindings);
         }

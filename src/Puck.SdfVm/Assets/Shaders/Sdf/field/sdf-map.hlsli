@@ -230,7 +230,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
             ) {
                 uint4 part = sdfProgramWord(sdfProgramLayout.partProgramOffset + 1u + pendingInstance);
-                bool partReady = ((part.z & 0x7FFFFFFFu) != 0u);
+                bool partReady = ((part.z & SDF_PART_LEAF_COUNT_MASK) != 0u);
 #ifndef SDF_DYNAMIC_TRANSFORMS
                 partReady = partReady && ((part.z & 0x80000000u) == 0u);
 #endif
@@ -247,7 +247,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         testedWord = maskWordIndex;
                         float4 sphere = sdfGroupMaskSpheres[maskWordIndex];
                         float gap = (length(worldPosition - sphere.xyz) - sphere.w);
-                        if ((sphere.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE) && (gap > 0.0) &&
+                        if ((sphere.w >= 0.0) && (result.distance < SDF_FAR_DISTANCE * sdfGroupMaskScales[maskWordIndex]) && (gap > 0.0) &&
                             ((gap * sdfGroupMaskScales[maskWordIndex]) >= result.distance)) {
                             uint kept = sdfGroupMaskKept[maskWordIndex];
                             maskWordBits &= kept;
@@ -259,7 +259,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 #endif
-                    if ((partReady || rootUnion) &&
+                    if ((partReady || rootUnion) && (part.z & SDF_PART_NO_DISTANCE_BOUND) == 0u &&
                         sdfInstanceCannotWin(instanceOffset, pendingInstance, asfloat(part.w), worldPosition, result.distance)) {
                         sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                             maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
@@ -272,7 +272,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
 #endif
                     ) {
-                        sdfFieldVisits += (part.z & 0x7FFFFFFFu);
+                        sdfFieldVisits += (part.z & SDF_PART_LEAF_COUNT_MASK);
                         sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,

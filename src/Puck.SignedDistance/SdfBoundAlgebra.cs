@@ -3,9 +3,10 @@ namespace Puck.SignedDistance;
 /// <summary>How the bounds of a field's operands compose through its set operations: the one algebra both the
 /// program, deciding whether an instance's authored bound can cull it (<see cref="SdfProgram.HasUnmaskableInfluence"/>),
 /// and the authoring stamper, sizing that bound (<c>CreationStampEmitter.RenderReach</c>), read.
-/// <para>A bound is the radius of a sphere outside which an operand's field is at least its distance to the sphere (divided by
-/// the Lipschitz factor of a scope that rescales it, <see cref="SdfInstanceCost.FieldRescale"/>), so culling the operand
-/// there changes nothing it could win. <see cref="Unbounded"/> stands for no bound: an operand
+/// <para>A bound contains an operand's influence. Only operands admitted by <see cref="SdfProgram.InstanceHasDistanceLowerBound"/>
+/// also certify that their field is at least the distance to that sphere, divided by their scope's
+/// <see cref="SdfInstanceCost.FieldRescale"/>. Containment alone cannot justify distance rejection for an anisotropic
+/// gauge or an optional clipper. <see cref="Unbounded"/> stands for no bound: an operand
 /// whose influence has no edge (a lattice fold with an unbounded limit, an infinite repeat). Unbounded is a state, carried
 /// as IEEE positive infinity so that composing, adding a finite margin and scaling by a positive factor keep it, and
 /// only the program's packing (<see cref="SdfProgram.UnmaskableBoundRadius"/>) turns it into a number.</para>

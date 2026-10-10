@@ -157,6 +157,8 @@
 #define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
 #define SDF_SEGMENT_TAPE_OFFSET(v)       ((v).w)
 #define SDF_TAPE_INSTRUCTION_THRESHOLD   30u
+#define SDF_PART_LEAF_COUNT_MASK         0x3FFFFFFFu
+#define SDF_PART_NO_DISTANCE_BOUND       0x40000000u
 #define SDF_TAPE_SLAB_COUNT              8u
 #define SDF_TAPE_HEADER_WORDS            33u
 #define SDF_TAPE_CERTIFIED               0x00000001u

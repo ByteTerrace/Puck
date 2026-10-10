@@ -647,6 +647,16 @@ unverified when no device run exists.
   fails within seconds with `windows sandbox failed: helper_unknown_error`, and
   the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,
   recreate it as the user, and copy its contents back.
+- A workspace-only sandbox cannot write the per-user `Puck` caches just because
+  it can build the checkout. Shader and world-asset builds accept the
+  `PuckShaderCacheDirectory` and `PuckWorldBakeCache` MSBuild overrides.
+  `puck parity` and `puck counters` also need a writable `world-builds` store:
+  `WorldArtifactStore` retries an access-denied lock open as contention until
+  its deadline, so a quiet wait before any World process starts can be a cache
+  permission block. `puck laws prove` needs its `law-trees` cache or writable
+  Git metadata for its fallback worktree. Report these as setup blocks, with
+  no GPU or red-law verdict, and run them in an environment with those writes
+  available; changing `LOCALAPPDATA` does not override Windows known folders.
 - Git Bash's `kill` and `pkill` do not reach native Windows processes, even
   when they report success. Stop a process with PowerShell
   `Stop-Process -Id <pid>` and confirm it is gone. Never search from `/` in Git

@@ -568,16 +568,21 @@ These are one-line cautions; the owning pages hold the derivations.
   sample.** It must cover the primitive's reach, its field ops, and its blend
   halo; a short bound clips geometry at tile edges and, through mapCore's
   whole-instance rejection (`sdfInstanceCannotWin`), at any sample. That
-  rejection divides the gap to the bound by the instance's field rescale, which
-  the part table's `.w` lane carries for every instance (compiled or not), and
-  runs for a compiled part always and for a generic instance only under the
+  rejection additionally requires `InstanceHasDistanceLowerBound`: containment
+  alone says nothing about an underestimating gauge, a non-uniform scale, a
+  warp or the field left after an optional intersection is disabled. The part
+  entry's `PartNoDistanceBoundFlag` keeps these instances on the full walk.
+  Eligible instances divide the bound gap by the field rescale: `.w` carries
+  the compiled scope's multiplier or the generic instance's inverse rescale.
+  Compiled parts join by hard union; generic instances additionally need the
   root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
   ambient group masks summarize each mask word as one sphere over its
-  ordinary-sized instances (`sdfSummarizeGroupMask`, oversized ones kept), so a
+  eligible ordinary-sized instances (`sdfSummarizeGroupMask`, others kept), so a
   many-instance body is rejected once per word. The soft-shadow march queries
   `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
-  which neither its stride nor its estimate moves; keep that ceiling exact when
-  changing the march. A skipped instance publishes no fold wall, as a skipped
+  which neither its stride, hit decision nor estimate moves. Include the
+  shading-scaled hit threshold as well as stride and penumbra saturation;
+  `SdfShadowQuery.Ceiling` is the CPU arithmetic reference. A skipped instance publishes no fold wall, as a skipped
   segment does not, so march sample positions can move while staying sound.
   `Xor` is maskable with a union-margin bound; do not add it to the unmaskable
   gate.
@@ -636,8 +641,9 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal both read. A scope's compose radius reaches `L` times as far when the
   scope's field joins its parent divided by its Lipschitz factor
   (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
-  surface and the blends' influence, and the field outside it is at least its
-  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance. The
+  surface and the blends' influence. Only a certified distance-bound instance
+  can compare its field with distance to that bound over
+  `SdfInstanceCost.FieldRescale`; geometric containment alone cannot. The
   `sdf-lattice-cull` canary pins on the GPU what the CPU laws hold: a hex
   wallpaper with no edge clipped by a box in one scoped placement is bounded by
   the box and still draws across all of it.
