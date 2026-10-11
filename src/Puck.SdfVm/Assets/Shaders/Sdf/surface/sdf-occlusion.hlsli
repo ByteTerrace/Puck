@@ -27,8 +27,9 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
     float visibility = 1.0;
 
     reach = (fastMarch ? min(reach, FastShadowMaxDistance) : reach);
-    // A clearance at least the step ceiling and at least traveled / sharpness (in de-scaled units) moves neither the
-    // stride nor the estimate, so the walk may stop looking past it: each sample queries min(field, saturation) through
+    // A clearance at least the step ceiling and at least visibility * traveled / sharpness (in de-scaled units, the
+    // running estimate's own level) moves neither the stride nor the estimate's minimum, so the walk may stop looking
+    // past it: each sample queries min(field, saturation) through
     // sdfQueryDistanceCeiling, which rejects every candidate farther away before its leaves run. The visibility, the
     // stride and the hit test are those of the full field bit for bit. Include the hit threshold too: an explicit scope
     // multiplier or a large local gradient can raise it above the step ceiling. KEEP IN SYNC with SdfShadowQuery.Ceiling.
@@ -41,7 +42,7 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
             ? max(FastShadowStepMax, (traveled * FastShadowStepFarSlope))
             : max(ShadowStepNear, (traveled * ShadowStepFarSlope)));
         float saturation = max(max(ceiling, SurfaceEpsilon * stepScale),
-            ((traveled >= ShadowEstimateStart) ? ((stepScale * traveled) / sharpness) : 0.0));
+            ((traveled >= ShadowEstimateStart) ? (((stepScale * traveled) / sharpness) * visibility) : 0.0));
         sdfQueryDistanceCeiling = (saturates ? min(SDF_FAR_DISTANCE, saturation * ceilingScale) : SDF_FAR_DISTANCE);
         float clearance = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
         sdfQueryDistanceCeiling = SDF_FAR_DISTANCE;

@@ -598,7 +598,9 @@ These are one-line cautions; the owning pages hold the derivations.
   once per word. The soft-shadow march queries
   `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
   which neither its stride, hit decision nor estimate moves. Include the
-  shading-scaled hit threshold as well as stride and penumbra saturation;
+  shading-scaled hit threshold as well as stride and penumbra saturation, the
+  latter at the march's running visibility, since a clearance whose estimate
+  reaches that minimum cannot lower it;
   `SdfShadowQuery.Ceiling` is the CPU arithmetic reference. A skipped instance publishes no fold wall, as a skipped
   segment does not, so march sample positions can move while staying sound.
   `Xor` is maskable with a union-margin bound; do not add it to the unmaskable
