@@ -170,6 +170,7 @@ public static partial class AzureCommand {
         ));
         Bind(command: buildInfrastructure, work: (parseResult, _) => BuildInfrastructureAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: infrastructureOutput))));
         Bind(command: deployInfrastructure, work: (parseResult, _) => DeployInfrastructureAsync(
+            clock: clock,
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             infrastructure: parseResult.GetValue<string?>(name: "--infrastructure-artifacts")
         ));
