@@ -20,7 +20,9 @@ public sealed class InSessionHistoryLawTests {
     public static TheoryData<string, ulong> WorldsAndSeeds() {
         var data = new TheoryData<string, ulong>();
 
-        foreach (var world in new[] { "fixture", "snake", "nexus" }) {
+        // Nexus is the shipped world whose tick costs the most, so each of its seeds is a class of its own
+        // (NexusSeekingLawTests): classes run side by side, and a theory's rows run one after another.
+        foreach (var world in new[] { "fixture", "snake" }) {
             foreach (var seed in new[] { 3UL, 77UL, 0x5EEDUL }) {
                 data.Add(p1: world, p2: seed);
             }
@@ -58,7 +60,17 @@ public sealed class InSessionHistoryLawTests {
 
     [MemberData(nameof(WorldsAndSeeds))]
     [Theory]
-    public void SeekingBackThenForwardReproducesEveryRecordedTick(string world, ulong seed) {
+    public void SeekingBackThenForwardReproducesEveryRecordedTick(string world, ulong seed) => SeekBackThenForward(
+        seed: seed,
+        world: world
+    );
+
+    /// <summary>The law of <see cref="SeekingBackThenForwardReproducesEveryRecordedTick"/> over one world and seed: the
+    /// window of a run of that world, sought back to its oldest tick, forward through every recorded tick, and across a
+    /// seeded scatter of jumps, reproduces the authoritative hash the live run reached at each tick it lands on.</summary>
+    /// <param name="world">The world: <c>fixture</c>, <c>snake</c> or <c>nexus</c>.</param>
+    /// <param name="seed">The seed of the run's input stream and of the scatter.</param>
+    internal static void SeekBackThenForward(string world, ulong seed) {
         using var harness = new WorldHistoryHarness(
             definition: Definition(world: world),
             seed: seed
@@ -102,6 +114,7 @@ public sealed class InSessionHistoryLawTests {
             actual: counters.RebuildRestores
         );
     }
+
     [Fact]
     public void ASeekAcrossAStructuralEditRestoresThroughTheLoadDoorAndStillReproduces() {
         using var harness = ScoredHarness(seed: 9UL);

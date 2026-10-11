@@ -96,6 +96,16 @@ places them. Keep a class out of the serial collections unless one of these
 reasons holds: every class there adds its whole duration to the suite's wall
 time.
 
+A theory's rows run one after another, and so do a serial collection's classes,
+so one costly row or class sets the floor of the suite's wall time. Two shapes
+lower it without dropping a law. Rows that each cost seconds go in a class of
+their own (`NexusSeekingLawTests` runs the seek law's three Nexus seeds as three
+classes, where the theory ran them in series), since classes run side by side.
+A law whose work is one exhaustive sweep of independent cases runs the cases in
+parallel into totals of their own and merges them in a fixed order
+(`SdfTapePredictionLawTests` runs its rows of tiles with `Parallel.For`), which
+keeps its report identical to a serial sweep's.
+
 Allocation checks run with tiered compilation disabled, so optimized code is
 available from startup. Warm enough to cover initialization and a complete
 relevant cadence, rather than running thousands of ticks to wait for JIT
