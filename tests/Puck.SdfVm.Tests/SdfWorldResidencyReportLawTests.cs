@@ -12,8 +12,8 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for what <see cref="SdfWorldResidency"/> reports and carries from its host over <see cref="FakeGpuDevice"/>: the
-/// live program report <c>world.budget</c> prints is the resident program's own words, instances, step scale, its binder
-/// and field-scope clamps, and the frame's bounded volumes, nothing before the first frame; and the debug view mode
+/// live program report <c>world.budget</c> prints is the resident program's own words, instances, step scale, its binder,
+/// field-scope clamps, segments, chains and specialization set, and the frame's bounded volumes, nothing before the first frame; and the debug view mode
 /// <c>world.debug-view</c> sets reaches every pass block, whether it is set before the tables exist or after.
 /// </summary>
 public sealed class SdfWorldResidencyReportLawTests {
@@ -142,6 +142,7 @@ public sealed class SdfWorldResidencyReportLawTests {
 
         Assert.Equal(expected: 0, actual: residency.LiveProgramWords);
         Assert.Empty(collection: residency.LiveProgramFieldScopeClamps);
+        Assert.Null(@object: residency.LiveProgramSpecialization);
 
         residency.ProduceFirstFrame(context: Context());
 
@@ -152,6 +153,10 @@ public sealed class SdfWorldResidencyReportLawTests {
         Assert.Equal(
             actual: residency.LiveProgramFieldScopeClamps,
             expected: program.FieldScopeClamps
+        );
+        Assert.Equal(
+            actual: (residency.LiveProgramSegments, residency.LiveProgramRigidSegments, residency.LiveProgramChains, residency.LiveProgramSpecialization),
+            expected: (program.SkipSegmentCount, program.RigidSegmentCount, program.ChainCount, program.Specialization)
         );
     }
     [Fact]

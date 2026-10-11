@@ -348,8 +348,11 @@ over `RotatePlane`). A new instruction touches every partner in one change:
 
 1. **C# model** — the enum, `SdfProgramBuilder` (including the hard-coded
    maximum its `RequireDefined` range checks accept), `SdfProgram` validation
-   and packing, and the Lipschitz analysis (`SdfProgram.Lipschitz.cs`). A new
-   parameter joins the part-program geometry key in
+   and packing, the Lipschitz analysis (`SdfProgram.Lipschitz.cs`), and its two
+   rows in `SdfOpRoles`: its role (`Of`) and the header lanes that select its
+   code (`CodeLanesOf`), which a chain's key reads (`SdfProgram.Chains.cs`). A
+   lane that only feeds arithmetic is data; keying it splits chains that share
+   code. A new parameter joins the part-program geometry key in
    `SdfProgram.PartPrograms.cs`, or parts differing only in it get shared.
 2. **Cull margins** — decide which channel covers the new instruction's reach:
    `MaxSmoothBlendRadius` (compose halo), `MaxScopedFieldReach` (a scoped field
@@ -1725,7 +1728,7 @@ Measure before and after on the same scene, as one GPU run at a time
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
 world.counters gpu     # per-node, per-pass counted work (dispatches, barriers, uploads, created objects)
-world.budget           # program words, instances, volumes, scope clamps
+world.budget           # program words, instances, volumes, scope clamps, segments, chains, vocabulary
 ```
 
 Compare the whole frame, not one pass: a cheaper beam can cost more primary

@@ -175,6 +175,7 @@ struct SdfProgramLayout {
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
     uint worldSegmentOffset; // world-segment list offset
+    uint chainTableOffset;   // chain table offset (worldHeader.y), validated where it is read
     bool hasInstances;       // instanceCount != 0
 };
 
@@ -207,8 +208,9 @@ SdfProgramLayout sdfLoadProgramLayout() {
     if (instanceCount > SDF_MAX_INSTANCES
         || !sdfProgramRange(instanceOffset + SDF_DIRECTORY_HEADER_VECTORS, instanceCount, SDF_BOUND_RECORD_VECTORS)) { return layout; }
     uint worldOffset = instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + SDF_BOUND_RECORD_VECTORS * instanceCount;
-    if (worldOffset >= vectors || !sdfProgramRange(worldOffset + SDF_DIRECTORY_HEADER_VECTORS,
-        SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldOffset)), 1u)) { return layout; }
+    if (worldOffset >= vectors) { return layout; }
+    uint4 worldHeader = sdfProgramWord(worldOffset);
+    if (!sdfProgramRange(worldOffset + SDF_DIRECTORY_HEADER_VECTORS, SDF_WORLD_SEGMENT_COUNT(worldHeader), 1u)) { return layout; }
     layout.valid = true;
     layout.vectorCount = vectors;
     layout.instructionCount = instructions;
@@ -224,6 +226,7 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
     layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));
+    layout.chainTableOffset = SDF_CHAIN_TABLE_OFFSET(worldHeader);
     layout.hasInstances = (instanceCount != 0u);
 
     return layout;

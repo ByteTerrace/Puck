@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Tests;
 /// and they pack every side table and flag (compiled part programs traced independently, a material with
 /// every layer, sweep and path tables); the description moves when the builder or packer puts any field elsewhere,
 /// whether a float lane, a bitfield inside a word, a material layer's field or a table entry; and the packer writes each
-/// header lane where the model's lane constants place it.
+/// header lane and the chain table where the model's lane constants place them.
 /// </summary>
 public sealed class SdfEncodingProbeLawTests {
     private static readonly IReadOnlyList<SdfEncodingProbeCall> Calls = SdfEncodingProbe.Calls();
@@ -158,14 +158,60 @@ public sealed class SdfEncodingProbeLawTests {
             }
         }
     }
+    // The packer writes the chain table where the model's lane constants place it: the world-segment list header names
+    // the table, whose header counts every segment's chains and names the identity list that follows the segment
+    // entries, and each segment's entry and identities are the chains the program reports for it. The chain-table call
+    // runs two chains in one segment, shares a chain between two segments, and ends chains at a shape, a pop and a cut.
+    [Fact]
+    public void ThePackerWritesTheChainTableWhereTheModelPlacesIt() {
+        foreach (var (_, program) in Built) {
+            var words = program.Words;
+            var table = ((int)words[((WorldSegmentHeaderOf(program: program) * 4) + SdfProgram.ChainTableLane)]);
+            var entries = (table + SdfProgram.DirectoryHeaderVectors);
+            var identities = ((int)words[((table * 4) + SdfProgram.ChainIdentitiesLane)]);
+            var chain = 0;
 
-    // The vector offset of a program's part table: the instance directory header's part-programs lane.
-    private static int PartTableOf(SdfProgram program) {
+            Assert.Equal(expected: ((uint)program.ChainCount), actual: words[((table * 4) + SdfProgram.ChainCountLane)]);
+            Assert.Equal(expected: (entries + ((program.SkipSegmentCount + (SdfProgram.ChainSegmentsPerVector - 1)) / SdfProgram.ChainSegmentsPerVector)), actual: identities);
+
+            for (var segment = 0; (segment < program.SkipSegmentCount); segment++) {
+                var entry = (((entries + (segment / SdfProgram.ChainSegmentsPerVector)) * 4) + ((segment % SdfProgram.ChainSegmentsPerVector) * SdfProgram.ChainSegmentWords));
+                var chains = program.ChainsOf(segment: segment);
+
+                Assert.Equal(expected: ((uint)chain), actual: words[(entry + SdfProgram.ChainSegmentFirstWord)]);
+                Assert.Equal(expected: ((uint)chains.Length), actual: words[(entry + SdfProgram.ChainSegmentCountWord)]);
+
+                foreach (var expected in chains) {
+                    Assert.Equal(expected: expected.Identity, actual: words[(((identities + (chain / SdfProgram.ChainIdentitiesPerVector)) * 4) + (chain % SdfProgram.ChainIdentitiesPerVector))]);
+                    chain++;
+                }
+            }
+
+            Assert.Equal(expected: program.ChainCount, actual: chain);
+        }
+
+        var chained = SdfEncodingProbe.Build(call: Named(name: "chain table"));
+
+        Assert.Contains(collection: Enumerable.Range(start: 0, count: chained.SkipSegmentCount), filter: segment => (chained.ChainsOf(segment: segment).Length > 1));
+        Assert.True(condition: (chained.Specialization.Chains.Count < chained.ChainCount));
+        Assert.Equal(expected: Enum.GetValues<SdfChainEnd>().ToHashSet(), actual: chained.Specialization.Chains.Select(selector: static chain => chain.End).ToHashSet());
+    }
+
+    // The vector offset of a program's instance directory, after the segment directory.
+    private static int InstanceDirectoryOf(SdfProgram program) {
         var words = program.Words;
         var boundsOffset = (((int)words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfProgram.MaterialVectorsPerEntry * ((int)words[SdfProgram.ProgramMaterialCountLane])));
         var segmentOffset = (boundsOffset + (SdfProgram.BoundRecordVectors * program.InstructionCount));
-        var instanceOffset = ((segmentOffset + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)])));
 
-        return ((int)words[((instanceOffset * 4) + SdfProgram.InstancePartProgramsLane)]);
+        return ((segmentOffset + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)])));
+    }
+    // The vector offset of a program's part table: the instance directory header's part-programs lane.
+    private static int PartTableOf(SdfProgram program) =>
+        ((int)program.Words[((InstanceDirectoryOf(program: program) * 4) + SdfProgram.InstancePartProgramsLane)]);
+    // The vector offset of a program's world-segment list header, after the instance directory.
+    private static int WorldSegmentHeaderOf(SdfProgram program) {
+        var instances = InstanceDirectoryOf(program: program);
+
+        return ((instances + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)program.Words[((instances * 4) + SdfProgram.InstanceCountLane)])));
     }
 }

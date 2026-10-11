@@ -49,7 +49,10 @@ world.budget
   pass, to the counted-cost ceilings recorded for the workload; see the
   [CLI reference](../../../reference/cli.md#puck-counterswork-counter-collector).
 - **`world.budget`** prints the compose-time cost sheet: live program words and
-  instances, the global step scale, volumes, and scoped field clamps. Confirm
+  instances, the global step scale, volumes, scoped field clamps, and the
+  program's directory segments (rigid ones counted), the chains they run and its
+  [specialization set](../../../plans/sdf-specialization.md#the-unit-of-specialization):
+  distinct chains, shape types, blends and compose forms. Confirm
   that the scene submits the geometry you think it does before you believe a
   count.
 

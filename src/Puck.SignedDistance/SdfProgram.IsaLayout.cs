@@ -55,6 +55,31 @@ public sealed partial class SdfProgram {
     /// <summary>The world-segment list header's lane holding the list's length
     /// (<c>SDF_WORLD_SEGMENT_COUNT_LANE</c>).</summary>
     public const int WorldSegmentCountLane = 0;
+    /// <summary>The world-segment list header's lane holding the chain table's absolute vector offset
+    /// (<c>SDF_CHAIN_TABLE_OFFSET</c>). Every lane of the directory headers before it is taken, so the table hangs off
+    /// this free one.</summary>
+    public const int ChainTableLane = 1;
+    /// <summary>The chain table header's lane holding the program's chain count, every segment's chains together
+    /// (<c>SDF_CHAIN_COUNT</c>).</summary>
+    public const int ChainCountLane = 0;
+    /// <summary>The chain table header's lane holding the absolute vector offset of its identity list
+    /// (<c>SDF_CHAIN_IDENTITIES_OFFSET</c>).</summary>
+    public const int ChainIdentitiesLane = 1;
+    /// <summary>The chain table's segment entries per vector, after its <see cref="DirectoryHeaderVectors"/> header: segment
+    /// <c>s</c>'s entry is vector <c>s / ChainSegmentsPerVector</c> of them, at word
+    /// <c>(s % ChainSegmentsPerVector) * ChainSegmentWords</c> (<c>SDF_CHAIN_SEGMENTS_PER_VECTOR</c>).</summary>
+    public const int ChainSegmentsPerVector = 2;
+    /// <summary>The words of one segment's chain-table entry: its first chain, then its chain count.</summary>
+    public const int ChainSegmentWords = 2;
+    /// <summary>The word of a segment's chain-table entry holding the index of its first chain in the identity list
+    /// (<c>SDF_CHAIN_SEGMENT_FIRST</c>).</summary>
+    public const int ChainSegmentFirstWord = 0;
+    /// <summary>The word of a segment's chain-table entry holding its chain count (<c>SDF_CHAIN_SEGMENT_COUNT</c>).</summary>
+    public const int ChainSegmentCountWord = 1;
+    /// <summary>The chain identities (<see cref="SdfChain.Identity"/>) per vector of the identity list: chain <c>c</c> is
+    /// word <c>c % ChainIdentitiesPerVector</c> of vector <c>c / ChainIdentitiesPerVector</c>
+    /// (<c>SDF_CHAIN_IDENTITIES_PER_VECTOR</c>).</summary>
+    public const int ChainIdentitiesPerVector = 4;
     /// <summary>The bound mode of a record that carries no bound: the interpreter evaluates it in full
     /// (<c>SDF_BOUND_NONE</c>).</summary>
     public const uint BoundModeNone = 0;
