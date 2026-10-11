@@ -173,8 +173,8 @@ public static partial class PrimeExploration {
     private static bool TryTableRandomPrime<TGenerator>(ulong low, ulong high, ref TGenerator generator, out ulong prime, int maxAttempts)
         where TGenerator : struct, IDrawGenerator {
         var bases = PrimeKernels.BasePrimes;
-        var start = PrimeKernels.CountOddPrimesBelow(value: ((uint)Math.Max(val1: low, val2: 3UL)));
-        var end = PrimeKernels.CountOddPrimesBelow(value: (((uint)high) + 1U));
+        var start = PrimeKernels.CountOddPrimesBelowCore(value: ((uint)Math.Max(val1: low, val2: 3UL)));
+        var end = PrimeKernels.CountOddPrimesBelowCore(value: (((uint)high) + 1U));
         var includesTwo = (low <= 2);
         var count = ((ulong)((end - start) + (includesTwo ? 1 : 0)));
 
@@ -305,7 +305,7 @@ public static partial class PrimeExploration {
     /// <returns>The number of values at or below <paramref name="high"/> that are coprime to thirty.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ulong WheelPrefix(ulong high) =>
-        (((high / PrimeWheel30.Modulus) * PrimeWheel30.ChannelCount) + WheelUnitsThrough.Counts[((int)(high % PrimeWheel30.Modulus))]);
+        (((high / PrimeWheel30.Modulus) * PrimeWheel30.ChannelCount) + PrimeSieveKernels.WheelUnitsThrough.Counts[((int)(high % PrimeWheel30.Modulus))]);
 
     /// <summary>The decision the default selector specializes: the shared exact word decision, which recognizes the interleaved path.</summary>
     private readonly struct BaillieSelectionDecision : IPrimeCandidateDecision {
@@ -341,17 +341,5 @@ public static partial class PrimeExploration {
 
             return ((PrimeWheel30.Modulus * (ordinal >>> 3)) + PrimeWheel30.NumericResidues[((int)(ordinal & (PrimeWheel30.ChannelCount - 1)))]);
         }
-    }
-
-    /// <summary>Holds, for each residue modulo thirty, the number of wheel units at or below it.</summary>
-    public static class WheelUnitsThrough {
-        /// <summary>Gets, for every remainder from zero through twenty-nine, the number of units of thirty at or below it.</summary>
-        /// <remarks>The values are written out as constant data, so a read costs one load from a constant address and no
-        /// caller can overwrite them; the law <c>prime-exploration.wheel-tables-match-their-derivation</c> proves each
-        /// equals the population count of <see cref="PrimeWheel30.PrefixMask(int)"/>.</remarks>
-        public static ReadOnlySpan<byte> Counts => [
-            0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4,
-            4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8,
-        ];
     }
 }

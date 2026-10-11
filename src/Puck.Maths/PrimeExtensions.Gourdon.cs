@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 public static partial class PrimeExtensions {
@@ -6,18 +8,38 @@ public static partial class PrimeExtensions {
     // z=y is an admissible choice and the upstream default. It lets ordinary
     // leaves and D reuse one compact square-free factor table without an MPF table.
     private const uint GourdonTableCapacityLimit = (1U << 27);
+    // Evaluate the logarithm at the integer square root's square: see ResolveGourdonCutoff.
+    private const double GourdonCutoffLogarithmScale = 0.42D;
+    private const double GourdonCutoffDivisorFloor = 14D;
 
+    /// <summary>Chooses the Gourdon cutoff y for <paramref name="value"/>: <c>r / max(14, 0.84 ln r)</c>, where
+    /// <c>r = floor(sqrt(x))</c>, held
+    /// strictly between the integer cube root and the integer square root and at most 2^27, the factor-table capacity.
+    /// <para>The count's cost is a + s*x/y + l(x)*y. The hard-leaf sieve and the semiprime sieve each cover [0, x/y), together
+    /// about s = 1.3 cycles per integer; the factor and prime tables, the easy-leaf terms and the hard-leaf special-factor
+    /// coordinates grow with y at l cycles per unit of y, and the coordinates per unit of y grow like x^(1/6). That cost is
+    /// least at y = sqrt(s*x/l(x)): sqrt(x)/y is 14 from 10^13 to 10^15, 15 to 16 near 10^16 and 10^17, and 17 to 18 near
+    /// 10^18, on the AVX-512 and AVX2 kernels and on the Zen 2 and Alder Lake loop models alike, which is 0.42 ln x above
+    /// 14. The minimum is wide: a divisor within 2 of the best costs about 1% at any size, so the rule does not depend on one
+    /// core's per-unit costs.</para>
+    /// <para>The divisor uses the deterministic fixed-point logarithm at r, so it stays constant between square
+    /// boundaries. This approximates r / max(14, 0.42 ln x) within one cutoff unit without decreasing between squares.
+    /// Binary64 arithmetic only scales that logarithm and proposes y; every admitted y satisfies floor(cuberoot(x)) &lt; y &lt;
+    /// floor(sqrt(x)), and the exact leaves decide the count at any admitted y.</para></summary>
+    /// <param name="value">The bound, in the Gourdon regime.</param>
+    /// <returns>The cutoff y, with floor(cuberoot(x)) &lt; y &lt; floor(sqrt(x)) and y at most 2^27.</returns>
     public static uint ResolveGourdonCutoff(ulong value) {
         var root = CombinatorialCubeRoot(value: value);
-        var logarithm = Math.Log(d: value);
-        var alpha = ((((((0.007888745747017503D * logarithm) - 0.7610431057184933D) * logarithm)
-            + 25.74106177417062D) * logarithm) - 288.9823576050215D);
-
-        // Floating-point tuning proposes work only. Every admitted y satisfies
-        // floor(cuberoot(x)) < y < floor(sqrt(x)); exact leaves decide the result.
-        alpha = Math.Max(val1: 1D, val2: (Math.Floor(d: (alpha * 1000D)) / 1000D));
-        var desired = ((ulong)(root * alpha));
-        var maximum = Math.Min(val1: GourdonTableCapacityLimit, val2: (value.SquareRoot() - 1UL));
+        var squareRoot = value.SquareRoot();
+        var exponent = BitOperations.Log2(value: squareRoot);
+        var fraction = FixedQ4816.Log2FractionQ61(mantissaQ62: (squareRoot << (62 - exponent)));
+        var logarithm = ((exponent + (((double)fraction) / (1UL << 61))) / (((double)FixedQ4816.Log2EQ62) / (1UL << 62)));
+        var divisor = Math.Max(val1: GourdonCutoffDivisorFloor, val2: ((2D * GourdonCutoffLogarithmScale) * logarithm));
+        // Across square boundaries r/max(14, .84 ln r) rises by more than .04 in this domain. The fixed logarithm's
+        // error (about 2^-36 in log2) moves the quotient by less than .001, including at table-interval boundaries.
+        // Between squares it is constant; the increasing integer clamps preserve monotonicity in both cases.
+        var desired = ((ulong)(squareRoot / divisor));
+        var maximum = Math.Min(val1: GourdonTableCapacityLimit, val2: (squareRoot - 1UL));
 
         return ((uint)Math.Clamp(max: maximum, min: (root + 1UL), value: desired));
     }

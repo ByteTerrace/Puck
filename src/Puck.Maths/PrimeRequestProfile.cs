@@ -159,11 +159,17 @@ public sealed class PrimeCountWorkBuilder(ulong bound) {
     internal ulong Bound { get; } = bound;
 
     internal ulong CachedQuotientDivisions { get; set; }
-    internal uint Cutoff { get; set; }
+
+    /// <summary>The Gourdon cutoff y the count ran at.</summary>
+    public uint Cutoff { get; internal set; }
+
     internal ulong EasyLeafBitmapBytes { get; set; }
     internal ulong EasyLeafSegments { get; set; }
     internal ulong LeafBitmapBytes { get; set; }
-    internal ulong LeafFrontier { get; set; }
+
+    /// <summary>The hard-leaf frontier floor(x/(y+1)) the cutoff implies.</summary>
+    public ulong LeafFrontier { get; internal set; }
+
     internal ulong LeafSegments { get; set; }
     internal ulong OrdinaryFactorCoordinates { get; set; }
     internal PrimeCountRoute Route { get; set; }

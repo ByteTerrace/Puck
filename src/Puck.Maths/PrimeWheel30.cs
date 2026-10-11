@@ -156,6 +156,19 @@ public static class PrimeWheel30 {
         0, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 7, 7, 15, 15,
         15, 15, 31, 31, 63, 63, 63, 63, 127, 127, 127, 127, 127, 127, 255,
     ];
+    /// <summary>Gets, for each <c>h</c> from zero through fifteen, the number of units below <c>2h</c>. Every unit is odd,
+    /// so the units below a remainder <c>t</c> from zero through twenty-nine number the entry at <c>t &gt;&gt; 1</c>.</summary>
+    /// <remarks>Sixteen entries fit one byte shuffle. The law <c>prime-exploration.wheel-tables-match-their-derivation</c>
+    /// proves they equal the derivation.</remarks>
+    public static ReadOnlySpan<byte> UnitsBelowHalves => [0, 1, 1, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 7, 7, 8];
+    /// <summary>Gets <see cref="UnitRoundUp(int)"/> for every remainder from zero through twenty-nine, as constant data
+    /// for loops that index it by a variable remainder.</summary>
+    /// <remarks>The values are written out so a read costs one load from a constant address; the law
+    /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves they equal the derivation.</remarks>
+    public static ReadOnlySpan<byte> UnitRoundUps => [
+        8, 0, 41, 33, 25, 17, 9, 1, 26, 18, 10, 2, 11, 3, 28,
+        20, 12, 4, 13, 5, 30, 22, 14, 6, 47, 39, 31, 23, 15, 7,
+    ];
 
     /// <summary>Gets the multiplier at a wheel phase: the ascending unit at phases zero through seven, and the next
     /// cycle's first unit, <c>Modulus + 1</c>, at phase eight.</summary>
@@ -209,6 +222,17 @@ public static class PrimeWheel30 {
     /// <returns>Bit <c>k</c> is set exactly when the <c>k</c>-th ascending unit is at most <paramref name="remainder"/>.</returns>
     public static byte PrefixMask(int remainder) =>
         ((byte)((1 << NumericBit(residue: (remainder + 1))) - 1));
+    /// <summary>Gets how a multiplier with a given remainder rounds up to the least multiplier coprime to thirty at or
+    /// above it.</summary>
+    /// <param name="remainder">The multiplier's remainder modulo thirty, from zero through twenty-nine.</param>
+    /// <returns>The phase of the least unit at or above <paramref name="remainder"/> (the next cycle's first unit for
+    /// remainder zero) in bits zero through two, and the distance from the remainder to that unit, at most five, above
+    /// them.</returns>
+    public static byte UnitRoundUp(int remainder) {
+        var phase = NumericBit(residue: remainder);
+
+        return ((byte)(((Multiplier(phase: phase) - remainder) << 3) | phase));
+    }
     /// <summary>Gets the word mask of the units no greater than an offset inside one 64-bit word of wheel bytes.</summary>
     /// <param name="offset">An offset from zero through <c><see cref="WordIntegers"/> − 1</c>.</param>
     /// <returns>Every bit of the bytes below the offset's byte, and that byte's <see cref="PrefixMask(int)"/>.</returns>

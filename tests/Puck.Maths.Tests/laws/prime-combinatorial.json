@@ -208,82 +208,30 @@
     "Tier": "Default",
     "Members": [
       {
-        "Type": "Puck.Maths.PrimeExtensions",
-        "Name": "FilterGourdonHardLeaves"
+        "Type": "Puck.Maths.PrimeLeafKernels",
+        "Name": "FilterGourdonHardLeavesCompress"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeLeafKernels",
+        "Name": "FilterGourdonHardLeavesPack256"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels",
+        "Name": "FilterGourdonHardLeavesPack128"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels",
         "Name": "FilterGourdonHardLeavesScalar"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes128",
-        "Name": "ByteCount"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes128",
-        "Name": "Broadcast"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes128",
-        "Name": "GreaterThanInt16Mask"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes128",
-        "Name": "And"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes128",
-        "Name": "Load"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes256",
-        "Name": "ByteCount"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes256",
-        "Name": "Broadcast"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes256",
-        "Name": "GreaterThanInt16Mask"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes256",
-        "Name": "And"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes256",
-        "Name": "Load"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes512",
-        "Name": "ByteCount"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes512",
-        "Name": "Broadcast"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes512",
-        "Name": "GreaterThanInt16Mask"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes512",
-        "Name": "And"
-      },
-      {
-        "Type": "Puck.Maths.VectorLanes512",
-        "Name": "Load"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "Every hard-leaf factor filter rung (Vector512, Vector256 and Vector128 lanes and the four-way scalar rung), each called directly on the same packed factors whatever the host accelerates: thresholds 23, 29, 181, 4093 and 32749; factors on both sides of each threshold, zero, the 32767 sentinel, each with and without the Moebius sign bit; empty, sub-vector, vector-straddling and long ranges; batch capacities 32, 33, 47 and 128. Repeated calls must advance, never exceed their capacity, and concatenate to the expected coordinates in the expected order.",
-        "Against": "The law's own descending scan applies the definition: a coordinate survives exactly when its factor with the sign bit cleared exceeds the threshold. It shares no vector load, compare, mask extraction or lane traversal with the subject.",
+        "Subject": "Every hard-leaf factor filter rung the host executes (the AVX-512 VBMI2 compress, the AVX2 and SSSE3 byte-shuffle packs and the four-way scalar rung), each called directly on the same packed factors: thresholds 23, 29, 181, 4093 and 32749; factors on both sides of each threshold, zero, the 32767 sentinel, each with and without the Moebius sign bit; empty, sub-vector, vector-straddling and long ranges, long runs starting at every wheel phase; batch capacities 32, 33, 47 and 128; then, at threshold 181 and capacities 33 and 128, 2048 factors whose aligned group of eight coordinates g survives exactly where g has a bit set, so every eight-lane survivor mask reaches each pack rung's shuffle table, from aligned and shifted starts. Then pinned spans at all 32 two-byte alignments within a 64-byte line, on dense and mixed factors, across full and partial vectors and capacities 32, 33, 47 and 128; dense factors exercise the upper divisor store beyond sixteen survivors. Repeated calls must advance, never exceed their capacity, concatenate to the expected leaves (each survivor's number and Moebius negation mask) in the expected order, and count the expected subtracted leaves.",
+        "Against": "The law's own descending scan applies the definition: a coordinate survives exactly when its factor with the sign bit cleared exceeds the threshold; its leaf is the coordinate-th unit modulo 30 from the oracle's unit list, and it subtracts its count exactly when the sign bit is clear. It shares no vector load, compare, mask extraction, lane traversal or wheel table with the subject.",
         "Shared": "",
-        "Citation": "ENVELOPE: a software-emulated wide rung runs the same managed kernel but not the hardware instructions a host without that width lacks; the production dispatch itself is reached through prime-selection.ulong-combinatorial-count-1e14. Order is part of the claim because descending coordinates keep the leaf sieve's prefix queries increasing.",
+        "Citation": "ENVELOPE: a host runs only the vector rungs whose instructions it has (VBMI2, AVX2, SSSE3); the production dispatch itself is reached through prime-selection.ulong-combinatorial-count-1e14. Order is part of the claim because descending coordinates keep the leaf sieve's prefix queries increasing.",
         "Absolute": ""
       }
     ]
@@ -293,35 +241,31 @@
     "Tier": "Default",
     "Members": [
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": ".ctor"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": "Reset"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": "Initialize"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": "TotalCount"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": "StartPrefix"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialLeafSieve",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
         "Name": "CrossOff"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialPrefixCursor",
-        "Name": ".ctor"
-      },
-      {
-        "Type": "Puck.Maths.PrimeExtensions+CombinatorialPrefixCursor",
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixCursor",
         "Name": "Count"
       }
     ],
@@ -329,10 +273,47 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "The Gourdon leaf sieve across six consecutive 61440-integer segments from zero, the last ending inside a word: after initialization and after each crossing of every prime 23 through 1499, its total and prefix-cursor counts at word, counter-block and prime-dependent strided offsets, repeats included. Primes whose wheel cycle fits in two sixteen-word counter blocks take the dense crossing mode that settles a block's decrements from a register; the rest take the sparse mode; crossing states carry across segments.",
+        "Subject": "The Gourdon leaf sieve through its production crossing dispatch, across six consecutive 61440-integer segments from zero, the last ending inside a word: after initialization and after each crossing of every prime 23 through 1499, its total and prefix-cursor counts at word, counter-block, periodic-stride and prime-dependent strided offsets, repeats included. Primes within the host width's periodic limit mask the bitmap with one period of masks and recount it; the rest decrement a counter slot per crossing; crossing states carry across segments. Prefix queries take the production cursor dispatch.",
         "Against": "The law's own bool array: an integer survives exactly when it is coprime to 2 through 19 and no crossed prime divides it, and a running sum gives each inclusive prefix. It shares no wheel table, byte layout, counter block or cursor with the subject.",
         "Shared": "",
-        "Citation": "ENVELOPE: counter blocks of sixteen words only; the larger blocks that segments above 2^32 select are reached through the combinatorial count laws, not here.",
+        "Citation": "ENVELOPE: the host's widest crossing width and prefix window only, on segments of 32 counter blocks; the narrower widths' periodic limits and kernels, every prefix window and walks longer than one window are pinned by prime-selection.gourdon-leaf-sieve-rungs-vs-oracle.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.gourdon-leaf-sieve-rungs-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialLeafSieve",
+        "Name": "CrossOff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixCursor",
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixWindowKind",
+        "Name": "Avx512BW"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixWindowKind",
+        "Name": "Avx2"
+      },
+      {
+        "Type": "Puck.Maths.PrimeLeafKernels+CombinatorialPrefixWindowKind",
+        "Name": "Scalar"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Every Gourdon leaf-sieve crossing width (Vector512, Vector256 and Vector128 lanes), each called directly whatever the host accelerates, on identical inputs, each queried through every prefix-cursor window the host executes (Vector512 on AVX-512BW, Vector256 on AVX2, and scalar): the six 61440-integer segments from zero, then, after 5569 production-width segments carry every crossing state from zero, three 61440-integer segments from 5569*983040, the last ending inside a word. After initialization and after each crossing of every prime 23 through 1499, the total and prefix-cursor counts at word, counter-block, periodic-stride and prime-dependent strided offsets must match. Then one 983040-integer segment of 512 counter blocks of eight words after every crossing: a fresh cursor's first query in each block, at a word and offset varying with the block, walks up to 31 whole sixteen-block windows before the masked one, then jumps up to 40 blocks; and one cursor walks the segment with jumps of 0 to 40 blocks, up to two whole windows. The widths mask small primes periodically in 128-byte strides of two blocks through the widest in-register stride kernel the host runs at or below the width, and by words where it runs none: the 512-bit kernel on AVX-512 VBMI masks primes through 512, the 256-bit kernel on AVX2 through 341 (a 512-bit width on a host without VBMI takes it), and the 128-bit kernel on SSSE3 through 204; each kernel writes a block's count as two parts in its two slots. Above the periodic limit every crossing decrements one of its block's two 16-bit counter slots.",
+        "Against": "The law's own bool array: an integer survives exactly when it is coprime to 2 through 19 and no crossed prime divides it, and a running sum gives each inclusive prefix. It shares no wheel table, byte layout, counter block, pattern or cursor with the subject.",
+        "Shared": "",
+        "Citation": "ENVELOPE: a software-emulated wide crossing width runs the kernel its host has, not the wider kernel it lacks (the 512-bit stride kernel runs only on an AVX-512 VBMI host), and a prefix window whose instructions the host lacks is not run; the production dispatch is pinned by prime-selection.gourdon-leaf-sieve-vs-oracle.",
         "Absolute": ""
       }
     ]
@@ -342,34 +323,54 @@
     "Tier": "Default",
     "Members": [
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeDivisionKernels",
         "Name": "DivideGourdonQuotients128"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeDivisionKernels",
         "Name": "DivideGourdonQuotients256"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeDivisionKernels",
         "Name": "DivideGourdonQuotients512"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeDivisionKernels",
         "Name": "DivideGourdonQuotientsScalar"
       },
       {
-        "Type": "Puck.Maths.PrimeExtensions",
+        "Type": "Puck.Maths.PrimeDivisionKernels",
         "Name": "GourdonQuotientLimit"
+      },
+      {
+        "Type": "Puck.Maths.PrimeDivisionKernels",
+        "Name": "DivideGourdonSegmentPositions512"
+      },
+      {
+        "Type": "Puck.Maths.PrimeDivisionKernels",
+        "Name": "DivideGourdonSegmentPositions256"
+      },
+      {
+        "Type": "Puck.Maths.PrimeDivisionKernels",
+        "Name": "DivideGourdonSegmentPositionsScalar"
+      },
+      {
+        "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByHalves",
+        "Name": "Below"
+      },
+      {
+        "Type": "Puck.Maths.PrimeDivisionKernels+GourdonUnitsByFraction",
+        "Name": "Below"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "Every Gourdon leaf-quotient rung (Vector512, Vector256 and Vector128 lanes and the scalar rung, which also finishes each vector rung's tail), each called directly whatever the host accelerates: divisors from 1 to 2^32-1, dividends one below, at and d-1 above each multiple of the anchor quotients 0, 1, 2, 2^32-1, 2^32, 2^43-1, 2^43, 2^47 and 2^48-1, the largest dividend each divisor admits, the top of ulong, and a fixed walk across magnitudes; every start offset below eight places each divisor in every lane and in the tail.",
-        "Against": "The law's own ulong division operator, the hardware integer divider. It shares no binary64 estimate, bias, rounding or correction step with the subject.",
+        "Subject": "Every Gourdon leaf-quotient rung (the dividing Vector512, Vector256 and Vector128 rungs and their scalar rung, each scalar rung also finishing its vector rungs' tails), each called directly whatever the host accelerates: divisors from 1 to 2^32-1, dividends one below, at and d-1 above each multiple of the anchor quotients 0, 1, 2, 2^32-1, 2^32, 2^43-1, 2^43, 2^47 and 2^48-1, the largest dividend each divisor admits, the top of ulong, and a fixed walk across magnitudes; every start offset below eight places each divisor in every lane and in the tail. Then every segment-position rung, which multiplies by binary64 reciprocals and packs the bit position of each quotient above a 32-bit origin (Vector512 with the AVX-512 VBMI fraction lookup where the host executes it, Vector512 with the byte-shuffle lookup, Vector256, scalar): on the longest final part of each of those runs' divisors below 2^31 that one origin admits, above the lowest and the highest admissible origin; on sixteen consecutive divisors from each anchor divisor about dividends one below, at and d-1 above each multiple of the quotients 1, 2, 29, 30, 239, 240, 2^28-2, 2^28-1, 2^32-1, 2^32 and 2^33-1; and, dividing by one in runs of 1 to 16, on offsets whose successor sits at and beside multiples of 30 and 240, at remainders 14 and 15 modulo 30, at the top of the 2^28 span and along a fixed walk, above origins 0, 7, 2^31 and 2^32-1. Each position must equal 2^29*floor(a/30) plus the integers from 1 through a-1 coprime to 30, for a the quotient's offset plus one, and so carry that count's word in its high half and its bit in its low six bits.",
+        "Against": "The law's own ulong division and remainder operators, the hardware integer divider, and the inclusion-exclusion count of integers coprime to 30 over the divisors 2, 3 and 5. They share no binary64 estimate, bias, rounding, correction step, multiply-and-shift division or unit table with the subject.",
         "Shared": "",
-        "Citation": "ENVELOPE: the rungs' contract admits only quotients below 2^48 and nonzero divisors; the law samples that domain at its edges rather than sweeping it. The error-bound argument in PrimeExtensions.Gourdon.Quotients.cs covers the rest. A software-emulated wide rung runs the same managed kernel but not the hardware instructions a host without that width lacks.",
+        "Citation": "ENVELOPE: the dividing rungs' contract admits only quotients below 2^48 and nonzero divisors, and the segment-position rungs' only divisors below 2^31 and quotients from their origin to below it plus 2^28-1; the law samples those domains at their edges rather than sweeping them. The error-bound arguments in PrimeDivisionKernels.Quotients.cs and PrimeDivisionKernels.SegmentPositions.cs, and the position and division-by-30 notes there, cover the rest. A software-emulated wide rung runs the same managed kernel but not the hardware instructions a host without that width lacks.",
         "Absolute": ""
       }
     ]
@@ -391,6 +392,48 @@
         "Against": "The law's own sum over primes cutoff<p<=sqrt(x) of pi(x/p)-pi(p)+1, with pi tabulated from Oracles.PrimeSieve's integer-index Eratosthenes sieve. It shares no wheel bitmap, descending stream, quotient rung or word mask with the subject.",
         "Shared": "",
         "Citation": "ENVELOPE: these cases fit one 1 MiB reverse window; crossing reverse windows is reached by the published 10^14 and Exhaustive 10^16 counts, not here.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "prime-selection.gourdon-cutoff-moves-work-only",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "CountCombinatorial64"
+      },
+      {
+        "Type": "Puck.Maths.PrimeExtensions",
+        "Name": "ResolveGourdonCutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWorkBuilder",
+        "Name": "Cutoff"
+      },
+      {
+        "Type": "Puck.Maths.PrimeCountWorkBuilder",
+        "Name": "LeafFrontier"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The Gourdon counter called through its explicit-cutoff seam at 10^14 with cutoffs spanning the admissible range: 46416 (one above the cube root), 200000, the resolved cutoff, 2000000 and 9999999 (one below the square root). Each count records the cutoff it ran at and the hard-leaf frontier floor(x/(y+1)) that cutoff implies.",
+        "Against": "Tomas Oliveira e Silva's independently computed pi(10^14)=3204941750802 in Table IV, the same value at every cutoff.",
+        "Shared": "",
+        "Citation": "https://sweet.ua.pt/tos/bib/5.4.pdf, Table IV. ENVELOPE: five cutoffs at one bound; the cutoff only moves work between the phases, so agreement here pins that the phase boundaries (x*, the easy and hard leaf ranges, the semiprime stream, an empty semiprime range at the top cutoff and a cube-root-sized x* at the bottom one) partition the count at every cutoff, not the balance between them.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "At the first Gourdon bound above the quotient recurrence's root cap, 10^14 through 10^19, 2^63 and the top of ulong, the resolved cutoff lies strictly between the integer cube and square roots, is at most 2^27, does not decrease as the bound grows, and equals floor(r / max(14, 0.84 ln r)), r = floor(sqrt(x)), clamped to those limits, within one unit. The cutoff is constant on every square plateau (the operands 324002622127985 and 324002622127986 both give 1282701, and the plateau ends of every fixed-point logarithm table interval agree), and the divisor floor and the capacity cap are crossed monotonically.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "ENVELOPE: the bounds state the rule's contract and its value at nine points, not that max(14, 0.84 ln r) is the balance of the phase costs, which the counted per-unit costs choose; the cube and square roots, the clamp and a BigInteger repeated-squaring enclosure of ln r (rational ln 2 bounds, no Math.Log) come from the law's own arithmetic.",
         "Absolute": ""
       }
     ]

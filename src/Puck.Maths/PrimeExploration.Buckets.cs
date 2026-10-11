@@ -68,29 +68,29 @@ public static partial class PrimeExploration {
             var wideEnd = ((((UInt128)(chunkLow + ((ulong)chunk.Length))) * PrimeWheel30.Modulus) - 1);
             var chunkHigh = ((wideEnd > high) ? high : ((ulong)wideEnd));
 
-            MarkPacketGroup<PacketResidue1>(chunk, chunkLow, chunkHigh, states[starts[0]..medium[0]], origin, ref smallActive[0]);
-            MarkPacketGroup<PacketResidue7>(chunk, chunkLow, chunkHigh, states[starts[1]..medium[1]], origin, ref smallActive[1]);
-            MarkPacketGroup<PacketResidue19>(chunk, chunkLow, chunkHigh, states[starts[2]..medium[2]], origin, ref smallActive[2]);
-            MarkPacketGroup<PacketResidue13>(chunk, chunkLow, chunkHigh, states[starts[3]..medium[3]], origin, ref smallActive[3]);
-            MarkPacketGroup<PacketResidue11>(chunk, chunkLow, chunkHigh, states[starts[4]..medium[4]], origin, ref smallActive[4]);
-            MarkPacketGroup<PacketResidue17>(chunk, chunkLow, chunkHigh, states[starts[5]..medium[5]], origin, ref smallActive[5]);
-            MarkPacketGroup<PacketResidue29>(chunk, chunkLow, chunkHigh, states[starts[6]..medium[6]], origin, ref smallActive[6]);
-            MarkPacketGroup<PacketResidue23>(chunk, chunkLow, chunkHigh, states[starts[7]..medium[7]], origin, ref smallActive[7]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue1>(chunk, chunkLow, chunkHigh, states[starts[0]..medium[0]], origin, ref smallActive[0]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue7>(chunk, chunkLow, chunkHigh, states[starts[1]..medium[1]], origin, ref smallActive[1]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue19>(chunk, chunkLow, chunkHigh, states[starts[2]..medium[2]], origin, ref smallActive[2]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue13>(chunk, chunkLow, chunkHigh, states[starts[3]..medium[3]], origin, ref smallActive[3]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue11>(chunk, chunkLow, chunkHigh, states[starts[4]..medium[4]], origin, ref smallActive[4]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue17>(chunk, chunkLow, chunkHigh, states[starts[5]..medium[5]], origin, ref smallActive[5]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue29>(chunk, chunkLow, chunkHigh, states[starts[6]..medium[6]], origin, ref smallActive[6]);
+            MarkPacketGroup<PrimeSieveKernels.PacketResidue23>(chunk, chunkLow, chunkHigh, states[starts[7]..medium[7]], origin, ref smallActive[7]);
         }
         buckets.ResetNext();
-        MarkMediumBucketGroup<PacketResidue1>(segment, blockLow, high, states[medium[0]..starts[1]], origin, buckets, 0);
-        MarkMediumBucketGroup<PacketResidue7>(segment, blockLow, high, states[medium[1]..starts[2]], origin, buckets, 1);
-        MarkMediumBucketGroup<PacketResidue19>(segment, blockLow, high, states[medium[2]..starts[3]], origin, buckets, 2);
-        MarkMediumBucketGroup<PacketResidue13>(segment, blockLow, high, states[medium[3]..starts[4]], origin, buckets, 3);
-        MarkMediumBucketGroup<PacketResidue11>(segment, blockLow, high, states[medium[4]..starts[5]], origin, buckets, 4);
-        MarkMediumBucketGroup<PacketResidue17>(segment, blockLow, high, states[medium[5]..starts[6]], origin, buckets, 5);
-        MarkMediumBucketGroup<PacketResidue29>(segment, blockLow, high, states[medium[6]..starts[7]], origin, buckets, 6);
-        MarkMediumBucketGroup<PacketResidue23>(segment, blockLow, high, states[medium[7]..starts[8]], origin, buckets, 7);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue1>(segment, blockLow, high, states[medium[0]..starts[1]], origin, buckets, 0);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue7>(segment, blockLow, high, states[medium[1]..starts[2]], origin, buckets, 1);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue19>(segment, blockLow, high, states[medium[2]..starts[3]], origin, buckets, 2);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue13>(segment, blockLow, high, states[medium[3]..starts[4]], origin, buckets, 3);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue11>(segment, blockLow, high, states[medium[4]..starts[5]], origin, buckets, 4);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue17>(segment, blockLow, high, states[medium[5]..starts[6]], origin, buckets, 5);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue29>(segment, blockLow, high, states[medium[6]..starts[7]], origin, buckets, 6);
+        MarkMediumBucketGroup<PrimeSieveKernels.PacketResidue23>(segment, blockLow, high, states[medium[7]..starts[8]], origin, buckets, 7);
         buckets.Advance();
     }
     private static unsafe void MarkMediumBucketGroup<TResidue>(Span<byte> segment, ulong blockLow, ulong high,
         ReadOnlySpan<PrimeMarkState> dormant, ulong origin, PacketBuckets buckets, int group)
-        where TResidue : struct, IPacketResidue {
+        where TResidue : struct, PrimeSieveKernels.IPacketResidue {
         var capacity = buckets.Capacities[group];
         var offset = buckets.Offsets[group];
         var countOffset = (group * PrimeWheel30.ChannelCount);
@@ -139,7 +139,7 @@ public static partial class PrimeExploration {
     [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.AggressiveOptimization)]
     private static unsafe void MarkMediumPhase<TResidue, TPhase>(byte* bitmap, int length, ref PrimeMarkState input,
         int count, ref PrimeMarkState output, ref int nextEnds)
-        where TResidue : struct, IPacketResidue where TPhase : struct, IPacketPhase {
+        where TResidue : struct, PrimeSieveKernels.IPacketResidue where TPhase : struct, IPacketPhase {
         var end = (bitmap + length);
         ref var current = ref input;
         ref var inputEnd = ref Unsafe.Add(elementOffset: count, source: ref input);

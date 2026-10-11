@@ -360,16 +360,22 @@ public static class PrimeKernels {
     /// <summary>Returns the number of odd primes strictly below a value no greater than 65,536.</summary>
     /// <param name="value">The exclusive bound, at most 65,536.</param>
     /// <returns>The count of odd entries of <see cref="BasePrimes"/> below <paramref name="value"/>, which is also the index of the first entry at or above it.</returns>
-    /// <remarks>One masked population count over the odd-prime bitmap plus the cumulative count of the words before it.</remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> exceeds 65,536.</exception>
+    /// <remarks>One masked population count over the odd-prime bitmap plus the cumulative count of the words before it.
+    /// The law <c>prime-selection.table-ranks-vs-sieve</c> compares every rank with a sieve.</remarks>
     public static int CountOddPrimesBelow(uint value) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: value, other: 65_536U, paramName: nameof(value));
+        return CountOddPrimesBelowCore(value: value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int CountOddPrimesBelowCore(uint value) {
         var position = (value >>> 1);
         var word = ((int)(position >>> RankWordShift));
         var below = OddPrimeRanks.Bits[word] & ((1UL << ((int)position)) - 1UL);
 
         return (OddPrimeRanks.Counts[word] + BitOperations.PopCount(value: below));
     }
-
     /// <summary>Runs the base-two strong-probable-prime round on an odd value, inside Montgomery constants the caller already holds.</summary>
     /// <param name="value">The odd value, at least three.</param>
     /// <param name="one">The radix reduced modulo the value, <see cref="ScaledResidueRing64.RadixResidue(ulong)"/>.</param>
@@ -553,7 +559,7 @@ public static class PrimeKernels {
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static bool PassesStrongLucas(ulong value, ulong one, ulong inverse) {
         var magnitude = FirstSelfridgeMagnitude;
-        var symbol = SelfridgeSymbol(
+        var symbol = SelfridgeSymbolCore(
             magnitude: magnitude,
             residue: (value % FirstSelfridgeMagnitude)
         );
@@ -567,7 +573,7 @@ public static class PrimeKernels {
             magnitude += 2UL;
 
             if (SelfridgeTableLimit > magnitude) {
-                symbol = SelfridgeSymbol(
+                symbol = SelfridgeSymbolCore(
                     magnitude: magnitude,
                     residue: (value % magnitude)
                 );
@@ -742,11 +748,22 @@ public static class PrimeKernels {
     }
 
     /// <summary>Returns the Jacobi symbol of a residue over a small odd discriminant magnitude from the precomputed masks.</summary>
-    /// <param name="magnitude">The odd magnitude, from <see cref="FirstSelfridgeMagnitude"/> up to <see cref="SelfridgeTableLimit"/>, exclusive.</param>
+    /// <param name="magnitude">The odd magnitude, from 5 up to 64, exclusive.</param>
     /// <param name="residue">The residue, below <paramref name="magnitude"/>.</param>
     /// <returns>The symbol <c>(residue / magnitude)</c>: <c>-1</c>, <c>0</c> or <c>1</c>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="magnitude"/> is below 5, 64 or above, or even, or
+    /// <paramref name="residue"/> is not below <paramref name="magnitude"/>.</exception>
+    /// <remarks>The law <c>prime-field.selfridge-symbols-vs-reciprocity</c> compares the table with the Jacobi symbol.</remarks>
     public static int SelfridgeSymbol(ulong magnitude, ulong residue) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: magnitude, other: FirstSelfridgeMagnitude, paramName: nameof(magnitude));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: magnitude, other: SelfridgeTableLimit, paramName: nameof(magnitude));
+        if ((magnitude & 1UL) == 0UL) { throw new ArgumentOutOfRangeException(paramName: nameof(magnitude), actualValue: magnitude, message: "The magnitude must be odd."); }
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: residue, other: magnitude, paramName: nameof(residue));
+        return SelfridgeSymbolCore(magnitude: magnitude, residue: residue);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int SelfridgeSymbolCore(ulong magnitude, ulong residue) {
         var masks = SelfridgeSymbols.Masks[((int)(magnitude >>> 1))];
         var bit = ((int)residue);
 

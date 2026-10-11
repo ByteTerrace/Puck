@@ -48,6 +48,8 @@ public static partial class PrimeExtensions {
     /// <para>Published power-of-two counts bound the search and make nearby ranks, including the last ranks,
     /// inexpensive. Other ranks use the combinatorial counter across the unsigned domain, rather than sieving
     /// the distance from a checkpoint. Cancellation is observed during counting and between sieve segments.
+    /// A rank whose result fits <see cref="uint"/> observes the token on entry only: the narrow implementation it
+    /// delegates to takes no token, and its count and bounded walk run to completion once started.
     /// A count that contradicts its own exact bracket raises <see cref="InvalidOperationException"/> instead of
     /// returning the out-of-range zero.</para>
     /// </remarks>

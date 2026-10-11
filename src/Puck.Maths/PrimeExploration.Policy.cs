@@ -14,8 +14,8 @@ public enum PrimeSieveMode {
     Windowed,
 }
 public static partial class PrimeExploration {
-    /// <summary>The bitmap bytes of a segment, and of a small-prime marking chunk inside a larger one: one 32-KiB
-    /// level-one data cache.</summary>
+    /// <summary>The bitmap bytes of a segment, and of a small-prime marking chunk inside a larger one: 32 KiB, a
+    /// conservative size for a level-one data cache.</summary>
     public const int CacheSegmentBytes = 32768;
 
     // 65521 is the largest entry of the shared base-prime table; the next prime starts the upper bases.

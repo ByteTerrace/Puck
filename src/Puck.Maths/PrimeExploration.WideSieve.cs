@@ -442,7 +442,7 @@ public static partial class PrimeExploration {
                     m_block = m_nextBlock;
                     var high = Math.Min(val1: ((ulong)m_limit), val2: (((m_block + ((uint)length)) * PrimeWheel30.Modulus) - 1));
 
-                    FilterSmallPrimes(blockLow: m_block, segment: segment);
+                    PrimeSieveKernels.FilterSmallPrimes(blockLow: m_block, segment: segment);
                     MaskEndpoint(block: m_block, high: m_limit, index: 0, low: 65536, segment: segment);
                     MaskEndpoint(block: ((m_block + ((uint)length)) - 1), high: m_limit, index: (length - 1), low: 65536, segment: segment);
                     MarkBucketSegment(segment: segment, blockLow: m_block, high: high, states: m_states.AsSpan(length: m_stateCount, start: 0),

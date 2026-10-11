@@ -7,26 +7,6 @@ namespace Puck.Maths;
 
 /// <summary>Explores primes throughout the unsigned sixty-four-bit domain using thirty-wheel coordinates.</summary>
 public static partial class PrimeExploration {
-    /// <summary>Gets the byte mask that clears one product's bit for every prime channel and multiplier phase.</summary>
-    /// <remarks>
-    /// <para>Row <c>primeChannel</c>, an index into <see cref="PrimeWheel30.Residues"/>, holds, at each ascending
-    /// multiplier phase <c>source</c>, the complement of the
-    /// numeric bit <see cref="PrimeWheel30.TargetBit(int, int)"/> of the product's residue, at index
-    /// <c>primeChannel · ChannelCount + source</c>. The values are written out as constant data, so a read costs one
-    /// load from a constant address and no caller can overwrite them; the law
-    /// <c>prime-exploration.wheel-tables-match-their-derivation</c> proves they equal the derivation.</para>
-    /// </remarks>
-    public static ReadOnlySpan<byte> ClearMasks => [
-        0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F,
-        0xFD, 0xDF, 0xEF, 0xFE, 0x7F, 0xF7, 0xFB, 0xBF,
-        0xDF, 0xF7, 0x7F, 0xFD, 0xBF, 0xFE, 0xEF, 0xFB,
-        0xF7, 0xFE, 0xBF, 0xDF, 0xFB, 0xFD, 0x7F, 0xEF,
-        0xFB, 0xEF, 0xFE, 0xBF, 0xFD, 0x7F, 0xF7, 0xDF,
-        0xEF, 0x7F, 0xFD, 0xFB, 0xDF, 0xBF, 0xFE, 0xF7,
-        0x7F, 0xBF, 0xDF, 0xEF, 0xF7, 0xFB, 0xFD, 0xFE,
-        0xBF, 0xFB, 0xF7, 0x7F, 0xFE, 0xEF, 0xDF, 0xFD,
-    ];
-
     /// <summary>Reports every prime in a closed interval in ascending numeric order.</summary>
     /// <param name="low">The inclusive lower bound.</param>
     /// <param name="high">The inclusive upper bound; a value below <paramref name="low"/> gives an empty interval.</param>
@@ -160,7 +140,7 @@ public static partial class PrimeExploration {
                     var segmentHigh = ((wideEnd > high) ? high : (ulong)wideEnd);
                     var segment = storage.AsSpan(length: length, start: storageOffset);
 
-                    FilterSmallPrimes(blockLow: blockLow, segment: segment);
+                    PrimeSieveKernels.FilterSmallPrimes(blockLow: blockLow, segment: segment);
                     MaskEndpoint(block: blockLow, high: high, index: 0, low: low, segment: segment);
                     MaskEndpoint(block: blockHigh, high: high, index: (length - 1), low: low, segment: segment);
                     MarkBucketSegment(segment, blockLow, segmentHigh, stateStorage.AsSpan(length: stateCount, start: 0), stateOrigin, groupStarts, groupActive, buckets);
@@ -248,61 +228,5 @@ public static partial class PrimeExploration {
             }
         }
         return count;
-    }
-    // The stateless marker: one division finds each prime's first multiple in the segment, and the wheel steps mark
-    // the rest. The windowed sieve streams every upper base prime through it once per segment.
-    private static void MarkBases(ReadOnlySpan<uint> primes, Span<byte> segment, ulong blockLow, ulong low, ulong high) {
-        foreach (var basePrime in primes) {
-            if (basePrime <= PreSievePrimeLimit) { continue; }
-            var prime = ((ulong)basePrime);
-            var square = (prime * prime);
-
-            if (square > high) { break; }
-            var lower = Math.Max(val1: low, val2: square);
-            // Division followed by a remainder correction avoids the usual overflowing low + prime - 1.
-            var (quotient, remainder) = Math.DivRem(left: lower, right: prime);
-            var multiplier = (quotient + ((remainder == 0UL) ? 0UL : 1UL));
-
-            // A wide product rejects a prime with no multiple in the segment before the second division. Windowed
-            // segments stream every upper base prime, and most primes above the segment width have no multiple in it.
-            if (Math.BigMul(a: multiplier, b: prime) > high) { continue; }
-            var maximumMultiplier = (high / prime);
-
-            _ = PrimeWheel30.TryChannel(channel: out var primeChannel, residue: ((byte)(prime % PrimeWheel30.Modulus)));
-            var clearMasks = ClearMasks.Slice(length: PrimeWheel30.ChannelCount, start: (primeChannel * PrimeWheel30.ChannelCount));
-
-            MarkWheelSteps(blockLow: blockLow, clearMasks: clearMasks, maximumMultiplier: maximumMultiplier, multiplier: multiplier, prime: prime, segment: segment);
-        }
-    }
-    private static void MarkWheelSteps(Span<byte> segment, ulong blockLow, ulong prime, ulong multiplier, ulong maximumMultiplier, ReadOnlySpan<byte> clearMasks) {
-        var residues = PrimeWheel30.NumericResidues;
-        var gaps = PrimeWheel30.Gaps;
-        var remainder = (multiplier % PrimeWheel30.Modulus);
-        var source = 0;
-
-        // Every remainder is at most 29, the final residue, so this search always finds a lane.
-        while (residues[source] < remainder) { ++source; }
-        multiplier += (((ulong)residues[source]) - remainder);
-        if (multiplier > maximumMultiplier) { return; }
-
-        var multiple = (multiplier * prime);
-        var high = (maximumMultiplier * prime);
-        ref var first = ref MemoryMarshal.GetReference(span: segment);
-        ref var firstMask = ref MemoryMarshal.GetReference(span: clearMasks);
-        ref var firstGap = ref MemoryMarshal.GetReference(span: gaps);
-
-        while (true) {
-            // The rounded first multiple is at least the segment's low endpoint; high is no greater than its
-            // high endpoint. Every visited byte therefore lies inside segment. Source starts in 0..7 and stays
-            // there under the masked increment, proving both eight-entry table offsets as well.
-            var index = ((multiple / PrimeWheel30.Modulus) - blockLow);
-
-            Unsafe.Add(elementOffset: ((nint)index), source: ref first) &= Unsafe.Add(elementOffset: source, source: ref firstMask);
-            var advance = (prime * Unsafe.Add(elementOffset: source, source: ref firstGap));
-
-            if ((high - multiple) < advance) { break; }
-            multiple += advance;
-            source = (source + 1) & (PrimeWheel30.ChannelCount - 1);
-        }
     }
 }
