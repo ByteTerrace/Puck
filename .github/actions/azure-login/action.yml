@@ -1,10 +1,22 @@
 description: Sign in to Azure with the repository's OIDC federation; call again before a phase that needs a fresh assertion.
+# A composite action cannot read the `vars` context, so each calling job passes the repository variables
+# (`vars.AZURE_CLIENT_ID`, `vars.AZURE_SUBSCRIPTION_ID`, `vars.AZURE_TENANT_ID`) as inputs.
+inputs:
+  client-id:
+    description: The federated application's client id (`vars.AZURE_CLIENT_ID`).
+    required: true
+  subscription-id:
+    description: The subscription to sign in to (`vars.AZURE_SUBSCRIPTION_ID`).
+    required: true
+  tenant-id:
+    description: The Entra tenant id (`vars.AZURE_TENANT_ID`).
+    required: true
 name: Sign in to Azure
 runs:
   steps:
     - uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
       with:
-        client-id: ${{ vars.AZURE_CLIENT_ID }}
-        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        client-id: ${{ inputs.client-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+        tenant-id: ${{ inputs.tenant-id }}
   using: composite

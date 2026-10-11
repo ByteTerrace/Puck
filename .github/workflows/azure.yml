@@ -78,6 +78,10 @@ jobs:
           artifact: nuget-packages
       - name: Sign in to Azure with OIDC
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - name: Install pinned Bicep
         run: az bicep install --version v0.47.16
       - name: Restore pinned bvm Template Specs and compile infrastructure
@@ -135,6 +139,10 @@ jobs:
       - if: steps.current.outputs.deploy == 'true'
         name: Sign in to Azure with OIDC
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - if: steps.current.outputs.deploy == 'true'
         name: Install pinned Bicep
         run: az bicep install --version v0.47.16
@@ -150,6 +158,10 @@ jobs:
       - if: steps.current.outputs.deploy == 'true'
         name: Refresh OIDC for application publication
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - id: release
         if: steps.current.outputs.deploy == 'true'
         name: Publish containers and apply application configuration
@@ -158,6 +170,10 @@ jobs:
       - if: steps.current.outputs.deploy == 'true'
         name: Refresh OIDC for World deployment
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - id: vault
         if: steps.current.outputs.deploy == 'true'
         name: Admit the runner to the signing-key vault
@@ -178,6 +194,10 @@ jobs:
       - if: steps.current.outputs.deploy == 'true'
         name: Refresh OIDC for Functions deployment
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - id: scm
         if: steps.current.outputs.deploy == 'true'
         name: Admit the runner to the Functions deployment endpoint
@@ -202,6 +222,10 @@ jobs:
       - if: steps.current.outputs.deploy == 'true'
         name: Refresh OIDC for website publication
         uses: ./.github/actions/azure-login
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - env:
           AZCOPY_AUTO_LOGIN_TYPE: AZCLI
           AZCOPY_CONCURRENCY_VALUE: AUTO
