@@ -547,6 +547,11 @@ reintroduce `[noinline]`.
 - A composition probe measures one worst case across every emitter. Any
   optional emission declares a `Probe` branch on its `ISdfSceneEmitter`, and
   probes reserve `SdfProgram.PartCompilationWordCapacity`, not `Words.Length`.
+  The probe is read for capacities alone, so it builds with
+  `packTapeCertificates: false`: the tile-tape certificates are more than half
+  of a large program's construction, no capacity depends on their values, and a
+  probe's tape words stay zero. A program the renderer executes always packs
+  them (the default); never read a certificate from a probe.
 - Emitter revisions compare componentwise; never sum or hash them, because some
   counters are assigned and can move down.
 - Static placement headroom covers both emission classes: a scoped creation

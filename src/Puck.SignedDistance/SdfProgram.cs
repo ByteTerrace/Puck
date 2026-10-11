@@ -484,7 +484,10 @@ public sealed partial class SdfProgram {
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
-        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        m_words[((segmentOffsetVectors * WordsPerVector) + SegmentTapeLane)] = ((uint)tapeOffsetVectors);
+        if (packTapeCertificates) {
+            PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        }
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: pathOffsetVectors);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);

@@ -27,7 +27,6 @@ public sealed partial class SdfProgram {
     }
 
     private void PackTapeCertificates(int offset, int segmentOffset, List<BoundRecord> segments, RigidPlan rigid) {
-        m_words[((segmentOffset * WordsPerVector) + SegmentTapeLane)] = ((uint)offset);
         PackTapeTokens(offset: offset, segmentOffset: segmentOffset, segmentCount: segments.Count);
         var state = TapeMetric.Identity;
 
