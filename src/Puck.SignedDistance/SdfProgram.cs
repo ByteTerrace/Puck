@@ -110,6 +110,9 @@ public sealed partial class SdfProgram {
     // the packed offset. Empty for a program with no convex-polygon profile.
     private readonly (int InstructionIndex, Vector2[] Vertices)[] m_convexPolygonProfiles;
     private readonly SdfInstanceGridInput[] m_instanceBinning;
+    // Each instance's certified distance gain and smooth-union sag (InstanceDistanceGain), analyzed once after the
+    // Lipschitz pass patches the scope rescales; ClassifyInstances widens the packed radius by the sag it needs.
+    private readonly DistanceBound[] m_instanceDistanceBounds;
     // Every SdfShapeType.Sweep instruction's own control points/radius endpoints, keyed by that instruction's index —
     // the host side of the side table PackSweepCurves appends to the packed word stream (see SdfShapeType.Sweep), and
     // what SdfFieldEvaluator reads directly to mirror the field without decoding the packed offset. Empty for a
@@ -300,6 +303,7 @@ public sealed partial class SdfProgram {
         // bound it tests. The grid block is a self-contained uint array appended after the world-segment list; its
         // length is known here (it depends on the instance layout), so it sizes the word stream up front. A probe
         // program flows through this same path, so the frozen capacity envelope grows to cover the grid automatically.
+        m_instanceDistanceBounds = AnalyzeInstanceDistanceBounds();
         m_instanceBinning = ClassifyInstances();
         RequiresFrameInstanceGridRebuild = (buildInstanceGrid && HasFrameBinnableDynamicInstance());
 
@@ -802,10 +806,7 @@ public sealed partial class SdfProgram {
                 // A live, maskable instance: its geometry radius plus its soft-blend coupling halo plus any scoped-field
                 // outward reach, float-safety padded. A STATIC one has a fixed world-space bound the grid bins; a DYNAMIC
                 // one resolves its center per frame, so the frozen grid cannot bin it and it rides the always-list.
-                radius = ((((instance.Radius + MaxSmoothBlendRadius(
-                    first: instance.First,
-                    end: instance.End
-                )) + MaxScopedFieldReach(
+                radius = ((((instance.Radius + SmoothHalo(index: index)) + MaxScopedFieldReach(
                     first: instance.First,
                     end: instance.End
                 )) * BoundRadiusScale) + BoundRadiusPadding);

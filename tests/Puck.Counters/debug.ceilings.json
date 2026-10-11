@@ -99,7 +99,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 3503304,
-              "gpu.shapes.evaluated": 9224048,
+              "gpu.shapes.evaluated": 12956689,
               "gpu.texels.written": 1587600
             }
           },
@@ -111,8 +111,8 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
-              "gpu.march.steps": 50317,
-              "gpu.shapes.evaluated": 150829
+              "gpu.march.steps": 50328,
+              "gpu.shapes.evaluated": 185625
             }
           },
           "sdf.world$composite": {
@@ -220,8 +220,8 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 28650384,
-              "gpu.shapes.evaluated": 45857810,
+              "gpu.march.steps": 28671305,
+              "gpu.shapes.evaluated": 49354346,
               "gpu.texels.written": 1587600
             }
           },
@@ -260,9 +260,9 @@
                   "gpu.binds.descriptor-set": 3,
                   "gpu.binds.pipeline": 1,
                   "gpu.dispatches.indirect": 1,
-                  "gpu.march.steps": 47288486,
-                  "gpu.shadow.slot0.steps": 47288486,
-                  "gpu.shapes.evaluated": 117530472,
+                  "gpu.march.steps": 47296740,
+                  "gpu.shadow.slot0.steps": 47296740,
+                  "gpu.shapes.evaluated": 962344651,
                   "gpu.texels.written": 1587600
                 }
               },
@@ -280,9 +280,9 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 47288486,
-              "gpu.shadow.slot0.steps": 47288486,
-              "gpu.shapes.evaluated": 117530472,
+              "gpu.march.steps": 47296740,
+              "gpu.shadow.slot0.steps": 47296740,
+              "gpu.shapes.evaluated": 962344651,
               "gpu.texels.written": 1587600
             }
           },
@@ -367,7 +367,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 4671072,
-              "gpu.shapes.evaluated": 12198153,
+              "gpu.shapes.evaluated": 14638327,
               "gpu.texels.written": 1587600
             }
           },
@@ -379,7 +379,7 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
-              "gpu.shapes.evaluated": 81640
+              "gpu.shapes.evaluated": 83592
             }
           },
           "sdf.world$views": {
@@ -682,7 +682,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 3503304,
-              "gpu.shapes.evaluated": 9224051,
+              "gpu.shapes.evaluated": 12956698,
               "gpu.texels.written": 1587600
             }
           },
@@ -694,8 +694,8 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
-              "gpu.march.steps": 50317,
-              "gpu.shapes.evaluated": 150829
+              "gpu.march.steps": 50328,
+              "gpu.shapes.evaluated": 185625
             }
           },
           "sdf.world$composite": {
@@ -803,8 +803,8 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 28650324,
-              "gpu.shapes.evaluated": 45857740,
+              "gpu.march.steps": 28671260,
+              "gpu.shapes.evaluated": 49354431,
               "gpu.texels.written": 1587600
             }
           },
@@ -843,9 +843,9 @@
                   "gpu.binds.descriptor-set": 3,
                   "gpu.binds.pipeline": 1,
                   "gpu.dispatches.indirect": 1,
-                  "gpu.march.steps": 47288503,
-                  "gpu.shadow.slot0.steps": 47288503,
-                  "gpu.shapes.evaluated": 117530173,
+                  "gpu.march.steps": 47296759,
+                  "gpu.shadow.slot0.steps": 47296759,
+                  "gpu.shapes.evaluated": 962342253,
                   "gpu.texels.written": 1587600
                 }
               },
@@ -863,9 +863,9 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 47288503,
-              "gpu.shadow.slot0.steps": 47288503,
-              "gpu.shapes.evaluated": 117530173,
+              "gpu.march.steps": 47296759,
+              "gpu.shadow.slot0.steps": 47296759,
+              "gpu.shapes.evaluated": 962342253,
               "gpu.texels.written": 1587600
             }
           },
@@ -950,7 +950,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 4671072,
-              "gpu.shapes.evaluated": 12198151,
+              "gpu.shapes.evaluated": 14638317,
               "gpu.texels.written": 1587600
             }
           },
@@ -962,7 +962,7 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
-              "gpu.shapes.evaluated": 81640
+              "gpu.shapes.evaluated": 83592
             }
           },
           "sdf.world$views": {

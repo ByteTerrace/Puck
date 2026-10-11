@@ -34,10 +34,10 @@ public sealed class PartProgramLawTests {
         var words = program.Words;
         var entry = (PartTable(words: words) + 8);
 
-        Assert.Equal(compiled, ((words[(entry + 2)] & 0x3fffffffu) != 0u));
-        // Mirror mapCore's packed admission and bound test against the incumbent sphere's distance of five.
-        var rejects = (((words[(entry + 2)] & 0x40000000u) == 0u)
-            && (((20f - program.InspectInstance(index: 1).BoundRadius) * BitConverter.UInt32BitsToSingle(value: words[(entry + 3)])) >= 5f));
+        Assert.Equal(compiled, ((words[(entry + 2)] & SdfProgram.PartLeafCountMask) != 0u));
+        // Mirror mapCore's packed admission and bound test (sdfInstanceCannotWin) against the incumbent sphere's
+        // distance of five: the gap times the packed distance gain.
+        var rejects = (((20f - program.InspectInstance(index: 1).BoundRadius) * SdfProgram.DecodePartDistanceGain(entryCountLane: words[(entry + 2)])) >= 5f);
 
         Assert.False(condition: rejects, userMessage: "A geometric containment sphere must not reject a smaller anisotropic field value.");
     }
@@ -78,8 +78,7 @@ public sealed class PartProgramLawTests {
         Assert.Equal(actual: ((float)distance), expected: 10f, tolerance: 0.001f);
         var words = program.Words;
         var entry = (PartTable(words: words) + 8);
-        var rejects = (((words[(entry + 2)] & 0x40000000u) == 0u)
-            && (((20f - program.InspectInstance(index: 1).BoundRadius) * BitConverter.UInt32BitsToSingle(value: words[(entry + 3)])) >= 15f));
+        var rejects = (((20f - program.InspectInstance(index: 1).BoundRadius) * SdfProgram.DecodePartDistanceGain(entryCountLane: words[(entry + 2)])) >= 15f);
 
         Assert.False(condition: rejects, userMessage: "The bound of an optional intersection cannot reject the remaining subject.");
     }
@@ -154,10 +153,11 @@ public sealed class PartProgramLawTests {
         with { Shape = ((uint)SdfShapeType.Sphere), Material = material };
 
     [Fact]
-    public void AnUncompiledInstanceCarriesItsFieldRescaleInverse() {
+    public void AnUncompiledInstanceCarriesItsDistanceGain() {
         // Instance 0 is one scope of leaves and compiles. Instance 1 nests a scope, which the part compiler refuses, so
-        // it stays on the generic walk; its entry still carries 1 / FieldRescale, which mapCore's whole-instance and
-        // group-mask word rejections divide the gap to its bound by.
+        // it stays on the generic walk; its entry still carries its distance gain, the product of its nested scopes'
+        // rescales (1 / FieldRescale) for a sphere, which mapCore's whole-instance and group-mask word rejections scale
+        // the gap to its bound by.
         var instructions = Scope(
             inner: 1,
             materialA: 0,
@@ -189,13 +189,13 @@ public sealed class PartProgramLawTests {
         var words = program.Words;
         var table = PartTable(words: words);
 
-        Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & 0x3fffffffu);
-        Assert.Equal(expected: 0u, actual: words[((table + 8) + 2)] & 0x3fffffffu);
+        Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & SdfProgram.PartLeafCountMask);
+        Assert.Equal(expected: 0u, actual: words[((table + 8) + 2)] & SdfProgram.PartLeafCountMask);
         Assert.Equal(expected: 2.5f, actual: program.InspectInstance(index: 1).FieldRescale, tolerance: 1e-6f);
-        Assert.Equal(
-            expected: (1f / program.InspectInstance(index: 1).FieldRescale),
-            actual: BitConverter.UInt32BitsToSingle(value: words[((table + 8) + 3)])
-        );
+        Assert.Equal(expected: (1f / program.InspectInstance(index: 1).FieldRescale), actual: program.InstanceDistanceGain(index: 1), tolerance: 1e-6f);
+        var packed = SdfProgram.DecodePartDistanceGain(entryCountLane: words[((table + 8) + 2)]);
+
+        Assert.InRange(actual: packed, high: program.InstanceDistanceGain(index: 1), low: (program.InstanceDistanceGain(index: 1) - (3f * SdfProgram.PartDistanceGainUnit)));
     }
     [Fact]
     public void CapacityDoesNotDependOnSharedGeometry() {
@@ -435,10 +435,12 @@ public sealed class PartProgramLawTests {
             2u,
             words[(secondBindings + 1)]
         );
+        // Dynamic, two bindings, and the unit distance gain of two exact spheres in a hard-union scope.
         Assert.Equal(
-            0x80000002u,
+            0x80000002u | (SdfProgram.PartDistanceGainMask << SdfProgram.PartDistanceGainShift),
             words[(table + 6)]
         );
+        Assert.Equal(expected: 1f, actual: SdfProgram.DecodePartDistanceGain(entryCountLane: words[(table + 6)]));
     }
     [Fact]
     public void IneligibleProbeStillReservesRoomForLaterCompiledParts() {

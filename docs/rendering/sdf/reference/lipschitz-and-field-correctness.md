@@ -229,10 +229,14 @@ Outside a scope every intersection, field op and fold with no edge reads the one
 global accumulator, so a flat instance holding one is unmaskable. A bound has two guarantees, and a reader takes the one it needs. It contains the instance's
 surface and the influence of its blends, so a ray that misses it misses the instance: the beam
 cull, the grid binning, the shadow and ambient gathers and the part compiler read it so, and the
-halo carries a scope's soft compose out to its radius times the scope's factor `L`. And the
-instance's field outside it is at least the distance to the bound divided by
+halo carries a scope's soft compose out to its radius times the scope's factor `L`. And,
+where it certifies one, the instance's field outside it is at least the distance to the bound
+times `SdfProgram.InstanceDistanceGain`: at most the inverse of
 `SdfInstanceCost.FieldRescale`, the largest `L` of a scope that divides its field before the
-parent sees it (1 when none does). The directory's running-minimum skip never reads an instance
+parent sees it, and less for a gauge or a non-uniform scale, whose fields grow more slowly than
+distance (a smooth union's sag widens the bound until the gain absorbs it). Whole-instance
+rejection and the group-mask word summaries read that guarantee; an instance certifying no
+gain is never rejected whole. The directory's running-minimum skip never reads an instance
 bound for a scope: a segment holding a push or pop is always evaluated, and the CPU evaluator
 culls only an instance that is a pure union with no scope.
 

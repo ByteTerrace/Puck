@@ -27,8 +27,10 @@ public static partial class CountersCommand {
     private const string ReportFileName = "counters.report.json";
     private const string ScratchPrefix = "puck-counters-";
     private const string Verb = "counters";
+    private const int LegBackstopSeconds = 600;
 
-    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 600);
+    // The World build and both legs.
+    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 1800);
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>Reads a report, refusing one that is not a well-formed <c>puck.counters.report.v1</c>
@@ -397,14 +399,18 @@ public static partial class CountersCommand {
         var runs = new List<WorldCountersRun>(capacity: WorldOffscreenLeg.Backends.Count);
 
         foreach (var backend in WorldOffscreenLeg.Backends) {
+            var stateDirectory = WorldOffscreenLeg.StateDirectoryOf(backend: backend, runDirectory: runDirectory);
+
+            CountersPipelineCache.Seed(backend: backend, root: CountersPipelineCache.DefaultRoot, stateDirectory: stateDirectory);
             var leg = WorldOffscreenLeg.Run(
                 arguments: [],
                 artifact: artifact.Path,
                 backend: backend,
                 budget: SuiteBudget,
-                // A safety net, not the leg length: it outlasts the script's 180-second world.wait ready deadline and
-                // the ticks after it, so a build that never finishes is named by that wait rather than cut off.
-                exitAfterSeconds: 240,
+                // A safety net, not the leg length: it outlasts the script's 180-second world.wait ready deadline, which
+                // a pipeline cache the kernels have outgrown spends building in the driver, and a workload's ticks
+                // after it at a rendered frame each, so a build that never finishes is named by that wait.
+                exitAfterSeconds: LegBackstopSeconds,
                 process: out var process,
                 runDirectory: runDirectory,
                 script: script,
@@ -416,6 +422,7 @@ public static partial class CountersCommand {
             if (leg != CliExit.Success) {
                 return leg;
             }
+            CountersPipelineCache.Persist(backend: backend, root: CountersPipelineCache.DefaultRoot, stateDirectory: stateDirectory);
             if (!CountersReading.TryRead(
                 backend: backend,
                 compiler: compiler,

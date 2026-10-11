@@ -44,6 +44,14 @@ public static class WorldOffscreenLeg {
 
         return built;
     }
+    /// <summary>Returns the World state directory a leg on <paramref name="backend"/> boots with.</summary>
+    /// <param name="runDirectory">The run's scratch directory.</param>
+    /// <param name="backend">The leg's backend name.</param>
+    /// <returns>The directory, which the World creates if nothing has.</returns>
+    public static string StateDirectoryOf(string runDirectory, string backend) => Path.Combine(
+        path1: runDirectory,
+        path2: $"state-{backend}"
+    );
     /// <summary>Runs one leg: the World at <paramref name="artifact"/> on <paramref name="backend"/>, booting
     /// <paramref name="world"/> (whose <c>host.presentation</c> decides the shape) with its own state directory, the
     /// script followed by <c>wire.errors</c> and <c>quit</c> on standard input, and the leg's streams written to
@@ -130,10 +138,7 @@ public static class WorldOffscreenLeg {
                     "--world", world,
                     "--backend", backend,
                     "--exit-after-seconds", exitAfterSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                    "--state-dir", Path.Combine(
-                        path1: runDirectory,
-                        path2: $"state-{backend}"
-                    ),
+                    "--state-dir", StateDirectoryOf(backend: backend, runDirectory: runDirectory),
                     .. arguments,
                 ],
                 environment: environment,

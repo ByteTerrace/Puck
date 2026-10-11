@@ -2102,7 +2102,12 @@ simulation until the engine is ready, resumes it, waits a pinned number of
 ticks, and asks for one `world.counters --json` reading, so both backends read
 at the same tick however long their engines took to build. The
 runner closes the script with `wire.errors` and `quit` and requires every
-command accepted.
+command accepted. Each leg's fresh state directory starts from the driver
+pipeline cache the last completed leg on that backend wrote back, kept per user
+under the Puck directory's `counters-pipeline-cache/<backend>`, so a run after
+the first builds no pipeline the driver already built; its hits and misses are
+pacing counts. A leg is cut off after ten minutes, and the whole run, the World
+build included, after thirty.
 
 `--world` and `--script` select another authored `.puck` or JSON workload and its console
 script. Both paths are recorded in the report and must match its ceilings.
