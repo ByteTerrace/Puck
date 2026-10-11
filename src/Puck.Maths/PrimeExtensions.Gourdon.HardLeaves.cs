@@ -1,8 +1,6 @@
 using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics;
 
 namespace Puck.Maths;
 
@@ -14,6 +12,7 @@ public static partial class PrimeExtensions {
     private const uint GourdonHardLeafSegmentWidth = ((32U * 1024U) * PrimeWheel30.Modulus);
     private const int GourdonHardLeafBatchSize = 128;
     private const int GourdonHardLeafScanSpan = 16384;
+    private const int GourdonHardLeafNegationWords = ((GourdonHardLeafBatchSize * sizeof(short)) / sizeof(ulong));
 
     // A count spends seconds in the Gourdon kernels, so they compile fully optimized on first call rather than
     // through tiered compilation's quick first tier and on-stack replacement.
@@ -32,7 +31,7 @@ public static partial class PrimeExtensions {
         var activeCount = ((int)tables.CountPrimes(value: ((uint)activeLimit)));
 
         // x*>=x^(1/4) and x/(y+1)>sqrt(x), so with x>2^44 the active bound is at least 2^11, far beyond 19.
-        Debug.Assert((activeCount > CombinatorialTinyPrimeCount));
+        Debug.Assert((activeCount > PrimeLeafKernels.CombinatorialTinyPrimeCount));
 
         var squareRootIndex = Math.Min(val1: activeCount,
             val2: ((int)tables.CountPrimes(value: cutoff.SquareRoot())));
@@ -43,14 +42,14 @@ public static partial class PrimeExtensions {
         var (lowerBounds, upperBounds) = workspace.PrepareGourdonHardBounds(cancellationToken: cancellationToken,
             cutoff: cutoff, primeCount: activeCount, primes: primes,
             quotients: quotients, squareRootIndex: squareRootIndex);
-        Span<int> coordinates = stackalloc int[GourdonHardLeafBatchSize];
-        Span<uint> divisors = stackalloc uint[GourdonHardLeafBatchSize];
-        Span<ulong> leafQuotients = stackalloc ulong[GourdonHardLeafBatchSize];
+        workspace.PrepareGourdonHardBatches(divisors: out var divisors, quotients: out var leafQuotients);
+        // A square-free batch keeps each leaf's negation mask behind the quotients, one base address for both.
+        var negations = MemoryMarshal.Cast<ulong, short>(span: leafQuotients[GourdonHardLeafBatchSize..]);
         var sum = Int128.Zero;
 
         if (profile is not null) {
             profile.LeafFrontier = (limit - 1UL);
-            profile.CachedQuotientDivisions += ((uint)(activeCount - CombinatorialTinyPrimeCount));
+            profile.CachedQuotientDivisions += ((uint)(activeCount - PrimeLeafKernels.CombinatorialTinyPrimeCount));
         }
 
         // Before crossing off p_b, phi[b] is phi(low-1,b-1), initially zero.
@@ -61,29 +60,33 @@ public static partial class PrimeExtensions {
 
             var high = Math.Min(val1: (low + GourdonHardLeafSegmentWidth), val2: limit);
             var lowDivisor = Math.Max(val1: low, val2: 1UL);
+            // Both divisors are positive and constant for this segment, and the floor-reciprocal division is exact for
+            // every ulong quotient, the 1e19-scale boundary included.
+            var highReciprocal = PrimeDivisionKernels.FloorReciprocalCore(divisor: high);
+            var lowReciprocal = PrimeDivisionKernels.FloorReciprocalCore(divisor: lowDivisor);
 
-            sieve.Initialize(low: low, width: ((uint)(high - low)));
+            sieve.InitializeCore(low: low, width: ((uint)(high - low)));
             if (profile is not null) {
                 ++profile.LeafSegments;
                 profile.LeafBitmapBytes += ((((high - low) + (PrimeWheel30.WordIntegers - 1)) / PrimeWheel30.WordIntegers) * sizeof(ulong));
             }
 
-            var index = (CombinatorialTinyPrimeCount + 1);
+            var index = (PrimeLeafKernels.CombinatorialTinyPrimeCount + 1);
 
             for (; (index <= squareRootIndex); ++index) {
                 if ((index & 255) == 0) { cancellationToken.ThrowIfCancellationRequested(); }
 
                 var prime = primes[index];
                 var quotient = quotients[index];
-                var minimum = Math.Max(val1: (quotient / high), val2: lowerBounds[index]);
-                var maximum = Math.Min(val1: (quotient / lowDivisor), val2: upperBounds[index]);
+                var minimum = Math.Max(val1: PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: quotient, divisor: high, reciprocal: highReciprocal), val2: lowerBounds[index]);
+                var maximum = Math.Min(val1: PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: quotient, divisor: lowDivisor, reciprocal: lowReciprocal), val2: upperBounds[index]);
 
                 // This upper bound decreases with p and with low. Once it is <=p,
                 // no later prime can have a leaf in this or any following segment.
                 if (prime >= maximum) { break; }
 
-                var last = CombinatorialCoordinate(value: ((uint)Math.Min(val1: minimum, val2: maximum)));
-                var first = CombinatorialCoordinate(value: ((uint)maximum));
+                var last = PrimeLeafKernels.CombinatorialCoordinate(value: ((uint)Math.Min(val1: minimum, val2: maximum)));
+                var first = PrimeLeafKernels.CombinatorialCoordinate(value: ((uint)maximum));
                 var coordinate = first;
 
                 if (profile is not null) { profile.SpecialFactorCoordinates += ((uint)(first - last)); }
@@ -96,14 +99,16 @@ public static partial class PrimeExtensions {
                 while (coordinate > last) {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var count = FilterGourdonHardLeaves(coordinate: ref coordinate, coordinates: coordinates, factors: factors,
-                        last: Math.Max(val1: last, val2: (coordinate - GourdonHardLeafScanSpan)), prime: prime);
+                    var subtracted = 0;
+                    var count = PrimeLeafKernels.FilterGourdonHardLeaves(coordinate: ref coordinate, divisors: divisors, factors: factors,
+                        last: Math.Max(val1: last, val2: (coordinate - GourdonHardLeafScanSpan)), negations: negations, prime: prime,
+                        subtracted: ref subtracted);
 
-                    sum += CountGourdonHardBatch(coordinates: coordinates[..count], divisors: divisors, factors: factors, low: low,
-                        prefix: ref prefix, previous: phi[index], quotient: quotient, quotients: leafQuotients);
+                    sum += CountGourdonHardBatch(divisors: divisors[..count], low: low, prefix: ref prefix, previous: phi[index],
+                        quotient: quotient, quotients: leafQuotients, subtracted: subtracted);
                 }
                 phi[index] += sieve.TotalCount;
-                sieve.CrossOff(index: index, prime: prime);
+                sieve.CrossOffCore(index: index, prime: prime);
             }
             if (index <= squareRootIndex) { continue; }
 
@@ -114,14 +119,14 @@ public static partial class PrimeExtensions {
 
                 var prime = primes[index];
                 var quotient = quotients[index];
-                var minimum = Math.Max(val1: (quotient / high), val2: prime);
-                var maximum = Math.Min(val1: (quotient / lowDivisor), val2: upperBounds[index]);
+                var minimum = Math.Max(val1: PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: quotient, divisor: high, reciprocal: highReciprocal), val2: prime);
+                var maximum = Math.Min(val1: PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: quotient, divisor: lowDivisor, reciprocal: lowReciprocal), val2: upperBounds[index]);
 
                 if (prime >= maximum) { break; }
 
                 if (minimum >= maximum) {
                     phi[index] += sieve.TotalCount;
-                    sieve.CrossOff(index: index, prime: prime);
+                    sieve.CrossOffCore(index: index, prime: prime);
                     continue;
                 }
 
@@ -131,7 +136,6 @@ public static partial class PrimeExtensions {
                 var stop = ((int)tables.CountPrimes(value: ((uint)minimum)));
                 var leaves = ((uint)(top - stop));
                 var prefix = sieve.StartPrefix();
-                ref var leafQuotient = ref MemoryMarshal.GetReference(span: leafQuotients);
                 // Each prefix count is below the segment width and there are fewer than y leaves, so the
                 // per-prime subtotal fits ulong; phi[b] is added once per prime rather than once per leaf.
                 var counted = 0UL;
@@ -141,156 +145,80 @@ public static partial class PrimeExtensions {
                     var bottom = Math.Max(val1: (stop + 1), val2: ((top - GourdonHardLeafBatchSize) + 1));
                     var length = ((top - bottom) + 1);
 
-                    DivideGourdonQuotients(dividend: quotient, divisors: primes.AsSpan(length: length, start: bottom), quotients: leafQuotients);
-                    for (var offset = (length - 1); (offset >= 0); --offset) {
-                        counted += prefix.Count(offset: ((uint)(Unsafe.Add(elementOffset: offset, source: ref leafQuotient) - low)));
-                    }
+                    PrimeDivisionKernels.DivideGourdonQuotients(dividend: quotient, divisors: primes.AsSpan(length: length, start: bottom), quotients: leafQuotients[..length]);
+                    counted += CountGourdonPrimeBatch(low: low, prefix: ref prefix, quotients: leafQuotients[..length]);
                     top = (bottom - 1);
                 }
                 sum += ((((Int128)phi[index]) * leaves) + counted);
                 phi[index] += sieve.TotalCount;
-                sieve.CrossOff(index: index, prime: prime);
+                sieve.CrossOffCore(index: index, prime: prime);
             }
         }
         return sum;
     }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int FilterGourdonHardLeaves(ReadOnlySpan<ushort> factors, ref int coordinate, int last, uint prime,
-        Span<int> coordinates) {
-        // Instruction-set dispatch folds when the caller is compiled. Every width selects the same
-        // coordinates in the same order; the laws run each width on identical inputs.
-        if (Vector512.IsHardwareAccelerated) {
-            return FilterGourdonHardLeaves<VectorLanes512, Vector512<byte>>(coordinate: ref coordinate,
-                coordinates: coordinates, factors: factors, last: last, prime: prime);
-        }
-        if (Vector256.IsHardwareAccelerated) {
-            return FilterGourdonHardLeaves<VectorLanes256, Vector256<byte>>(coordinate: ref coordinate,
-                coordinates: coordinates, factors: factors, last: last, prime: prime);
-        }
-        if (Vector128.IsHardwareAccelerated) {
-            return FilterGourdonHardLeaves<VectorLanes128, Vector128<byte>>(coordinate: ref coordinate,
-                coordinates: coordinates, factors: factors, last: last, prime: prime);
-        }
-        return FilterGourdonHardLeavesScalar(coordinate: ref coordinate, coordinates: coordinates, factors: factors,
-            last: last, prime: prime);
-    }
-
-    // Writes each coordinate c in (last, coordinate] whose least factor exceeds prime, in descending order, and
-    // moves coordinate to the next unexamined one. A call stops early only when another full vector might not
-    // fit; it then returns at least coordinates.Length-lanes survivors. Requires -1<=last<=coordinate<factors.Length
-    // and coordinates.Length>=lanes. The sign bit stores mu, not the factor. After masking, signed compares are
-    // exact: factors <=32767 and the caller's p<=sqrt(y)<32767.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int FilterGourdonHardLeaves<TLanes, TBytes>(ReadOnlySpan<ushort> factors, ref int coordinate, int last,
-        uint prime, Span<int> coordinates)
-        where TLanes : struct, IByteVectorLanes<TBytes>
-        where TBytes : struct {
-        Debug.Assert(((last >= -1) && (last <= coordinate) && (coordinate < factors.Length)));
-        var lanes = (TLanes.ByteCount / sizeof(ushort));
-        var factorMask = TLanes.Broadcast(value: CombinatorialFactorMask);
-        var threshold = TLanes.Broadcast(value: ((ushort)prime));
-        ref readonly var source = ref MemoryMarshal.GetReference(span: factors);
-        ref var destination = ref MemoryMarshal.GetReference(span: coordinates);
-        var limit = (coordinates.Length - lanes);
-        var count = 0;
-        var current = coordinate;
-
-        while ((current >= (last + lanes)) && (count <= limit)) {
-            var start = ((current - lanes) + 1);
-            var survivors = TLanes.GreaterThanInt16Mask(left: TLanes.And(left: TLanes.Load(elementOffset: ((nuint)start), source: in source),
-                right: factorMask), right: threshold);
-
-            // Loads ascend in memory; consume the highest set lane first to preserve
-            // descending m and increasing prefix queries. count<=limit bounds the stores.
-            while (survivors != 0) {
-                var lane = BitOperations.Log2(value: survivors);
-
-                Unsafe.Add(elementOffset: count++, source: ref destination) = (start + lane);
-                survivors ^= (1U << lane);
-            }
-            current -= lanes;
-        }
-        return FilterGourdonHardLeafTail(coordinate: ref coordinate, coordinates: coordinates, count: count,
-            current: current, factors: factors, lanes: lanes, last: last, prime: prime);
-    }
-    // The scalar rung of FilterGourdonHardLeaves: four branch-free predicates per step, same contract.
-    public static int FilterGourdonHardLeavesScalar(ReadOnlySpan<ushort> factors, ref int coordinate, int last, uint prime,
-        Span<int> coordinates) {
-        const int Lanes = 4;
-        var limit = (coordinates.Length - Lanes);
-        var count = 0;
-        var current = coordinate;
-
-        while ((current >= (last + Lanes)) && (count <= limit)) {
-            coordinates[count] = current;
-            count += (((factors[current] & CombinatorialFactorMask) > prime) ? 1 : 0);
-            coordinates[count] = (current - 1);
-            count += (((factors[(current - 1)] & CombinatorialFactorMask) > prime) ? 1 : 0);
-            coordinates[count] = (current - 2);
-            count += (((factors[(current - 2)] & CombinatorialFactorMask) > prime) ? 1 : 0);
-            coordinates[count] = (current - 3);
-            count += (((factors[(current - 3)] & CombinatorialFactorMask) > prime) ? 1 : 0);
-            current -= Lanes;
-        }
-        return FilterGourdonHardLeafTail(coordinate: ref coordinate, coordinates: coordinates, count: count,
-            current: current, factors: factors, lanes: Lanes, last: last, prime: prime);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int FilterGourdonHardLeafTail(ReadOnlySpan<ushort> factors, ref int coordinate, int last, uint prime,
-        Span<int> coordinates, int count, int current, int lanes) {
-        // A batch with room for one more vector stopped because fewer than one vector of
-        // coordinates remains; all of them fit. A fuller batch leaves them for the next call.
-        if (count <= (coordinates.Length - lanes)) {
-            for (; (current > last); --current) {
-                coordinates[count] = current;
-                count += (((factors[current] & CombinatorialFactorMask) > prime) ? 1 : 0);
-            }
-        }
-        coordinate = current;
-        return count;
-    }
+    // Sums one filtered batch of hard leaves: divides quotient by each leaf number and reads the prefix count at
+    // floor(quotient/m)-low, negated where the leaf's mask is all ones; subtracted counts those leaves. Leaf i's
+    // negation mask is short i of quotients[GourdonHardLeafBatchSize..], where the filter wrote it.
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static long CountGourdonHardBatch(scoped ReadOnlySpan<int> coordinates, scoped Span<uint> divisors,
-        scoped Span<ulong> quotients, ushort[] factors, ulong quotient, ulong low, ulong previous,
-        ref CombinatorialPrefixCursor prefix) {
-        Debug.Assert(((divisors.Length >= coordinates.Length) && (quotients.Length >= coordinates.Length)));
-        ref var divisor = ref MemoryMarshal.GetReference(span: divisors);
-        ref var leafQuotient = ref MemoryMarshal.GetReference(span: quotients);
-        ref var factor = ref MemoryMarshal.GetArrayDataReference(array: factors);
+    private static long CountGourdonHardBatch(scoped ReadOnlySpan<uint> divisors, int subtracted, scoped Span<ulong> quotients, ulong quotient,
+        ulong low, ulong previous, ref PrimeLeafKernels.CombinatorialPrefixCursor prefix) {
+        var length = divisors.Length;
 
-        for (var index = 0; (index < coordinates.Length); ++index) {
-            Unsafe.Add(elementOffset: index, source: ref divisor) = CombinatorialNumber(coordinate: coordinates[index]);
-        }
-        DivideGourdonQuotients(dividend: quotient, divisors: divisors[..coordinates.Length], quotients: quotients);
+        Debug.Assert(((length <= GourdonHardLeafBatchSize) && (quotients.Length >= (GourdonHardLeafBatchSize + GourdonHardLeafNegationWords))));
+        PrimeDivisionKernels.DivideGourdonQuotients(dividend: quotient, divisors: divisors, quotients: quotients[..length]);
+        ref var leafQuotient = ref MemoryMarshal.GetReference(span: quotients);
+        const nint NegationOffset = ((GourdonHardLeafBatchSize * sizeof(ulong)) / sizeof(short));
 
         // Each count is <=x/y<2^43 since y>cbrt(x). At most 128 leaves
         // contribute less than 2^50 in magnitude; only the outer sum needs Int128.
         // The Moebius sign selects the count's sign without a branch, as a 50/50 data-dependent
-        // branch would mispredict on half of the leaves, and the shared phi term is added once
-        // per batch as previous times the summed signs.
+        // branch would mispredict on half of the leaves: (count^negate)-negate is +count or -count,
+        // so the loop sums count^negate onto the subtracted leaves' count. The shared phi term is
+        // added once per batch as previous times the summed signs, length-2*subtracted.
         var cursor = prefix;
-        ref var coordinate = ref MemoryMarshal.GetReference(span: coordinates);
-        var sum = 0L;
-        var signs = 0L;
+        var sum = (subtracted + (((long)previous) * (length - (2 * subtracted))));
 
-        for (var index = 0; (index < coordinates.Length); ++index) {
-            var count = ((long)cursor.Count(offset: ((uint)(Unsafe.Add(elementOffset: index, source: ref leafQuotient) - low))));
-            // Zero when the leaf adds its count (sign bit set), all ones when it subtracts it.
-            var negate = (((long)((Unsafe.Add(elementOffset: Unsafe.Add(elementOffset: index, source: ref coordinate), source: ref factor)
-                & CombinatorialNegativeMoebius) >> 15)) - 1L);
+        ref readonly var end = ref Unsafe.Add(elementOffset: length, source: ref leafQuotient);
+        ref var negation = ref Unsafe.Add(elementOffset: NegationOffset, source: ref Unsafe.As<ulong, short>(source: ref leafQuotient));
 
-            sum += ((count ^ negate) - negate);
-            signs += negate | 1L;
+        for (ref var leaf = ref leafQuotient; Unsafe.IsAddressLessThan(left: in leaf, right: in end); leaf = ref Unsafe.Add(elementOffset: 1, source: ref leaf)) {
+            sum += ((long)cursor.CountCore(offset: ((nuint)(leaf - low)))) ^ negation;
+            negation = ref Unsafe.Add(elementOffset: 1, source: ref negation);
         }
         prefix = cursor;
-        return (sum + (((long)previous) * signs));
+        return sum;
+    }
+    // Sums the prefix counts at quotients[i]-low from the last quotient to the first, which the prime leaves of one
+    // prime visit in nondecreasing order.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static ulong CountGourdonPrimeBatch(scoped ReadOnlySpan<ulong> quotients, ulong low, ref PrimeLeafKernels.CombinatorialPrefixCursor prefix) {
+        ref var leafQuotient = ref MemoryMarshal.GetReference(span: quotients);
+        var cursor = prefix;
+        var counted = 0UL;
+
+        for (var index = ((nuint)quotients.Length); (index > 0); --index) {
+            counted += cursor.CountCore(offset: ((nuint)(Unsafe.Add(elementOffset: (index - 1), source: ref leafQuotient) - low)));
+        }
+        prefix = cursor;
+        return counted;
     }
 
     private sealed partial class CombinatorialCountingWorkspace {
         private uint[] m_gourdonHardLowerBounds = [];
         private uint[] m_gourdonHardUpperBounds = [];
+        // Quotient stores start at vector multiples inside these aligned buffers. Filter stores start at the running
+        // survivor count and can cross lines even though the buffer starts are aligned.
+        private CacheAlignedArray<uint> m_gourdonHardDivisors;
+        private CacheAlignedArray<ulong> m_gourdonHardQuotients;
 
+        internal void PrepareGourdonHardBatches(out Span<uint> divisors, out Span<ulong> quotients) {
+            if (m_gourdonHardDivisors.Length == 0) {
+                m_gourdonHardDivisors = new(length: GourdonHardLeafBatchSize);
+                m_gourdonHardQuotients = new(length: (GourdonHardLeafBatchSize + GourdonHardLeafNegationWords));
+            }
+            divisors = m_gourdonHardDivisors.Span;
+            quotients = m_gourdonHardQuotients.Span;
+        }
         internal (uint[] LowerBounds, uint[] UpperBounds) PrepareGourdonHardBounds(uint cutoff,
             uint[] primes, ulong[] quotients, int primeCount, int squareRootIndex,
             CancellationToken cancellationToken) {
@@ -304,7 +232,7 @@ public static partial class PrimeExtensions {
             // correction count reuses retained arrays, even when the cutoff shrinks.
             // The two arrays retain eight bytes per active prime; only this setup
             // divides by p^2 and, in the square-free region, by p for the y/p bound.
-            for (var index = (CombinatorialTinyPrimeCount + 1); (index <= primeCount); ++index) {
+            for (var index = (PrimeLeafKernels.CombinatorialTinyPrimeCount + 1); (index <= primeCount); ++index) {
                 if ((index & 16383) == 0) { cancellationToken.ThrowIfCancellationRequested(); }
 
                 var prime = primes[index];

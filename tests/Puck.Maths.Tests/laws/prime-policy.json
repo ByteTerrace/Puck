@@ -43,7 +43,7 @@
   {
     "Id": "prime-exploration.presieve-proof-boundary",
     "Tier": "Default",
-    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }, {"Type": "Puck.Maths.PrimeExploration", "Name": "FilterSmallPrimes"}],
+    "Members": [{ "Type": "Puck.Maths.PrimeExploration", "Name": "Enumerate" }, { "Type": "Puck.Maths.PrimeExploration", "Name": "Count" }, {"Type": "Puck.Maths.PrimeSieveKernels", "Name": "FilterSmallPrimes"}],
     "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Count and ordered enumeration cross 65537 squared in tiny presieved segments; the square must be rejected while proven smaller survivors remain.", "Against": "Oracles.ExactPrimality uses integer trial division and BigInteger witnesses without the sieve, wheel coordinates or Lucas recurrence. ENVELOPE: correctness at the proof boundary is checked; the saved code inspection establishes omission of unnecessary decisions below it.", "Shared": "", "Citation": "", "Absolute": "" }]
   },
   {

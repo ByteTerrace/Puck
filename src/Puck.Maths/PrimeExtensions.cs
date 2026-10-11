@@ -872,15 +872,9 @@ public static partial class PrimeExtensions {
         public static uint Divide(uint value, uint[] divisors, ulong[] reciprocals, uint index) => ((uint)((((UInt128)reciprocals[index]) * value) >> 64));
     }
     private readonly struct QuotientCountWord64 : IQuotientCountWidth<ulong> {
-        // floor(2^64/d): the high product underestimates the quotient by at most one; the exact remainder
-        // comparison supplies that possible missing unit.
-        public static ulong Reciprocal(uint divisor) => (ulong.MaxValue / divisor);
+        public static ulong Reciprocal(uint divisor) => PrimeDivisionKernels.FloorReciprocalCore(divisor: divisor);
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong Divide(ulong value, uint[] divisors, ulong[] reciprocals, uint index) {
-            var divisor = divisors[index];
-            var quotient = ((ulong)((((UInt128)value) * reciprocals[index]) >> 64));
-
-            return (quotient + (((value - (quotient * divisor)) >= divisor) ? 1UL : 0UL));
-        }
+        public static ulong Divide(ulong value, uint[] divisors, ulong[] reciprocals, uint index) =>
+            PrimeDivisionKernels.DivideByFloorReciprocalCore(dividend: value, divisor: divisors[index], reciprocal: reciprocals[index]);
     }
 }

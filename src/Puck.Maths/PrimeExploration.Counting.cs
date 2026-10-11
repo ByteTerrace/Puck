@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
 
@@ -13,7 +14,30 @@ public static partial class PrimeExploration {
     // stores all primes through sqrt(x), and the +1 retains the square p_i*p_i on the diagonal.
     // Formula and streamed quotient ordering: primecount src/P2.cpp, BSD-2-Clause; see the notices.
     // The Gourdon caller supplies cutoff >= floor(cuberoot(value)), making the upper scan O(value^(2/3)).
+    /// <summary>Counts the products of two primes, the smaller above <paramref name="cutoff"/>, that do not exceed
+    /// <paramref name="value"/>: the streamed correction P2(x, a) the Gourdon counter subtracts.</summary>
+    /// <param name="value">The inclusive bound, above <see cref="uint.MaxValue"/>.</param>
+    /// <param name="cutoff">The exclusive bound on the smaller prime: at least
+    /// <c>floor(value / 2^48)</c> and below the integer square root of <paramref name="value"/>. The lower bound keeps
+    /// every leaf quotient below <see cref="PrimeDivisionKernels.GourdonQuotientLimit"/>. A cutoff at or above the
+    /// integer cube root keeps the upper scan to <c>O(value^(2/3))</c>; a smaller admissible one costs more.</param>
+    /// <param name="cancellationToken">Observed between segments.</param>
+    /// <param name="profile">Receives the counted work, or <see langword="null"/>.</param>
+    /// <returns>The count of products <c>p·q</c> of primes with <c>cutoff &lt; p ≤ q</c> and <c>p·q ≤ value</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> does not exceed <see cref="uint.MaxValue"/>,
+    /// or <paramref name="cutoff"/> is below <c>floor(value / 2^48)</c> or not below the integer square root of
+    /// <paramref name="value"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled.</exception>
+    /// <remarks>The law <c>prime-selection.gourdon-semiprime-count-vs-oracle</c> compares the count with a direct
+    /// enumeration.</remarks>
     public static ulong CountSemiprimes(ulong value, uint cutoff, CancellationToken cancellationToken, PrimeCountWorkBuilder? profile = null) {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: value, other: ((ulong)uint.MaxValue), paramName: nameof(value));
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: ((ulong)cutoff), other: (value / PrimeDivisionKernels.GourdonQuotientLimit), paramName: nameof(cutoff));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((ulong)cutoff), other: value.SquareRoot(), paramName: nameof(cutoff));
+        return CountSemiprimesCore(cancellationToken: cancellationToken, cutoff: cutoff, profile: profile, value: value);
+    }
+
+    internal static ulong CountSemiprimesCore(ulong value, uint cutoff, CancellationToken cancellationToken, PrimeCountWorkBuilder? profile) {
         cancellationToken.ThrowIfCancellationRequested();
         var root = ((uint)value.SquareRoot());
 
@@ -37,7 +61,6 @@ public static partial class PrimeExploration {
             segmentBytes: CacheSegmentBytes, work: profile?.SemiprimeForwardBitmap);
         return counter.Sum;
     }
-
     // One-based selection from an inclusive interval. Count is the ordinal consumed in traversal order,
     // or the exact interval count when Selected is zero. Neither direction repeats survivor decisions.
     internal static ulong SelectPrime(ulong low, ulong high, ulong ordinal, CancellationToken cancellationToken, PrimeRequestWorkBuilder? profile = null) =>
@@ -211,8 +234,8 @@ public static partial class PrimeExploration {
         private readonly DescendingPrimeStream m_primes;
         private readonly ulong m_value;
 
-        private readonly uint[] m_divisors = new uint[PrimeExtensions.GourdonQuotientBatchSize];
-        private readonly ulong[] m_quotients = new ulong[(PrimeExtensions.GourdonQuotientBatchSize + 1)];
+        private readonly uint[] m_divisors = new uint[PrimeDivisionKernels.GourdonQuotientBatchSize];
+        private readonly ulong[] m_quotients = new ulong[(PrimeDivisionKernels.GourdonQuotientBatchSize + 1)];
         // Holds a final segment whose length is not a whole number of words, zero-padded.
         private ulong[] m_padded = [];
 
@@ -304,15 +327,9 @@ public static partial class PrimeExploration {
             return words;
         }
         private void Refill() {
-            var count = 0;
+            var count = m_primes.Next(destination: m_divisors);
 
-            while (count < m_divisors.Length) {
-                var prime = m_primes.Next();
-
-                if (prime == 0) { break; }
-                m_divisors[count++] = prime;
-            }
-            PrimeExtensions.DivideGourdonQuotients(dividend: m_value, divisors: m_divisors.AsSpan(length: count, start: 0), quotients: m_quotients);
+            PrimeDivisionKernels.DivideGourdonQuotients(dividend: m_value, divisors: m_divisors.AsSpan(length: count, start: 0), quotients: m_quotients);
             m_quotients[count] = ulong.MaxValue;
             m_next = 0;
             m_count = count;
@@ -347,29 +364,51 @@ public static partial class PrimeExploration {
             m_consumer = m_window.Consume;
         }
 
+        // Writes the next descending primes into destination and returns how many it wrote; fewer than its length
+        // means the stream is exhausted, and every later call writes none. The current word and its origin stay in
+        // locals, so each prime is decoded without a round trip through the stream's fields.
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal uint Next() {
-            while (true) {
-                if (m_bits != 0) {
-                    var bit = (63 - BitOperations.LeadingZeroCount(value: m_bits));
+        internal int Next(Span<uint> destination) {
+            var bits = m_bits;
+            var word = m_word;
+            var words = MemoryMarshal.Cast<byte, ulong>(span: m_window.PaddedBitmap);
+            var origin = ((uint)(((m_blockLow + ((ulong)(((uint)word) * sizeof(ulong)))) * PrimeWheel30.Modulus)));
+            var count = 0;
 
-                    m_bits &= ~(1UL << bit);
-                    return ((uint)(((m_blockLow + ((uint)((m_word * sizeof(ulong)) + (bit >> 3)))) * PrimeWheel30.Modulus) + PrimeWheel30.NumericResidues[bit & (PrimeWheel30.ChannelCount - 1)]));
-                }
-                if (m_word != 0) {
-                    m_bits = MemoryMarshal.Cast<byte, ulong>(span: m_window.PaddedBitmap)[--m_word];
+            while (count < destination.Length) {
+                if (bits != 0) {
+                    var bit = BitOperations.LeadingZeroCount(value: bits) ^ 63;
+
+                    // BZHI clears the top bit in one step after the count; it is a fast BMI2 instruction everywhere.
+                    bits = (Bmi2.X64.IsSupported ? Bmi2.X64.ZeroHighBits(index: ((uint)bit), value: bits) : bits ^ (1UL << bit));
+                    destination[count++] = ((origin + ((uint)((bit >> 3) * PrimeWheel30.Modulus)))
+                        + PrimeWheel30.NumericResidues[bit & (PrimeWheel30.ChannelCount - 1)]);
                     continue;
                 }
-                if (Fill()) { continue; }
+                if (word != 0) {
+                    bits = words[--word];
+                    origin -= ((uint)PrimeWheel30.WordIntegers);
+                    continue;
+                }
+                if (Fill()) {
+                    bits = 0;
+                    word = m_word;
+                    words = MemoryMarshal.Cast<byte, ulong>(span: m_window.PaddedBitmap);
+                    origin = ((uint)(((m_blockLow + ((ulong)(((uint)word) * sizeof(ulong)))) * PrimeWheel30.Modulus)));
+                    continue;
+                }
                 ReadOnlySpan<uint> exceptional = [5, 3, 2];
 
-                while (m_exceptional < exceptional.Length) {
+                while ((m_exceptional < exceptional.Length) && (count < destination.Length)) {
                     var prime = exceptional[m_exceptional++];
 
-                    if ((prime > m_lowExclusive) && (prime <= m_high)) { return prime; }
+                    if ((prime > m_lowExclusive) && (prime <= m_high)) { destination[count++] = prime; }
                 }
-                return 0;
+                break;
             }
+            m_bits = bits;
+            m_word = word;
+            return count;
         }
 
         private bool Fill() {

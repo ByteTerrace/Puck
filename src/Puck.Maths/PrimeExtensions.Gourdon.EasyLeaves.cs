@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Puck.Maths;
 
@@ -14,12 +13,18 @@ public static partial class PrimeExtensions {
         var counter = new GourdonEasyLeafCounter(cancellationToken: cancellationToken, cutoff: cutoff, profile: profile, tables: tables,
             value: value, xStar: xStar);
 
-        // A 16-KiB U(30) bitmap plus its 8-KiB word prefixes stays within a 32-KiB L1.
-        // One persistent sieve serves every A/C query below sqrt(x), including the final partial word.
+        // The segment size is a conservative choice: the 16-KiB U(30) bitmap and its 8-KiB word prefixes take 24 KiB
+        // together, and the size changes only how many segments a count visits. One persistent sieve serves every A/C
+        // query below sqrt(x), including the final partial word.
         PrimeExploration.VisitPrimeCountSegments(highExclusive: ((uint)value.SquareRoot()), segmentBytes: 16384,
             visitor: counter.Consume, cancellationToken: cancellationToken);
         return counter.Sum;
     }
+
+    // The batch size is a conservative choice. With its 2-KiB buffer of bit positions, the bitmap and word prefixes
+    // come to 26 KiB, and the batch's 256 streamed primes and reciprocals read 3 KiB more. SumCounts admits far larger
+    // batches: a 16-KiB segment allows 32752 terms.
+    private const int GourdonEasyLeafBatchSize = 256;
 
     private sealed class GourdonEasyLeafCounter {
         private readonly ulong m_value;
@@ -34,9 +39,12 @@ public static partial class PrimeExtensions {
         private readonly ulong m_cutoffQuotient;
         private readonly CombinatorialFactorTables m_tables;
         private readonly uint[] m_primes;
+        private readonly double[] m_reciprocals;
         private readonly CancellationToken m_cancellationToken;
         private readonly PrimeCountWorkBuilder? m_profile;
-        private readonly ulong[] m_quotients = new ulong[GourdonQuotientBatchSize];
+        // SumPi's batch: the segment bit position of each quotient. The reciprocal rungs store whole vectors of them,
+        // which stay inside cache lines from this aligned start.
+        private readonly CacheAlignedArray<ulong> m_positions = new(length: GourdonEasyLeafBatchSize);
 
         internal Int128 Sum { get; private set; }
 
@@ -47,6 +55,7 @@ public static partial class PrimeExtensions {
             m_xStar = xStar;
             m_tables = tables;
             m_primes = tables.Primes;
+            m_reciprocals = tables.Reciprocals;
             m_cubeRoot = CombinatorialCubeRoot(value: value);
             m_sqrtCutoff = cutoff.SquareRoot();
             m_piCutoff = tables.CountPrimes(value: cutoff);
@@ -73,7 +82,7 @@ public static partial class PrimeExtensions {
 
             // z=y. C1's square-free multiplier is a prime or two distinct primes.
             if (low < m_cutoff) {
-                var first = Math.Max(val1: ((uint)CombinatorialTinyPrimeCount), val2: m_piQuotientCubeRoot);
+                var first = Math.Max(val1: ((uint)PrimeLeafKernels.CombinatorialTinyPrimeCount), val2: m_piQuotientCubeRoot);
                 var minimumPrime = ((uint)Math.Min(val1: (m_cutoffQuotient / high), val2: m_sqrtCutoff));
 
                 first = (Math.Max(val1: first, val2: Math.Max(val1: piSqrtLow, val2: m_tables.CountPrimes(value: minimumPrime))) + 1U);
@@ -83,7 +92,7 @@ public static partial class PrimeExtensions {
                 }
             }
 
-            var firstC2 = Math.Max(val1: ((uint)CombinatorialTinyPrimeCount),
+            var firstC2 = Math.Max(val1: ((uint)PrimeLeafKernels.CombinatorialTinyPrimeCount),
                 val2: Math.Max(val1: m_piQuotientCubeRoot, val2: m_piSqrtCutoff));
             var minimumC2Prime = ((uint)Math.Min(val1: (xHigh / m_cutoff), val2: m_xStar));
 
@@ -214,32 +223,29 @@ public static partial class PrimeExtensions {
             first = (conjugateHigh + 1U);
             return (sum + SumPi(first: first, index: index, last: piMinimumClustered, multiplier: 1, quotient: quotient, segment: in segment));
         }
-        // Sums pi(quotient/p_i) for i in [first,last], scaled by multiplier, plus (2-index) per term. Quotients are
-        // divided in batches by the exact estimate-and-correct rungs, then looked up from register-held state.
+        // Sums pi(quotient/p_i) for i in [first,last], scaled by multiplier, plus (2-index) per term. Each batch divides by
+        // the primes' stored reciprocals into the quotients' segment bit positions, then sums their counts.
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private Int128 SumPi(ulong quotient, uint first, uint last, uint index, uint multiplier, in PrimeExploration.PrimeCountSegment segment) {
             if (first > last) { return 0; }
             var count = ((last - first) + 1U);
-            var lookup = segment;
             var primes = m_primes.AsSpan(length: ((int)count), start: ((int)first));
-            var quotients = m_quotients.AsSpan();
-            ref var quotientsStart = ref MemoryMarshal.GetArrayDataReference(array: m_quotients);
+            var reciprocals = m_reciprocals.AsSpan(length: ((int)count), start: ((int)first));
+            var positions = m_positions.Span;
+            var low = segment.Low;
             // The unsigned subtotal fits: fewer than Array.MaxLength terms, each bounded by pi(uint.MaxValue).
             var sum = 0UL;
 
             while (!primes.IsEmpty) {
                 m_cancellationToken.ThrowIfCancellationRequested();
-                var length = Math.Min(val1: primes.Length, val2: quotients.Length);
+                var length = Math.Min(val1: primes.Length, val2: positions.Length);
 
-                DivideGourdonQuotients(dividend: quotient, divisors: primes[..length], quotients: quotients);
-                // A chunk-local subtotal stays in a register; the outer sum is live across the division call.
-                var chunk = 0UL;
-
-                for (var offset = 0; (offset < length); ++offset) {
-                    chunk += lookup.Count(value: Unsafe.Add(elementOffset: offset, source: ref quotientsStart));
-                }
-                sum += chunk;
+                PrimeDivisionKernels.DivideGourdonSegmentPositions(dividend: quotient, divisors: primes[..length], low: low, positions: positions,
+                    reciprocals: reciprocals[..length]);
+                // A fresh reference keeps the lookup's base in a register rather than in the spilled span local.
+                sum += segment.SumCounts(length: length, positions: in m_positions.Reference);
                 primes = primes[length..];
+                reciprocals = reciprocals[length..];
             }
             return ((((Int128)sum) * multiplier) + (((Int128)count) * (2 - ((Int128)index))));
         }

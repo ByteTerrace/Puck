@@ -4,7 +4,7 @@ using System.Runtime.Intrinsics;
 
 namespace Puck.Maths;
 
-public static partial class PrimeExploration {
+public static partial class PrimeSieveKernels {
     private interface IPatternWrite { static abstract bool Initialize { get; } }
     private readonly struct InitializePattern : IPatternWrite { public static bool Initialize => true; }
     private readonly struct IntersectPattern : IPatternWrite { public static bool Initialize => false; }
@@ -14,6 +14,7 @@ public static partial class PrimeExploration {
     // integers coprime to that primorial, never leaves more than 491 consecutive non-candidates: at most two consecutive
     // all-zero 64-bit words, and a candidate in any 17 consecutive wheel bytes. Restoring the primes themselves in the
     // first blocks only adds candidates.
+    /// <summary>The largest prime whose multiples the presieve patterns remove.</summary>
     public const uint PreSievePrimeLimit = 163;
 
     // Pairing large primes with smaller ones keeps the combined periods compact. The grouping is inspired by
@@ -43,7 +44,14 @@ public static partial class PrimeExploration {
         /// The pattern as a read-only view, <c>First · Second · Third</c> bytes long; bit <c>b</c> of byte <c>i</c> is set
         /// exactly when <c>30 · i + </c><see cref="PrimeWheel30.NumericResidues"/><c>[b]</c> is coprime to the group's primes.
         /// </returns>
-        public static ReadOnlySpan<byte> Period(int group) => PeriodTable[group];
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="group"/> is negative or not below <see cref="Count"/>.</exception>
+        public static ReadOnlySpan<byte> Period(int group) {
+            ArgumentOutOfRangeException.ThrowIfNegative(value: group, paramName: nameof(group));
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: group, other: Count, paramName: nameof(group));
+            return PeriodCore(group: group);
+        }
+
+        internal static ReadOnlySpan<byte> PeriodCore(int group) => PeriodTable[group];
     }
 
     private static byte[][] CreateSmallPrimePatterns() {
@@ -73,14 +81,18 @@ public static partial class PrimeExploration {
         return patterns;
     }
 
+    /// <summary>Initializes a thirty-wheel bitmap with the multiples of primes 7 through 163 removed, retaining those primes themselves.</summary>
+    /// <param name="segment">Receives one byte per block of thirty integers, in ascending numeric residue order.</param>
+    /// <param name="blockLow">The first block's index, so its first integer is mathematically <c>30 · blockLow</c>.</param>
+    /// <remarks>Every span length and block index is accepted. The caller masks interval endpoints and the integer one.</remarks>
     public static void FilterSmallPrimes(Span<byte> segment, ulong blockLow) {
         var count = SmallPrimePatterns.Count;
 
         for (var group = 0; (group < count); group += 4) {
-            var first = SmallPrimePatterns.Period(group: group);
-            var second = SmallPrimePatterns.Period(group: (group + 1));
-            var third = SmallPrimePatterns.Period(group: (group + 2));
-            var fourth = SmallPrimePatterns.Period(group: (group + 3));
+            var first = SmallPrimePatterns.PeriodCore(group: group);
+            var second = SmallPrimePatterns.PeriodCore(group: (group + 1));
+            var third = SmallPrimePatterns.PeriodCore(group: (group + 2));
+            var fourth = SmallPrimePatterns.PeriodCore(group: (group + 3));
             var a = ((int)(blockLow % ((ulong)first.Length)));
             var b = ((int)(blockLow % ((ulong)second.Length)));
             var c = ((int)(blockLow % ((ulong)third.Length)));

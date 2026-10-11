@@ -9,6 +9,7 @@ public types:
 | `PrimeExploration` | `TryRandomPrime`, `Enumerate(low, high, onPrime, cancellationToken)` and `Count(low, high, cancellationToken)` |
 | `PrimeConstellation` | Prime patterns such as twins and quadruplets, enumerated over an interval |
 | `PrimeWheel30` | The coordinates and multiplication of the eight units modulo thirty |
+| `PrimeKernels`, `PrimeDivisionKernels`, `PrimeLeafKernels`, `PrimeSieveKernels` | The rungs beneath those entry points, public so that a law can drive each one: the word-sized primality and rank machinery, the leaf-quotient and floor-reciprocal divisions, the hard-leaf survivor filters with the leaf sieve and its prefix cursor, and the presieve, packet and wheel tables. See [the kernel classes](#the-kernel-classes). |
 
 `SymmetryLattice` owns the E8 Coxeter data the wheel is built from.
 
@@ -99,48 +100,123 @@ triangular term that cancels exactly, so the streamed semiprime count P2
 supplies their difference; the remaining Sigma terms, the Phi0 ordinary leaves,
 the A+C easy leaves and the D hard leaves are evaluated separately.
 
-The cutoff `y` uses
-[primecount's cubic-logarithm tuning](https://github.com/kimwalisch/primecount/blob/master/src/util.cpp)
-within exact integer bounds: above the integer cube root, below the integer
-square root, and at most 134217728. Floating-point tuning changes the work;
-exact integer formulas determine the answer. The factor tables keep only
+The cutoff `y` is `r / max(14, 0.84 ln r)`, with `r = floor(sqrt(x))`, within exact integer
+bounds: above the integer cube root, below the integer square root, and at most
+134217728. The count's cost is a constant plus `s·x/y` for the two sieves (the
+hard-leaf sieve and the semiprime sieve, about 1.3 cycles per integer between
+them) plus `l(x)·y` for the tables, easy-leaf terms and hard-leaf special-factor
+coordinates, whose per-`y` cost grows with `x`. That cost is least at
+`y = sqrt(s·x/l(x))`; the counted per-unit costs put `sqrt(x)/y` at 14 from 10^13
+to 10^15, 15 to 16 near 10^16 and 10^17, and 17 to 18 near 10^18 on the AVX-512
+and AVX2 kernels and on the Zen 2 and Alder Lake loop models alike. The minimum is
+wide: a divisor within 2 of the best costs about 1% at any size. The logarithm
+uses the deterministic fixed-point kernel; binary64 only scales its result and
+proposes the cutoff. Evaluating at `r` keeps the cutoff constant between square
+boundaries and non-decreasing across them, within one unit of
+`floor(sqrt(x)) / max(14, 0.42 ln x)`. The cutoff moves work between the phases and never
+changes the count. The factor tables keep only
 residues coprime to 30. Each entry combines the least prime factor and the
 Möbius sign in sixteen bits, with zero for a repeated prime factor; prime counts
-use a bitmap and a prefix count per word. The tables need about 7/12 of a byte
-per covered integer plus four bytes per stored prime, and their capacity grows
-in 65536-entry steps.
+use a bitmap and a prefix count per word. Each stored prime keeps its binary64
+reciprocal beside it. The tables need about 7/12 of a byte per covered integer
+plus twelve bytes per stored prime, and their capacity grows in 65536-entry
+steps.
 
 - **Ordinary leaves** use a periodic partial sieve through 19.
 - **Easy leaves** use reflected grouping and one persistent sieve through the
   square root, with a 16 KiB bitmap and 8 KiB prefix-count array. Each segment
-  is copied once into zero-padded words, so a prime-count lookup reads one word,
-  one prefix and one mask with no edge branch.
+  is copied once into zero-padded words followed by one zero word, and each
+  word's prefix counts the segment's primes through that word. Every easy-leaf
+  divisor is a stored prime, so its quotients come from the reciprocal rungs
+  below, which turn each quotient as they divide into its bit position: the
+  number of integers coprime to 30 from the segment's start through the
+  quotient, packed with the word in the high 32 bits and the bit within it in
+  the low six. A prime-count lookup then reads the two halves, the word's
+  prefix and the word, and subtracts the primes at and above the bit, a shift
+  and a population count with no mask table and no edge branch.
 - **Hard leaves** use 32 KiB wheel segments with incrementally updated
   population counters. Crossing off a prime unrolls its eight-step wheel cycle,
-  which advances exactly that prime's number of wheel bytes. Primes above the
-  square root of the cutoff are filtered in batches of at most 128 by
-  fixed-width SIMD comparisons of 32, 16 or 8 packed factors, with a scalar tail;
-  the masks keep exactly the factors the scalar predicate keeps. Each batch sum
-  fits 64 bits, and the full sums use signed 128-bit arithmetic.
+  which advances exactly that prime's number of wheel bytes. Each counter block
+  covers eight bitmap words, 64 bytes, and keeps two 16-bit slots whose sum
+  modulo 2^16 is its count, so a block's counters are one 32-bit word and one
+  512-bit vector holds sixteen blocks' worth. The sieve keeps its counters, its
+  word prefix masks, its window masks and its bitmap in one pinned, cache-line
+  aligned store at fixed offsets, so a prefix cursor addresses all four from
+  the bitmap's address. A small prime instead masks each 128-byte stride of two
+  blocks with one period of masks and recounts each block in registers. The
+  512-bit kernel, on AVX-512 VBMI, counts a byte's low seven bits with one
+  two-table byte permute and adds its top bit under a mask; the AVX2 and SSSE3
+  kernels look up both nibbles in a sixteen-entry table, and a 512-bit host
+  without VBMI takes the AVX2 kernel. Each kernel writes both blocks' counts with
+  one 64-bit store, splitting each count between the block's two slots. A
+  counted crossing costs about two vector steps, so the limit is 16SW/(S+2W)
+  bytes per wheel cycle for the 128-byte stride S and the kernel's vector width
+  W in bytes: 512, 341 and 204 at 512, 256 and 128 bits. Every larger prime's
+  k-th crossing of a cycle
+  decrements slot k modulo 2, so crossings that share a slot are two wheel
+  steps apart, at least 6q bytes for a prime 30q+r, and share a block only
+  below 320; each crossing also prefetches its own byte one wheel cycle on, so
+  a prime's next cycle is in the first-level cache when its crossings reach
+  it. A prefix query two or more words past its cursor counts
+  from its block's start. The 512- and 256-bit SIMD rungs multiply-add the
+  sixteen blocks' slots ending at the query's block by a window mask, adding
+  whole windows first for longer walks, and count the query block's words
+  before the query through the eight words ending at it; the scalar rung sums
+  the blocks one by one and the words through eight masked population counts.
+  Primes up to the square root of the cutoff are
+  filtered in batches of at most 128 by fixed-width SIMD comparisons of 32, 16
+  or 8 packed factors, with a scalar tail; the masks keep exactly the factors
+  the scalar predicate keeps, and the filter writes each surviving leaf's
+  number and Möbius sign for the batch. The survivors move into place without a
+  loop over them: AVX-512 VBMI2 compresses them, and the AVX2 and SSSE3 rungs
+  shuffle each eight lanes by a table entry chosen by their survivor mask.
+  The 512- and 256-bit filters pin the factor span and consume one masked head
+  to align the following loads to their vector width; those loads never cross
+  a 64-byte line. Short heads and tails can still cross a line. The VBMI2 rung
+  packs offsets and signs in one compress and omits the upper sixteen-divisor
+  store when at most sixteen lanes survive, reducing output stores from 192
+  to 128 bytes for those vectors. AVX2 keeps its two eight-lane packs and
+  four stores per sixteen input factors; SSSE3 and scalar remain fallbacks.
+  The driver prepares two floor reciprocals per segment instead of dividing
+  twice per prime, the same division the widened quotient-counting recurrence
+  uses for its divisors. For a positive divisor d, r=floor((2^64-1)/d) makes
+  the high half of n*r exact or one low for every ulong dividend, including
+  d=1 and 1e19-scale n. One nonoverflowing remainder comparison supplies the
+  missing unit. Each batch sum fits 64 bits, and the full sums use signed
+  128-bit arithmetic.
 - **Leaf quotients** divide one dividend by runs of divisors with 512-, 256- or
   128-bit SIMD rungs and a scalar rung. A rung estimates each quotient in
   binary64 and corrects it with one exact integer step: for a dividend below
   2^64, a divisor below 2^32 and a quotient below 2^48, the estimate lies within
   1/8 of the true quotient, so the corrected quotient is exact on every host
-  and at every width. No floating-point value reaches the count.
+  and at every width. The correction's 64-bit product of a quotient and a
+  32-bit divisor takes two 32-bit multiplies on the 256- and 128-bit rungs,
+  which have no 64-bit multiply. The easy leaves' reciprocal rungs (512- and 256-bit SIMD
+  and scalar) multiply by the divisor's stored binary64 reciprocal instead of
+  dividing; with that extra rounding the estimate still lies within 1/4 of the
+  quotient, and the same integer step corrects it. Their divisors stay below
+  2^31, so the correction needs only the low 32 bits of the remainder, one
+  32-bit multiply. A rung divides the quotient's offset by 30 with one multiply
+  and a shift, finds the units below its remainder in a sixteen-entry byte
+  shuffle, and packs word and bit with one more multiply; on AVX-512 VBMI the
+  fraction bits of the division's product index a 64-entry permute instead,
+  with no remainder formed. The windowed sieve divides
+  each streamed batch of upper base primes with the dividing rungs. No
+  floating-point value reaches the count.
 - **The semiprime correction** streams primes downward from the square root in
   1 MiB reverse bitmaps while the forward sieve advances through their
   increasing quotients in 32 KiB segments. Each query reads one bitmap word
   under a mask; no square-root-sized prime table is kept.
 
-The Gourdon kernels, the leaf-quotient rungs and the sieve's marking, pattern
-and segment kernels compile fully optimized on their first call, because a
+The Gourdon kernels, the factor-table sieve, the leaf-quotient rungs and the
+sieve's marking, pattern and segment kernels compile fully optimized on their
+first call, because a
 count spends seconds in them: under tiered compilation an unoptimized method
 waits for promotion, which a single-processor host delays by a second or more
 whenever new code is compiled. A rank search keeps its factor tables and leaf
 buffers between counts; they become collectable after the request. Near the top
-of `ulong` the cutoff is about 116 million and the remaining sieve frontier
-about 159 billion integers. The implementation is single-threaded.
+of `ulong` the cutoff is the table-capacity limit of 134217728 and the remaining
+sieve frontier about 137 billion integers. The implementation is single-threaded.
 
 ### A random prime
 
@@ -237,8 +313,9 @@ additional memory.
 ### Segments and the presieve
 
 Each segment stores one byte per thirty integers, one bit per unit residue in
-ascending order, and starts at a 64-byte boundary. A segment holds 32 KiB, the
-size of a level-one data cache, or less when the interval is shorter. The
+ascending order, and starts at a 64-byte boundary. A segment holds 32 KiB, a
+conservative size for a level-one data cache, or less when the interval is
+shorter. The
 windowed policy repeats its upper-base pass for every segment, so its segments
 hold 16744448 bytes, 16 MiB less one 32 KiB chunk, which lets the bitmap and its
 alignment pad share one 16 MiB pooled array. Two, three and five are
@@ -297,9 +374,11 @@ channel fixes which bit each phase clears; small tables supply the byte carries.
   [primesieve's large-prime marker](https://github.com/kimwalisch/primesieve/blob/v12.15/src/EratBig.cpp),
   with transitions generated from the local tables.
 - **Windowed segments** stream every upper base prime through each segment
-  again. One division finds a prime's first multiple at or above the segment
-  start, a wide product rejects primes with no multiple in the segment before a
-  second division bounds the rest, and the wheel steps mark the multiples. No
+  again. A batch of streamed coordinates decodes to primes, and one leaf-quotient
+  rung divides the segment start by the whole batch, giving each prime's first
+  multiple at or above the segment start. A table rounds that multiplier up to a
+  unit modulo 30, a wide product rejects primes with no wheel multiple in the
+  segment, and the wheel steps mark the multiples. No
   per-prime state outlives the segment, so the workspace is independent of the
   number of base primes while base generation repeats once per segment.
 
@@ -400,3 +479,32 @@ An eight-bit channel mask rejects anchors whose tuple meets a factor 2, 3 or 5;
 exceptional anchors 2, 3 and 5 are checked separately, and the remaining members
 are decided individually. Anchors come from `PrimeExploration.Enumerate` with
 the same cancellation contract.
+
+## The kernel classes
+
+The counting, selection and sieving paths are built from kernels that are
+public so a law can drive each rung alone and compare it with a direct oracle.
+Four classes hold them, one per domain:
+
+| Class | Holds |
+|---|---|
+| `PrimeKernels` | The word-sized primality and factorization machinery, the odd-prime rank `CountOddPrimesBelow` and the Selfridge symbol table `SelfridgeSymbol` |
+| `PrimeDivisionKernels` | The leaf quotients `DivideGourdonQuotients512`, `256`, `128` and `Scalar`, the packed bitmap positions `DivideGourdonSegmentPositions512`, `256` and `Scalar` with their units-below lookups, and division by a fixed divisor through `FloorReciprocal` and `DivideByFloorReciprocal` |
+| `PrimeLeafKernels` | The hard-leaf survivor filters `FilterGourdonHardLeavesCompress`, `Pack256`, `Pack128` and `Scalar`, the thirty-wheel leaf sieve `CombinatorialLeafSieve` with its `CombinatorialPrefixCursor`, and the wheel tables they read |
+| `PrimeSieveKernels` | The presieve groups and patterns, `FilterSmallPrimes`, the packet residues and `PacketOffset`, and the wheel's clear-mask and unit-count tables |
+
+Each method that could otherwise read or write out of bounds is a checked shell
+over an internal core with the same body. The shell checks every span length,
+index, alignment and bound the kernel relies on, and, for the quotient and
+segment-position rungs, makes one pass over the divisors to check each divisor,
+reciprocal and quotient range. It throws
+`ArgumentOutOfRangeException` or `ArgumentException` naming the parameter
+before it writes anything. A rung that executes an instruction set directly
+(the AVX-512 VBMI lookup, the AVX-512 VBMI2, AVX2 and SSSE3 hard-leaf filters,
+the AVX-512BW and AVX2 prefix windows) throws `PlatformNotSupportedException`
+on a host without it. The counting engine's loops call the cores directly, so
+the checks cost them nothing. What a shell cannot check, such as the order of a
+prime list or a cursor made stale by a later crossing, is the caller's, and each
+member's documentation says so. The law
+`prime-selection.kernel-shells-refuse-violations` drives every shell with each
+violated precondition.

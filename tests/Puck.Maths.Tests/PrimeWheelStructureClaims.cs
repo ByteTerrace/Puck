@@ -11,9 +11,6 @@ internal static partial class Subjects {
         0, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 7, 7, 15, 15,
         15, 15, 31, 31, 63, 63, 63, 63, 127, 127, 127, 127, 127, 127, 255,
     ];
-    // MarkPacketPrime's written forms: distance k uses gap g and multiplier m, offset k uses coefficient m - 1.
-    private static readonly (int Phase, int Gap, int Multiplier)[] PacketDistanceForms = [(0, 6, 1), (1, 4, 7), (2, 2, 11), (3, 4, 13), (7, 2, 29)];
-    private static readonly (int Phase, int Coefficient, int Multiplier)[] PacketOffsetForms = [(1, 6, 7), (2, 10, 11), (3, 12, 13), (4, 16, 17), (5, 18, 19), (6, 22, 23), (7, 28, 29)];
     // OEIS A048670, a(n) = Jacobsthal's function of the product of the first n primes, for n = 4..9 (7# through 23#).
     private static readonly int[] PublishedJacobsthalPrimorials = [10, 14, 22, 26, 34, 40];
 
@@ -97,8 +94,29 @@ internal static partial class Subjects {
                 if (units[bit] <= remainder) { expected |= (1 << bit); }
             }
             if ((PrimeWheel30.PrefixMask(remainder: remainder) != expected) || (PrimeWheel30.PrefixMasks[remainder] != expected)
-                || (LiteralNumericPrefixMasks[remainder] != expected) || (PrimeExploration.WheelUnitsThrough.Counts[remainder] != BitOperations.PopCount(value: ((uint)expected)))) {
+                || (LiteralNumericPrefixMasks[remainder] != expected) || (PrimeSieveKernels.WheelUnitsThrough.Counts[remainder] != BitOperations.PopCount(value: ((uint)expected)))) {
                 return $"the prefix mask or unit count through remainder {remainder} is not {expected}";
+            }
+            var phase = Array.FindIndex(array: walk, match: (unit) => (unit >= remainder));
+            var roundUp = ((walk[phase] - remainder) << 3) | phase;
+
+            if ((PrimeWheel30.UnitRoundUp(remainder: remainder) != roundUp) || (PrimeWheel30.UnitRoundUps[remainder] != roundUp)) {
+                return $"the unit round-up of remainder {remainder} is not phase {phase} at distance {(walk[phase] - remainder)}";
+            }
+        }
+        // The units below 2h, and the 512-bit position rung's fraction table: entry j+32k stands for t=j-(j>>4).
+        for (var half = 0; (half < 16); ++half) {
+            var below = Array.FindAll(array: units, match: (unit) => (unit < (2 * half))).Length;
+
+            if (PrimeWheel30.UnitsBelowHalves[half] != below) { return $"the units below {(2 * half)} are not {below}"; }
+        }
+        for (var entry = 0; (entry < 64); ++entry) {
+            var fraction = entry & 31;
+            var remainder = (fraction - (fraction >> 4));
+            var below = Array.FindAll(array: units, match: (unit) => (unit < remainder)).Length;
+
+            if (PrimeDivisionKernels.GourdonUnitsByFractionTable[entry] != below) {
+                return $"the fraction table's entry {entry} is not the {below} units below {remainder}";
             }
         }
         var word = 0UL;
@@ -107,7 +125,7 @@ internal static partial class Subjects {
             var bit = Array.IndexOf(array: units, value: (offset % 30));
 
             if (bit >= 0) { word |= (1UL << (((offset / 30) * 8) + bit)); }
-            if ((PrimeWheel30.WordPrefixMask(offset: offset) != word) || (PrimeExtensions.CombinatorialTables.PrefixMasks[offset] != word)) {
+            if ((PrimeWheel30.WordPrefixMask(offset: offset) != word) || (PrimeLeafKernels.CombinatorialTables.PrefixMasks[offset] != word)) {
                 return $"the word prefix mask at offset {offset} is not 0x{word:X16}";
             }
         }
@@ -126,7 +144,7 @@ internal static partial class Subjects {
                     var target = ((int)((prime * walk[phase]) % 30));
                     var targetBit = Array.IndexOf(array: units, value: target);
                     var row = ((channel * 8) + phase);
-                    var step = PrimeExtensions.CombinatorialTables.Steps[row];
+                    var step = PrimeLeafKernels.CombinatorialTables.Steps[row];
 
                     if ((PrimeWheel30.Carry(phase: phase, residue: residue) != carry) || (step.Carry != carry)) {
                         return $"the carry of residue {residue} at phase {phase} is not {carry}";
@@ -135,17 +153,17 @@ internal static partial class Subjects {
                         return $"the lift of residue {residue} at phase {phase} is not {lift}";
                     }
                     if ((PrimeWheel30.TargetBit(phase: phase, residue: residue) != targetBit) || (PrimeWheel30.NumericBit(residue: target) != targetBit) || (step.Bit != targetBit)
-                        || (step.Gap != gap) || (PrimeExploration.ClearMasks[row] != ((byte)~(1 << targetBit)))) {
+                        || (step.Gap != gap) || (PrimeSieveKernels.ClearMasks[row] != ((byte)~(1 << targetBit)))) {
                         return $"residue {residue} at phase {phase} does not land on numeric bit {targetBit}";
                     }
                 }
             }
         }
         foreach (var (residue, masks) in ((ReadOnlySpan<(uint, ulong)>)[
-            PacketMasks<PrimeExploration.PacketResidue1>(), PacketMasks<PrimeExploration.PacketResidue7>(),
-            PacketMasks<PrimeExploration.PacketResidue11>(), PacketMasks<PrimeExploration.PacketResidue13>(),
-            PacketMasks<PrimeExploration.PacketResidue17>(), PacketMasks<PrimeExploration.PacketResidue19>(),
-            PacketMasks<PrimeExploration.PacketResidue23>(), PacketMasks<PrimeExploration.PacketResidue29>()])) {
+            PacketMasks<PrimeSieveKernels.PacketResidue1>(), PacketMasks<PrimeSieveKernels.PacketResidue7>(),
+            PacketMasks<PrimeSieveKernels.PacketResidue11>(), PacketMasks<PrimeSieveKernels.PacketResidue13>(),
+            PacketMasks<PrimeSieveKernels.PacketResidue17>(), PacketMasks<PrimeSieveKernels.PacketResidue19>(),
+            PacketMasks<PrimeSieveKernels.PacketResidue23>(), PacketMasks<PrimeSieveKernels.PacketResidue29>()])) {
             for (var phase = 0; (phase < units.Length); ++phase) {
                 var target = ((int)((residue * walk[phase]) % 30));
 
@@ -154,45 +172,42 @@ internal static partial class Subjects {
                 }
             }
         }
-        foreach (var residue in units) {
-            foreach (var (phase, gap, multiplier) in PacketDistanceForms) {
-                if ((gap != (walk[(phase + 1)] - walk[phase])) || (multiplier != walk[phase])
-                    || (((((residue * multiplier) % 30) + (residue * gap)) / 30) != PrimeWheel30.Carry(phase: phase, residue: residue))) {
-                    return $"MarkPacketPrime's written distance {phase} disagrees with the derivation at residue {residue}";
-                }
-            }
-            foreach (var (phase, coefficient, multiplier) in PacketOffsetForms) {
-                if ((coefficient != (walk[phase] - walk[0])) || (multiplier != walk[phase])
-                    || (((residue * multiplier) / 30) != PrimeWheel30.Lift(multiplier: walk[phase], residue: residue))) {
-                    return $"MarkFullPacketRun's written offset {phase} disagrees with the derivation at residue {residue}";
-                }
-            }
-            int Carry(int phase) => PrimeWheel30.Carry(phase: phase, residue: residue);
-            var squareModFive = (((residue % 5) == 1) || ((residue % 5) == 4));
+        // A prime p=30q+r marks multiplier walk[k] at byte floor(p*walk[k]/30), so the packet kernels' phase-k mark lies
+        // floor(p*walk[k]/30)-floor(p/30) bytes past the phase-zero mark.
+        foreach (var (residue, offset) in ((ReadOnlySpan<(uint, Func<int, uint, nint>)>)[
+            PacketOffsets<PrimeSieveKernels.PacketResidue1>(), PacketOffsets<PrimeSieveKernels.PacketResidue7>(),
+            PacketOffsets<PrimeSieveKernels.PacketResidue11>(), PacketOffsets<PrimeSieveKernels.PacketResidue13>(),
+            PacketOffsets<PrimeSieveKernels.PacketResidue17>(), PacketOffsets<PrimeSieveKernels.PacketResidue19>(),
+            PacketOffsets<PrimeSieveKernels.PacketResidue23>(), PacketOffsets<PrimeSieveKernels.PacketResidue29>()])) {
+            foreach (var quotient in ((ReadOnlySpan<uint>)[0, 1, 2, 7, 1_000, 2_184])) {
+                var prime = ((30L * quotient) + residue);
 
-            // MarkPacketPrime reuses distances: phases 4, 5, 6 for every residue; phase 3 and phase 7 by residue class.
-            if ((Carry(phase: 4) != Carry(phase: 2)) || (Carry(phase: 5) != Carry(phase: 1)) || (Carry(phase: 6) != Carry(phase: 0))
-                || ((Carry(phase: 3) == Carry(phase: 1)) != squareModFive) || ((Carry(phase: 3) == Carry(phase: 1)) != (residue is 1 or 11 or 19 or 29))
-                || ((Carry(phase: 7) == Carry(phase: 2)) != (residue is 7 or 13 or 17 or 23))) {
-                return $"MarkPacketPrime's distance reuse does not hold at residue {residue}";
+                for (var phase = 1; (phase < units.Length); ++phase) {
+                    var expected = (((prime * walk[phase]) / 30) - (prime / 30));
+                    var actual = offset(arg1: phase, arg2: quotient);
+
+                    if (actual != expected) { return $"PacketOffset({phase}) of the prime {prime} is {actual}, not {expected}"; }
+                }
             }
         }
         return null;
     }
 
-    private static (uint Residue, ulong Masks) PacketMasks<TResidue>() where TResidue : struct, PrimeExploration.IPacketResidue =>
+    private static (uint Residue, ulong Masks) PacketMasks<TResidue>() where TResidue : struct, PrimeSieveKernels.IPacketResidue =>
         (TResidue.Residue, TResidue.Masks);
+    private static (uint Residue, Func<int, uint, nint> Offset) PacketOffsets<TResidue>() where TResidue : struct, PrimeSieveKernels.IPacketResidue =>
+        (TResidue.Residue, static (phase, quotient) => PrimeSieveKernels.PacketOffset<TResidue>(phase: phase, quotient: quotient));
 
     /// <summary>Pins the presieve patterns as coprimality to the primes 7 through 163 and their runs to Jacobsthal's bound.</summary>
     public static string? PresieveJacobsthalRunBound() {
         var units = Oracles.UnitsModulo(modulus: 30);
-        var presieved = Oracles.PrimesBetween(high: ((int)PrimeExploration.PreSievePrimeLimit), low: 7);
-        var groups = PrimeExploration.SmallPrimeGroups.ToArray();
-        var patterns = Enumerable.Range(start: 0, count: PrimeExploration.SmallPrimePatterns.Count).Select(selector: static group => PrimeExploration.SmallPrimePatterns.Period(group: group).ToArray()).ToArray();
+        var presieved = Oracles.PrimesBetween(high: ((int)PrimeSieveKernels.PreSievePrimeLimit), low: 7);
+        var groups = PrimeSieveKernels.SmallPrimeGroups.ToArray();
+        var patterns = Enumerable.Range(start: 0, count: PrimeSieveKernels.SmallPrimePatterns.Count).Select(selector: static group => PrimeSieveKernels.SmallPrimePatterns.Period(group: group).ToArray()).ToArray();
         var grouped = groups.SelectMany(selector: static group => ((int[])[group.First, group.Second, group.Third])).Where(predicate: static prime => (prime != 1)).Order().ToArray();
 
         if (!grouped.SequenceEqual(second: presieved)) { return "the pattern groups do not hold each prime from 7 through PreSievePrimeLimit exactly once"; }
-        if (Oracles.PrimesBetween(high: ((int)PrimeExploration.PreSievePrimeLimit), low: 2).Length != 38) { return "PreSievePrimeLimit is not the 38th prime, whose primorial A048670 a(38) describes"; }
+        if (Oracles.PrimesBetween(high: ((int)PrimeSieveKernels.PreSievePrimeLimit), low: 2).Length != 38) { return "PreSievePrimeLimit is not the 38th prime, whose primorial A048670 a(38) describes"; }
         for (var group = 0; (group < groups.Length); ++group) {
             var (first, second, third) = groups[group];
             var pattern = patterns[group];
@@ -220,7 +235,7 @@ internal static partial class Subjects {
         var segment = new byte[(1 << 20)];
 
         foreach (var blockLow in ((ReadOnlySpan<ulong>)[0UL, 33_333_333_333_333UL, ((ulong.MaxValue / 30UL) - ((ulong)segment.Length))])) {
-            PrimeExploration.FilterSmallPrimes(blockLow: blockLow, segment: segment);
+            PrimeSieveKernels.FilterSmallPrimes(blockLow: blockLow, segment: segment);
             var previous = -1L;
             var zeroBytes = 0;
             var zeroWords = 0;
@@ -245,7 +260,7 @@ internal static partial class Subjects {
         }
 
         // A run the greedy covering forces, placed by the Chinese remainder theorem and read from the real patterns.
-        var coveringPrimes = Oracles.PrimesBetween(high: ((int)PrimeExploration.PreSievePrimeLimit), low: 2);
+        var coveringPrimes = Oracles.PrimesBetween(high: ((int)PrimeSieveKernels.PreSievePrimeLimit), low: 2);
         var classes = Oracles.GreedyCovering(length: PresieveWitnessLength, primes: coveringPrimes);
 
         if (classes is null) { return $"the greedy covering no longer covers {PresieveWitnessLength} integers"; }
