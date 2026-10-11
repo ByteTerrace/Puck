@@ -25,7 +25,7 @@ stale and is corrected in the same change.
   Codex-written code. The pass verifies and fixes in one run.
 - Every pass is review-and-fix, never report-only: the owner prefers fixes
   applied in the pass to findings handed back. Both Codex models, Astra
-  (`gpt-6-astra`) and Sol (`gpt-6-sol`), are free to use and encouraged for a
+  (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use and encouraged for a
   pass; neither is reserved. The installed Codex plugin's result-handling
   guidance not to auto-apply a review's fixes does not apply in this
   repository.

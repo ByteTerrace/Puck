@@ -493,9 +493,9 @@ program reaches.
   stable. What falls is the cost of each evaluation, from about six header
   loads and full-width dispatches per non-rigid segment to two or three narrow
   ones, with straight-line point arithmetic and a smaller live register set
-  between them. Phase 4 confirms it by disassembly of the per-chain paths and,
-  when the owner asks, one `puck bench` reading on an idle machine; no
-  wall-clock threshold is a gate.
+  between them. Phase 4 confirms it by disassembly of the per-chain paths and
+  by `world.gpu-timing` readings of the hit passes on a quiet machine, read
+  beside their unchanged counts; no wall-clock threshold is a gate.
 - **Memory.** The chain table adds two words per segment and one per chain:
   about 1,300 words for the island's static program. A stored set costs its
   bytecode, a few megabytes per backend. Each residency keeps its generic set

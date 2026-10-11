@@ -248,8 +248,10 @@ World run with effective `host.presentation: none` uses no GPU; the
 - CPU work runs beside a GPU leg. A correctness leg (device laws, parity,
   canaries, counted performance work) judges values that do not depend on load,
   so solution builds, large CPU suites and other lanes' work keep running while
-  it does. Two GPU-bound jobs never overlap. Only wall-clock work (`puck bench`,
-  a timing spike) needs a quiet machine.
+  it does. Two GPU-bound jobs never overlap. Only timing work (`puck bench`,
+  `world.gpu-timing`, `world.fps`, a timed build or test pass) needs a quiet
+  machine: nothing else builds, tests or uses the GPU while it runs, and a
+  timing is reported beside the counts of the same run, never alone.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.

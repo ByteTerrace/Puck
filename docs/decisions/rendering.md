@@ -25,13 +25,17 @@ same wrong image. Frame counts derive from pinned logical steps and reset
 semantics, not the scheduler's cadence. Float presentation pixels are never
 claimed as simulation-state determinism.
 
-**Performance is judged by deterministic counts.** Code, disassembly, and
-counts of the work a pass records decide performance questions; wall-clock and
-GPU timing are deferred with no date as evidence. The one planned use of GPU
-timing is the editor's live per-pass readout
-([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)), shown to the
-person at the screen and never read by a counter report, a ceiling, a canary
-or a law. Work counts extend one shared read
+**Performance is judged by counted work, with timing read beside it.** Code,
+disassembly, and counts of the work a pass records decide performance
+questions, and only counts set a ceiling or gate a change. Wall-clock and GPU
+timing (`world.gpu-timing`, `world.fps`, `puck bench`) are evidence beside
+those counts, never alone: a timing shows where frame time goes and reads the
+frame-rate bar, and a count shows what work moved. Load moves a timing, so one
+runs on a quiet machine, with no build, test or other GPU work beside it. No
+counter report, ceiling, canary or law reads a timing; dynamic resolution's
+load signal and the editor's per-pass readout
+([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)) are its
+runtime readers. Work counts extend one shared read
 contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
@@ -46,8 +50,8 @@ quality at a steady 120 FPS, every frame under 8.3 ms. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
 fast, and a lower tier is never the fix for a missed bar. Counted work still
-decides each change; the bar itself is read with `puck bench` when the owner
-asks.
+decides each change; the bar itself is read by timing the worst frame on a
+quiet machine.
 
 **P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
 deterministic counters, dispatches, march steps, texels written and bytes

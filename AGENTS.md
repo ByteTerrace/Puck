@@ -197,9 +197,11 @@ verb out. Its rules in brief:
   and two GPU-bound jobs never overlap. A failed leg is re-run once alone: a
   timeout or wait that passes alone is a flake to report, and a wrong value is
   a failure to fix.
-- Judge performance by code, disassembly and load-independent counts. A
-  wall-clock timing runs only when the owner asks, once, serially, on an idle
-  machine, through `puck bench`.
+- Judge performance by code, disassembly and load-independent counts; only
+  counts set a ceiling or gate a change. Wall-clock and GPU timing are evidence
+  read beside those counts, never alone, and run on a quiet machine: the lead
+  keeps every agent's builds, tests and GPU legs off the machine while one
+  runs ([the rule](docs/decisions/rendering.md#the-pipeline-foundation)).
 
 ## Branches, commits and pushes
 

@@ -193,7 +193,7 @@ Every build, a Codex brief's included, passes `-nodeReuse:false`
 Codex and Claude both implement, and no model in either family is restricted or
 reserved. Choose the model and effort per lane by fit: put the strongest available
 model on subtle or correctness-heavy work. Codex's two models, Astra
-(`gpt-6-astra`, the frontier model) and Sol (`gpt-6-sol`, the workhorse), are
+(`gpt-6-astra`, the frontier model) and Sol (`gpt-6.1-sol`, the workhorse), are
 both free to use and encouraged, for implementation and for review-and-fix
 passes; pass `--model` and `--effort` on every launch
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Keep every

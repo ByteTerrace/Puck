@@ -182,6 +182,7 @@ The profile defers three checks, and a run prints each with its reason:
   from a qualification reading of the published package on the reference
   devices and none has been taken.
 - **Frame-time median and tail**, and **reload stalls**. Both need wall-clock
-  and GPU timing, which are deferred with no date. Qualification sets no
-  frame-time threshold and counts that every reload installs, never how long it
-  took.
+  and GPU timing, which is evidence beside counts and never a gate
+  ([the rule](../decisions/rendering.md#the-pipeline-foundation)).
+  Qualification sets no frame-time threshold and counts that every reload
+  installs, never how long it took.

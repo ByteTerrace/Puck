@@ -7,8 +7,8 @@ description: Applies .NET 10 performance behavior when writing, reviewing, refac
 
 This skill is factual, not an architecture or style mandate. Judge a change by
 code, disassembly and load-independent counts (allocations, operation counts);
-a wall-clock benchmark runs only when the owner asks for one, through
-`puck bench`. Distinguish runtime improvements from workload-specific evidence.
+a wall-clock benchmark (`puck bench`) is evidence beside those counts, never
+alone, and runs on a quiet machine. Distinguish runtime improvements from workload-specific evidence.
 
 ## Route to the relevant evidence
 

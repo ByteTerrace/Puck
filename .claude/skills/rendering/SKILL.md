@@ -1715,9 +1715,12 @@ These are one-line cautions; the owning pages hold the derivations.
 
 ## Performance work
 
-Judged by code, disassembly, and deterministic work counters — never
-wall-clock or GPU timestamps. Measure before and after on the same scene, as
-one GPU run at a time ([`verification`](../verification/SKILL.md#gpu-legs)):
+Judged by code, disassembly, and deterministic work counters, which alone set
+ceilings and gate a change. `world.gpu-timing` and `world.fps` readings are
+evidence beside the counts of the same run, never alone, and are taken on a
+quiet machine ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
+Measure before and after on the same scene, as one GPU run at a time
+([`verification`](../verification/SKILL.md#gpu-legs)):
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero

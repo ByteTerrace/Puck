@@ -6365,8 +6365,8 @@ in the change that explains the move and never from wall-clock or GPU timing.
 The recorded Steam Deck run, with dynamic resolution on and render scale
 responding to its signal, keeps P15 open beside P15-8 and is listed under
 [deferred to the end](#deferred-to-the-end).
-Whether that run holds a frame-time target is not checked while wall-clock and
-GPU timing are deferred.
+Whether that run holds a frame-time target is read by timing it, beside its
+counts.
 
 Vendor upscalers such as FSR, DLSS, and XeSS are not part of this package. The
 record, the jittered color and the derived motion are the inputs they expect,
@@ -8675,8 +8675,8 @@ The reasoning is recorded in
 
 Focused shader and planner tests first, then the supported GPU fixtures
 through the real `Puck.World` executable on both backends. Performance is
-judged by code, disassembly, and deterministic counts; wall-clock and GPU
-timing are deferred with no date. A GPU-backed check runs on real floor and
+judged by code, disassembly, and deterministic counts, with wall-clock and GPU
+timing read beside them on a quiet machine, never alone. A GPU-backed check runs on real floor and
 ceiling hardware, not over a remote session, because a remote session does not
 report the adapter's memory properties. A check that needs a particular machine
 or environment is listed under [deferred to the end](#deferred-to-the-end) and

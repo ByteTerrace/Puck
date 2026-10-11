@@ -460,9 +460,11 @@ see its project README.
 There is no maintained cross-engine benchmark score. `Puck.Bench` remains
 quarantined under `experimental/`; do not build or revive its old suite.
 
-Performance is judged by counted work, code and disassembly, never by time.
-`puck bench` is the only tool that measures wall-clock time, and it runs only
-when the owner asks for a timing.
+Performance is judged by counted work, code and disassembly, and only counts
+set a ceiling or gate a change. Timings (`puck bench`, `world.gpu-timing`,
+`world.fps`) are evidence read beside the counts of the same run, never alone,
+and are taken on a quiet machine with no build, test or other GPU work beside
+them ([the rule](../decisions/rendering.md#the-pipeline-foundation)).
 
 Two tools read the counts. For a live World workload, wait for rendered
 frames, then sample `world.counters`: its `gpu` section is the per-pass counted
