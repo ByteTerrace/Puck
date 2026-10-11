@@ -84,7 +84,9 @@ forged-avatars/
 # Engine benchmark (puck.bench) reports — puck.bench.v1 JSON written under the cwd by --bench / bench.run
 # (plan §8). Machine-specific measurements, never a committed artifact.
 bench-reports/
-.codex
+# Codex's project configuration is shared; anything else a Codex run writes there stays local.
+.codex/*
+!.codex/config.toml
 .tmp
 docs/.obsidian
 # Shader compiler outputs and local freshness records; CI packages the bytecode.

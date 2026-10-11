@@ -109,8 +109,8 @@ describes, closing the MCP client first, since it holds the installed tool. The
 check needs no checkout: outside one, or without git, the tool says nothing.
 
 which follows the newest running World, so one configuration serves every run.
-The checkout carries it for both clients: `.mcp.json` at the root and
-`.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
+The checkout carries it for every client: `.mcp.json` at the root for Claude
+Code, `.codex/config.toml` for Codex, and `.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
 started before any World, or after the World exits, a call is refused with
 nothing dispatched; once a World runs `world.control start`, the next call
 attaches. A call whose attachment closes (timeout, cancellation, World exit or

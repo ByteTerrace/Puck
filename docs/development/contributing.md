@@ -68,7 +68,10 @@ macOS, and nothing here is verified there.
   (`codex login`), and install the Claude Code plugin `codex@openai-codex` on
   each machine: `.claude/settings.json` enables it and names its marketplace,
   so Claude Code offers the install when it loads the project, and
-  `/codex:setup` checks the CLI afterwards. The Windows sandbox's permission
+  `/codex:setup` checks the CLI afterwards. The versioned
+  `.codex/config.toml` registers the `puck` MCP server for Codex, which reads
+  it only once the project is trusted; everything else a Codex run writes
+  under `.codex/` stays untracked. The Windows sandbox's permission
   cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
 - **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
   and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
@@ -642,7 +645,7 @@ unverified when no device run exists.
   "Failed to read NuGet.Config due to unauthorized access". The machine's
   owner fixes the folder's permissions by re-enabling inheritance or granting
   `CodexSandboxUsers` read and execute on that folder. A folder a sandboxed run
-  created, such as the checkout's ignored `.codex/`, can end up owned by a
+  created, such as the checkout's `.codex/`, can end up owned by a
   `CodexSandbox*` account (`(Get-Acl <path>).Owner`); every sandboxed job then
   fails within seconds with `windows sandbox failed: helper_unknown_error`, and
   the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,

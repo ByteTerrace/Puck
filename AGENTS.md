@@ -148,7 +148,8 @@ settles a question, decide by that principle and say why.
    agent-local memory, which this project turns off: the owner works across
    machines and accounts, and knowledge held on one of them is lost to the rest.
    `.claude/settings.json` (the shared harness settings, the Codex plugin and
-   the hooks under `.claude/hooks/`) and `.claude/launch.json` are versioned;
+   the hooks under `.claude/hooks/`), `.claude/launch.json` and Codex's
+   `.codex/config.toml` are versioned;
    `.claude/settings.local.json` stays personal and untracked.
 
 ## `InternalsVisibleTo` is forbidden
