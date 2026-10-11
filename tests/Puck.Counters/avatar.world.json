@@ -1,0 +1,17 @@
+{
+  "schema": "puck.world.definition.v1",
+  "basis": "../../src/Puck.World/Assets/worlds/debug",
+  "documentId": "counters-avatar",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "height": 720,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "targetHertz": 0,
+    "width": 1280
+  },
+  "simulation": { "rateHz": 30 }
+}
