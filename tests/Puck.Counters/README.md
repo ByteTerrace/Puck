@@ -18,7 +18,7 @@ work each render pass performs. The measurements count work, not elapsed time.
 | `counters.puck` | Two blocks and their caps | `counters.script.txt` | `counters.ceilings.json` |
 | `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` | `nexus.ceilings.json` |
 | `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` | `courtyard.ceilings.json` |
-| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground and cubes, inherited from `debug.puck`, with no seat and so no avatar | `shadow.script.txt` | `debug.ceilings.json` |
+| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` | `debug.ceilings.json` |
 | `avatar.world.json` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` | `avatar.ceilings.json` |
 | `sky-still.puck` | An unchanging sky | `sky.script.txt` | `sky-still.ceilings.json` |
 | `sky-drift.puck` | Moving clouds | `sky.script.txt` | `sky-drift.ceilings.json` |
@@ -36,10 +36,9 @@ ticks before its one reading.
 The debug workload uses the same camera at the medium preset instead, with
 temporal reconstruction and indirect lighting off and the exact shadow mask and
 march, so every frame marches every lit pixel's shadow afresh. Its ceilings
-hold the shadow pass's shape evaluations: a field walk that stops rejecting far
-candidates per sample multiplies them twentyfold (2,359,732,255 against a
-recorded 117,530,472 on the RTX 2060's Vulkan driver). It has no seat, so no
-avatar stands in it.
+hold the shadow pass's shape evaluations, most of them the Moth's: a field walk
+that rejects none of the avatar's gauge-built pool instances whole doubles them
+(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver).
 
 The seated-avatar workload is the debug world as played: its 1280×720 output
 shows the Moth seated before the default third-person camera, at the shipped
