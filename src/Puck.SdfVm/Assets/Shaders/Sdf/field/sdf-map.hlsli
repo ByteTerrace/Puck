@@ -259,8 +259,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 #endif
-                    if ((partReady || rootUnion) && (part.z & SDF_PART_NO_DISTANCE_BOUND) == 0u &&
-                        sdfInstanceCannotWin(instanceOffset, pendingInstance, asfloat(part.w), worldPosition, result.distance)) {
+                    if ((partReady || rootUnion) &&
+                        sdfInstanceCannotWin(instanceOffset, pendingInstance, sdfPartDistanceGain(part), worldPosition, result.distance)) {
                         sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                             maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
                         continue;

@@ -65,11 +65,11 @@ void sdfShadowMovedCandidate(uint instanceOffset, uint index, float3 origin, flo
 // per summarized word: the box of its set instances' current bound spheres, then the radius reaching every one of them
 // from the box's center. An instance whose radius exceeds `oversized` (the grid's largest binned radius, the split that
 // keeps a ground or a building in the grid's always-list) stays out of the sphere and in the word's kept bits, so one
-// large neighbour cannot hide a body's whole word. Uncertified distance bounds stay in the kept bits too.
+// large neighbour cannot hide a body's whole word. An instance with no distance gain stays in the kept bits too.
 // UNIFORM CONTROL FLOW like the gathers: every lane calls it, after the
 // barrier that completes the mask; it ends with its own barrier. Only a program under the root-union certificate is
-// summarized (each instance then joins as a hard union, which the word rejection relies on), and min(part.w, 1)
-// carries a conservative inverse field rescale for every instance.
+// summarized (each instance then joins as a hard union, which the word rejection relies on), and the word's scale is
+// its summarized instances' smallest distance gain (sdfPartDistanceGain).
 void sdfSummarizeGroupMask(bool ambient, float oversized, uint lane) {
     uint table = sdfProgramLayout.partProgramOffset;
     sdfGroupMaskSummarized = ((table != 0u) && sdfCanTracePartsIndependently());
@@ -90,12 +90,11 @@ void sdfSummarizeGroupMask(bool ambient, float oversized, uint lane) {
             uint4 part = sdfProgramWord(table + 1u + index);
             float4 bound = sdfInstanceBoundAt(offset, index);
             if (bound.w < 0.0) { continue; }
-            if ((part.z & SDF_PART_NO_DISTANCE_BOUND) != 0u || !all(isfinite(bound)) ||
-                bound.w > oversized) { kept |= (1u << bit); continue; }
+            float gain = sdfPartDistanceGain(part);
+            if (!(gain > 0.0) || !all(isfinite(bound)) || bound.w > oversized) { kept |= (1u << bit); continue; }
             low = min(low, (bound.xyz - bound.w));
             high = max(high, (bound.xyz + bound.w));
-            float inverseRescale = asfloat(part.w);
-            scale = min(scale, ((inverseRescale > 0.0) ? inverseRescale : 0.0));
+            scale = min(scale, gain);
             summarized |= (1u << bit);
         }
         float3 center = (0.5 * (low + high));

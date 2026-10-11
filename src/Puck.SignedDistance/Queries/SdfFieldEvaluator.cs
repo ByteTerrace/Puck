@@ -484,11 +484,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
 
-            // A plane, or any compose the program itself marks as reaching every tile, has no finite bound however
-            // small the instance declared; the program's own test is the one the GPU prepass trusts.
+            // A plane, or any compose reaching every tile, has no finite bound however small the instance declared; the
+            // program's own test is the one the GPU prepass trusts, and CanCullInstance needs a unit distance gain.
             if (
                 instance.IsDynamic ||
-                !program.InstanceHasDistanceLowerBound(index: index) ||
+                (program.InstanceDistanceGain(index: index) < 1f) ||
                 !IsPureUnionInstance(
                 instance: instance,
                 instructions: instructions

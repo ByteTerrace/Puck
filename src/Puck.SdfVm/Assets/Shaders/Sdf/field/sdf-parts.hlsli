@@ -12,21 +12,30 @@ bool sdfCanTracePartsIndependently() {
 #endif
 }
 
+// The distance gain a part entry certifies (SdfProgram.InstanceDistanceGain, packed by EncodePartDistanceGain and
+// decoded alike by DecodePartDistanceGain): outside the instance's packed bound its field, in every walk, is at least
+// the gain times the gap to that bound. Zero means the instance is never rejected whole.
+float sdfPartDistanceGain(uint4 part) {
+    uint field = (part.z >> SDF_PART_DISTANCE_GAIN_SHIFT) & SDF_PART_DISTANCE_GAIN_MASK;
+    return ((field == SDF_PART_DISTANCE_GAIN_MASK) ? 1.0 : ((float)field * SDF_PART_DISTANCE_GAIN_UNIT));
+}
+
 // Whether a whole visible instance cannot replace the incumbent at worldPosition: the per-sample twin of the segment
 // walk's skip sphere, read from the instance's packed bound (SdfProgram's instance directory entry). Outside that
-// bound a certified instance's field is at least the gap to it divided by its field rescale (SdfInstanceCost.FieldRescale,
-// carried conservatively by min(part.w, 1): the compiled scope multiplier or the generic inverse rescale), so a gap at least the
-// incumbent loses a hard union's strict test exactly and skipping the instance changes no distance, material or seam.
-// The caller excludes SDF_PART_NO_DISTANCE_BOUND: containment alone cannot bound a gauge, warp or optional clipper.
-// It asks only where the instance joins as a hard union: a compiled part always does, and a generic instance
-// does under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is skipped. A
-// shadow, ambient or normal probe far from a body skips all of its leaves, as primary's own ray bounds do.
-bool sdfInstanceCannotWin(uint instanceOffset, uint instance, float inverseRescale, float3 worldPosition, float incumbent) {
+// bound the instance's field is at least the gap to it times its distance gain (sdfPartDistanceGain: its scopes'
+// rescales, its gauges' and non-uniform scales' slower growth, its smooth unions' sag absorbed by the packed radius),
+// so a scaled gap at least the incumbent loses a hard union's strict test exactly and skipping the instance changes
+// no distance, material or seam. A zero gain (an approximate primitive, a warp, an optional clipper) is never
+// rejected. It asks only where the instance joins as a hard union: a compiled part always does, and a generic
+// instance does under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is
+// skipped. A shadow, ambient or normal probe far from a body skips all of its leaves, as primary's own ray bounds do.
+bool sdfInstanceCannotWin(uint instanceOffset, uint instance, float gain, float3 worldPosition, float incumbent) {
 #ifdef SDF_TAPE_BUILD
     if (sdfTapeBuilding) { return false; }
 #endif
-    // A scope starts at the finite far sentinel before its rescale, even when every leaf lies farther away.
-    if (!(inverseRescale > 0.0) || incumbent >= SDF_FAR_DISTANCE * min(inverseRescale, 1.0)) { return false; }
+    // A scope starts at the finite far sentinel before its rescale, even when every leaf lies farther away; the gain
+    // never exceeds that rescale.
+    if (!(gain > 0.0) || incumbent >= SDF_FAR_DISTANCE * gain) { return false; }
     uint entry = sdfInstanceEntryOffset(instanceOffset, instance);
     uint4 meta = sdfProgramWord(entry + 1u);
     float4 bound = asfloat(sdfProgramWord(entry));
@@ -41,11 +50,11 @@ bool sdfInstanceCannotWin(uint instanceOffset, uint instance, float inverseResca
         return false;
     }
     float gap = (length(worldPosition - bound.xyz) - bound.w);
-    return ((gap > 0.0) && ((gap * min(inverseRescale, 1.0)) >= incumbent));
+    return ((gap > 0.0) && ((gap * gain) >= incumbent));
 }
 
-// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic|no-distance-bound, scope scale); an
-// instance the table does not compile has a zero count and carries its field rescale's inverse in the scale lane.
+// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|distance gain|dynamic, scope scale);
+// an instance the table does not compile has a zero count, its distance gain and nothing else.
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
