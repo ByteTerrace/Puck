@@ -583,17 +583,19 @@ These are one-line cautions; the owning pages hold the derivations.
   sample.** It must cover the primitive's reach, its field ops, and its blend
   halo; a short bound clips geometry at tile edges and, through mapCore's
   whole-instance rejection (`sdfInstanceCannotWin`), at any sample. That
-  rejection additionally requires `InstanceHasDistanceLowerBound`: containment
-  alone says nothing about an underestimating gauge, a non-uniform scale, a
-  warp or the field left after an optional intersection is disabled. The part
-  entry's `PartNoDistanceBoundFlag` keeps these instances on the full walk.
-  Eligible instances divide the bound gap by the field rescale: `.w` carries
-  the compiled scope's multiplier or the generic instance's inverse rescale.
-  Compiled parts join by hard union; generic instances additionally need the
+  rejection compares the gap to the bound times the instance's distance gain
+  (`SdfProgram.InstanceDistanceGain`, packed into the part entry's `.z` and
+  decoded by `sdfPartDistanceGain`): containment alone says nothing about how
+  fast a field grows. The gain folds scope rescales, an underestimating gauge's
+  or a non-uniform scale's slower growth, and a smooth union's sag (which widens
+  the packed radius until the gain absorbs it); a warp, a field op, a Sweep or
+  Path, or a clipper only some walks apply certifies zero and stays on the full
+  walk. Compiled parts join by hard union; generic instances additionally need the
   root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
   ambient group masks summarize each mask word as one sphere over its
-  eligible ordinary-sized instances (`sdfSummarizeGroupMask`, others kept), so a
-  many-instance body is rejected once per word. The soft-shadow march queries
+  certified ordinary-sized instances at their smallest gain
+  (`sdfSummarizeGroupMask`, others kept), so a many-instance body is rejected
+  once per word. The soft-shadow march queries
   `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
   which neither its stride, hit decision nor estimate moves. Include the
   shading-scaled hit threshold as well as stride and penumbra saturation;

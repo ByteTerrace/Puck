@@ -5,6 +5,9 @@ public sealed partial class SdfProgram {
     // distance from the query point to the instance's packed influence sphere's surface (d >= 0). An empty accumulator
     // holds the far sentinel and constrains nothing.
     private const float UnconstrainedGain = float.PositiveInfinity;
+    // The relative evaluation error a gauge's computed norm is allowed before its certificate stops holding. The
+    // influence contract already requires the evaluated zero set to stay inside the reach the stamper charges.
+    private const float GaugeEvaluationMargin = (1f - (1f / 1024f));
     // The smooth blends' radius floor, SDF_SMOOTH_RADIUS_MIN in field/sdf-program.hlsli.
     private const float SmoothRadiusMin = 0.0001f;
 
@@ -40,9 +43,10 @@ public sealed partial class SdfProgram {
     /// such factor is certified and the instance is never rejected whole.</summary>
     /// <param name="index">The instance index.</param>
     /// <returns>1 for a field of exact primitives, similarity transforms and the union, subtraction and intersection
-    /// families; less where a scope's rescale divides its field; 0 for an underestimating gauge, a non-uniform scale,
-    /// an approximate primitive, a non-similarity domain, a field modifier, an unknown composition, or a clipping
-    /// operand only some walks apply.</returns>
+    /// families; less for an underestimating gauge (<see cref="SdfShapeType.Superellipsoid"/>) or a non-uniform
+    /// <see cref="SdfOp.Scale"/>, whose fields grow more slowly than distance; 0 for an approximate primitive, a
+    /// non-similarity domain, a field modifier, an unknown composition, or a clipping operand only some walks
+    /// apply.</returns>
     /// <remarks>Each certified primitive's field is at least its gain times the distance to its own solid, which the
     /// influence sphere contains. A union keeps the smaller gain, a subtraction keeps its subject's, and an
     /// intersection keeps the smaller of both operands' gains, since the composed bound may derive from either
@@ -72,6 +76,7 @@ public sealed partial class SdfProgram {
         if (!instance.Active || IsUnmaskable(instance: instance)) { return default; }
         Span<DistanceBound> scopes = stackalloc DistanceBound[(SdfProgramBuilder.MaxFieldScopeDepth + 1)];
         var depth = 0;
+        var chain = 1f;
 
         scopes[0] = new DistanceBound(Gain: UnconstrainedGain, Sag: 0f);
         for (var cursor = instance.First; (cursor < instance.End); cursor++) {
@@ -79,14 +84,22 @@ public sealed partial class SdfProgram {
 
             switch (instruction.Op) {
                 case SdfOp.ResetPoint:
+                    chain = 1f;
+                    break;
                 case SdfOp.Translate:
                 case SdfOp.Rotate:
                 case SdfOp.TransformDynamic:
                     break;
                 case SdfOp.Scale:
+                    // The candidate is min(s) f(S^-1 q), and S^-1 shortens no distance by more than 1/max(s), so the
+                    // candidate is at least min(s)/max(s) times f's gain times the distance to the scaled solid.
                     var scale = instruction.Data0;
+                    var largest = MathF.Max(x: scale.X, y: MathF.Max(x: scale.Y, y: scale.Z));
 
-                    if (!(scale.X > 0f) || (scale.X != scale.Y) || (scale.Y != scale.Z) || (scale.Z != scale.W)) { return default; }
+                    if (!(scale.X > 0f) || !(scale.Y > 0f) || !(scale.Z > 0f) || !(scale.W > 0f) || !float.IsFinite(f: largest)) {
+                        return default;
+                    }
+                    chain *= ((scale.W == largest) ? 1f : (scale.W / largest));
                     break;
                 case SdfOp.PushField:
                     scopes[++depth] = new DistanceBound(Gain: UnconstrainedGain, Sag: 0f);
@@ -97,7 +110,7 @@ public sealed partial class SdfProgram {
                     if (!TryCompose(
                         accumulator: ref scopes[depth],
                         blend: ((SdfBlendOp)instruction.Blend),
-                        candidate: new DistanceBound(Gain: shapeGain, Sag: 0f),
+                        candidate: new DistanceBound(Gain: (shapeGain * chain), Sag: 0f),
                         optional: (instruction.Detail || !instruction.Secondary),
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
@@ -167,6 +180,8 @@ public sealed partial class SdfProgram {
     }
     private float ShapeDistanceGain(SdfInstruction instruction, int instructionIndex) {
         switch ((SdfShapeType)instruction.Shape) {
+            case SdfShapeType.Superellipsoid:
+                return SuperellipsoidDistanceGain(instruction: instruction);
             // Their fields are bounded against their own spheres, not exact distances to their solids, and are capped
             // at the far sentinel in local units.
             case SdfShapeType.Sweep:
@@ -182,6 +197,27 @@ public sealed partial class SdfProgram {
                     sweepCurves: m_sweepCurves
                 ) ? 1f : 0f);
         }
+    }
+    // The gauge (sdfSuperellipsoid in field/sdf-shapes.hlsli) is minR (N(q) - 1) with q = |p| * inverseRadii and N the
+    // exponent's norm, homogeneous of degree one. Outside the solid, p / N(q) lies on its surface, so the distance to
+    // the solid is at most |p| (1 - 1/N) and the gauge is at least minR (N / |p|) times that distance.
+    // N(q) >= c |q| >= c min(inverseRadii) |p|, where c is 1 at e = 2 and 3^(1/e - 1/2) past it (the Euclidean norm
+    // reaches the e-norm's at the cube diagonal).
+    private static float SuperellipsoidDistanceGain(SdfInstruction instruction) {
+        var radii = instruction.Data0;
+        var exponent = radii.W;
+        var smallest = MathF.Min(x: radii.X, y: MathF.Min(x: radii.Y, y: radii.Z));
+        var inverse = MathF.Min(x: instruction.Data1.Y, y: MathF.Min(x: instruction.Data1.Z, y: instruction.Data1.W));
+
+        if (!(exponent >= SdfProgramBuilder.MinSuperellipsoidExponent) || !(exponent <= SdfProgramBuilder.MaxSuperellipsoidExponent) ||
+            !(smallest > 0f) || !(inverse > 0f) || !float.IsFinite(f: inverse)) {
+            return 0f;
+        }
+
+        var norm = ((exponent == 2f) ? 1f : MathF.Pow(x: 3f, y: ((1f / exponent) - 0.5f)));
+        var gain = (((norm * smallest) * inverse) * GaugeEvaluationMargin);
+
+        return (((gain > 0f) && float.IsFinite(f: gain)) ? MathF.Min(x: gain, y: 1f) : 0f);
     }
 
     private readonly record struct DistanceBound(float Gain, float Sag);
