@@ -53,6 +53,15 @@ fast, and a lower tier is never the fix for a missed bar. Counted work still
 decides each change; the bar itself is read by timing the worst frame on a
 quiet machine.
 
+**Worlds are mostly static, and sculpting happens in the editor.** Most of a
+world's geometry never changes while it is played, and editor mode is where a
+creation's field is sculpted. The cost of evaluating an authored field therefore
+belongs to the moment it changes, not to every frame: a played world renders a
+representation baked from its static geometry, which can ship with the compiled
+world, and a sculpt edit rebakes only what it touches. The field interpreter
+serves the editor's live preview and the frames before a bake lands. Dynamic
+bodies bake per rigid part, since their parts move without changing shape.
+
 **P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
 deterministic counters, dispatches, march steps, texels written and bytes
 uploaded, is recorded over one pinned workload, `puck counters`' world with its
