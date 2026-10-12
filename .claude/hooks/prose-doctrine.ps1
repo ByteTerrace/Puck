@@ -25,7 +25,7 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path -Path $PSScriptRoot -ChildP
 $markerRoot = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath 'claude-prose-doctrine'
 
 $contributing = 'docs/development/contributing.md'
-$documentation = '.claude/skills/documentation/references/complete-reference.md'
+$documentation = 'docs/development/documentation.md'
 
 $codeExtensions = @('.hlsl', '.hlsli', '.puck', '.ps1', '.ts')
 $legalNames = @('LICENSE.md', 'THIRD-PARTY-NOTICES.md', 'CLA.md', 'PRIVACY.md')
@@ -108,7 +108,7 @@ $passages = @{
     Purge           = { Get-Section -RelativePath $documentation -Heading '### Prose that fails on every surface' }
     Voice           = { 'Voice, titles, and page shapes: docs/development/documentation.md.' }
     XmlRegister     = {
-        "XML documentation register, from the documentation skill:`n`n" +
+        "XML documentation register, from docs/development/documentation.md:`n`n" +
         (Get-Section -RelativePath $documentation -Heading '### The register, characterized')
     }
 }

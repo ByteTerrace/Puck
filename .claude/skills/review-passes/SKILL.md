@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes an optional review-and-fix pass on a lane (none by default; the lead's choice when a second reader pays for itself, or an explicit owner request; never a second round). Cross-family review is the usual choice unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verifying fixes, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns the landing bar and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Briefs, runs and closes an optional review-and-fix pass on a lane (none by default; the lead's choice when a second reader pays for itself, or an explicit owner request; never a second round). Cross-family review is the usual choice unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verifying fixes, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns the landing bar and GPU legs; the changed area's skill supplies contracts and hunt classes.
 ---
 
 # Review passes
@@ -45,13 +45,10 @@ stale and is corrected in the same change.
 - Never launch a `--write` pass into a tree a canary, counters or parity run
   builds from: an edit mid-run changes the source state that run reuses. Wait
   for the run to finish or give the pass a separate worktree.
-- Start with scoped source inspection and retained successful build evidence;
-  do not repeat a cold build merely to launch the review. The lead schedules
-  any required restore and build after source fixes are ready, using the
-  serialized heavy-work grant and the owner's time budget. Have the brief name
-  available corpora and packages and use `--no-restore` when they are present.
-  Compilation and tests still require the grant, and tests require a successful
-  current build. A documentation-only pass needs no build unless XML comments change.
+- Restore and build the review worktree before the pass starts, so `obj/` and
+  `bin/` exist: a Codex sandbox has no network, so the brief tells the pass to
+  build with `--no-restore`. A documentation-only pass needs no build unless XML
+  comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).
@@ -180,7 +177,7 @@ no brief, so it raises compatibility findings and tries to run tests.
    each touched project with zero warnings, show each fix working by running
    or measuring it, run the tests the fixes added or touched, and resolve or
    report each open finding as verified, repaired, or rejected with the
-   reason. For documentation-only fixes, use `documentation` checks and build
+   reason. For documentation-only fixes, use `puck docs links` and build
    only for changed XML comments. The lead reads the verified diff; nothing
    here opens another pass.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
@@ -207,4 +204,3 @@ no brief, so it raises compatibility findings and tries to run tests.
 | [`rendering`](../rendering/SKILL.md) | The render-graph runtime contracts and recurring bug classes to put in a render lane's hunt list. |
 | [`maths-laws`](../maths-laws/SKILL.md) | A Maths lane's laws, legs and mutation probe. |
 | [`puck-world`](../puck-world/SKILL.md) | A World lane's document, authority and replay contracts. |
-| [`documentation`](../documentation/SKILL.md) | Reviewing documents and skills. |

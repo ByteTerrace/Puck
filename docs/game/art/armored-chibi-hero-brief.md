@@ -254,7 +254,7 @@ Run builds and focused checks appropriate to actual changes. Schema or animation
 
 Keep implementation within this milestone: one hero, one alternate palette, essential movement and rendering support, production integration, and evidence. Leave terrain/sky upgrades, combat, equipment inventories, full avatar customization, broad renderer rewrites, and crowd-system redesign for separate work.
 
-Before completing, audit every documentation surface affected by a changed contract using [boy-scout](../../../.claude/skills/boy-scout/SKILL.md) and [documentation](../../../.claude/skills/documentation/SKILL.md). Record unrelated defects without expanding the change. Do not stage, commit, or alter another session's work.
+Before completing, audit every documentation surface affected by a changed contract using [boy-scout](../../../.claude/skills/boy-scout/SKILL.md) and [Writing documentation](../../development/documentation.md). Record unrelated defects without expanding the change. Do not stage, commit, or alter another session's work.
 
 ## 8. Handoff between implementing agents
 

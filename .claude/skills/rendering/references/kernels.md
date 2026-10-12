@@ -163,7 +163,7 @@ another's grid. A view at a native ceiling that asks for nothing temporal uses
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
 `Fragment`, and a view asking for temporal reconstruction uses
 `SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
-reactivity buffer and the history, [SKILL](../SKILL.md#temporal-reconstruction)).
+reactivity buffer and the history).
 In `Fragment`: views writes `currentColor` (one retained allocation) at the active
 render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
 at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording

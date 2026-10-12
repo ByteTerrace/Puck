@@ -257,7 +257,7 @@ Which types stayed in `Puck.State`, and why, is
 
 ### WP13 — Documentation and skills
 
-Skills: `documentation`, `boy-scout`.
+Skills: `boy-scout`; guide: [Writing documentation](../development/documentation.md).
 
 **Status:** closed. The state chapters under `docs/reference/state` describe
 the arena, `CellValue`, facets, atomic firing, groups, families, the pattern

@@ -113,17 +113,7 @@ Read-backs land on stdout, refusals and capture confirmations on stderr, so
 capture both streams. Full verb surface, the offscreen recipe, and the
 sculpting library are in `references/loop.md`.
 
-Offline, the structural checks are, in order:
-
-```bash
-puck compile <file>.puck --output <file>.world.json --validate
-dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --prototype <id>
-```
-
-The first step is only needed for a `.puck` source; a hand-authored JSON
-document starts at `creation stats` directly.
-
-It validates the whole world and checks the stamp budget, then emits text-free
+Offline, `creation stats` (below, under Verifying) validates the whole world and checks the stamp budget, then emits text-free
 prototypes at unit placement scale to inspect static and pooled rest-pose clamps.
 It also constructs the whole world's deterministic contact field, including solid
 placements and screens, even with a prototype filter. Exit 1 can mean validation,
@@ -288,8 +278,9 @@ Source first, then structure, then pixels:
 ```bash
 puck compile <file>.puck --output <file>.world.json --validate   # .puck only
 dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --prototype <id>
-dotnet run --project src/Puck.Cli -- schema --check
 ```
+
+A hand-authored JSON document starts at `creation stats` directly.
 
 Then run the game and look — a claim about how something reads is not verified
 until you have looked at a capture. The offscreen and windowed recipes, with the
