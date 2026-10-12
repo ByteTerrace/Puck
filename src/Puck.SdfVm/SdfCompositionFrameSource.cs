@@ -52,10 +52,13 @@ public interface ISdfFrameDresser {
 /// must therefore stay constant — see its remarks).
 /// </para>
 /// <para>
-/// The capacity probe: also at construction, one combined worst-case program is built by calling every emitter's
+/// The capacity probe: also at construction, one combined worst case is emitted by calling every emitter's
 /// <see cref="ISdfSceneEmitter.Emit"/> with <see cref="SdfEmitContext.Probe"/> set — each in its own material scope
-/// when <see cref="ISdfSceneEmitter.OwnsMaterialScope"/> is set — and measuring the result once
-/// (<see cref="WorstCaseProgramWordCapacity"/>/<see cref="WorstCaseInstanceCapacity"/>/<see cref="WorstCaseDynamicTransformCapacity"/>).
+/// when <see cref="ISdfSceneEmitter.OwnsMaterialScope"/> is set — and measured once without being built
+/// (<see cref="SdfProgramBuilder.MeasureCapacity"/>:
+/// <see cref="WorstCaseProgramWordCapacity"/>/<see cref="WorstCaseInstanceCapacity"/>/<see cref="WorstCaseDynamicTransformCapacity"/>),
+/// so the probe packs no stream and runs none of the build's analysis; an engine ceiling the emission exceeds still
+/// refuses there (<see cref="SdfProgramCapacityException"/>).
 /// This generalizes the per-host <c>MeasureWorstCaseEnvelope</c> pattern: any live rebuild (every real
 /// <see cref="CaptureFrame"/> call) is a program built from the same emitters' non-probe branches, which by the probe
 /// contract (see <see cref="ISdfSceneEmitter"/>) covers expected runtime variation. New authored content may exceed
@@ -90,9 +93,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // Pooled scratch for the packed instance-cull grid every BuildProgram call needs (see SdfProgram's gridWorkspace
     // parameter) — sized once against SdfProgramBuilder.MaxInstances, the same ceiling the allocating
     // SdfInstanceGrid.Build path derives the grid resolution against, so routing through this workspace instead
-    // produces byte-identical packed words. One instance covers both the construction-time probe build and every live
-    // CaptureFrame rebuild: each build copies the workspace's span into the new SdfProgram's own m_words before
-    // returning (see SdfProgram's constructor), so nothing outlives a build that could alias the next one.
+    // produces byte-identical packed words. Every live CaptureFrame rebuild shares one instance: each build copies the
+    // workspace's span into the new SdfProgram's own m_words before returning (see SdfProgram's constructor), so nothing
+    // outlives a build that could alias the next one.
     private readonly SdfInstanceGrid.Workspace m_gridWorkspace;
     // This frame's freshly-read components, and the STAGING half of the built record: captured before a build, promoted
     // into m_builtRevisions only once that build has returned. See CaptureRevisions/CaptureFrame for why both halves
@@ -182,19 +185,24 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_transforms = new DynamicTransform[slotCursor];
         m_gridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: SdfProgramBuilder.MaxInstances);
 
-        var probe = BuildProgram(
+        // The probe is measured, never built: its emission states every count the capacity depends on.
+        var probe = new SdfProgramBuilder();
+
+        Emit(
+            builder: probe,
             context: new SdfEmitContext(
                 Probe: true,
                 Time: 0f,
                 RenderOrigin: Vector3.Zero,
                 ParkPosition: ParkPosition,
                 SlotBase: 0
-            ),
-            previous: null
+            )
         );
 
-        WorstCaseProgramWordCapacity = probe.PartCompilationWordCapacity;
-        WorstCaseInstanceCapacity = probe.Instances.Count;
+        var capacity = probe.MeasureCapacity();
+
+        WorstCaseProgramWordCapacity = capacity.Words;
+        WorstCaseInstanceCapacity = capacity.Instances;
         WorstCaseDynamicTransformCapacity = m_transforms.Length;
     }
 
@@ -212,22 +220,16 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the instance-count floor the engine's mask buffer must reserve (see <see cref="WorstCaseProgramWordCapacity"/>).</summary>
     public int WorstCaseInstanceCapacity { get; }
     /// <summary>Gets the packed-word floor the engine's program buffer must reserve — every registered emitter's probe
-    /// form, combined into one program, measured once at construction with room for part compilation and sharing
-    /// to vary within the probe's instruction and instance ceilings.</summary>
+    /// form, combined into one emission and measured once at construction (<see cref="SdfProgramBuilder.MeasureCapacity"/>),
+    /// with room for part compilation and sharing to vary within the probe's instruction and instance ceilings.</summary>
     public int WorstCaseProgramWordCapacity { get; }
 
-    // Shared by construction's probe build and every live rebuild: one builder, every emitter's Emit in list order,
-    // wrapped in a material scope for any OwnsMaterialScope emitter (the ONLY behavior difference from calling Emit
-    // directly — see SdfMaterialScope). context.SlotBase is overwritten per-emitter from m_slotBases; the caller's
-    // context otherwise carries Probe/Time/RenderOrigin/ParkPosition through unchanged.
-    //
-    // `previous` — the program this call is rebuilding (null for the construction-time probe, which has no history)
-    // — supplies List capacity hints for the fresh builder: its own counts are exactly what THIS build's counts were
-    // last time, and a live scene's shape rarely swings wildly frame to frame, so seeding from them removes most of
-    // List<T>'s geometric-growth reallocation without guessing at a number nothing measured. A capacity hint changes
-    // nothing observable (List<T>.Capacity affects no read value), and every builder is routed through m_gridWorkspace
-    // — the pooled grid-build scratch this type owns — so the grid block is produced without its own per-call
-    // allocation either.
+    // A live rebuild. `previous`, the program this call rebuilds, supplies List capacity hints for the fresh builder: its
+    // own counts are exactly what this build's counts were last time, and a live scene's shape rarely swings wildly
+    // frame to frame, so seeding from them removes most of List<T>'s geometric-growth reallocation without guessing at a
+    // number nothing measured. A capacity hint changes nothing observable (List<T>.Capacity affects no read value), and
+    // every build is routed through m_gridWorkspace, the pooled grid-build scratch this type owns, so the grid block is
+    // produced without its own per-call allocation either.
     private SdfProgram BuildProgram(SdfEmitContext context, SdfProgram? previous) {
         var builder = new SdfProgramBuilder(
             instructionCapacity: (previous?.InstructionCount ?? 0),
@@ -236,6 +238,18 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0)
         );
 
+        Emit(
+            builder: builder,
+            context: context
+        );
+
+        return builder.Build(gridWorkspace: m_gridWorkspace);
+    }
+    // Shared by construction's probe and every live rebuild: every emitter's Emit in list order, wrapped in a material
+    // scope for any OwnsMaterialScope emitter (the only behavior difference from calling Emit directly; see
+    // SdfMaterialScope). context.SlotBase is overwritten per emitter from m_slotBases; the caller's context otherwise
+    // carries Probe/Time/RenderOrigin/ParkPosition through unchanged.
+    private void Emit(SdfProgramBuilder builder, SdfEmitContext context) {
         for (var index = 0; (index < m_emitters.Count); index++) {
             var emitter = m_emitters[index];
             var emitContext = new SdfEmitContext(
@@ -261,12 +275,6 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 );
             }
         }
-
-        // The construction-time probe is read for its capacities alone, which no tile-tape certificate's value changes.
-        return builder.Build(
-            gridWorkspace: m_gridWorkspace,
-            packTapeCertificates: !context.Probe
-        );
     }
     // THE REBUILD TRIGGER, and it must not be able to CANCEL — reading this frame's components into m_pendingRevisions
     // and reporting whether any of them moved, in one pass.

@@ -303,7 +303,7 @@ both runtimes already cross-check.
 `WorldDefinitionValidator` reads two injection seams before any document
 parses—`WorldPostProcessVocabularyHook.PostProcessPackageCheck` and
 `WorldProbeVocabularyHook.ProbeKindCheck`—normally wired by a composition
-root's module initializer (`Puck.World.Client.WorldSchemaVocabularyHooks` for
+root's module initializer (`Puck.World.WorldSchemaVocabularyHooks` for
 the desktop client) to a real catalog answering `true`/`false`. Each is REQUIRED
 (never absent-tolerant: an uninstalled hook throws), but answers `bool?`—
 `true`/`false` from a host with a real catalog, or `null` from a host that

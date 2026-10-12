@@ -10,7 +10,7 @@ public sealed class SdfVisibilityCadenceLawTests {
         var visibility = File.ReadAllText(path: Path.Join(path1: root, path2: "frame/sdf-visibility.hlsli"));
         var ambient = File.ReadAllText(path: Path.Join(path1: root, path2: "surface/sdf-surface.hlsli"));
         var shadow = File.ReadAllText(path: Path.Join(path1: root, path2: "surface/sdf-shadow.hlsli"));
-        var hit = File.ReadAllText(path: Path.Join(path1: root, path2: "passes/sdf-hit-stages.hlsli"));
+        var hit = File.ReadAllText(path: Path.Join(path1: root, path2: "passes/sdf-views-stage.hlsli"));
 
         Assert.NotEqual(actual: SdfVisibility.ShadowQueriesWord, expected: SdfVisibility.AmbientQueriesWord);
         Assert.True(condition: (SdfVisibility.ShadowQueriesWord < (SdfWorldPackage.VisibilityRecordByteLength / sizeof(uint))));

@@ -3,12 +3,12 @@ using Xunit;
 
 namespace Puck.SignedDistance.Tests;
 
-/// <summary>Laws for the capacity probe's build, which skips the tile-tape certificates: a probe is read for the buffer
-/// capacities it measures, and no certificate's value changes a capacity.</summary>
+/// <summary>Laws for the capacity probe's measurement (<see cref="SdfProgramBuilder.MeasureCapacity"/>), which reads a
+/// builder's emission without building it: its words never fall below the built program's
+/// <see cref="SdfProgram.PartCompilationWordCapacity"/>, and its instances are the built program's.</summary>
 public sealed class SdfProgramCapacityProbeLawTests {
-    // Instances of translated, rotated and scaled shapes, which certify, beside a reserved path table, which only a
-    // probe reserves: the parts of a program a capacity depends on.
-    private static SdfProgramBuilder Scene() {
+    // Instances of translated, rotated and scaled shapes beside a reserved path table, which only a probe reserves.
+    private static SdfProgramBuilder Instanced() {
         var builder = new SdfProgramBuilder();
         var stone = builder.AddMaterial(material: new(Vector3.One));
         var moss = builder.AddMaterial(material: new(new Vector3(x: 0.2f, y: 0.6f, z: 0.2f)));
@@ -25,46 +25,40 @@ public sealed class SdfProgramCapacityProbeLawTests {
         }
         return builder;
     }
+    // World segments only, with the side tables a polygon and a sweep add and a wallpaper fold's leaf extension.
+    private static SdfProgramBuilder World() {
+        var builder = new SdfProgramBuilder();
+        var stone = builder.AddMaterial(material: new(Vector3.One));
 
-    [Fact]
-    public void AProbeBuildMeasuresTheSameCapacitiesAsTheFullBuild() {
-        var scene = Scene();
-        var full = scene.Build();
-        var probe = scene.Build(packTapeCertificates: false);
+        _ = builder.ResetPoint();
+        _ = builder.Box(halfExtents: new Vector3(x: 4f, y: 0.25f, z: 4f), material: stone, round: 0f);
+        _ = builder.ResetPoint();
+        _ = builder.Translate(offset: new Vector3(x: 0f, y: 1f, z: 0f));
+        _ = builder.ConvexPolygon(cornerRadius: 0f, lift: SdfLift.Extrude, liftAmount: 0.5f, material: stone, vertices: [new(x: 0f, y: 0f), new(x: 0.5f, y: 1f), new(x: 1f, y: 0f)]);
+        _ = builder.ResetPoint();
+        _ = builder.Sweep(a: Vector3.Zero, b: new Vector3(x: 1f, y: 2f, z: 0f), bulge: 0f, c: new Vector3(x: 2f, y: 0f, z: 0f), material: stone, radiusEnd: 0.1f, radiusStart: 0.2f, strandOffset: 0f, strands: 1, twist: 0f);
+        _ = builder.ResetPoint();
+        _ = builder.WallpaperFold(cell: new Vector2(x: 2f, y: 2f), group: SdfWallpaperGroup.P4M, limit: new Vector2(x: 3f, y: 3f));
+        _ = builder.Sphere(material: stone, radius: 0.4f);
 
-        Assert.Equal(actual: probe.PartCompilationWordCapacity, expected: full.PartCompilationWordCapacity);
-        Assert.Equal(actual: probe.Instances.Count, expected: full.Instances.Count);
-        Assert.Equal(actual: probe.InstructionCount, expected: full.InstructionCount);
-        Assert.Equal(actual: probe.Words.Length, expected: full.Words.Length);
-        Assert.True(condition: (full.Instances.Count > 0), userMessage: "The scene must declare instances for the capacity to be measured over them.");
+        return builder;
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void TheMeasuredCapacityBoundsTheBuiltProgramsAndCountsItsInstances(int scene) {
+        var builder = ((scene == 0) ? Instanced() : World());
+        var measured = builder.MeasureCapacity();
+        var built = builder.Build();
+
+        Assert.InRange(actual: built.PartCompilationWordCapacity, high: measured.Words, low: 1);
+        Assert.Equal(actual: measured.Instances, expected: built.Instances.Count);
     }
     [Fact]
-    public void AProbeBuildPacksNoCertificateWhereTheFullBuildCertifiesShapes() {
-        var scene = Scene();
-        var full = scene.Build();
-        var probe = scene.Build(packTapeCertificates: false);
-        var certified = 0;
+    public void AnEmptyBuilderMeasuresAtLeastItsBuiltProgram() {
+        var builder = new SdfProgramBuilder();
 
-        for (var instruction = 0; (instruction < full.InstructionCount); instruction++) {
-            if (full.TapeCertificate(instruction: instruction).Flags != 0U) { certified++; }
-            Assert.Equal(actual: probe.TapeCertificate(instruction: instruction), expected: new SdfTapeCertificate(ErrorOffset: 0f, ErrorSlope: 0f, Flags: 0U, Lipschitz: 0f));
-        }
-        Assert.True(condition: (certified > 0), userMessage: "The full build must certify at least one instruction, or the probe's zero proves nothing.");
-    }
-    [Fact]
-    public void AProbeBuildPacksEveryOtherWordAsTheFullBuildDoes() {
-        var scene = Scene();
-        var full = scene.Build();
-        var probe = scene.Build(packTapeCertificates: false);
-        var differing = 0;
-
-        for (var word = 0; (word < full.Words.Length); word++) {
-            if (full.Words[word] != probe.Words[word]) { differing++; }
-        }
-
-        // The certificates are four words per instruction and the tokens a few per instance; nothing else may differ.
-        Assert.InRange(actual: differing, low: 1, high: (((4 * full.InstructionCount) + (4 * full.Instances.Count)) + 16));
-        Assert.Equal(actual: probe.Instructions, expected: full.Instructions);
-        Assert.Equal(actual: probe.Instances, expected: full.Instances);
+        Assert.True(condition: (builder.MeasureCapacity().Words >= builder.Build().PartCompilationWordCapacity));
     }
 }

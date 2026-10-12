@@ -28,7 +28,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders.Model/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data (the screen tables, the shadow slots, the levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, the `indirect/` modules the indirect cache (classify, trace, proofs and the views' reads), `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data (the screen tables, the shadow slots, the levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, the `indirect/` modules the indirect cache (classify, trace, proofs and the views' reads), `field/sdf-vm.hlsli` the interpreter aggregator, `passes/sdf-world.hlsli` the modules every world kernel reads, `passes/sdf-hit-pass.hlsli` and `passes/sdf-hit-entry.hlsli` the hit kernels' head and entry, one `*.comp.hlsl` wrapper per dispatch under `passes/` that includes its own stage | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`; the model its declarations are generated from, `src/Puck.Shaders.Model` and `src/Puck.SdfVm.Model` (`ShaderDeclarations`, `SdfKernelInterfaces`), which compile no shader; `src/Puck.Shaders.Generator`, the build-only reference whose build writes them before any kernel compiles; `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
@@ -479,13 +479,20 @@ reintroduce `[noinline]`.
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), the
   indirect receiver (every field query of indirect light, with the cache only)
-  and views (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
-  pass macros, each compiling its own stage over one pixel context (`SdfPixel`):
+  and views (materials, lighting) are separate dispatches sharing one entry point
+  (`passes/sdf-hit-entry.hlsli`) through pass macros, each compiling its own stage
+  over one pixel context (`SdfPixel`). A hit kernel includes the common head
+  (`passes/sdf-hit-pass.hlsli`), then only its own stage module, then the
+  entry, and a stage module includes what it reads beyond `passes/sdf-world.hlsli`
+  itself, so a kernel's include closure, which the shader cache keys and a
+  reload recompiles by, holds no other pass's stage. Never route a stage module
+  back through the aggregator or another wrapper: an edit to it would then
+  recompile every hit kernel. The stages are
   `sdfPrimaryStage` in `march/sdf-primary.hlsli`, `sdfSurfaceStage` and
   `sdfAmbientStage` in `surface/sdf-surface.hlsli`, `sdfShadowStage` in
   `surface/sdf-shadow.hlsli`, `sdfReceiverStage` in
   `indirect/sdf-indirect-receiver.hlsli` (`SDF_RECEIVER_PASS`), and `sdfViewsStage`
-  (`passes/sdf-hit-stages.hlsli`), which reads the record once as a surface
+  (`passes/sdf-views-stage.hlsli`), which reads the record once as a surface
   sample (`SdfSurfaceSample`) and runs `sdfLightStage`
   (`passes/sdf-light-stage.hlsli`) and the debug views
   (`debug/sdf-debug-views.hlsli`), shading hits only into the lit image
@@ -598,11 +605,11 @@ reintroduce `[noinline]`.
 - A composition probe measures one worst case across every emitter. Any
   optional emission declares a `Probe` branch on its `ISdfSceneEmitter`, and
   probes reserve `SdfProgram.PartCompilationWordCapacity`, not `Words.Length`.
-  The probe is read for capacities alone, so it builds with
-  `packTapeCertificates: false`: the tile-tape certificates are more than half
-  of a large program's construction, no capacity depends on their values, and a
-  probe's tape words stay zero. A program the renderer executes always packs
-  them (the default); never read a certificate from a probe.
+  The probe is measured, never built: `SdfProgramBuilder.MeasureCapacity`
+  reads the emission's exact counts and bounds the ones only analysis decides,
+  through the one packed layout (`SdfProgram.Layout`), so its words are never
+  below the built program's capacity (`SdfProgramCapacityProbeLawTests`). A new
+  packed section joins `SdfProgram.Layout` and the measurement's count of it.
 - Emitter revisions compare componentwise; never sum or hash them, because some
   counters are assigned and can move down.
 - Static placement headroom covers both emission classes: a scoped creation

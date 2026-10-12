@@ -21,6 +21,7 @@
         <ProjectReference Include="../Puck.World.Authoring/Puck.World.Authoring.csproj" />
         <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+        <ProjectReference Include="../Puck.World.Vocabulary/Puck.World.Vocabulary.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

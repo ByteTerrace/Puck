@@ -1130,9 +1130,7 @@ public sealed partial class SdfProgramBuilder {
     /// instances — the reference the grid-cull gate compares against; see <see cref="SdfProgram"/>.</param>
     /// <param name="gridWorkspace">Forwarded to <see cref="SdfProgram"/>'s constructor — see its
     /// <c>gridWorkspace</c> parameter. <see langword="null"/> (the default) keeps the allocating grid-build path.</param>
-    /// <param name="packTapeCertificates">Forwarded to <see cref="SdfProgram"/>'s constructor — see its
-    /// <c>packTapeCertificates</c> parameter. Only a capacity probe passes <see langword="false"/>.</param>
-    public SdfProgram Build(bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, bool packTapeCertificates = true) {
+    public SdfProgram Build(bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null) {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -1250,7 +1248,6 @@ public sealed partial class SdfProgramBuilder {
             instances: m_instances,
             instructions: m_instructions,
             materials: m_materials,
-            packTapeCertificates: packTapeCertificates,
             paths: m_paths,
             reservedPathWords: m_reservedPathWords,
             screenSurfaces: m_screenSurfaces,

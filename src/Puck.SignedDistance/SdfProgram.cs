@@ -153,12 +153,6 @@ public sealed partial class SdfProgram {
     /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
-    /// <param name="packTapeCertificates">Whether to compute and pack the per-instruction tile-tape certificates and
-    /// tokens (default <see langword="true"/>, and the only value a program the renderer executes takes). A capacity
-    /// probe reads <see cref="PartCompilationWordCapacity"/> and the instance count alone, neither of which depends
-    /// on a certificate's value, so it passes <see langword="false"/> and skips the interval arithmetic that is more
-    /// than half of a large program's construction; the certificate words then stay zero, which reads as a live
-    /// instruction with no certificate (<see cref="TapeCertificate"/>).</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
@@ -171,7 +165,7 @@ public sealed partial class SdfProgram {
     /// the deterministic field's representation.</exception>
     /// <exception cref="InvalidOperationException">Two distinct chains of the program share one 32-bit
     /// <see cref="SdfChain.Identity"/>.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, bool packTapeCertificates = true) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
@@ -338,36 +332,59 @@ public sealed partial class SdfProgram {
             )
         );
 
-        var dataOffsetVectors = (ProgramHeaderVectors + instructionCount);
-        var materialOffsetVectors = (dataOffsetVectors + (InstructionDataVectors * instructionCount));
-        var boundsOffsetVectors = (materialOffsetVectors + (MaterialVectorsPerEntry * materialCount));
-        var segmentOffsetVectors = (boundsOffsetVectors + (BoundRecordVectors * instructionCount));
-        var instanceOffsetVectors = ((segmentOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * segments.Count));
-        var worldSegmentOffsetVectors = ((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * m_instances.Length));
-        var gridOffsetVectors = ((worldSegmentOffsetVectors + DirectoryHeaderVectors) + worldSegmentCount);
-        var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
-        var tapeOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
-        var chainTableOffsetVectors = (tapeOffsetVectors + instructionCount);
-        var convexPolygonOffsetVectors = (chainTableOffsetVectors + m_chainTable.Vectors);
+        var convexPolygonVectors = 0;
+        var pathEdges = 0;
+
+        foreach (var (_, vertices) in m_convexPolygonProfiles) {
+            convexPolygonVectors += ((vertices.Length + 1) / 2);
+        }
+
+        foreach (var path in m_paths) {
+            pathEdges = checked((pathEdges + path.Edges.Count));
+        }
+
+        var layout = new Layout(
+            ChainTableVectors: m_chainTable.Vectors,
+            ConvexPolygonVectors: convexPolygonVectors,
+            GridWords: gridBlock.Length,
+            Instances: m_instances.Length,
+            Instructions: instructionCount,
+            Materials: materialCount,
+            PathEdges: pathEdges,
+            RigidLeaves: rigidPlan.Leaves.Count,
+            Segments: segments.Count,
+            SweepCurves: m_sweepCurves.Length,
+            WorldSegments: worldSegmentCount
+        );
+        var dataOffsetVectors = layout.DataOffset;
+        var materialOffsetVectors = layout.MaterialOffset;
+        var boundsOffsetVectors = layout.BoundsOffset;
+        var segmentOffsetVectors = layout.SegmentOffset;
+        var instanceOffsetVectors = layout.InstanceOffset;
+        var worldSegmentOffsetVectors = layout.WorldSegmentOffset;
+        var gridOffsetVectors = layout.GridOffset;
+        var rigidPlanOffsetVectors = layout.RigidPlanOffset;
+        var tapeOffsetVectors = layout.TapeOffset;
+        var chainTableOffsetVectors = layout.ChainTableOffset;
+        var convexPolygonOffsetVectors = layout.ConvexPolygonOffset;
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
-        var convexPolygonWords = 0;
+        var convexPolygonCursor = 0;
 
         for (var profileIndex = 0; (profileIndex < m_convexPolygonProfiles.Length); profileIndex++) {
-            convexPolygonProfileOffsets[profileIndex] = (convexPolygonOffsetVectors + convexPolygonWords);
-            convexPolygonWords += ((m_convexPolygonProfiles[profileIndex].Vertices.Length + 1) / 2);
+            convexPolygonProfileOffsets[profileIndex] = (convexPolygonOffsetVectors + convexPolygonCursor);
+            convexPolygonCursor += ((m_convexPolygonProfiles[profileIndex].Vertices.Length + 1) / 2);
         }
 
         // The Sweep curve table sits immediately after the convex-polygon table — a FIXED 3-uvec4 stride per curve
         // (A, B, C), unlike ConvexPolygon's variable vertex count, so no per-entry word count needs computing here.
-        var sweepOffsetVectors = (convexPolygonOffsetVectors + convexPolygonWords);
+        var sweepOffsetVectors = layout.SweepOffset;
         var sweepCurveOffsets = new int[m_sweepCurves.Length];
 
         for (var curveIndex = 0; (curveIndex < m_sweepCurves.Length); curveIndex++) {
             sweepCurveOffsets[curveIndex] = (sweepOffsetVectors + (curveIndex * SweepCurveVectorsPerEntry));
         }
 
-        var pathOffsetVectors = (sweepOffsetVectors + (SweepCurveVectorsPerEntry * m_sweepCurves.Length));
-        var pathEnd = pathOffsetVectors;
+        var pathEnd = layout.PathOffset;
 
         foreach (var path in m_paths) {
             var instruction = m_instructions[path.InstructionIndex];
@@ -377,13 +394,10 @@ public sealed partial class SdfProgram {
             };
             pathEnd = checked((pathEnd + (2 * path.Edges.Count)));
         }
-        var partProgramOffset = pathEnd;
+        var partProgramOffset = layout.PartProgramOffset;
         var totalVectors = (partProgramOffset + partPrograms.VectorCount);
-        // A probe cannot rely on shared or ineligible parts staying that way in every later emission. Each leaf
-        // needs at least ResetPoint + ShapeBlend, so its shared record plus placement binding consume at most
-        // instructionCount vectors in total, even if no two placements share geometry.
-        PartCompilationWordCapacity = checked((((partProgramOffset + ((m_instances.Length == 0)
-            ? 0 : ((1 + m_instances.Length) + instructionCount))) * WordsPerVector) + reservedPathWords));
+
+        PartCompilationWordCapacity = layout.PartCompilationWordCapacity(reservedPathWords: reservedPathWords);
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -497,12 +511,10 @@ public sealed partial class SdfProgram {
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
         m_words[((segmentOffsetVectors * WordsPerVector) + SegmentTapeLane)] = ((uint)tapeOffsetVectors);
-        if (packTapeCertificates) {
-            PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
-        }
+        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
         PackChainTable(offset: chainTableOffsetVectors, worldSegmentOffset: worldSegmentOffsetVectors);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
-        PackPaths(offset: pathOffsetVectors);
+        PackPaths(offset: layout.PathOffset);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);
         PackPartPrograms(instanceOffset: instanceOffsetVectors, offset: partProgramOffset, plan: partPrograms);
     }

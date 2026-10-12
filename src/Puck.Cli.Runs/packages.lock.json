@@ -491,8 +491,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "1.5.9",
-        "contentHash": "Vro4ZKVZLBoPdCftyMUlzhlRpegI3N6TlT0zpyn79a42mH214VDqzkAdV70vu578W6NKS84hBA9H6j81cz0dLg=="
+        "resolved": "1.5.11",
+        "contentHash": "khJyt6K3OLmDtYhI1gjaz5NX+rBGCnQrTpTQZdeCjCrNy559DmU2eLdpzj8f1ZpLCu4+6Yd022LiDr1NP3jfhw=="
       },
       "Resharp": {
         "type": "Transitive",
@@ -835,9 +835,6 @@
           "Parlot": "[1.5.*, )"
         }
       },
-      "puck.analyzers": {
-        "type": "Project"
-      },
       "puck.cli.core": {
         "type": "Project",
         "dependencies": {
@@ -883,7 +880,6 @@
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
-          "Puck.Analyzers": "[1.0.0, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )"
         }
@@ -900,7 +896,8 @@
           "Puck.Cli.Shaders": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )"
+          "Puck.World.Server": "[1.0.0, )",
+          "Puck.World.Vocabulary": "[1.0.0, )"
         }
       },
       "puck.launcher": {
@@ -981,7 +978,8 @@
           "Puck.SdfVm": "[1.0.0, )",
           "Puck.World.Authoring": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
-          "Puck.World.Schema": "[1.0.0, )"
+          "Puck.World.Schema": "[1.0.0, )",
+          "Puck.World.Vocabulary": "[1.0.0, )"
         }
       },
       "puck.world.console": {
@@ -1055,6 +1053,16 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
+          "Puck.World.Schema": "[1.0.0, )"
+        }
+      },
+      "puck.world.vocabulary": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       }
