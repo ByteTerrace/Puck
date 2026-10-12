@@ -7,8 +7,7 @@ namespace Puck.Cli.Runs.Tests;
 
 /// <summary>
 /// Proves what <c>puck canary --plan</c> counts: the World boots, runner-started processes, builds and summed leg
-/// budget of a selection, from its manifests alone; which legs run alone; and that each gate selection is refused
-/// once it outgrows the cost recorded in <see cref="CanaryCeilingsLedger"/>.
+/// budget of a selection, from its manifests alone, and which legs run alone.
 /// </summary>
 public sealed class CanaryPlanLawTests {
     private static CanaryLeg Leg(string name) => new(
@@ -273,40 +272,6 @@ public sealed class CanaryPlanLawTests {
                 actual: (manifest.Id, proof.Exclusive, proof.Gpu)
             );
         }
-    }
-    [Fact]
-    public void ACeilingRefusesOnlyAPlanThatExceedsItAndNamesWhereToRaiseIt() {
-        var plan = CanaryCommand.Plan(
-            manifests: [Manifest(id: "lone", shape: CanaryBootShape.Headless, timeoutSeconds: 30)],
-            namedWorldArtifact: false,
-            backends: WorldOffscreenLeg.Backends
-        );
-
-        Assert.Null(@object: CanaryCommand.CeilingRefusal(
-            ceiling: new CanaryCeiling(LegBudgetSeconds: 60, WorldBoots: 2),
-            name: "merge",
-            plan: plan
-        ));
-
-        var boots = CanaryCommand.CeilingRefusal(
-            ceiling: new CanaryCeiling(LegBudgetSeconds: 60, WorldBoots: 1),
-            name: "merge",
-            plan: plan
-        );
-
-        Assert.NotNull(@object: boots);
-        Assert.Contains(actualString: boots, expectedSubstring: "2 World boots against 1");
-        Assert.Contains(actualString: boots, expectedSubstring: "merge in CanaryCeilings.json");
-        Assert.Contains(actualString: boots, expectedSubstring: "puck canary-ceilings");
-        Assert.DoesNotContain(actualString: boots, expectedSubstring: "leg budget");
-        Assert.Contains(
-            expectedSubstring: "a 60-second leg budget against 59",
-            actualString: CanaryCommand.CeilingRefusal(
-                ceiling: new CanaryCeiling(LegBudgetSeconds: 59, WorldBoots: 2),
-                name: "automatic",
-                plan: plan
-            )
-        );
     }
     [Fact]
     public void PlanningAListIsRefusedAtParse() {

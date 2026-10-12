@@ -17,9 +17,9 @@ public sealed record CountersBatchGroup(string Name, string Prelude, IReadOnlyLi
     // Sky-only work waits for the existing engine verdict without installing an indirect cache.
     public string Completion { get; init; } = "indirect";
 }
-public sealed record CountersBatchObservation(string Name, string Method, string Script, string Report, string Ceilings);
+public sealed record CountersBatchObservation(string Name, string Method, string Script, string Report);
 public sealed record PreparedCountersObservation(CountersBatchObservation Definition, string ScriptPath, string Script,
-    string ReportPath, string CeilingsPath);
+    string ReportPath);
 public sealed record PreparedCountersGroup(string Name, string PreludePath, string Prelude,
     IReadOnlyList<PreparedCountersObservation> Observations) {
     public string Completion { get; init; } = "indirect";
@@ -47,7 +47,6 @@ public static class CountersBatchInput {
         var groups = new List<PreparedCountersGroup>();
         var names = new HashSet<string>(comparer: PuckPaths.Comparer);
         var reports = new HashSet<string>(comparer: PuckPaths.Comparer);
-        var ceilings = new HashSet<string>(comparer: PuckPaths.Comparer);
         var scripts = new HashSet<string>(comparer: PuckPaths.Comparer);
         var groupNames = new HashSet<string>(comparer: PuckPaths.Comparer);
 
@@ -78,10 +77,9 @@ public static class CountersBatchInput {
                 }
                 var scriptPath = SourcePath(home: home, value: observation.Script);
                 var reportPath = ProductPath(output: output, value: observation.Report);
-                var ceilingsPath = SourcePath(home: home, value: observation.Ceilings);
 
-                if (!scripts.Add(item: scriptPath) || !reports.Add(item: reportPath) || !ceilings.Add(item: ceilingsPath)) {
-                    throw new FormatException(message: "observations must own distinct scripts, report paths and ceilings paths");
+                if (!scripts.Add(item: scriptPath) || !reports.Add(item: reportPath)) {
+                    throw new FormatException(message: "observations must own distinct scripts and report paths");
                 }
                 var script = ReadScript(path: scriptPath);
                 var commands = Commands(script: script).ToArray();
@@ -110,11 +108,10 @@ public static class CountersBatchInput {
                     || (disabled < 0) || (disabled >= warmed))) {
                     throw new FormatException(message: $"observation {observation.Name} must disable indirect work before its engine completion");
                 }
-                observations.Add(item: new PreparedCountersObservation(CeilingsPath: ceilingsPath, Definition: observation, ReportPath: reportPath, Script: script, ScriptPath: scriptPath));
+                observations.Add(item: new PreparedCountersObservation(Definition: observation, ReportPath: reportPath, Script: script, ScriptPath: scriptPath));
             }
             groups.Add(item: new PreparedCountersGroup(group.Name, preludePath, prelude, observations) { Completion = group.Completion });
         }
-        if (reports.Overlaps(other: ceilings)) { throw new FormatException(message: "a report output names a ceilings file"); }
         foreach (var report in reports) {
             var relative = Path.GetRelativePath(path: report, relativeTo: output).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar);
 
@@ -126,8 +123,8 @@ public static class CountersBatchInput {
         var inputs = new HashSet<string>(collection: scripts, comparer: PuckPaths.Comparer) { world, Path.GetFullPath(path: path) };
 
         foreach (var group in groups) { inputs.Add(item: group.PreludePath); }
-        if (reports.Overlaps(other: inputs) || ceilings.Overlaps(other: inputs)) {
-            throw new FormatException(message: "an output or ceiling names a batch input");
+        if (reports.Overlaps(other: inputs)) {
+            throw new FormatException(message: "an output names a batch input");
         }
         return new PreparedCountersBatch(world, groups, Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text))));
     }

@@ -15,8 +15,8 @@ public sealed partial class CountersLawTests {
             var method = new[] { "cache", "screen", "cone" }[(index % 3)];
             var id = $"{name}-{index}";
 
-            return new PreparedCountersObservation(new CountersBatchObservation(Ceilings: (id + ".ceilings.json"), Method: method, Name: id,
-                Report: (id + ".json"), Script: (id + ".script.txt")), (id + ".script.txt"), "script\n", (id + ".json"), (id + ".ceilings.json"));
+            return new PreparedCountersObservation(new CountersBatchObservation(Method: method, Name: id,
+                Report: (id + ".json"), Script: (id + ".script.txt")), (id + ".script.txt"), "script\n", (id + ".json"));
         }).ToArray());
     private static CliProcessResult BatchTranscript(PreparedCountersGroup group, string backend, string defect = "") {
         var stdout = new List<string>();
@@ -107,7 +107,7 @@ public sealed partial class CountersLawTests {
             + ((defect == "prelude-wait") ? "world.wait ready 180\n" : "")));
         var manifest = new CountersBatchManifest("fixture.puck", [
             new CountersBatchGroup("sky", "prelude.script.txt", [
-                new CountersBatchObservation(Ceilings: "sky-low.ceilings.json", Method: "cache", Name: "sky-low", Report: "sky-low.json", Script: "sky.script.txt"),
+                new CountersBatchObservation(Method: "cache", Name: "sky-low", Report: "sky-low.json", Script: "sky.script.txt"),
             ]) { Completion = ((defect == "unknown-completion") ? "timer" : "engine") },
         ]);
         var path = Path.Combine(path1: directory.RootPath, path2: "batch.json");
@@ -196,7 +196,7 @@ public sealed partial class CountersLawTests {
             + ((defect == "terminal") ? "quit\n" : "")), path: script);
         if (defect == "warm-order") { File.WriteAllText(script, File.ReadAllText(path: script).Replace(comparisonType: StringComparison.Ordinal, newValue: "world.wait indirect\nworld.rate pause\n", oldValue: "world.rate pause\nworld.wait indirect\n")); }
         File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: "prelude.script.txt"), "world.wait ready 180\n");
-        var observation = new CountersBatchObservation(Ceilings: "medium-cache-pan.ceilings.json", Method: "cache", Name: "medium-cache-pan",
+        var observation = new CountersBatchObservation(Method: "cache", Name: "medium-cache-pan",
             Report: defect switch {
                 "escape" => "../outside.json",
                 "reserved" => "batch.observations.json",
@@ -210,7 +210,6 @@ public sealed partial class CountersLawTests {
             Name = ((defect == "observation-case") ? "MEDIUM-CACHE-PAN" : "other"),
             Script = "other.script.txt",
             Report = "other.json",
-            Ceilings = "other.ceilings.json",
         };
 
         File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: other.Script), File.ReadAllText(path: script));

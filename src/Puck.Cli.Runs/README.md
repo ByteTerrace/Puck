@@ -1,6 +1,6 @@
 # Puck.Cli.Runs
 
-Puck.Cli.Runs holds the verbs that boot a World and judge it: `canary`, `canary-ceilings`, `counters`, `parity`, `qualify`, `landing`, `determinism`, `publish` and `schema`.
+Puck.Cli.Runs holds the verbs that boot a World and judge it: `canary`, `counters`, `parity`, `qualify`, `landing`, `determinism`, `publish` and `schema`.
 
 ## Documentation
 

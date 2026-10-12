@@ -32,7 +32,7 @@ timing (`world.gpu-timing`, `world.fps`, `puck bench`) are evidence beside
 those counts, never alone: a timing shows where frame time goes and reads the
 frame-rate bar, and a count shows what work moved. Load moves a timing, so one
 runs on a quiet machine, with no build, test or other GPU work beside it. No
-counter report, ceiling, canary or law reads a timing; dynamic resolution's
+counter report, canary or law reads a timing; dynamic resolution's
 load signal and the editor's per-pass readout
 ([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)) are its
 runtime readers. Work counts extend one shared read
@@ -62,28 +62,21 @@ world, and a sculpt edit rebakes only what it touches. The field interpreter
 serves the editor's live preview and the frames before a bake lands. Dynamic
 bodies bake per rigid part, since their parts move without changing shape.
 
-**P14 and P15 are gated by counted-cost ceilings.** Each of their passes'
+**P14 and P15 are judged by counted work.** Each of their passes'
 deterministic counters, dispatches, march steps, texels written and bytes
-uploaded, is recorded over one pinned workload, `puck counters`' world with its
-camera and views, at the floor tier and the RTX 2060's 1920x1080, and
-held as a calibrated ceiling that workload may not exceed; other content is
-free to cost more, since its counts gate nothing. The ledger counts upload
-bytes per pass (`gpu.uploads.host-visible`), the SDF upload's brick writes and
-fillers under passes of their own, and the kernels count their own march steps
-and texels written (`gpu.march.steps`, `gpu.texels.written`), because a march's
-steps are decided inside the shader's data-dependent loop; `puck counters
---check` holds the workload to `tests/Puck.Counters/counters.ceilings.json`. A
-pass that cannot do a kind of work, or that the floor tier skips, holds a
-required zero, so work that starts where it should not fails as surely as work
-over its ceiling. A ceiling is
-re-recorded only in the change that explains why the count moved, so a cost
-increase is always a stated decision; wall-clock and GPU timing never set or
-move one. The floor device is where a missed budget first shows, so its counts
-bound the programme's rendering cost before any timing is taken. The programme
-tests on more than one GPU, so the ledger holds one record per device for the
-counts whose magnitudes follow the device, beside the deterministic counts and
-required zeros every device shares, and a device with no record fails by name
-rather than going unjudged.
+uploaded, is counted over one pinned workload, `puck counters`' world with its
+camera and views, at the floor tier and the RTX 2060's 1920x1080; other
+content is free to cost more. The counters count upload bytes per pass
+(`gpu.uploads.host-visible`), the SDF upload's brick writes and fillers under
+passes of their own, and the kernels count their own march steps and texels
+written (`gpu.march.steps`, `gpu.texels.written`), because a march's steps are
+decided inside the shader's data-dependent loop. A change that moves a count is
+measured before and after it on the same device with `puck counters compare`,
+and the change states why the count moved, so a cost increase is always a
+stated decision; wall-clock and GPU timing never judge one. Nothing records the
+counts in the repository. The floor device is where a missed budget first
+shows, so its counts bound the programme's rendering cost before any timing is
+taken.
 
 **Attachment ownership belongs to the pipeline plan.** A backend executes a
 plan it does not own. Outputs are versioned, each version has one writer, and

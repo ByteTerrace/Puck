@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the re-record runs on the merged head under a GPU grant and lands with the reason in the commit message.
+The response says the owed confirmation runs on the merged head under a GPU grant and the reason for the move stands in the commit message.

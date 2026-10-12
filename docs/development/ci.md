@@ -79,17 +79,12 @@ critical path, so CI speed work leaves its AOT and optimisation settings alone.
 a fresh Windows checkout on each of four runners, verifies its commit and
 platform, and runs one shard of its manifest's test assemblies there
 (`puck artifacts test-windows --shard <i> --shards <n>`, the matrix's size).
-The shards split the manifest by the measured run times recorded in
-`TestDurations.json`: each assembly, longest first, joins the shard with the
-least recorded time so far, so the shards hold every assembly exactly once and
-none ends more than the longest assembly's time past an even split
-(`ArtifactsShardLawTests`). An assembly the table does not name, such as a new
-test project, weighs the median. Each shard writes its measured times as
-`durations.json` beside its TRX reports in its `test-diagnostics-<i>` artifact;
-`puck artifacts durations <directory>` over one run's downloaded reports
-re-records the table when the times drift. A shard runs each assembly as
-`dotnet <assembly.dll>`, two at a time and longest first, so its longest suite
-runs alongside the others; each run's output is printed whole when it finishes.
+The shards deal the manifest round-robin: in ordinal order, the assembly at
+index `i` joins shard `i` modulo the shard count, so the shards hold every
+assembly exactly once and differ in size by at most one
+(`ArtifactsShardLawTests`). A shard runs each assembly as
+`dotnet <assembly.dll>`, two at a time; each run's output is printed whole when
+it finishes, and its TRX reports go to the shard's `test-diagnostics-<i>` artifact.
 A failing assembly cancels nothing: every assembly in the shard runs, and the
 shard ends by naming each one that failed; one shard's failure cancels no other
 (`fail-fast: false`). The job installs the

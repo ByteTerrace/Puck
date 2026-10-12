@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -12,30 +11,20 @@ namespace Puck.World;
 /// (<paramref name="view"/>, the world's own by default) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
 /// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
 /// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
-/// submissions; and their budget per output pixel from the counters ceilings the floor device committed
-/// (<c>src/Puck.World/floor.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
-/// backend (<see cref="WorldDynamicResolution.StepBudgetPerPixel"/>). A timed or counted reading sums the view's newest submissions not read before, through a
+/// submissions; and their budget per output pixel (<see cref="WorldDynamicResolution.StepBudgetPerPixel"/>). A timed or counted reading sums the view's newest submissions not read before, through a
 /// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
 /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a
 /// host whose presenter reports none.</param>
-/// <param name="backend">Resolves the backend the device runs, on the first budget read, or <see langword="null"/> before
-/// a device is up.</param>
 /// <param name="timing">The timestamp demand the views' GPU frame time is recorded under.</param>
 /// <param name="probe">The render probe, whose root runtime holds the views' work.</param>
 /// <param name="view">The view whose fresh submissions this source reads.</param>
-internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, Func<string?> backend, WorldGpuTiming timing, WorldRenderProbe probe, string view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
-    /// <summary>The name the committed counters ceilings are compiled into the World under.</summary>
-    public const string CeilingsResource = "counters.ceilings.json";
-
+internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, WorldGpuTiming timing, WorldRenderProbe probe, string view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
     private static readonly int MarchStepsColumn = ColumnOf(kind: GpuWork.MarchSteps);
-    private static readonly Lazy<WorldCountersCeilings?> Ceilings = new(valueFactory: ReadCeilings);
     private readonly WorldFrameLoadAggregate m_gpu = new();
     private readonly GpuWorkSample m_sample = new();
     private readonly WorldFrameLoadAggregate m_steps = new();
 
-    private double m_budget;
-    private bool m_budgeted;
     private IPresentTimingFeedback? m_presentTiming;
     private bool m_resolved;
     // The instance set the views were found in, and each instance's node when it is one of the world's own views, or
@@ -60,18 +49,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
     }
     /// <inheritdoc/>
-    public double MarchStepBudgetPerPixel {
-        get {
-            if (!m_budgeted && (backend() is { } name)) {
-                m_budgeted = true;
-                m_budget = ((Ceilings.Value is { } ceilings)
-                    ? WorldDynamicResolution.StepBudgetPerPixel(backend: name, ceilings: ceilings)
-                    : 0d);
-            }
-
-            return m_budget;
-        }
-    }
+    public double MarchStepBudgetPerPixel => WorldDynamicResolution.StepBudgetPerPixel;
 
     /// <inheritdoc/>
     public void RequireGpuTiming(bool required) => timing.Require(required: required);
@@ -248,13 +226,6 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         return true;
-    }
-    private static WorldCountersCeilings? ReadCeilings() {
-        using var stream = typeof(WorldFrameLoadSource).Assembly.GetManifestResourceStream(name: CeilingsResource);
-
-        return ((stream is null)
-            ? null
-            : JsonSerializer.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings, utf8Json: stream));
     }
     private static int ColumnOf(WorkKind kind) {
         var kinds = GpuWork.SubmissionKinds;

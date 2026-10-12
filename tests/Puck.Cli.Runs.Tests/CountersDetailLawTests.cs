@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Puck.Cli.Runs.Tests;
 
-/// <summary>Laws for detail identities through readings, comparison and device-aware ceilings.</summary>
+/// <summary>Laws for detail identities through readings and comparison.</summary>
 public sealed class CountersDetailLawTests {
     [Fact]
     public void ReadingRetainsExecutedAndSkippedDetailsWithTheirPassClass() {
@@ -39,51 +39,8 @@ public sealed class CountersDetailLawTests {
         Assert.Contains(collection: differences, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=stars"));
         Assert.Contains(collection: differences, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds"));
     }
-    // A detail's required zero is shared by every device: on a device with no record it is still judged, beside the line
-    // naming the device, while that device's own magnitudes wait for its record. On the recording device every detail is
-    // judged, and an unknown one fails.
     [Fact]
-    public void ADetailRequiredZeroHoldsOnAForeignDeviceAndUnknownDetailsFail() {
-        var original = Report(run: Run(counts: [Count(detail: null, value: 100), Count(detail: "stars", value: 0)]));
-        var ceilings = CountersCeilings.Record(report: original);
-
-        Assert.Equal(expected: 0L, actual: Assert.Single(collection: ceilings.Backends[0].Ceilings).Ceiling);
-        var counts = new[] { Count(detail: null, value: 101), Count(detail: "stars", value: 1), Count(detail: "clouds", value: 3) };
-        var foreign = CountersCeilings.Check(report: Report(run: Run(counts: counts) with { Device = Device with { DeviceId = 3 } }), ceilings: ceilings);
-
-        Assert.Equal(expected: 2, actual: foreign.Failures.Count);
-        Assert.Equal(expected: "vulkan: no ceilings recorded for GPU (vendor=0x0001 device=0x0003); run puck counters --record on it", actual: foreign.Failures[0]);
-        Assert.Contains(collection: foreign.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=stars") && line.Contains(comparisonType: StringComparison.Ordinal, value: "required zero")));
-        Assert.Empty(collection: foreign.Notes);
-
-        var recording = CountersCeilings.Check(report: Report(run: Run(counts: counts)), ceilings: ceilings);
-
-        Assert.Equal(expected: 3, actual: recording.Failures.Count);
-        Assert.Contains(collection: recording.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=-") && line.Contains(comparisonType: StringComparison.Ordinal, value: "over its ceiling")));
-        Assert.Contains(collection: recording.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds") && line.Contains(comparisonType: StringComparison.Ordinal, value: "no ceiling")));
-    }
-    [Fact]
-    public void SkippedDetailsRecordZerosAndCannotDisappearFromAMeasurement() {
-        var run = Run(counts: []) with {
-            Passes = [new WorldCountersPass(Class: WorkClass.Deterministic, Label: "sky", Node: "world", State: GpuPassState.Skipped) { Details = ["plain", "stars"] }],
-        };
-        var report = Report(run: run);
-        var ceilings = CountersCeilings.Record(report: report);
-
-        Assert.Equal(expected: (GpuWork.SubmissionKinds.Length * 3), actual: ceilings.Backends[0].Ceilings.Count);
-        Assert.Empty(collection: ceilings.Backends[0].Devices[0].Ceilings);
-        Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
-        var missing = run with { Passes = [run.Passes[0] with { Details = ["plain"] }] };
-
-        Assert.Equal(expected: GpuWork.SubmissionKinds.Length,
-            actual: CountersCeilings.Check(report: Report(run: missing), ceilings: ceilings).Failures.Count);
-        var added = run with { Passes = [run.Passes[0] with { Details = ["plain", "stars", "clouds"] }] };
-
-        Assert.Equal(expected: "vulkan: pass=sky detail=clouds node=world has no ceiling recorded",
-            actual: Assert.Single(collection: CountersCeilings.Check(report: Report(run: added), ceilings: ceilings).Failures));
-    }
-    [Fact]
-    public void ReportsRequireDetailKeysAndCeilingsRequireLayoutObjects() {
+    public void ReportsRequireDetailKeysAndPassDetails() {
         var report = Report(run: Run(counts: [Count(detail: null, value: 1)]));
         var json = JsonNode.Parse(json: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport))!;
 
@@ -92,11 +49,6 @@ public sealed class CountersDetailLawTests {
         json = JsonNode.Parse(json: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport))!;
         json["runs"]![0]!["passes"]![0]!.AsObject().Remove(propertyName: "details");
         Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(json: json.ToJsonString(), jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport));
-        var ceilings = CountersCeilings.Record(report: report);
-
-        json = JsonNode.Parse(json: JsonSerializer.Serialize(value: ceilings, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings))!;
-        json["backends"]![0]!["ceilings"] = new JsonArray();
-        Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(json: json.ToJsonString(), jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings));
     }
 
     private static GpuDeviceIdentity Device => new(Backend: "vulkan", AdapterName: "GPU", VendorId: 1, DeviceId: 2,

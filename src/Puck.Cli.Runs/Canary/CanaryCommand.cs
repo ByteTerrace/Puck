@@ -31,7 +31,7 @@ public static partial class CanaryCommand {
             Description = "Maximum World processes to run at once (default: the logical processor count). A federated leg holds one per process. Proof reports remain in authored order.",
         };
         var gpuJobsOption = CanaryGpuJobs.Create();
-        var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
+        var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
         var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
         var keepTranscriptsOption = new Option<bool>(name: "--keep-transcripts") { Description = "Keep every leg's run directory whatever its verdict, for a caller that reads the transcripts afterwards and owns their removal; by default a held proof's legs are deleted and a failed proof's are kept." };
@@ -53,14 +53,13 @@ public static partial class CanaryCommand {
               --debug-layers         boot every leg that names a backend, windowed or offscreen, with that
                                      backend's validation layer, and fail a leg on any validation message
                                      or an unloaded layer
-              --plan                 print the selection's counts and ceiling without building or running
+              --plan                 print the selection's counts without building or running
               --keep-transcripts     keep every leg's run directory whatever its verdict
               --jobs <n>             run at most n World processes at once (default: logical processors)
               --gpu-jobs <n>         run at most n legs on the GPU at once (default {CanaryGpuJobs.Default})
 
-            The five selection forms are mutually exclusive. Every execution refuses an empty selection,
-            and a gate selection (the automatic set or --merge) whose planned World boots or summed leg
-            budget exceed the cost recorded in CanaryCeilings.json (`puck canary-ceilings`). It builds Puck.World once (or takes
+            The five selection forms are mutually exclusive. Every execution refuses an empty selection.
+            It builds Puck.World once (or takes
             --world-artifact as given), then runs every positive and discriminating leg from fresh state
             in its own run directory, state directory and loopback endpoints: up to --jobs World processes
             at once, of which at most --gpu-jobs legs boot a windowed or offscreen World or require gpu.
@@ -292,46 +291,8 @@ public static partial class CanaryCommand {
             manifests: selected,
             namedWorldArtifact: (worldArtifact is not null)
         );
-        var ceilingName = CeilingName(selection: selection);
-        CanaryCeiling? ceiling = null;
-
-        if (ceilingName is not null) {
-            if (!CanaryCeilingsLedger.TryRead(
-                error: out var ledgerError,
-                ledger: out var ledger,
-                repositoryRoot: repositoryRoot,
-                text: out _
-            )) {
-                Console.Error.WriteLine(value: $"ERROR: {CanaryCeilingsLedger.FileName}: {ledgerError}");
-
-                return CliExit.Refused;
-            }
-
-            ceiling = ((ceilingName == "merge")
-                ? ledger!.Merge
-                : ledger!.Automatic);
-        }
-
         if (plan) {
-            PrintPlan(
-                ceiling: ceiling,
-                ceilingName: ceilingName,
-                plan: costs
-            );
-        }
-
-        // Checked before anything builds, so a gate that outgrew its ceiling costs nothing to refuse.
-        if (
-            (ceiling is not null) &&
-            (CeilingRefusal(
-                ceiling: ceiling,
-                name: ceilingName!,
-                plan: costs
-            ) is { } overCeiling)
-        ) {
-            Console.Error.WriteLine(value: $"ERROR: {overCeiling}");
-
-            return CliExit.Refused;
+            PrintPlan(plan: costs);
         }
 
         var exit = SuiteExit(

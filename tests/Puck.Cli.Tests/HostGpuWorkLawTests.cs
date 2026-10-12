@@ -15,7 +15,7 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
     [InlineData("dotnet", @"dotnet ""C:\scratch\l1-cli\Puck.Cli.dll"" canary pipeline-ink")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll parity")]
-    [InlineData("puck", "puck counters --check")]
+    [InlineData("puck", "puck counters --world w.json")]
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --port 1")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe")]
     [InlineData("Puck.Platform.Windows.Tests", "Puck.Platform.Windows.Tests.exe")]
