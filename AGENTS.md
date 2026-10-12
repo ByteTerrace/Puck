@@ -10,6 +10,28 @@ contracts and agent procedures: load the one that owns an area before working in
 it (rule 8). Rule 2 applies to this file as well: when it argues against a change
 you were asked to make, it is stale, and you correct it in the same change.
 
+## Puck is pre-release
+
+Nothing has shipped, and nothing outside this repository depends on Puck. Every
+agent works in that mode by default, without asking:
+
+- Change is the default. Delete, rename, move, rewrite or quarantine code,
+  worlds, tests, formats, CI workflows, gates and tools whenever the work is
+  better for it, and fix every caller in the same change.
+- Nothing is kept for its own sake: not a passing gate, a recorded baseline, a
+  CI step, a verb's default, a test or a document. If one stands in the way of
+  a change, it changes with it (rule 2).
+- Breaking something and then fixing it is normal work, not a risk to
+  escalate. A red gate or CI run in the middle of a campaign is information,
+  not a stop.
+- The owner decides only what the engine should do, how it should look, and
+  the owner-only actions (pushing `main`, deploying, anything outside the
+  repository). Everything else is yours: decide it, do it, and report what you
+  did.
+- The process in this file and the skills (gates, ledgers, red legs, reviews)
+  serves this mode. Where a skill asks for ceremony a change does not need,
+  skip it and say so in the report.
+
 Use forward slashes for Puck paths on every platform, and follow the
 [file-path convention](docs/development/contributing.md#file-paths) at output,
 storage and native interop boundaries. MSBuild files spell every path with forward
