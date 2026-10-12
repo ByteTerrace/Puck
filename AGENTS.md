@@ -176,7 +176,8 @@ run it, or run its tests; its builds are expected to break as deletions land.
 It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 `Puck.Platform.Switch`, each firewalled from the root build
 ([experimental/README.md](experimental/README.md)). The engine contract
-`Puck.Post` covered is a live gap, except the slice `puck parity` covers
+`Puck.Post` covered is a live gap: `puck parity --world <file>` covers a slice of
+it once a parity world exists, and none does while the campaign runs
 ([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
 runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
 hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,

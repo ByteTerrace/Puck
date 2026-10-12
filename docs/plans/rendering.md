@@ -7272,8 +7272,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
      workloads. Both backends pass with debug layers and agree on the counted
      baseline. The still workload can skip a node entirely; an absent sample
-     is not a measured zero. Each workload's ceilings are recorded on the RTX 2060
-     at the floor tier, beside it as `sky-<workload>.ceilings.json`.
+     is not a measured zero. Each workload is measured on the RTX 2060
+     at the floor tier.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the

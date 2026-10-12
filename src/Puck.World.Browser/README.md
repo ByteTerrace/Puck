@@ -364,9 +364,8 @@ A state row lying over a dense lattice (a physics field) is installed
 `HostOwned`: the arena stores no columns for it, and this engine serves no
 host-owned row, so its cells read as absent. `BrowserHostlessIslandTests` judges the composed island over
 ticks 1-3 and pins both that no such throw occurs and that `hostFacts[]`
-names a physics/body operand; `engine-timing.test.cjs` and
-`engine-wasm.test.cjs` judge the composed island itself. Only
-`BrowserParityRecordingTests`/`engine-wasm.test.cjs`'s own
+names a physics/body operand. Only
+`BrowserParityRecordingTests`'s own
 determinism-hash fixtures use `games/tictactoe.puck`, for their
 own fixed-baseline reason, unrelated to this boundary.
 
@@ -408,9 +407,8 @@ the switch and 327,445 bytes without it (+30%, +96 KiB).
 
 ## Performance
 
-`src/Puck.Dashboard/src/portal/tests/engine-timing.test.cjs` times every call
-an editing loop makes against this AppBundle under Node, over the shipped
-island (`experimental/src/Puck.World/Assets/worlds/puck.world.json` + `standard.puck` + its imports,
+The table below records every call an editing loop makes against this
+AppBundle under Node, over the island (`experimental/src/Puck.World/Assets/worlds/puck.world.json` + `standard.puck` + its imports,
 `~2.4 MB` of source JSON, composing to a `~428 KB` standalone document); the
 native columns are a recorded measurement of the identical calls under the JIT,
 for comparison. Medians of three runs each, one machine. No test re-measures

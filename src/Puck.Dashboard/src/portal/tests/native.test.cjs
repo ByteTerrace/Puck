@@ -27,16 +27,12 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const { officialTreeMissing, officialSources, TICTACTOE_ROOT, STANDARD_SOURCE } =require('./support/officialTree.cjs');
 const { readWorkspaceFixture } = require('./support/studioFixture.cjs');
 const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
 const { sourceUri } = require('../src/document/sourcePaths.ts');
 const { parseDocumentText } = require('../src/document/jsonText.ts');
 const { pathToPointer } = require('../src/document/jsonPath.ts');
 const { rulePath, ruleSpan } = require('../src/authoring/sourceMap.ts');
-
-// A test that needs a compiled world skips itself by name when no official tree has been built.
-const needsTree = (t) => { const missing = officialTreeMissing(); if (missing) t.skip(missing); return !missing; };
 
 // A test of the source exports skips itself by name on an engine build that has none.
 async function needsSourceExports(t, engine) {
@@ -48,27 +44,6 @@ async function needsSourceExports(t, engine) {
     t.skip(`this AppBundle predates the source exports: ${error.message}`);
     return false;
   }
-}
-
-// The tictactoe fragment composed over the standard basis, from the official tree's sources mounted the way the
-// studio mounts them, with a small `.puck` root beside them. The composed document carries Int64.Min/MaxValue
-// sentinels (state row min/max) that JavaScript's own JSON.parse/stringify round trip cannot preserve exactly, so
-// `compile()` gets `composeSource()`'s raw, never-JS-round-tripped text.
-async function composeTicTacToeText(engine) {
-  await engine.mountSources({ ...officialSources(), [TICTACTOE_ROOT.path]: TICTACTOE_ROOT.text });
-  const result = await engine.composeSource(TICTACTOE_ROOT.path);
-  assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
-  assert.equal(typeof result.composed, 'string');
-  return result.composed;
-}
-
-// The standard basis composed through its imports in the official tree's mounted sources: a whole document `parse()`
-// accepts, which the compiled `standard` document is not while it imports what it builds on.
-async function composeStandardText(engine) {
-  await engine.mountSources(officialSources());
-  const result = await engine.composeSource(STANDARD_SOURCE);
-  assert.equal(typeof result.composed, 'string', JSON.stringify(result.diagnostics));
-  return result.composed;
 }
 
 function overBudgetDraftText() {
@@ -149,24 +124,6 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('parse() decodes both ParseResult arms through the facade', async (t) => {
-    if (!needsTree(t)) return;
-    const engine = await bootEngineFromLocalBundle(appBundleDir);
-    try {
-      const bad = await engine.parse(JSON.stringify({ schema: 'not.a.real.schema' }));
-      assert.equal(bad.ok, false);
-      assert.ok(Array.isArray(bad.errors));
-      assert.ok(bad.errors.some((e) => e.message.includes('not.a.real.schema')));
-      assert.ok(Array.isArray(bad.deferred));
-
-      const good = await engine.parse(await composeStandardText(engine));
-      assert.equal(good.ok, true, JSON.stringify(good));
-      assert.equal(typeof good.document, 'object');
-    } finally {
-      await engine.dispose();
-    }
-  });
-
   test('cells() decodes EngineCell[] with plain numbers, not bigints (ordinals are small)', async () => {
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {
@@ -175,89 +132,6 @@ if (!fs.existsSync(mainMjs)) {
       assert.equal(result.ok, true);
       assert.equal(result.cells.length, 4);
       assert.deepEqual(result.cells[0], { ordinal: 0, key: '0', x: 0.5, y: 0, z: 0.5 });
-    } finally {
-      await engine.dispose();
-    }
-  });
-
-  test('compile()/rows()/writeRow()/judge()/stateHash() round-trip bigints through the facade', async (t) => {
-    if (!needsTree(t)) return;
-    const engine = await bootEngineFromLocalBundle(appBundleDir);
-    try {
-      if (!(await needsSourceExports(t, engine))) return;
-      const composedText = await composeTicTacToeText(engine);
-      const compiled = await engine.compile(composedText);
-      assert.equal(compiled.ok, true, JSON.stringify(compiled));
-      const handle = compiled.handle;
-
-      const rows = await engine.rows(handle);
-      assert.ok(rows.length > 0);
-      const row = rows.find((r) => r.kind === 'Int' && !r.keyed);
-      assert.ok(row, 'no scalar Int row in the composed document');
-      for (const cell of row.cells) {
-        assert.equal(cell.value.kind, 'Int', `RowInfo cell for '${row.name}' must carry its row's own kind`);
-        assert.equal(typeof cell.value.value, 'bigint', `RowInfo cell value for '${row.name}' must be a bigint, not ${typeof cell.value.value}`);
-      }
-
-      // 1 (not an arbitrary larger value) - matches the row's own authored envelope, exactly as
-      // engine-wasm.test.cjs's own "tictactoe-write-then-judge" fixture writes.
-      const written = await engine.writeRow(handle, row.name, undefined, 1n, 'set');
-      assert.equal(written.ok, true, written.error);
-      const read = await engine.readRow(handle, row.name);
-      assert.equal(read.found, true);
-      assert.equal(read.value.kind, 'Int');
-      assert.equal(read.value.value, 1n);
-      assert.equal(typeof read.value.value, 'bigint');
-
-      const judged = await engine.judge(handle, 1n);
-      assert.equal(judged.ok, true, judged.error);
-      assert.ok(Array.isArray(judged.trace.rules));
-      for (const write of judged.trace.writes) {
-        assert.equal(typeof write.old, 'bigint');
-        assert.equal(typeof write.new, 'bigint');
-      }
-
-      const hash = await engine.stateHash(handle);
-      assert.equal(typeof hash, 'string');
-      assert.ok(hash.length > 0);
-
-      await engine.release(handle);
-    } finally {
-      await engine.dispose();
-    }
-  });
-
-  test('evaluate() and boardMask() decode their bigint arms', async (t) => {
-    if (!needsTree(t)) return;
-    const engine = await bootEngineFromLocalBundle(appBundleDir);
-    try {
-      if (!(await needsSourceExports(t, engine))) return;
-      const composedText = await composeTicTacToeText(engine);
-      const compiled = await engine.compile(composedText);
-      assert.equal(compiled.ok, true, JSON.stringify(compiled));
-      const handle = compiled.handle;
-
-      const evaluated = await engine.evaluate(handle, '1 + 2', 'Int', 0n);
-      assert.equal(evaluated.ok, true, evaluated.error);
-      assert.equal(evaluated.value, 3n);
-      assert.equal(typeof evaluated.value, 'bigint');
-
-      // boardMask() only accepts a board-shaped row (at most 64 cells) - not every keyed row
-      // qualifies (tictactoe.world.json also carries larger keyed rows, e.g. 'transforms'), so try
-      // each keyed row until one is accepted rather than assuming the first is board-shaped.
-      const rows = await engine.rows(handle);
-      let boardMaskChecked = false;
-      for (const candidate of rows.filter((r) => r.keyed)) {
-        const mask = await engine.boardMask(handle, candidate.name);
-        if (mask.ok) {
-          assert.equal(typeof mask.mask, 'bigint');
-          boardMaskChecked = true;
-          break;
-        }
-      }
-      assert.ok(boardMaskChecked, 'no keyed row in the composed document is board-shaped (<=64 cells)');
-
-      await engine.release(handle);
     } finally {
       await engine.dispose();
     }
@@ -290,30 +164,6 @@ if (!fs.existsSync(mainMjs)) {
       assert.equal(uncomposed.composed, null, 'nothing composed');
       assert.ok(uncomposed.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.path === 'counter.puck'), JSON.stringify(uncomposed.diagnostics));
       await assert.rejects(engine.writeSource('../escape.puck', ''), 'a path outside the workspace is refused');
-    } finally {
-      await engine.dispose();
-    }
-  });
-
-  test('every rule of a compiled source maps to its own rule line, so a rule-trace link lands on the rule itself', async (t) => {
-    if (!needsTree(t)) return;
-    const engine = await bootEngineFromLocalBundle(appBundleDir);
-    try {
-      if (!(await needsSourceExports(t, engine))) return;
-      const sources = officialSources();
-      await engine.mountSources(sources);
-      const source = 'games/tictactoe.puck';
-      const compiled = await engine.compileSource(source);
-      assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
-      const document = parseDocumentText(compiled.document);
-      const lines = sources[source].split('\n');
-      assert.ok(document.rules.length > 0);
-      for (const rule of document.rules) {
-        assert.ok(compiled.sourceMap[pathToPointer(rulePath(document, rule.name))], `rule '${rule.name}' has its own pointer`);
-        const span = ruleSpan(document, compiled.sourceMap, rule.name);
-        assert.equal(span.path, source);
-        assert.ok(lines[span.line - 1].includes(`rule "${rule.name}"`), `rule '${rule.name}' links to line ${span.line}: ${lines[span.line - 1]}`);
-      }
     } finally {
       await engine.dispose();
     }

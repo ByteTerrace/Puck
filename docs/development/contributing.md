@@ -295,8 +295,8 @@ canary, parity, determinism, qualification, verdict and game fixtures sit under
 `experimental/` with the laws that booted them, and their gates are not run
 until the owner calls for qualification
 ([quarantined gates](../plans/open-items.md#quarantined-gates)). Until then
-the live checks are the build, the suites' remaining laws, the ledger and
-generator `--check` forms, and running the debug world.
+the live checks are the build, the suites' remaining laws, the generator
+`--check` forms, and running the debug world.
 
 The [World suites](../../tests/Puck.World.Tests/README.md) cover documents,
 protocol, authoritative simulation, and shipped game state programs. The

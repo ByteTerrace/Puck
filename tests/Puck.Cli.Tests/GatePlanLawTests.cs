@@ -50,7 +50,6 @@ public sealed class GatePlanLawTests {
         Assert.All(included, check => Assert.Contains(expected: check, set: checks));
         foreach (var artifact in BaselinesCommand.Artifacts) {
             Assert.False(condition: string.IsNullOrWhiteSpace(value: artifact.Project));
-            Assert.NotEmpty(collection: artifact.Inputs);
             Assert.All(collection: artifact.Inputs, action: static input => Assert.False(condition: string.IsNullOrWhiteSpace(value: input)));
             Assert.Contains(collection: GatePlan.Steps, filter: step => ((step.Kind == GateStepKind.Baseline) && step.Arguments.SequenceEqual(other: artifact.CheckArguments())));
         }

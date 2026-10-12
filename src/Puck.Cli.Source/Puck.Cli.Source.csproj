@@ -17,13 +17,4 @@
         <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
         <ProjectReference Include="../Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
     </ItemGroup>
-    <ItemGroup>
-        <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension only. puck derivations
-             also references it as an ordinary assembly, so the token fingerprint it computes is the analyzers'
-             own; it stays an analyzer over this project too. -->
-        <ProjectReference
-            Update="../Puck.Analyzers/Puck.Analyzers.csproj"
-            ReferenceOutputAssembly="true"
-        />
-    </ItemGroup>
 </Project>

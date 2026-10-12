@@ -996,7 +996,7 @@ Each baseline declares its owning test project and the data globs its tests read
 outside that project's reach. The affected map selects the checks against the
 same merge base as the suites. The gate runs each reached baseline once, after
 the repository checks and before the selected GPU commands. The completeness
-law requires every baseline check to have a baseline step and non-empty inputs.
+law requires every baseline check to have a baseline step.
 
 Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
