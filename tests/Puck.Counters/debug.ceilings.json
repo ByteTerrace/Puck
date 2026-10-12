@@ -99,7 +99,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 3503304,
-              "gpu.shapes.evaluated": 12956689,
+              "gpu.shapes.evaluated": 9182157,
               "gpu.texels.written": 1587600
             }
           },
@@ -112,7 +112,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
               "gpu.march.steps": 50328,
-              "gpu.shapes.evaluated": 185625
+              "gpu.shapes.evaluated": 185634
             }
           },
           "sdf.world$composite": {
@@ -221,7 +221,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 28671305,
-              "gpu.shapes.evaluated": 49354346,
+              "gpu.shapes.evaluated": 49354406,
               "gpu.texels.written": 1587600
             }
           },
@@ -260,9 +260,9 @@
                   "gpu.binds.descriptor-set": 3,
                   "gpu.binds.pipeline": 1,
                   "gpu.dispatches.indirect": 1,
-                  "gpu.march.steps": 47296740,
-                  "gpu.shadow.slot0.steps": 47296740,
-                  "gpu.shapes.evaluated": 962344651,
+                  "gpu.march.steps": 47285807,
+                  "gpu.shadow.slot0.steps": 47285807,
+                  "gpu.shapes.evaluated": 113422937,
                   "gpu.texels.written": 1587600
                 }
               },
@@ -280,9 +280,9 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 47296740,
-              "gpu.shadow.slot0.steps": 47296740,
-              "gpu.shapes.evaluated": 962344651,
+              "gpu.march.steps": 47285807,
+              "gpu.shadow.slot0.steps": 47285807,
+              "gpu.shapes.evaluated": 113422937,
               "gpu.texels.written": 1587600
             }
           },
@@ -367,7 +367,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 4671072,
-              "gpu.shapes.evaluated": 14638327,
+              "gpu.shapes.evaluated": 14638366,
               "gpu.texels.written": 1587600
             }
           },
@@ -682,7 +682,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 3503304,
-              "gpu.shapes.evaluated": 12956698,
+              "gpu.shapes.evaluated": 9182158,
               "gpu.texels.written": 1587600
             }
           },
@@ -695,7 +695,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches": 1,
               "gpu.march.steps": 50328,
-              "gpu.shapes.evaluated": 185625
+              "gpu.shapes.evaluated": 185634
             }
           },
           "sdf.world$composite": {
@@ -804,7 +804,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 28671260,
-              "gpu.shapes.evaluated": 49354431,
+              "gpu.shapes.evaluated": 49354492,
               "gpu.texels.written": 1587600
             }
           },
@@ -843,9 +843,9 @@
                   "gpu.binds.descriptor-set": 3,
                   "gpu.binds.pipeline": 1,
                   "gpu.dispatches.indirect": 1,
-                  "gpu.march.steps": 47296759,
-                  "gpu.shadow.slot0.steps": 47296759,
-                  "gpu.shapes.evaluated": 962342253,
+                  "gpu.march.steps": 47285827,
+                  "gpu.shadow.slot0.steps": 47285827,
+                  "gpu.shapes.evaluated": 113422640,
                   "gpu.texels.written": 1587600
                 }
               },
@@ -863,9 +863,9 @@
               "gpu.binds.descriptor-set": 3,
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
-              "gpu.march.steps": 47296759,
-              "gpu.shadow.slot0.steps": 47296759,
-              "gpu.shapes.evaluated": 962342253,
+              "gpu.march.steps": 47285827,
+              "gpu.shadow.slot0.steps": 47285827,
+              "gpu.shapes.evaluated": 113422640,
               "gpu.texels.written": 1587600
             }
           },
@@ -950,7 +950,7 @@
               "gpu.binds.pipeline": 1,
               "gpu.dispatches.indirect": 1,
               "gpu.march.steps": 4671072,
-              "gpu.shapes.evaluated": 14638317,
+              "gpu.shapes.evaluated": 14638355,
               "gpu.texels.written": 1587600
             }
           },
