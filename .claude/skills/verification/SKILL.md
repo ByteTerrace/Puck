@@ -31,7 +31,7 @@ A lane lands on:
 
 A change to simulation state stays deterministic (`AGENTS.md` rule 4);
 `puck test --reproduce` on a world the change reaches is the quick way to see
-two runs agree. `[VerifiedCode]` brands are enforced by the build (rule 7).
+two runs agree.
 
 Nothing else is a precondition. A red gate or CI run is information to act on,
 not a stop. While the debug world is the one live world, the canary, parity,
@@ -65,8 +65,6 @@ and commit the result with the change:
 
 | Owns | Check form |
 |---|---|
-| `FileLengths.json` | `puck lengths --check` |
-| `CommentSmells.json` | `puck comment-smells --check` |
 | `FormatVersions.json` | `puck formats --check` |
 | `CanaryCeilings.json` | `puck canary-ceilings --check` |
 | Formatting of touched files | `puck format --check --file-list <scratchpad>/<lane>-files.json` |

@@ -9,7 +9,7 @@ namespace Puck.Cli.Format.Tests;
 /// <c>--include</c> arguments, batched to fit a command line, and its matcher is unforgiving: a path that does not match
 /// a document matches nothing, and matching nothing is silent, so a check would report a clean tree it never
 /// opened. A project this repository
-/// builds links <c>build/VerifiedCodeAttribute.cs</c> in from two directories above it, and a run over that project's
+/// builds links <c>build/OpensGpuDeviceAttribute.cs</c> in from two directories above it, and a run over that project's
 /// root must still leave that file alone.
 /// </summary>
 public sealed class FormatWhitespaceScopeTests {

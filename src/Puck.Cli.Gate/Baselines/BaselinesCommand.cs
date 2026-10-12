@@ -36,7 +36,7 @@ public static class BaselinesCommand {
             CheckedFiles: ["coverage-manifest.json", "leg-ledger.md"],
             CommittedDirectory: "tests/Puck.Maths.Tests",
             Description: "The Puck.Maths law ledger: coverage manifest, leg ledger, frontier and RESULTS.md.",
-            Inputs: ["VerifiedCode.json"],
+            Inputs: [],
             Name: "maths-ledger",
             Project: "Puck.Maths.Tests",
             RunArguments: [],

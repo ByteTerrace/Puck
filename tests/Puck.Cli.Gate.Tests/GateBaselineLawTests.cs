@@ -7,7 +7,6 @@ namespace Puck.Cli.Gate.Tests;
 
 public sealed class GateBaselineLawTests : GateRunLaws {
     [InlineData("src/Puck.World/Assets/worlds/game.puck", "corpus-inventory")]
-    [InlineData("VerifiedCode.json", "maths-ledger")]
     [InlineData("build/trigger.props", "corpus-inventory,maths-ledger")]
     [InlineData("docs/only.md", "")]
     [Theory]

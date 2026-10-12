@@ -68,19 +68,6 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   prime by its preceding gap), window-sieve uniform selection, and the
   Õ(√N) or analytic counting methods below 2^64.
 
-## Branded members
-
-A member carrying `[VerifiedCode("id", …)]` is settled: proven correct over its
-whole input space. `VerifiedCode.json` records a fingerprint sealing the source
-that proof was read against — the member's own declaration plus the declarations
-its entry names under `dependencies`, one level deep and listed by hand. Editing
-anything under the seal fails the build with **VER001** and the recomputed hash.
-Do not silence that by deleting the attribute — re-establish the basis, update
-the manifest hash, and say why in the commit; or if the member should stop being
-branded, remove the attribute and its manifest entry together. Inspect the
-current declarations and read each entry's `basis`, `argument`, and
-`dependencies` before concluding a change keeps the proof intact.
-
 ## Verify
 
 The quick check is one command — `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`,

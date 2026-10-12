@@ -1,7 +1,7 @@
 # Puck.Cli.Source.Tests
 
-These laws hold the source and repository verbs: derivation keys, `docs links` and `docs citations`, the
-ratchet ledgers' canonical form, and `references` over a project with an unresolved analyzer. The suite references
+These laws hold the source and repository verbs: derivation keys, `docs links` and `docs citations`,
+and `references` over a project with an unresolved analyzer. The suite references
 `Puck.Cli.Source` alone.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.

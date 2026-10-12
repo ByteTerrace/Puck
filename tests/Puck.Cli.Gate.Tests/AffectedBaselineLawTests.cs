@@ -47,7 +47,6 @@ public sealed class AffectedBaselineLawTests {
         Assert.Equal(expected: ["corpus-inventory"], actual: Select(path: "fixtures/data.json", consumer: true).Baselines.Select(selector: static artifact => artifact.Name));
     }
     [InlineData("src/Puck.World/Assets/worlds/debug.puck", "corpus-inventory")]
-    [InlineData("VerifiedCode.json", "maths-ledger")]
     [Theory]
     public void ExternalTestDataReachesItsBaseline(string path, string name) {
         Assert.Contains(collection: Select(path: path).Baselines, filter: artifact => (artifact.Name == name));

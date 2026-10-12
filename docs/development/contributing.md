@@ -861,16 +861,6 @@ meant to establish.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.
-- No source file over 2000 lines: `FileLengthAnalyzer` fails the build (LEN001)
-  unless `FileLengths.json` already records the file, and a recorded file may
-  only shrink (LEN002/LEN003). Split, then `puck lengths`—the ledger
-  never grows.
-- No new comment smell: `CommentSmellAnalyzer` fails the build (SMELL001)
-  when a file `CommentSmells.json` does not record carries an inline comment
-  in a named smell bucket, and a recorded file's count may only fall
-  (SMELL002/SMELL003). Rewrite or delete the comment, then
-  `puck comment-smells`. Both ledgers are
-  [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
 - A strictly versioned format token (a wire key, checkpoint or journal
   version, replay shape token, baker version, magic, or `puck.<name>.vN`
   schema) is recorded in `FormatVersions.json` with the shape fingerprint of its

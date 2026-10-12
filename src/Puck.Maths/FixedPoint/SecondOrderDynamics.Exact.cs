@@ -152,8 +152,7 @@ public static class SecondOrderExactMath {
     /// <see cref="FixedQ4816.PiQ61"/> as the value of π (consistent with every other exact-π chain in this
     /// library) and evaluated by the standard even/odd Taylor series over the reduced angle. Internal (rather than
     /// private) so <c>CurvatureSplineExactMath</c> (<c>CurvatureSpline.Exact.cs</c>) can derive an authored tangent
-    /// yaw's exact unit direction from the same series rather than a transcribed copy that could silently drift; not
-    /// named in any <c>VerifiedCode.json</c> entry (checked at widening time).</summary>
+    /// yaw's exact unit direction from the same series rather than a transcribed copy that could silently drift.</summary>
     internal static (BigInteger Sin, BigInteger Cos) SinCosExact(BigInteger numerator, BigInteger denominator) {
         var twoPiNumerator = (2 * ((BigInteger)FixedQ4816.PiQ61));
         var twoPiDenominator = (BigInteger.One << FixedQ4816.PiQ61FractionBitCount);

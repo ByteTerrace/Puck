@@ -12,8 +12,7 @@ namespace Puck.State;
 /// <c>System.Text.Json</c>'s own <c>JsonPolymorphic</c>/<c>JsonDerivedType</c> attributes; this attribute carries no
 /// behavior of its own. It exists only to mark the hierarchy CLOSED — every case is declared in the same file/assembly
 /// and the base type's constructor is private or private protected, so no case can be added from outside — and to
-/// give a mechanical grep target for "what is a union in this codebase", the way <c>[VerifiedCode]</c> gives one for
-/// branded members. Shared here (rather than declared per-union) so every union in the codebase carries the identical
+/// give a mechanical grep target for "what is a union in this codebase". Shared here (rather than declared per-union) so every union in the codebase carries the identical
 /// marker and a later real union-type feature has exactly one file to retire.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]

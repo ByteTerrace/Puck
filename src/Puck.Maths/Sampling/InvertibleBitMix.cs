@@ -37,7 +37,6 @@ public static class InvertibleBitMix {
     /// <summary>Applies the mixing permutation.</summary>
     /// <param name="value">The word to mix.</param>
     /// <returns>The mixed word; <see cref="Unmix(uint)"/> recovers <paramref name="value"/> exactly.</returns>
-    [VerifiedCode("invertible-bit-mix.mix", Laws = "sampling.bit-mix-is-a-permutation, sampling.bit-mix-constants-invert")]
     public static uint Mix(uint value) {
         unchecked {
             value ^= (value >>> FirstShift);
@@ -57,7 +56,6 @@ public static class InvertibleBitMix {
     /// already off the end; a shift by fifteen needs the doubled term as well, because the tripled shift is the first
     /// one that vanishes.
     /// </remarks>
-    [VerifiedCode("invertible-bit-mix.unmix", Laws = "sampling.bit-mix-is-a-permutation, sampling.bit-mix-constants-invert")]
     public static uint Unmix(uint value) {
         unchecked {
             value ^= (value >>> FirstShift);

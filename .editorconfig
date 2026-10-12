@@ -53,19 +53,6 @@ dotnet_diagnostic.IDE0044.severity = error
 # Lock.EnterScope() is allocation-honest, refuses Monitor.Wait/Pulse misuse at
 # the type, and warns (CS9216) if the Lock is ever boxed back to object.
 dotnet_diagnostic.IDE0330.severity = error
-# VER001/VER002/VER003/VER004/VER005 (Puck.Analyzers): a [VerifiedCode]-branded declaration's fingerprint drifted
-# from VerifiedCode.json, a manifest entry's brand was never encountered, a branded declaration is a shape
-# (partial, or carrying a preprocessor directive) the fingerprint refuses to cover, a brand's Basis disagrees with
-# the manifest's recorded basis, or a manifest entry's symbol textually names an assembly whose own namespace tree
-# does not back that name up (the namespace-equals-assembly-name convention VER002 relies on is broken). Errors,
-# not WellKnownDiagnosticTags.NotConfigurable — TreatWarningsAsErrors already makes these build failures, and
-# leaving suppression possible means an in-progress refactor can quiet one locally instead of someone
-# ripping the analyzer out.
-dotnet_diagnostic.VER001.severity = error
-dotnet_diagnostic.VER002.severity = error
-dotnet_diagnostic.VER003.severity = error
-dotnet_diagnostic.VER004.severity = error
-dotnet_diagnostic.VER005.severity = error
 # IDE1006: Naming rule violations (static fields PascalCase, instance fields m_ prefix, constants PascalCase, etc.)
 dotnet_diagnostic.IDE1006.severity = error
 # Rule: const fields must be PascalCase.

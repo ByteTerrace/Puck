@@ -6,8 +6,8 @@ using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
 
-// Normalize/Validate for ShapeDocument.Bumps/Shear — split out of CreationCanonicalizer.cs to keep it under the
-// file-length ceiling (LEN001); a partial-class split, not a separate concern.
+// Normalize/Validate for ShapeDocument.Bumps/Shear — split out of CreationCanonicalizer.cs for length; a
+// partial-class split, not a separate concern.
 public static partial class CreationCanonicalizer {
     // Radii clamp away from zero (SdfProgramBuilder.GaussianPushMinRadius) exactly like SdfProgramBuilder.GaussianPush
     // itself, so a direct Normalize() call on already-invalid data cannot hand the builder a zero divisor; Push clamps
