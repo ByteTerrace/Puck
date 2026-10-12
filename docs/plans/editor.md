@@ -401,7 +401,7 @@ costs nothing outside the editor.
 
 **Status:** open; items 2 and 3 are in place, items 1, 4, 5 and 6 are not.
 `WorldPickMapBuilder` maps the emitted SDF ordinals and mesh draws to their
-placement or stamped body (`WorldPickMapLawTests`, `WorldComposedPickMapLawTests`,
+placement or stamped body (`WorldComposedPickMapLawTests`,
 the `sdf-picking` canary). The GPU path runs while a seat builds or has its
 inspector on (`WorldCursorFeed`), and the cursor label names the placement and
 the pixel it answered at (`WorldPickLabelLawTests`). The CPU path is the static

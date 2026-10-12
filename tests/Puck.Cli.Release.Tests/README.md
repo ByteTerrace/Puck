@@ -32,9 +32,6 @@ listener must stop the worker with a failure exit code. Official package and boo
 draws and exact-byte retry checks. The hosted composition control moves a nested machine document to the common worlds
 directory and verifies its asset path still names the same asset without embedding the build directory.
 
-`AzureHostTelemetryShutdownLawTests` reads each Azure host's built `runtimeconfig.json`, so the suite builds
-`Puck.Actors` and `Puck.Azure.Functions` first; nothing here links against them.
-
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 
 ## Verification
@@ -45,11 +42,7 @@ Run the suite's CPU laws from the repository root:
 dotnet test --project tests/Puck.Cli.Release.Tests/Puck.Cli.Release.Tests.csproj -c Release --filter-not-trait Category=Gpu
 ```
 
-`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real official tree; run it alone with
-`--filter-class "*OfficialBuildCommandTests"`. Quarantined: the tree-building laws pin the documents of the island
-tree (the root `puck`, the basis `standard`, the games and shards), which moved to `experimental/`, so they and their
-fixture live in `experimental/tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs`; only the porcelain
-unit law runs here. The official tree's root is now the debug world.
+The official tree's root is now the debug world.
 
 ## Documentation
 

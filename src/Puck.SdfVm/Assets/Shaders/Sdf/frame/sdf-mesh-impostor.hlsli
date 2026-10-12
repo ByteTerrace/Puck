@@ -8,7 +8,7 @@
 // agree on, and a pixel no majority of the views cover is a miss. The includer's interface declares the impostor depth
 // atlas, sdfImpostorDepth: the mesh pass's pass group and the world kernels' World group both do. KEEP IN SYNC with
 // SdfBakedImpostor (the views' directions, bases and texel layout), SdfMeshImpostor and SdfMeshRegion.Write (the
-// record's impostor words), and the CPU oracle in tests/Puck.SignedDistance.Tests (SdfImpostorOracle).
+// record's impostor words).
 #ifndef FRAME_SDF_MESH_IMPOSTOR_HLSLI
 #define FRAME_SDF_MESH_IMPOSTOR_HLSLI
 

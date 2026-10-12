@@ -584,9 +584,7 @@ construct and public only to read. The only snapshot a caller can create
 directly is an empty one, which dispatches nothing. A snapshot another
 registry's router built is refused with `ArgumentException` before any entry is
 examined, so a host that mixed two registries learns it at the call site rather
-than through a half-applied tick. `ApiSurfaceTests` fails the
-suite if a public constructor appears on any of the four, so this is enforced
-rather than merely asserted.
+than through a half-applied tick.
 
 ## Pointing at a displayed source
 

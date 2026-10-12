@@ -772,9 +772,7 @@ base, so passing both is refused.
   or composite action, chooses only through such an include: a suite whose laws
   read that tree declares it with a `PuckAffectedInput` item
   (`<PuckAffectedInput Include="../../.github/**" />`), and a source that names
-  a workflow in a comment or as a datum it compares chooses nothing
-  (`AffectedWorkflowReadersLawTests` holds every reading suite to its
-  declaration).
+  a workflow in a comment or as a datum it compares chooses nothing.
 - **Baselines** follow the same reached projects: a baseline is chosen when its
   owning test project is reached, or a changed or deleted path matches the
   repository-relative data globs declared beside its artifact. The plan lists
@@ -1625,9 +1623,7 @@ git's object ids in `HEAD` together with the content of every uncommitted,
 staged, or untracked change that `git status` reports. The machine's runtime
 identifier and the build command line are part of the key too. Edits to
 documentation, tests, or projects the World does not reference leave the key
-unchanged. Worktrees whose World sources are identical share a build.
-`WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
-and fails when the build reads a file outside the keyed paths. Outside a git
+unchanged. Worktrees whose World sources are identical share a build. Outside a git
 checkout, no key can be computed, so the run builds under a name that no later
 run can reuse.
 

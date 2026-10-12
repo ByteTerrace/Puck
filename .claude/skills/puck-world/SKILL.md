@@ -428,7 +428,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `WorldCacheRoots`, both handed to the boot (`WorldBootInputs`) and taken by
   every consumer from its host; only `Program.cs` names their per-user
   defaults (`world`, `bakes`, `compiled-worlds`, `compilations`), and
-  `WorldStateRootIsolationLawTests` (one in `tests/Puck.World.Tests` and in each of the Server, Client, Games, Machines, Presentation and Silo suites) holds
+  `WorldStateRootIsolationLawTests` (one in `tests/Puck.World.Tests` and in each of the Server and Presentation suites) holds
   every assembly its suite links to that, so a fixture hands its own temporary
   roots. Stderr carries one `[world] compiled world:`
   line after the `[world] definition:` line.

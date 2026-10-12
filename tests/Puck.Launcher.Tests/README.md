@@ -13,7 +13,7 @@ including appended glyphs. `OverlayGlyphCacheTests` covers persistence across
 fresh loaders, alternating icon repertoires, source invalidation, malformed
 cache recovery, and admission of the shipped atlas.
 
-`WindowPumpFaultLawTests` and `LauncherHostRunLawTests` run a real windowed
+`LauncherHostRunLawTests` run a real windowed
 launcher host over fakes: a window that is already closed, a render node that
 produces nothing, and a presenter whose `Activate` throws a chosen failure. No
 GPU or display is needed. They check four things. A throwing activation faults

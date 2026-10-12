@@ -428,8 +428,7 @@ the draw's material as a mesh's texel entry is. That is the rule the trace disca
 by too, so coverage and material have one provenance and filtered alpha decides neither.
 The level depends on the draw and the camera alone, the pixel's size at the sphere's
 center. Primary stores that
-material in the visibility record, shared by picking and lighting. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
-and `SdfImpostorLawTests` hold it to the field's sphere and box.
+material in the visibility record, shared by picking and lighting.
 
 ---
 

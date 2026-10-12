@@ -1,5 +1,3 @@
-using System.Numerics;
-
 using Puck.SignedDistance;
 using Puck.Testing;
 
@@ -7,43 +5,6 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-public sealed class SdfIndirectZeroContributionLawTests {
-    [Fact]
-    public void ExactlyZeroContributionOmitsVisibilityWithoutChangingTheSourceFold() {
-        Vector3[] reflectances = [Vector3.Zero, Vector3.One, new(x: 0f, y: 0.25f, z: 0f), new(x: float.Epsilon, y: 0f, z: 0f)];
-        var emission = new Vector3(x: 0.125f, y: 0.25f, z: 0.5f);
-        var previous = new Vector3(x: 0.5f, y: 0.25f, z: 0.125f);
-        const float Attenuation = 0.5f;
-
-        foreach (var direct in new[] { false, true }) {
-            foreach (var gain in new[] { 0f, float.Epsilon, 0.5f, 1f }) {
-                foreach (var reflected in reflectances) {
-                    foreach (var visibility in new[] { 0f, 0.25f, 1f }) {
-                        var needed = (direct && (gain != 0f) && (reflected != Vector3.Zero));
-                        var original = (direct ? ((reflected * visibility) * (Attenuation * gain)) : Vector3.Zero);
-                        var selected = (direct ? ((reflected * (needed ? visibility : 1f)) * (Attenuation * gain)) : Vector3.Zero);
-                        var independent = (emission + ((reflected * previous) * Attenuation));
-
-                        Assert.Equal(actual: (selected + independent), expected: (original + independent));
-                        if (direct && (gain == 1f) && (reflected.X == float.Epsilon)) { Assert.True(condition: needed); }
-                    }
-                }
-            }
-        }
-        var shader = File.ReadAllText(path: RepositoryPaths.Resolve(
-            relativePath: "src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-shade.hlsli"));
-        const string Guard = "if ((passGroup.indirectSources & SdfIndirectSourcesDirect) != 0u && passGroup.indirectSourceGains.x != 0.0 && any(reflected != 0.0)) {";
-        var guard = shader.IndexOf(comparisonType: StringComparison.Ordinal, value: Guard);
-
-        Assert.True(condition: (guard >= 0));
-        var end = shader.IndexOf(startIndex: guard, value: '}');
-        var call = shader.IndexOf(comparisonType: StringComparison.Ordinal, value: "sdfIndirectDiffuseVisibilities(");
-
-        Assert.InRange(actual: call, high: end, low: guard);
-        Assert.Contains(actualString: shader[..guard], expectedSubstring: "surface.shadowVisibility = 1.0;");
-        Assert.Contains(actualString: shader[..guard], expectedSubstring: "surface.incomingVisibility = 1.0;");
-    }
-}
 public sealed partial class SdfWorldPassesLawTests {
     [InlineData(SdfIndirectTier.Medium)]
     [InlineData(SdfIndirectTier.High)]

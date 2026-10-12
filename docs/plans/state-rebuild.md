@@ -84,7 +84,7 @@ in `tests/Puck.State.Tests` — a needs set built over a test-declared facet
 advertise it, with `AdmittingARuleWhoseFacetsTheHostServesSucceedsWithNoRefusal`
 as its control. The reachable half of group admission is pinned on the hosts:
 a group the browser refuses to compile runs neither itself nor the rules it
-claims (`BrowserRuleGroupLawTests`), and the server refuses such a document
+claims, and the server refuses such a document
 outright (`RuleGroupServerLawTests`). Each host's own trigger-admission arm is
 unlawed and unreachable by any document until a second facet exists —
 `IWorldFacts` is the only declared facet and both hosts serve it — so the

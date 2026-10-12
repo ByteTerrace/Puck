@@ -2,10 +2,7 @@
 
 This suite checks the managed font and text contracts in `Puck.Text`.
 `OpenTypeOutlineTests` covers TrueType and CFF/CFF2 outlines,
-`ManagedFontKerningTests` covers face selection and kerning,
-`IndependentFontOracleTests` checks JetBrains Mono glyph mapping and metrics
-against a checked-in fontTools snapshot,
-`MtsdfContractTests` covers distance-field sampling, and
+`ManagedFontKerningTests` covers face selection and kerning, and
 `TextContractTests` covers layout, wrapping, alignment, and loader round
 trips.
 
@@ -17,11 +14,6 @@ raster and its rectangle in a packed atlas. `GenerationBudgetTests` checks
 cumulative whole-job limits, overflow-safe reservations, and cancellation.
 `CffDistanceOracleTests` compares real Source Serif CFF and CFF2 fonts with
 independent mapping, metric, outline-bound, and signed-distance samples.
-
-The oracle fixture is derived from the vendored OFL font with fontTools. Its
-exact command, the fontTools version, and expected values are recorded in
-`Assets/Fonts/jetbrains-mono-oracle.json`; normal test runs are fully offline
-and do not require Python, FreeType, or another native runtime.
 
 The two unmodified Source Serif fonts and their OFL license come from
 [Adobe's pinned release](https://github.com/adobe-fonts/source-serif/tree/5f220b17d27ed64873f22cde0dd593685387bd19).

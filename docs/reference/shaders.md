@@ -2150,8 +2150,7 @@ work to its named row. An interface declaring no work counters
 declares them empty. A kernel therefore counts unguarded: a package's kernel
 that a document pass compiles by naming its source, such as `place` or a source
 conversion, reads the declarations the loader generates for the document's
-interface, and there it counts nothing. `DocumentPassPackageKernelLawTests`
-compiles every package kernel that way. The node clears the slot's counters
+interface, and there it counts nothing. The node clears the slot's counters
 ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
@@ -2959,10 +2958,8 @@ compiler. An edited source misses its stored package: it compiles while the
 compiler exists and is refused by `SHADERPKG_ABSENT` once it does not. A
 one-off shader is stored under the name it plans with, so another name misses.
 A damaged stored package is refused by its pin and nothing compiles in its
-place. In `tests/Puck.Cli.Shaders.Tests`, `NoDeviceShaderCompileLawTests` hold every
-Puck assembly in the World's Release output to importing nothing from the
-Direct3D HLSL compiler. In `tests/Puck.World.Presentation.Tests`, `PipelineOverrideLawTests`
-also check that a
+place. In `tests/Puck.World.Presentation.Tests`, `PipelineOverrideLawTests`
+check that a
 `world.load` and a boot refuse an unbound override by name, and that a recorded
 commit re-drives through `replay.verify` to a match while a shadow server
 without the recording's source reader refuses it.

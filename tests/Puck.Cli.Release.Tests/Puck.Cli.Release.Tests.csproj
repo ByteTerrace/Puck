@@ -13,18 +13,14 @@
     <ItemGroup>
         <!-- The release and automation verbs. -->
         <ProjectReference Include="../../src/Puck.Cli.Release/Puck.Cli.Release.csproj" />
-        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
-        <ProjectReference Include="../../src/Puck.Actors/Puck.Actors.csproj" ReferenceOutputAssembly="false" Private="false" />
-        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
-        <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
-        <!-- WorkflowGraphLawTests reads the GitHub Actions workflows and composite actions as YAML. -->
+        <!-- DocsWorkflowLawTests reads the GitHub Actions workflows as YAML. -->
         <PackageReference Include="YamlDotNet" Version="[16.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- The repository data these laws read outside the project: a change under it selects this suite in `puck
-             affected`, which reaches .github/ through such a declaration alone (AffectedWorkflowReadersLawTests). -->
+             affected`, which reaches .github/ through such a declaration alone. -->
         <PuckAffectedInput Include="../../.github/**" />
     </ItemGroup>
     <ItemGroup>

@@ -511,17 +511,15 @@ reintroduce `[noinline]`.
   (`SdfLightScreen`), each one `SdfLightSource`; the light stage walks
   `sdfLightAt` over them once, sums
   each kind of term over the walk and adds each total once, so the order terms
-  combine in is the walk's, not the kinds'. A new kind is a branch there, and
-  `SdfLightInterfaceLawTests` refuses a kind branch anywhere else and a
-  generated kind without one.
+  combine in is the walk's, not the kinds'. A new kind is a branch there and
+  nowhere else, and every generated kind has one.
 - **The sky is an open layer stack; a kind is a record and a module.** A layer
   kind is an `ISdfSkyKind` parameter record (`SdfSkyKinds.cs`, at most
   `SdfSkyLayer.PayloadBytes`) and one module, `sky/kinds/<name>.hlsli`,
   declared once in `SdfSkyKindsHlsl.Kinds` (`Puck.SdfVm.Model`), which generates
   `isa/sdf-sky-kinds.hlsli` (constants, each record's struct and payload decoder)
   and `sky/sdf-sky-kind-table.hlsli` (the module includes and the evaluation
-  switch). A new kind touches no other kind and no pass (`SkyKindTableLawTests`,
-  `SkyLayerTableLawTests`); a world-side kind adds its `WorldRenderSkyLayer` record
+  switch). A new kind touches no other kind and no pass; a world-side kind adds its `WorldRenderSkyLayer` record
   and its arms in `WorldSkyLayers`, the validator, the keys and the resolver. The
   walks (`sky/sdf-sky.hlsli`) cut the stack into runs: the sky pass writes the
   lowest field run's offset and at most `SdfSky.MaxUpperFieldRuns` upper runs as
@@ -571,7 +569,7 @@ reintroduce `[noinline]`.
   includes `indirect/sdf-indirect-procedures.hlsli` after them, since every
   enabled procedure is compiled into the dispatch. A procedure is on the
   stack at most once at a time. Each marcher procedure asks its sample at one
-  point (`SdfIndirectMarcherCallSiteLawTests`); a probe kernel's reference reads
+  point; a probe kernel's reference reads
   are plain queries (`SDF_INDIRECT_PLAIN_QUERIES`) through the same site. A new
   probe or procedure joins those, never a call of its own. A tape build
   (`sdfBuildTileTape`) runs in a kernel of its own, as the tape pass does:
@@ -791,9 +789,8 @@ These are one-line cautions; the owning pages hold the derivations.
   codecs, mip filters and octahedral normal pair live in `Puck.Assets.Textures`,
   where a GPU upload also reaches them. An encoder's bytes are pinned by
   `TextureCodecLawTests`, so an encoder change re-records those pins and
-  `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
-  (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
-  law keeps and names).
+  `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`, which the
+  device law `BakeSamplingDeviceLawTests` samples.
   Material identity is never blended or compressed.
 - **A bake reaches the GPU through the one image upload.** `GpuPixelFormat`
   carries `Bc4Unorm`, `Bc5Unorm`, `Bc6hUfloat` and `Bc7Unorm` (sampled only:
@@ -851,8 +848,7 @@ These are one-line cautions; the owning pages hold the derivations.
   because its fragment stage discards and writes depth, which the mesh stage's forced
   early test forbids; the hit passes shade a card pixel from the impostor's views
   (`frame/sdf-mesh-impostor-surface.hlsli`) with each texel's material (the impostor's R8 plane, read unfiltered),
-  and reprojection takes its point through the draw's inverse matrix. A change to
-  the trace moves `SdfImpostorOracle` and `SdfImpostorLawTests` with it.
+  and reprojection takes its point through the draw's inverse matrix.
 
 ## Engine seams that bite
 
@@ -1039,8 +1035,8 @@ These are one-line cautions; the owning pages hold the derivations.
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
   a change to either moves `ImageSourceConversionLawTests`,
-  `ImageSourceWorkingSpaceLawTests`, the `source-conversion` canary and
-  `SourceConversionCanaryFixtureTests` together. Every conversion writes
+  `ImageSourceWorkingSpaceLawTests` and the `source-conversion` canary
+  together. Every conversion writes
   working values; `source-transfer` writes them relative to the host's paper
   white, the pass-block value `SourceConversionPackage` writes each frame, so
   an HDR sample shows at its own luminance. A desktop capture of an HDR display
@@ -1170,7 +1166,7 @@ These are one-line cautions; the owning pages hold the derivations.
   a residency's tables (`SdfWorldResidency.WaitReadyAsync`) and a reload's
   replacements are awaited through `BackgroundBuild.Start`'s task overload, so
   a cold set occupies only the threads whose creations are in the driver
-  (`GpuPassPipelineTurnLawTests`), and `BackgroundBuild` cancels with
+ , and `BackgroundBuild` cancels with
   `CancelAsync`, so no build continuation runs on the frame thread. The
   synchronous `GpuBuildLease.Wait` is for a holder with no build to await from
   (a compositor's encode pipeline, a harness).
@@ -1192,7 +1188,7 @@ These are one-line cautions; the owning pages hold the derivations.
   builds on the pool. One shadow kernel and one kernel per views variant serve
   every shadow fade capacity, so no policy, quality switch, session lever or
   handoff leases a pipeline, and a policy change waits for none
-  (`SdfShadowFadePipelinesLawTests`). A frame whose shadow or views kernel still
+ . A frame whose shadow or views kernel still
   builds waits through `FrameWaiting`; a held light table survives the source
   recycling its presentation buffers. The holder builds no tables until the set is ready, and keeps the
   leases until a device loss or the residency's last release gives them back.
@@ -1222,8 +1218,7 @@ These are one-line cautions; the owning pages hold the derivations.
   unless a newer swap or resize replaced it. `SdfWorldTables`'
   constructor owns its creations through one `GpuCreationScope`, which
   releases them newest first when a later step throws, so a refusal leaks
-  nothing (`SdfWorldTablesCreationFaultLawTests`,
-  `SdfWorldResidencyBuildRefusalLawTests`). A new GPU-owning build joins its
+  nothing (`SdfWorldResidencyBuildRefusalLawTests`). A new GPU-owning build joins its
   creations to a scope, or to a null-tolerant release it calls on failure.
   The views variants are outside that build: the tables need only the one the
   live program selects, or a fuller one (`SdfWorldTables.ViewsWaiting`), and a
@@ -1617,7 +1612,6 @@ These are one-line cautions; the owning pages hold the derivations.
   `GpuKernelCounters`' constants. Every other generated include, a document
   pass's among them, declares the same functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
-  `DocumentPassPackageKernelLawTests` compiles every package kernel that way.
   Its node keeps
   `GpuKernelCounters`: per frame slot a device-local counter
   buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), rows for
@@ -1650,8 +1644,8 @@ These are one-line cautions; the owning pages hold the derivations.
   layers count evaluations, hashes and field-run loads at their own operations.
   A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
-  counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
-  and `SdfWorkCountingLawTests` hold both. The residency's upload counts its
+  counts only where one is written (`sdfVisibilityStoreWord`, the output writes).
+  The residency's upload counts its
   `environment` pass for the CPU candidate projection only. One `sdf.environment`
   graph producer per residency records the map and reduction after acquiring
   actual panorama image publications; its ordinary node counters own their
@@ -1707,8 +1701,7 @@ These are one-line cautions; the owning pages hold the derivations.
   member of a wrapped factory joins a `GpuCreationKind`, and
   `GpuCreationFaultsLawTests`' coverage table fails on a member it does not
   name. A fault law fails every creation of an owner in turn over a tracking
-  fake and holds it to releasing exactly what it created: the SDF tables'
-  construction (`SdfWorldTablesCreationFaultLawTests`) and the overlay
+  fake and holds it to releasing exactly what it created: the overlay
   package's graph (`OverlayPackageLawTests`)
   over `FakeGpuDevice` with `trackObjects`, whose `Created` and `Memory` show
   what was released and the device-local bytes still held, and a shader
@@ -1740,9 +1733,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `FakeGpuDevice` with `RecordingGpuObjectNaming`, which fails on a member
   taking a name that it has no row for); the counting and fault
   decorators pass every name through and carry `Naming` over. A new creating
-  member takes a name and its backends hand the object to the naming;
-  `SdfWorldTablesObjectNameLawTests` holds the tables' names, every region's
-  included. To trace a
+  member takes a name and its backends hand the object to the naming. To trace a
   validation message, run with `--debug-layers` (`puck canary --debug-layers`,
   or the World flag) and read the name the message prints beside the handle:
   the validation layer names each object a `[vulkan-debug] validation` line
@@ -2134,17 +2125,16 @@ buffer marked `ShaderInterfaceBinding.Pushed`. A pipeline's groups are one
 `ShaderInterfaceLayout.PipelineLayout`), and each backend's layout is planned
 from it with no device call: `DirectXRootLayout.Plan` (a view table per group,
 a second table for a group's samplers, the pushed index last at `b0` in space
-4) and `VulkanGroupLayouts.Plan`. `DirectXRootLayoutLawTests` and
-`VulkanGroupLayoutsLawTests` hold both to the spike's tables in
-`tests/Shared/GpuGroupLayoutTables.cs`. A pipeline description with a `Layout`
+4) and `VulkanGroupLayouts.Plan`. `DirectXRootLayoutLawTests` holds the first
+to the spike's tables in `tests/Shared/GpuGroupLayoutTables.cs`. A pipeline description with a `Layout`
 is created from those plans (`DirectXRootSignatures.CreateLayout`, whose root
 signature has sampler tables and no static sampler; `VulkanPipelineLayouts.Create`
 over the planned sets), and `RequireLayout` refuses a layout beside the bindings
 it replaces. Its `GroupLayoutHandles` are what a group's set is allocated
 against, from a pool sized by `GpuDescriptorPoolSizes.ForGroups`; on Direct3D
 12 that pool's samplers are a range of the sampler heap.
-`DirectXGroupedLayoutLawTests` and `VulkanGroupedPipelineLayoutLawTests` hold the
-created layouts to the same tables. A group's set takes its constant buffers,
+`VulkanGroupedPipelineLayoutLawTests` holds the created Vulkan layouts to the
+same tables. A group's set takes its constant buffers,
 separate images and samplers through `IGpuBindings.WriteConstantBuffer`
 (a view a non-zero multiple of `IGpuBindings.ConstantBufferAlignment`),
 `WriteSampledImage` and `WriteSampler`; on Direct3D 12 a write of a kind the
@@ -2196,8 +2186,6 @@ catalog (`RenderGraphDocumentLawTests`), and `puck schema` regenerates
 A package's ports are typed (`RenderGraphPackagePort`: an image, or a buffer
 with its stride and count, and its access), and a version bound to a port of another kind,
 stride or count is refused as `RENDERGRAPH_PACKAGE_INPUT` or `_OUTPUT`.
-`RenderGraphPackageBarrierLawTests` hold a shader, post and overlay chain's
-planned barriers to a hand-derived table.
 `sdf.bricks` publishes the world's brick pool as a buffer output counted by
 `BrickPoolVoxels`; `RenderGraphBufferEdgeLawTests` plans its edges. A buffer
 edge is one mechanism with the image edge: `ShaderPipelineResourceKind` lives
@@ -2215,9 +2203,8 @@ writes. History remains reachable for lifetime and binding. Local history
 uses a per-storage successful-write cursor (`ShaderPipelineRenderNode.History.cs`),
 committed at submission and rolled back with access state on failure; device
 loss starts with no history. Package signatures decide whether another sample
-is owed, and publication and export remain allowed. `RenderGraphHistoryLawTests`
-holds this rule for images, buffers, reloads, graphics attachments and recovery.
-`RenderGraphSchedulerLawTests` also pins
+is owed, and publication and export remain allowed.
+`RenderGraphSchedulerLawTests` pins
 refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
 every same-frame rendering reader, no extent, no pass-pixels), kind mismatches and that
 zero-allocation steady frame with a buffer edge in it. A source instance
@@ -2836,7 +2823,7 @@ and the encode block at `b2` in space 3), and lease it from the device's
 presentation pipeline is created outside a build cache and no compositor ships a
 shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
-import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
+import `d3dcompiler_*.dll`.
 
 ## Render-graph runtime contracts
 
@@ -2977,8 +2964,8 @@ over time, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view sta
 only while `SdfTemporalHistory.Stands` finds a render now would feed the same
 temporal inputs (jitter always; previous view and poses where the pass reads
 motion). A new temporal input a pass reads joins `Stands` in the same change.
-`SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
-runtime's convergence laws hold these without a device; the `temporal-jitter`
+`SdfWorldPassesLawTests.Temporal` and the runtime's convergence laws hold
+these without a device; the `temporal-jitter`
 and `temporal-motion` canaries exercise it on one.
 
 ## Temporal reconstruction
