@@ -514,9 +514,8 @@ The acting-principal/administration contract is proved by
 `AuthorityAdministrationLawTests` and the compose/dissolve-authority contract by
 `EngageAuthorityLawTests` and `ControlApplicationLawTests`, all in `tests/Puck.World.Server.Tests` with code-built
 furniture. For ad-hoc work: every denial case
-needs a control (actor holding the grant succeeds), keep actor ≠ target
-(every seat is seeded wide, so self-targeting discriminates nothing), and
-prove a new assertion once by breaking it.
+needs a control (actor holding the grant succeeds), and keep actor ≠ target
+(every seat is seeded wide, so self-targeting discriminates nothing).
 
 `Observe` also admits a concrete `state:<row>` subject. The
 `StateObservations(row)` query still filters values by the row/cell audience

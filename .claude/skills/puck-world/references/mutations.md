@@ -388,8 +388,8 @@ evaluation took.
 
 **First, `puck search "\[MutationKind\(" src -M 0` against `WorldMutation.cs`
 gives the current kind count and declared ordinals.** A colliding ordinal is a
-boot failure. A genuinely new kind is a substrate decision and must survive
-consolidation review first: is this an existing kind's payload? Most proposals
+boot failure. A genuinely new kind is a substrate decision, so first check whether
+it is an existing kind's payload. Most proposals
 are — a new section reuses `UpsertStateCell`, a rule effect reuses an existing
 kind.
 

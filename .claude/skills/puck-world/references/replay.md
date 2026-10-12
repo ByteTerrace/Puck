@@ -78,9 +78,9 @@ surface.
   `WorldPipelineSources` over it to the shadow server, so a recorded
   `CommitViewGraph` binds against the same sources and re-drives to the
   recorded outcome.
-  World remains at version 1 during development (owner instruction). Change the
-  current format directly; do not bump versions or accumulate retired magic values
-  for development edits. Re-record verification tapes against the current code.
+  World stays at version 1 during development. Change the current format
+  directly; do not bump versions or accumulate retired magic values for
+  development edits. A tape a change breaks is re-recorded or deleted.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.

@@ -49,6 +49,8 @@ agent works in that mode by default, without asking:
   - Every project stays in the build.
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
+  - Self-modification is explicitly approved: agents edit AGENTS.md, the
+    skills and their evals as part of ordinary work.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.

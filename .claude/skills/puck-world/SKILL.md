@@ -472,15 +472,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   measures ~0.03 LSB mean and slips under it.
 - **Search content with `puck search`.** The `content-search` skill owns it,
   including the fallback when the CLI cannot bootstrap.
-- **A verification that cannot fail is a lie.** Pair every denial case with
-  a control (actor holds the grant → succeeds), keep actor ≠ target (every
-  seat is seeded wide, so self-targeting discriminates nothing), and prove
-  a new assertion once by breaking it. A law with a fix is proven by
-  `puck laws prove <law> --fix <commit>` (or `--file-list` for an
-  uncommitted fix), which withholds the fix in a worktree of its own and
-  requires the law to fail there and pass with it; never hand-revert files
-  in a shared tree. This repo's recorded dominant failure mode is
-  verification scripts that lie silently.
+- **A denial check needs a control.** Pair a denial case with an actor who
+  holds the grant and succeeds, and keep actor ≠ target (every seat is seeded
+  wide, so self-targeting discriminates nothing).
 - `replay.verify` MATCH proves the explicitly hashed authoritative state-system
   trajectory, not the whole document, grant table, or HUD
   ([references/replay.md](references/replay.md)). A recording tapes every row
@@ -496,8 +490,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   multi-authority federation (`four-corners-sharded`: a leg's `authorities`
   array names N real listener processes, each with its own dynamic endpoint
   and generated identity, and a `line`/`response`/`sequence` assertion's
-  `authority` selector reads a specific one's transcript) — re-run whichever
-  proofs your change touches. The runner closes every leg's script with
+  `authority` selector reads a specific one's transcript). The runner closes every leg's script with
   `wire.errors` and `quit`, so a leg lasts as long as its script; a manifest's
   `timeoutSeconds` is only the kill ceiling (each child World also gets
   `--exit-after-seconds` at it as a backstop), `--jobs` bounds the
