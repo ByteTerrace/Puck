@@ -424,15 +424,20 @@ world.shaders.status
 ```
 
 The reload reads the kernels the tree's `passes` directory carries and keeps
-the rest (`SdfKernelSet.Overlaid`). A kernel carried as its `sdf-*.comp.hlsl`
-source compiles with the World's shader compiler, whose cache makes an
-unchanged source a hit; a kernel carried only as bytecode loads as it stands.
-Omit the directory to read the deployed bytecode. The request stays pending
-while the sources compile, the bytecode loads and the changed pipelines are
-created on the thread pool; status then reports `applied`, `unchanged`, or
-`failed`, with a generation and changed pipeline count, and a compile error
-names its file and line. The issuing text session's later lines wait for the
-request to settle.
+the rest (`SdfKernelTreeLoad`). A kernel carried as its `sdf-*.comp.hlsl`
+source compiles to the running backend's target alone, through the per-user
+shader cache the build compiles into, so an unchanged source is a hit and the
+next build publishes what the reload compiled; a kernel carried only as
+bytecode loads as it stands. Compiles run one per processor, shortest recorded
+compile first, and each frame installs the kernels that have compiled since
+the last batch (`[shaders.reload: request=N installed pipelines=K kernels=…]`),
+so an edit the views kernels show renders while the receiver and indirect
+kernels still compile. Omit the directory to read the deployed bytecode. The
+request stays pending until its last batch is installed; status then reports
+`applied`, `unchanged`, or `failed`, with a generation and changed pipeline
+count, and a compile error names its file and line (batches installed before
+it stay). The issuing text session's later lines wait for the request to
+settle.
 
 `SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
 creates replacements for the kernels whose bytecode changed, and for any refused

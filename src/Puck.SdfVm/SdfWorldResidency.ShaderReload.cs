@@ -28,18 +28,22 @@ public sealed partial class SdfWorldResidency {
     // The compiler the pending request's carried sources compile with, written with the request under the gate.
     private ShaderCompiler? m_pendingShaderCompiler;
 
-    // The reload whose pipelines are building, and the request it answers.
+    // The batch whose pipelines are building, the tree load the request's kernels arrive from, the request they answer
+    // and the pipelines its installed batches changed.
     private readonly BackgroundBuild<SdfWorldPipelineReload> m_reloadBuild = new();
-
+    private SdfKernelTreeLoad? m_reloadLoad;
     private SdfShaderReloadStatus? m_reloadRequest;
+    private int m_reloadChanged;
 
     /// <summary>Gets the latest request outcome, safe to read from the console while rendering continues.</summary>
     public SdfShaderReloadStatus ShaderReloadStatus => Volatile.Read(location: ref m_shaderReloadStatus);
 
     /// <summary>Queues a kernel reload. The next produced frame starts reading the kernels the tree carries, compiling
-    /// each carried source (<see cref="SdfKernelSet.Overlaid"/>), and creating the changed pipelines off the frame
-    /// thread; a later frame installs them. A kernel the tree does not carry keeps its bytecode. Does not rebuild or
-    /// reset the world.</summary>
+    /// each carried source to this residency's backend alone (<see cref="SdfKernelTreeLoad"/>), and each later frame
+    /// installs the kernels that have compiled since the last batch, their changed pipelines created off the frame
+    /// thread, so a kernel that compiles quickly renders while a heavy one still compiles. A kernel the tree does not
+    /// carry keeps its bytecode. The request is pending until its last batch is installed; a failure keeps the batches
+    /// already installed. Does not rebuild or reset the world.</summary>
     /// <param name="compiler">The compiler a carried kernel source compiles with.</param>
     /// <param name="tree">The kernel tree whose passes directory (<see cref="SdfKernelSet.PassesDirectory"/>) carries the
     /// kernels, as sources or bytecode: a source checkout's <c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>, or null for the
@@ -84,9 +88,10 @@ public sealed partial class SdfWorldResidency {
         }
     }
 
-    // Starts a queued reload, or installs the one whose pipelines finished building. Loading the bytecode and creating
-    // the changed pipelines run on the thread pool; only the install, a device drain and the swap, runs here, so the
-    // request stays pending while the driver compiles.
+    // Advances the request in flight, or starts a queued one. The tree's kernels arrive from the load as they compile;
+    // each batch becomes a reload of its own (its pipelines leased and built off the frame thread, installed here once
+    // built), so a kernel that compiles quickly renders while a heavy one still compiles. The request stays pending
+    // until the load has completed and its last batch is installed.
     private void ApplyPendingShaderReload() {
         if (m_reloadBuild.TryTake(
             error: out var error,
@@ -98,7 +103,17 @@ public sealed partial class SdfWorldResidency {
             );
         }
 
-        if (m_reloadBuild.IsPending || (Volatile.Read(location: ref m_pendingShaderReload) is null)) {
+        if (m_reloadBuild.IsPending) {
+            return;
+        }
+
+        if (m_reloadLoad is { } load) {
+            AdvanceShaderReload(load: load);
+
+            return;
+        }
+
+        if (Volatile.Read(location: ref m_pendingShaderReload) is null) {
             return;
         }
 
@@ -108,21 +123,58 @@ public sealed partial class SdfWorldResidency {
         )!;
 
         m_reloadRequest = request;
-        StartShaderReload(
-            compiler: Volatile.Read(location: ref m_pendingShaderCompiler)!,
-            device: m_deviceContext!,
-            directory: request.Directory!,
-            // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
-            extension: (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Beam].Span)
-                ? ".dxil"
-                : ".spv"
-            ),
-            pipelines: m_pipelines.Current!
+        m_reloadChanged = 0;
+
+        try {
+            m_reloadLoad = SdfKernelTreeLoad.Start(
+                bytecodeExtension: BytecodeExtension(),
+                compiler: Volatile.Read(location: ref m_pendingShaderCompiler)!,
+                directory: request.Directory!
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
+            FinishShaderReload(failure: exception.Message);
+        }
+    }
+    // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
+    private string BytecodeExtension() =>
+        (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Beam].Span)
+            ? ".dxil"
+            : ".spv"
         );
+    // Starts building the batch the load delivered since the last one, or finishes the request once the load has
+    // completed with nothing left to install.
+    private void AdvanceShaderReload(SdfKernelTreeLoad load) {
+        var completed = load.IsCompleted;
+        var ready = load.TakeReady();
+
+        if (ready.Count != 0) {
+            var kernels = m_kernels;
+
+            foreach (var (kernel, bytecode) in ready) {
+                kernels = kernels.With(
+                    bytecode: bytecode,
+                    kernel: kernel
+                );
+            }
+
+            StartShaderReload(
+                device: m_deviceContext!,
+                kernels: kernels,
+                pipelines: m_pipelines.Current!
+            );
+
+            return;
+        }
+
+        if (completed) {
+            FinishShaderReload(failure: load.FailureOf());
+        }
     }
     // Waits out a reload in flight and reports its request failed; a device loss or disposal discards the pipelines.
     private void CancelShaderReload(string reason) {
         m_reloadBuild.CancelAndWait(discard: static reload => reload.Dispose());
+        m_reloadLoad?.Dispose();
+        m_reloadLoad = null;
 
         if (m_reloadRequest is { } request) {
             m_reloadRequest = null;
@@ -130,11 +182,6 @@ public sealed partial class SdfWorldResidency {
         }
     }
     private void InstallShaderReload(SdfWorldPipelineReload? reload, Exception? error) {
-        var request = m_reloadRequest!;
-        SdfShaderReloadStatus result;
-
-        m_reloadRequest = null;
-
         try {
             if (error is not null) {
                 ExceptionDispatchInfo.Throw(source: error);
@@ -142,24 +189,25 @@ public sealed partial class SdfWorldResidency {
 
             using (reload) {
                 var changed = m_tables!.InstallReload(reload: reload!);
+                var previous = m_kernels;
 
                 m_kernels = reload!.Kernels; // Device-loss recovery must reconstruct the last successful set too.
-                result = request with {
-                    Generation = (request.Generation + ((changed > 0)
-                        ? 1
-                        : 0)),
-                    State = ((changed > 0)
-                        ? "applied"
-                        : "unchanged"),
-                    ChangedPipelines = changed,
-                };
+                m_reloadChanged += changed;
+
+                if (changed > 0) {
+                    var kernels = string.Join(separator: ",", values: SdfKernelSet.Kernels.Where(predicate: kernel => !previous[kernel].Span.SequenceEqual(other: m_kernels[kernel].Span)).Select(selector: SdfKernelSet.StemOf));
+
+                    Console.Error.WriteLine(value: $"[shaders.reload: request={m_reloadRequest!.RequestId} installed pipelines={changed} kernels={kernels}{((m_reloadLoad is { IsCompleted: false }) ? " more=compiling" : "")}]");
+                }
             }
         } catch (Exception exception) {
-            PublishShaderReload(result: request with { State = "failed", Error = exception.Message });
-
             // A bad directory or bytecode, or kernels that do not read this host's interface (another instruction set's
             // stamp, a binding the host does not place), fail the request, as do several pipelines failing together;
-            // anything else, a device loss above all, continues to the host's recovery.
+            // anything else, a device loss above all, continues to the host's recovery. Batches already installed stay.
+            m_reloadLoad?.Dispose();
+            m_reloadLoad = null;
+            FinishShaderReload(failure: exception.Message);
+
             if (FailsTheRequest(exception: exception)) {
                 return;
             }
@@ -167,11 +215,27 @@ public sealed partial class SdfWorldResidency {
             throw;
         }
 
-        PublishShaderReload(result: result);
-
         static bool FailsTheRequest(Exception exception) =>
             ((exception is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException) ||
             ((exception is AggregateException aggregate) && aggregate.InnerExceptions.All(predicate: FailsTheRequest)));
+    }
+    private void FinishShaderReload(string? failure) {
+        var request = m_reloadRequest!;
+
+        m_reloadRequest = null;
+        m_reloadLoad?.Dispose();
+        m_reloadLoad = null;
+        PublishShaderReload(result: ((failure is not null)
+            ? request with { State = "failed", Error = failure, ChangedPipelines = m_reloadChanged, Generation = (request.Generation + ((m_reloadChanged > 0) ? 1 : 0)) }
+            : request with {
+                Generation = (request.Generation + ((m_reloadChanged > 0)
+                    ? 1
+                    : 0)),
+                State = ((m_reloadChanged > 0)
+                    ? "applied"
+                    : "unchanged"),
+                ChangedPipelines = m_reloadChanged,
+            }));
     }
     private void PublishShaderReload(SdfShaderReloadStatus result) {
         lock (m_shaderReloadGate) {
@@ -184,12 +248,11 @@ public sealed partial class SdfWorldResidency {
             ? $" error={error}"
             : "")}]");
     }
-    // Kept apart so the build's closure is allocated only when a reload starts, never on a polled frame. The changed
+    // Kept apart so the build's closure is allocated only when a batch starts, never on a polled frame. The changed
     // kernels' replacements are leased from the pass-pipeline cache and waited for here, off the frame thread; another
     // residency leasing the replaced entries keeps them, since a reload swaps only this residency's leases.
-    private void StartShaderReload(SdfWorldPipelines pipelines, IGpuDeviceContext device, ShaderCompiler compiler, string directory, string extension) {
+    private void StartShaderReload(SdfWorldPipelines pipelines, IGpuDeviceContext device, SdfKernelSet kernels) {
         var cache = m_pipelines.Catalog.Pipelines;
-        var current = m_kernels;
 
         m_reloadBuild.Start(build: async token => {
             SdfWorldPipelineReload reload;
@@ -200,12 +263,7 @@ public sealed partial class SdfWorldResidency {
                 reload = pipelines.PrepareReload(
                     cache: cache,
                     device: device,
-                    kernels: current.Overlaid(
-                        bytecodeExtension: extension,
-                        cancellationToken: token,
-                        compiler: compiler,
-                        directory: directory
-                    ),
+                    kernels: kernels,
                     reflector: reflector
                 );
             }

@@ -6,23 +6,30 @@ namespace Puck.World;
 /// <summary>
 /// The SDF kernel reload surface, <c>world.shaders.reload</c> and <c>world.shaders.status</c>: every presentation shape
 /// that renders an SDF residency, windowed or offscreen, registers it, since reloading kernels needs a renderer and no
-/// window. A reload compiles the kernel sources its tree carries with the World's <see cref="ShaderCompiler"/>.
+/// window. A reload compiles the kernel sources its tree carries with the World's toolchain into the per-user shader
+/// cache the build compiles kernels into (<see cref="ShaderCompiler.DefaultCacheDirectory"/>), so the build after an
+/// edit publishes what the reload compiled, and a reload of an unedited source is a hit on what the build compiled.
 /// </summary>
 /// <param name="renderProbe">The render probe whose residency the verbs reload and report.</param>
-/// <param name="compiler">The World's shader compiler, which a carried kernel source compiles with.</param>
+/// <param name="compiler">The World's shader compiler, whose toolchain a carried kernel source compiles with.</param>
 internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProbe, ShaderCompiler compiler) : ICommandModule {
+    private readonly Lazy<ShaderCompiler> m_kernelCompiler = new(valueFactory: () => new ShaderCompiler(
+        cacheDirectory: ShaderCompiler.DefaultCacheDirectory,
+        toolchain: compiler.Toolchain
+    ));
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.reload",
-            description: "Reloads SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the kernels the tree's passes directory carries and keeps the rest: a kernel's sdf-*.comp.hlsl source compiles with the world's shader compiler (an unchanged source is a cache hit), and a kernel carried only as bytecode loads as it stands. Defaults to the deployed Assets/Shaders/Sdf, which carries bytecode; a source checkout names src/Puck.SdfVm/Assets/Shaders/Sdf, so editing a kernel and reloading is one step. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; a compile error (reported with its file and line), a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the previous set; DXIL kernels are checked through the dxcompiler beside dxc. The request completes off the frame thread and reports its outcome on stderr ('[shaders.reload: request=N applied|unchanged|failed ...]'); a text session's later lines wait for it, and world.shaders.status reports it too. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
+            description: "Reloads SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the kernels the tree's passes directory carries and keeps the rest: a kernel's sdf-*.comp.hlsl source compiles to the running backend alone, through the per-user shader cache the build shares (an unchanged source is a cache hit), and a kernel carried only as bytecode loads as it stands. Defaults to the deployed Assets/Shaders/Sdf, which carries bytecode; a source checkout names src/Puck.SdfVm/Assets/Shaders/Sdf, so editing a kernel and reloading is one step. Uses the current backend. Kernels install as they compile, quickest first, so a light kernel's change shows while a heavy kernel still compiles, and each installed batch prints '[shaders.reload: request=N installed pipelines=K]'. Replaces changed pipelines while retaining world state, GPU buffers and textures; a compile error (reported with its file and line), a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the kernels installed before it; DXIL kernels are checked through the dxcompiler beside dxc. The request completes off the frame thread and reports its outcome on stderr ('[shaders.reload: request=N applied|unchanged|failed ...]'); a text session's later lines wait for it, and world.shaders.status reports it too. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
             handler: (context, args) => {
                 if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
-                    if (!node.RequestShaderReload(compiler: compiler, tree: ((args.Count == 0)
+                    if (!node.RequestShaderReload(compiler: m_kernelCompiler.Value, tree: ((args.Count == 0)
                         ? null
                         : args.Tail(start: 0)))) {
                         return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");

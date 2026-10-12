@@ -5596,7 +5596,7 @@ item 2 landed.
     fold's shell on both backends, against an analytic oracle; it checks marches,
     not field values. A reload reads only the kernels a
     tree carries and compiles each carried `.comp.hlsl` source with the World's
-    `ShaderCompiler` (`SdfKernelSet.Overlaid`), so editing a kernel and
+    `ShaderCompiler` (`SdfKernelTreeLoad`), so editing a kernel and
     reloading is one step; the `sdf-shader-reload` canary installs a baker
     that reads the host's stamped include and refuses one declaring another
     stamp, on both backends. The parity world boots with soft shadows at
