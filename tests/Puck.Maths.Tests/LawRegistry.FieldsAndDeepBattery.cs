@@ -266,6 +266,10 @@ internal static partial class LawRegistry {
             id: "prime-field.montgomery-reduction-vs-big-integer"
         ),
         ClaimCase(
+            claim: Subjects.LazyChainsMatchExactDecision,
+            id: "prime-field.lazy-chains-vs-exact-decision"
+        ),
+        ClaimCase(
             claim: Subjects.SelfridgeSymbolsMatchReciprocity,
             id: "prime-field.selfridge-symbols-vs-reciprocity"
         ),

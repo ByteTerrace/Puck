@@ -37,6 +37,37 @@ path.
 - Do not infer a primitive's contract from its name; verify its source, XML
   documentation, and tests.
 
+## Prime counting and selection
+
+These rules govern `PrimeCountingFunction`, `NthPrime`, `TryRandomPrime` and
+the kernels under them ([prime exploration](../../../docs/reference/prime-exploration.md)):
+
+- They run on one core. Never propose threads, tasks or GPU work for them.
+- They target Intel and AMD across modern cores. AVX2 is the floor that gets
+  tuning and AVX-512 is the upper path; the 128-bit and scalar rungs stay as
+  correct, lawed fallbacks, never deleted and never refused. Gate on
+  capability, never on vendor.
+- Cost models assume 32 KiB of L1D and 512 KiB of L2 per core and no help
+  from L3: data that misses L2 costs as memory traffic. Derive constants from
+  the algorithm or the vector width; never fit one to a single chip's caches.
+- A table may make the work faster; it may not let the work be skipped.
+  Structural tables (wheel masks and steps, the base-prime table below 65536,
+  presieve patterns, witness constants) are fine. Tables that encode answers
+  over the query range (π at checkpoints, n-th prime lists, prime or gap lists
+  over large ranges, zeta zeros) are not. Verified bounds such as the maximal
+  prime gap below 2^64 are facts, not shipped data.
+- Raw kernels the laws call are public checked shells over internal cores: the
+  shell validates its preconditions and instruction set in release builds, and
+  hot loops call the core.
+- Judge a change by counted work, JIT disassembly and llvm-mca (znver4 for the
+  AVX-512 path; znver2 and alderlake for the AVX2 path), then hardware
+  counters where available; time it only when the owner asks.
+- Measured dead ends, not to re-propose: a cutoff z above y, VPOPCNTQ from
+  C#, fusing the semiprime stream into the hard-leaf sweep, per-pair rework of
+  the medium-prime sieve entry, walk-to-next-prime selection (it weights each
+  prime by its preceding gap), window-sieve uniform selection, and the
+  Õ(√N) or analytic counting methods below 2^64.
+
 ## Branded members
 
 A member carrying `[VerifiedCode("id", …)]` is settled: proven correct over its

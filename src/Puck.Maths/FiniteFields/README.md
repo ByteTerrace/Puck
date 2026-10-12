@@ -731,6 +731,23 @@ A narrow sibling, `ReduceNarrow`, serves moduli below `2³²` with the same
 multiply within one word, and the reduction `n − hi(m·n)` needs no correction
 step at all. The `uint` primality kernel's base-two round runs on it.
 
+A lazy sibling, `ReduceLazy`, serves chains whose operands multiply to a
+product below `2⁶⁴·n`. It lifts the subtractive quotient by the modulus,
+`hi(a·b) + n − hi(m·n)`, which then lies in `(0, 2n)`. Below
+`LazyModulusCeiling`, `2⁵⁸`, two operands below `8n` satisfy the bound, and a
+chain that keeps every operand below `8n` — the prime kernels' base-two rounds,
+interleaved batches and Lucas ladders do, with sums left unfolded and
+differences lifted by `4n` — needs no comparison between its products;
+`Canonical` folds a value below `8n` back to the residue wherever one is
+compared. Below `FoldedLazyModulusCeiling`, `2⁶²`, two operands below `2n`
+satisfy it, and the same chains fold each sum and difference once by `2n`, so
+only the product's fold is gone; `Fold` folds a value below `2n`. The
+representative a lazy chain carries is not unique, so a value is folded before
+it is read as a residue, and the decision read either way is the same decision.
+Masks rather than conditionals serve the exact kernels because the JIT turns a
+select inside a loop into a branch, and a data-dependent branch on a
+multiplication chain mispredicts about half the time.
+
 **Branchless-mask discipline.** Every conditional fold is a mask rather than a
 branch, and each one is stated against the case where the untruncated value no
 longer fits the carrier. `Add` detects the wrap rather than assuming it away

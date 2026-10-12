@@ -31,6 +31,13 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public readonly struct ScaledResidueRing64 {
+    /// <summary>The exclusive bound on a modulus whose chains may carry residues lazily, below eight times the modulus, between products reduced by <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>.</summary>
+    /// <remarks><c>2^58</c>: the lifted REDC of a product of two operands below <c>8n</c> is below <c>64 n^2 / 2^64 + n</c>, which is below <c>2n</c> exactly when <c>64n</c> is below <c>2^64</c>.</remarks>
+    public const ulong LazyModulusCeiling = (1UL << 58);
+    /// <summary>The exclusive bound on a modulus whose chains may carry residues below twice the modulus between products reduced by <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>, folding each sum and difference once by twice the modulus.</summary>
+    /// <remarks><c>2^62</c>: the lifted REDC of a product of two operands below <c>2n</c> is below <c>4 n^2 / 2^64 + n</c>, which is below <c>2n</c> exactly when <c>4n</c> is below <c>2^64</c>; that is also what keeps a sum of two such operands inside the carrier.</remarks>
+    public const ulong FoldedLazyModulusCeiling = (1UL << 62);
+
     /// <summary>Creates the ring over an odd modulus.</summary>
     /// <param name="modulus">The modulus, which must be odd and greater than one. The precondition is not enforced.</param>
     /// <remarks>
@@ -76,17 +83,55 @@ public readonly struct ScaledResidueRing64 {
     /// <param name="right">The second reduced addend.</param>
     /// <returns>The reduced sum.</returns>
     /// <remarks>
+    /// <para>
     /// The representation is linear — <c>aR + bR</c> is <c>(a + b)R</c> — so a sum needs no REDC of its own, only the
-    /// conditional fold every modular addition needs. Above <c>2^63</c> the untruncated sum no longer fits the carrier,
-    /// so the wrap is detected rather than assumed away, and folding a wrapped sum lands on the right value anyway,
-    /// because the radix vanishes modulo the carrier.
+    /// fold every modular addition needs. The fold is decided by one comparison against the room the modulus leaves
+    /// above the right addend, <c>modulus - right</c>: a left addend at or past it has a sum at or past the modulus,
+    /// and the truncated sum less the modulus is then the residue even when the untruncated sum left the carrier,
+    /// because the radix vanishes modulo the carrier. So a modulus above <c>2^63</c> needs no wrap detection of its own.
+    /// </para>
+    /// <para>
+    /// The fold is a mask rather than a conditional. The JIT turns a select inside a loop into a branch, never a
+    /// conditional move, and a data-dependent branch on a multiplication chain mispredicts about half the time; the
+    /// mask costs a serial run of set, widen, negate and mask instructions instead, which is still the cheaper form.
+    /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong Add(ulong left, ulong right, ulong modulus) {
-        var sum = (left + right);
-        var fold = unchecked((0UL - ((sum < left) | (sum >= modulus)).As<ulong>()));
+        var fold = unchecked((0UL - (left >= (modulus - right)).As<ulong>()));
 
-        return (sum - (modulus & fold));
+        return ((left + right) - (modulus & fold));
+    }
+    /// <summary>Folds a value below twice an odd modulus into <c>[0, modulus)</c>; see <see cref="Canonical(ulong, ulong)"/> for wider operands.</summary>
+    /// <param name="value">The value, below <c>2 * modulus</c>.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <returns><paramref name="value"/> less the modulus when it is at or past it; otherwise <paramref name="value"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ulong Fold(ulong value, ulong modulus) =>
+        (value - (modulus & unchecked((0UL - (value >= modulus).As<ulong>()))));
+    /// <summary>Reduces a lazily carried residue below eight times an odd modulus into <c>[0, modulus)</c>.</summary>
+    /// <param name="value">The value, below <c>8 * modulus</c>, so the modulus is below <see cref="LazyModulusCeiling"/>.</param>
+    /// <param name="modulus">The odd modulus, below <see cref="LazyModulusCeiling"/>.</param>
+    /// <returns>The residue of <paramref name="value"/> in <c>[0, modulus)</c>.</returns>
+    /// <remarks>
+    /// Three folds, by four times, twice and once the modulus, each a mask: a value below <c>8n</c> is below <c>4n</c>
+    /// after the first, below <c>2n</c> after the second and below <c>n</c> after the third. The widest operand the
+    /// lazy chains of <see cref="PrimeKernels"/> carry is below <c>8n</c>, which is what fixes the count.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ulong Canonical(ulong value, ulong modulus) {
+        var twice = (modulus << 1);
+
+        return Fold(
+            modulus: modulus,
+            value: Fold(
+                modulus: twice,
+                value: Fold(
+                    modulus: (twice << 1),
+                    value: value
+                )
+            )
+        );
     }
     /// <summary>Recovers the ordinary residue a Montgomery-form element stands for.</summary>
     /// <param name="value">The reduced Montgomery-form element.</param>
@@ -177,7 +222,12 @@ public readonly struct ScaledResidueRing64 {
     /// </para>
     /// <para>
     /// The correction is a mask rather than a conditional: the comparison sits on a multiplication chain's critical
-    /// path, where a data-dependent branch mispredicts about half the time.
+    /// path, where a data-dependent branch mispredicts about half the time, and the JIT turns a select inside a loop
+    /// into a branch rather than a conditional move. The low half of the product is a separate truncated multiply
+    /// rather than the second output of the widening one: <see cref="Math.BigMul(ulong, ulong, out ulong)"/> and the
+    /// <see cref="UInt128"/> product both hand that half back through memory, and it heads the chain's critical path.
+    /// Chains over a modulus below <see cref="LazyModulusCeiling"/> run <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>
+    /// instead, which has no correction at all.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -194,6 +244,46 @@ public readonly struct ScaledResidueRing64 {
         var borrow = unchecked((0UL - (high < correction).As<ulong>()));
 
         return ((high - correction) + (modulus & borrow));
+    }
+    /// <summary>Multiplies two lazily carried residues whose product is below <c>2^64</c> times the modulus and reduces it by REDC lifted by the modulus, to a value below twice the modulus.</summary>
+    /// <param name="left">The first factor: below <c>8 * modulus</c> for a modulus below <see cref="LazyModulusCeiling"/>, below <c>2 * modulus</c> for one below <see cref="FoldedLazyModulusCeiling"/>.</param>
+    /// <param name="right">The second factor, under the same bound as <paramref name="left"/>.</param>
+    /// <param name="modulus">The odd modulus, below <see cref="FoldedLazyModulusCeiling"/>.</param>
+    /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>, <see cref="ModulusInverse"/>.</param>
+    /// <returns>A value below <c>2 * modulus</c> congruent to <c>left * right / 2^64</c> modulo <paramref name="modulus"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// The subtractive quotient of <see cref="Reduce(ulong, ulong, ulong, ulong)"/>, <c>hi(left * right) - hi(m * modulus)</c>,
+    /// lies in <c>(-modulus, left * right / 2^64)</c>, so adding the modulus lands it in <c>(0, 2 * modulus)</c>
+    /// whenever the product is below <c>2^64 * modulus</c>. Two operands below <c>8 * modulus</c> satisfy that below
+    /// <see cref="LazyModulusCeiling"/>, where <c>64 * modulus</c> is below <c>2^64</c>; two below <c>2 * modulus</c>
+    /// satisfy it below <see cref="FoldedLazyModulusCeiling"/>. A chain that keeps its operands under the bound its
+    /// modulus allows needs no comparison between its products, and <see cref="Canonical(ulong, ulong)"/> or
+    /// <see cref="Fold(ulong, ulong)"/> recovers the unique residue wherever one is compared. The modulus is added to
+    /// the product's high half, which is ready before the critical multiply, so the chain's step is the three
+    /// multiplies and one subtraction. The high half is formed and lifted before the factor, in that order in the
+    /// source as well: the JIT allocates in source order, and this order keeps the interleaved four-chain walk of
+    /// <see cref="PrimeKernels"/> free of stack traffic, where forming the factor first sends it through the stack on
+    /// the critical path.
+    /// </para>
+    /// <para>
+    /// The result is not unique: a chain that reads a value back as a residue must fold it first, and the values two
+    /// chains carry differ even when the residues they stand for agree. The folded result equals
+    /// <see cref="Reduce(ulong, ulong, ulong, ulong)"/>'s, so a decision read from either form is the same decision.
+    /// </para>
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ulong ReduceLazy(ulong left, ulong right, ulong modulus, ulong inverse) {
+        var lifted = (MultiplyHigh(
+            left: left,
+            right: right
+        ) + modulus);
+        var factor = unchecked(((left * right) * inverse));
+
+        return (lifted - MultiplyHigh(
+            left: factor,
+            right: modulus
+        ));
     }
     /// <summary>Multiplies two Montgomery-form residues of a modulus below <c>2^32</c> and reduces the product lazily, by REDC with the full radix <c>2^64</c>.</summary>
     /// <param name="left">The first factor, in <c>[1, modulus]</c>.</param>
@@ -272,7 +362,8 @@ public readonly struct ScaledResidueRing64 {
     /// <returns>The reduced difference.</returns>
     /// <remarks>
     /// The counterpart to <see cref="Add(ulong, ulong, ulong)"/>, and linear for the same reason. A borrowed difference
-    /// is already exact once the modulus is added back, because the radix vanishes modulo the carrier.
+    /// is already exact once the modulus is added back, because the radix vanishes modulo the carrier. The fold is a
+    /// mask, for the reason <see cref="Add(ulong, ulong, ulong)"/> gives.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong Subtract(ulong left, ulong right, ulong modulus) {

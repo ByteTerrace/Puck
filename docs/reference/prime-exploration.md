@@ -257,18 +257,28 @@ small interval compiles only the table path.
 
 When the generator type holds no references, the selector treats it as a pure
 value: a copy taken after a draw restores the stream exactly. It then keeps
-drawing past an undecided wide survivor until three survivors are pending, runs
-their base-two rounds as three interleaved Montgomery chains, and confirms them
+drawing past an undecided wide survivor until four survivors are pending, runs
+their base-two rounds as four interleaved Montgomery chains, and confirms them
 with the strong Lucas test in draw order. The first prime wins and the generator
 is restored to the copy taken after its draw. A narrow or exceptional candidate
 ends the batch and is decided after the pending survivors; budget expiry
 decides a partial batch survivor by survivor. The result, the final generator
 state and success or failure are exactly those of deciding each candidate in
 draw order. A generator whose draws depend on anything outside its own fields
-must hold a reference, which keeps the sequential order. The filter depth stays
-at 163: with interleaved rounds the modelled request cost is flat from 163 to
-331 and rises beyond, and the depth never changes the selected prime, the draws
-or the final state.
+must hold a reference, which keeps the sequential order.
+
+Four chains because a chain's step, one REDC and one conditional doubling,
+issues four multiplies, and on current cores the multiplier retires about four
+in the time a lazy step's dependency chain takes, so four chains keep it busy
+for exactly as long as a step lasts and a fifth would wait on it. At the top of
+the carrier one survivor in six is prime, so a width of three decides 2.0
+batches per selected prime, four 1.6 and five 1.4. A batch walks in the widest
+of the arithmetics the [primality](#primality) section describes that its
+largest modulus admits: lazily below 2^58, folded lazily below 2^62, exactly
+above.
+The filter depth stays at 163: with interleaved rounds the modelled request
+cost is flat from 163 to 331 and rises beyond, and the depth never changes the
+selected prime, the draws or the final state.
 
 ## Enumerating an interval
 
@@ -467,6 +477,24 @@ once and shares them between its two rounds. The base-two round takes two as
 reading `U_d = 0` off `2V_(d+1) = V_d`. The `uint` kernel's base-two round uses
 a 64-bit radix with lazy reduction. The arbitrary-width `BigIntegerFunctions`
 twelve-base threshold is separate.
+
+Below `ScaledResidueRing64.LazyModulusCeiling`, 2^58, every chain of the word
+decision carries residues lazily: a product comes back below twice the modulus
+through `ReduceLazy`, a sum is a plain sum, a difference is lifted by four times
+the modulus, and nothing is folded until a residue is compared, where
+`Canonical` recovers it. Every operand a chain multiplies stays below eight
+times the modulus, which is what the ceiling guarantees keeps the lifted
+quotient below twice the modulus. Below `FoldedLazyModulusCeiling`, 2^62, the
+same chains fold each sum and difference once, by twice the modulus, so every
+operand stays below twice the modulus and the product bound holds up to that
+ceiling; the product's own fold is still gone. The decision is the exact
+chain's decision at every value, pinned by
+`prime-field.lazy-chains-vs-exact-decision`; what changes is the chain's step,
+which drops the compare-and-mask fold after every product, and below 2^58 after
+every doubling too, so a step there is the three multiplies of a REDC and one
+subtraction. The JIT turns a select inside a loop into a branch rather than a
+conditional move, and a data-dependent branch on the chain mispredicts about
+half the time, so the exact chains above both ceilings keep their masks.
 
 ## Constellations
 
