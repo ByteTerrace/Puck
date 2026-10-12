@@ -47,7 +47,8 @@ public sealed partial class SdfIndirectCache : IDisposable {
         var names = new[] { "bricks", "updates", "directions", "trace-states", "shade-updates" }.Select(selector: part => new GpuObjectName(owner: "sdf-indirect", part: part)).ToArray();
 
         m_copies = scope.Own(created: new GpuRegionCopyPool(bindings: gpu.Bindings, copyPipeline: copyPipeline, name: new GpuObjectName(owner: "sdf-indirect", part: "region-copies"), regions: names, slotCount: SdfWorldTables.FrameRingSize));
-        var lengths = new[] { m_bricks.Length, m_updates.Length, (layout.RaysPerProbe * 16), (m_traceStates.Length * sizeof(uint)), m_shadeUpdates.Length };
+        var directions = IrradianceDirectionTable.Elements(rays: Math.Max(val1: 1, val2: layout.RaysPerProbe));
+        var lengths = new[] { m_bricks.Length, m_updates.Length, (directions.Length * sizeof(float)), (m_traceStates.Length * sizeof(uint)), m_shadeUpdates.Length };
         var regions = new GpuRegion[lengths.Length];
 
         Regions = regions;
@@ -56,16 +57,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
                 copySets: m_copies.Region(index: region), memory: GpuResidency.RingMemory(profile: profile), name: names[region],
                 policy: GpuResidency.Select(byteCount: ((ulong)lengths[region]), profile: profile, readersInFlight: true), recorder: gpu.Recorder, slotCount: SdfWorldTables.FrameRingSize));
         }
-        var directions = new float[(layout.RaysPerProbe * 4)];
-
-        for (var ray = 0; (ray < layout.RaysPerProbe); ray++) {
-            var direction = IrradianceLattice.BaseDirection(count: layout.RaysPerProbe, index: ray);
-
-            directions[(ray * 4)] = ((float)direction.X);
-            directions[((ray * 4) + 1)] = ((float)direction.Y);
-            directions[((ray * 4) + 2)] = ((float)direction.Z);
-        }
-        Regions[2].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: directions.AsSpan()));
+        Regions[2].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: directions));
         ClearBricks();
         Regions[0].Write(bytes: m_bricks, offset: 0);
         scope.Complete();

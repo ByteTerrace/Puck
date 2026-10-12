@@ -81,6 +81,9 @@ public sealed class SdfIndirectLayout {
     public const int RadianceWords = SourceCount;
     /// <summary>The largest supported probe ray count, bounding a shade group's shared storage.</summary>
     public const int MaximumRaysPerProbe = 256;
+    /// <summary>The octahedral bins along each side of the continuation search's candidate table
+    /// (<see cref="IrradianceDirectionTable"/>).</summary>
+    public const int ContinuationBins = IrradianceDirectionTable.Bins;
     /// <summary>The measured-cost pair of placement units: a probe's placement.</summary>
     public const int CostPlace = 0;
     /// <summary>The measured-cost pair of partition units: a cell's partition.</summary>

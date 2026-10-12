@@ -34,6 +34,7 @@ static const uint SdfIndirectIrradianceTexels = 64u;
 static const uint SdfIndirectSourceCount = 5u;
 static const uint SdfIndirectRadianceWords = 5u;
 static const uint SdfIndirectMaximumRaysPerProbe = 256u;
+static const uint SdfIndirectContinuationBins = 16u;
 static const uint SdfIndirectCostPlace = 0u;
 static const uint SdfIndirectCostClassify = 1u;
 static const uint SdfIndirectCostTrace = 2u;

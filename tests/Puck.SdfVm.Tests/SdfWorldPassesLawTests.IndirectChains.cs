@@ -19,7 +19,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         // Before a measurement the continuation search and the reduction are priced at their bounds; once the kernel has
         // counted its visits, record loads and reduction included, the count is the price.
-        Assert.True(condition: (units.ItemCost(instructionCount: ChainInstructions) >= (((long)layout.RaysPerProbe) * ((8L * layout.RaysPerProbe) + SdfIndirectLayout.IrradianceTexels))));
+        Assert.True(condition: (units.ItemCost(instructionCount: ChainInstructions) >= SdfIndirectCost.ShadeCacheCost(layout: layout)));
         Assert.Equal(expected: (layout.RaysPerProbe * 19L), actual: measured.ItemCost(instructionCount: ChainInstructions));
         // The parity world's solve at Medium: every allocated probe shaded once for the direct sweep and once for each
         // of the two feedback sweeps, at the visits the RTX 2060 counted there, takes few produced frames' chunks.

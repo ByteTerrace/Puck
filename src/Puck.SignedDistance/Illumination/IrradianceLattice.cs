@@ -76,6 +76,9 @@ public static class IrradianceLattice {
     /// <summary>The orientations a probe's directions take: the symmetries of the cube, which permute and negate axes
     /// and so rotate a direction exactly on every machine.</summary>
     public const int Orientations = 48;
+    /// <summary>The cone, in radians, about a continuation's direction within which a coarser probe's rays are
+    /// candidates to continue it.</summary>
+    public const double ReprojectionCone = 0.5;
 
     private static readonly (int First, int Second)[] Segments = BuildSegments();
 

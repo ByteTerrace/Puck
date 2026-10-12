@@ -179,14 +179,19 @@ void sdfIndirectStoreCell(uint cell, uint proof, SdfIndirectCell value) {
 #include "sdf-indirect-proof.hlsli"
 
 #if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
-float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
+#include "../field/sdf-octahedral.hlsli"
+// IrradianceLattice.OrientationOf: the cube symmetry a probe's directions take.
+uint sdfIndirectSymmetry(int3 lattice, uint level) {
+    sdfIndirectHashes++;
+    return sdfIndirectHash(lattice, level) % 48u;
+}
+// IrradianceLattice.Orient applied to a stored base direction.
+float3 sdfIndirectOrientedDirection(uint ray, uint symmetry) {
     uint length, stride;
     indirectDirections.GetDimensions(length, stride);
     if (ray >= SdfIndirectMaximumRaysPerProbe || ray >= length) { return 0.0; }
     float3 direction = indirectDirections[ray].xyz;
-    uint symmetry = sdfIndirectHash(lattice, level) % 48u;
     sdfIndirectLoads++;
-    sdfIndirectHashes++;
     if ((symmetry & 1u) != 0u) { direction.x = -direction.x; }
     if ((symmetry & 2u) != 0u) { direction.y = -direction.y; }
     if ((symmetry & 4u) != 0u) { direction.z = -direction.z; }
@@ -199,6 +204,46 @@ float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
         default: return direction;
     }
 }
+float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
+    return sdfIndirectOrientedDirection(ray, sdfIndirectSymmetry(lattice, level));
+}
+// IrradianceDirectionTable.Unorient: a direction taken back into the probe's base frame, exactly.
+float3 sdfIndirectUnorient(float3 direction, uint symmetry) {
+    float3 base;
+    switch (symmetry >> 3u) {
+        case 1u: base = direction.xzy; break;
+        case 2u: base = direction.yxz; break;
+        case 3u: base = direction.zxy; break;
+        case 4u: base = direction.yzx; break;
+        case 5u: base = direction.zyx; break;
+        default: base = direction; break;
+    }
+    if ((symmetry & 1u) != 0u) { base.x = -base.x; }
+    if ((symmetry & 2u) != 0u) { base.y = -base.y; }
+    if ((symmetry & 4u) != 0u) { base.z = -base.z; }
+    return base;
+}
+// IrradianceDirectionTable: after the rays' directions, one (first slot, length) header per octahedral bin, then the
+// bins' ascending candidate rays, one per float. A base-frame direction's bin lists every ray within the continuation
+// cone of it; a header that does not fit the buffer offers none.
+bool sdfIndirectCandidates(float3 base, uint rays, out uint first, out uint count) {
+    first = 0u;
+    count = 0u;
+    uint length, stride;
+    indirectDirections.GetDimensions(length, stride);
+    float2 encoded = sdfOctEncode(base);
+    if (!all(isfinite(encoded))) { return false; }
+    uint2 bin = (uint2)clamp(floor((encoded * 0.5 + 0.5) * (float)SdfIndirectContinuationBins), 0.0, (float)(SdfIndirectContinuationBins - 1u));
+    uint headers = rays + SdfIndirectContinuationBins * SdfIndirectContinuationBins;
+    if (rays > SdfIndirectMaximumRaysPerProbe || headers > length) { return false; }
+    float4 header = indirectDirections[rays + bin.y * SdfIndirectContinuationBins + bin.x];
+    sdfIndirectLoads++;
+    if (!(header.x >= (float)(headers * 4u)) || !(header.y >= 0.0) || !(header.y <= (float)rays)
+        || !(header.x + header.y <= (float)(length * 4u))) { return false; }
+    first = (uint)header.x;
+    count = (uint)header.y;
+    return true;
+}
 #endif
 
 #if defined(SDF_INDIRECT_PASS) || defined(SDF_RECEIVER_PASS)
@@ -206,7 +251,8 @@ bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoi
     return dot(endpoint - handoff, direction) > 0.0;
 }
 // IrradianceCacheModel.ReprojectedRay: the original ray must be inside the direction cone; its endpoint must be
-// beyond the handoff. Rank those endpoints as seen from the handoff, while an exit ranks by direction alone.
+// beyond the handoff. Rank those endpoints as seen from the handoff, while an exit ranks by direction alone. Only the
+// direction's bin's candidates, ascending, can lie in the cone, so the search picks the ray a scan of every ray picks.
 int sdfIndirectContinuationRay(float3 position, float3 direction, int3 lattice, uint level, uint index, float3 origin) {
     uint length, stride;
     indirectTraceStates.GetDimensions(length, stride);
@@ -214,11 +260,22 @@ int sdfIndirectContinuationRay(float3 position, float3 direction, int3 lattice, 
     uint state = indirectTraceStates[index];
     sdfIndirectLoads++;
     uint rays = sdfIndirectRaysPerProbe(passGroup.indirectTier);
+    if (rays < 64u || (state & ((1u << (rays / 64u)) - 1u)) == 0u) { return -1; }
+    uint symmetry = sdfIndirectSymmetry(lattice, level);
+    uint first, count;
+    if (!sdfIndirectCandidates(sdfIndirectUnorient(direction, symmetry), rays, first, count)) { return -1; }
     int best = -1;
     float bestCosine = -2.0;
-    [loop] for (uint ray = 0u; ray < SdfIndirectMaximumRaysPerProbe && ray < rays; ray++) {
-        if ((state & (1u << (ray % (rays / 64u)))) == 0u) { continue; }
-        float3 storedDirection = sdfIndirectDirection(lattice, level, ray);
+    float4 candidates = 0.0;
+    [loop] for (uint candidate = 0u; candidate < count; candidate++) {
+        uint slot = first + candidate;
+        if (candidate == 0u || (slot & 3u) == 0u) {
+            candidates = indirectDirections[slot >> 2u];
+            sdfIndirectLoads++;
+        }
+        uint ray = (uint)candidates[slot & 3u];
+        if (ray >= rays || (state & (1u << (ray % (rays / 64u)))) == 0u) { continue; }
+        float3 storedDirection = sdfIndirectOrientedDirection(ray, symmetry);
         float cosine = dot(storedDirection, direction);
         if (cosine < cos(0.5)) { continue; }
         uint address = sdfIndirectHitWordOffset(passGroup.indirectTier) + (index * rays + ray) * SdfIndirectHitWords;

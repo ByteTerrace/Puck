@@ -41,8 +41,6 @@ public sealed record IrradianceModelOptions(double ExitDistance, bool Partition 
 /// </summary>
 public sealed partial class IrradianceCacheModel {
     private const int ProofSlots = 8;
-    // The cone, in radians, about a continuation's direction within which a coarser probe's rays are candidates.
-    private const double ReprojectionCone = 0.5;
 
     private sealed class Probe(IrradianceProbeKey key, IrradianceProbePlacement placement) {
         public IrradianceProbeKey Key { get; } = key;
@@ -414,12 +412,12 @@ public sealed partial class IrradianceCacheModel {
         return support.ToArray();
     }
     // The coarser probe's stored ray whose own end best continues the finer ray: among its rays within
-    // ReprojectionCone of the direction, the one whose hit (or continuation) point, seen from the finer ray's end, lies
+    // IrradianceLattice.ReprojectionCone of the direction, the one whose hit (or continuation) point, seen from the finer ray's end, lies
     // nearest the direction, and lies beyond the end; an exit by its direction alone. -1 when none qualifies.
     private static int ReprojectedRay(IrradianceProbeKey key, IrradianceLevel level, Double3 point, Double3 direction, Probe probe) {
         var best = -1;
         var bestCosine = double.MinValue;
-        var cone = Math.Cos(d: ReprojectionCone);
+        var cone = Math.Cos(d: IrradianceLattice.ReprojectionCone);
 
         for (var ray = 0; (ray < level.Rays); ray++) {
             var rayDirection = IrradianceLattice.Direction(key: key, level: level, ray: ray);

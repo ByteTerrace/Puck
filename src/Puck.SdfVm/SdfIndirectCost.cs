@@ -313,7 +313,7 @@ public static class SdfIndirectCost {
     public static SdfIndirectUnits ShadeUnits(SdfIndirectLayout layout, SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(layout);
         return new(UnitsPerItem: Math.Max(val1: 1, val2: layout.RaysPerProbe), QueriesPerUnit: ShadeRayQueries(frame: frame),
-            FixedUnitCost: (8L * layout.RaysPerProbe), FixedItemCost: (((long)layout.RaysPerProbe) * SdfIndirectLayout.IrradianceTexels),
+            FixedUnitCost: (IrradianceLattice.CellCorners * ContinuationVisits(layout: layout)), FixedItemCost: (((long)layout.RaysPerProbe) * SdfIndirectLayout.IrradianceTexels),
             SplitItemCost: (2L * layout.RaysPerProbe), LaneUnits: Math.Max(val1: 1, val2: (layout.RaysPerProbe / ShadeLanes)));
     }
 
@@ -337,7 +337,20 @@ public static class SdfIndirectCost {
         return channels;
     }
     /// <summary>Bounds continuation ray-record visits and the irradiance reduction even with direct lighting disabled.</summary>
-    public static long ShadeCacheCost(SdfIndirectLayout layout) => (((long)layout.RaysPerProbe) * ((8 * layout.RaysPerProbe) + SdfIndirectLayout.IrradianceTexels));
+    public static long ShadeCacheCost(SdfIndirectLayout layout) =>
+        (((long)layout.RaysPerProbe) * ((IrradianceLattice.CellCorners * ContinuationVisits(layout: layout)) + SdfIndirectLayout.IrradianceTexels));
+    /// <summary>Bounds one continuation search's cache visits against one corner: its trace state, its bin's list
+    /// header, the list's elements, and per candidate ray its direction and both words of its hit record
+    /// (<see cref="IrradianceDirectionTable"/>).</summary>
+    /// <param name="layout">The cache tier.</param>
+    /// <returns>The visits, zero for a tier with no rays.</returns>
+    public static long ContinuationVisits(SdfIndirectLayout layout) {
+        ArgumentNullException.ThrowIfNull(layout);
+        if (layout.RaysPerProbe == 0) { return 0L; }
+        var candidates = IrradianceDirectionTable.MaximumCandidates(rays: layout.RaysPerProbe);
+
+        return ((2L + ((candidates + 3) / 4)) + (3L * candidates));
+    }
 }
 /// <summary>The named refusal of indirect work whose single field query or indivisible unit exceeds one submission's
 /// instruction-visit cap. The residency checks it first and renders that program without indirect lighting.</summary>

@@ -123,7 +123,13 @@ existing trace-evaluation allowance and `SdfIndirectCost` instruction budget
 until the shade unit is measured.
 Transport, light rectangles and shared receiver proofs use the same field-scaled
 admission; placement, classification and tracing share one submission allowance.
-Shade also prices bounded continuation-cache traversal. Keep the
+Shade also prices bounded continuation-cache traversal
+(`SdfIndirectCost.ContinuationVisits`). A continuation search scans only its
+direction's octahedral bin of `IrradianceDirectionTable`, uploaded after the ray
+directions and generated with them; change the bins, the cone
+(`IrradianceLattice.ReprojectionCone`) or the shaders' `sdfOctEncode` together, and
+keep `IrradianceDirectionTableLawTests` proving each list a superset at single
+precision, ascending, so the search still picks the full scan's ray. Keep the
 instruction count from the actual submitted field, including pinned shade sources.
 Diagnostic `--debug-layers` logging precedes recording and names each estimate.
 `SdfIndirectFrameBudget` renews a device slice (`TryAdmitDevice`: transport and

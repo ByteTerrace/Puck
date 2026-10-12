@@ -424,7 +424,13 @@ conservative prices overstate the work, a frame admits one submission's cap of
 chunk is admitted whatever its cost, so a unit larger than the slice still
 advances, one chunk a frame; only a unit over the submission cap is refused.
 Shade also counts continuation-record searches and irradiance reduction,
-including when direct lighting is disabled. Transport, light rectangles and the
+including when direct lighting is disabled. A continuation search, in transport,
+shading and the near-field sample alike, reads only the rays its direction can
+continue through: the ray-direction buffer holds, after the base directions, a
+candidate list for each of 16 by 16 octahedral bins of a direction in a probe's
+base frame (`IrradianceDirectionTable`), every ray within the continuation cone
+of some direction in the bin, ascending, so the search picks the ray a scan of
+every ray would. Its bound is the longest list, 39 of High's 256 rays. Transport, light rectangles and the
 shared receiver allowance advance across frames; a frame never drains a pending
 queue in a loop. The tier's existing count ceilings remain additional limits.
 A dormant or inactive probe's stratum is an admitted unit that traces nothing;
