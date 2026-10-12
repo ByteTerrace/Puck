@@ -637,10 +637,20 @@ These are one-line cautions; the owning pages hold the derivations.
   Path, or a clipper only some walks apply certifies zero and stays on the full
   walk. Compiled parts join by hard union; generic instances additionally need the
   root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
-  ambient group masks summarize each mask word as one sphere over its
-  certified ordinary-sized instances at their smallest gain
-  (`sdfSummarizeGroupMask`, others kept), so a many-instance body is rejected
-  once per word. The soft-shadow march queries
+  ambient walks alone (`sdfBoundedFieldActive`) read a bounded instance
+  (`SdfProgram.InstanceBoundsSecondaryField`, part entry `.z` bit 30,
+  `SDF_PART_BOUNDED_SECONDARY`) as `max(field, gap)` at a unit gain: mapCore
+  floors every candidate it composes into the root union at the gap, so the
+  floor is continuous and every surface and interior keeps its sign. That needs
+  the root-union certificate and a sphere holding the solid those walks see,
+  so an optional intersection, xor or morph, a lane erosion or an unmaskable
+  instance stays unbounded ([the ruling](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
+  Never set `sdfBoundedFieldActive` around another walk: primary, normals,
+  views and indirect read the field itself. The shadow and ambient group masks
+  summarize each mask word as one
+  sphere over its ordinary-sized instances at their smallest walk gain (1 when
+  bounded; `sdfSummarizeGroupMask`, zero-gain unbounded ones kept), so a
+  many-instance body is rejected once per word. The soft-shadow march queries
   `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
   which neither its stride, hit decision nor estimate moves. Include the
   shading-scaled hit threshold as well as stride and penumbra saturation, the

@@ -33,7 +33,7 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         hit.lanes = 0.0;
         hit.instanceIndex = -1;
         hit.frameSlot = SDF_TRANSFORM_SLOT_NONE;
-        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, true);
+        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, true, false, 0.0);
         hit.distance *= sdfProgramLayout.stepScale;
         return hit;
     }

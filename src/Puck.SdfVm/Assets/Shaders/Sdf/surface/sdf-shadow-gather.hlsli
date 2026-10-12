@@ -69,7 +69,9 @@ void sdfShadowMovedCandidate(uint instanceOffset, uint index, float3 origin, flo
 // UNIFORM CONTROL FLOW like the gathers: every lane calls it, after the
 // barrier that completes the mask; it ends with its own barrier. Only a program under the root-union certificate is
 // summarized (each instance then joins as a hard union, which the word rejection relies on), and the word's scale is
-// its summarized instances' smallest distance gain (sdfPartDistanceGain).
+// its summarized instances' smallest walk gain: 1 for an instance the shadow and ambient walks bound
+// (SDF_PART_BOUNDED_SECONDARY, which those walks floor at its sphere's gap), else its distance gain
+// (sdfPartDistanceGain). Only those two walks consume the summary, and mapCore asks it only while sdfBoundedFieldActive.
 void sdfSummarizeGroupMask(bool ambient, float oversized, uint lane) {
     uint table = sdfProgramLayout.partProgramOffset;
     sdfGroupMaskSummarized = ((table != 0u) && sdfCanTracePartsIndependently());
@@ -90,7 +92,7 @@ void sdfSummarizeGroupMask(bool ambient, float oversized, uint lane) {
             uint4 part = sdfProgramWord(table + 1u + index);
             float4 bound = sdfInstanceBoundAt(offset, index);
             if (bound.w < 0.0) { continue; }
-            float gain = sdfPartDistanceGain(part);
+            float gain = (((part.z & SDF_PART_BOUNDED_SECONDARY) != 0u) ? 1.0 : sdfPartDistanceGain(part));
             if (!(gain > 0.0) || !all(isfinite(bound)) || bound.w > oversized) { kept |= (1u << bit); continue; }
             low = min(low, (bound.xyz - bound.w));
             high = max(high, (bound.xyz + bound.w));

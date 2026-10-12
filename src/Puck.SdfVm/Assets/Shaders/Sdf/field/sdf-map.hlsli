@@ -135,6 +135,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // union of independent operands, which admits that skip for an instance the part table does not compile.
     uint testedInstance = SDF_SEGMENT_NONE;
     uint testedWord = SDF_SEGMENT_NONE;
+    // The instance a bounded walk floors (sdfPartBoundsWalk) and its gap: every candidate its segments compose into the
+    // root union reads at least that gap.
+    uint flooredInstance = SDF_SEGMENT_NONE;
+    float instanceFloor = -SDF_FAR_DISTANCE;
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
     bool rootUnion = sdfCanTracePartsIndependently();
 #else
@@ -240,9 +244,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     testedInstance = pendingInstance;
 #if defined(SDF_SCREEN_SOURCES) && defined(SDF_GROUP_SHADOW_GATHER)
                     // A group mask's word summary rejects every summarized instance still pending in this word at once:
-                    // the sphere encloses all of them and its scale is their smallest, so each would fail
-                    // sdfInstanceCannotWin. The oversized instances it left out stay pending.
-                    if (rootUnion && sdfGroupMaskSummarized && (sdfShadowMaskActive || sdfAmbientMaskActive) &&
+                    // the sphere encloses all of them and its scale is their smallest walk gain (a bounded one's 1), so
+                    // each would fail sdfInstanceCannotWin. The oversized instances it left out stay pending.
+                    if (rootUnion && sdfGroupMaskSummarized && sdfBoundedFieldActive && (sdfShadowMaskActive || sdfAmbientMaskActive) &&
                         (maskWordIndex != testedWord) && (maskWordIndex < SDF_GROUP_MASK_SUMMARY_WORDS)) {
                         testedWord = maskWordIndex;
                         float4 sphere = sdfGroupMaskSpheres[maskWordIndex];
@@ -259,11 +263,19 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 #endif
-                    if ((partReady || rootUnion) &&
-                        sdfInstanceCannotWin(instanceOffset, pendingInstance, sdfPartDistanceGain(part), worldPosition, result.distance)) {
-                        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
-                            maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
-                        continue;
+                    bool bounded = sdfPartBoundsWalk(part);
+                    float gain = (bounded ? 1.0 : sdfPartDistanceGain(part));
+                    if ((partReady || rootUnion) && (gain > 0.0)) {
+                        float gap = sdfInstanceGap(instanceOffset, pendingInstance, worldPosition);
+                        if (sdfInstanceCannotWin(gap, gain, result.distance)) {
+                            sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                                maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                            continue;
+                        }
+                        if (bounded) {
+                            flooredInstance = pendingInstance;
+                            instanceFloor = gap;
+                        }
                     }
                 }
                 if (partReady) {
@@ -273,7 +285,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
                     ) {
                         sdfFieldVisits += (part.z & SDF_PART_LEAF_COUNT_MASK);
-                        sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
+                        sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial,
+                            (flooredInstance == pendingInstance), instanceFloor);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                         maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
@@ -293,6 +306,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
         if (segment >= segmentCount || (previousSegment != SDF_SEGMENT_NONE && segment <= previousSegment)) { return sdfIsaErrorHit(); }
         previousSegment = segment;
+        // A bounded walk floors every candidate a floored instance composes into the root union (sdfBoundedFieldActive).
+        bool segmentFloored = ((segmentInstance >= 0) && (((uint)segmentInstance) == flooredInstance));
         if (sdfTapeNextSegment(segment, segment + 1u) != segment) { continue; }
 #ifdef SDF_TAPE_BUILD
         sdfTapeBeginSegment();
@@ -428,7 +443,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
                     if (sdfTapeDecided(shapeIndex)) { result.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shapeHeader)); }
-                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
+                    sdfComposeCandidate(result, ((segmentFloored && (fieldDepth == 0u)) ? max(candidate, instanceFloor) : candidate), SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
                 }
 
  #ifdef SDF_TAPE_BUILD
@@ -1182,6 +1197,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
                     // A losing scope cannot tint its parent. A winning hard union carries its own internal seam;
                     // a smooth outer composition instead creates a new two-material seam in the shared helper.
+                    if (segmentFloored && (fieldDepth == 0u)) { composeCandidate = max(composeCandidate, instanceFloor); }
                     bool scopeWinsUnion = (composeBlend == SDF_BLEND_UNION) && (composeCandidate < result.distance);
                     sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
                     if (trackMaterial && scopeWinsUnion) {
@@ -1205,6 +1221,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
                 if (sdfTapeDecided(index)) { result.distance = sdfTapeWinnerSeed(composeBlend); }
+                if (segmentFloored && (fieldDepth == 0u)) { composeCandidate = max(composeCandidate, instanceFloor); }
                 sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
             }
         }

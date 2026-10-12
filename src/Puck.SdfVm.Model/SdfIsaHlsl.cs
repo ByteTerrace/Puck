@@ -137,6 +137,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PART_DISTANCE_GAIN_SHIFT", value: SdfProgram.PartDistanceGainShift);
         declarations.Bits(name: "SDF_PART_DISTANCE_GAIN_MASK", value: SdfProgram.PartDistanceGainMask);
         declarations.Real(name: "SDF_PART_DISTANCE_GAIN_UNIT", value: SdfProgram.PartDistanceGainUnit);
+        declarations.Bits(name: "SDF_PART_BOUNDED_SECONDARY", value: SdfProgram.PartBoundedSecondaryFlag);
         declarations.Count(name: "SDF_TAPE_SLAB_COUNT", value: SdfWorldPackage.TapeSlabCount);
         declarations.Count(name: "SDF_TAPE_HEADER_WORDS", value: SdfWorldPackage.TapeHeaderWords);
         declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);

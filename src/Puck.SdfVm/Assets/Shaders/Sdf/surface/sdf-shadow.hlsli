@@ -116,12 +116,14 @@ void sdfShadowStage(SdfPixel p) {
         if (lit && (decision != SDF_SHADOW_DECISION_REPROJECTED)) {
             uint fallbackMask = ((cullOn && (groupGather == 1u)) ? p.instanceMaskBase : SDF_INSTANCE_MASK_ALL);
             sdfSecondaryMarchActive = true;
+            sdfBoundedFieldActive = true;
             sdfShadowMaskActive = (groupGather == 2u);
             sdfShadowParticipationActive = true;
             marched = softShadowVisibility(surfacePoint, surfaceNormal.normal, direction, fallbackMask, shadingStepScale, shadowReach, lightIndex);
             sdfShadowParticipationActive = false;
             sdfShadowMaskActive = false;
             sdfSecondaryMarchActive = false;
+            sdfBoundedFieldActive = false;
         }
         if (lit && (decision == SDF_SHADOW_DECISION_REPROJECTED)) { marched = history[shadowSlot]; }
         if (lit && secondary) {

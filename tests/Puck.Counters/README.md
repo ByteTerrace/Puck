@@ -38,7 +38,10 @@ temporal reconstruction and indirect lighting off and the exact shadow mask and
 march, so every frame marches every lit pixel's shadow afresh. Its ceilings
 hold the shadow pass's shape evaluations, most of them the Moth's: a field walk
 that rejects none of the avatar's gauge-built pool instances whole doubles them
-(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver).
+(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver). Those
+counts predate the shadow and ambient walks' bounded field, which rejects every
+Moth instance whole at a unit gain, and both avatar ledgers wait on a
+re-record on each backend.
 
 The seated-avatar workload is the debug world as played: its 1280×720 output
 shows the Moth seated before the default third-person camera, at the shipped

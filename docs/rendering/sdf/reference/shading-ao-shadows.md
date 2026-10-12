@@ -53,8 +53,10 @@ describes projection, refresh thresholds and counted work.
 ## Ambient occlusion
 
 The default ambient path samples three points along the hit normal. Each probe
-uses the same scaled-distance contract as the marcher. The result modulates
-ambient contribution only; it does not darken direct light a second time.
+uses the same scaled-distance contract as the marcher and reads bounded
+instances no nearer than their influence spheres, as the shadow march does
+(see [Shadows](#shadows)). The result modulates ambient contribution only; it
+does not darken direct light a second time.
 
 Cone AO and bent normals are optional quality candidates. They require a clear
 budget, stable behavior on thin geometry, and evidence that the additional
@@ -73,13 +75,19 @@ incoming light's grows from zero; each keeps its radiance. The
 marches by K + F and provisions incoming visibility storage by policy.
 An 8×8 workgroup grid gather limits the candidate instance
 set for the shadow ray; each pixel then consumes the shared mask. The gather
-also summarizes each mask word's certified distance bounds as one sphere, so a
-sample far from a body rejects those instances together. An instance is
-rejected only where the gap to its bound, times its certified distance gain,
-reaches the running minimum: containing the geometry alone cannot bound an
-underestimating field, so a gauge or a non-uniform scale certifies the slower
-rate its field grows at, and an instance with no certified gain (a warp, a
-field op, a sweep) remains an individual candidate, as do oversized bounds. Each sample asks the field
+also summarizes each mask word's instance bounds as one sphere, so a
+sample far from a body rejects those instances together. The shadow and
+ambient-occlusion marches read each bounded instance as the larger of its field
+and the distance to its influence sphere
+([the ruling](../../../decisions/rendering.md#the-pipeline-foundation)), so it
+is rejected once that distance reaches the running minimum, whatever rate its
+field grows at. The floor is continuous and keeps every surface and interior,
+and it lifts an underestimating gauge, scale, warp or field op toward the true
+distance away from the body, which lightens that body's penumbra. An instance
+the walks cannot bound (an optional intersection, xor or morph, a lane erosion)
+is rejected only where the gap to its bound, times its certified distance gain,
+reaches the running minimum, and one with no certified gain remains an
+individual candidate, as do oversized bounds. Each sample asks the field
 only up to the clearance at which neither the stride, hit decision nor penumbra estimate
 can change, so candidates beyond it are rejected before they are evaluated;
 the visibility is the full field's.
