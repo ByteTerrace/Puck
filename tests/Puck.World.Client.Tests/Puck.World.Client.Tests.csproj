@@ -45,7 +45,6 @@
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/MirrorBindings.cs" Link="World/MirrorBindings.cs" />
         <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
-        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/ValueDomainFixtures.cs" Link="World/ValueDomainFixtures.cs" />
         <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />

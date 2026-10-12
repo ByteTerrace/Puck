@@ -66,7 +66,6 @@
         <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
         <Compile Include="../Shared/World/RecordingNarrationSink.cs" Link="World/RecordingNarrationSink.cs" />
         <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
-        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
         <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
