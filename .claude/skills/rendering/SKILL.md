@@ -600,8 +600,9 @@ These are one-line cautions; the owning pages hold the derivations.
   the root-union certificate and a sphere holding the solid those walks see,
   so an optional intersection, xor or morph, a lane erosion or an unmaskable
   instance stays unbounded ([the ruling](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
-  Never set the flag in another walk: it changes the far field the penumbra
-  reads. The shadow and ambient group masks summarize each mask word as one
+  Never set `sdfBoundedFieldActive` around another walk: primary, normals,
+  views and indirect read the field itself. The shadow and ambient group masks
+  summarize each mask word as one
   sphere over its ordinary-sized instances at their smallest walk gain (1 when
   bounded; `sdfSummarizeGroupMask`, zero-gain unbounded ones kept), so a
   many-instance body is rejected once per word. The soft-shadow march queries
