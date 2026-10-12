@@ -16,6 +16,12 @@ client vocabulary hooks and the Gaming Brick machine catalog.
 `WorldRenderEnvelopeLawTests` exercises the real scene capacity probe without a
 GPU, including new per-shape placements within authored headroom.
 
+The laws that boot the quarantined worlds (the flagship, the courtyard, the
+parity world, the counters workloads, the canary and game fixtures, and the
+saved-document corpus) are quarantined in
+[`experimental/tests/Puck.World.Presentation.Tests`](../../experimental/tests/Puck.World.Presentation.Tests)
+at the same relative paths, out of the build.
+
 This suite holds scene probes and full composed worlds, so `puck affected` and
 the gate treat its full run as heavy: one at a time on the machine.
 

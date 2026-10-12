@@ -42,7 +42,7 @@ public static class WorldPlacementPolicy {
     /// adjacency and field reservations (1680 instances for the shipped overworld's ten bands), which is why the
     /// figure that governs this constant is the composed one. A raise here is a measured decision, not a free one —
     /// re-measure with <c>WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom</c>
-    /// before changing it.</summary>
+    /// before changing it; that law is quarantined with the overworld under <c>experimental/tests</c>.</summary>
     public const int MaxShapesPerStamp = 367;
     /// <summary>The document-wide ceiling on convex colliders materialized from SOLID placements by the analytic
     /// provider. Protects boot-time allocation and the per-body O(colliders) solver walk. <c>32768</c> admits one

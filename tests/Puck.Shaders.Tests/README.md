@@ -62,7 +62,12 @@ canary's generated fixtures to the generator and show reflection catching its
 hand-perturbed offset. `InterfaceEchoCanaryFixtureTests` hold each
 `interface-echo` document's blocks to the shipped interfaces it stands for,
 each echo file to the generator, and every shipped package with frame data to
-some echo.
+some echo. Quarantined: the canary-fixture laws (`EchoCanaryFixtureTests`,
+`InterfaceEchoCanaryFixtureTests`, `PipelineCanaryFixtureTests`, the
+`source-conversion` region law, the canary rows of `ShaderFrameBlockLawTests`,
+the render node's completion, timing and counters-canary laws, and the
+checked-in package-kernel law of `RenderGraphDocumentLawTests`) read the canary
+corpus and live in `experimental/tests/Puck.Shaders.Tests/`.
 `SdfFilmGrainPackageLawTests` hold the film grain package's declaration: its
 config's defaults, refusals by field and schema, its interface layout under the name its
 checked-in declarations carry, and its stages shipped for both backends.

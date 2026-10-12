@@ -22,37 +22,6 @@ public class EmitterSugarTests {
 
         return Assert.IsType<JsonObject>(@object: rules[0]);
     }
-    // ---- Shipped-world cross-checks --------------------------------------------------------------------------
-
-    private static JsonObject LoadShippedRule(string relativeWorldPath, string ruleName) {
-        var worldsDir = ShippedWorlds.FindDirectory();
-        var fullPath = Path.Combine(
-            path1: worldsDir,
-            path2: relativeWorldPath
-        );
-
-        Assert.True(
-            condition: File.Exists(path: fullPath),
-            userMessage: $"Shipped world file not found: {fullPath}"
-        );
-
-        var root = JsonNode.Parse(File.ReadAllText(path: fullPath));
-        var rules = Assert.IsType<JsonArray>(@object: root!["rules"]);
-
-        foreach (var candidate in rules) {
-            var obj = Assert.IsType<JsonObject>(@object: candidate);
-
-            if (string.Equals(
-                a: obj["name"]?.ToString(),
-                b: ruleName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return obj;
-            }
-        }
-        throw new InvalidOperationException(message: $"rule '{ruleName}' not found in {relativeWorldPath}");
-    }
-
     [Fact]
     public void AddCellWithMultiTokenRhsLowersToVerbatimExpression() {
         var rule = FirstRule(body: """
@@ -412,30 +381,6 @@ public class EmitterSugarTests {
             "solitaireFreecell[to]",
             WorldExpressionJson.Text(node: gate["right"])
         );
-    }
-    [Fact]
-    public void HoundWitnessClaimGateMatchesTheShippedRule() {
-        var expected = LoadShippedRule(
-            relativeWorldPath: "puck.world.json",
-            ruleName: "witness-claim"
-        );
-
-        var rule = FirstRule(body: """
-            rule "witness-claim" {
-                when boneHolder[0] >= 0 and houndIdentity[$each] != boneHolder[0] and los(each, cell, boneHolder, 0) == 1 and distance(each, cell, boneHolder, 0) <= 9
-                mode: Edge
-                forEach: hound
-                boneHolderTrust[$pair:each:cell:boneHolder:0] += (1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.3
-            }
-            """);
-
-        var mismatch = JsonMismatch.Find(
-            actual: rule,
-            expected: expected,
-            path: "witness-claim"
-        );
-
-        Assert.Null(@object: mismatch);
     }
     [Fact]
     public void KnownFieldWithWrongUnitReportsPuck025() => WorldSources.AssertRefused(

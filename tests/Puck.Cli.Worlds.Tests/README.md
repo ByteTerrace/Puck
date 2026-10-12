@@ -1,7 +1,7 @@
 # Puck.Cli.Worlds.Tests
 
 These laws hold the world-authoring verbs. `ShippedSourceLintLawTests` runs `puck lint --strict` over every tracked
-source under `worlds`, `src/Puck.World/Assets` and `tests/Puck.World.Verdicts`, so an error or warning in a
+source under `worlds`, `src/Puck.World/Assets` and `experimental/tests/Puck.World.Verdicts`, so an error or warning in a
 shipped world or cartridge fails the suite with the report the verb printed. `FormatProjectionLawTests` holds every
 tracked source outside `experimental` to what `puck format` prints, and holds that formatting leaves its compiled
 document unchanged.
@@ -14,7 +14,11 @@ the semantic-validation gate on an update, stale-byte refusal without output rep
 from its source naming its asset and graph files from where it lands.
 
 `TestCommandLawTests`, `TestCommandCompositionLawTests`, `TestCommandParlorLawTests`, the schedule laws and `CompositionBootLawTests` boot the real `Puck.World` executable out
-of its own Release output, so the suite builds that project first; nothing here links against it.
+of its own Release output, so the suite builds that project first; nothing here links against it. Quarantined: every
+one of those that boots a verdict world, a game or a `worlds/` package, with `ScheduledStepVocabularyLawTests`,
+`WorldListenRefusalLawTests`, `SkyBaselineFixtureLawTests` and the shipped-world laws of
+`CompiledWorldCompileTests` and `WorldDocumentOutputLawTests`, lives in `experimental/tests/Puck.Cli.Worlds.Tests/`;
+`TestCommandLawTests` keeps only its usage-error law here.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

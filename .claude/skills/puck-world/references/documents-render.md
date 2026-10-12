@@ -339,7 +339,7 @@ through the same closed mutation vocabulary as `pipeline.load`. The host
 (`WorldViewGraphHost`) reconciles only accepted document state into the render
 graph runtime's instance set. The runtime owns resources, history, background
 compilation and frame-boundary installation; none belongs in the schema. Use
-[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.puck)
+[the pipeline world](../../../../experimental/src/Puck.World/Assets/worlds/pipeline.puck)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the `puck.render.graph.v1` document contract a row's source is written in.
@@ -440,7 +440,7 @@ stamp census, even when their creation is animated or attached. A simultaneous
 animated-placement registration doubles the character. Verify body count and
 `world.budget` together. Bounded flow/cloud media share 64 frame slots; disabled
 volumes emit nothing, and the budget readback includes their submitted count.
-The [Moth courtyard](../../../../src/Puck.World/Assets/worlds/moth-courtyard.md)
+The [Moth courtyard](../../../../experimental/src/Puck.World/Assets/worlds/moth-courtyard.md)
 provides eight held poses and independent sky/cloud switches for repeatable GPU
 captures. Density controls live in the World.Authoring README.
 

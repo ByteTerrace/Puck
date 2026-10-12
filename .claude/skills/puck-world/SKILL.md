@@ -19,6 +19,18 @@ capacity, and the stamp pool are in
 sculpting library is in
 [references/documents-composition.md](references/documents-composition.md).
 
+**One live world.** While the current campaign runs, the debug world
+(`src/Puck.World/Assets/worlds/debug.puck`, basis `avatars/moth`, importing
+`skies.puck`) is the only live world and the World's default boot. Every other
+world this skill names (the island `puck.world.json`, its districts, the
+courtyard, the games, the shards, the tools, the root `worlds/` packages) and
+every canary, parity, verdict, determinism and game fixture is quarantined at
+its old repository path under `experimental/`, with the laws that booted it.
+Treat what this skill says about them as a description of quarantined content:
+do not boot, repair or retarget it, and do not rebuild a gate around the debug
+world ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),
+[open items](../../../docs/plans/open-items.md#quarantined-gates)).
+
 ## The model in one paragraph
 
 Treat everything as data: versioned JSON documents (`puck.world.definition.v1` — the world
@@ -113,7 +125,7 @@ member there rather than at a reader.
 
 `src/Puck.Physics` owns the generic kernels the server drives: `Navigation/` (the budgeted, checkpointed A* over surface, volume, and medium grids) and `Fields/` (`FieldLattice`, the reaction integrator behind a `state.lattices` row). Server keeps pair selection, authority, and body-state writes. The static solid field bakes a distance grid at `collision.gridCellSize` (0 = none; the shipped world authors 0.5) and answers the exact program inside a contact band derived from the kit colliders, so a query never marches from scratch; `world.collision.status` echoes the grid. `host.journalDepth` bounds the undo journal (0 = unbounded; entries past the horizon fold forward into the base; `world.status` echoes it). Transfer leases, escrow rows, and parked entries expire off one sorted `WorldDeadlineTable`, never a per-tick sweep of a whole collection. Every crossing step a peer can see is written ahead to the authority's crossing log, and a restarted authority redoes the records its checkpoint does not reflect ([references/adjacency-and-federation.md](references/adjacency-and-federation.md#durable-crossings)).
 
-**The one world and its districts.** `puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias. The district primitives and the derived limits that shape a district are in [references/documents-composition.md](references/documents-composition.md#the-one-world-and-its-districts).
+**The one world and its districts** (quarantined under `experimental/src/Puck.World/Assets/worlds/`). `puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias. The district primitives and the derived limits that shape a district are in [references/documents-composition.md](references/documents-composition.md#the-one-world-and-its-districts).
 
 The agent projects are an optional extension family, not members of the base world dependency closure:
 

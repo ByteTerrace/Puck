@@ -33,13 +33,9 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
-        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
-        <Compile Include="../Shared/World/AuthoredGameFixtures.Server.cs" Link="World/AuthoredGameFixtures.Server.cs" />
-        <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
-        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
         <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
@@ -53,7 +49,6 @@
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/RuleArenaFixture.cs" Link="World/RuleArenaFixture.cs" />
-        <Compile Include="../Shared/World/SolitaireFixtures.cs" Link="World/SolitaireFixtures.cs" />
         <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />

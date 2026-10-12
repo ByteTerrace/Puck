@@ -291,7 +291,7 @@ properties {
 ```
 
 This fragment assumes the `paddleballBalls` and `paddleballPaddles` pools and their enum
-fields from `src/Puck.World/Assets/worlds/games/paddleball.puck`.
+fields from `experimental/src/Puck.World/Assets/worlds/games/paddleball.puck`.
 
 The field and mapping compile once, and live reads use ordinals. A placement
 binding follows the population's current body assignment, so a physical body

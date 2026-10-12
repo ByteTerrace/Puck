@@ -1,52 +1,12 @@
 using System.Text;
 
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
 
 /// <summary>Exercises the pure <c>Engine/</c> core directly (linked as source — see the project's own remarks on why
-/// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.puck</c> composed with
-/// <c>games/tictactoe.world.json</c> as the primary "does the whole pipeline run" fixture, and the flagship
-/// <c>puck.world.json</c> to pin the one verified, honest scope boundary this engine has today (a
-/// <c>screens[].source.machine</c> engine key never resolves to a real catalog, so its registration is DEFERRED
-/// rather than refused or silently admitted — see <see cref="BrowserExtensionVocabulary"/>'s own remarks; nothing
-/// here carries an emulator core).</summary>
+/// a browser-wasm exe cannot be referenced) over inline documents.</summary>
 public sealed class BrowserEngineTests {
-    private static byte[] ComposedPuckWorldBytes() {
-        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
-
-        Assert.True(
-            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                path: path,
-                tree: out var tree,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        return Encoding.UTF8.GetBytes(s: tree!.ToJsonString());
-    }
-    // standard.puck composed with the tictactoe fragment — a real shipped document pair with no
-    // screens[].source.machine engine to trip the extension-vocabulary boundary ComposedPuckWorldBytes hits.
-    private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.puck"));
-        var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
-
-        Assert.True(
-            condition: WorldDefinitionFileSource.TryComposeFragmentBytes(
-                alias: "a",
-                composed: out var composed,
-                fragmentBytes: fragmentBytes,
-                hostBytes: basisBytes,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        return Encoding.UTF8.GetBytes(s: composed!.ToJsonString());
-    }
-
     [InlineData("bodies.localSeats -1 is outside 0..4 (the host's seat ceiling).", "bodies.localSeats")]
     [InlineData("an addon requires a name.", null)]
     [InlineData("screens[0].index 5 is duplicated.", "screens[0].index")]
@@ -57,29 +17,6 @@ public sealed class BrowserEngineTests {
         Assert.Equal(
             expected: expectedPath,
             actual: split.Path
-        );
-    }
-    [Fact]
-    public void Canonicalize_reproduces_serialization_byte_for_byte() {
-        var bytes = ComposedTicTacToeBytes();
-        var parsed = BrowserParser.Parse(utf8Json: bytes);
-        var canonicalized = BrowserParser.Canonicalize(utf8Json: bytes);
-
-        Assert.True(condition: parsed.Ok);
-        Assert.True(condition: canonicalized.Ok);
-        Assert.Equal(
-            expected: parsed.Document,
-            actual: canonicalized.Document
-        );
-
-        // Re-parsing the canonical text must reproduce the identical canonical text — the ouroboros round-trip
-        // WorldDefinitionSerialization's own remarks describe, reached through the browser's own pipeline.
-        var reparsed = BrowserParser.Parse(utf8Json: Encoding.UTF8.GetBytes(s: canonicalized.Document!));
-
-        Assert.True(condition: reparsed.Ok);
-        Assert.Equal(
-            expected: canonicalized.Document,
-            actual: reparsed.Document
         );
     }
     [Fact]
@@ -108,109 +45,6 @@ public sealed class BrowserEngineTests {
         );
     }
     [Fact]
-    public void Compile_and_judge_one_tick_refuses_no_write() {
-        var errors = new List<string>();
-        var deferred = new List<string>();
-
-        Assert.True(
-            condition: BrowserParser.TryParseAndValidate(
-                utf8Json: ComposedTicTacToeBytes(),
-                errors: errors,
-                deferred: deferred,
-                definition: out var definition
-            ),
-            userMessage: string.Join(
-                separator: "; ",
-                values: errors
-            )
-        );
-
-        var session = new BrowserSession(definition: definition!);
-        var trace = session.Judge(tick: 1UL);
-
-        // A gate conjunct that reads an absent cell is reported and read false; it refuses no write, which is what
-        // this document's own rules must not do on a tick nobody has played.
-        Assert.DoesNotContain(
-            collection: trace.Refusals,
-            filter: refusal => !string.Equals(
-                a: refusal.Effect,
-                b: "gate",
-                comparisonType: StringComparison.Ordinal
-            )
-        );
-        Assert.NotNull(@object: trace.Rules);
-        Assert.NotNull(@object: trace.Writes);
-    }
-    [Fact]
-    public void ParseFragment_composes_a_game_module_under_the_standard_basis() {
-        var basisPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.puck");
-        var fragmentPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck");
-        var hostBytes = ShippedWorldDocuments.Composed(path: basisPath);
-        var fragmentBytes = ShippedWorldDocuments.Read(path: fragmentPath);
-
-        var result = BrowserParser.ParseFragment(
-            fragmentUtf8: fragmentBytes,
-            hostUtf8: hostBytes,
-            alias: "a"
-        );
-
-        Assert.True(
-            condition: result.Ok,
-            userMessage: string.Join(
-                separator: "; ",
-                values: (result.Errors ?? []).Select(selector: error => error.Message)
-            )
-        );
-        Assert.DoesNotContain(
-            expectedSubstring: "a$",
-            actualString: ((result.Errors ?? []).Select(selector: error => error.Message).FirstOrDefault() ?? "")
-        );
-    }
-    [Fact]
-    public void Parse_composed_puck_world_defers_its_unregistered_machine_engines() {
-        // The verified, honest boundary: Puck.World.Browser carries no machine catalog at all, so a document whose
-        // machines author real gaming-brick engines DEFERS the answer (never refuses, never silently passes) rather
-        // than either booting a machine nothing can run or rejecting a document a cataloged host admits.
-        var result = BrowserParser.Parse(utf8Json: ComposedPuckWorldBytes());
-
-        Assert.True(
-            condition: result.Ok,
-            userMessage: string.Join(
-                separator: "; ",
-                values: (result.Errors ?? []).Select(selector: error => error.Message)
-            )
-        );
-        Assert.NotNull(@object: result.Document);
-        Assert.Contains(
-            collection: result.Deferred!,
-            filter: message => message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "no machine catalog was supplied for 'gaming-brick'"
-            )
-        );
-        Assert.Contains(
-            collection: result.Deferred!,
-            filter: message => message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "no machine catalog was supplied for 'advanced-gaming-brick'"
-            )
-        );
-    }
-    [Fact]
-    public void Parse_composed_tictactoe_fragment_succeeds() {
-        var result = BrowserParser.Parse(utf8Json: ComposedTicTacToeBytes());
-
-        Assert.True(
-            condition: result.Ok,
-            userMessage: string.Join(
-                separator: "; ",
-                values: (result.Errors ?? []).Select(selector: error => error.Message)
-            )
-        );
-        Assert.NotNull(@object: result.Document);
-        Assert.Null(@object: result.Errors);
-    }
-    [Fact]
     public void Parse_malformed_json_refuses_without_throwing() {
         var result = BrowserParser.Parse(utf8Json: Encoding.UTF8.GetBytes(s: "{ not json"));
 
@@ -229,100 +63,6 @@ public sealed class BrowserEngineTests {
                 comparisonType: StringComparison.Ordinal,
                 value: "not.a.real.schema"
             )
-        );
-    }
-    [Fact]
-    public void ReadRow_and_WriteRow_round_trip_through_the_arena() {
-        var errors = new List<string>();
-        var deferred = new List<string>();
-
-        Assert.True(condition: BrowserParser.TryParseAndValidate(
-            utf8Json: ComposedTicTacToeBytes(),
-            errors: errors,
-            deferred: deferred,
-            definition: out var definition
-        ));
-
-        var session = new BrowserSession(definition: definition!);
-        var scalarRow = definition!.State.FirstOrDefault(predicate: row => ((row.Kind == CellKind.Int) && !row.IsKeyed && (row.Field is null)));
-
-        Assert.NotNull(@object: scalarRow);
-
-        var before = session.ReadRow(
-            row: scalarRow!.Name.Value,
-            key: StateRow.SlotKey.Value
-        );
-
-        Assert.Equal(
-            expected: nameof(CellKind.Int),
-            actual: before.Kind
-        );
-
-        var next = (long.Parse(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            s: before.Value!
-        ) + 1);
-
-        Assert.True(
-            condition: session.TryWriteRow(
-                row: scalarRow.Name.Value,
-                key: StateRow.SlotKey.Value,
-                value: next,
-                add: false,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        var after = session.ReadRow(
-            row: scalarRow.Name.Value,
-            key: StateRow.SlotKey.Value
-        );
-
-        Assert.Equal(
-            expected: next.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-            actual: after.Value
-        );
-    }
-    [Fact]
-    public void Rows_reports_every_authored_cell() {
-        var errors = new List<string>();
-        var deferred = new List<string>();
-
-        Assert.True(condition: BrowserParser.TryParseAndValidate(
-            utf8Json: ComposedTicTacToeBytes(),
-            errors: errors,
-            deferred: deferred,
-            definition: out var definition
-        ));
-
-        var session = new BrowserSession(definition: definition!);
-        var rows = session.Rows();
-
-        Assert.Equal(
-            expected: definition!.State.Count,
-            actual: rows.Count
-        );
-    }
-    [Fact]
-    public void StateHash_is_stable_across_repeated_reads() {
-        var errors = new List<string>();
-        var deferred = new List<string>();
-
-        Assert.True(condition: BrowserParser.TryParseAndValidate(
-            utf8Json: ComposedTicTacToeBytes(),
-            errors: errors,
-            deferred: deferred,
-            definition: out var definition
-        ));
-
-        var session = new BrowserSession(definition: definition!);
-        var first = session.StateHash();
-        var second = session.StateHash();
-
-        Assert.Equal(
-            actual: second,
-            expected: first
         );
     }
 }

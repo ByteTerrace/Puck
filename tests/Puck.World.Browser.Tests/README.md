@@ -1,8 +1,8 @@
 # Puck.World.Browser.Tests
 
-This xUnit v3 suite targets `net10.0` and checks the browser-hosted world engine. `BrowserComposerTests`, `BrowserEngineTests`, and `BrowserHostlessIslandTests` cover composition and hostless execution; `BrowserParityRecordingTests` covers parity recording; `ValidatorMessagePathRatchetTests` preserves validator diagnostics paths; and `BrowserWorkspaceTests` covers the `.puck` authoring surface (a mounted workspace, compile, compose, and the language server's idle-driven diagnostics) over the sources in `Fixtures/sources`.
+This xUnit v3 suite targets `net10.0` and checks the browser-hosted world engine. `BrowserEngineTests` covers the engine core over inline documents; `ValidatorMessagePathRatchetTests` preserves validator diagnostics paths; and `BrowserWorkspaceTests` covers the `.puck` workspace's path refusals and source provenance.
 
-`wasm/sources.test.mjs` drives the same surface through the published AppBundle under Node (`node --test tests/Puck.World.Browser.Tests/wasm/sources.test.mjs` after `dotnet publish src/Puck.World.Browser -c Release`), and skips itself by name when no AppBundle exists. Fixture sources are tracked, so they must compile cleanly and stay formatted; a broken source a test needs is written by the test itself.
+Quarantined: the laws that composed the shipped island or `standard.puck` with the tictactoe module (`BrowserHostlessIslandTests`, `BrowserHostOwnedRowLawTests`, `BrowserGateReadsTruthLawTests`, `BrowserParityRecordingTests`, and the island and tictactoe laws of `BrowserEngineTests` and `ValidatorMessagePathRatchetTests`), the `BrowserWorkspaceTests` laws over the sources in `Fixtures/sources`, and the Node suite `wasm/sources.test.mjs` live under [`experimental/tests/Puck.World.Browser.Tests`](../../experimental/tests/Puck.World.Browser.Tests) with the fixtures they read.
 
 ## Verification
 

@@ -50,7 +50,7 @@ public sealed class SourceMapElementLawTests {
     public static TheoryData<string> WorldSources() {
         var data = new TheoryData<string>();
 
-        foreach (var tree in new[] { "worlds", "src/Puck.World/Assets/worlds", "src/Puck.World.Transpiler/Samples" }) {
+        foreach (var tree in new[] { "src/Puck.World/Assets/worlds", "src/Puck.World.Transpiler/Samples" }) {
             foreach (var path in Directory.EnumerateFiles(path: RepositoryPaths.Resolve(relativePath: tree), searchOption: SearchOption.AllDirectories, searchPattern: "*.puck")) {
                 var source = File.ReadAllText(path: path);
 

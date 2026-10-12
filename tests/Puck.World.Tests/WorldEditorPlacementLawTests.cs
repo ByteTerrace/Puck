@@ -15,8 +15,7 @@ namespace Puck.World.Tests;
 /// through the row door. <c>world.nudge</c> moves a placement by exactly one grid pitch per step, landing the moved
 /// axis on the lattice only while snapping is on, and <c>world.undo</c>'s journal takes the moves back;
 /// <c>world.turn</c> turns it by exactly one angle step; <c>world.place</c> with no view to aim from is refused by name.
-/// Each claim pairs its passing case with a red leg that fails it. <see cref="WorldEditorBuildModeLawTests"/> holds the
-/// surface-resting place, which needs the presentation's static field.
+/// Each claim pairs its passing case with a red leg that fails it.
 /// </summary>
 public sealed class WorldEditorPlacementLawTests {
     // Resolves whichever instance the console addresses now, so a law can stop one and start another under its name.

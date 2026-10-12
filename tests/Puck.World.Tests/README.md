@@ -7,6 +7,11 @@ in-session history over a host, and every device law that opens a Vulkan or
 Direct3D device. Rendering and complete game interaction still need verification
 by running Puck.World.
 
+Quarantined: every law that boots a full host through `WorldBootHarness`, or
+reads a world quarantined with the shipped worlds, sits in
+[`experimental/tests/Puck.World.Tests`](../../experimental/tests/Puck.World.Tests),
+out of the build, with `WorldBootHarness` itself.
+
 The rest of the World's laws live in suites aligned with what they reach, so a
 change selects only the suites that can observe it:
 
@@ -80,8 +85,10 @@ Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
 `WorldInspectorLawTests` checks the shared panel/command formatter, captured placement
 and material identities, explicit text-cap refusal, and allocation-free steady formatting.
-`CompiledCatalogLawTests` boots every shipped world the World's build compiled
-into its Release catalog from its compiled world. `WorldStateRootIsolationLawTests`
+`CompiledCatalogLawTests`, which boots every shipped world the World's build
+compiled into its Release catalog from its compiled world, is quarantined in
+[`experimental/tests/Puck.World.Tests`](../../experimental/tests/Puck.World.Tests).
+`WorldStateRootIsolationLawTests`
 reads the IL of every assembly in this suite's output, the desktop assembly
 included, and proves the shared scan the other World suites run finds the one
 site per per-user root that exists, in the desktop entry point.

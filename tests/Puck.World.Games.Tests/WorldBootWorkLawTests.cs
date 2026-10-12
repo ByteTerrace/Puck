@@ -1,5 +1,4 @@
 using Puck.Abstractions.Counting;
-using Puck.World.Machines;
 using Puck.World.Transpiler.Composition;
 using Xunit;
 
@@ -63,65 +62,6 @@ public sealed class WorldBootWorkLawTests {
             Assert.True(condition: (counts[kind] == count), userMessage: $"{kind} expected {count}: {described}");
         }
     }
-    private static Dictionary<string, long> BootLineup(WorldMachineCatalog catalog) {
-        var work = new WorldBootWork();
-        var path = RepositoryPaths.Resolve(relativePath: "worlds/parlor/lineup.puck");
-
-        using (WorldBootWork.Attribute(work: work)) {
-            Assert.True(
-                condition: WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out var failure, path: path),
-                userMessage: failure?.Diagnostics.FormatReport(filePath: path)
-            );
-            Assert.True(
-                condition: WorldSourceLoader.TryLoadForAdmission(
-                    admission: out _,
-                    catalog: catalog,
-                    catalogFingerprint: catalog.CompositionFingerprint,
-                    document: compiled!.Document!,
-                    sourceCompilation: compiled,
-                    path: path,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-        }
-
-        return Counts(work: work);
-    }
-    private static Dictionary<string, long> BootIsland(WorldMachineCatalog catalog) {
-        var work = new WorldBootWork();
-        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
-
-        using (WorldBootWork.Attribute(work: work)) {
-            Assert.True(
-                condition: WorldDefinitionLoader.TryResolve(
-                    catalog: catalog,
-                    catalogFingerprint: catalog.CompositionFingerprint,
-                    explicitPath: path,
-                    failure: out var failure,
-                    source: out var source
-                ),
-                userMessage: failure
-            );
-            // The boot completes its admission once its command vocabulary and neighbour transports compose, proving
-            // the same four borders again through a resolver of its own.
-            Assert.True(
-                condition: WorldDefinitionValidator.TryCompleteAdmission(
-                    admission: source.Admission!,
-                    machines: catalog,
-                    neighbours: new WorldFileNeighbourResolver(
-                        baseDirectory: () => Path.GetDirectoryName(path: path)!,
-                        catalog: catalog,
-                        catalogFingerprint: catalog.CompositionFingerprint
-                    ),
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-        }
-
-        return Counts(work: work);
-    }
 
     [Fact]
     public void TheSourceIsNamedAndDeclaresItsKindsInReportOrder() {
@@ -155,107 +95,5 @@ public sealed class WorldBootWorkLawTests {
         Assert.Equal(expected: 2L, actual: inner.Read(kind: WorldBootWork.Loads));
         Assert.Equal(expected: process, actual: WorldBootWork.Process.Read(kind: WorldBootWork.Loads));
         Assert.Throws<ArgumentException>(testCode: () => outer.Add(amount: 1L, kind: new WorkKind(name: "world.boot.other", unit: "count", workClass: WorkClass.Deterministic)));
-    }
-    [Fact]
-    public void TheLineupBootsWithinItsCountsAndItsSecondBootCompilesNothing() {
-        var catalog = TestMachines.Catalog();
-
-        WorldDefinitionFileSource.ForgetComposedDocuments();
-
-        // Hold the lineup first so its enum discovery is outside the measured boot. The cold composition asks for
-        // the lineup and basis and records each source's input facts; a warm composition only asks for the lineup.
-        Assert.True(condition: WorldCompileCache.Shared.TryCompile(
-            compiled: out _,
-            failure: out var failure,
-            path: RepositoryPaths.Resolve(relativePath: "worlds/parlor/lineup.puck")
-        ), userMessage: failure?.Diagnostics.FormatReport(filePath: "lineup.puck"));
-
-        // The lineup and its basis are the two sources the boot reads; one load reads the basis, merges both, and
-        // parses, validates and compiles the rules of the one document it admits. The supplied root needs no
-        // second cache ask for provenance; the basis is asked for when read and when its provenance is checked.
-        AssertPinned(
-            asks: 3L,
-            compileCeiling: 2L,
-            counts: BootLineup(catalog: catalog),
-            exact: [
-                ("world.boot.loads", 1L),
-                ("world.boot.documents-read", 1L),
-                ("world.boot.compositions", 2L),
-                ("world.boot.compositions-shared", 0L),
-                ("world.boot.parses", 1L),
-                ("world.boot.validations", 1L),
-                ("world.boot.rule-compilations", 1L),
-                ("world.boot.neighbour-resolves", 0L),
-            ]
-        );
-        // The second boot compiles nothing and answers the whole graph from the image the first one held.
-        AssertPinned(
-            asks: 1L,
-            compileCeiling: 0L,
-            counts: BootLineup(catalog: catalog),
-            exact: [
-                ("world.boot.loads", 1L),
-                ("world.boot.documents-read", 0L),
-                ("world.boot.compositions", 0L),
-                ("world.boot.compositions-shared", 1L),
-                ("world.boot.parses", 1L),
-                ("world.boot.validations", 1L),
-                ("world.boot.rule-compilations", 1L),
-            ]
-        );
-    }
-    [Fact]
-    public void TheIslandBootsWithinItsCountsParsesEachNeighbourOnceAndItsSecondBootCompilesNothing() {
-        var catalog = TestMachines.Catalog();
-
-        WorldDefinitionFileSource.ForgetComposedDocuments();
-
-        // Twenty-five documents — the island, its basis, its games and modules, the shared quality presets, and the
-        // four shards its borders name — are read and merged once each. Each of the twenty .puck sources is asked
-        // once to read it and once to capture the composition's input facts. Reuse checks those facts directly rather
-        // than asking for every compile again. The island and four shards are each parsed once, though admission and
-        // its completion each prove all four borders.
-        Dictionary<string, long> first = null!;
-        var firstBytes = AllocationWindow.Total(window: () => first = BootIsland(catalog: catalog));
-
-        Console.WriteLine(value: $"island first allocation={firstBytes}: {string.Join(separator: ", ", values: first.Select(selector: pair => $"{pair.Key}={pair.Value}"))}");
-
-        AssertPinned(
-            asks: 40L,
-            compileCeiling: 20L,
-            counts: first,
-            exact: [
-                ("world.boot.loads", 1L),
-                ("world.boot.documents-read", 25L),
-                ("world.boot.compositions", 25L),
-                ("world.boot.compositions-shared", 4L),
-                ("world.boot.parses", 5L),
-                ("world.boot.validations", 1L),
-                ("world.boot.rule-compilations", 1L),
-                ("world.boot.neighbour-resolves", 8L),
-            ]
-        );
-        Assert.True(condition: (first["world.boot.curve-compiles"] <= 2L));
-        // The second boot compiles nothing, merges nothing, and parses only the island itself.
-        Dictionary<string, long> second = null!;
-        var secondBytes = AllocationWindow.Total(window: () => second = BootIsland(catalog: catalog));
-
-        Console.WriteLine(value: $"island warm allocation={secondBytes}: {string.Join(separator: ", ", values: second.Select(selector: pair => $"{pair.Key}={pair.Value}"))}");
-        AssertPinned(
-            asks: 0L,
-            compileCeiling: 0L,
-            counts: second,
-            exact: [
-                ("world.boot.loads", 1L),
-                ("world.boot.documents-read", 1L),
-                ("world.boot.compositions", 0L),
-                ("world.boot.compositions-shared", 1L),
-                ("world.boot.parses", 1L),
-                ("world.boot.validations", 1L),
-                ("world.boot.rule-compilations", 1L),
-                ("world.boot.neighbour-resolves", 8L),
-                ("world.boot.curve-compiles", 0L),
-            ]
-        );
     }
 }

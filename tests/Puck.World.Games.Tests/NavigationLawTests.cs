@@ -1323,41 +1323,4 @@ public sealed partial class NavigationLawTests {
             actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == observed)).Cells![0].Value.Raw
         );
     }
-    // The island authors a dozen navigation domains, and sweeping one's occupancy and edges against the shipped
-    // solid field is the expensive part of navigation (`puck bench world`'s construction row measures it). Server
-    // construction bakes none of them; the first route request or read-back bakes the domain it reads. The control
-    // routes a navigator through a small fixture domain and must find it baked, so the count is known to move.
-    [Fact]
-    public void TheIslandsNavigationDomainsConstructWithoutSweepingTheSolidFieldUpFront() {
-        using (var island = Fixtures.FreshServer(definition: AuthoredGameFixtures.Nexus)) {
-            Assert.True(
-                condition: (island.Server.Population.NavigationDomainCount > 1),
-                userMessage: $"the island compiled {island.Server.Population.NavigationDomainCount} navigation domain(s)"
-            );
-            Assert.Equal(
-                actual: island.Server.Population.NavigationBakedDomainCount,
-                expected: 0
-            );
-        }
-
-        using var routed = Fixtures.FreshServer(definition: NavigationDocument(domain: VolumeDomain()));
-
-        Assert.Equal(
-            actual: routed.Server.Population.NavigationBakedDomainCount,
-            expected: 0
-        );
-        _ = JoinNavigator(
-            fixture: routed,
-            goal: new FixedVector3(
-                X: FixedQ4816.FromInteger(value: 4),
-                Y: FixedQ4816.FromInteger(value: 4),
-                Z: FixedQ4816.Zero
-            )
-        );
-        routed.Step();
-        Assert.Equal(
-            actual: routed.Server.Population.NavigationBakedDomainCount,
-            expected: 1
-        );
-    }
 }

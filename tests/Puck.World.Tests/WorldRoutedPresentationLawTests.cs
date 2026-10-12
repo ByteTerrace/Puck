@@ -1,5 +1,4 @@
 using System.Numerics;
-using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -136,61 +135,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Same(actual: continuum.PresentedElsewhere(slot: 0), expected: north);
         Assert.NotEqual(actual: continuum.PresentationRevision, expected: presentation);
         continuum.EndFrame();
-    }
-    [Fact]
-    public void MixedLayoutsLatchViewIndicesAndRetireScenesWhenSeatsReturnHome() {
-        using var state = new TemporaryDirectory(prefix: "puck-routed-layout-");
-        var host = state.Own(owner: WorldBootHarness.Compose(
-            edit: definition => (definition with {
-                ViewsRaw = (definition.Views with {
-                    Graphs = [new WorldViewGraph(Name: "pane", Package: "sdf.world")],
-                    Layouts = [new WorldViewLayout(Name: "mixed", Slots: [
-                        new WorldViewSlot(Camera: definition.Cameras[0].Name, Height: 1f, Width: 0.2f, X: 0f, Y: 0f),
-                        new WorldViewSlot(Height: 1f, Instance: "pane", Width: 0.2f, X: 0.2f, Y: 0f),
-                        new WorldViewSlot(Height: 1f, Width: 0.2f, X: 0.4f, Y: 0f),
-                        new WorldViewSlot(Camera: definition.Cameras[0].Name, Height: 1f, Width: 0.2f, X: 0.6f, Y: 0f),
-                        new WorldViewSlot(Height: 1f, Width: 0.2f, X: 0.8f, Y: 0f),
-                    ])],
-                }),
-            }),
-            presentation: WorldHostPresentation.Offscreen,
-            stateDirectory: state,
-            world: "tests/Puck.Counters/counters.puck"
-        ).Build());
-        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
-        var client = host.Services.GetRequiredService<WorldClient>();
-        var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            _ = client.Roster.VacateSeat(slot: slot);
-        }
-        _ = client.Roster.OccupySeat(profile: null, slot: 0);
-        _ = client.Roster.OccupySeat(profile: null, slot: 1);
-        using var boot = Endpoint(definition: client.Definition, identity: Home, position: HomePose);
-        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
-
-        _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
-        _ = routes.Publish(endpoint: boot, entity: boot.Mirror.Address(index: 0), slot: 1);
-        var frame = Capture(source: presenter);
-
-        Assert.Equal(actual: frame.Views.Count, expected: 4);
-        Assert.True(condition: presenter.TryRoutedView(index: out var index, scene: out var scene, view: 1));
-        Assert.Equal(actual: index, expected: 0);
-        Assert.Equal(actual: Capture(source: scene!.FrameSource).Views[0], expected: frame.Views[1]);
-        foreach (var view in new[] { -1, 0, 2, 3, 4, int.MaxValue }) {
-            Assert.False(condition: presenter.TryRoutedView(index: out _, scene: out _, view: view));
-        }
-        _ = routes.Publish(endpoint: boot, entity: boot.Mirror.Address(index: 0), slot: 0);
-        _ = Capture(source: presenter);
-        Assert.False(condition: presenter.Presents(scene: scene));
-        Assert.False(condition: presenter.TryRoutedView(index: out _, scene: out _, view: 1));
-
-        _ = client.Roster.VacateSeat(slot: 0);
-        _ = client.Roster.VacateSeat(slot: 1);
-        client.DeliverDefinition(definition: (client.Definition with { ViewsRaw = (client.Definition.Views with { Layouts = [] }) }), version: default);
-        _ = Capture(source: presenter);
-        Assert.Single(collection: presenter.CaptureFrame(deltaSeconds: 1f, height: 36U, interpolationAlpha: 1f, width: 64U).Views);
-        Assert.False(condition: presenter.TryRoutedView(index: out _, scene: out _, view: 0));
     }
     [Fact]
     public void ARoutedPaletteFollowsHostColorsWithoutAnAuthorityDelivery() {

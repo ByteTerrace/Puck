@@ -8,7 +8,7 @@ public sealed class WorldRenderProbeAllocationLawTests(ITestOutputHelper output)
     [Fact]
     public void NoTwoCpuSceneProbeClassesRunAtOnce() => SceneProbeScan.AssertProbesRunOneAtATime(
         assembly: typeof(WorldRenderProbeAllocationLawTests).Assembly,
-        controls: [typeof(WorldRenderEnvelopeLawTests), typeof(SdfTapeInventoryLawTests), typeof(SdfTapePredictionLawTests)],
+        controls: [typeof(WorldRenderEnvelopeLawTests)],
         output: output,
         suiteDirectory: "tests/Puck.World.Presentation.Tests"
     );

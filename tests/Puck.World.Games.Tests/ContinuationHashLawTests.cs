@@ -93,23 +93,6 @@ public sealed class ContinuationHashLawTests {
         Assert.True(condition: (ball.FixedPosition.Z > FixedQ4816.FromDouble(value: -1.5d)));
     }
     [Fact]
-    public void ARigidBallComingToRestFoldsTheBytesItsCheckpointEntryEncodes() {
-        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Fixtures/minimal-paddleball-host.puck");
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var ordinal = definition.Placements.ToList().FindIndex(match: static row => (row.Id == "paddleballBall"));
-        var ball = fixture.Server.Body(index: fixture.Server.Population.BodyForPlacementOrdinal(ordinal: ordinal))!;
-        var moved = false;
-
-        for (var tick = 0; (tick < 240); tick++) {
-            fixture.Step();
-            moved |= !ball.Resting;
-            AssertStreamedFoldsTheCapturedEntries(context: $"paddleball tick {tick}", population: fixture.Server.Population);
-        }
-
-        Assert.True(condition: moved, userMessage: "the ball never moved, so no tick folded a body in flight");
-        Assert.True(condition: ball.Resting);
-    }
-    [Fact]
     public void ASteadyFoldAllocatesNothing() {
         using var fixture = Fixtures.FreshServer(definition: CarryFixtures.WallCarryDocument(
             includeOtherBody: true,

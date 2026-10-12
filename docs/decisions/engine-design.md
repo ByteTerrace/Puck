@@ -137,6 +137,30 @@ in-session operation is a planned integration task, not evidence that an
 underlying library is absent. The [reference-game design](../game/design.md)
 and the [play programme](../plans/play.md) own that experience.
 
+## One live world while the campaign runs
+
+While the current engine campaign is in progress, the debug world
+([`debug.puck`](../../src/Puck.World/Assets/worlds/debug.puck)) is the only
+live world, and the World boots it when no `--world` is given. Its own
+dependencies stay live with it: the Moth avatar it takes as its basis, the
+quality presets that avatar imports, the skies it imports, and the shipped
+fonts, schemas and audio assets live code reads.
+
+Every other world is quarantined in [`experimental/`](../../experimental/README.md),
+each file at its repository path under that directory: the other shipped worlds
+(the island, the courtyard, the games, the districts, the shards and the tools),
+the asset packages that lived under the root `worlds/`, and every fixture world
+under `tests/` (the parity world, the canary worlds, the counters workloads
+other than the debug world's own, and the game, determinism and verdict
+fixtures), with the laws, baselines and ledgers that existed only to boot or
+test them. Engine code those worlds exercised stays live. The gates whose
+fixtures moved (canaries, parity, determinism, the counters workloads other
+than the debug world's, the qualification profile and the world baselines)
+keep their verbs and wait, unrun, until the owner calls for qualification; the
+[open items](../plans/open-items.md#quarantined-gates) record what each covered.
+A quarantined world returns by being rewritten or re-admitted under the gate,
+never by building it in place.
+
 ## Verification must match the claim
 
 Validate physical limits and report useful failures rather than silently

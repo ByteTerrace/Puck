@@ -798,6 +798,8 @@ The [shader reference](shaders.md#shader-pipelines-and-live-development)
 owns the source-language, resource and toolchain contracts.
 ## `puck affected`—the checks a change needs
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 `puck affected` reads the working tree's changes against a base (`--since`,
 `HEAD` by default, so only uncommitted work) and names what those changes can
 break, and nothing wider. `--merge-base <revision>` takes the base as the merge
@@ -811,7 +813,7 @@ base, so passing both is refused.
   build-order-only reference such as a test that launches `Puck.World`. A file
   no project owns, such as a test data directory under `tests/`, chooses the
   projects whose sources name that directory, spelled by its first two
-  segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`. A file a
+  segments such as `experimental/tests/Puck.World.Verdicts` or `worlds/parlor`. A file a
   project links into its own build from outside its directory, such as a shared
   fixture under `tests/Shared` or content copied from another project, chooses
   the projects whose project files include it as their own changes would, each
@@ -915,7 +917,7 @@ base, so passing both is refused.
   document declared, or an asset a base world named, chooses the canaries whose
   documents reached it there. A base `.puck` source composes through an export
   of the base revision's document trees (`src/Puck.World/Assets`,
-  `tests/Puck.World.Canaries`, `tests/Puck.World.Verdicts` and `worlds`, written
+  `experimental/tests/Puck.World.Canaries`, `experimental/tests/Puck.World.Verdicts` and `worlds`, written
   by `git archive` to a temporary directory when the first document is read and
   deleted when the selection ends), because the composer reads files. A git run
   the export needs that fails, or does not finish within two minutes, refuses
@@ -988,6 +990,8 @@ legs and the run directory are deleted; when either fails, all of them are kept
 and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
+
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 `puck gate` is the batch qualification for a branch. It reads the change
 against the merge base of `HEAD` and `--merge-base` (default
@@ -1319,6 +1323,8 @@ failed, the test run cannot be judged, or the fix cannot be withheld), 130
 cancelled after cleanup.
 
 ## `puck canary`—real-World behavioral proofs
+
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 `puck canary` is deliberately narrow: it runs deterministic stdin-driven
 behavioral proofs that fit a strict transcript vocabulary. Every manifest owns
@@ -1750,6 +1756,8 @@ dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pi
 
 ## `puck landing`—git-loss check, then the automatic canary set
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 `puck landing --against <tip> --base <authoring-base>` refuses a commit that
 drops content its author never worked from — the shape a `git reset --soft
 <tip>` before a squash produces, which re-parents the author's own tree onto
@@ -1772,6 +1780,8 @@ refusal.
 ---
 
 ## `puck test`—test worlds
+
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 A test world carries its own test. Its `schedule` section says what command to
 submit and at exactly which simulation tick, acting as which seat; its
@@ -1968,16 +1978,18 @@ world whose `--reproduce` runs disagreed, or `--host browser`, which is refused 
 because the browser engine host has no command ingress, principal or
 authoritative server to submit a scheduled command through.
 
-The worlds are under [`tests/Puck.World.Verdicts`](../../tests/Puck.World.Verdicts/README.md);
+The worlds are under [`experimental/tests/Puck.World.Verdicts`](../../experimental/tests/Puck.World.Verdicts/README.md);
 the pairs reproducing each repaired hole are in
-[`proofs/`](../../tests/Puck.World.Verdicts/proofs/README.md) beside them, run by
+[`proofs/`](../../experimental/tests/Puck.World.Verdicts/proofs/README.md) beside them, run by
 law rather than by a directory sweep.
 
 ---
 
 ## `puck parity`—cross-backend parity over the authored parity world
 
-`puck parity` boots `tests/Puck.Parity/parity.puck` once per graphics
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
+`puck parity` boots `experimental/tests/Puck.Parity/parity.puck` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
@@ -2006,7 +2018,7 @@ world that cannot be read, or whose last tick leaves no room for those 30, is
 refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
-(`tests/Puck.Parity/parity.contract.json`).
+(`experimental/tests/Puck.Parity/parity.contract.json`).
 With `--debug-layers` each leg boots its World under its backend's validation
 layer, with the same arguments and the same rule as `puck canary
 --debug-layers`: a `[vulkan-debug] validation` line, any `[d3d12-debug]` line,
@@ -2028,7 +2040,7 @@ Per capture, these independent verdicts, in order:
 
 1. **Content gate**—a capture its producer refused by name (`cameraInside`,
    `busy`, `stale`, `failed`, `unserved`, `deviceLost`; see the
-   [parity README](../../tests/Puck.Parity/README.md)), missing, or below its
+   [parity README](../../experimental/tests/Puck.Parity/README.md)), missing, or below its
    station's census floor never reaches comparison: agreement between
    degenerate frames is vacuous.
 2. **State verdict**—`stateHash` equality, exact, no envelope. A one-bit
@@ -2078,6 +2090,8 @@ not parity. A per-change check on one backend is
 
 ## `puck counters`—work-counter collector
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 `puck counters` reads the engine's deterministic work counts from a real World
 run, so a performance change can be judged by counted work rather than by time.
 `puck bench` stays the only tool that measures wall-clock time.
@@ -2092,11 +2106,11 @@ puck counters --batch <manifest> [--output <directory>] [--check | --record]
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/counters.puck` once per backend
+The run boots `experimental/tests/Puck.Counters/counters.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
-leg runs `tests/Puck.Counters/counters.script.txt` on the World's console. The
+leg runs `experimental/tests/Puck.Counters/counters.script.txt` on the World's console. The
 script turns off the cadence gate so every frame renders every pass, pauses the
 simulation until the engine is ready, resumes it, waits a pinned number of
 ticks, and asks for one `world.counters --json` reading, so both backends read
@@ -2225,7 +2239,7 @@ Missing, extra, malformed, refused or mismatched observations fail collection.
 All reports must agree under the existing backend rules before `--record`
 can write any measured ceilings. `--check` reads each observation's declared
 ceilings. `--batch` refuses beside `--world`, `--script`, `--report` or
-`--ceilings`. The [indirect comparison workload](../../tests/Puck.Counters/indirect-comparison/README.md)
+`--ceilings`. The [indirect comparison workload](../../experimental/tests/Puck.Counters/indirect-comparison/README.md)
 uses two tier groups to collect sixty actual backend observations in four
 serial boots, yielding thirty paired reports.
 
@@ -2324,6 +2338,8 @@ error or a file that is not a readable report.
 
 ## `puck determinism`—cross-host determinism attestation
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 ```text
 puck determinism record <manifest> --output <stream>   record what each scenario hashes to on this host
 puck determinism compare <left> <right>                 name the first divergence of each scenario
@@ -2336,7 +2352,7 @@ this process the way the game boots it, headless and with no presentation. It
 joins the scenario's seats, then steps the world for its ticks, writing the
 scenario's state cells and submitting its held intents before the ticks they
 name. The shipped manifest is
-[tests/Puck.Determinism/determinism.json](../../tests/Puck.Determinism/determinism.json).
+[tests/Puck.Determinism/determinism.json](../../experimental/tests/Puck.Determinism/determinism.json).
 It covers body dynamics and action state, flocks, rule latches and state
 writes, flow conservation, a kart lap, a billiards host, navigation, the chess
 AI's search, rule groups, decisions, board enforcement and interactions. Two
@@ -2410,13 +2426,15 @@ on Windows and on Linux and compares the two streams
 
 ## `puck qualify`—package qualification
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 ```text
 puck qualify <package> [--profile <file>] [--list] [--output <file>]
 ```
 
 `puck qualify` holds a producer-built `Puck.World` package, such as CI's
 `artifacts/world`, to the release profile
-(`tests/Puck.Qualification/release.profile.json`, a `puck.release.profile.v1`
+(`experimental/tests/Puck.Qualification/release.profile.json`, a `puck.release.profile.v1`
 document whose schema `puck schema` generates). It never builds: it checks
 that the package's entry assembly is in the profile's publish mode, installs a
 clean copy, runs the profile's functional canaries on the copy's World with
@@ -2813,10 +2831,12 @@ separate evidence, and unresolved rows remain unmodeled.
 
 ### `puck bench world`
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `puck.world.json` and a checked-in Klondike fixture document
 (`Bench/klondike.fixture.puck`, spliced the way
-`tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
+`experimental/tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
 allocation (median over a sampled window, after a warmup), the contact work
@@ -2842,16 +2862,18 @@ puck bench world
 
 Regenerate the fixture document only when
 `Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Shared/World/Fixtures.cs) or
-`src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
+`experimental/src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
 it—it is a checked-in snapshot, not derived at run time.
 
 ### `puck bench startup`
+
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 Measures the actual World executable in fresh processes, serially. Build World
 in Release first; the benchmark never builds inside a sample. With no world
 arguments it runs a representative corpus: overworld, Moth courtyard,
 Backgammon, Reversi, the three parlor games, the complete game host fixtures
-under `tests/Puck.World.Fixtures`, and the Jump, Kart, and Dive canary
+under `experimental/tests/Puck.World.Fixtures`, and the Jump, Kart, and Dive canary
 hosts. Most other files under `Assets/worlds/games` are modules that need a
 host; they cannot be benchmarked by launching the module alone. Explicit paths
 select another corpus:
@@ -3849,6 +3871,8 @@ Running the verb without `--check` rewrites the ledger in its canonical form.
 
 ## `puck canary-ceilings`—recorded gate costs
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 `CanaryCeilings.json` at the repository root records what the two gate selections of
 [`puck canary`](#puck-canaryreal-world-behavioral-proofs), the automatic set and `--merge`, cost: World boots and
 the summed per-leg timeouts, as `--plan` counts them over the checked-in manifests. The ledger is generated; nothing
@@ -3995,6 +4019,8 @@ CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
 ## `puck baselines`—test baselines
 
+While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 A committed test baseline is recorded by this verb and only compared by its test. Every run of an owning test
 writes the fresh copy of each record it compares against to `records/<artifact>` beside its assembly
 (`TestRecords` in `tests/Shared`), never to the checkout. The verb builds the test project in Release, clears that
@@ -4004,7 +4030,7 @@ baseline is what a recording replaces; a run that does not write its records, or
 
 | Artifact | Committed files | Owning tests |
 |---|---|---|
-| `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
+| `browser-parity` | `experimental/tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 | `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier (Smoke and Default) |
 | `state` | `<world>.state.json` and `<world>.cost.json` in `tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` | `ShippedWorldStateBaselineTests` |

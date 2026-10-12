@@ -103,7 +103,7 @@ For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/
 It pairs a rebuilt SDF avatar with the Moth Pipeline, with inspection cameras,
 walking and flight poses, and live document reload.
 
-The [Moth courtyard](Assets/worlds/moth-courtyard.md) imports that model into an
+The [Moth courtyard](../../experimental/src/Puck.World/Assets/worlds/moth-courtyard.md) imports that model into an
 eight-body scene: one isolated inspection subject and seven held pose stations,
 with named cameras and independent sky and volumetric-cloud toggles.
 
@@ -118,7 +118,7 @@ World composes both Gaming Brick forges as built-ins and discovers the rest from
 installation it cannot use refuses the boot by name. Imported world content
 cannot enable cloud access by itself.
 
-The [granaries district](Assets/worlds/modules/README.md) renders the existing Azure
+The [granaries district](../../experimental/src/Puck.World/Assets/worlds/modules/README.md) renders the existing Azure
 deployment's storage inventory on the island's own plaza as an importable, authored
 storeyard; the same collection tables can serve a text world. Its buildings can preserve gameplay-owned
 transforms and facets across inventory refreshes, and `world.reflow.preview` / `world.reflow.status` / `world.reflow.commit` rearrange
@@ -153,7 +153,7 @@ manifest. Measure a published artifact with
 
 `--world` takes a `.world.json` document or a `.puck` source, which boots
 without a prior compile. A source that declares several worlds — a
-composition such as [Rulepush](../../worlds/rulepush/README.md) — boots the
+composition such as [Rulepush](../../experimental/worlds/rulepush/README.md) — boots the
 world it declares `entry world`; `--entry <name>` boots another of its declared
 worlds instead, which is how a level of a composition is worked on directly:
 
@@ -204,7 +204,7 @@ entry point names these three per-user caches and hands them to the boot as
 directories of its own.
 
 Boot prints one line naming the world-definition file it loaded (an explicit
-`--world <path>` or the shipped `Assets/worlds/puck.world.json`), one
+`--world <path>` or the shipped `Assets/worlds/debug.world.json`, compiled from `debug.puck`), one
 `[world] compiled world:` line naming the compiled world it read, the chunks it
 kept, derived and deferred, and where it wrote one, one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
@@ -1055,8 +1055,15 @@ Facts a script needs:
   validated against.
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
-- `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.puck` (the standards as
+- `Assets/`—the shipped worlds. While the current campaign runs, the one live
+  world is `worlds/debug.puck` (the boot default, compiled to
+  `debug.world.json`), with its basis `worlds/avatars/moth.puck`, the
+  `quality.puck` presets that avatar imports and the `skies.puck` it imports;
+  every other world named in this bullet is quarantined at the same path under
+  `experimental/src/Puck.World/Assets/worlds/`
+  ([decision](../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
+  The quarantined island, `worlds/puck.world.json`, is a delta over
+  `worlds/standard.puck` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
@@ -1199,13 +1206,13 @@ for the authored facet.
 
 Each tabletop game—poker, dominoes, billiards, bowling, tic-tac-toe,
 hex lines, mancala, the solitaires—lives in its own file under `Assets/worlds/games/`, imported bare by
-`puck.world.json` (`WorldDefinition.Imports`; see the
+`experimental/src/Puck.World/Assets/worlds/puck.world.json` (`WorldDefinition.Imports`; see the
 [`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents-composition.md#document-composition-basis-and-imports)),
 and every district lives under `Assets/worlds/modules/`, imported under its alias. The island restates
 each game's root placement row onto the market hall's floor (`parent: marketCourt`) and each district's
 `<alias>Court` row where the district stands, so a module's own rows never carry island coordinates. The
 shared substrate—channels, kits, population capacity, spawn points, the island's own ground, hud/views,
-and everything no module's content touches—stays in `puck.world.json` itself; `world.imports` reads the
+and everything no module's content touches—stays in `experimental/src/Puck.World/Assets/worlds/puck.world.json` itself; `world.imports` reads the
 resolved stack back. A module addresses the world through placements, never
 absolute coordinates: dominoes, billiards, and bowling anchor to marker
 placements of their own, so a module composes into any host that declares the
@@ -1239,8 +1246,8 @@ row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 identity data belongs to the garden rather than an imported game.
 
 Physical chess is not part of the shipped island: it is the Parlor package's
-[`chess.puck`](../../worlds/parlor/chess.puck), whose
-[README](../../worlds/parlor/README.md) covers play, its computer opponent, and
+[`chess.puck`](../../experimental/worlds/parlor/chess.puck), whose
+[README](../../experimental/worlds/parlor/README.md) covers play, its computer opponent, and
 verification. Its board uses the tabletop primitive (see the
 [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
 and `world.tabletop` reads the board's frame, observation, and bound rows.
@@ -1324,7 +1331,7 @@ rank; the top-k of a mask is
 highest-rank index, never mixed, so the plain integer comparison the showdown
 makes IS the poker comparison. No sort, no per-rank pattern row, no scratch
 copy of the hand, and a live rank on every street for the seat that may see
-it. `tests/Puck.World.Games.Tests/PokerHandStrengthLawTests.cs` feeds authored
+it. `experimental/tests/Puck.World.Games.Tests/PokerHandStrengthLawTests.cs` feeds authored
 seven-card hands through the shipped rules on a real server and pins the
 exact word for every category, the near-miss controls, the ordering, a full
 hand to showdown (chip and card conservation, the reveal, the collection back
@@ -1367,7 +1374,7 @@ eight-line chunks into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
 moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
 dedicated verb, since the generic one already answers it.
 
-The garden's [Solitaire collection](Assets/worlds/games/README.md) adds Klondike
+The garden's [Solitaire collection](../../experimental/src/Puck.World/Assets/worlds/games/README.md) adds Klondike
 draw-one/draw-three, Spider with one/two/four suits, and FreeCell through authored
 state and rules. Its guide covers table selection, card identities, pile IDs,
 and the console request protocol.
@@ -2445,7 +2452,7 @@ calling principal's explicitly disclosed literal observations.
 `world.state.similar <row> <key> <table> [top]` ranks a vector table's cells
 against a query vector by cosine similarity and dot product, reading through
 the caller's visibility and writing nothing. The headless
-[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
+[tabletop fixture](../../experimental/tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 
 [Decision policies](../Puck.World.Schema/README.md#decision-policies) let a world

@@ -19,6 +19,16 @@ same change. The user's current instruction outranks it.
 `puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
 (below) outside the checkout.
 
+While the debug world is the one live world, the canary, parity, determinism
+and qualification fixtures and most counters workloads are quarantined under
+`experimental/`, so `puck affected` and `puck gate` refuse for want of a canary
+directory, and no gate is run or rebuilt around the debug world until the
+owner calls for qualification
+([open items](../../../docs/plans/open-items.md#quarantined-gates)). Verify a
+lane by hand instead: the solution build, the touched suites' CPU laws, the
+`--check` forms below, `puck docs links` over changed documents, and a run of
+the debug world.
+
 - **`puck gate --merge-base origin/<integration-branch>`** is the lane's
   qualification. Run it on the lane's final head against the integration branch
   the brief names and report its verdict; do not repeat steps it ran. `--gpu`

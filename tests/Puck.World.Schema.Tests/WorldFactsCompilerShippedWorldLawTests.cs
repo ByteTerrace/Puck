@@ -439,27 +439,6 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
             );
         }
     }
-    [Fact]
-    public void TheShippedCorpusCarriesAtLeastOneHostOwnedFieldRow() {
-        var hostOwned = 0;
-
-        foreach (var path in ShippedWorlds()) {
-            if (Load(path: path) is not { } definition) {
-                continue;
-            }
-
-            foreach (var descriptor in definition.StateCatalog.Descriptors) {
-                if (descriptor.HostOwned) {
-                    hostOwned++;
-                }
-            }
-        }
-
-        Assert.NotEqual(
-            actual: hostOwned,
-            expected: 0
-        );
-    }
 }
 
 /// <summary>What one compile of a shipped world left under the arena-addressed compiler.</summary>

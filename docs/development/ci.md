@@ -208,12 +208,17 @@ already compared, and skips the rest. Only this job saves the Linux cache, so
 the cache's existence under a key is the record of a passing comparison.
 Its `determinism` job is the simulation's cross-host leg. The artifacts job
 records every scenario of
-[the determinism manifest](../../tests/Puck.Determinism/determinism.json) on
+[the determinism manifest](../../experimental/tests/Puck.Determinism/determinism.json) on
 Windows with `puck determinism record` into the `determinism-windows` artifact;
 the Linux job records the same manifest with the same verb and runs
 `puck determinism compare` on the two streams, which fails on the first tick and
 system, or the first document hash, where the hosts differ and prints the
-scenarios, ticks and hashes it compared.
+scenarios, ticks and hashes it compared. While the debug world is the one live
+world the manifest is quarantined under `experimental/`, so both determinism
+steps refuse until the owner calls for qualification
+([quarantined gates](../plans/open-items.md#quarantined-gates)); so do
+`puck canary-ceilings --check` and the published-host startup check, whose
+canaries and world are quarantined too.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
 Linux world verification runs each compiled assembly directly as `dotnet <assembly.dll>`,

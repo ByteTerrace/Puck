@@ -8,8 +8,9 @@ namespace Puck.World.Transpiler.Tests;
 /// structural JSON comparison, that every corpus-wide gate in this assembly runs over.</summary>
 /// <remarks>Enumeration is recursive. <see cref="Sources"/> is every committed <c>.puck</c> world source, the corpus of
 /// gates that judge a source as committed text — reference linting, formatter idempotence, formatting preserving what
-/// a source compiles to. <see cref="Files"/> is every hand-authored world document, gated through its own
-/// decompilation. Three private copies of the walk could disagree about which documents each gate covers.</remarks>
+/// a source compiles to. The hand-authored world document corpus and the asset-package sources, with the gates that
+/// enumerated them, are quarantined in <c>experimental/</c> with the documents they read. Three private copies of the
+/// walk could disagree about which documents each gate covers.</remarks>
 internal static class ShippedWorlds {
     // A committed source is the largest thing the suite compiles and several gates judge the same compilation, so
     // each source compiles once per run.
@@ -65,35 +66,6 @@ internal static class ShippedWorlds {
         path1: FindDirectory(),
         path2: relativePath
     );
-    /// <summary>Returns every hand-authored <c>*.world.json</c> under the worlds directory, recursively, as
-    /// forward-slashed paths relative to it, in ordinal order: the documents no source carries
-    /// (<see cref="Composition.PuckDocumentComposer.TryCarriers"/>), since a document file sharing the name of a source
-    /// that emits a document is never read in the source's place.</summary>
-    /// <returns>The decompilation corpus.</returns>
-    public static IEnumerable<string> FilePaths() {
-        var worldsDirectory = FindDirectory();
-
-        if (!Composition.PuckDocumentComposer.TryCarriers(
-            carriers: out var carriers,
-            directory: worldsDirectory,
-            libraries: out _,
-            option: SearchOption.AllDirectories,
-            reason: out var reason
-        )) {
-            throw new InvalidDataException(message: reason);
-        }
-
-        return carriers
-            .Where(predicate: static carrier => !carrier.IsSource)
-            .Select(selector: carrier => Path.GetRelativePath(
-                path: carrier.Path,
-                relativeTo: worldsDirectory
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ));
-    }
-    public static TheoryData<string> Files() => new(values: FilePaths());
     /// <summary>Returns the absolute path of <c>src/Puck.World/Assets/worlds</c>, walked up from the test
     /// runner's own directory.</summary>
     /// <returns>The worlds directory.</returns>
@@ -117,31 +89,6 @@ internal static class ShippedWorlds {
         }
 
         throw new DirectoryNotFoundException(message: "Could not locate src/Puck.World/Assets/worlds directory from test runner.");
-    }
-    /// <summary>Returns every <c>*.puck</c> source of the asset packages under the repository's <c>worlds</c>
-    /// directory, recursively, as forward-slashed absolute paths in ordinal order.</summary>
-    /// <returns>The package sources' absolute paths.</returns>
-    public static IEnumerable<string> PackageSourcePaths() {
-        var packages = Path.GetFullPath(path: Path.Combine(
-            FindDirectory(),
-            "..",
-            "..",
-            "..",
-            "..",
-            "worlds"
-        ));
-
-        return (Directory.Exists(path: packages)
-            ? Directory.EnumerateFiles(
-                path: packages,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*.puck"
-            ).Select(selector: static path => path.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            )).Order(comparer: StringComparer.Ordinal)
-            : []
-        );
     }
     /// <summary>Returns every <c>*.puck</c> world source under the worlds directory, recursively, as forward-slashed
     /// paths relative to it, in ordinal order.</summary>

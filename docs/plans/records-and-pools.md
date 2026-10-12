@@ -147,7 +147,7 @@ reload. Use the Chinese Checkers judged candidate plus rewind for the ordinary-r
 performance check; record repeated before/after samples and reject a repeatable
 slowdown. Capacity scans and dependent-pair cascades remain explicitly priced.
 
-The [records-pools canary](../../tests/Puck.World.Canaries/records-pools/canary.json)
+The [records-pools canary](../../experimental/tests/Puck.World.Canaries/records-pools/canary.json)
 exercises the real executable: an ordinary state mutation triggers claim, field
 write, release, reclaim with defaults, and deterministic replay. The shipped-game
 behavior laws check Paddleball scoring and Arena elimination independently of recorded
@@ -180,7 +180,7 @@ remain the acceptance gate for this working tree. Equal live values alone are no
 the fresh-state hash criterion: allocator generations and retained continuation
 must also agree, as recorded in the
 [generation decision](../decisions/state-and-language.md). The authored rulepush
-scenario is met by the [rulepush package](../../worlds/rulepush/README.md). Its tests
+scenario is met by the [rulepush package](../../experimental/worlds/rulepush/README.md). Its tests
 cover selective push, blocking, overlap, noun rewrite and undo. Its canaries
 check deterministic replay and an eight-turn undo whose state hash matches the
 earlier turn.

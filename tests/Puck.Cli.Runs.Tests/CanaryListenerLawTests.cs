@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
 using Puck.Cli.Canary;
-using Puck.Launcher;
 using Xunit;
 
 namespace Puck.Cli.Runs.Tests;
@@ -34,54 +33,5 @@ public sealed class CanaryListenerLawTests {
                 port: port
             ));
         }
-    }
-    [Fact]
-    public void AWorldThatCannotBindItsListenerIsAnInfrastructureFailureRatherThanUnsupported() {
-        using var occupant = new Socket(
-            addressFamily: AddressFamily.InterNetwork,
-            protocolType: ProtocolType.Udp,
-            socketType: SocketType.Dgram
-        );
-
-        occupant.Bind(localEP: new IPEndPoint(
-            address: IPAddress.Loopback,
-            port: 0
-        ));
-
-        using var leg = ScheduledWorldBoot.Leg();
-        var refused = ScheduledWorldBoot.Run(
-            legDirectory: leg.PathOf(name: "occupied"),
-            options: ["--listen", occupant.LocalEndPoint!.ToString()!],
-            script: "quit\n",
-            world: "phase-fixture.puck"
-        );
-        var transcript = new CanaryTranscript(
-            RunDirectory: string.Empty,
-            Stderr: refused.Stderr.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n'),
-            Stdout: []
-        );
-
-        Assert.Equal(
-            actual: refused.ExitCode,
-            expected: LauncherHostRun.UnsupportedExitCode
-        );
-        Assert.NotNull(@object: CanaryCommand.ListenerRefusal(stderr: transcript.Stderr));
-        Assert.Null(@object: CanaryCommand.UnsupportedReason(
-            exitCode: refused.ExitCode,
-            transcript: transcript
-        ));
-
-        // The same exit code with a device the machine lacks is still UNSUPPORTED, and not a listener refusal.
-        var device = new CanaryTranscript(
-            RunDirectory: string.Empty,
-            Stderr: ["[world.host: unsupported: vulkan device unavailable: no adapter]"],
-            Stdout: []
-        );
-
-        Assert.NotNull(@object: CanaryCommand.UnsupportedReason(
-            exitCode: LauncherHostRun.UnsupportedExitCode,
-            transcript: device
-        ));
-        Assert.Null(@object: CanaryCommand.ListenerRefusal(stderr: device.Stderr));
     }
 }

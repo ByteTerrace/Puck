@@ -136,7 +136,7 @@ service result cannot accidentally become another request body.
 
 An `observations` entry reads an approved external collection and maps selected
 fields into existing state rows of any cell kind, and nothing else. The
-[granaries example](../Puck.World/Assets/worlds/modules/README.md) uses this
+[granaries example](../../experimental/src/Puck.World/Assets/worlds/modules/README.md) uses this
 path to represent storage accounts without configuring any cloud mutation
 operations; the [Azure hosting example](../Puck.World/Assets/hosting/azure.extensions.example.json)
 also shows a `Fixed` row fed by a metrics observation. An observation writes

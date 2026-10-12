@@ -454,36 +454,4 @@ public sealed class WorldPresentationManifestLawTests {
             expected: (0, ExpectedBindings.Length)
         );
     }
-    [Fact]
-    public void TheFlagshipWorldsManifestCompilesWithAPlausibleCount() {
-        var definition = AuthoredGameFixtures.Nexus;
-        var manifest = WorldPresentationManifest.Of(definition: definition);
-
-        Assert.Same(
-            actual: WorldPresentationManifest.Of(definition: definition),
-            expected: manifest
-        );
-        Assert.InRange(
-            actual: manifest.Bindings.Length,
-            high: 256,
-            low: 1
-        );
-        Assert.InRange(
-            actual: manifest.BodyBindings.Length,
-            high: 256,
-            low: 1
-        );
-        Assert.Contains(
-            collection: manifest.Bindings.ToArray(),
-            expected: Number(row: "captureStation")
-        );
-        Assert.Contains(
-            collection: manifest.BodyBindings.ToArray(),
-            expected: Number(row: "swayClock")
-        );
-        Assert.Contains(
-            collection: manifest.BodyBindings.ToArray(),
-            expected: Number(row: "scale", key: StateBinding.BodyKey)
-        );
-    }
 }

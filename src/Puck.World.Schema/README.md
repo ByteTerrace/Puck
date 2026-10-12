@@ -462,10 +462,10 @@ legal baseline. Acceptance commits its bookkeeping in one transaction. See the
 [chess authoring notes](../Puck.World/README.md#the-world-as-data) for promotion,
 castling rights, duplicate occupancy, and diagnostic limitations.
 
-The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
-and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
+The [tabletop state fixture](../../experimental/tests/Puck.World.Canaries/tabletop-state/fixture.puck)
+and its [positive script](../../experimental/tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
 exercise movement, pile order, ray flips, phase progression, and replay through
-the real headless application. The [control script](../../tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)
+the real headless application. The [control script](../../experimental/tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)
 checks that an occupied destination spends nothing. Complex scoring remains
 an addon concern; these operators introduce no scripts, recursion, or open loops.
 
@@ -581,7 +581,7 @@ collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
 under `../Puck.World/Assets/worlds/`. The boot default is
-`puck.world.json` (the island), a `basis` delta over `standard.puck`;
+`experimental/src/Puck.World/Assets/worlds/puck.world.json` (the island), a `basis` delta over `standard.puck`;
 `pipeline.puck` and `moth-courtyard.puck` are diagnostic scenes a
 `--world` argument names. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
@@ -818,7 +818,7 @@ Every reserved channel is a row of the rewrite's channel table, which carries
 its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
 the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
-two aliases (`tests/Puck.World.Fixtures/twin-tictactoe-host.puck`),
+two aliases (`experimental/tests/Puck.World.Fixtures/twin-tictactoe-host.puck`),
 and an entry with no `as` composes its names unchanged.
 
 **Exports: a module's names are private by default.** A module document may
@@ -909,7 +909,7 @@ levers) lands in a section the document authors, and a section the session
 left alone is written as authored. Moved render ceilings, per-view quality
 (`views.quality`) and editor values create their valid section when the document
 omits it; session pins never fold. `WorldSaveAuthoredDocumentLawTests` saves
-every shipped world, every world document under `tests/Puck.World.Fixtures`,
+every shipped world, every world document under `experimental/tests/Puck.World.Fixtures`,
 and every canary world that way and proves each one boots
 again to the definition it was loaded as. One value moves on an otherwise
 untouched world: an advancing `state` row/cell (`Advance`) settles to its live

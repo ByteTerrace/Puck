@@ -69,7 +69,7 @@ and saves the current owned identity, preserving both the departing facts and la
 writes while recovery waits. A replay's re-driven home arrival binds the projection its taped outcome records the live adoption bound, in a detached identity, and saves nothing.
 Foreign-written
 facts are unsigned until provenance attestation for carried state exists. The
-[rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level
+[rulepush package](../../../../experimental/worlds/rulepush/README.md) relies on this: a level
 hears the visitor's presses, a win writes an identity fact onto the travelling
 record, and the overworld adopts it when the visitor walks home and opens a gate
 from it. Its `rulepush-overworld` canary is the end-to-end check, and
