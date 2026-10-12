@@ -1,5 +1,8 @@
 #ifndef PUCK_SDF_SURFACE_HLSLI
 #define PUCK_SDF_SURFACE_HLSLI
+#include "sdf-normals.hlsli"
+#include "sdf-shadow-gather.hlsli"
+#include "sdf-ambient.hlsli"
 
 // The surface and ambient stages: each reads the pixel's visibility record (sdf-visibility.hlsli), which primary wrote,
 // and writes its own rows. Every active pixel receives neutral N and S rows before the next dispatch, including misses

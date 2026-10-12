@@ -38,6 +38,8 @@
 // reads and writes it through tilesRW (worldTiles); cull-args and the hit passes read it through tiles.
 #define SDF_TILES_READ_WRITE
 #include "sdf-world.hlsli"
+#include "../march/sdf-cone.hlsli"
+#include "../march/sdf-part-bounds.hlsli"
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

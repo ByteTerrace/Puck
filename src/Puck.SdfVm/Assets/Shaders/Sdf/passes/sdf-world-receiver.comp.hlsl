@@ -2,4 +2,7 @@
 // record, and the near-field or comparison replacement of its incoming light, which views reads from the receiver buffer.
 // It compiles the full instruction set once; views keeps no field query of the cache.
 #define SDF_RECEIVER_PASS
-#include "sdf-world-views.comp.hlsl"
+#include "sdf-hit-pass.hlsli"
+#include "../indirect/sdf-indirect-receiver.hlsli"
+#include "../indirect/sdf-indirect-procedures.hlsli"
+#include "sdf-hit-entry.hlsli"

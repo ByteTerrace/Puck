@@ -1,6 +1,7 @@
 // The per-workgroup shadow and ambient gather that builds one candidate mask for a group's hits.
 #ifndef SURFACE_SDF_SHADOW_GATHER_HLSLI
 #define SURFACE_SDF_SHADOW_GATHER_HLSLI
+#include "../march/sdf-cone.hlsli"
 #ifdef SDF_SCREEN_SOURCES
 #ifdef SDF_GROUP_SHADOW_GATHER
 // The group's enclosing sphere widens its light cone; the shared grid walker preserves every candidate.

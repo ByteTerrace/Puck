@@ -10,20 +10,13 @@
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
 
-// The world modules, in the order the kernels declare them: each reads only what the modules before it declare.
+// The world modules every world kernel reads, each reading only what the modules before it declare. A module only some
+// kernels read (the cone march, the normals, the gathers, a pass's stage) is included by the module or wrapper that
+// reads it, never here: everything here is in every world kernel's include closure, so an edit to it recompiles them all.
 #include "../frame/sdf-work.hlsli"
 #include "../frame/sdf-frame.hlsli"
-#include "../shade/sdf-environment.hlsli"
 #include "../shade/sdf-lighting.hlsli"
 #include "../march/sdf-march-constants.hlsli"
-#include "../surface/sdf-normals.hlsli"
-#include "../march/sdf-cone.hlsli"
-#include "../march/sdf-grid-walk.hlsli"
 #include "../frame/sdf-levers.hlsli"
-#include "../surface/sdf-shadow-gather.hlsli"
-#include "../surface/sdf-ambient.hlsli"
-#include "../shade/sdf-surface-shading.hlsli"
-#include "../debug/sdf-overshoot.hlsli"
-#include "sdf-hit-stages.hlsli"
 
 #endif

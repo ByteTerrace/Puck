@@ -4,6 +4,7 @@
 #define SDF_TAPE_BUILD
 #define SDF_VM_DISABLE_PART_PROGRAMS
 #include "sdf-world.hlsli"
+#include "../march/sdf-cone.hlsli"
 #include "../field/sdf-tape-build.hlsli"
 
 // One workgroup a tile, as the beam dispatches; its invocations build the tile's slabs in parallel.
