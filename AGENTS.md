@@ -99,7 +99,10 @@ settles a question, decide by that principle and say why.
    change. Rename, reshape and delete freely, updating every internal caller in
    the same change. No compat aliases, deprecation steps, migration shims or
    read-side tolerance for retired data shapes: migrate data once and delete the
-   old path.
+   old path. Nothing has shipped, and that covers the tooling too: CI
+   workflows, gates, verbs and their fixtures change with the code. A step
+   whose input moved or went away is retargeted or deleted in the same change,
+   never left broken for later and never put to the owner as a question.
 6. **Merges follow the branch's owner.** Only the lead merges into the
    integration branch its brief names. A delegated agent merges that branch
    into its own working branch and merges anything else only when its brief
