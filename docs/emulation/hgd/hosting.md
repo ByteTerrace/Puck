@@ -6,13 +6,9 @@ is particular to the Deck.
 
 ## The engine
 
-`HumbleGamingDeckEngine` is the `IMachineEngine` with id `humble-gaming-deck`.
-Its configuration names the cartridge under `content.path`; it takes no option
-string, because the NTSC model and the default power-on profile are its only
-configuration today. It declares one video output, `video`, one audio output,
-`audio`, and two input ports: `controls` for the $4016 controller and
-`controls-2` for $4017. The engine is not yet registered with World; wiring it
-into World's cabinets is the World cabinets package.
+The Deck has no `IMachineEngine` yet, so World cannot host it: writing the
+engine and wiring it into World's cabinets is the World cabinets package. The
+host below is what that engine will wrap.
 
 ## The host and the core
 

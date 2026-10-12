@@ -205,9 +205,8 @@ delete the file before writing a new one. An inline MSBuild task, which cannot
 reference `AtomicFile`, writes a temporary file beside the destination and moves
 it over the destination. The compiler is the one writer that rewrites its
 outputs in place (`obj/<name>.dll`, `.pdb` and `.xml`), so the copy from `obj` to
-`bin` and the copy into a publish directory stay plain copies;
-`BuildOutputLinkLawTests` fails when a `bin` file shares its file with a
-compiler output. A build into a directory that outlives it, such as the World
+`bin` and the copy into a publish directory stay plain copies, and a `bin` file
+never shares its file with a compiler output. A build into a directory that outlives it, such as the World
 builds in `world-builds`, passes `--output` and links no content items, since
 an editor saving a source in place would otherwise rewrite the kept build.
 
@@ -610,21 +609,6 @@ one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
 
-`tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real
-`puck.official.manifest.v1` tree from this checkout's own worlds and the
-browser AppBundle, so it needs that AppBundle published first:
-
-```powershell
-dotnet publish src/Puck.World.Browser -c Release
-dotnet test --project tests/Puck.Cli.Release.Tests -c Release --filter-class "*OfficialBuildCommandTests"
-```
-
-In CI the compiled archive carries the AppBundle the solution build generates
-(the `artifacts` workflow installs `wasm-tools`), so the test job has one without
-a publish and this is a local-run-only step; the ahead-of-time publish CI ships is
-the WebAssembly producer's (`browser.yml`). Without the bundle the tree-building
-tests skip by name, and the skip reason names the publish command; they never
-fail for the missing prerequisite.
 
 ## Working with world documents
 

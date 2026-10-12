@@ -289,8 +289,7 @@ floor → column → ceiling without leaving contact), the pit (a `Subtraction` 
 `axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — What it measures (`body.fly` from each
 spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
 body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
-penetration resolved across `up`, the approach clamp horizontal only — pinned by
-`FixedContactPushMathLawTests`); the 0.1 and 0.25 m rises are stepped by the capsule's rounded
+penetration resolved across `up`, the approach clamp horizontal only); the 0.1 and 0.25 m rises are stepped by the capsule's rounded
 bottom and the 0.5 m rise blocks (there is no authored step height); a wall stops at radius + skin
 with y, pitch and roll unchanged; the high overhang is inert and the low one blocks; the pit and the
 edge both land the body upright on the net. The pit carries an SDF fact worth knowing before

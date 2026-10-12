@@ -184,9 +184,6 @@ edge verb.
 
 Bindings, chord pages, toggles, sequences, interactive rebinding, and the
 binding document format belong to [Commands and input](commands.md).
-This project contributes only `InputSourceLabels`, which describes a physical
-source using the connected family's labels—for example, the south face button
-is B on Switch, A on Xbox or Steam, and X on DualSense.
 
 ## Keyboard focus and passthrough sources
 
@@ -296,16 +293,11 @@ state:
 ```text
 lamp geometry + palette + live bindings
     -> LightLegendComposer
-    -> LightLegendDriver
-    -> dirty lamp writes at no more than 30 Hz
+    -> per-lamp colors
 ```
 
-`LightLegendDriver` takes host control on its first tick and restores autonomous
-mode when disposed. If the process is killed before disposal, a lamp array can
-remain frozen on its last host-controlled frame until the operating system,
-vendor software, or a replug reclaims it.
-
-The transport and composer have been exercised on a Logitech G915 LampArray
+No host drives a lamp array yet: nothing delivers the composed colors to a
+device on a tick. The transport and composer have been exercised on a Logitech G915 LampArray
 (115 lamps, 33-millisecond minimum update), a G502 mouse, and a POWERPLAY pad.
 
 ## Limits and hardware evidence
@@ -360,7 +352,7 @@ feature framing. Triton feature messages use report id 1 and
 | `SourceFocus` | Routes keys and text between the game and a focused passthrough source, and holds the reserved focus chord. |
 | `SourcePassthroughRouter` / `IWindowInputFilter` | Host `SourceFocus` for a window: deliver a passthrough source's pointer and keys to its window and withhold them from the game. |
 | `IGamepadOutput` / `TriggerEffectSpec` | Expose capability-gated controller output. |
-| `LightLegendComposer` / `LightLegendDriver` | Compose and deliver presentation-side LampArray legends. |
+| `LightLegendComposer` | Composes presentation-side LampArray legends. |
 
 The concrete controller parsers are `NintendoSwitchController`,
 `DualSenseController`, `SteamController`, and `SteamControllerTriton`.

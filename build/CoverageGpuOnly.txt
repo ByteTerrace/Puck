@@ -1,0 +1,5 @@
+# The one list of live code that only a hardware GPU reaches. CI's test runners have no GPU, so `puck artifacts coverage`
+# leaves every line under these repository-relative prefixes out of the 100% line-coverage requirement, and a project
+# directory listed here may go unloaded. A prefix earns its place only when every line under it runs on a device alone:
+# code that a CPU test can reach is tested or deleted instead. The GPU-trait test classes
+# ([Trait("Category", "Gpu")]) are the evidence for what is listed here.

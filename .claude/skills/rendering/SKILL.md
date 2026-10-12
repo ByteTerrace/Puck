@@ -51,7 +51,7 @@ table in [kernels](references/kernels.md#the-frame) says what each writes.
   ambient pass wrote into the visibility record, so an AO edit inside the views
   code changes nothing.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
-  light kind is a branch there and nowhere else (`SdfLightInterfaceLawTests`).
+  light kind is a branch there and nowhere else.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.
@@ -166,9 +166,9 @@ drifted.
   `Vector3` math (its multiply-add may fuse), sRGB through
   `ImageSourceConversion.LinearToSrgb8`/`Srgb8ToLinear`, mip filters and block
   encoders in integer or scalar double arithmetic.
-- **Encoder bytes are pinned** by `TextureCodecLawTests` and
-  `BakeSamplingFixtureLawTests`; an encoder change that moves bytes updates
-  them in the same change.
+- **Encoder bytes are pinned** by `TextureCodecLawTests` and the bake fixture
+  `BakeSamplingDeviceLawTests` samples; an encoder change that moves bytes
+  updates them in the same change.
 
 ## Performance and cost
 

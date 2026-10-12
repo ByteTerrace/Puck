@@ -31,23 +31,19 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
   `CommandArgsTests` and `WireArgsTests` pin argument parsing and the zero-copy
   trailing-token view; `CommandEchoTests` pins the echo grammar's quoting.
 - **The router.** `InputRouterTests` covers held-command edge logic over
-  physical signals, `CommandModalityTests` per-slot maps, `HeldOrderTrackerTests`
-  and `HeldCommandReleaseLawTests` press ordering and a held verb's two edges.
-  `InputRouterHardeningTests` pins the behaviors an audit found unproven,
-  `InputRouterFocusExemptTests` what a focus-exempt signal may and may not do,
-  `InputRouterMomentaryReleaseTests` the one-release-per-command rule, and
-  `InputRouterReleaseOrderTests` the total order of every synthesized release.
-  `InputRouterConcurrencyTests` drives the headline thread-safety claim rather
-  than asserting it. `CommandBufferTests` covers the borrowed per-tick view.
+  physical signals, `CommandModalityTests` per-slot maps, and `HeldOrderTrackerTests`
+  press ordering. `InputRouterHardeningTests` pins the behaviors an audit found
+  unproven, `InputRouterMomentaryReleaseTests` the one-release-per-command rule,
+  and `InputRouterReleaseOrderTests` the total order of every synthesized
+  release. `CommandBufferTests` covers the borrowed per-tick view.
 - **Bindings.** `PagedInputBindingsTests` covers pages, chords, modifiers, and
   wheels end to end; `BindingProfileCompilationLawTests`,
   `BindingProfileValidationTests`, and `BindingRowMemberLawTests` the compiler's
-  laws and structural refusals; `BindingChannelLoweringLawTests` and
-  `BindingChannelScaleLawTests` the channel path; `BindingVocabularyCheckTests`
+  laws and structural refusals; `BindingChannelScaleLawTests` the channel path; `BindingVocabularyCheckTests`
   the vocabulary gate, including its tolerance for documents it exists to
   refuse; `BindingProfileJsonTests` the one wire shape, from a whole document's
   lossless round trip down to an enum refusing a numeric token.
-  `BindingSessionTests` and `BindingSessionPlanReservationTests` cover guided
+  `BindingSessionTests` cover guided
   rebinding and what a plan must reserve. `BindingWheelGeometryTests`,
   `BindingWheelGestureStateTests`, `BindingWheelGraceTests`, and
   `BindingWheelSectorTextTests` cover radial geometry, gesture state, the
@@ -58,10 +54,6 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
   document's passthrough source, and holds a hit bit-identical across
   evaluations and threads. `SourcePointerCommandLawTests` carries a pointer
   ray through the router's snapshot to the same pixel on every replay.
-- **The published surface itself.** `ApiSurfaceTests` and `PackagingTests` pin
-  that the snapshot shapes stay internal to construct, that no public member
-  carries `[Obsolete]`, a retired-shape name, or a mutable field, and that the
-  package identity and the shipped XML documentation survive a pack.
 
 ## Documentation
 

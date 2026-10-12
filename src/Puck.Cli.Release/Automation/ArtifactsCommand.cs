@@ -14,17 +14,20 @@ public static class ArtifactsCommand {
     /// <summary>Returns the <c>dotnet</c> arguments <c>test-windows</c> runs one archived test assembly with. The runner has
     /// no GPU and its tree is a restored archive rather than a build, so the run takes the CPU selection
     /// (<see cref="CliTestRun.CpuSelection"/>) and leaves out the laws that read a build tree
-    /// (<see cref="CliTestRun.WithoutBuildTree"/>), writes its TRX report, and dumps and ends a run that stops making
-    /// progress.</summary>
+    /// (<see cref="CliTestRun.WithoutBuildTree"/>), writes its TRX report and its Cobertura coverage report beside it
+    /// (<c>coverage</c> merges every run's), and dumps and ends a run that stops making progress.</summary>
     /// <param name="assembly">The test assembly.</param>
-    /// <param name="results">The results directory.</param>
-    /// <param name="report">The TRX report's file name in it.</param>
+    /// <param name="results">The results directory, absolute.</param>
+    /// <param name="report">The TRX report's file name in it; the coverage report takes its name with the
+    /// <c>.cobertura.xml</c> extension.</param>
+    /// <param name="settings">The coverage settings file, absolute (<c>build/CodeCoverage.config</c>).</param>
     /// <returns>The arguments.</returns>
-    public static string[] TestWindowsArguments(string assembly, string results, string report) => [
+    public static string[] TestWindowsArguments(string assembly, string results, string report, string settings) => [
         assembly,
         .. CliTestRun.CpuSelection,
         .. CliTestRun.WithoutBuildTree,
         .. CliTestRun.Report(directory: results, fileName: report),
+        .. CliTestRun.Coverage(output: Path.Combine(path1: results, path2: Path.ChangeExtension(path: report, extension: ".cobertura.xml")), settings: settings),
         .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15)),
     ];
 
@@ -347,13 +350,16 @@ public static class ArtifactsCommand {
                 // The results directory is passed whole: a test host resolves a relative one from where it stands, which
                 // for some assemblies is their own output directory, and their reports would miss the upload.
                 var run = await CliProcess.RunAsync(
-                    arguments: TestWindowsArguments(assembly: assembly, report: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.trx", results: Path.Combine(path1: root, path2: Results)),
+                    arguments: TestWindowsArguments(assembly: assembly, report: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.trx", results: Path.Combine(path1: root, path2: Results), settings: Path.Combine(path1: root, path2: "build/CodeCoverage.config")),
                     cancellationToken: cancellationToken,
                     capture: true,
                     fileName: "dotnet",
                     workingDirectory: root
                 );
+                var coverage = Path.Combine(path1: root, path2: Results, path3: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.cobertura.xml");
 
+                // The shard uploads its results; the compact form is what `coverage` needs, at a fraction of the size.
+                if (File.Exists(path: coverage)) { CoverageReport.Compact(report: coverage); }
                 lock (console) {
                     Console.Write(value: run.Stdout);
                     Console.Error.Write(value: run.Stderr);
@@ -371,6 +377,32 @@ public static class ArtifactsCommand {
         }
         Console.WriteLine(value: $"Verified {assemblies.Count} compiled test assemblies without solution restore or workload installation.");
         return 0;
+    }
+    // A live project is a src/ project the solution builds; the verdict also refuses one that no run loaded.
+    private static int Coverage(string results) {
+        var root = RepositoryPaths.RequireRoot();
+        var directory = Path.GetFullPath(path: Path.Combine(path1: root, path2: results));
+        var reports = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.*")
+            .Where(predicate: static path => (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cobertura.xml") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: CoverageReport.CompactExtension)))
+            .Order(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        if (reports.Length == 0) { throw new InvalidDataException(message: $"No coverage reports under {results}."); }
+        var gpuOnly = CoverageReport.ParseGpuOnly(text: File.ReadAllText(path: Path.Combine(path1: root, path2: CoverageReport.GpuOnlyList)));
+        var projects = System.Xml.Linq.XDocument.Load(uri: Path.Combine(path1: root, path2: "Puck.slnx"))
+            .Descendants(name: "Project")
+            .Select(selector: static project => ((string?)project.Attribute(name: "Path") ?? ""))
+            .Where(predicate: static path => path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/"))
+            .Select(selector: static path => path[..(path.LastIndexOf(value: '/') + 1)]);
+        var files = CoverageReport.Merge(reports: reports);
+
+        Console.WriteLine(value: $"Merged {reports.Length} coverage reports.");
+        using var report = new StringWriter();
+        var complete = CoverageReport.Judge(files: files, gpuOnly: gpuOnly, projects: projects, writer: report);
+
+        File.WriteAllText(path: Path.Combine(path1: directory, path2: "coverage.txt"), contents: report.ToString());
+        Console.Write(value: report.ToString());
+        return (complete ? 0 : 1);
     }
     private static async Task<int> TestWorldAsync() {
         const string Results = "artifacts/world-test-results";
@@ -419,10 +451,15 @@ public static class ArtifactsCommand {
             description: "Run the compiled world authentication and recovery tests (Linux).",
             name: "test-world"
         );
+        var resultsOption = new Option<string>(name: "--results") { DefaultValueFactory = static _ => "artifacts/test-results", Description = "The directory holding every shard's Cobertura reports." };
+        var coverage = new Command(
+            description: "Merge the test runs' coverage reports; fail unless every live line outside the GPU-only list is covered.",
+            name: "coverage"
+        ) { resultsOption };
         var command = new Command(
             description: "Capture, restore, and test the compiled Release outputs of one build.",
             name: "artifacts"
-        ) { capture, restore, testWindows, testWorld };
+        ) { capture, restore, testWindows, testWorld, coverage };
 
         capture.SetAction(action: (_, _) => CaptureAsync());
         restore.SetAction(action: (_, _) => RestoreAsync());
@@ -431,6 +468,7 @@ public static class ArtifactsCommand {
             shards: parseResult.GetValue(option: shardsOption)
         ));
         testWorld.SetAction(action: (_, _) => TestWorldAsync());
+        coverage.SetAction(action: parseResult => Coverage(results: parseResult.GetValue(option: resultsOption)!));
         return command;
     }
 }

@@ -28,7 +28,7 @@ The corpus is three trees, enumerated where they live rather than copied:
   a source of its package that imports it
   (`EveryPackageFragmentIsImportedByASourceOfItsPackage`).
 - `src/Puck.World.Transpiler/Samples/*.puck` — the transpiler's worked
-  examples, the same top-level set `SamplesCompileTests` compiles. The
+  examples. The
   `modules/` and `extensions/` subdirectories hold fragments, which are not
   root documents.
 

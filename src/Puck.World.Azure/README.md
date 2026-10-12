@@ -87,9 +87,9 @@ namespace. A fresh process gets a new one, preventing stale transfer epochs from
 the previous process from blocking entry; restoring a previous process's body is
 a separate durable travel-recovery operation.
 
-The extension also owns `WorldApiCounterpartResolver` and `HttpCounterpartPublisher`,
-which implement the engine's neighbour-resolution and counterpart-publication seams
-using Azure credentials. The engine interfaces carry no Azure credential types.
+The extension also owns `WorldApiCounterpartResolver`, which implements the
+engine's neighbour-resolution seam using Azure credentials; no publisher
+implements the counterpart-publication seam (`ICounterpartPublisher`) yet. The engine interfaces carry no Azure credential types.
 
 ## Host composition
 

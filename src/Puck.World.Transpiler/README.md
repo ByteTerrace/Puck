@@ -969,8 +969,7 @@ handed to the dispatcher the host supplied, which is how a cartridge is diagnose
 A finding raised after lowering carries a JSON pointer, which the source map turns into a line. The lowering
 registers every element an author writes at its own pointer — a `rule`, each object in an array written element by
 element (`rules [ { … } ]`, `patterns [ … ]`, `state { world [ … ] }`), each row and rule a `sql` statement lowers
-to, the lattice a `grid` declares — so a finding about one element lands on the construct that wrote it
-(`SourceMapElementLawTests`). The validation of a composed world names paths into the composed document, where a
+to, the lattice a `grid` declares — so a finding about one element lands on the construct that wrote it. The validation of a composed world names paths into the composed document, where a
 basis's and an import's rows come ahead of the root's own, so `WorldSemanticValidator` traces each path back into
 the root's own lowered document before reading the map (`WorldDocumentBasis.TraceToLayer`, following each list row
 by the key its merge used): a finding about the root's k-th row lands on that row whatever the basis contributes

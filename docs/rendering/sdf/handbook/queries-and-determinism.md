@@ -156,9 +156,8 @@ deliberate: an evaluator that silently interpreted *part* of a program and
 guessed at the rest would be worse than one that refuses outright, because
 its wrong answers would look exactly like right ones.
 
-`WorldQueryProviders.ForWorld` is the resolver a sim asks for the right
-provider; a sim binds only `IWorldQuery` itself; nothing downstream needs to
-know or care which provider answered.
+A sim binds only `IWorldQuery` itself; nothing downstream needs to know or care
+which provider answered.
 
 A third reading sits between the two. `SdfDistanceGrid` keeps the live
 evaluator's exact values at the corners of world-space cells, and because the
@@ -355,10 +354,7 @@ to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
 thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
 the red leg, and holds a contact tolerance to ending the approach in a few
 queries just off the face, and a large clearance times a large step scale to
-proposing the whole step. `SdfBoundsTightnessLawTests` holds a half turn's
-bounds to the unrotated program's over the box's image, and the box cull to
-walking under half of a twelve-object row while still enclosing every point
-answer. `SdfFieldEvaluatorCullLawTests`, `SdfFieldEvaluatorScopedCullLawTests`
+proposing the whole step. `SdfFieldEvaluatorCullLawTests`, `SdfFieldEvaluatorScopedCullLawTests`
 and `SdfFieldEvaluatorCullBoundaryLawTests` hold every point answer, material
 and gradient, and every box's bounds bit for bit, to a cull-off reference (the
 same instructions with no instance declared and every chain opened by a zero
@@ -486,5 +482,4 @@ all if a different consumer read it differently.
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
   `src/Puck.Maths/FixedPoint/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
-  `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
-  `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.
+  `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`.

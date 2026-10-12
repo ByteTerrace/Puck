@@ -80,8 +80,7 @@ description IS the help text — `help [--names] [<prefix>]` prints `name - desc
 registered command (only the names with `--names`; only the verbs whose names start with a prefix, ignoring case,
 when one is given; a prefix that matches nothing is refused), which is why descriptions here are long. Both factories take
 an `audience`: `CommandAudience.Operator` makes the registry refuse the verb for
-every principal but the console, before the handler runs, on every dispatch path
-(`CommandAudienceLawTests`). The evaluation diagnostics — `world.rule.trace`,
+every principal but the console, before the handler runs, on every dispatch path. The evaluation diagnostics — `world.rule.trace`,
 `world.rule.failures`, `world.search`, `world.decisions`, `world.responses`,
 `world.rules`, `world.verdicts` — are operator verbs, because each prints values
 the rules computed, which may derive from state a seat is not shown.

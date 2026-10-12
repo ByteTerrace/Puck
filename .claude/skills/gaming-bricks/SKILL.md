@@ -38,7 +38,7 @@ Post stages are authoritative; update stale skill guidance in the same change.
   `AdvancedIdleEquivalenceLawTests` compare them over the shipped cartridges.
   A ticked cycle withdraws both cached clock agreements, including the
   others-only bound: rejoining the display to a stale bound can skip a timer
-  edge. `ClockAgreementLawTests` covers this with parked HBlank DMA.
+  edge.
 - External suites, co-simulators, Post stages and golden replays are evidence
   about the hardware model. A stage or replay that a better-sourced correction
   moves is updated with the correction.

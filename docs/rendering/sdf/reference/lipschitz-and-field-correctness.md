@@ -299,9 +299,7 @@ stride through an occluder thinner than their minimum stride on either side,
 but never across a wall. The rule is exact up to the float rounding of the
 wall test itself: a grazing ray whose landing rounds back onto the side it left
 crosses again from there, a tolerance further on.
-`SdfLogSphereMarchDeviceLawTests` holds the marches on the device, and
-`SdfLogSphereCrossingLawTests` holds a CPU reference march of the rule, over
-both kinds of wall, to its no-skip property and its crossing bound.
+`SdfLogSphereMarchDeviceLawTests` holds the marches on the device.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not

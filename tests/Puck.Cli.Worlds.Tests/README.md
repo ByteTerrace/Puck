@@ -17,7 +17,7 @@ from its source naming its asset and graph files from where it lands.
 of its own Release output, so the suite builds that project first; nothing here links against it. Quarantined: every
 one of those that boots a verdict world, a game or a `worlds/` package, with `ScheduledStepVocabularyLawTests`,
 `WorldListenRefusalLawTests`, `SkyBaselineFixtureLawTests` and the shipped-world laws of
-`CompiledWorldCompileTests` and `WorldDocumentOutputLawTests`, lives in `experimental/tests/Puck.Cli.Worlds.Tests/`;
+`WorldDocumentOutputLawTests`, lives in `experimental/tests/Puck.Cli.Worlds.Tests/`;
 `TestCommandLawTests` keeps only its usage-error law here.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.

@@ -873,8 +873,7 @@ surface: a diffuse term that joins the radiance the material shade lights by, a
 specular lobe (a point light's own), a rim brighten, and a factor on reflected
 light (an occluder's dimming). The stage sums each kind of term over the walk
 and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
-kind, which `SdfLightInterfaceLawTests` holds, so a new kind is one branch of
-that function.
+kind, so a new kind is one branch of that function.
 
 ## Screen lights and the CRT treatment
 

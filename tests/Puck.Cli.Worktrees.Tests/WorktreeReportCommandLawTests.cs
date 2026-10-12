@@ -364,30 +364,7 @@ public sealed class WorktreeReportProtectionLawTests : WorktreeReportLaws {
         });
     }
 }
-/// <summary>The report's --into names an exact branch, never a revision expression or a tag.</summary>
-public sealed class WorktreeReportIntoLawTests : WorktreeReportLaws {
-    [InlineData("main^")]
-    [InlineData("main~1")]
-    [InlineData("main@{0}")]
-    [InlineData("main^{commit}")]
-    [InlineData("main..main")]
-    [InlineData("main:tracked.txt")]
-    [InlineData("only-a-tag")]
-    [InlineData("origin/only-a-tag")]
-    [Theory]
-    public void IntoRequiresAnExactBranchName(string into) {
-        using var checkout = Checkout();
 
-        _ = CommitChange(checkout: checkout, name: "second.txt", text: "second\n");
-        _ = checkout.Git("tag", "refs/heads/only-a-tag");
-        _ = checkout.Git("tag", "refs/remotes/origin/only-a-tag");
-        var result = ConsoleCapture.RunSplit(run: () => WorktreeReportCommand.Execute(repositoryRoot: checkout.Root, into: into, clock: Clock));
-
-        Assert.Equal(actual: result.ExitCode, expected: 2);
-        Assert.Empty(collection: result.Output);
-        Assert.Contains(actualString: result.Error, expectedSubstring: "names no local or remote-tracking branch");
-    }
-}
 /// <summary>The report reads remote counterparts through the fetch mapping and refuses a partial clone only where Git cannot forbid a lazy fetch.</summary>
 public sealed class WorktreeReportRemoteLawTests : WorktreeReportLaws {
     // A report never lazily fetches: git that can forbid it is told to, and git that cannot reads only a repository

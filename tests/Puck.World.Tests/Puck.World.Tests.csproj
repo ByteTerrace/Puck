@@ -72,7 +72,6 @@
         <Compile Include="../Shared/World/MachineOperationFixtures.cs" Link="World/MachineOperationFixtures.cs" />
         <Compile Include="../Shared/World/PortalFixtures.cs" Link="World/PortalFixtures.cs" />
         <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
-        <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
         <Compile Include="../Shared/World/TimelineLeverFixtures.cs" Link="World/TimelineLeverFixtures.cs" />

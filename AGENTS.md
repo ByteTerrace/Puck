@@ -40,6 +40,8 @@ agent works in that mode by default, without asking:
   line coverage, plus a short keep-list of invariant tests the owner approves
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Code no test and no live world reaches is deleted, not tested.
+  CI enforces the 100% (`puck artifacts coverage` in `build.yml`); code only a
+  GPU reaches is left out through one list, `build/CoverageGpuOnly.txt`.
 - The owner's velocity rulings:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
@@ -67,7 +69,7 @@ agent works in that mode by default, without asking:
 Use forward slashes for Puck paths on every platform, and follow the
 [file-path convention](docs/development/contributing.md#file-paths) at output,
 storage and native interop boundaries. MSBuild files spell every path with forward
-slashes too, held by `MsBuildPathSpellingLawTests`.
+slashes too.
 
 ## Orientation
 

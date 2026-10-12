@@ -12,7 +12,7 @@ namespace Puck.Cli.Release.Tests.Automation;
 public sealed class ArtifactsTestSelectionLawTests {
     [Fact]
     public void ATestWindowsRunTakesTheCpuSelectionAndLeavesOutTheBuildTreeLaws() {
-        var arguments = ArtifactsCommand.TestWindowsArguments(assembly: "tests/A/bin/Release/net10.0/A.dll", report: "000-A.trx", results: "artifacts/test-results");
+        var arguments = ArtifactsCommand.TestWindowsArguments(assembly: "tests/A/bin/Release/net10.0/A.dll", report: "000-A.trx", results: "artifacts/test-results", settings: "build/CodeCoverage.config");
 
         Assert.Equal(expected: "tests/A/bin/Release/net10.0/A.dll", actual: arguments[0]);
         Assert.Equal(actual: CliTestRun.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);

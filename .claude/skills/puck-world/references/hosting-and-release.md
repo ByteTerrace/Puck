@@ -212,7 +212,7 @@ still needs the group CAS and root census, but reuses fully published host effec
 do not add another simulation-boundary wait to a no-op publication retry.
 Deploy, rollback, restore, resume, and
 finalization use a renewable controller lease. Run the CLI
-`WorldRelease*` and `CheckedProcessCancellationTests` laws for changes to retained
+`WorldRelease*` laws for changes to retained
 configuration, bootstrap, or controller ownership. The Azure lease law requires
 Docker and the Azurite image documented in the CLI test README. Cancellation of
 the local Azure CLI does not retract an already accepted remote operation.

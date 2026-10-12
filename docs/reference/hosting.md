@@ -123,10 +123,7 @@ for smooth presentation, but neither value authorizes another simulation step.
 | Inherited capability | `TryResolveCapability<T>` | Flows through descendant contexts | Shared services, registries, factories |
 | Held capability | `HoldsCapability<T>` | Belongs to one holder; a child receives it only through a grant | Terminal control, input focus, exclusive authority |
 
-`HostContext` stores both kinds. `ChainedHostContext` tries its primary then its
-fallback context for inherited capabilities, but checks only the primary for
-held capabilities. That rule prevents an exclusive authority from leaking
-through a convenient service fallback.
+`HostContext` stores both kinds.
 
 `HeldCapabilityGrants` creates a delegation chain. Revoking an ancestor grant
 invalidates every descendant lease, including a descendant grant described as
@@ -503,7 +500,7 @@ intermediate publications is correct.
 | Render root | `IRenderRoot` | The surface a host presents each frame, and its device-loss and teardown lifecycle |
 | Fixed-step time | `EngineTicks`, `TickClock`, `FrameContext`, `FixedStepContext`, `IFixedStepSimulation` | Integer simulation time and presentation context |
 | Input time | `InputClock`, `OsTimeCorrelator` | Monotonic capture timestamps and native event correlation |
-| Host scope | `IHostContext`, `HostContext`, `ChainedHostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
+| Host scope | `IHostContext`, `HostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
 | Delegation | `HeldCapabilityGrants`, `ICapabilityTakeBack`, `IHeldCapabilityLeaseSource` | Revocable held-capability chains |
 | Standard authority | `ITerminalControl`, `IInputFocus` | Exit ownership and device focus |
 | Observation | `FrameCaptureController`, `PublishBuffer<T>` | Capture sessions and latest-value handoff |

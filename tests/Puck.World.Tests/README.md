@@ -42,56 +42,50 @@ that covered pixels evaluate no layer.
 BC6H textures with every mip level through the image upload and samples each
 probe texel at its level with `Assets/Shaders/bake-sampling.comp.hlsl`, on the
 first Vulkan device with a graphics queue, the first Direct3D 12 adapter and
-WARP, skipping by name on a host without one. `StagedRegionDeviceLawTests`
-runs an uploaded source's conversion on the same three devices with its region
+WARP, skipping by name on a host without one. `StagedRegionDeviceLawTests` runs
+an uploaded source's conversion on the same three devices with its region
 staged, chosen by handing the runtime the device's own memory profile with no
 host-visible device-local bytes, and holds a capture of each tick's image to the
 CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer
 on and fails on any `[d3d12-debug]` line, which is safe because device laws run
-one at a time with no other device alive. `SurfaceEncoderUploadDeviceLawTests` hands
-`SurfaceEncoder.ReadSurface` CPU pixels in both float working formats on the
-same three devices, uploaded and drawn through the display encode in SDR, and
-holds each RGBA8 channel within one code of the value's own code, headroom
-saturating to 255; its debug-layer leg runs alone the same way.
-The device laws share `tests/Shared`'s
-`HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
-hardware device carries `[Trait("Category", "Gpu")]`, which the build holds
-(GPU001). The trait places the class in the suite's one serial collection of
-[device laws](../../docs/development/contributing.md#device-laws), which runs after
-the parallel ones, and `--filter-not-trait Category=Gpu` runs the rest of the suite
-beside a GPU leg. A Vulkan device law's
-instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
-`HeadlessVulkanDevice.Validation` says (on), unless the law passes
-`validation` itself; a host without the layer skips the law by name. An instance
-created under validation without a reporting messenger fails the law. The layer
-writes what it finds to the device's own writer, and disposing the device
-destroys it and its instance, then fails the law that owns it when the writer
-holds any `[vulkan-debug] validation` line, naming the first message's
-identifier. Creation failures check the same writer after teardown, so a validation
-message fails even when the device would otherwise be skipped. Snapshots share the
-callback writer's lock. `HeadlessVulkanDeviceValidationLawTests` reads the switch back from the
-device and holds the check: a deliberate violation fails the law that owns the
-device, and a device asked for no validation reports no layer.
-`HeadlessVulkanLifecycleLawTests` holds creation-failure cleanup, missing-messenger
-failures and synchronized snapshots over recording APIs without opening a device. The Direct3D 12
-debug layer stays off for `DirectXTestDevices.Hardware` and `Warp`: the layer
-is enabled for the whole process and removes every device the process already
-holds, and on some configurations it stops the next device from being created,
-so only a device law, which runs alone, takes
-`DirectXTestDevices.Debug`. `SharedFenceLawTests` orders a
-Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
+one at a time with no other device alive. `SurfaceEncoderUploadDeviceLawTests`
+hands `SurfaceEncoder.ReadSurface` CPU pixels in both float working formats on
+the same three devices, uploaded and drawn through the display encode in SDR,
+and holds each RGBA8 channel within one code of the value's own code, headroom
+saturating to 255; its debug-layer leg runs alone the same way. The device laws
+share `tests/Shared`'s `HeadlessVulkanDevice` and `DirectXTestDevices`. Every
+class that opens a hardware device carries `[Trait("Category", "Gpu")]`, which
+the build holds (GPU001). The trait places the class in the suite's one serial
+collection of [device laws](../../docs/development/contributing.md#device-laws),
+which runs after the parallel ones, and `--filter-not-trait Category=Gpu` runs
+the rest of the suite beside a GPU leg. A Vulkan device law's instance runs
+under `VK_LAYER_KHRONOS_validation` as the one switch
+`HeadlessVulkanDevice.Validation` says (on), unless the law passes `validation`
+itself; a host without the layer skips the law by name. An instance created
+under validation without a reporting messenger fails the law. The layer writes
+what it finds to the device's own writer, and disposing the device destroys it
+and its instance, then fails the law that owns it when the writer holds any
+`[vulkan-debug] validation` line, naming the first message's identifier.
+Creation failures check the same writer after teardown, so a validation message
+fails even when the device would otherwise be skipped. Snapshots share the
+callback writer's lock. `HeadlessVulkanDeviceValidationLawTests` reads the
+switch back from the device and holds the check: a deliberate violation fails
+the law that owns the device, and a device asked for no validation reports no
+layer. The Direct3D 12 debug layer stays off for `DirectXTestDevices.Hardware`
+and `Warp`: the layer is enabled for the whole process and removes every device
+the process already holds, and on some configurations it stops the next device
+from being created, so only a device law, which runs alone, takes
+`DirectXTestDevices.Debug`. `SharedFenceLawTests` orders a Direct3D 11 writer
+and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
 ## Composition root
 
-`WorldInspectorLawTests` checks the shared panel/command formatter, captured placement
-and material identities, explicit text-cap refusal, and allocation-free steady formatting.
-`CompiledCatalogLawTests`, which boots every shipped world the World's build
-compiled into its Release catalog from its compiled world, is quarantined in
+`WorldInspectorLawTests` checks the shared panel/command formatter, captured
+placement and material identities, explicit text-cap refusal, and
+allocation-free steady formatting. `CompiledCatalogLawTests`, which boots every
+shipped world the World's build compiled into its Release catalog from its
+compiled world, is quarantined in
 [`experimental/tests/Puck.World.Tests`](../../experimental/tests/Puck.World.Tests).
-`WorldStateRootIsolationLawTests`
-reads the IL of every assembly in this suite's output, the desktop assembly
-included, and proves the shared scan the other World suites run finds the one
-site per per-user root that exists, in the desktop entry point.
 
 This suite holds full hosts and scene probes, so `puck affected` and the gate
 treat its full run as heavy: one at a time on the machine.

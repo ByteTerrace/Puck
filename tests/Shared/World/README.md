@@ -39,8 +39,8 @@ checks. A suite links one `TestMachines`: `Bricks` carries both Gaming Brick
 cores, and `Empty` carries no machine, so a world declaring a screen machine is
 refused there by name.
 
-`SceneProbeScan` and `PerUserRootScan` are the scans the suites hold their own
-classes and output to: scene probes run one class at a time, and no assembly a
+`PerUserRootScan` is the scan the suites hold their own
+output to: no assembly a
 suite links resolves a per-user world state root.
 
 ## Keep the feedback loop short
@@ -53,13 +53,6 @@ Use the smallest fixture that exercises the behavior under test:
 - `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
   and tables into that minimal world. A poker hand must not build the Nexus
   navigation graph or simulate unrelated creatures.
-- `RuleArenaFixture` compiles a state program once per test, then loads each
-  candidate into the arena and judges it as one tick, with the derived boards
-  the arena's own import recomputes. A row the arena already holds unchanged —
-  the same row instance, its generation unmoved — is not reloaded, so build
-  candidates by replacing only the rows that vary and reuse the rest. Exhaustive
-  rule checks retain all candidate combinations; physical sampling and mutation
-  admission use server tests alongside them.
 - A deterministic run several laws read is computed once and shared as its
   immutable results, never as a live server: `ShippedWorldIdleRuns` holds two
   independent idle boots of the island, and `ShippedWorldStateBaselines.Run`
@@ -91,8 +84,7 @@ Three collections decide what may run together. A class that owns a full host
 or a scene probe (`WorldBootHarness`, `WorldSceneEmitter`, `WorldFramePresenter`,
 `SdfCompositionFrameSource` or `ComposedSdfWorldFixture`) holds a large reserved
 scene, so it joins `SceneProbeCollection`, which runs one class at a time beside
-the other parallel classes; each suite that owns such classes holds them to it
-through `SceneProbeScan`. A class that bounds the calling thread's allocation
+the other parallel classes. A class that bounds the calling thread's allocation
 over a host or scene, or that changes process-wide state, joins
 `AllocationCollection`, which runs alone after the parallel classes, and a class
 that swaps the console writer joins `ConsoleRedirectionCollection`. Device laws

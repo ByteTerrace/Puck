@@ -21,8 +21,7 @@ These tests keep the Physics kernels honest through separate evidence:
   centers, and rotated faces, plus one-raw-unit overlaps and zero warmed allocations;
 - `FixedSpatialNeighborhoodTests` compares complete grid queries with an independent wide-integer distance oracle,
   and pins bounded candidate work, independent cell/occupant rotation (including one-inspection budgets), zero steady-state allocation, and
-  coordinate-extreme behavior at 4,096 points; `FixedFlockSteeringTests` isolates separation, weighted-centroid
-  cohesion, independent heading influence, tangent-plane/volume motion, coincident-pair antisymmetry, and wide means;
+  coordinate-extreme behavior at 4,096 points;
 - `FixedFlockPipelineStressTests` combines perception and steering for 4,096 moving creatures, including initially
   coincident crowds. It checks bounded work, zero warmed allocations, and identical trajectories under reversed
   body-update order. Its reported timings exclude world rules, collision, navigation, and rendering;
@@ -41,10 +40,6 @@ These tests keep the Physics kernels honest through separate evidence:
   sequential impulses with warm starting, persistent manifold slots, speculative activation, bounded deep-overlap
   recovery, restitution, and coupled-tangent friction—each law paired with the solver option that sabotages it, so
   the red run is a change of mechanism rather than a change of expectation;
-- `TwoBodyStaticDegenerationLawTests` proves the `TwoBody/` measurement rig (independent of `FixedTwoBodyKernel`/
-  `FixedRigidWorld` by construction) reproduces `FixedRigidSolver`'s own single-body trajectory bit for bit with one
-  side pinned static, which is what makes the precision-floor measurements below trustworthy readings of a real
-  two-body path rather than an unvalidated stand-in;
 - `Measurements/` holds the report-not-assert facts: softness coefficients, iteration budgets, field-sample budgets,
   sabotage outcomes, and the two-dynamic-body precision floor (mass/inertia placement windows measured against real
   `FixedMassProperties` refusal, an accuracy floor against a `BigInteger`-rational oracle, and a settle-jitter sweep
@@ -70,8 +65,7 @@ walk or cell-translation pass from an accidentally quadratic implementation.
 | `../../src/Puck.Physics/FixedSurfaceQuery.cs` | The nearest-surface-point query—the anchor primitive climbing and grappling both resolve against. |
 | `Geometry/SpikeGeometry.cs` | Shapes, absolute placement, and the three candidate generators (half-space, slab, signed-distance field). |
 | `Fixtures/` | The `SpikeWorld` harness, `SpikeBodies`, and the six scenario fixtures. |
-| `TwoBody/` | The two-dynamic-body measurement rig—`TwoBodyDynamics`, `TwoBodySolver`, `EnvelopeCornerMeasurement`—independent of the production `FixedTwoBodyKernel`/`FixedRigidWorld`; it exists to justify their shape and to give the precision-floor measurements an instrument proven equivalent to the real single-body solver, not to share code with production. |
-| `Measurements/` | The measurement facts (`MeasurementTests`, `ProbeTests`, `TwoBodyMeasurementTests`) and their shared sink (`MeasurementReport`, `physics-measurements.txt`). |
+| `Measurements/` | The measurement facts (`MeasurementTests`, `ProbeTests`) and their shared sink (`MeasurementReport`, `physics-measurements.txt`). |
 | `*LawTests.cs` (root) | The mandatory laws—kernel-level, world-ordering, the `FixedRigidSolver` mechanism/sabotage battery, and `FixedTetherConstraint`'s distance-cap laws. |
 
 ## Contracts worth knowing before editing
@@ -102,39 +96,6 @@ walk or cell-translation pass from an accidentally quadratic implementation.
   per corner rather than one cone for the whole face. `FixedManifoldSlot.FrictionImpulse` persists as a world-space
   vector (not two scalars against the tangent basis) because that basis, `Tangent1`/`Tangent2`, is rebuilt from
   `Normal` every `Prepare()`.
-
-## Two-body precision floor
-
-`Measurements/TwoBodyMeasurementTests.cs` measures the two-dynamic-body case a static wall cannot stand in for—a
-static side's zero inverse mass and inverse inertia are exact at any placement, hiding the mass-ratio pathology a
-genuine two-body contact exposes. Each fact writes a `## `-prefixed section to `physics-measurements.txt` and asserts
-against its own measured numbers, never a guessed threshold:
-
-- **Envelope corner placement window**—the shared mass/inertia placement a heaviest-and-lightest corner pair can
-  both invert at, found by real `FixedMassProperties` refusal. Measured: no shared placement exists once size ratio
-  and aspect ratio both compound past the authored density and size bands (19 of 60 grid cells at the widest ratios
-  tested).
-- **Global unscaled union**—the exponent window mass and inertia need across every shipped world scale, density,
-  and box shape with no per-world placement, measured against real kernels. Measured: mass needs 43 bits and
-  inertia 68, past a single flat 64-bit carrier, so no one inertia placement serves the whole shipped shape set
-  unscaled.
-- **Settle-jitter floor**—a two-point, frictionless rig (light box resting on ground, heavy box resting on light)
-  swept over mass ratio `{1,10,100,1000,10000}` and inverse-inertia placement `{40,32,24,20,16,12,9,6,4}`. Measured:
-  `FixedRigidScales.RoomScale`'s shipped 40-bit placement never construction-refuses across the whole ratio sweep,
-  but settle drift grows monotonically with mass ratio (from ~0.006 units at 1:1 to ~18 units at 10000:1) rather
-  than staying flat—a real property of this frictionless two-point rig's own unconstrained rocking mode, not a
-  bit-budget artifact (the confirmatory iteration sweep shows MORE biased-solve iterations leave MORE drift behind
-  at these ratios, ruling out under-iteration).
-- **Accuracy floor (BigInteger oracle)**—a single head-on, no-rotation, point-mass
-  impulse computed through the real fixed-point kernel chain, compared against an exact `BigInteger`-rational oracle
-  that rounds once at the very end instead of once per stage. Measured: zero ULP divergence at every ratio from 1:1
-  to 10000:1.
-
-`TwoBodyStaticDegenerationLawTests.cs` (the mandatory law, not a measurement): a two-body contact with a static side
-reproduces `FixedRigidSolver`'s own single-body trajectory bit for bit over 300 steps—proving the generalization is
-a strict superset, not a parallel implementation. The fixture rebuilds its `TwoBodyContact` fresh each step from the
-current absolute height, carrying the warm-start impulse forward by hand: `TwoBodyContact`'s `BaseSeparation` is
-derived once, at construction, and does not re-derive from a body's cumulative displacement across steps on its own.
 
 ## Running
 

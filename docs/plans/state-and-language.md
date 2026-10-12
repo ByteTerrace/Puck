@@ -809,8 +809,7 @@ right, nearest-neighbour selection) is setup, and its neighbour limit bounds
 only the evaluations; a decision is charged its cell lookups, query walk, heap,
 per-candidate perception and gate, retained scores, and sorts; a reordering
 transform is charged the insertion sort it runs; a transaction is charged the
-costlier of its two paths. `WorkSheetTraceLawTests` enumerates small worlds and
-holds the evaluator's own trace under the admitted sheet.
+costlier of its two paths.
 
 Search spends a `SearchWork` allowance: what the sheet and one fold of every
 row leave, divided equally among the jobs, unspent and unshared. Every unit of

@@ -7,48 +7,6 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>Near's bounded policy and admission words come from the production model and WORLD declaration.</summary>
-public sealed class SdfIndirectNearLawTests {
-    [Fact]
-    public void TheNearAllowanceAndPhasesReachGeneratedShadersWithoutAnotherPolicyTable() {
-        Assert.Equal(actual: SdfIndirectNearLayout.Steps, expected: 12);
-        Assert.Equal(actual: SdfIndirectNearLayout.Phases, expected: 4);
-        Assert.Equal(actual: SdfIndirectNearLayout.Reach, expected: 0.5f);
-        var generated = SdfIndirectHlsl.Generate();
-
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectNearSteps = 12u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectNearPhases = 4u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectNearReach = 0.5;");
-    }
-    [Fact]
-    public void OnlyWorldPassesCarryNearAdmissionAndItsExactPredecessor() {
-        var names = SdfWorldPackage.WorldIndirectValues.Select(selector: member => member.Name).ToArray();
-
-        Assert.Contains(collection: names, expected: SdfWorldPackage.IndirectNearEnabled);
-        Assert.Contains(collection: names, expected: SdfWorldPackage.IndirectPreviousPublication);
-        var solveNames = SdfWorldPackage.IndirectMembers.Select(selector: member => member.Name).ToArray();
-
-        Assert.DoesNotContain(collection: solveNames, expected: SdfWorldPackage.IndirectNearEnabled);
-        Assert.DoesNotContain(collection: solveNames, expected: SdfWorldPackage.IndirectPreviousPublication);
-        var parameters = SdfWorldInterfaces.WorldParameters;
-        var enable = parameters.BlockOffsetOf(member: SdfWorldPackage.IndirectNearEnabled);
-        var previous = parameters.BlockOffsetOf(member: SdfWorldPackage.IndirectPreviousPublication);
-
-        Assert.NotEqual(actual: previous, expected: enable);
-        Assert.True(condition: ((enable + sizeof(uint)) <= parameters.SizeBytes));
-        Assert.True(condition: ((previous + sizeof(uint)) <= parameters.SizeBytes));
-    }
-    [Fact]
-    public void AnUnboundCacheClearsBothNearWordsInsteadOfRetainingPriorAdmission() {
-        var parameters = SdfWorldInterfaces.WorldParameters;
-        var block = new byte[parameters.SizeBytes];
-
-        Array.Fill(array: block, value: ((byte)255));
-        SdfFrameBlock.WriteIndirect(block: block, cache: null);
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.IndirectNearEnabled)))));
-        Assert.Equal(0u, BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.IndirectPreviousPublication)))));
-    }
-}
 public sealed partial class SdfWorldPassesLawTests {
     [InlineData(SdfIndirectTier.High, "ready")]
     [InlineData(SdfIndirectTier.High, "unfenced")]

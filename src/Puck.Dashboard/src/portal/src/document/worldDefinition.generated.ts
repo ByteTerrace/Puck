@@ -10896,7 +10896,7 @@ export type WorldSeatModeFamily = {
 
 export type WorldSeatModeState = {
   /**
-   * The state's stable name — the token player.mode <family> <state> takes and the value Client.WorldContextFamilies context rows key on.
+   * The state's stable name — the token player.mode <family> <state> takes and the value WorldContextFamilies context rows key on.
    */
   name: string;
   /**

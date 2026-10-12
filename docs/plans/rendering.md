@@ -412,7 +412,7 @@ block, and each interface's generated echo pass, to the layout
 camera frame converter's conversion kernels compile to `cs_5_0` at build
 (`CompileDirect3D11Kernels`), and the Direct3D 12 surface compositor's blit
 compiles to DXIL at build; a device only creates them, and no Puck assembly
-imports the Direct3D HLSL compiler (`NoDeviceShaderCompileLawTests`).
+imports the Direct3D HLSL compiler.
 
 The game's build packages every pipeline source a shipped world's row names:
 the tree run that writes the compiled worlds writes one package per source and
@@ -886,7 +886,7 @@ graph:
 - 5b: the `post-pass` canary. It boots a `views.post` row running
   `sdf.film-grain` on both backends and pins its pixels, with a discriminating
   leg without the row. No parity world authors `views.post`.
-- 5c: `OverlayPackageLawTests` and `OverlayFrameSlotsLawTests`, beside the
+- 5c: `OverlayPackageLawTests`, beside the
   canaries the coverage index maps to `src/Puck.Overlays`
   (`instrument-clock-source`, `music-conditional-layer-and-embellishment`,
   `voice-babble` and `world-seat-binding-recompose`). Parity does not cross the
@@ -1533,8 +1533,7 @@ direction toward the camera against their depth, discards what no majority of th
 covers, and writes the surface's ray parameter and depth, so a card pixel sorts
 against meshes and the field as the surface does. The hit passes shade it from the
 same views: albedo, normal and emission weighted by view and coverage, with the
-each texel's own material (the impostor stores a material plane). The CPU oracle `SdfImpostorOracle` states the trace,
-`SdfImpostorLawTests` hold it to the field's sphere and box within a stated share of
+each texel's own material (the impostor stores a material plane). The CPU oracle `SdfImpostorOracle` states the trace hold it to the field's sphere and box within a stated share of
 the bounding radius, `SdfMeshLodLawTests` hold the selection and its handover, and
 `ParityBakeSelectionLawTests` hold the parity world's captures to meshes, so its
 references change with no impostor. The `sdf-bake-impostor` canary is the device
@@ -2361,7 +2360,7 @@ exceeded, held against `IrradianceReference`:
 | Property | Bound | Law |
 |---|---|---|
 | Sealed geometry | Exact: 0 (below 10⁻¹²) inside sealed rooms with 0.05 m planar and curved walls, a sealed pocket inside one cell, a slab inside a receiver's launch interval, a slab 0.00005 to 0.00015 thick wholly beneath a launch's first sample | `IrradianceVisibilityLawTests`, `IrradianceProofLawTests`, `IrradianceLatticeLawTests.ALaunchNeverStepsOverAThinSlab`, `IrradianceAdversarialLawTests.ALaunchCannotJumpASlabBeforeItsFirstSample` |
-| Energy | Exact: the furnace series to 10⁻⁹ at ρ = 0, 0.5 or 0.6 and 1, on one level and on two with continuation, with unresolved grazing rays present, and unchanged by sweep order or splitting | `IrradianceFeedbackLawTests`, `IrradianceBoundLawTests.EnergyIsConserved*` |
+| Energy | Exact: the furnace series to 10⁻⁹ at ρ = 0, 0.5 or 0.6 and 1, on one level and on two with continuation, with unresolved grazing rays present, and unchanged by sweep order or splitting | `IrradianceBoundLawTests.EnergyIsConserved*` |
 | Hit position | Within 0.001 of a zero the field brackets, whatever the travel and however conservative the gauge; a grazing ray marches on or ends unresolved | `IrradianceLatticeLawTests.AHitIsAcceptedOnlyWithinTheSurfaceEpsilon`, `IrradianceAdversarialLawTests.ALowerBoundFieldDoesNotProveAHitWithinTheSurfaceEpsilon` |
 | Interpolation within a cell (angular parallax, light round a small occluder, overshoot beside an opening) | Under a table within 0.05 of the reference; beside a doorway within 0.06, against an exterior of 1; a small object under an off-axis emissive plate within 0.13, against the plate's 1, at the 1.5 m spacing | `IrradianceVisibilityLawTests`, `IrradianceBoundLawTests.InterpolationAtTheRoomSpacingStaysWithinItsBound` |
 | Continuation merging | Within 0.03 of the reference against an emitter of 1, at the test layout (0.5 into 2) and at `medium`'s (1.5 into 4.5); the nearest ray by direction exceeds it | `IrradianceBoundLawTests.ContinuationMergingStaysWithinItsBound` |
@@ -2646,7 +2645,7 @@ bounce and the computed one are never added together.
 - **Direct light at a hit goes through the one light interface.** The shade
   pass builds a surface at the hit with ambient occlusion one and calls
   `sdfLightResponse` for each light, so a new light kind or a new body light
-  reaches indirect light with no change here, and `SdfLightInterfaceLawTests`
+  reaches indirect light with no change here
   keeps holding that no kernel branches on a kind elsewhere. A light's diffuse
   term is scaled by its `bounce`; the hit's diffuse albedo is its albedo times
   `(1 − metal)`, as `sdfMaterialShade` has it, times `bleed`; the response's
@@ -3025,8 +3024,7 @@ re-record explained in the same change.
      borders, classification keeping a corner 2.4 units from a surface in its
      cell), `IrradianceContinuationLawTests` (a sealed hall's middle reading the
      hall exactly, with and without a coarse level; a continuation stopping at
-     the far distance; no interval counted twice) and
-     `IrradianceScheduleLawTests` (budgets, order independence, idle plans, a
+     the far distance; no interval counted twice) (budgets, order independence, idle plans, a
      shared brick, the nearest bricks kept, invalidation over continuation and
      relocation). G2 uses the lattice, layout and schedule from the live cache.
    - Counted-cost gate: no GPU row moves.
@@ -3636,8 +3634,7 @@ Phase 3, the groups, follows phase 2:
     plans one set layout per set number up to the highest group, empty where
     no group sits, and a 4-byte push range, with every binding and the range
     visible to the pipeline's stages. The plans carry everything 14b needs to
-    create root signatures and pipeline layouts. `DirectXRootLayoutLawTests`,
-    `VulkanGroupLayoutsLawTests` and `GpuGroupLayoutTableLawTests` hold the
+    create root signatures and pipeline layouts. `DirectXRootLayoutLawTests` hold the
     planners and the spike's interfaces to the same tables. No combined
     image sampler is in the closed set, and no source declares
     `vk::combinedImageSampler`: every pass reads a separate image and sampler
@@ -4187,7 +4184,7 @@ lookup with a retired slot, and allocates nothing once warm.
 P9 is complete, and the colors a program bakes at build (a creation palette's,
 a height field's, a text screen's ink) read through the mirror too, since P10's
 step 8. The
-`WorldStateMirrorLawTests`, `WorldPresentationManifestLawTests`,
+`WorldPresentationManifestLawTests`,
 `WorldPresentationLookupLawTests`, `WorldStateReadRoutingLawTests`,
 `SeatRouteDeliveryLawTests`, `WorldWheelRingsLawTests`,
 `WorldStateCellsLawTests`, `WorldSceneMovedTransformsLawTests` and
@@ -7537,7 +7534,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      its detail row through P18-7's counter foundation. A pixel covered with all its neighbours reads
      zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
      Composite counts each in-place field fallback; its fog evaluates no sky
-     (`SdfSkySamplingLawTests`).
+    .
    - Landed, the shared environment (extended by P18-8 and P18-9): the
      residency's upload renders a 64 × 64 octahedral map and reduces its
      lighting-visible stack to nine second-order SH coefficients. Every view
@@ -7866,13 +7863,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      grow beyond the initial 32 rows when needed. The fixed composite order and
      the one-per-kind rule are gone; fog is the air and appears at most once.
    - Laws: `SkyLayerTableLawTests` (every kind's packed record through its
-     generated decoder; red: a decoder whose two members trade offsets),
-     `SkyKindTableLawTests` (a fixture kind inserts only its own lines; no pass
+     generated decoder; red: a decoder whose two members trade offsets) (a fixture kind inserts only its own lines; no pass
      names a kind), `SkyRunCompositionLawTests` (every kind's class, repeated
      kinds, a disc between two cloud layers, the run cap),
      `WorldRenderLightingSkyLawTests` (the stack's resolution, the tier, and the
      field-run, mask, clock, panorama and fog refusals), the domain rows of the new
-     bindable fields, and `SdfWorkDetailLawTests` and `SdfSkySamplingLawTests`
+     bindable fields, and `SdfWorkDetailLawTests`
      over the counted sites.
    - Evidence and remaining work: the sky device laws, `sky-layers` and the
      retained parity stations hold. Both backends distinguish a live panorama's

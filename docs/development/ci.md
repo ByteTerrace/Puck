@@ -108,6 +108,18 @@ assembly retain their configured concurrency; production deadlines are unchanged
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
+
+Every assembly run also measures line coverage (the `Microsoft.Testing.Extensions.CodeCoverage`
+extension, with `build/CodeCoverage.config`) and keeps a compact form of its Cobertura report beside
+its TRX. The **Check line coverage** job downloads every shard's results and runs
+`puck artifacts coverage`, which merges the reports (a line is covered when any
+run hit it) and fails unless every line of live `src/` code is covered and every
+live project was loaded by some run. The suite's target is the smallest set of
+tests that reaches that, plus the owner's keep-list of invariant tests coverage
+cannot see ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). The runners have no
+GPU, so code only a device reaches is left out through one list,
+`build/CoverageGpuOnly.txt`, and nowhere else. The job writes the full list of
+uncovered lines to `coverage.txt` in the results directory.
 Every assembly must discover tests; hardware-dependent cases may still skip.
 Explicit tests, including the Maths suite's Deep and Exhaustive tiers, stay out of a
 direct assembly run exactly as they stay out of a plain `dotnet test`.
@@ -288,7 +300,7 @@ the step in the same change.
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
 | `puck schema`, `registry`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
-| Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
+| Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, the Linux

@@ -39,12 +39,14 @@ and an import alias reaching a binding read inside an atom.
 `OperandTreeLawTests` pins sugar/call/member equivalence, live-key grouping, family gaps, structural rewrites,
 usage linting and refusal of malformed operands.
 
-`ProjectionLawTests` is the projection law: compile, print, compile again and the two documents are equal; format,
-compile and the document is unchanged. It runs over every shipped `.puck` source and over `ConstructCorpus`, one
-generated source per construct `ConstructRegistry` reads out of the registries themselves — the polymorphic `$type`
-tables in `Puck.State`, `ExpressionComparisons`' comparison operators and `PuckDslVocabulary`'s kinds — so a construct the generator does
-not cover, or one the printer cannot reproduce, fails under its own name. `OneDoorTests` keeps every harness on
-`WorldCompiler`, the vocabulary's one compile entry point.
+`ProjectionLawTests` is the projection law: compile, print, compile again and
+the two documents are equal; format, compile and the document is unchanged. It
+runs over every shipped `.puck` source and over `ConstructCorpus`, one generated
+source per construct `ConstructRegistry` reads out of the registries themselves
+— the polymorphic `$type` tables in `Puck.State`, `ExpressionComparisons`'
+comparison operators and `PuckDslVocabulary`'s kinds — so a construct the
+generator does not cover, or one the printer cannot reproduce, fails under its
+own name.
 
 `SyntaxRewriterLawTests` is the rewrite law over `Puck.Transpiler.Rewriting`: over every shipped source and every
 registered construct, printing the identity rewrite's tree equals printing the unrewritten one, so a descent arm
@@ -81,12 +83,5 @@ dotnet test tests/Puck.World.Transpiler.Tests/Puck.World.Transpiler.Tests.csproj
 The project references `Puck.Transpiler`, `Puck.World.Transpiler`, and `Puck.World.Schema`; grammar and CLI behavior remain owned by the transpiler projects.
 
 ## Documentation
-
-`UnifiedSortLawTests` checks that own-value and attribute sorting use the same
-authored key list and the same document discriminator.
-
-`WorldCostSourceTests` checks that cost contributors from two module instances
-retain distinct names and instance paths while pointing to their shared defining
-source line.
 
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

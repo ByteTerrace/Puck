@@ -84,7 +84,7 @@ in `tests/Puck.State.Tests` — a needs set built over a test-declared facet
 advertise it, with `AdmittingARuleWhoseFacetsTheHostServesSucceedsWithNoRefusal`
 as its control. The reachable half of group admission is pinned on the hosts:
 a group the browser refuses to compile runs neither itself nor the rules it
-claims (`BrowserRuleGroupLawTests`), and the server refuses such a document
+claims, and the server refuses such a document
 outright (`RuleGroupServerLawTests`). Each host's own trigger-admission arm is
 unlawed and unreachable by any document until a second facet exists —
 `IWorldFacts` is the only declared facet and both hosts serve it — so the
@@ -102,11 +102,6 @@ public members. The possessed-inhabitant walk is the tick's alone and owns its
 list, so no buffer is aliased across facades. Everything a facade exposes only
 to the rest of its own assembly is `internal`, and a member nothing outside its
 declaring type reads is private.
-
-`RuleArenaFixture` is one arena over the catalog its rules compiled against,
-loaded per position through `StateArena.TryLoad`, with `RuleLatch.Reset`
-before each judge, because the shipped tabletop judges are `Edge` rules and a
-latch shared across positions judges the first alone.
 
 ## Work packages
 
@@ -206,7 +201,7 @@ is what the write sees. The arena's admission is the compose's admission:
 envelope, reserved cells, eviction and clock settling are enforced there and
 nowhere else. The arena recomputes a derived board on a keyed write,
 `WorldDefinitionValidator.Discrete.cs` checks against that recompute through
-`BoardDerivation`, and `RuleArenaFixture`'s consumers read the arena. A cell
+`BoardDerivation`. A cell
 token parses through `CellValue.TryParse`. `BatchComposeLawTests` pins the
 compose refusal text.
 

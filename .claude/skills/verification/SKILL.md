@@ -23,7 +23,14 @@ owns each verb's flags. When this file and the code disagree, the code wins.
    says what you ran and what it showed.
 3. Tests kept honest: write one only where running cannot show the behavior and
    it will outlive the next rewrite; a test the change breaks is updated or
-   deleted in the same change. Run the tests you added or touched.
+   deleted in the same change. Run the tests you added or touched. CI requires
+   100% line coverage of live `src/` from the CPU suites (`puck artifacts
+   coverage` in `build.yml`), so new code lands with a test that reaches it and
+   code nothing reaches is deleted. Code only a GPU reaches goes in
+   `build/CoverageGpuOnly.txt`, the one exclusion list. To see a suite's
+   coverage locally, run it as
+   `dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
+   and merge with `puck artifacts coverage --results <dir>`.
 
 A change to simulation state stays deterministic; `puck test --reproduce` shows
 two runs agree. Gates, parity, canaries, counters and `puck laws prove` are

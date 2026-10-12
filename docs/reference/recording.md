@@ -157,10 +157,7 @@ a lagging source simply waits rather than skewing the mix.
 `CaptureSink` is the default `ICaptureSink` for still capture: it hands each
 CPU-pixel frame to any registered `ICaptureFrameObserver`s and then encodes it
 to PNG through `Puck.Assets`'s `PngEncoder`, either to one fixed path or to
-numbered files under a directory. `FrameHashObserver` is the standard
-observer—it writes a 64-bit FNV-1a hash line per frame, the core signal for
-proving that deterministic frames render bit-identically across runs or
-backends.
+numbered files under a directory.
 
 `OverlayCompositor` alpha-blends the document's overlay rows onto the copied
 CPU frame after capture, at zero cost when a document has no overlay rows.
@@ -180,7 +177,7 @@ boundary) and the compositor (to blend them).
 | Session | `RecordingSession`, `RecordingSessionOptions`, `RecordingStatus` | Drives a document against platform factories and reports honest progress. |
 | Muxing | `MatroskaMuxer`, `EbmlWriter`, `MatroskaIds` | The hand-rolled deterministic Matroska/WebM writer. |
 | Audio | `OpusAudioLane`, `AudioLaneSource`, `OpusStreamEncoder`, `OpusHead`, `LinearResampler`, `FloatRing`, `IAudioPacketSink` | Resampling, mixing, and Opus encoding for the audio lane. |
-| Capture | `CaptureSink`, `ICaptureFrameObserver`, `FrameHashObserver`, `FrameSlotQueue`, `Av1TemporalDelimiterFilter` | The default sink, frame observation, and the render/encode handoff. |
+| Capture | `CaptureSink`, `ICaptureFrameObserver`, `FrameSlotQueue`, `Av1TemporalDelimiterFilter` | The default sink, frame observation, and the render/encode handoff. |
 | Overlay | `OverlayCompositor`, `BitmapFont`, `Rgba32` | Capture-only compositing of text, rectangles, and timecodes. |
 
 ## Verification
@@ -196,9 +193,8 @@ real `SeekHead` at the identical offset.
 ## Packaging
 
 `ByteTerrace.Puck.Recording` depends on `Puck.Abstractions` (the capture and
-recording interfaces this project implements against), `Puck.Assets` (the PNG
-codec `CaptureSink` writes still frames through), and `Puck.Maths`
-(`Fnv1aHash` for `FrameHashObserver`), plus the third-party `Concentus`
+recording interfaces this project implements against) and `Puck.Assets` (the PNG
+codec `CaptureSink` writes still frames through), plus the third-party `Concentus`
 (the managed Opus encoder) package. It carries no platform, GPU, or windowing
 dependency—a consumer supplies `IVideoEncoderFactory` and
 `IAudioCaptureSourceFactory` from wherever real hardware access lives, which

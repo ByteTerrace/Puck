@@ -34,7 +34,6 @@ and each lease retires exactly once.
 
 **Laws.** `RenderGraphRuntimeLawTests.Leases`
 (`ALeaseARecordingHoldsRetiresAfterItsFrameSlotsFence`),
-`LeaseRetireListLawTests` (`tests/Puck.Hosting.Tests`),
 `ShaderPipelineRenderNodeLawTests` (retirement and disposal counts),
 `RenderGraphRuntimeLawTests.Reconfigure`.
 
@@ -209,12 +208,8 @@ the existing access tracker on failure. `IRenderGraphPackageRecorder.Submitted`
 commits the temporal sample metadata, and `SdfResolveRecorder` caches history
 descriptors by their bound handles as well as their slot and tables.
 
-**Laws.** `SdfTemporalHistoryLawTests`
-(`EveryEpochInputAndAPoseGapResetAtThePixelCenter`,
-`ACountedSourceDrivesTheIndexAndUncountedRendersRepeatTheirSample`,
-`AJitteredRenderDoesNotStandOnceSamplingEnds`),
-`SdfWorldPassesLawTests.Temporal`, the runtime's convergence laws,
-`RenderGraphHistoryLawTests`, and `RenderGraphSchedulerLawTests.History`.
+**Laws.** `SdfWorldPassesLawTests.Temporal`, the runtime's convergence laws,
+and `RenderGraphSchedulerLawTests.History`.
 
 **Verification boundary.** CPU laws hold scheduling, cursor recovery and
 submission callbacks on a fake device. Temporal and device-loss canaries and
