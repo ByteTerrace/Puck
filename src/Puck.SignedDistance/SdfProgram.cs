@@ -277,7 +277,6 @@ public sealed partial class SdfProgram {
         }
 
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
-        m_shapeReach = new SdfSkipSphere[m_instructions.Length];
         var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners);
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();

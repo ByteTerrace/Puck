@@ -32,10 +32,11 @@ namespace Puck.SignedDistance.Queries;
 // for part of the program.
 //
 // THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
-// conservative world-space sphere proves it cannot beat the answer. A point walk's skip changes no distance, material
-// or gradient; a box walk's skip keeps its interval an enclosure of every point answer. Skipping also skips the
-// skipped slice's own point-transform chain, which nothing after it can observe: the program refuses a stream whose
-// next segment reads a point without a ResetPoint of its own (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
+// certificate (SdfFieldEvaluator.Certificates.cs), derived from the compiled fixed-point stream, proves it cannot move
+// the answer. A point walk's skip changes no distance, material or gradient; a box walk's skip changes no interval.
+// Skipping also skips the skipped slice's own point-transform chain, which nothing after it can observe: the program
+// refuses a stream whose next segment reads a point without a ResetPoint of its own
+// (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
 public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
@@ -59,12 +60,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // constant, not a physical law.
     private static readonly FixedQ4816 GradientEpsilon = FixedQ4816.FromDouble(value: 0.01);
 
-    // The same float-safety padding SdfProgram bakes into every GPU cull bound (its BoundRadiusScale/
-    // BoundRadiusPadding, applied at ClassifyInstances/CompileRigidPlan/PackInstances — KEEP IN SYNC) — widening an
-    // instance's authored bound before converting it to FixedQ4816 absorbs float and fixed-point rounding, so the
-    // bound this evaluator tests against can only be looser (never tighter) than the geometry it must cover.
-    private const float CullBoundRadiusScale = 1.0001f;
-    private const float CullBoundRadiusPadding = 0.001f;
     // The iteration budget at unit step scale. A non-accepted point advance is at least
     // max(floor(HitEpsilon * stepScale), one Q48.16 tick) — the divisor m_marchIterations rescales by — so this budget
     // times HitEpsilon is the distance a point march always covers before it may exhaust, at every step scale.
@@ -89,11 +84,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // a chamfer's bevel arm makes the field OVERESTIMATE, so a march advancing by the
     // raw value steps past thin geometry and tunnels.
     private readonly FixedQ4816 m_stepScale;
-    // One conservative world-space bound per cullable instance (see BuildCullBounds), sorted by First ascending — the
-    // order program.Instances declares them in, since only one instance is open at a time.
+    // One certified bound per cullable instance (see BuildCullBounds), sorted by First ascending — the order
+    // program.Instances declares them in, since only one instance is open at a time.
     private readonly CullBound[] m_cullBounds;
-    // The member spheres of every scoped instance in m_cullBounds, each instance's a contiguous run.
-    private readonly MemberSphere[] m_members;
+    // The lowering members' certificates of every instance in m_cullBounds, each instance's a contiguous run.
+    private readonly Reach[] m_members;
     // Per instruction, the slot of the skippable chain a ResetPoint opens in m_segmentBounds; minus one otherwise.
     private readonly int[] m_segmentSlots;
     private readonly SegmentBound[] m_segmentBounds;
@@ -118,8 +113,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         m_instructions = Compile(program: program);
         m_stepScale = ConservativeStepScale(value: program.StepScale);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
-        (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program);
-        (m_segmentSlots, m_segmentBounds) = BuildSegments(compiled: m_instructions, program: program);
+        var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
+
+        (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program, reaches: reaches);
+        (m_segmentSlots, m_segmentBounds) = BuildSegments(compiled: m_instructions, program: program, reaches: reaches);
         m_primeable = ComposesByHardUnion(compiled: m_instructions);
         (m_rotationSlots, m_rotationBounds) = BuildRotationBounds(instructions: m_instructions);
 

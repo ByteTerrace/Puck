@@ -62,7 +62,7 @@ public sealed partial class SdfFieldEvaluator {
         var walked = 0L;
 
         for (var bound = 0; (bound < cullBounds.Length); bound++) {
-            reaches[bound] = CheapPointReach(bound: in cullBounds[bound], worldPosition: worldPosition);
+            reaches[bound] = FixedQ4816.FromRawBits(value: cullBounds[bound].Reach.CheapPointReach(point: worldPosition));
 
             if (m_primeable && ((primer.Candidate < 0) || (reaches[bound] < reaches[primer.Candidate]))) {
                 primer.Candidate = bound;
@@ -169,7 +169,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if ((segment >= 0) && PointClears(bound: in segmentBounds[segment], resultDistance: resultDistance, worldPosition: worldPosition)) {
+                        if ((segment >= 0) && segmentBounds[segment].Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: resultDistance, below: resultDistance, bound: in segmentBounds[segment]))) {
                             index = (segmentBounds[segment].End - 1);
                         }
 
@@ -458,12 +458,12 @@ public sealed partial class SdfFieldEvaluator {
             (((Bound >= 0) && (Distance < resultDistance)) ? (Distance + FixedQ4816.Epsilon) : resultDistance);
     }
 
-    // Whether an instance's reach clears the threshold: the largest axis distance first, then the rounded root, then,
-    // for a scoped instance, the least of its members' reaches.
+    // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
+    // the exact distance, then each lowering member's.
     private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>
         ((cheapReach >= threshold) ||
-            PointLengthClears(bound: in bound, threshold: threshold, worldPosition: worldPosition) ||
-            ((bound.MemberCount > 0) && MembersClear(bound: in bound, threshold: threshold, worldPosition: worldPosition)));
+            bound.Reach.PointClears(point: worldPosition, threshold: threshold.Value) ||
+            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition)));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentityRotation(in CompiledInstruction instruction) =>
         ((instruction.Data0X == FixedQ4816.Zero) && (instruction.Data0Y == FixedQ4816.Zero) && (instruction.Data0Z == FixedQ4816.Zero) &&

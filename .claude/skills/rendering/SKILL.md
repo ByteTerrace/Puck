@@ -402,9 +402,20 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    enclose rather than mirror (`Sweep` does), but it is never missing: a shape
    with no rule answers the unbounded interval, which empties its program's
    frame. Both walks' cull (`SdfFieldEvaluator.Cull.cs`) admits blends by name,
-   each with the rule that makes a far candidate leave the answer bitwise, so a
-   new blend is walked, never skipped, until its rule is added there and
-   `SdfFieldEvaluatorScopedCullLawTests` covers it.
+   each with the rule that makes a far candidate leave the answer bitwise (for
+   the box walk, its interval too), so a new blend is walked, never skipped,
+   until its rule is added there and `SdfFieldEvaluatorScopedCullLawTests`
+   covers it. The cull's proofs are reach certificates
+   (`SdfFieldEvaluator.Certificates.cs`) derived from the compiled fixed-point
+   stream: a shape is certified only by a per-shape argument bounding its point
+   field below the exact distance and, for the box walk, its interval's lower
+   end and width over a box. A new shape, or a changed point or interval rule
+   for a certified one, re-derives that argument in the same change, and
+   `SdfFieldEvaluatorCullBoundaryLawTests` covers it. Never certify from the
+   float program's skip spheres or an instance's declared bound: a quantized
+   rotation contracts far points, a float sum moves centres, a clipped scope's
+   solid is smaller than its operands bound, and an interval blend reading an
+   operand twice loosens its lower end, each of which changes an answer.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and

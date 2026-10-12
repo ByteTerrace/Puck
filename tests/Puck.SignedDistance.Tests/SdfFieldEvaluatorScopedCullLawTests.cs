@@ -10,7 +10,7 @@ namespace Puck.SignedDistance.Tests;
 /// instance joining through a hard-union pop, a chain of smooth-union or subtracted shapes inside a scope, and the
 /// nearest instance walked ahead of its place. Each law compares a program against a cull-off reference built from the
 /// same instructions with no instance declared and every chain opened by a zero elongation, an exact identity that
-/// leaves the chain no reach sphere and so nothing for either walk to skip.</summary>
+/// leaves the chain no certificate and so nothing for either walk to skip.</summary>
 public sealed class SdfFieldEvaluatorScopedCullLawTests {
     private const int ScopedInstanceCount = 6;
 
@@ -150,50 +150,31 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void CulledBoxBoundsHoldTheCullOffAnswersInsideThem(bool topLevelSmooth) {
+    public void CulledBoxBoundsAreTheCullOffBounds(bool topLevelSmooth) {
         var (culled, reference) = BuildFixture(topLevelSmooth: topLevelSmooth);
-        var half = 0.35;
 
-        for (var x = -30.0; (x <= 48.0); x += 1.3) {
-            foreach (var y in ((double[])[-0.5, 0.4, 1.1, 2.2,])) {
-                foreach (var z in ((double[])[-4.0, 0.0, 0.7,])) {
-                    Assert.True(condition: culled.TryDistanceBounds(
-                        distance: out var bounds,
-                        lower: Position(x: (x - half), y: (y - half), z: (z - half)),
-                        upper: Position(x: (x + half), y: (y + half), z: (z + half))
-                    ));
+        // Point boxes, small boxes, and boxes wide enough to straddle several instances, each answered bit for bit.
+        foreach (var (half, step) in ((ValueTuple<double, double>[])[(0.0, 0.7), (0.35, 1.3), (1.5, 2.1), (4.0, 3.7),])) {
+            for (var x = -30.0; (x <= 48.0); x += step) {
+                foreach (var y in ((double[])[-0.5, 0.31, 1.1, 2.2,])) {
+                    foreach (var z in ((double[])[-4.0, 0.0, 0.7,])) {
+                        var lower = Position(x: (x - half), y: (y - half), z: (z - half));
+                        var upper = Position(x: (x + half), y: (y + half), z: (z + half));
 
-                    foreach (var (dx, dy, dz) in ((ValueTuple<double, double, double>[])[(-half, -half, -half), (half, half, half), (0.0, 0.0, 0.0), (half, -half, 0.1), (-0.2, half, -half),])) {
-                        Assert.True(condition: reference.TryDistance(distance: out var answer, material: out _, position: Position(x: (x + dx), y: (y + dy), z: (z + dz))));
+                        Assert.True(condition: reference.TryDistanceBounds(distance: out var expected, lower: lower, upper: upper));
+                        Assert.True(condition: culled.TryDistanceBounds(distance: out var actual, lower: lower, upper: upper));
                         Assert.True(
-                            condition: bounds.Contains(value: answer),
-                            userMessage: $"the box about ({x}, {y}, {z}) bounds {bounds}, which misses the reference answer {answer} at offset ({dx}, {dy}, {dz})"
+                            condition: (actual == expected),
+                            userMessage: $"the box of half-width {half} about ({x}, {y}, {z}) answered {actual}, the cull-off walk {expected}"
                         );
                     }
                 }
             }
         }
-
-        // A box of one point bounds that point's answer within a few raws, so a skip that moves the answer by more,
-        // such as a smooth union taken inside its blend radius, shows where a wide box's slack would hide it.
-        for (var x = -30.0; (x <= 48.0); x += 0.7) {
-            foreach (var y in ((double[])[0.0, 0.31, 0.75, 1.3,])) {
-                foreach (var z in ((double[])[-0.9, 0.0, 0.55,])) {
-                    var position = Position(x: x, y: y, z: z);
-
-                    Assert.True(condition: culled.TryDistanceBounds(distance: out var bounds, lower: position, upper: position));
-                    Assert.True(condition: reference.TryDistance(distance: out var answer, material: out _, position: position));
-                    Assert.True(
-                        condition: bounds.Contains(value: answer),
-                        userMessage: $"the point box at ({x}, {y}, {z}) bounds {bounds}, which misses the reference answer {answer}"
-                    );
-                }
-            }
-        }
     }
-    // Every witness instance is a scope joining through a hard-union pop whose bound lies far along +X while its shapes
-    // sit at the origin, under the near sphere, in a material of their own; any body that runs there wins with a
-    // negative distance and the witness material.
+    // Sixty-four scopes joining through a hard-union pop, each a rotated sphere smoothly joined to a translated one far
+    // along +X, after one near sphere: from near the origin both walks skip every scope whole, so they visit exactly the
+    // instructions a program of the near sphere alone visits, and answer what it answers.
     [Fact]
     public void FarScopedInstancesOutsideTheRunningBestRunNoneOfTheirBodies() {
         var witnessedBuilder = new SdfProgramBuilder();
@@ -210,15 +191,19 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
         }
 
         for (var index = 0; (index < 64); index++) {
+            var center = new Vector3(x: (1000f + (index * 25f)), y: 0f, z: 0f);
+
             _ = witnessedBuilder.Instance(
-                boundCenter: new Vector3(x: (1000f + (index * 25f)), y: 0f, z: 0f),
+                boundCenter: center,
                 boundRadius: 3f,
                 emit: builder => {
                     _ = builder.PushField(compose: SdfBlendOp.Union);
                     _ = builder.ResetPoint();
+                    _ = builder.Translate(offset: center);
+                    _ = builder.Rotate(rotation: Quaternion.CreateFromYawPitchRoll(pitch: 0.2f, roll: 0.1f, yaw: 0.4f));
                     _ = builder.Sphere(material: witnessMaterial, radius: 0.4f);
                     _ = builder.ResetPoint();
-                    _ = builder.Translate(offset: new Vector3(x: 0.3f, y: 0f, z: 0f));
+                    _ = builder.Translate(offset: (center + new Vector3(x: 0.3f, y: 0f, z: 0f)));
                     _ = builder.Sphere(blend: SdfBlendOp.SmoothUnion, material: witnessMaterial, radius: 0.3f, smooth: 0.2f);
                     _ = builder.PopField();
                 }
@@ -230,16 +215,23 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
 
         foreach (var (x, y, z) in ((ValueTuple<double, double, double>[])[(0.0, 0.0, 0.0), (0.5, 0.25, 1.0), (-2.0, 1.0, 0.0),])) {
             var position = Position(x: x, y: y, z: z);
+            var corner = Position(x: (x + 0.5), y: (y + 0.5), z: (z + 0.5));
 
-            Assert.True(condition: nearOnly.TryDistance(distance: out var nearDistance, material: out var nearMaterialFound, position: position));
-            Assert.True(condition: witnessed.TryDistance(distance: out var distance, material: out var material, position: position));
+            Assert.True(condition: nearOnly.TryDistance(distance: out var nearDistance, instructionsWalked: out var nearWalked, material: out var nearMaterialFound, position: position));
+            Assert.True(condition: witnessed.TryDistance(distance: out var distance, instructionsWalked: out var walked, material: out var material, position: position));
             Assert.True(
-                condition: ((distance == nearDistance) && (material == nearMaterialFound)),
-                userMessage: $"at ({x}, {y}, {z}) a far scoped instance body ran: answered {distance} in material {material}, the near sphere alone answers {nearDistance} in material {nearMaterialFound}"
+                condition: ((distance == nearDistance) && (material == nearMaterialFound) && (walked == nearWalked)),
+                userMessage: $"at ({x}, {y}, {z}) the point walk visited {walked} instructions and answered {distance} in material {material}; the near sphere alone visits {nearWalked} and answers {nearDistance} in material {nearMaterialFound}"
+            );
+            Assert.True(condition: nearOnly.TryDistanceBounds(distance: out var nearBounds, instructionsWalked: out var nearBoxWalked, lower: position, upper: corner));
+            Assert.True(condition: witnessed.TryDistanceBounds(distance: out var bounds, instructionsWalked: out var boxWalked, lower: position, upper: corner));
+            Assert.True(
+                condition: ((bounds == nearBounds) && (boxWalked == nearBoxWalked)),
+                userMessage: $"from ({x}, {y}, {z}) the box walk visited {boxWalked} instructions and answered {bounds}; the near sphere alone visits {nearBoxWalked} and answers {nearBounds}"
             );
         }
 
-        // Inside the first bound the cull may not skip, so the witnesses bite.
+        // At the first scope the walks cannot skip it, so the witnesses bite.
         Assert.True(condition: witnessed.TryDistance(distance: out _, material: out var boundMaterial, position: Position(x: 1000.0, y: 0.0, z: 0.0)));
         Assert.Equal(actual: boundMaterial, expected: witnessMaterial);
     }
@@ -276,33 +268,28 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
         Assert.Equal(actual: smoothWalked, expected: unionWalked);
         Assert.Equal(actual: smoothDistance, expected: FixedQ4816.FromDouble(value: 0.25));
     }
-    // Two instances answer the same unit sphere in different materials. The later one declares the wider bound, so it
-    // is the nearest by reach and is walked first; the earlier one's bound, once the evaluator pads it (by 1.0001 and
-    // 0.001, its CullBoundRadiusScale and CullBoundRadiusPadding), is the sphere itself, so its reach equals the
-    // primer's answer exactly. Only a strictly greater reach may skip it, so the earlier material wins the tie, as it
-    // does in stream order.
+    // Two instances answer the same unit sphere in different materials. The later one also holds a small sphere far
+    // below, which widens its certificate until its reach from every query is the least, so it is the nearest and is
+    // walked first; the earlier one cannot be skipped against its equal answer, and joining the nearest's answer only
+    // where it stands leaves the tie to the earlier material, as stream order does.
     [Fact]
     public void AnEarlierInstanceTyingTheNearestKeepsItsMaterial() {
-        var tight = BitConverter.SingleToInt32Bits(value: 0.998f);
-
-        while (FixedQ4816.FromDouble(value: ((BitConverter.Int32BitsToSingle(value: tight) * 1.0001f) + 0.001f)) < FixedQ4816.One) {
-            tight++;
-        }
-
-        var tightRadius = BitConverter.Int32BitsToSingle(value: tight);
-
-        Assert.Equal(actual: FixedQ4816.FromDouble(value: ((tightRadius * 1.0001f) + 0.001f)), expected: FixedQ4816.One);
-
         var builder = new SdfProgramBuilder();
         var first = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX));
         var second = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitY));
         var center = new Vector3(x: 7f, y: 0f, z: -3f);
 
-        foreach (var (material, radius) in ((ValueTuple<int, float>[])[(first, tightRadius), (second, 4f),])) {
-            _ = builder.Instance(boundCenter: center, boundRadius: radius, emit: instance => {
+        foreach (var material in ((int[])[first, second,])) {
+            _ = builder.Instance(boundCenter: center, boundRadius: 41f, emit: instance => {
                 _ = instance.ResetPoint();
                 _ = instance.Translate(offset: center);
                 _ = instance.Sphere(material: material, radius: 1f);
+
+                if (material == second) {
+                    _ = instance.ResetPoint();
+                    _ = instance.Translate(offset: (center - new Vector3(x: 0f, y: 40f, z: 0f)));
+                    _ = instance.Sphere(material: material, radius: 0.1f);
+                }
             });
         }
 
@@ -358,34 +345,5 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
             Assert.True(condition: culled.TryDistance(distance: out var actual, material: out _, position: position));
             Assert.True(condition: (actual == expected), userMessage: $"at x = {x} the culled walk answered {actual}, the reference {expected}");
         }
-    }
-    [Fact]
-    public void EveryStaticShapeKeepsItsReachSphereWhateverItsBlend() {
-        SdfProgram Build(SdfBlendOp blend) {
-            var builder = new SdfProgramBuilder();
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-            _ = builder.ResetPoint();
-            _ = builder.Sphere(material: material, radius: 0.5f);
-            _ = builder.ResetPoint();
-            _ = builder.Translate(offset: new Vector3(x: 3f, y: 1f, z: -2f));
-            _ = builder.Sphere(blend: blend, material: material, radius: 0.7f, smooth: 0.25f);
-
-            return builder.Build(buildInstanceGrid: false);
-        }
-
-        var union = Build(blend: SdfBlendOp.Union);
-        var shape = (union.Instructions.Count - 1);
-        var expected = union.ShapeSkipSphere(instruction: shape);
-
-        Assert.Equal(actual: expected.Mode, expected: SdfProgram.BoundModeStatic);
-
-        foreach (var blend in ((SdfBlendOp[])[SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,])) {
-            var reach = Build(blend: blend).ShapeReachSphere(instruction: shape);
-
-            Assert.Equal(actual: reach, expected: expected);
-        }
-
-        Assert.Equal(actual: union.ShapeReachSphere(instruction: (shape - 1)).Mode, expected: SdfProgram.BoundModeNone);
     }
 }

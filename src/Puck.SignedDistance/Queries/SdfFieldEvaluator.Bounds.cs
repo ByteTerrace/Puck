@@ -66,10 +66,9 @@ public sealed partial class SdfFieldEvaluator {
     /// <returns><see langword="false"/> when the program has no shape or a corner leaves the evaluator's frame.</returns>
     /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/> on an
     /// axis.</exception>
-    /// <remarks>The cull is <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/>'s own, asked of the box: an instance or chain of shapes whose
-    /// bound sphere lies at or beyond the running interval's upper end, or the nearest instance's, from every point of
-    /// the box can only offer a candidate no point's answer would take, so skipping it leaves every point answer inside
-    /// the interval. It rests on the same sphere containment the point cull's exactness rests on.</remarks>
+    /// <remarks>The walk skips an instance or chain of shapes only where a certificate proves the lower end of every
+    /// interval it could join lies at or beyond the running interval's upper end, or the nearest instance's, so the skip
+    /// leaves the interval exactly as walking every instruction answers it.</remarks>
     public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked) =>
         TryDistanceBounds(distance: out distance, instructionsWalked: out instructionsWalked, lower: lower, rotationsExpanded: out _, upper: upper);
     /// <summary>Encloses the box and counts visited instructions and full interval rotation expansions.</summary>
@@ -129,7 +128,7 @@ public sealed partial class SdfFieldEvaluator {
         (WithinRaw(raw: point.X.Value, limit: m_frameRaw) && WithinRaw(raw: point.Y.Value, limit: m_frameRaw) && WithinRaw(raw: point.Z.Value, limit: m_frameRaw));
     private static bool WithinRaw(long raw, long limit) =>
         ((raw != long.MinValue) && (Math.Abs(value: raw) <= limit));
-    // The widest power-of-two cube whose bounds stay bounded, capped so the instance cull's subtraction of each bound's
+    // The widest power-of-two cube whose bounds stay bounded, capped so the cull's subtraction of each certificate's
     // centre stays inside the carrier; minus one raw when not even a one-raw cube is bounded. Every instruction joins the
     // proof: one whose bounds were ever missing would answer the unbounded interval, which shrinks the frame, and never
     // grants one.
@@ -137,15 +136,15 @@ public sealed partial class SdfFieldEvaluator {
         var centre = 0UL;
 
         foreach (var bound in evaluator.m_cullBounds) {
-            centre = Math.Max(val1: centre, val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterX.Value), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterY.Value), val2: FusedArithmetic.RawMagnitude(value: bound.CenterZ.Value))));
+            centre = Math.Max(val1: centre, val2: CentreMagnitude(reach: in bound.Reach));
         }
 
         foreach (var bound in evaluator.m_segmentBounds) {
-            centre = Math.Max(val1: centre, val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterX.Value), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: bound.CenterY.Value), val2: FusedArithmetic.RawMagnitude(value: bound.CenterZ.Value))));
+            centre = Math.Max(val1: centre, val2: CentreMagnitude(reach: in bound.Reach));
         }
 
         foreach (var member in evaluator.m_members) {
-            centre = Math.Max(val1: centre, val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: member.CenterX.Value), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: member.CenterY.Value), val2: FusedArithmetic.RawMagnitude(value: member.CenterZ.Value))));
+            centre = Math.Max(val1: centre, val2: CentreMagnitude(reach: in member));
         }
 
         var ceiling = ((centre >= ((ulong)long.MaxValue)) ? 0L : (long.MaxValue - ((long)centre)));
@@ -171,8 +170,8 @@ public sealed partial class SdfFieldEvaluator {
         return frame;
     }
     // The bounds over a box whose every point the frame holds, and the instructions the walk visited. A culling walk
-    // skips what the cull tables prove cannot lower any point answer in the box (SdfFieldEvaluator.Cull.cs); the frame's
-    // own walks skip nothing, so a frame rests on every instruction.
+    // skips what the cull tables prove cannot change its interval (SdfFieldEvaluator.Cull.cs); the frame's own walks
+    // skip nothing, so a frame rests on every instruction.
     private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded, bool cull = true) {
         var cullBounds = m_cullBounds;
         var reaches = (((BoxReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
@@ -180,12 +179,16 @@ public sealed partial class SdfFieldEvaluator {
             : (BoxReachScratch = new FixedQ4816[cullBounds.Length]));
         var primer = BoxPrimer.None;
         var walked = 0;
+        var query = new BoxQuery(box: world);
 
         rotationsExpanded = 0;
 
         if (cull) {
             for (var bound = 0; (bound < cullBounds.Length); bound++) {
-                reaches[bound] = CheapBoxReach(bound: in cullBounds[bound], box: world);
+                ref readonly var reach = ref cullBounds[bound].Reach;
+
+                // An instance with no box certificate is never skipped, and its key only orders the primer's choice.
+                reaches[bound] = FixedQ4816.FromRawBits(value: (reach.Boxed ? reach.CheapBoxReach(query: in query) : reach.CheapPointReach(point: Corner(box: world))));
 
                 if (m_primeable && ((primer.Candidate < 0) || (reaches[bound] < reaches[primer.Candidate]))) {
                     primer.Candidate = bound;
@@ -199,6 +202,7 @@ public sealed partial class SdfFieldEvaluator {
             first: 0,
             primer: ref primer,
             reaches: (cull ? reaches.AsSpan(start: 0, length: cullBounds.Length) : []),
+            query: in query,
             rotationsExpanded: ref rotationsExpanded,
             walked: ref walked,
             world: world
@@ -209,10 +213,10 @@ public sealed partial class SdfFieldEvaluator {
         return result;
     }
     // Walks [first, end) over a box from the far seed, the box form of WalkPoints: with reaches it skips each cullable
-    // instance whose reach clears the running upper end or the primer's, walking the primer on its own first when the
-    // running upper end clears nothing, and joins the primer as the bounds already walked; a culling walk also skips
-    // each chain whose sphere clears the running upper end.
-    private FixedInterval WalkBounds(int first, int end, IntervalVector3 world, ReadOnlySpan<FixedQ4816> reaches, ref BoxPrimer primer, bool cull, ref int walked, ref int rotationsExpanded) {
+    // instance whose candidates' lower ends clear the running upper end or the primer's, walking the primer on its own
+    // first when the running upper end clears nothing, and joins the primer as the bounds already walked; a culling walk
+    // also skips each chain whose candidates' lower ends clear the running upper end by its margin.
+    private FixedInterval WalkBounds(int first, int end, IntervalVector3 world, in BoxQuery query, ReadOnlySpan<FixedQ4816> reaches, ref BoxPrimer primer, bool cull, ref int walked, ref int rotationsExpanded) {
         var visited = 0;
         var expanded = 0;
         var cullBounds = m_cullBounds;
@@ -239,7 +243,7 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                if (BoxInstanceClears(bound: in cullBounds[bound], box: world, cheapReach: reaches[bound], threshold: primer.Clearance(upper: result.Upper))) {
+                if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], query: in query, threshold: primer.Clearance(upper: result.Upper))) {
                     index = (cullBounds[bound].End - 1);
 
                     continue;
@@ -255,12 +259,13 @@ public sealed partial class SdfFieldEvaluator {
                         first: cullBounds[primer.Bound].First,
                         primer: ref none,
                         reaches: [],
+                        query: in query,
                         rotationsExpanded: ref expanded,
                         walked: ref visited,
                         world: world
                     );
 
-                    if (BoxInstanceClears(bound: in cullBounds[bound], box: world, cheapReach: reaches[bound], threshold: primer.Clearance(upper: result.Upper))) {
+                    if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], query: in query, threshold: primer.Clearance(upper: result.Upper))) {
                         index = (cullBounds[bound].End - 1);
 
                         continue;
@@ -283,7 +288,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if (cull && (segment >= 0) && BoxClears(bound: in segmentBounds[segment], box: world, result: result)) {
+                        if (cull && (segment >= 0) && segmentBounds[segment].Reach.Boxed && segmentBounds[segment].Reach.BoxClears(query: in query, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in segmentBounds[segment]))) {
                             index = (segmentBounds[segment].End - 1);
                         }
 
@@ -427,65 +432,26 @@ public sealed partial class SdfFieldEvaluator {
     [DoesNotReturn]
     private static void ThrowNoInclusionRule(SdfOp op) =>
         throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for op {op}.");
-    // The box forms of PointReach: the least distance from any point of the box to the bound's centre is the length of
-    // the gap between them, taken by the same exact-square, once-rounded length the point reach takes of a longer
-    // vector, so it never exceeds what the point reach would read at a point of the box; a scaled pop's reach rises
-    // with it too. The frame keeps each gap's subtraction inside the carrier (FindFrame caps it by the farthest centre).
-    private static FixedQ4816 BoxReach(in CullBound bound, IntervalVector3 box) {
-        var reach = (BoxGap(box: box, centreX: bound.CenterX, centreY: bound.CenterY, centreZ: bound.CenterZ) - bound.Radius);
-
-        return ((bound.CandidateScale > FixedQ4816.Zero)
-            ? FixedQ4816.Min(x: reach, y: (reach * bound.CandidateScale))
-            : reach);
-    }
-    // CheapPointReach's box form: the largest axis gap, no greater than the gap's rounded length.
-    private static FixedQ4816 CheapBoxReach(in CullBound bound, IntervalVector3 box) => ScaledReach(
-        bound: in bound,
-        reach: (FixedQ4816.Max(x: Gap(axis: box.X, centre: bound.CenterX), y: FixedQ4816.Max(x: Gap(axis: box.Y, centre: bound.CenterY), y: Gap(axis: box.Z, centre: bound.CenterZ))) - bound.Radius)
-    );
-    // Whether a chain's sphere clears the running bounds from every point of the box: the upper end plus its margin,
-    // and the negated lower end when it carves.
-    private static bool BoxClears(in SegmentBound bound, IntervalVector3 box, FixedInterval result) {
-        var (x, y, z) = (Gap(axis: box.X, centre: bound.CenterX), Gap(axis: box.Y, centre: bound.CenterY), Gap(axis: box.Z, centre: bound.CenterZ));
-        var threshold = SegmentThreshold(above: result.Upper, below: result.Lower, bound: in bound);
-
-        return ((((Int128)(FixedQ4816.Max(x: x, y: FixedQ4816.Max(x: y, y: z)) - bound.Radius).Value) >= threshold) || LengthAtLeast(least: (threshold + bound.Radius.Value), x: x, y: y, z: z));
-    }
-    // BoxReach's instance test with InstanceClears' order: the largest axis gap, the rounded root, then the members.
-    private bool BoxInstanceClears(in CullBound bound, IntervalVector3 box, FixedQ4816 cheapReach, FixedQ4816 threshold) {
-        if (
+    // Whether the box walk may skip an instance: every candidate interval it can join has its lower end at or past the
+    // threshold, as its certificate proves, or, for an unscoped instance, each of its members' does.
+    private bool BoxInstanceClears(in CullBound bound, in BoxQuery query, FixedQ4816 cheapReach, FixedQ4816 threshold) =>
+        (bound.Reach.Boxed && (
             (cheapReach >= threshold) ||
-            ((bound.CandidateScale > FixedQ4816.Zero)
-                ? (BoxReach(bound: in bound, box: box) >= threshold)
-                : LengthAtLeast(least: (((Int128)threshold.Value) + bound.Radius.Value), x: Gap(axis: box.X, centre: bound.CenterX), y: Gap(axis: box.Y, centre: bound.CenterY), z: Gap(axis: box.Z, centre: bound.CenterZ)))
-        ) {
-            return true;
-        }
-
-        if (bound.MemberCount == 0) {
-            return false;
-        }
-
+            bound.Reach.BoxClears(query: in query, threshold: threshold.Value) ||
+            (!bound.Scoped && (bound.MemberCount > 1) && MembersBoxClear(bound: in bound, query: in query, threshold: threshold.Value))));
+    private bool MembersBoxClear(in CullBound bound, in BoxQuery query, Int128 threshold) {
         foreach (ref readonly var member in m_members.AsSpan(start: bound.MemberFirst, length: bound.MemberCount)) {
-            var (x, y, z) = (Gap(axis: box.X, centre: member.CenterX), Gap(axis: box.Y, centre: member.CenterY), Gap(axis: box.Z, centre: member.CenterZ));
-
-            if ((MemberReach(bound: in bound, distance: FixedQ4816.Max(x: x, y: FixedQ4816.Max(x: y, y: z)), member: in member) < threshold) &&
-                !MemberLengthClears(bound: in bound, member: in member, threshold: threshold, x: x, y: y, z: z)) {
+            if (!member.BoxClears(query: in query, threshold: threshold)) {
                 return false;
             }
         }
 
         return true;
     }
-    private static FixedQ4816 BoxGap(IntervalVector3 box, FixedQ4816 centreX, FixedQ4816 centreY, FixedQ4816 centreZ) => new FixedVector3(
-        X: Gap(axis: box.X, centre: centreX),
-        Y: Gap(axis: box.Y, centre: centreY),
-        Z: Gap(axis: box.Z, centre: centreZ)
-    ).Length;
-    private static FixedQ4816 Gap(FixedInterval axis, FixedQ4816 centre) => FixedQ4816.Max(
-        x: FixedQ4816.Max(x: (centre - axis.Upper), y: (axis.Lower - centre)),
-        y: FixedQ4816.Zero
-    );
+    // The box's least corner, the point whose reach orders an uncertified instance as a primer.
+    private static FixedVector3 Corner(IntervalVector3 box) => new(X: box.X.Lower, Y: box.Y.Lower, Z: box.Z.Lower);
+    private static ulong CentreMagnitude(in Reach reach) =>
+        Math.Max(val1: FusedArithmetic.RawMagnitude(value: reach.CenterX), val2: Math.Max(val1: FusedArithmetic.RawMagnitude(value: reach.CenterY), val2: FusedArithmetic.RawMagnitude(value: reach.CenterZ)));
 
     /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
     /// must appear here; the sync law holds the two sets equal.</summary>
