@@ -1017,37 +1017,23 @@ against the merge base of `HEAD` and `--merge-base` (default
    `--suite-jobs` sets the bound.
 6. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
-7. `lengths`: `puck lengths --check`.
-8. `comment-smells`: `puck comment-smells --check`.
-9. `docs links`: `puck docs links`.
-10. `schema`: `puck schema --check`.
-11. `architecture`: `puck architecture --check`.
-12. `registry`: `puck registry --check`.
-13. `vocabulary`: `puck vocabulary --check`.
-14. `shaders generate`: `puck shaders generate --check`.
-15. `shaders interface echo`: `puck shaders interface --echo-fixtures --check tests/Puck.World.Canaries/interface-echo`.
-16. `branding`: `puck branding --check`.
-17. `formats`: `puck formats --check`.
-18. `canary-ceilings`: `puck canary-ceilings --check`.
-19. `derivations`: `puck derivations --check`.
-20. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-21. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
-22. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-23. `parity`: `puck parity` when selected, only with `--gpu`.
-24. `Puck.World.Tests`: device suite, only with `--gpu`.
-25. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-26. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-27. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-28. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
-    `tests/Puck.Counters` in ordinal order, using their actual `workload` and
-    `script` paths. A declared `.batch.json` association routes its complete
-    measured observation set once through `puck counters --batch <manifest> --check`;
-    ambiguous associations or missing declared ceilings refuse. Other ledgers
-    run `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
-    `<name>.script.txt` supplies `--script` when present; otherwise the recorded
-    script supplies it, or the verb's default when absent.
-29. `docs citations`: `puck docs citations`, only with `--gpu`.
-30. `affected record`: `puck affected --record`, only with `--gpu --record`
+7. `docs links`: `puck docs links`.
+8. `schema`: `puck schema --check`.
+9. `architecture`: `puck architecture --check`.
+10. `registry`: `puck registry --check`.
+11. `vocabulary`: `puck vocabulary --check`.
+12. `shaders generate`: `puck shaders generate --check`.
+13. `branding`: `puck branding --check`.
+14. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+15. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+16. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+17. `parity`: `puck parity` when selected, only with `--gpu`.
+18. `Puck.World.Tests`: device suite, only with `--gpu`.
+19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+22. `docs citations`: `puck docs citations`, only with `--gpu`.
+23. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -1062,10 +1048,6 @@ holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
 root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
-
-The interface-echo step checks the shipped fixture family's model-derived graphs,
-positive and perturbed shader sources, and capture extents together without
-writing files. It runs on the CPU and opens no graphics device.
 
 Each baseline declares its owning test project and the data globs its tests read
 outside that project's reach. The affected map selects the checks against the

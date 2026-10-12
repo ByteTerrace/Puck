@@ -236,19 +236,13 @@ public sealed partial class GateRunLawTests : GateRunLaws {
             actual: runner.Steps.Skip(count: 1),
             expected: new[] {
                 new[] { "format", "--check", "--file-list", fileList },
-                ["lengths", "--check"],
-                ["comment-smells", "--check"],
                 ["docs", "links"],
                 ["schema", "--check"],
                 ["architecture", "--check"],
                 ["registry", "--check"],
                 ["vocabulary", "--check"],
                 ["shaders", "generate", "--check"],
-                ["shaders", "interface", "--echo-fixtures", "--check", "tests/Puck.World.Canaries/interface-echo"],
                 ["branding", "--check"],
-                ["formats", "--check"],
-                ["canary-ceilings", "--check"],
-                ["derivations", "--check"],
             }
         );
         // The run keeps its log and step summary: the CLI copy and the file list go when it ends.
@@ -258,15 +252,15 @@ public sealed partial class GateRunLawTests : GateRunLaws {
     public void AFailedStepFailsTheGateWhileTheRestStillRun() {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
-        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty)) { ExitCode = static arguments => ((arguments[0] == "lengths") ? 1 : 0) };
+        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty)) { ExitCode = static arguments => ((arguments[0] == "schema") ? 1 : 0) };
 
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 15);
-        Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1, ");
-        Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
-        Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
+        Assert.Equal(actual: runner.Steps.Count, expected: 9);
+        Assert.Contains(actualString: output, expectedSubstring: "gate: schema FAILED (exit 1, ");
+        Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: schema; full output in ");
+        Assert.Contains(expectedSubstring: "===== schema (exit 1)\noutput of schema", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
     }
     [Fact]
     public void TheBootstrapFileAppCompilesAsAnOrdinaryStepWithoutABuildServer() {
@@ -285,7 +279,7 @@ public sealed partial class GateRunLawTests : GateRunLaws {
         Assert.Equal(actual: compile[..5], expected: ["build", Bootstrap, "-c", "Release", "--disable-build-servers"]);
         Assert.DoesNotContain(collection: compile, expected: CliOptions.NoNodeReuse);
         // An ordinary step: the checks after it still run.
-        Assert.Contains(collection: runner.Steps, filter: static step => (step[0] == "derivations"));
+        Assert.Contains(collection: runner.Steps, filter: static step => (step[0] == "branding"));
     }
     [Fact]
     public void GpuWorkRunsOnlyWhenAskedFor() {

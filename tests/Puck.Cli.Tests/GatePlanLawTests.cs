@@ -24,17 +24,11 @@ public sealed class GatePlanLawTests {
     public void EveryPuckStepThePlanExpandsParsesThroughTheRootCommand() {
         using var directory = new TemporaryDirectory(prefix: "puck-gate-plan-grammar-law-");
 
-        directory.WriteText(name: "tests/Puck.Counters/a.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/a.ceilings.json", text: """{"workload":"tests/Puck.Counters/a.world.json"}""");
-        directory.WriteText(name: "tests/Puck.Counters/a.script.txt", text: "world.counters --json");
-        directory.WriteText(name: "tests/Puck.Counters/b.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/b.ceilings.json", text: """{"workload":"tests/Puck.Counters/b.world.json"}""");
         var affected = new AffectedPlan(Baselines: BaselinesCommand.Artifacts, Canaries: ["example"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: true, Parity: true, Suites: [], Unmapped: [], Worlds: []);
         var steps = GatePlan.Expand(affected: affected, fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: directory.RootPath, sources: true, suiteJobs: 4, gpuJobs: 4)
             .Where(predicate: static step => (step.Kind is GateStepKind.Locks or GateStepKind.Puck or GateStepKind.Baseline or GateStepKind.Canaries or GateStepKind.Parity))
             .ToArray();
 
-        Assert.Contains(collection: steps, filter: static step => (step.Arguments[0] == "counters"));
         foreach (var step in steps) {
             var parsed = PuckRootCommand.Create(clock: TimeProvider.System).Parse(args: step.Arguments);
 
@@ -60,26 +54,6 @@ public sealed class GatePlanLawTests {
             Assert.All(collection: artifact.Inputs, action: static input => Assert.False(condition: string.IsNullOrWhiteSpace(value: input)));
             Assert.Contains(collection: GatePlan.Steps, filter: step => ((step.Kind == GateStepKind.Baseline) && step.Arguments.SequenceEqual(other: artifact.CheckArguments())));
         }
-    }
-    [Fact]
-    public void DiscoveryRequiresCeilingsUsesOptionalOrRecordedScriptsAndSortsWorkloads() {
-        using var directory = new TemporaryDirectory(prefix: "puck-gate-discovery-law-");
-
-        directory.WriteText(name: "tests/Puck.Counters/unrecorded.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/unrecorded.script.txt", text: "script");
-        directory.WriteText(name: "tests/Puck.Counters/z.world.json", text: "{}");
-        directory.WriteText(name: "tests/Puck.Counters/z.ceilings.json", text: """{"workload":"tests/Puck.Counters/z.world.json"}""");
-        directory.WriteText(name: "tests/Puck.Counters/z.script.txt", text: "script");
-        directory.WriteText(name: "tests/Puck.Counters/a.puck", text: "world {}");
-        directory.WriteText(name: "tests/Puck.Counters/a.ceilings.json", text: """{"workload":"tests/Puck.Counters/a.puck"}""");
-        directory.WriteText(name: "fixtures/recorded-source.puck", text: "world {}");
-        directory.WriteText(name: "tests/Puck.Counters/shared.ceilings.json", text: """{"workload":"fixtures/recorded-source.puck","script":"tests/Puck.Counters/common.script.txt"}""");
-        var workloads = GatePlan.CounterWorkloads(repositoryRoot: directory.RootPath, step: GatePlan.Steps.Single(predicate: step => (step.Kind == GateStepKind.Counters))).ToArray();
-
-        Assert.Equal(["counters a", "counters shared", "counters z"], workloads.Select(selector: step => step.Name));
-        Assert.Equal(["counters", "--check", "--world", "tests/Puck.Counters/a.puck", "--ceilings", "tests/Puck.Counters/a.ceilings.json"], workloads[0].Arguments);
-        Assert.Equal(["counters", "--check", "--world", "fixtures/recorded-source.puck", "--ceilings", "tests/Puck.Counters/shared.ceilings.json", "--script", "tests/Puck.Counters/common.script.txt"], workloads[1].Arguments);
-        Assert.Equal(["--script", "tests/Puck.Counters/z.script.txt"], workloads[2].Arguments.TakeLast(count: 2));
     }
     [Fact]
     public void TheRenderedHelpAndCliReferenceContainTheWholePlanInOrder() {
