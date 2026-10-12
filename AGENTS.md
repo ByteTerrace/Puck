@@ -28,9 +28,16 @@ agent works in that mode by default, without asking:
   the owner-only actions (pushing `main`, deploying, anything outside the
   repository). Everything else is yours: decide it, do it, and report what you
   did.
-- The process in this file and the skills (gates, ledgers, red legs, reviews)
-  serves this mode. Where a skill asks for ceremony a change does not need,
-  skip it and say so in the report.
+- Puck is not yet in alpha, and most of what lands now will be broken and
+  rebuilt. Verify a change by running it or measuring it. Write a test only
+  where running cannot show the behavior and the test will outlive the next
+  rewrite. An existing test that a change breaks is updated or deleted in that
+  change, never preserved as a constraint.
+- The gates, ledgers, red-leg proofs and review passes described in this file
+  and the skills were written by agents, not ordered by the owner. They are
+  tools to use when they pay for themselves, never preconditions for landing.
+  A document records something as the owner's ruling only when the owner said
+  it.
 
 Use forward slashes for Puck paths on every platform, and follow the
 [file-path convention](docs/development/contributing.md#file-paths) at output,
