@@ -103,6 +103,12 @@ qualifies its own local lanes and the GPU legs, not every partner's CPU suites.
 A gate blocks a lane, never a partner: the partner takes its next work from its
 track or the ready queue.
 
+While the owner holds a campaign in progress, no lane runs gates: a lane lands
+on a zero-warning build of what it touched and its own laws with their red legs
+proved, and parity, canaries, counters checks and `puck gate` wait until the
+owner calls for qualification. Timings and captures the work itself needs are
+not gates and still run.
+
 Qualify a lane once, on the head it lands from. A gate costs an hour on a busy
 machine, and every move of the integration branch invalidates it, so:
 
