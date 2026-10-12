@@ -294,13 +294,13 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // This build writes and reads exactly one tape contract; raise the version whenever its layout or the
-    // authoritative-hash contract changes, so a tape of another layout is refused at intake. The tape carries the recorded
+    // authoritative-hash contract changes, never reusing an earlier value, so a tape of another layout is refused at intake. The tape carries the recorded
     // authority, its typed rebuild origins and its document paths, each starting seat's full identity projection, the
     // companion tapes of a set, each departure and its rollback where the authority decided it, settlements by target
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 2u;
+    private const uint Version = 5u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>

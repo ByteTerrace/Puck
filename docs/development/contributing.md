@@ -876,8 +876,9 @@ meant to establish.
   version or magic, which its codec writes in its header or handshake and
   refuses any other by name before any state changes. Nothing records a
   layout, so a change to a format's layout raises its version (or the digit
-  of its magic) in the same change; a version that stays put while its layout
-  moves misreads old data instead of refusing it.
+  of its magic) in the same change, to a value it never had before; a version
+  that stays put or returns while its layout moves misreads old data instead of
+  refusing it.
 - The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
   never declared by hand. A change that adds or removes canary cost runs
   `puck canary-ceilings` and states the new `puck canary --merge --plan`

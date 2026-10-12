@@ -1198,7 +1198,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte. The tape's
-shape token, the checkpoint version, the handshake key and the federation key
+version, the checkpoint version, the handshake key and the federation key
 each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
@@ -5025,7 +5025,7 @@ Each commit is marked with what it waits on.
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
    - Every format that carries an intent is strict and has no reader for an
-     earlier shape: the tape's shape token, the checkpoint version
+     earlier shape: the tape's version, the checkpoint version
      (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
      (`WorldProtocol.WireProtocolKey`) and the federation key
      (`WorldFederationCodec.WireKey`). No tape is checked in.

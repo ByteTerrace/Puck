@@ -38,7 +38,7 @@ public sealed class OverlayGlyphSdfPack {
 
     // 'P','O','G','P' + format version; raise the version whenever the pack layout changes.
     private const uint PackMagic = 0x50474F50u;
-    private const uint PackVersion = 2u;
+    private const uint PackVersion = 3u;
 
     /// <summary>The number of glyphs in the ASCII block (printable ASCII 0x20-0x7E).</summary>
     public const int AsciiGlyphCount = (0x7F - 0x20);

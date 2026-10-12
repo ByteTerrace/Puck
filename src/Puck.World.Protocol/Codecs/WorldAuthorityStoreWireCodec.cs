@@ -28,8 +28,8 @@ public readonly record struct WorldAuthorityJournalEntry(ulong Tick, ulong Engin
 public static class WorldAuthorityStoreWireCodec {
     // "PJNL" — Puck Journal.
     private const uint JournalMagic = 0x4C4E4A50U;
-    // Raise it whenever the page layout changes.
-    private const ushort JournalVersion = 2;
+    // Raise it whenever the page layout changes; never reuse an earlier value.
+    private const ushort JournalVersion = 3;
     private const int MaxEntryBytes = ((8 * 1024) * 1024);
 
     /// <summary>Encodes one journal page's whole entry sequence.</summary>
