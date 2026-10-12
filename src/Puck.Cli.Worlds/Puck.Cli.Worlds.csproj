@@ -20,6 +20,7 @@
         <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
         <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
         <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.World.Vocabulary/Puck.World.Vocabulary.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

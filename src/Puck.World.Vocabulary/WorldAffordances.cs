@@ -14,7 +14,7 @@ namespace Puck.World;
 /// and also run where no registry can exist (the offline replay rehydrator, a pre-container boot parse), so it is a
 /// lookup that is present once the composition root installs it and absent elsewhere. Absent means the command half
 /// of validation is skipped — structural validation still runs — never that it passed; the composition root's
-/// post-build sweep (<see cref="WorldSeatBindings.ValidateAffordancesLoudly"/>) re-covers the documents that entered
+/// post-build sweep (<c>WorldSeatBindings.ValidateAffordancesLoudly</c>) re-covers the documents that entered
 /// before install. It is also genuinely process-scoped: there is exactly one console, so every world instance in this
 /// process dispatches through the same verb set.</para>
 /// <para>The channel vocabulary is deliberately not ambient, and the asymmetry is the point. A channel table is a

@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 namespace Puck.World.Browser.Engine;
 
 /// <summary>Wires the injection seams <see cref="WorldDefinitionValidator"/> requires installed before any document
-/// parses — a composition root's job everywhere else (<c>Puck.World.Client.WorldSchemaVocabularyHooks</c> is the
+/// parses — a composition root's job everywhere else (<c>Puck.World.WorldSchemaVocabularyHooks</c> is the
 /// desktop client's, <c>Puck.World.Silo</c>'s own installer the other). Puck.World.Browser references neither
 /// <c>Puck.World.Protocol</c> nor any extension-owning assembly (Architecture.props' exact-closure profile), so
 /// every predicate here honestly answers <see langword="null"/> — this host carries no catalog at all for a
