@@ -306,11 +306,10 @@ without re-measuring.
 AGB stages and drains at its frame sync deliberately, so a cell changed this frame
 appears the frame after on either machine. Validation bounds a frame's map writes
 to the queue's 24 entries so a write can never be silently dropped; the push
-subroutine's drop path must stay unreachable. `blit` is implemented and validated
-on both targets but is deliberately UNMODELED: a small one measures near a fixed
-cost while a full-screen one exceeds a whole frame on the Color machine and barely
-registers on AGB, so it is both uncharacterized and a cadence-divergence hazard.
-Do not give it a weight without a model that spans both observations.
+subroutine's drop path must stay unreachable. `blit` carries a measured weight on
+each target (`CartridgeCostProfile.Blit`, from the `blit20x6` measurement shape);
+a blit much larger than that shape costs more than the weight says, which is why
+`BlitCellCount` bounds it.
 
 A primitive with no measured weight prices as `CostBound.Unmodeled`, which
 poisons the whole estimate rather than contributing an invented number, so the

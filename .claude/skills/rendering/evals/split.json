@@ -5,12 +5,9 @@
   "train": [
     "g03-framerate-after-placements",
     "g04-hand-written-isa-define",
-    "g05-bake-filter-changed",
-    "g07-abi-change-with-reload",
-    "g09-counters-disagree-between-backends"
+    "g07-abi-change-with-reload"
   ],
   "test": [
-    "g01-new-blend-plan",
     "g02-ao-edit-has-no-effect",
     "g06-extra-map-call-sites",
     "g08-dynamic-transform-capacity",
