@@ -18,6 +18,7 @@ public sealed class WorldBenchServer : IDisposable {
         m_stateDirectory = stateDirectory;
     }
 
+    public WorldMachineHost Machines => m_machines;
     public WorldServer Server { get; }
 
     public static WorldBenchServer Boot(WorldDefinition definition, WorldMachineCatalog? catalog = null) {

@@ -193,6 +193,25 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     }
 
     /// <inheritdoc/>
+    public void RunUntil(ulong dot) {
+        var clock = m_componentClock.Clock;
+
+        while (clock.CycleCount < dot) {
+            if (
+                m_componentClock.AbsorbsQuietStretches &&
+                m_halted &&
+                !m_lockedUp &&
+                !m_key1.IsSwitching &&
+                !m_key1.IsStopped &&
+                (m_interrupts.Pending == InterruptKind.None)
+            ) {
+                IdleHalted(dot: dot);
+            } else {
+                StepInstruction();
+            }
+        }
+    }
+    /// <inheritdoc/>
     public void StepInstruction() {
         StepInstructionCore();
         // Nothing outlives the instruction with cycles owed: an instruction boundary is where every other component
@@ -200,6 +219,53 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         FlushBusCycles();
     }
 
+    // The halted steps StepInstruction would take before the clock reaches the dot or an interrupt becomes pending,
+    // each one machine cycle checked for a wake before it is spent. A stretch every component has agreed is plain
+    // counting raises no interrupt, so its whole machine cycles are spent at once; a stretch only the display works
+    // through is spent with the display ticked alone and the wake checked after each machine cycle. The clock moves two
+    // dots per machine cycle under double speed and four otherwise, which bounds either stretch at the machine cycle the
+    // step loop would stop on.
+    private void IdleHalted(ulong dot) {
+        var clock = m_componentClock.Clock;
+        var dotsPerMachineCycle = ((ulong)(m_componentClock.IsDoubleSpeed
+            ? (CpuTCyclesPerMachineCycle >> 1)
+            : CpuTCyclesPerMachineCycle
+        ));
+
+        m_bus.NoteInstructionStart(pc: m_programCounter);
+
+        do {
+            var untilDot = ((((dot - clock.CycleCount) + dotsPerMachineCycle) - 1UL) / dotsPerMachineCycle);
+            var quietMachineCycles = ((ulong)(m_componentClock.AgreedQuietCycles / CpuTCyclesPerMachineCycle));
+
+            if (quietMachineCycles > 1UL) {
+                AdvanceTCycles(count: ((int)(Math.Min(
+                    val1: quietMachineCycles,
+                    val2: untilDot
+                ) * CpuTCyclesPerMachineCycle)));
+
+                continue;
+            }
+
+            var aloneMachineCycles = ((ulong)(m_componentClock.DisplayAloneCycles / CpuTCyclesPerMachineCycle));
+
+            if (
+                (aloneMachineCycles <= 1UL) ||
+                (m_componentClock.IdleDisplayAlone(
+                    interrupts: m_interrupts,
+                    machineCycles: ((int)Math.Min(
+                        val1: aloneMachineCycles,
+                        val2: untilDot
+                    ))
+                ) == 0)
+            ) {
+                AdvanceTCycles(count: CpuTCyclesPerMachineCycle);
+            }
+        } while (
+            (clock.CycleCount < dot) &&
+            (m_interrupts.Pending == InterruptKind.None)
+        );
+    }
     private void StepInstructionCore() {
         // M-06: the debug watchpoint PC witness. A cheap unconditional field write on the bus side (SystemBus.cs); the
         // bus itself decides whether anything downstream cares (a watch hit latches this, otherwise it is never read).

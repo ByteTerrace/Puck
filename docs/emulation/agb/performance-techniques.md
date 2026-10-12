@@ -32,6 +32,18 @@ idle steps alongside instruction and exception steps; a sleeping CPU does
 not wait indefinitely inside a call. STOP still uses the modeled restricted
 wake sources while peripheral clocks continue advancing.
 
+`RunCycles` idles a halted CPU through a whole span at once
+(`AgbBus.IdleHalted`) when the span leaves the state its single idle steps
+would: no wake is requested, clock readiness holds, no DMA is pending, the span
+ends before the next scheduled event, and the APU can cover it in one step
+(before its frame sequencer clocks and before the next host sample falls due).
+Each idled cycle still counts as one step. A forge cartridge halts until each
+V-blank, so its frames cost only the instructions they run. Linked sessions and
+single `Step` calls keep one idle cycle per step.
+`AdvancedIdleEquivalenceLawTests` (in `tests/Puck.AdvancedGamingBrick.Forge.Tests`)
+compares the spans with single steps over the shipped AGB cartridge, state and
+audio, every host tick.
+
 Text backgrounds without horizontal mosaic resolve one tile-map entry and
 read one packed tile row for up to eight pixels. These bytes are used only
 within the current scanline callback, so CPU and DMA writes before the next

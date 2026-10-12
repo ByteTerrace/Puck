@@ -26,8 +26,8 @@ public sealed class MachineBootOptionsTests {
         Assert.Null(@object: options.ImagePath);
         Assert.Empty(collection: tokens);
     }
-    [InlineData("cgb fast dmgspeed bios=C:\\Firmware Files\\boot.bin", "C:\\Firmware Files\\boot.bin")]
-    [InlineData("cgb FAST dmgspeed bios=\"C:\\Firmware Files\\boot.bin\"", "C:\\Firmware Files\\boot.bin")]
+    [InlineData("cgb fast ags bios=C:\\Firmware Files\\boot.bin", "C:\\Firmware Files\\boot.bin")]
+    [InlineData("cgb FAST ags bios=\"C:\\Firmware Files\\boot.bin\"", "C:\\Firmware Files\\boot.bin")]
     [Theory]
     public void ExternalPathsConsumeTheFinalArgument(string input, string path) {
         var options = MachineBootOptions.Parse(
@@ -45,7 +45,7 @@ public sealed class MachineBootOptionsTests {
         );
         Assert.Equal(
             actual: tokens,
-            expected: new[] { "cgb", "dmgspeed" }
+            expected: new[] { "cgb", "ags" }
         );
         var roundTrip = MachineBootOptions.Parse(
             options: options.Format(),

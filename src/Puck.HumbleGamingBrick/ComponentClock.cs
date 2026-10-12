@@ -31,6 +31,9 @@ namespace Puck.HumbleGamingBrick.Timing;
 /// </para>
 /// </summary>
 public sealed class ComponentClock {
+    // A machine cycle is four CPU T-cycles at either speed.
+    private const int CpuTCyclesPerMachineCycle = 4;
+
     private readonly ApuComponent m_apu;
     private readonly ApuGeneratorClock m_apuGeneratorClock;
     private readonly AudioOutputComponent m_audioOutput;
@@ -43,7 +46,7 @@ public sealed class ComponentClock {
     private readonly SerialComponent m_serial;
     private readonly TimerComponent m_timer;
 
-    // Whether a stretch may be absorbed at all: normal speed, and no timed cartridge to tick per dot.
+    // Whether a stretch may be absorbed at all: no timed cartridge to tick per dot.
     private bool m_canAbsorb;
     private bool m_isDoubleSpeed;
     // Cycles every CPU-domain component has agreed to absorb, not yet spent — the display judged separately, so a
@@ -52,6 +55,10 @@ public sealed class ComponentClock {
     // Cycles of an agreed stretch the clock has already advanced through but the components have not: applied to
     // them by Settle before anything reads or ticks them.
     private int m_pendingAbsorb;
+    // Dots the display has already been moved through, by TickDisplayAlone, inside the cycles of m_pendingAbsorb.
+    // Under double speed every cycle of a stretch either completes a dot or is the generator's mid-dot step, so Settle
+    // counts the generator calls as the pending cycles less every dot they crossed, these included.
+    private int m_pendingDisplayDots;
     // Cycles every component has agreed to absorb as plain counting, not yet spent. Valid only until some component's
     // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
     // cycle, each of which clears it.
@@ -73,6 +80,9 @@ public sealed class ComponentClock {
     /// <param name="oamDma">The OAM DMA unit (CPU domain).</param>
     /// <param name="ppu">The PPU (LCD domain).</param>
     /// <param name="hdma">The HDMA unit (CPU domain).</param>
+    /// <param name="absorbsQuietStretches">Whether stretches every component agrees are plain counting are absorbed
+    /// at once; <see langword="false"/> ticks every component on every cycle, the reference the absorbing driver
+    /// must reproduce bit for bit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A component's declared domain does not match its slot.</exception>
     public ComponentClock(
@@ -86,7 +96,8 @@ public sealed class ComponentClock {
         ICartridge cartridge,
         OamDmaController oamDma,
         Ppu ppu,
-        HdmaController hdma
+        HdmaController hdma,
+        bool absorbsQuietStretches = true
     ) {
         ArgumentNullException.ThrowIfNull(argument: clock);
         ArgumentNullException.ThrowIfNull(argument: timer);
@@ -156,7 +167,8 @@ public sealed class ComponentClock {
         m_oamDma = oamDma;
         m_hdma = hdma;
         m_cartridgeClock = cartridgeClock;
-        m_canAbsorb = (m_cartridgeClock is null);
+        AbsorbsQuietStretches = absorbsQuietStretches;
+        m_canAbsorb = (absorbsQuietStretches && (m_cartridgeClock is null));
         m_ppu = ppu;
     }
 
@@ -167,6 +179,23 @@ public sealed class ComponentClock {
             : 0
         );
 
+    /// <summary>Gets whether this driver absorbs quiet stretches rather than ticking every component on every cycle.</summary>
+    public bool AbsorbsQuietStretches { get; }
+    /// <summary>Gets the CPU T-cycles every component has already agreed to absorb as plain counting: an advance of
+    /// at most this many changes no component's state but its counters, so none of them requests an interrupt inside
+    /// it. Zero when no such agreement stands.</summary>
+    public int AgreedQuietCycles =>
+        (m_canAbsorb
+            ? m_quietRemaining
+            : 0
+        );
+    /// <summary>Gets the CPU T-cycles the display can be ticked alone through: those every other component has already
+    /// agreed to absorb, while no transfer unit watches the display's modes. Zero when no such agreement stands.</summary>
+    public int DisplayAloneCycles =>
+        ((m_canAbsorb && m_hdma.IsIdle)
+            ? m_othersRemaining
+            : 0
+        );
     /// <summary>Gets the master clock this driver advances.</summary>
     public MasterClock Clock =>
         m_clock;
@@ -178,7 +207,7 @@ public sealed class ComponentClock {
         get => m_isDoubleSpeed;
         set {
             m_isDoubleSpeed = value;
-            m_canAbsorb = (m_cartridgeClock is null);
+            m_canAbsorb = (AbsorbsQuietStretches && (m_cartridgeClock is null));
             m_quietRemaining = 0;
         }
     }
@@ -253,14 +282,10 @@ public sealed class ComponentClock {
                 continue;
             }
 
-            // The display has work on these cycles but nothing else does. At normal speed the display alone is ticked
-            // and the rest absorbed; a transfer unit watching for a horizontal-blank edge must see every dot, so it
-            // holds the stretch to what the display itself agreed to, as does double speed, whose half-dot cycles
-            // are not ticked one display dot at a time here.
-            if (
-                m_isDoubleSpeed ||
-                !m_hdma.IsIdle
-            ) {
+            // The display has work on these cycles but nothing else does, so the display alone is ticked and the rest
+            // absorbed; a transfer unit watching for a horizontal-blank edge must see every dot, so it holds the
+            // stretch to what the display itself agreed to.
+            if (!m_hdma.IsIdle) {
                 quiet = ppuCycles;
 
                 if (quiet == 0) {
@@ -360,10 +385,11 @@ public sealed class ComponentClock {
         m_oamDma.Tick();
         m_hdma.Tick();
     }
-    // Ticks the display alone through cycles every other component has agreed to absorb, at normal speed: the
-    // display first catches up on any dots owed from earlier absorbed stretches, then is ticked one dot per cycle. A
-    // tick samples the display's mode before the display's own dot on that cycle, so the transfer unit's sample is
-    // taken before the stretch's last dot.
+    // Ticks the display alone through cycles every other component has agreed to absorb: the display first catches up
+    // on any dots owed from earlier absorbed stretches, then is ticked once per whole dot the cycles cross — every
+    // cycle at normal speed, every other one under double speed. A cycle's CPU-domain tick samples the display's mode
+    // before that cycle's own dot, so the transfer unit's last sample precedes the stretch's last dot when the last
+    // cycle completes one and follows it when the last cycle is a mid-dot step.
     private void TickDisplayAlone(int cycles) {
         var owed = ((int)(m_clock.CycleCount - m_settledCycleCount));
 
@@ -372,14 +398,28 @@ public sealed class ComponentClock {
             m_ppu.Skip(dots: owed);
         }
 
-        m_clock.AdvanceCycles(cycles: ((ulong)cycles));
+        var lastCompletesDot = (!m_isDoubleSpeed || (((SubCyclePhase + cycles) & 1) == 0));
+        var dotsBefore = m_clock.CycleCount;
 
-        for (var dot = 1; (dot < cycles); ++dot) {
+        AdvanceClock(cycles: cycles);
+
+        var dots = ((int)(m_clock.CycleCount - dotsBefore));
+
+        for (var dot = 1; (dot < dots); ++dot) {
             m_ppu.Tick();
         }
 
-        m_hdma.SampleMode();
-        m_ppu.Tick();
+        if (dots == 0) {
+            m_hdma.SampleMode();
+        } else if (lastCompletesDot) {
+            m_hdma.SampleMode();
+            m_ppu.Tick();
+        } else {
+            m_ppu.Tick();
+            m_hdma.SampleMode();
+        }
+
+        m_pendingDisplayDots += (owed + dots);
         m_settledCycleCount = m_clock.CycleCount;
     }
     private void TickLcdDomain() {
@@ -398,6 +438,7 @@ public sealed class ComponentClock {
     public void AdvanceCpuTCycle() {
         Settle();
         m_quietRemaining = 0;
+        m_othersRemaining = 0;
 
         // Double-speed advances only half a dot per CPU T-cycle, so the whole-dot boundary that makes the LCD-domain
         // components due is crossed on every other call; that bookkeeping lives in the cold path. At normal speed — the
@@ -433,10 +474,28 @@ public sealed class ComponentClock {
                 return;
             }
 
+            // The others' agreement still stands; with the display current, the display can join it again for as
+            // long as it next only counts, exactly as a fresh agreement would.
             if (
-                !m_isDoubleSpeed &&
-                m_hdma.IsIdle
+                (m_settledCycleCount == m_clock.CycleCount) &&
+                m_hdma.IsQuiet
             ) {
+                var display = DisplayQuietCycles();
+
+                if (display >= count) {
+                    m_quietRemaining = (Math.Min(
+                        val1: m_othersRemaining,
+                        val2: display
+                    ) - count);
+                    m_othersRemaining -= count;
+                    m_pendingAbsorb += count;
+                    AdvanceClock(cycles: count);
+
+                    return;
+                }
+            }
+
+            if (m_hdma.IsIdle) {
                 m_quietRemaining = 0;
                 m_othersRemaining -= count;
                 m_pendingAbsorb += count;
@@ -447,6 +506,68 @@ public sealed class ComponentClock {
         }
 
         AdvanceCpuTCyclesSlow(count: count);
+    }
+    /// <summary>Spends a halted processor's machine cycles with the display ticked alone, exactly as that many four-cycle
+    /// advances would, stopping after the first machine cycle that ends with an interrupt pending or before one the
+    /// display would only count through, which an agreement absorbs more cheaply.</summary>
+    /// <param name="machineCycles">The most machine cycles to spend; four CPU T-cycles each, all within
+    /// <see cref="DisplayAloneCycles"/>.</param>
+    /// <param name="interrupts">The interrupt controller whose pending requests wake the processor.</param>
+    /// <returns>The machine cycles spent.</returns>
+    public int IdleDisplayAlone(int machineCycles, InterruptController interrupts) {
+        ArgumentNullException.ThrowIfNull(argument: interrupts);
+
+        var owed = ((int)(m_clock.CycleCount - m_settledCycleCount));
+
+        if (owed > 0) {
+            m_hdma.SampleMode();
+            m_ppu.Skip(dots: owed);
+            m_pendingDisplayDots += owed;
+            m_settledCycleCount = m_clock.CycleCount;
+        }
+
+        // Four CPU T-cycles cross four dots at normal speed and two under double speed, leaving the sub-dot phase where
+        // it was, so whether a machine cycle's last cycle completes a dot holds for every one of them.
+        var dots = (m_isDoubleSpeed
+            ? (CpuTCyclesPerMachineCycle >> 1)
+            : CpuTCyclesPerMachineCycle
+        );
+        var lastCompletesDot = (!m_isDoubleSpeed || (SubCyclePhase == 0));
+        var spent = 0;
+
+        m_quietRemaining = 0;
+
+        while (
+            (spent < machineCycles) &&
+            (m_ppu.QuietDots < dots)
+        ) {
+            AdvanceClock(cycles: CpuTCyclesPerMachineCycle);
+
+            for (var dot = 1; (dot < dots); ++dot) {
+                m_ppu.Tick();
+            }
+
+            if (lastCompletesDot) {
+                m_hdma.SampleMode();
+                m_ppu.Tick();
+            } else {
+                m_ppu.Tick();
+                m_hdma.SampleMode();
+            }
+
+            m_othersRemaining -= CpuTCyclesPerMachineCycle;
+            m_pendingAbsorb += CpuTCyclesPerMachineCycle;
+            m_pendingDisplayDots += dots;
+            ++spent;
+
+            if (interrupts.Pending != InterruptKind.None) {
+                break;
+            }
+        }
+
+        m_settledCycleCount = m_clock.CycleCount;
+
+        return spent;
     }
     /// <summary>Forgets the agreed quiet stretch, settling the components first. Every path that changes a component's
     /// state other than absorbing cycles — a register write into any component, a snapshot restore — calls this
@@ -470,8 +591,10 @@ public sealed class ComponentClock {
         }
 
         var dots = ((int)(now - m_settledCycleCount));
+        var crossed = (dots + m_pendingDisplayDots);
 
         m_pendingAbsorb = 0;
+        m_pendingDisplayDots = 0;
         m_settledCycleCount = now;
 
         if (dots > 0) {
@@ -482,7 +605,7 @@ public sealed class ComponentClock {
         AbsorbOthers(
             cycles: pending,
             generatorCalls: (m_isDoubleSpeed
-            ? (pending - dots)
+            ? (pending - crossed)
             : pending)
         );
     }

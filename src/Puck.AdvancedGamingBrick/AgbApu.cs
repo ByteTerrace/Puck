@@ -49,6 +49,20 @@ public sealed partial class AgbApu : IAgbApu {
     /// <inheritdoc/>
     public int SampleRate =>
         m_sampleRate;
+    /// <summary>Gets how many further master cycles one <see cref="Step"/> can cover with exactly the result of
+    /// stepping them one at a time: those before the frame sequencer next clocks and before the next host sample falls
+    /// due, across which every channel only counts down at its current period. Valid until a register write.</summary>
+    public long QuietCycles =>
+        Math.Min(
+            val1: (m_frameSequencerTimer - 1L),
+            val2: ((m_sampleRate > 0)
+                ? m_samplePhase.QuietSteps(
+                    period: MasterClock,
+                    weight: m_sampleRate
+                )
+                : long.MaxValue
+            )
+        );
 
     /// <inheritdoc/>
     public int DrainSamples(Span<short> destination) =>

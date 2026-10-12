@@ -22,10 +22,8 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     public const int DefaultMaximumPendingSteps = 8;
 
     // The CURRENT revision — construction-fixed at boot, then live-mutable through TryReconfigure (the device swap).
-    // The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
     private ConsoleModel m_model;
 
-    private readonly bool m_dmgSpeed;
     private readonly MachineBootOptions m_boot;
     private readonly byte[]? m_bootRom;
 
@@ -35,16 +33,13 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     /// <param name="cartridgeRom">The cartridge ROM image, or <see langword="null"/> to start empty.</param>
     /// <param name="savePath">The cartridge's battery-save path (conventionally <c>&lt;romPath&gt;.sav</c>), or
     /// <see langword="null"/> for an in-memory-only save.</param>
-    /// <param name="dmgSpeed">When <see langword="true"/>, the FAIRNESS pin: the tick-to-cycle budget stays at the DMG
-    /// rate regardless of the KEY1 double-speed latch, so the budget is a function of configuration alone and every
-    /// machine consumes identical cycle counts per engine tick.</param>
     /// <param name="audioSampleRate">The audio output rate in frames per emulated second the neutral
     /// <see cref="IAudioMachine"/> surface reports, or 0 (the default) when no consumer wants audio from this host —
     /// a silent host performs zero presentation-side audio synthesis.</param>
     /// <param name="bootMode">Cold startup executes Puck firmware; fast startup skips its presentation.</param>
     /// <param name="bootRomPath">An external boot image, or null for bundled Puck firmware for the current revision.</param>
     /// <param name="bootRomImage">An already prepared external boot image. Mutually exclusive with bootRomPath.</param>
-    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0, MachineBootMode bootMode = MachineBootMode.Cold, string? bootRomPath = null, byte[]? bootRomImage = null)
+    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, int audioSampleRate = 0, MachineBootMode bootMode = MachineBootMode.Cold, string? bootRomPath = null, byte[]? bootRomImage = null)
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
@@ -54,7 +49,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
         savePath: savePath
     ) {
         m_model = model;
-        m_dmgSpeed = dmgSpeed;
         m_boot = new(
             ImagePath: bootRomPath,
             Mode: bootMode
@@ -106,7 +100,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
     public string Options =>
         GamingBrickEngine.FormatOptions(
             boot: m_boot,
-            dmgSpeed: m_dmgSpeed,
             model: m_model
         );
 
@@ -137,7 +130,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
         // Only hardware moves live. Image selection was checked above; the core never reloads a host path.
         var (ok, workerReason) = Worker.Reconfigure(options: GamingBrickEngine.FormatOptions(
             model: model,
-            dmgSpeed: m_dmgSpeed,
             boot: new MachineBootOptions(
                 Mode: m_boot.Mode,
                 ImagePath: null
@@ -159,7 +151,6 @@ public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek,
             cartridgeRom: data,
             bootMode: m_boot.Mode,
             bootRom: m_bootRom,
-            dmgSpeed: m_dmgSpeed,
             model: m_model,
             savePath: savePath
         );

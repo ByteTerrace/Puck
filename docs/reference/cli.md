@@ -2824,7 +2824,12 @@ behind each sampled tick as deterministic counts (certified sweeps and the
 bounds queries they charge, interval walks with their instructions and full
 rotation expansions, and point evaluations with their instructions, read from
 `physics.sweep`, `sdf.bounds` and `sdf.point`), and a scripted Klondike deal's
-per-tick time and per-mutation allocation. A server
+per-tick time and per-mutation allocation. The screen machines
+emulate on worker threads the tick only submits to, and the back-to-back idle
+window is bounded by the slowest of them once their pending windows fill, so
+the lane also times the shipped tick paced at the simulation rate, beside the
+count of submissions that waited on a machine, and times each screen machine's
+own tick of emulation alone. A server
 construction includes admission, navigation, and runtime allocation, so this
 lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,

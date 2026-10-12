@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick;
 /// The <see cref="IMachineEngine"/> for the SM83-family GamingBrick — the first implementation of the neutral
 /// screen-machine contract. Its <see cref="Id"/> is <c>gaming-brick</c>, and its options vocabulary is a hardware
 /// revision (a family token <c>dmg</c>/<c>cgb</c>/<c>agb</c>, default <c>dmg</c>, or a specific revision such as
-/// <c>cgb0</c> or <c>sgb2</c>) plus an optional <c>dmgspeed</c> fairness pin and <c>cold</c>/<c>fast</c> startup.
+/// <c>cgb0</c> or <c>sgb2</c>) plus <c>cold</c>/<c>fast</c> startup.
 /// Bundled Puck firmware is the default; an optional final <c>bios=&lt;path&gt;</c> selects an external image.
 /// A host resolves this engine by id and hands it cartridge bytes; the machine it builds is a <see cref="MachineHost"/>.
 /// It also carries <see cref="IMachineLinkingEngine"/>: two of its running machines can be cable-linked into one
@@ -14,10 +14,6 @@ namespace Puck.HumbleGamingBrick;
 /// <see cref="SerialLinkSession"/> interleave until the link is disposed.
 /// </summary>
 public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingEngine, IMachineOperationProvider {
-    /// <summary>The <c>dmgspeed</c> option token — the fairness speed pin (a fixed per-tick cycle budget regardless of the
-    /// KEY1 double-speed latch).</summary>
-    internal const string DmgSpeedToken = "dmgspeed";
-
     // The serial port carries exactly one peer, so a cable link is a pair.
     private const int CableSeats = 2;
     // The revision a bare family token selects: the two steppings the accuracy work targets, plus the Advanced console.
@@ -50,12 +46,11 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
 
     /// <inheritdoc/>
     public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
-        var (model, dmgSpeed, boot) = ParseOptions(options: options);
+        var (model, boot) = ParseOptions(options: options);
 
         return new MachineHost(
             audioSampleRate: audioSampleRate,
             cartridgeRom: contentBytes,
-            dmgSpeed: dmgSpeed,
             bootMode: boot.Mode,
             bootRomPath: boot.ImagePath,
             model: model,
@@ -140,17 +135,15 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
         return true;
     }
 
-    /// <summary>Parses the space-separated options string (order-independent) into a hardware revision and the fairness
-    /// pin — the one options grammar, shared by <see cref="Create"/> and a host's live reconfigure. A model keyword sets
-    /// the revision; the <c>dmgspeed</c> token applies the fairness pin. An unknown token throws so a typo is loud, not
-    /// silently defaulted.</summary>
+    /// <summary>Parses the space-separated options string (order-independent) into a hardware revision and the firmware
+    /// startup options — the one options grammar, shared by <see cref="Create"/> and a host's live reconfigure. A model
+    /// keyword sets the revision. An unknown token throws so a typo is loud, not silently defaulted.</summary>
     /// <param name="options">The engine-specific options string, or <see langword="null"/> for defaults.</param>
     /// <param name="bootDefaults">Construction-fixed startup settings to retain when reconfiguring only hardware.</param>
-    /// <returns>The parsed revision, fairness pin and firmware startup options.</returns>
+    /// <returns>The parsed revision and firmware startup options.</returns>
     /// <exception cref="ArgumentException">A token is not a recognized option.</exception>
-    internal static (ConsoleModel Model, bool DmgSpeed, MachineBootOptions Boot) ParseOptions(string? options, MachineBootOptions? bootDefaults = null) {
+    internal static (ConsoleModel Model, MachineBootOptions Boot) ParseOptions(string? options, MachineBootOptions? bootDefaults = null) {
         var model = DefaultModel;
-        var dmgSpeed = false;
         var boot = MachineBootOptions.Parse(
             defaults: bootDefaults,
             machineTokens: out var machineTokens,
@@ -158,12 +151,7 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
         );
 
         foreach (var token in machineTokens) {
-            if (token.Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: DmgSpeedToken
-            )) {
-                dmgSpeed = true;
-            } else if (TryParseModelToken(
+            if (TryParseModelToken(
                 model: out var parsed,
                 token: token
             )) {
@@ -172,29 +160,26 @@ public sealed partial class GamingBrickEngine : IMachineEngine, IMachineLinkingE
                 throw new ArgumentException(message: $"unknown gaming-brick option '{token}' — expected one of {string.Join(
                     separator: '|',
                     values: ModelTokens.Keys
-                )}, {DmgSpeedToken}, cold, fast, or a final bios=<path>");
+                )}, cold, fast, or a final bios=<path>");
             }
         }
 
-        return (Model: model, DmgSpeed: dmgSpeed, Boot: boot);
+        return (Model: model, Boot: boot);
     }
-    /// <summary>Formats a revision + fairness pin back into the canonical options string — the inverse of
+    /// <summary>Formats a revision and its startup options back into the canonical options string — the inverse of
     /// <see cref="ParseOptions"/>, so a host's <c>screen.options</c> echo and <c>world.save</c> readback speak the same
     /// vocabulary an author wrote. A family's default revision formats as the bare family token.</summary>
     /// <param name="model">The current revision.</param>
-    /// <param name="dmgSpeed">Whether the fairness pin is set.</param>
     /// <param name="boot">The construction-fixed firmware startup options.</param>
-    /// <returns>The options string (e.g. <c>cgb</c> or <c>dmg dmgspeed</c>).</returns>
-    internal static string FormatOptions(ConsoleModel model, bool dmgSpeed, MachineBootOptions boot) {
+    /// <returns>The options string (e.g. <c>cgb cold</c>).</returns>
+    internal static string FormatOptions(ConsoleModel model, MachineBootOptions boot) {
         var modelToken = model switch {
             DmgFamilyDefault => "dmg",
             ColorFamilyDefault => "cgb",
             _ => model.ToString().ToLowerInvariant(),
         };
 
-        return ((dmgSpeed
-            ? $"{modelToken} {DmgSpeedToken}"
-            : modelToken) + $" {boot.Format()}");
+        return $"{modelToken} {boot.Format()}";
     }
 
     private static bool TryParseModelToken(string token, out ConsoleModel model) =>

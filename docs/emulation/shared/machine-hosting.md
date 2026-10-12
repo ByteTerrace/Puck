@@ -75,10 +75,9 @@ contract; constructing a core starts no worker or rendering infrastructure.
   Carry fractional pacing remainders in a long-running host. HGB carries
   instruction overshoot internally; AGB callers subtract the previous
   call's overshoot from the next budget. AGB's rate is
-  16,777,216 cycles/second; HGB's hardware rate is 4,194,304 LCD dots/second,
-  including CGB double speed. HGB's `CycleRate` retains the queued
-  host's speed policy: pass `dmgSpeed: true` to keep that reported rate at
-  the dot rate when using it for your host's pacing. `NativeFrameIndex` is
+  16,777,216 cycles/second; HGB's is 4,194,304 LCD dots/second in every model,
+  CGB double speed included, and its `CycleRate` reports exactly that.
+  `NativeFrameIndex` is
   based on the master clock and remains usable while the LCD is disabled.
 - `Framebuffer` is a live, row-major `0x00RRGGBB` span: 240 × 160 for AGB,
   160 × 144 for HGB. Copy it before another thread uses it or the core advances.
@@ -112,7 +111,7 @@ for these services.
 The screen engines share `cold`/`fast` tokens and a final `bios=<path>` option.
 The path consumes the rest of the option string, so paths with spaces work;
 matching surrounding double quotes are optional. `bios=puck` selects bundled
-firmware. Machine-specific options, such as HGB's `cgb dmgspeed`, precede the
+firmware. Machine-specific options, such as HGB's `cgb` revision token, precede the
 path. The [HGB guide](../hgb/embedding.md#firmware-and-startup)
 owns revision-specific startup behavior.
 
@@ -154,11 +153,16 @@ $\text{remainder} \leftarrow (\text{stepTicks} \times \text{CoreFrequency} + \te
 
 Each budget rounds down and carries its fractional part into the next call.
 The [synchronous contract](#synchronous-core-hosting) states the rate and overshoot
-policy for each core. HGB consumes LCD-dot budgets even in CGB double speed;
-CPU T-cycles are a separate hardware domain. Its reported pacing frequency can
-also follow the queued host’s speed policy unless `dmgspeed` is selected.
+policy for each core. HGB consumes LCD-dot budgets even in CGB double speed and paces at the dot
+rate; CPU T-cycles are a separate hardware domain.
 
 ## Queued screen-machine hosting
+
+A world emulates every running machine on every tick, whether or not any
+screen showing it is visible to anyone. Machine state is simulation state that
+rules, bindings and replays read, so it never depends on what a viewer can see;
+the cost of an unseen cabinet is reduced by making idle emulation cheap, never
+by skipping or deferring it.
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A
 concrete host has one main job: turn loaded content into an
@@ -210,7 +214,7 @@ The worker applies these policies:
   exact. Engine ticks become core cycles through
   `RationalRateAccumulator.TakeCycleBudget`, a remainder-carrying integer
   conversion against `Puck.Hosting.EngineTicks.PerSecond`. A core may change its
-  rate's cycles, as CGB double speed does, but keeps its seconds, which set the
+  rate's cycles while it runs, but keeps its seconds, which set the
   scale of the carried phase; the conversion carries phase rather than
   accumulating drift. A rewind restores that phase with the core, and a durable
   checkpoint persists it with its scale and refuses a runtime whose clock has a

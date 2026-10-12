@@ -782,6 +782,49 @@ public sealed partial class AgbBus : IAgbBus {
         m_halted = false;
         m_stopped = false;
     }
+    /// <summary>Idles a halted processor through up to <paramref name="limit"/> cycles at once, leaving exactly the
+    /// state that many single-cycle halted steps would: it moves only while no wake is requested, the clock may
+    /// advance without per-cycle work, no peripheral event or pending DMA falls inside the span, and the APU can cover
+    /// it in one step.</summary>
+    /// <param name="limit">The most cycles to idle; the caller's remaining budget.</param>
+    /// <returns>The cycles idled, each standing for one halted step; zero when any condition fails, in which case
+    /// the caller takes an ordinary step.</returns>
+    public long IdleHalted(long limit) {
+        if (
+            !m_halted ||
+            (m_dmaCore is null) ||
+            (m_apuCore is null) ||
+            m_dmaActive ||
+            !m_clockState.CanAdvance ||
+            (m_apuClock != m_scheduler.Now) ||
+            m_dmaCore.HasPendingTransfer ||
+            m_apuCore.HasPendingFifoRefill ||
+            (m_stopped
+                ? StopWakeRequested()
+                : m_interrupts.HasPendingInterrupt)
+        ) {
+            return 0L;
+        }
+
+        // A single halted step stays on StepClocks' fast path only while the next event is more than one cycle away,
+        // and the APU span must not cross its own frame-sequencer clock or a host sample.
+        var cycles = Math.Min(
+            val1: limit,
+            val2: Math.Min(
+                val1: ((m_scheduler.NextWhen - m_scheduler.Now) - 1L),
+                val2: m_apuCore.QuietCycles
+            )
+        );
+
+        if (cycles <= 0L) {
+            return 0L;
+        }
+
+        m_scheduler.Now += cycles;
+        SyncApu();
+
+        return cycles;
+    }
 
     // A PPU event (V-blank/H-blank/video-capture start/end) fired at its exact cycle marks the matching timed-DMA
     // channels PENDING. This only flips activation flags — no bus access — so it is safe to call from the per-cycle

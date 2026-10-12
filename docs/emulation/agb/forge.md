@@ -26,12 +26,15 @@ and placed before byte variables; saved variables retain both bytes.
 
 `ThumbEmitter`, `ArmWords`, `AgbForgeCartridge`, `AgbForgeKernel`, `AgbHw`,
 and `AgbForgeMemoryMap` remain available for lower-level native tooling.
-The polling kernel also retains its rectangle and deterministic PRNG helpers.
+The kernel also retains its rectangle and deterministic PRNG helpers.
 The document compiler emits no built-in gameplay and uses neither helper.
 
 ## Boot and firmware ownership
 
-The document compiler emits no SWIs, IRQ dispatch, or BIOS dependency.
+The document compiler emits no SWIs, IRQ dispatch, or BIOS dependency. Its
+frame wait arms the V-blank request (DISPSTAT's enable and IE's V-blank bit,
+with IME left clear), acknowledges any stale request in IF, and halts through
+HALTCNT; the next V-blank wakes the processor without dispatching anything.
 `forge.play` mounts canonical source through the content provider and uses the
 engine's bundled cold-boot default. Explicit fast boot retains firmware services.
 The default header logo is zeroed; the Puck firmware can start this native image.

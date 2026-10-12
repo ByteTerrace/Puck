@@ -35,6 +35,11 @@ public interface ICpu {
     /// masks feed. Read-only observability for a debugger's register dump; the state itself is in the snapshot.</summary>
     bool InterruptMasterEnable { get; }
 
+    /// <summary>Executes instructions until the master clock reaches <paramref name="dot"/>: exactly the steps that
+    /// calling <see cref="StepInstruction"/> while the clock stands before that dot would run, leaving the same state,
+    /// with the machine cycles a halted processor burns idled together until an interrupt is pending.</summary>
+    /// <param name="dot">The master-clock instant, in whole LCD dots, at or past which stepping stops.</param>
+    void RunUntil(ulong dot);
     /// <summary>Executes one instruction — or services a pending interrupt, or burns one machine cycle while halted —
     /// advancing the master clock by the cycles it consumes.</summary>
     void StepInstruction();
