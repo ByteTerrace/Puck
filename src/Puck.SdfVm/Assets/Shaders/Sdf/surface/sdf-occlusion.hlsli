@@ -19,6 +19,16 @@
 // before striding on.
 // The march takes the shadow-march quality and its light's penumbra sharpness; softShadowVisibility reads both
 // from the view.
+#ifdef SDF_QUERY_REJECTION_BOUND
+// The clearance that proves a stride from traveled to the reach (stride's bound below): the estimate's level plus the
+// stride and the estimate's growth over it. A query's running minimum starts here, so the clearance it reports, and
+// its rejected bounds, prove as far as the field allows. Zero before the estimate starts.
+float sdfShadowProofCeiling(float traveled, float reach, float stepScale, float visibility, float sharpness) {
+    if (traveled < ShadowEstimateStart) { return 0.0; }
+    return ((((stepScale * traveled) / sharpness) * visibility) +
+        (max((reach - traveled), 0.0) * (1.0 + ((visibility * stepScale) / sharpness))));
+}
+#endif
 float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach,
     bool fastMarch, float sharpness) {
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
@@ -43,9 +53,28 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
             : max(ShadowStepNear, (traveled * ShadowStepFarSlope)));
         float saturation = max(max(ceiling, SurfaceEpsilon * stepScale),
             ((traveled >= ShadowEstimateStart) ? (((stepScale * traveled) / sharpness) * visibility) : 0.0));
-        sdfQueryDistanceCeiling = (saturates ? min(SDF_FAR_DISTANCE, saturation * ceilingScale) : SDF_FAR_DISTANCE);
+        float saturationCeiling = (saturates ? min(SDF_FAR_DISTANCE, saturation * ceilingScale) : SDF_FAR_DISTANCE);
+#ifdef SDF_QUERY_REJECTION_BOUND
+        // The walk rejects against the saturation, as before, so it evaluates exactly what it did; its running minimum
+        // starts at the clearance a stride to the reach would need (sdfShadowProofCeiling), and every rejected bound
+        // lowers sdfQueryRejectedBound. Their minimum is a lower bound of the field the stride below may take.
+        sdfQueryRejectCeiling = saturationCeiling;
+        sdfQueryDistanceCeiling = (saturates
+            ? min(SDF_FAR_DISTANCE, max(saturation, sdfShadowProofCeiling(traveled, reach, stepScale, visibility, sharpness)) * ceilingScale)
+            : SDF_FAR_DISTANCE);
+        float bound = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
+        sdfQueryRejectCeiling = SDF_FAR_DISTANCE;
+        sdfQueryDistanceCeiling = SDF_FAR_DISTANCE;
+        // The saturated walk's value bit for bit: rounding a product is monotone, so the minimum commutes with the
+        // program's final multiplier.
+        float clearance = min(bound, (saturationCeiling * sdfProgramLayout.stepScale));
+        float provenClearance = (saturates ? min(bound, sdfQueryRejectedBound) : clearance);
+#else
+        sdfQueryDistanceCeiling = saturationCeiling;
         float clearance = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
         sdfQueryDistanceCeiling = SDF_FAR_DISTANCE;
+        float provenClearance = clearance;
+#endif
 
         sdfEvalCount += 1.0;
         sdfWorkSteps += 1u;
@@ -64,7 +93,16 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
             return 0.0;
         }
 
+        // The ceiling keeps samples dense where they could lower the estimate. Past it the stride takes every step the
+        // proven clearance c shows cannot: a point s further on reads at least c - s, so it neither hits while
+        // s <= c - SurfaceEpsilon * stepScale nor lowers the estimate while k (c - s) / (stepScale (t + s)) stays at or
+        // above the visibility, s <= (k c - v stepScale t) / (k + v stepScale).
         float stride = clamp(clearance, ShadowStepMin, ceiling);
+        if (traveled >= ShadowEstimateStart) {
+            float safe = min((provenClearance - (SurfaceEpsilon * stepScale)),
+                (((sharpness * provenClearance) - (visibility * stepScale * traveled)) / (sharpness + (visibility * stepScale))));
+            stride = max(stride, safe);
+        }
         bool proven;
         float switchAt;
 

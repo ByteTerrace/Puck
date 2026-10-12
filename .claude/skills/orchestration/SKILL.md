@@ -115,7 +115,12 @@ fluctuate with what else is open and do not define a machine's capability.
 Allocate one GPU leg per GPU at a time, and let CPU work, builds included, run
 beside it: a correctness leg's verdict does not depend on load, and a leg that
 times out under load is re-run once alone and reported as a flake. Only
-wall-clock work needs a quiet machine. Use
+wall-clock work needs a quiet machine, and the lead takes it: a lane judges
+by counts and lists the timing reads it wants, and the lead runs them in a
+window it has cleared of every other lane's builds, suites, evals and World
+runs. A brief that measures boot, compile or frame time grants no GPU and
+takes no timing while other lanes run. Booting `Puck.World` is a GPU leg
+even when only its startup is measured. Use
 [`verification`](../verification/SKILL.md#gpu-legs) for grants, GPU work
 classification and execution.
 

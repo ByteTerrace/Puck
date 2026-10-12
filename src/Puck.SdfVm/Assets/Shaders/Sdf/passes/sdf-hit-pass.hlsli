@@ -33,6 +33,10 @@
 #if defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
 #define SDF_GROUP_SHADOW_GATHER
 #endif
+// The soft-shadow march strides on the bounds its walk rejects by (field/sdf-map.hlsli).
+#ifdef SDF_SHADOW_PASS
+#define SDF_QUERY_REJECTION_BOUND
+#endif
 // One shadow kernel, the receiver and one kernel per views variant serve every fade capacity: each compiles both fade
 // slots and reads the active fade count from the pass block, which a graph without the incoming image writes as zero.
 #if defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_VIEWS_PASS)
