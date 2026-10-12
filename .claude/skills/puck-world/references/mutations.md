@@ -210,7 +210,7 @@ discovers the set by reflection and `Validate()` fails BOOT loudly on a
 missing attribute, an out-of-range ordinal, or a collision.
 
 The lane is `UInt128`, with room past the last ordinal, but a new kind is a substrate
-decision that must survive consolidation review first (see "Adding a mutation
+decision that must answer the consolidation question first (see "Adding a mutation
 kind" below). Regenerate rather than trust this
 table — it is a copy of the `[MutationKind]` attributes on `WorldMutation`'s
 nested records, which are the authority:
@@ -401,8 +401,8 @@ existing ordinals (necessary, but it passes on a codec that silently truncates
 the new range), and a control exercising a bit past the old ceiling across the
 wire. The width is an implementation detail, not protocol: authored grants name
 verbs by name and the ordinal is an internal dense index, so widening or
-re-packing ordinals is mechanical under supergreen. Only past the consolidation
-gate do the steps below apply.
+re-packing ordinals is mechanical. Only past the consolidation question do the
+steps below apply.
 
 1. **Data:** the nested sealed record on `WorldMutation` with
    `[MutationKind(ordinal, section)]` (the next ordinal past the last, keeping the set dense). XML-doc the row

@@ -32,11 +32,10 @@ documentation, and this skill with them when guidance disagrees.
 7. Regenerate machine-owned registers and reports with
    `puck baselines maths-ledger`; never hand-edit them. A test run writes
    only to the build output and never changes the checkout.
-8. Prove the new law bites by applying a plausible mutation, observing the
-   intended failure, restoring the implementation, and observing the pass.
-   A law that lands with a fix is proven against that fix with
-   `puck laws prove <law> --fix <commit>`, or `--file-list` for an
-   uncommitted fix; it never hand-reverts files in a shared tree.
+8. When it is in doubt whether a new law can fail, apply a plausible mutation
+   in a worktree of your own and watch it go red, or run
+   `puck laws prove <law> --fix <commit>` (`--file-list` for an uncommitted
+   fix). Never hand-revert files in a shared tree.
 
 ## Run a tier
 
@@ -61,4 +60,4 @@ rules, mutation procedure, or deliberate-correction rules.
 | [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names, or textual patterns across the suite. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers, or rename and deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
-| [`verification`](../verification/SKILL.md) | The gates beyond the law suite, the CLI copy, and what a finished lane proves. |
+| [`verification`](../verification/SKILL.md) | The landing bar, optional checks beyond the law suite, and the CLI copy. |

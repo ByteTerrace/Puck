@@ -39,8 +39,9 @@ Post stages are authoritative; update stale skill guidance in the same change.
   A ticked cycle withdraws both cached clock agreements, including the
   others-only bound: rejoining the display to a stale bound can skip a timer
   edge. `ClockAgreementLawTests` covers this with parked HBlank DMA.
-- Treat external suites and co-simulators as evidence; repository Post stages
-  and golden replays are gates.
+- External suites, co-simulators, Post stages and golden replays are evidence
+  about the hardware model. A stage or replay that a better-sourced correction
+  moves is updated with the correction.
 
 ## Workflow
 
@@ -52,25 +53,21 @@ Post stages are authoritative; update stale skill guidance in the same change.
    counts.
 3. Make the smallest hardware-model change that explains the evidence. Keep
    clock conversions exact, event ordering explicit, and snapshots complete.
-4. Add or update a self-checking stage when a durable contract changes. A
-   diagnostic trace alone is not a gate.
-5. Iterate with `--filter` or `--tier`, then run the affected Post battery in
-   Release: the Humble battery's `--lane gate` for any change, and a plain run
-   (every ledger row) for one that touches accuracy; a recorded outcome that
-   moves is accepted from the run's own candidate ledger with `--accept`,
-   never re-measured. Run both batteries when shared hosting, snapshots,
-   clocks, or link behavior crosses the two machines; run Tier C for serial,
-   SIO, infrared, or link changes. The light gun rides the infrared receive
-   line: its Humble stage is `light-gun`, a forge cartridge reads it through
-   `$light` (`CartridgeLightTests`), and the World's headless `light-gun`
-   canary drives it from a seat's pointer.
-6. Report exact commands, selected stages, asset-gated skips, and whether a
-   failure is caused by the change or was already present.
-
-When a change reaches either emulator core, fetch the Tier B corpora with each
-battery's own `--fetch-corpora` (the archives and hashes its `corpora.json`
-pins) and run Tier B; the owner grants that download to every lane, so a
-missing corpus is fetched, not reported as a skip.
+4. Show the change working by running the Post stages it reaches in Release
+   (`--filter` or `--tier`), or by booting a cartridge that exercises it. Add
+   a self-checking stage only where running cannot show the behavior and the
+   stage will outlive the next rewrite.
+5. Wider runs are optional tools: the Humble battery's `--lane gate`, a plain
+   run over every ledger row for accuracy work, both batteries when shared
+   hosting, snapshots, clocks or link behavior crosses the two machines, Tier C
+   for serial, SIO, infrared or link changes, and Tier B over the corpora each
+   battery's `--fetch-corpora` downloads (the archives and hashes its
+   `corpora.json` pins). A recorded outcome that moves is accepted from the
+   run's own candidate ledger with `--accept`, never re-measured. The light gun
+   rides the infrared receive line: its Humble stage is `light-gun`, a forge
+   cartridge reads it through `$light` (`CartridgeLightTests`), and the World's
+   headless `light-gun` canary drives it from a seat's pointer.
+6. Report exact commands, selected stages and asset-gated skips.
 
 ## Load references selectively
 

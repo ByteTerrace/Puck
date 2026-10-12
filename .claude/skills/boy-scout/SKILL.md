@@ -88,8 +88,7 @@ and synchronizing the relevant documentation is part of the code change.
    prose merely to make every row change: a behavior-preserving private
    refactor can complete the audit with no documentation diff.
 5. **Verify the whole set.** Route prose, links, anchors, XML, skills, docfx
-   inputs, and generated sources through `documentation`; run the owning code
-   gate as well. Inspect the final diff as one contract change, not as code with
+   inputs, and generated sources through `documentation`. Inspect the final diff as one contract change, not as code with
    optional documentation attached.
 
 The audit is a working discipline, not a request for a persistent checklist or
@@ -101,11 +100,12 @@ silently omit it because its file was outside the planned implementation.
 - **An owed or in-passing fix rides the primary change's verification.** A doc
   fix owes its surface-specific check; XML documentation owes the relevant
   build; docfx source or navigation owes its build or link check; a comment fix
-  owes nothing extra; a fix that touches code owes the gate the code owes.
+  owes nothing extra; a fix that touches code is built and shown working like
+  the code around it.
 - **A fix that changes observable behavior is never incidental.** Exception
   types and parameter names, return values, accepted inputs, formatted output —
-  changing any of these requires its own ruling, its own laws, and its own
-  commit, however small the diff. When a comment and the code disagree, the
+  changing any of these is its own change and its own commit, however small
+  the diff. When a comment and the code disagree, the
   incidental fix corrects the COMMENT to the code; deciding the code is wrong
   is a ruled change.
 - **Every fact removed keeps a home or is recorded stale** — the orphan audit
@@ -164,12 +164,7 @@ A finding recorded nowhere was not left deliberately; it was dropped.
 |---|---|
 | [`documentation`](../documentation/SKILL.md) | A code change's documentation-set audit or an incidental fix touches READMEs, `docs/`, XML comments, docfx inputs, headings, links, skills, or agent instructions — it owes that skill's ownership rules, registers, orphan audit, and verification checklist. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The finding is a `Puck.Maths` doc-vs-code divergence, or the fix touches `tests/Puck.Maths.Tests`. |
-| [`gaming-bricks`](../gaming-bricks/SKILL.md) | The incidental fix touched emulator code — it owes the Humble and Advanced Post batteries that skill routes. |
+| [`gaming-bricks`](../gaming-bricks/SKILL.md) | The incidental fix touched emulator code and needs that skill's contracts. |
 | [`puck-world`](../puck-world/SKILL.md) | The finding touches world data, server substrate, replay, session behavior, or the greenfield game surface. Consult its current verification routing. |
 | [`content-search`](../content-search/SKILL.md) / [`symbol-analysis`](../symbol-analysis/SKILL.md) | Finding every referrer of the thing you fixed — text by search, C# semantics by the compiler. |
-| [`verification`](../verification/SKILL.md) | Proving the change and its fixes: the gate route, red legs, ledgers checked with `--check`, GPU legs. |
-
-Do not hard-code that engine work has no gate. Route through `puck-world` and
-inspect the current test projects and verification guidance: settled substrate
-and greenfield game surfaces can have different stories. Report any remaining
-machine-verification gap explicitly instead of repeating a historical absence.
+| [`verification`](../verification/SKILL.md) | Showing the change and its fixes working: the landing bar, optional checks, GPU legs. |

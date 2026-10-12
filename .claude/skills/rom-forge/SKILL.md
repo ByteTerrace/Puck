@@ -323,10 +323,12 @@ owns its own coefficients.
 
 ## Verification
 
-Run both existing forge test projects. `CartridgeCompilerTests` builds JSON
-source, exercises editing/refusals, pins deterministic output after round-trip,
-and runs inputs, comparisons, arithmetic and sprite/graphics observations on
-both real emulators. Emitter probes and boot-image hash tests remain separate.
+Show a forge change working by compiling a cartridge and playing it in a world
+(below). The two forge test projects are there to run when they reach the
+change: `CartridgeCompilerTests` builds JSON source, exercises
+editing/refusals, pins deterministic output after round-trip, and runs inputs,
+comparisons, arithmetic and sprite/graphics observations on both real
+emulators. Emitter probes and boot-image hash tests are separate.
 Compiler validation cannot prove an arbitrary player's game correct; no
 hidden demo verifier runs during document compilation.
 

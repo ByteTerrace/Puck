@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Decides when a lane gets a review (by default none; one verify-and-fix pass for determinism, persisted formats, federation or an explicit owner request, never a second round) and briefs, runs and closes that pass. Cross-family review is the default unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Briefs, runs and closes an optional review-and-fix pass on a lane (none by default; the lead's choice when a second reader pays for itself, or an explicit owner request; never a second round). Cross-family review is the usual choice unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verifying fixes, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns the landing bar and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
@@ -15,23 +15,19 @@ stale and is corrected in the same change.
 
 ## When a lane gets a review
 
-- By default a lane gets no review pass. Its implementer verifies its own work
-  (build, its laws with proved red legs, the suites `puck affected` selects) and
-  the lead lands it through `puck gate`. Code first: a review never stands
-  between finished code and its landing without one of the reasons below.
-- A lane gets one cross-family pass when it changes determinism (simulation
-  state, fixed-point numerics, replay), a persisted format, or federation
-  authority. Codex reviews Claude-written code; a Claude agent reviews
-  Codex-written code. The pass verifies and fixes in one run.
-- Every pass is review-and-fix, never report-only: the owner prefers fixes
-  applied in the pass to findings handed back. Both Codex models, Astra
-  (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use and encouraged for a
-  pass; neither is reserved. The installed Codex plugin's result-handling
-  guidance not to auto-apply a review's fixes does not apply in this
-  repository.
-- An explicit owner request also starts a review and takes precedence over the
-  default trigger and cross-family selection. Use the owner's named model and
-  effort, including a same-family reviewer, for both review and local fixes.
+- A lane gets no review pass by default. Its implementer shows it working
+  ([landing bar](../verification/SKILL.md#the-landing-bar)) and the lead lands
+  it. A review never stands between finished code and its landing.
+- A review is a tool the lead may choose when a second reader pays for itself,
+  for example on a subtle determinism, persisted-format or federation change.
+  Cross-family is the usual choice: Codex reviews Claude-written code, a Claude
+  agent reviews Codex-written code.
+- Every pass is review-and-fix, never report-only. Both Codex models, Astra
+  (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use for a pass. The
+  installed Codex plugin's result-handling guidance not to auto-apply a
+  review's fixes does not apply in this repository.
+- An explicit owner request starts a review with the owner's named model and
+  effort, including a same-family reviewer.
 - There is no second round. The lead reads the pass's fix diff and rules on
   anything left: a scoped fix, a recorded open item, or a dismissal with its
   reason.
@@ -133,14 +129,13 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    - layout and synchronization: a C# and HLSL block drifting, a missing
      barrier on either backend;
    - documents and docs: a persisted shape read under a new meaning, docs
-     wrong about the change;
-   - laws whose red legs cannot fail.
+     wrong about the change.
 
    Add the author's own open questions, and the bug classes earlier passes
    found in the same area. Write the hunt list before reading the diff:
    checks written after reading it inherit its blind spots.
-6. **Evidence gathered.** The suites, counts, gates and mutation proofs the
-   lane already ran, so the pass reads instead of re-running them.
+6. **Evidence gathered.** What the lane already ran and measured, so the pass
+   reads instead of re-running it.
 7. **Rules block,** verbatim. Codex reads `AGENTS.md` from the worktree root
    on its own; the block names it and restates the rules a review pass most
    often needs in front of it:
@@ -152,13 +147,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
 8. **Instructions block,** verbatim:
 
    ```text
-   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear, adding a law (test) that fails without the fix; otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Report every existing law you find that cannot fail. Don't commit. End with a list, one line per finding: <id> file:line - fixed (files; law) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
+   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Don't commit. End with a list, one line per finding: <id> file:line - fixed (files) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
    ```
 
    For a documentation-only pass, append: "Edit only Markdown, eval case files,
-   and XML comments. A documentation fix needs no law; do not add tests.
-   Check changed Markdown links and anchors. Build only when XML comments
-   change."
+   and XML comments; do not add tests. Check changed Markdown links and
+   anchors. Build only when XML comments change."
 
 Do not hand the pass a `puck affected` list, do not tell it to use the Codex
 CLI, and do not use the companion's `review` subcommand for a lane: it takes
@@ -182,28 +176,26 @@ no brief, so it raises compatibility findings and tries to run tests.
    (`review: <lane> pass, unverified`), so the output is never lost and its
    diff is one unit. Keep every commit that may be rewritten local, including
    verification repairs; never push them before step 5.
-3. **Verify the fixes.** Brief one agent, in the review worktree, to: build
-   each touched project, then the solution; prove every new or changed law red
-   with its fix withheld and green with it applied (`verification` § Prove
-   each law's red leg); run the suites the fixes reach; run the check forms on
-   touched files; repair what does not compile; and resolve or report each
-   open finding. The agent reports each finding as verified, repaired, or
-   rejected with the reason. For documentation-only fixes, use `documentation`
-   checks; add no law and build only for changed XML comments.
-   The lead reads the verified diff; nothing here opens another pass.
+3. **Verify the fixes.** Brief one agent, in the review worktree, to build
+   each touched project with zero warnings, show each fix working by running
+   or measuring it, run the tests the fixes added or touched, and resolve or
+   report each open finding as verified, repaired, or rejected with the
+   reason. For documentation-only fixes, use `documentation` checks and build
+   only for changed XML comments. The lead reads the verified diff; nothing
+   here opens another pass.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
    `area: sentence` subjects, and land them on the author's working branch (a
    fast-forward when the pass ran detached at its head). From the clean
    author's worktree, use `git merge --ff-only <verified review head>`; if
    the branch has diverged, stop and report it, never reset or rebase it.
    Rewrite only the pass's unpublished commits, preserving earlier branch
-   history. Each message names the findings fixed, the law that pins each,
-   and how its red leg was proved, or the documentation checks for doc-only
-   fixes. No `Co-Authored-By` trailer.
+   history. Each message names the findings fixed and how each fix was shown
+   working, or the documentation checks for doc-only fixes. No
+   `Co-Authored-By` trailer.
 5. **Hand over.** Merge the integration branch's current tip into the working
-   branch and run the final checks `verification` requires. Take any GPU legs
-   under the lead's grant or report them as owed. Once the required gates
-   pass, push the working branch, fast-forward only. Only the lead merges it
+   branch and rebuild what it touched. Once the
+   [landing bar](../verification/SKILL.md#the-landing-bar) holds, push the
+   working branch, fast-forward only. Only the lead merges it
    into the integration branch the lead's brief names.
 
 ## Route adjacent work
@@ -211,7 +203,7 @@ no brief, so it raises compatibility findings and tries to run tests.
 | Skill | Route there for |
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Selecting models and coordinating assignments, machines, integration merges and finding destinations. |
-| [`verification`](../verification/SKILL.md) | The gates, CLI copy, red-leg proofs, GPU legs and finished-lane list the verifier runs. |
+| [`verification`](../verification/SKILL.md) | The landing bar, CLI copy and GPU legs the verifier uses. |
 | [`rendering`](../rendering/SKILL.md) | The render-graph runtime contracts and recurring bug classes to put in a render lane's hunt list. |
 | [`maths-laws`](../maths-laws/SKILL.md) | A Maths lane's laws, legs and mutation probe. |
 | [`puck-world`](../puck-world/SKILL.md) | A World lane's document, authority and replay contracts. |

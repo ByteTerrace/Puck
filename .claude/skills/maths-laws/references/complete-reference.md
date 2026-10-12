@@ -15,7 +15,7 @@ Read the relevant section when `SKILL.md` routes here.
 - [Deliberate corrections](#9-rule-4--a-deliberate-correction-is-expected-to-move-values)
 
 This skill is **factual and procedural only**: how the suite is shaped, what a
-declaration owes, and how to prove a new law discriminates. It does not design
+declaration owes, and how to check a new law discriminates. It does not design
 the kernel under test. The user's current instruction outranks it — if it
 argues against a change you were asked to make, it is stale; update it in the
 same change and say so.
@@ -523,7 +523,8 @@ House rules the build and the determinism contract impose:
 
 ## 8. Validating that a new law actually bites
 
-A green new case proves nothing by itself. Two instruments, cheapest first.
+A green new case does not show it can fail. When that is in doubt, two
+instruments help, cheapest first.
 
 **Mutate in head.** Trace one wrong line in the kernel — flip the tie
 direction, change the shift, drop the sign handling, swap two lanes, widen a
@@ -532,8 +533,7 @@ where the difference is observable. If every operand it sweeps is degenerate
 for the mutation (unit basis elements, zero lanes, a saturating fold), the leg
 is decorative and its text must say so as an `ENVELOPE`.
 
-**The mutation probe** — the empirical version, and the one to use before
-claiming a new law verified:
+**The mutation probe** — the empirical version, an optional tool:
 
 1. Work in an **isolated worktree** (the harness's `EnterWorktree`, or
    `git worktree add`), so the broken kernel never meets another session's
@@ -541,7 +541,7 @@ claiming a new law verified:
    output.
 2. Break the kernel the case claims to pin, **one line**.
 3. Run the tier the case lives in.
-4. **The new case must go red.** If it stays green, it does not bite — the
+4. **The new case should go red.** If it stays green, it does not bite — the
    operands, the fold, or the leg is wrong. Note the collateral too: which
    *other* cases went red tells you what the case adds over its neighbours (a
    mutation that reddens only mirrors of the same statement means the new case

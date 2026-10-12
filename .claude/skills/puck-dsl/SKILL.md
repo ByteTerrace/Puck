@@ -107,9 +107,9 @@ puck compile <file> --validate
 
 Then, for a world, run it (`dotnet run --project src/Puck.World -c Release --
 --exit-after-seconds 2`, per `AGENTS.md` rule 3); for a cartridge, verify
-through the emulator battery, never a standalone driver (`gaming-bricks`,
-`rom-forge`). A committed source additionally owes the byte-for-byte
-regeneration gate above before merge.
+in a world, never a standalone driver (`gaming-bricks`, `rom-forge`). A
+committed cartridge source's JSON twin is regenerated in the same change;
+`CartridgeRoundTripTests` byte-compares the two.
 
 `puck format` (`src/Puck.Cli.Format/Format/FormatCommand.cs`) formats every source kind Puck owns: a `.puck` file goes
 through `PuckPrinter` (`src/Puck.Cli.Format/Format/PuckSourcePhase.cs`, the `puck` pass), a `.cs` file through the C#
@@ -322,10 +322,9 @@ site under `src/` to this and fails on a minting call no row reads back.
 
 Use the current [records and pools](../../../docs/reference/state/records-and-pools.md)
 and [rule groups](../../../docs/reference/state/rule-groups.md) references when editing records,
-pools, token knowledge, or retained turns. Pool lifetime tests must include
+pools, token knowledge, or retained turns. A pool's lifetime spans
 release/reclaim and export/reload; a static slot lookup follows the current
-occupant, while a held handle checks its generation. Exercise module read/action
-exports through lexical bindings and include lossless compile/decompile laws.
-After changing this surface, regenerate schema, vocabulary, and name-registry
-outputs with their CLI owners and run the affected State, Rules, World, and
-World.Transpiler suites. A generated projection probe must cover every new arm.
+occupant, while a held handle checks its generation. Module read/action exports
+resolve through lexical bindings, and compile/decompile is lossless. After
+changing this surface, regenerate schema, vocabulary, and name-registry outputs
+with their CLI owners.
