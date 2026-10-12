@@ -3,7 +3,9 @@
 Puck.Shaders.Generator is the build-time host of the kernel builds. With the
 repository root as its argument it runs the shader declaration generator
 (`ShaderDeclarations` in `Puck.SdfVm.Model`), so a build writes each
-declaration whose text the model has changed before any kernel compiles. With
+declaration whose text the model has changed before any kernel compiles; its
+second argument is the stamp listing every file the run read or owns, and the
+build runs it again only when the generator or one of those files moved. With
 `compile` or `check` it runs one project's shader build (`ShaderBuild` in
 `Puck.Shaders.Model`) for `build/Shaders.targets`: every output compiles through
 `ShaderCompiler` and its per-user cache on cores MSBuild grants, or, for a pack

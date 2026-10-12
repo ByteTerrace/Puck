@@ -126,7 +126,25 @@ The cache lives in `shaders` under the per-user Puck directory
 `$XDG_DATA_HOME/Puck/shaders` or `~/.local/share/Puck/shaders` on Linux), which the
 `puck shaders` verbs share.
 A World keeps its own compiler cache under its state root (`pipelines`), so a
-World run in a fresh state directory still compiles what it observes.
+World run in a fresh state directory still compiles what it observes. SDF kernel
+hot reload (`world.shaders.reload`) is the exception: it compiles a checkout's
+kernels into this per-user cache, so the build after a reloaded edit publishes
+the reload's bytecode rather than compiling it again.
+
+Which targets a build plans follows what will run it. DXIL is built on Windows
+alone. SPIR-V is built off Windows, in CI (`ContinuousIntegrationBuild`) and in
+a solution build (the gate, the suites, qualification); a Windows build of one
+project, the development loop's `dotnet build src/Puck.World`, plans DXIL alone,
+since Direct3D 12 is the development backend, and removes the SPIR-V an earlier
+build left in its output. `-p:PuckShaderSpirvEnabled=true` builds SPIR-V there.
+A project's shader build runs only when a file its last successful run read (each
+stage source and every include its closures reached, listed in a
+`shader-build.<hash>.inputs` record under the project's intermediate directory,
+named by the cache directory and the DXC command), an output, a sidecar, any
+bytecode under `Assets/Shaders`, the build-only generator or the project file
+changed; a replaced `dxc` with unchanged
+sources is not seen, so rebuild with `--no-incremental` after replacing the
+toolchain.
 `-p:PuckShaderCacheDirectory=<dir>` names another build cache, such as the
 directory CI saves and restores between runs.
 Each cache entry contains its input key, its bytecode, and the bytecode's

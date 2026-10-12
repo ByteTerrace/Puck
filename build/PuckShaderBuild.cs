@@ -55,6 +55,8 @@ public sealed class PuckShaderBuild : Task, ICancelableTask {
     public string CacheDirectory { get; set; } = "";
     /// <summary>The <c>dxc</c> command.</summary>
     public string DxcCommand { get; set; } = "";
+    /// <summary>Where a compile writes every file it read once it succeeds, or empty for none.</summary>
+    public string InputsFile { get; set; } = "";
 
     /// <inheritdoc/>
     public override bool Execute() {
@@ -99,7 +101,13 @@ public sealed class PuckShaderBuild : Task, ICancelableTask {
 
         var arguments = new StringBuilder();
 
-        foreach (var argument in new[] { Tool, Mode, "--project", ProjectDirectory, "--request", requestPath, "--lock", LockFile, "--cache", CacheDirectory, "--dxc", DxcCommand }) {
+        var argumentList = new System.Collections.Generic.List<string> { Tool, Mode, "--project", ProjectDirectory, "--request", requestPath, "--lock", LockFile, "--cache", CacheDirectory, "--dxc", DxcCommand };
+
+        if (!string.IsNullOrEmpty(value: InputsFile)) {
+            argumentList.Add(item: "--inputs");
+            argumentList.Add(item: InputsFile);
+        }
+        foreach (var argument in argumentList) {
             arguments.Append(value: ((arguments.Length == 0) ? "" : " ")).Append(value: Quote(argument: argument));
         }
         start.Arguments = arguments.ToString();

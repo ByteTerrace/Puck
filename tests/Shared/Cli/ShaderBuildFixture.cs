@@ -60,6 +60,7 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
         // selected before it.
         project.AddFirst(content: new XElement("PropertyGroup",
             new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"),
+            new XElement(content: "true", name: "PuckShaderSpirvEnabled"),
             new XElement("DxcCommand", CompilerPath),
             new XElement("PuckShaderCacheDirectory", PathOf(path: "cache"))));
         project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));

@@ -66,10 +66,14 @@ public sealed partial class ShaderBuild {
     public IReadOnlyList<ShaderBuildOutput> Restored => m_restored;
     /// <summary>Gets the order the last <see cref="CompileAsync"/> admitted its compiles in.</summary>
     public IReadOnlyList<ShaderBuildOutput> Admitted => m_admitted;
+    /// <summary>Gets every file the last <see cref="CompileAsync"/> read to plan its outputs, as full paths in ordinal
+    /// order: each stage source and every include its closure reaches. A build keys its next run on them.</summary>
+    public IReadOnlyList<string> Reads => m_reads;
 
     private readonly List<ShaderBuildOutput> m_compiled = [];
     private readonly List<ShaderBuildOutput> m_restored = [];
     private readonly List<ShaderBuildOutput> m_admitted = [];
+    private readonly List<string> m_reads = [];
 
     /// <summary>Makes every output current: publishes what the cache holds and compiles the rest.</summary>
     /// <param name="outputs">The outputs.</param>
@@ -82,6 +86,7 @@ public sealed partial class ShaderBuild {
         m_compiled.Clear();
         m_restored.Clear();
         m_admitted.Clear();
+        m_reads.Clear();
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         if (!SweepOrphans()) {
@@ -93,6 +98,11 @@ public sealed partial class ShaderBuild {
         if (plans is null) {
             return false;
         }
+
+        m_reads.AddRange(collection: plans.SelectMany(selector: static plan => plan.Plan.Includes.Select(selector: static include => include.Path).Append(element: plan.Plan.Stage.Path))
+            .Select(selector: static path => Path.GetFullPath(path: path).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar))
+            .Distinct(comparer: StringComparer.Ordinal)
+            .Order(comparer: StringComparer.Ordinal));
 
         var missing = new List<(ShaderBuildOutput Output, ShaderOutputPlan Plan)>();
         var current = 0;

@@ -206,7 +206,19 @@ public static partial class CompileCommand {
             oldChar: Path.DirectorySeparatorChar
         ) + "\n")).Order(comparer: StringComparer.Ordinal);
 
+        // Beside the report, the Puck assemblies the run loaded, one full path per line: the code its outputs are a
+        // function of, which the build holds the next run's need against (build/WorldAssets.targets). An assembly the run
+        // never loaded cannot move what it wrote, so a change to one reruns nothing.
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(predicate: static assembly => (!assembly.IsDynamic && (assembly.GetName().Name is { } name) && name.StartsWith(value: "Puck.", comparisonType: StringComparison.Ordinal) && (assembly.Location.Length != 0)))
+            .Select(selector: static assembly => (assembly.Location.Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar) + "\n"))
+            .Order(comparer: StringComparer.Ordinal);
+
         try {
+            AtomicFile.WriteAllText(
+                contents: string.Concat(values: assemblies),
+                path: (reportPath + ".assemblies")
+            );
             AtomicFile.WriteAllText(
                 contents: string.Concat(values: lines),
                 path: reportPath

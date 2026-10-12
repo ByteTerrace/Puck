@@ -8,8 +8,11 @@
         Per-project knobs, set in a project's own PropertyGroup before this file imports: $(DxcCommand) (default "dxc",
         a bare name resolved on the search path or a path to the executable), $(PuckShaderDxilEnabled) (default true:
         vertex and fragment DXIL), $(PuckComputeShaderDxilEnabled) (default true: compute DXIL) and
-        $(PuckShaderSpirvEnabled) (default true: SPIR-V for every stage). A project with no DirectX consumer sheds the
-        DXIL, and one whose shaders run only on Direct3D 12 sheds the SPIR-V, it would otherwise ship unread.
+        $(PuckShaderSpirvEnabled) (SPIR-V for every stage; true off Windows, in CI and in a solution build, false in a
+        Windows development build of one project, below). A project with no DirectX consumer sheds the DXIL, and one
+        whose shaders run only on Direct3D 12 sheds the SPIR-V, it would otherwise ship unread. A build without SPIR-V
+        removes the SPIR-V an earlier build left in its output, so a Vulkan run of it refuses by the missing kernel's
+        name rather than running stale bytecode.
 
         DXIL is built on Windows alone, whatever a project sets: Direct3D 12 is its one reader and exists only on
         Windows, so a build on any other host (a Linux container, CI's cross-host shader comparison) plans no DXIL
@@ -42,6 +45,7 @@
             <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <CacheDirectory ParameterType="System.String" />
             <DxcCommand ParameterType="System.String" />
+            <InputsFile ParameterType="System.String" />
         </ParameterGroup>
         <Task>
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderBuild.cs" Type="Class" />
@@ -81,10 +85,16 @@
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
-        <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">true</PuckShaderSpirvEnabled>
         <!-- Whether this host builds DXIL: Windows alone (see above). It is the host's fact, not a project knob; a law
              sets it to stand in for another host. -->
-        <_PuckShaderHostBuildsDxil>$([MSBuild]::IsOSPlatform('Windows'))</_PuckShaderHostBuildsDxil>
+        <_PuckShaderHostBuildsDxil Condition="'$(_PuckShaderHostBuildsDxil)' == ''">$([MSBuild]::IsOSPlatform('Windows'))</_PuckShaderHostBuildsDxil>
+        <!-- SPIR-V builds wherever Vulkan may run what the build ships: on a host that builds no DXIL, in CI
+             (ContinuousIntegrationBuild), and in a solution build (the gate, the suites, qualification). An ordinary
+             development build of one project on Windows (`dotnet build src/Puck.World`) builds DXIL alone, because
+             Direct3D 12 is the development backend and the heaviest kernels' SPIR-V would otherwise compile beside their
+             DXIL after every kernel edit; -p:PuckShaderSpirvEnabled=true builds it there too. -->
+        <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == '' and ('$(_PuckShaderHostBuildsDxil)' != 'true' or '$(ContinuousIntegrationBuild)' == 'true' or ('$(SolutionPath)' != '' and '$(SolutionPath)' != '*Undefined*'))">true</PuckShaderSpirvEnabled>
+        <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">false</PuckShaderSpirvEnabled>
         <!-- The build-only host that runs the shader build; every shader project references it with
              ReferenceOutputAssembly="false", so it is built before CompileShaders runs. -->
         <_PuckShaderBuildToolProject>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'src', 'Puck.Shaders.Generator', 'Puck.Shaders.Generator.csproj'))</_PuckShaderBuildToolProject>
@@ -134,11 +144,33 @@
         </MSBuild>
     </Target>
 
+    <!-- The files the last successful compile read (every stage source and include its closures reached), which it
+         writes after success: the compile reruns only when one of them, an output, a sidecar, any bytecode under
+         Assets/Shaders (so foreign bytecode is still refused), the tool or this build's definition moved, or the set of
+         outputs changed. A missing input always reruns it, so a deleted source still
+         sweeps its bytecode. A changed DXC with unchanged sources is not seen here; build with no-incremental after
+         replacing the toolchain. -->
+    <PropertyGroup>
+        <!-- Named by the cache and the DXC command too, so pointing either elsewhere (an empty cache compiles everything
+             afresh) never reads another's record. -->
+        <_PuckShaderBuildInputs>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.$([MSBuild]::StableStringHash('$(PuckShaderCacheDirectory)|$(DxcCommand)').ToString('x8')).inputs'))</_PuckShaderBuildInputs>
+    </PropertyGroup>
+    <Target Name="_PuckReadShaderBuildInputs" Condition="'$(DesignTimeBuild)' != 'true'">
+        <ReadLinesFromFile File="$(_PuckShaderBuildInputs)" Condition="Exists('$(_PuckShaderBuildInputs)')">
+            <Output TaskParameter="Lines" ItemName="_PuckShaderBuildRead" />
+        </ReadLinesFromFile>
+        <ItemGroup>
+            <_PuckShaderBuildRead Include="@(PuckShaderOutput->'%(SourcePath)')" />
+            <_PuckShaderBuildProduct Include="@(PuckShaderOutput->'%(FullPath)');@(PuckShaderOutput->'%(FullPath).hash')" />
+        </ItemGroup>
+    </Target>
+
     <!-- Makes every output current: publishes what the cache holds and compiles the rest, with no compiler run while the
          project's publication lock is held. A kernel may include a declaration generated from C# (sdf-isa.hlsli, a
          *.interface.hlsli): the generator writes those as it builds, which ResolveProjectReferences finishes first. -->
-    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool">
-        <PuckShaderBuild CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
+    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool;_PuckReadShaderBuildInputs"
+            Inputs="@(_PuckShaderBuildRead);@(_PuckShaderBuildProduct);@(_PuckExistingShaderBytecode);$(PuckShaderBuildTool);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)" Outputs="$(_PuckShaderBuildInputs)">
+        <PuckShaderBuild CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" InputsFile="$(_PuckShaderBuildInputs)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
         <PropertyGroup>
             <_PuckShadersCompiled>true</_PuckShadersCompiled>
         </PropertyGroup>
@@ -152,6 +184,15 @@
         <ItemGroup>
             <Content Include="@(PuckShaderOutput)" CopyToOutputDirectory="PreserveNewest" RemoveMetadata="Stage;Backend;SourcePath" />
         </ItemGroup>
+    </Target>
+
+    <!-- A build without SPIR-V ships none: SPIR-V an earlier build copied into this output (its own or a referenced
+         project's) would otherwise stand beside the current DXIL, stale against its source. -->
+    <Target Name="PuckRemoveUnbuiltSpirv" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true' and '$(PuckShaderSpirvEnabled)' != 'true'">
+        <ItemGroup>
+            <_PuckUnbuiltSpirv Include="$(OutDir)Assets/Shaders/**/*.spv" />
+        </ItemGroup>
+        <Delete Files="@(_PuckUnbuiltSpirv)" Condition="'@(_PuckUnbuiltSpirv)' != ''" />
     </Target>
 
     <!-- Kernel-class probe kernels and the camera frame converter's conversion kernels run on a camera graph's own

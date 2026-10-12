@@ -18,9 +18,23 @@
     <ItemGroup>
         <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
     </ItemGroup>
-    <!-- Reconcile on every build: a file may have been edited, deleted or restored without changing an assembly.
-         Equal declarations are never rewritten, so this does not invalidate unchanged kernels. -->
-    <Target Name="PuckGenerateShaderDeclarations" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
-        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot;" />
+    <!-- Reconcile whenever the generator's assemblies or a file the last run read or owns moved: the stamp lists those
+         files, so one edited, deleted or restored without changing an assembly reruns it (a missing input always runs
+         the target). Equal declarations are never rewritten, so a run does not invalidate unchanged kernels. -->
+    <Target Name="PuckReadShaderDeclarationInputs" Condition="'$(DesignTimeBuild)' != 'true'">
+        <!-- The intermediate directory is set by the SDK's targets, after this project's body, so the stamp is named here. -->
+        <PropertyGroup>
+            <_PuckShaderDeclarationStamp>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-declarations.inputs'))</_PuckShaderDeclarationStamp>
+        </PropertyGroup>
+        <ReadLinesFromFile File="$(_PuckShaderDeclarationStamp)" Condition="Exists('$(_PuckShaderDeclarationStamp)')">
+            <Output TaskParameter="Lines" ItemName="_PuckShaderDeclarationInput" />
+        </ReadLinesFromFile>
+        <ItemGroup>
+            <_PuckShaderDeclarationInput Include="$(TargetDir)*.dll" />
+        </ItemGroup>
+    </Target>
+    <Target Name="PuckGenerateShaderDeclarations" AfterTargets="Build" DependsOnTargets="PuckReadShaderDeclarationInputs" Condition="'$(DesignTimeBuild)' != 'true'"
+            Inputs="@(_PuckShaderDeclarationInput);$(MSBuildProjectFullPath)" Outputs="$(_PuckShaderDeclarationStamp)">
+        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot; &quot;$(_PuckShaderDeclarationStamp)&quot;" />
     </Target>
 </Project>

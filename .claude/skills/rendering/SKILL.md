@@ -2875,7 +2875,10 @@ pacing, and when briefing a review of such a change.
 
 ## Verifying
 
-Shader builds need no flags. Every output compiles through `ShaderCompiler`
+Shader builds need no flags, except that a Windows build of one project builds
+DXIL alone: run Vulkan from a solution build or with
+`-p:PuckShaderSpirvEnabled=true` ([kernels](references/kernels.md#building)).
+Every output compiles through `ShaderCompiler`
 into the per-user shader cache, keyed by its include closure, its `StepsOf`
 options and its DXC, never by the checkout, so a fresh worktree reuses valid
 entries with matching closures, options, and toolchain. Missing outputs compile

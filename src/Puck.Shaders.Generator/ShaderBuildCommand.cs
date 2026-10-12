@@ -11,7 +11,8 @@ namespace Puck.Shaders.Generator;
 /// Options: <c>--project &lt;directory&gt;</c>, <c>--request &lt;file&gt;</c> (one <see cref="ShaderBuildOutput"/> a
 /// line), <c>--lock &lt;file&gt;</c> (the publication lock), <c>--cache &lt;directory&gt;</c> (default
 /// <see cref="ShaderCompiler.DefaultCacheDirectory"/>), <c>--dxc &lt;command&gt;</c> (default <c>dxc</c>) and
-/// <c>--jobs &lt;n&gt;</c>. Without <c>--jobs</c> a compile asks its host for every core over its standard streams
+/// <c>--jobs &lt;n&gt;</c>; a compile also takes <c>--inputs &lt;file&gt;</c>, which it writes after success with every file
+/// it read (<see cref="ShaderBuild.Reads"/>), one full path a line, for the build to skip the next run on. Without <c>--jobs</c> a compile asks its host for every core over its standard streams
 /// (<see cref="StreamShaderCoreBroker"/>); the build host answers from MSBuild's own core budget. Every message is one
 /// line on standard output, and an error is a line in MSBuild's canonical format. A host's <c>cancel</c> line, or the end
 /// of its answers, cancels the build: every compile it started ends first, then the generator prints one line saying so
@@ -24,7 +25,7 @@ internal static class ShaderBuildCommand {
         for (var index = 1; (index < arguments.Length); index += 2) {
             if (
                 ((index + 1) >= arguments.Length) ||
-                (arguments[index] is not ("--project" or "--request" or "--lock" or "--cache" or "--dxc" or "--jobs")) ||
+                (arguments[index] is not ("--project" or "--request" or "--lock" or "--cache" or "--dxc" or "--jobs" or "--inputs")) ||
                 !options.TryAdd(key: arguments[index], value: arguments[(index + 1)])
             ) {
                 return Refuse(reason: $"'{arguments[index]}' is not a shader build option, or it repeats or has no value.");
@@ -61,12 +62,25 @@ internal static class ShaderBuildCommand {
             }
 
             using var stopping = new CancellationTokenSource();
+            var inputs = options.GetValueOrDefault(key: "--inputs");
 
-            return (await build.CompileAsync(
+            // The inputs file is the build's key for skipping the next run: removed before, written only after success.
+            if (inputs is not null) {
+                File.Delete(path: inputs);
+            }
+
+            if (!await build.CompileAsync(
                 cancellationToken: stopping.Token,
                 cores: ((jobs > 0) ? new FixedShaderCoreBroker(cores: jobs) : new StreamShaderCoreBroker(answers: new StreamReader(stream: Console.OpenStandardInput()), requests: Console.Out, cancel: stopping.Cancel)),
                 outputs: outputs
-            ).ConfigureAwait(continueOnCapturedContext: false) ? 0 : 1);
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
+                return 1;
+            }
+            if (inputs is not null) {
+                File.WriteAllLines(contents: build.Reads, path: inputs);
+            }
+
+            return 0;
         } catch (OperationCanceledException) {
             // The build joins every compile it started before it reports cancellation, so its host can tell a graceful
             // stop from the process-tree kill it falls back to.

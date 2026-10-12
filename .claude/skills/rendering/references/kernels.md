@@ -18,7 +18,14 @@ declared stage for its enabled backends through `ShaderCompiler` and its
 per-user cache, and publishes the bytecode beside the source.
 `PuckShaderSpirvEnabled` selects SPIR-V; `PuckShaderDxilEnabled` selects
 vertex and fragment DXIL, and `PuckComputeShaderDxilEnabled` selects compute DXIL.
-All three default to true. DXIL is built on Windows alone, whatever a project
+The DXIL pair defaults to true; SPIR-V defaults to true off Windows, in CI and
+in a solution build, and to false in a Windows build of one project (the
+development loop), which also removes the SPIR-V an earlier build left in its
+output, so a Vulkan run there needs `-p:PuckShaderSpirvEnabled=true`. A
+project's shader build is skipped while nothing its last run read
+(`obj/.../shader-build.<hash>.inputs`), no output, no sidecar and no bytecode
+under `Assets/Shaders` moved; build with `--no-incremental` after replacing
+`dxc`. DXIL is built on Windows alone, whatever a project
 sets: Direct3D 12 is its one reader, so a build on any other host plans SPIR-V
 only (`_PuckShaderHostBuildsDxil`), and the cross-host comparison
 (`puck shaders compare`) holds SPIR-V alone. Never add a DXIL output, artifact
@@ -45,10 +52,17 @@ world.shaders.status          # idle | pending | applied | unchanged | failed
 ```
 
 The reload reads the kernels the tree's `passes` directory carries and keeps
-the rest (`SdfKernelSet.Overlaid`). A kernel's `sdf-*.comp.hlsl` source
-compiles with the World's `ShaderCompiler`, the one document passes use, so an
-unchanged source is a cache hit; a kernel carried only as bytecode loads as it
-stands, and a source wins over bytecode beside it. A tree may carry one kernel.
+the rest (`SdfKernelTreeLoad`). A kernel's `sdf-*.comp.hlsl` source compiles
+to the running backend's target alone, with the World's toolchain, into the
+per-user shader cache the build uses, so an unchanged source is a cache hit and
+the build after a reloaded edit publishes rather than compiles; a kernel carried
+only as bytecode loads as it stands, and a source wins over bytecode beside it.
+Compiles run one per processor, shortest recorded compile first, and each frame
+installs the kernels compiled since the last batch as a reload of its own, so a
+views-only edit renders after the views kernels' DXIL (seconds) while the
+receiver's (minutes) still runs. Kernels of one batch may briefly pair with
+older kernels of another; an edit to an HLSL-only contract between passes looks
+wrong until the request settles. A tree may carry one kernel.
 Without a directory, the command reads the bytecode deployed beside the running
 `Puck.World`; a relative path resolves against the game's working directory. A
 status of `unchanged` means no kernel's bytecode changed — usually an edit in

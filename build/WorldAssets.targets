@@ -63,7 +63,7 @@
         </ItemGroup>
         <Delete Files="$(PuckWorldReport)" Condition="'@(PuckWorldReportedGone)' != ''" />
     </Target>
-    <Target Name="PuckResolveWorldCompiler" DependsOnTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Target Name="PuckResolveWorldCompiler" DependsOnTargets="PuckNameWorldReport;ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
         <!-- The project instance the reference built, so the path is the CLI that build produced. -->
         <MSBuild
             Projects="@(_MSBuildProjectReferenceExistent)"
@@ -75,8 +75,14 @@
             <Output TaskParameter="TargetOutputs" PropertyName="PuckWorldCompilerPath" />
         </MSBuild>
         <!-- A compiled world is keyed by the engine build it was derived under, so every engine assembly the compiler
-             runs is an input: one can change while the compiler's own assembly does not. -->
-        <ItemGroup>
+             runs is an input: one can change while the compiler's own assembly does not. The last run lists the Puck
+             assemblies it loaded beside its report, and only those are inputs: the outputs are a function of the sources
+             and the code that ran, so an edit to an assembly the compile never loads (the renderer, the client, the
+             platform) reruns nothing. With no list yet, every Puck assembly beside the compiler is. -->
+        <ReadLinesFromFile File="$(PuckWorldReport).assemblies" Condition="Exists('$(PuckWorldReport).assemblies')">
+            <Output TaskParameter="Lines" ItemName="PuckWorldCompilerAssembly" />
+        </ReadLinesFromFile>
+        <ItemGroup Condition="'@(PuckWorldCompilerAssembly)' == ''">
             <PuckWorldCompilerAssembly Include="$([System.IO.Path]::GetDirectoryName('$(PuckWorldCompilerPath)'))/Puck.*.dll" />
         </ItemGroup>
     </Target>
