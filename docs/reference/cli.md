@@ -2820,7 +2820,12 @@ The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
 allocation (median over a sampled window, after a warmup), and a scripted
-Klondike deal's per-tick time and per-mutation allocation. A server
+Klondike deal's per-tick time and per-mutation allocation. The screen machines
+emulate on worker threads the tick only submits to, and the back-to-back idle
+window is bounded by the slowest of them once their pending windows fill, so
+the lane also times the shipped tick paced at the simulation rate, beside the
+count of submissions that waited on a machine, and times each screen machine's
+own tick of emulation alone. A server
 construction includes admission, navigation, and runtime allocation, so this
 lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,
