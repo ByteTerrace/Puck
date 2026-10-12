@@ -251,6 +251,57 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ## Verification
 
+### Edit to running
+
+The target is under 30 seconds from saving an engine C# or HLSL file to seeing
+it in the running debug world (`src/Puck.World/Assets/worlds/debug.puck`, the
+World's default), on Direct3D 12, the World's default backend on Windows.
+
+**C#**: build and boot in one command, restore skipped:
+
+```powershell
+dotnet run --project src/Puck.World -c Release --no-restore
+```
+
+A Windows build of one project builds DXIL alone, so a Vulkan run
+(`-- --backend vulkan`) needs `-p:PuckShaderSpirvEnabled=true` or a solution
+build ([shader freshness](../reference/shaders.md#freshness)). Restore again
+(drop `--no-restore`) after changing a package or project reference.
+
+**HLSL** (an SDF kernel module under `src/Puck.SdfVm/Assets/Shaders/Sdf`): keep
+the World running, save the file, and type in its console or stdin:
+
+```text
+world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
+```
+
+Each kernel installs as soon as its DXIL compiles, quickest first, and prints
+`[shaders.reload: request=N installed pipelines=K kernels=…]`; the views
+kernels, which shading and material edits reach, land long before the
+receiver and indirect kernels, which take minutes of DXC time. The reload
+writes into the build's shader cache, so the next build publishes those kernels
+without compiling them. A change to a C# struct, buffer layout or binding needs
+the C# loop instead.
+
+Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
+the CPU at the stated load:
+
+| Loop | Phase | Time |
+|---|---|---|
+| C#, edit in `Puck.SdfVm` | `dotnet run` to `world.wait ready` | 22.6–24.7 s (31% load) |
+| | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
+| | of which the build after the edit | 12.7–15.3 s (12–65% load) |
+| | of which boot to `world.wait ready` | 10.2–12.2 s |
+| C#, edit in `Puck.World.Client` | build, which also reruns the world compile, then boot | 18.2 s + 12.2 s (26% load) |
+| HLSL, edit in `passes/sdf-light-stage.hlsli` | reload to the first views kernel installed | 11.1 s (37% load), 22.6 s (100% load) |
+| | to every views variant installed | 25.2 s (37% load) |
+| | to the request settling (receiver DXIL) | 111 s (37% load) |
+
+Boot to readiness is about 4 s of process start before the document loads,
+2.5 s of the render-capacity probe (`SdfCompositionFrameSource` builds the
+worst-case program, 118 million words), and 4 to 5 s of window, device,
+pipelines and first frames.
+
 ### Verify a change
 
 `puck gate` is the batch qualification, run from a copy of the candidate's own
@@ -611,7 +662,9 @@ and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
 DXC compiles the same HLSL sources to SPIR-V and, on Windows, DXIL during the
-build ([freshness](../reference/shaders.md#freshness)). `dxc`
+build ([freshness](../reference/shaders.md#freshness)); a Windows build of one
+project, the development loop, skips SPIR-V unless
+`-p:PuckShaderSpirvEnabled=true` asks for it. `dxc`
 must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
 describes. The build compiles through the runtime's `ShaderCompiler` into the
