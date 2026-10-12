@@ -92,7 +92,7 @@ public static class DeterminismCommand {
             : CliExit.Failed);
     }
     private static Command CreateRecord() {
-        var manifestArgument = new Argument<string>(name: "manifest") { Description = "A puck.determinism.manifest.v1 file, such as tests/Puck.Determinism/determinism.json." };
+        var manifestArgument = new Argument<string>(name: "manifest") { Description = "A puck.determinism.manifest.v1 file." };
         var outputOption = CliOptions.Output(description: "The stream file to write.", required: true);
         var command = new Command(
             description: "Record what each scenario of a manifest hashes to on this host.",

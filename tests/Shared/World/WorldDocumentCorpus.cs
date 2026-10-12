@@ -19,10 +19,9 @@ internal static class WorldDocumentCorpus {
     /// <summary>The refusal <see cref="TryBoot"/> reports for a module library.</summary>
     public const string ModuleLibrary = "a module library emits no document";
 
-    // The trees of the game's shipped world documents.
+    // The trees of the game's shipped world documents; the root worlds/ packages are quarantined under experimental/.
     private static readonly string[] ShippedTrees = [
         ShippedWorldDocuments.WorldDirectory,
-        "worlds",
     ];
     // Every shipped document another shipped document names as its basis or an import, repository-relative.
     private static readonly Lazy<HashSet<string>> ComposedDocuments = new(valueFactory: static () => {

@@ -26,9 +26,9 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
     public string SourcePath { get; set; } = SourcePath;
 }
 /// <summary>
-/// Resolves the world definition at boot: a <c>--world &lt;path&gt;</c> argument (or the checked-in
-/// <c>Assets/worlds/puck.world.json</c> beside the executable — the one shipped world
-/// reached from), loaded through
+/// Resolves the world definition at boot: a <c>--world &lt;path&gt;</c> argument (or, absent one, the shipped
+/// <c>Assets/worlds/debug.world.json</c> beside the executable, which the build compiles from <c>debug.puck</c>: the
+/// debug world, the one live world while every other world is quarantined in <c>experimental/</c>), loaded through
 /// <see cref="WorldJsonContext"/>, schema-checked, and passed through <see cref="WorldDefinitionValidator"/>.
 /// </summary>
 /// <remarks>Every resolved path is an assertion: absent, unreadable, or invalid, it fails the boot with a named reason
@@ -41,7 +41,7 @@ public static partial class WorldDefinitionLoader {
     public const string BootInstanceName = "boot";
     /// <summary>The default world file this build ships, resolved through <see cref="PuckPaths.Shipped"/> when no
     /// <c>--world</c> path is supplied.</summary>
-    public const string DefaultRelativePath = "Assets/worlds/puck.world.json";
+    public const string DefaultRelativePath = "Assets/worlds/debug.world.json";
 
     // Every byte-level load door decodes here, so the boot ledger counts each such load once; a file load counts in
     // WorldDefinitionFileSource.TryLoadParsed instead.

@@ -25,8 +25,6 @@
              host. Engine/*.cs carries no JS-interop attribute at all (only Exports/ does), so it links unmodified
              as source and runs under the ordinary net10.0 test host, proving the same code the AppBundle ships. -->
         <Compile Include="../../src/Puck.World.Browser/Engine/**/*.cs" LinkBase="Engine" />
-        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
-        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

@@ -11,18 +11,18 @@ Gaming Brick cores, because the shipped worlds carry Gaming Brick screens; it
 references no client, renderer or graphics backend.
 
 Its fixtures come from [`tests/Shared/World`](../Shared/World/README.md), with the
-server vocabulary hooks and the Gaming Brick machine catalog. The fixture worlds
-the laws load live in [`tests/Puck.World.Fixtures`](../Puck.World.Fixtures),
-outside any project, because suites beside this one read them too.
+server vocabulary hooks and the Gaming Brick machine catalog. That every shipped
+world the World's own build compiled boots from its compiled world was held by
+`CompiledCatalogLawTests` in [`Puck.World.Tests`](../Puck.World.Tests/README.md),
+which is quarantined under `experimental/tests`.
 
-`PaddleballContactLawTests` checks the shipped ball and court from both touching
-and elevated spawns. [`ShippedWorldStateBaselines`](ShippedWorldStateBaselines/README.md)
-holds one canonical state export and tick-cost record per shipped world, which
-`ShippedWorldStateBaselineTests` reproduces and `puck baselines state` records.
-That every shipped world the World's own build compiled boots from its compiled
-world is `CompiledCatalogLawTests` in
-[`Puck.World.Tests`](../Puck.World.Tests/README.md), beside the build that writes
-the catalog.
+Quarantined: the laws that boot the island, the game modules, the root `worlds/`
+packages, the moth courtyard, `pipeline.puck`, the fixture worlds of
+`experimental/tests/Puck.World.Fixtures` and the canaries, among them `PaddleballContactLawTests`
+and `ShippedWorldStateBaselineTests` with its `ShippedWorldStateBaselines` records
+(`puck baselines state`), live under
+[`experimental/tests/Puck.World.Games.Tests`](../../experimental/tests/Puck.World.Games.Tests)
+beside the documents they read.
 
 ## Verification
 

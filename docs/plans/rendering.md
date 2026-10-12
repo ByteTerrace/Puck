@@ -205,7 +205,7 @@ names the GC mode. The World registers the server's `state.arena`,
 `state.rules` and `state.search` sources; the arena and search sit behind
 forwarders that carry a retired instance's totals across a definition rebuild,
 so their readings never go down. `puck counters` boots
-`tests/Puck.Counters/counters.puck` offscreen once per backend through
+`experimental/tests/Puck.Counters/counters.puck` offscreen once per backend through
 the leg machinery it shares with `puck parity`, writes a
 `puck.counters.report.v1` report whose schema `puck schema` generates, and exits
 1 naming the kind, pass and node of any deterministic count or pass state the
@@ -1592,7 +1592,7 @@ the first observable. Source entry points: planning and loading in
 `ShaderPipelineLoader`) and `src/Puck.Shaders/Graph` (`RenderGraphDefinition`,
 `RenderGraphCompiler`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
-retirement); the fixture runner in `tests/Puck.World.Canaries` and
+retirement); the fixture runner in `experimental/tests/Puck.World.Canaries` and
 `src/Puck.Cli.Harness/Canary` and `src/Puck.Cli.Runs/Canary`; authoring in `WorldPipelineCommandModule`,
 `WorldViewGraphHost`, `WorldViewGraph`; work counting in
 `src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
@@ -1616,7 +1616,7 @@ information.
 ### P1a — Durable functional fixtures
 
 **Owns:** the canary model, loader, assertions, and orchestration; new shader
-fixtures under `tests/Puck.World.Canaries`; the shader render node's
+fixtures under `experimental/tests/Puck.World.Canaries`; the shader render node's
 allocation and replacement tests.
 
 **Delivers:** the authored ink pipeline as a supported real-World fixture
@@ -1886,7 +1886,7 @@ it depends on and fails.
 The qualification of the packaged candidate has its tool and its profile;
 [Qualifying a package](../development/qualification.md) is the owning
 explanation. The release profile,
-`tests/Puck.Qualification/release.profile.json`, records the publish mode
+`experimental/tests/Puck.Qualification/release.profile.json`, records the publish mode
 (framework-dependent ReadyToRun, since `Puck.World` is not AOT-compatible),
 compiler discovery `None`, the validation layers on both backends, the
 functional canaries, and the stability matrix: both backends, 1280×800 and
@@ -3153,7 +3153,7 @@ re-record explained in the same change.
      `SdfProgram.Materials.cs`, the light record, `WorldRenderDefaults`,
      `WorldDefinitionValidator`, `src/Puck.World.Transpiler/Vocabulary/`,
      `moth.puck`, `quality.puck`, `WorldCaptureRow`, `WorldCaptureScheduler`,
-     `tests/Puck.Parity`, `tests/Puck.World.Canaries`.
+     `experimental/tests/Puck.Parity`, `experimental/tests/Puck.World.Canaries`.
    - Done when: a `gi-furnace` canary holds a uniformly emissive diffuse
      enclosure's incident irradiance to the finite-sweep formula at
      `feedback: 1` and to the one-bounce value at `feedback: 0`; a `gi-sealed`
@@ -3467,7 +3467,7 @@ buffer or push range.
 compute pass, each with two frequency groups, has passed its build-time half,
 as the [implementation status](#implementation-status) records, and its GPU
 half has passed: the two-group layout runs on Direct3D 12 and Vulkan inside
-`tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
+`experimental/tests/Puck.Parity/parity.contract.json`'s tolerances, as the `binding` parity
 station (step 16). Its last leg holds: one build's SPIR-V on Linux compared
 byte for byte with the Windows build of the same commit. The artifacts
 job collects the Windows build's SPIR-V (`puck shaders collect`, the
@@ -3739,7 +3739,7 @@ Phase 3, the groups, follows phase 2:
       ([P16](#p16--display-output)).
 
     14b, the groups. Each commit lands with `puck parity` unchanged, and the
-    canaries named are those `tests/Puck.Affected/canary-coverage.json` maps
+    canaries named are those `experimental/tests/Puck.Affected/canary-coverage.json` maps
     to the commit's sources, by text rather than a `puck affected` run, so
     they are unverified; Direct3D 12 files are unmapped, so a commit that
     touches one also runs its canaries on Direct3D 12. Each owner's commit
@@ -3884,7 +3884,7 @@ Phase 3, the groups, follows phase 2:
     Step 18 moved package passes, post-process packages included, onto the
     same two groups.
 16. Done: the gate spike's GPU half, the `binding` parity station
-    (`tests/Puck.Parity/binding.graph.json`, shown in a corner pane of the parity
+    (`experimental/tests/Puck.Parity/binding.graph.json`, shown in a corner pane of the parity
     layout and captured as its own instance): a compute pass and a fullscreen
     pass reading a frame group and a pass group, with config, a formatted load, a
     storage image and a pass-group sampler table, match on Direct3D 12 and Vulkan
@@ -5235,7 +5235,7 @@ layering check shown failing once on a deliberate upward include; `puck search
 Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
-(`tests/Puck.Counters/counters.puck`, its camera and views) at the floor
+(`experimental/tests/Puck.Counters/counters.puck`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. P15-1
@@ -5249,10 +5249,10 @@ The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
-floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.puck`
+floor runs a 1920x1080 display, which `experimental/tests/Puck.Counters/counters.puck`
 presents offscreen with its one camera at that extent, and the floor tier is the
 world's own `low` preset (shadows off, ambient occlusion off, render scale
-`half`), which `tests/Puck.Counters/counters.script.txt` selects with
+`half`), which `experimental/tests/Puck.Counters/counters.script.txt` selects with
 `world.quality low` before anything is read. Half is 181/255 of each axis, which
 the extent quantization rounds up to 0.75, so the view renders 1440x810 and
 `resolve` reconstructs it to 1920x1080 and `place` copies it.
@@ -6062,7 +6062,7 @@ counted rows recorded in the same change.
      counts as skipped. `puck counters --check` and `--record` hold the report
      to `puck.counters.ceilings.v1`. The `kernel-counters` canary holds a
      volume's steps doubling with its samples and a post pass counting one texel
-     a pixel. `tests/Puck.Counters/counters.ceilings.json` is recorded on the
+     a pixel. `src/Puck.World/floor.ceilings.json` is recorded on the
      RTX 2060 at the floor tier, and `--check` holds it there and fails on a
      raised count and on a broken required zero.
 2. **P15-2, jitter and history epochs.** The temporal contract, with
@@ -6175,7 +6175,7 @@ counted rows recorded in the same change.
    - Counted-cost gate: at reduced scale the resolve writes the output texels
      once; a placement with no other work stands in for that output. The
      counted 1080p low workload's rows are in
-     `tests/Puck.Counters/counters.ceilings.json`: `resolve` and `composite`
+     `src/Puck.World/floor.ceilings.json`: `resolve` and `composite`
      each write 2,073,600 texels, and `sky` the render grid's 1,166,400. Resolve
      adds its output storage, bindings and one pipeline: a reduced view owns what
      the native graph at its render ceiling owns, with the render-grid color held
@@ -6259,7 +6259,7 @@ counted rows recorded in the same change.
    - Touches: `SdfWorldPackage.Fragment`, `passes/sdf-resolve.comp.hlsl`,
      `passes/sdf-hit-stages.hlsli`, `SdfWorldPasses`, `place.comp.hlsl`,
      `PlacePackage`, `WorldSessionLevers`, `WorldRenderLeverCommandModule`,
-     `quality.puck`, `tests/Puck.Parity`.
+     `quality.puck`, `experimental/tests/Puck.Parity`.
    - Done when: a `temporal-convergence` canary's still scene, resolved at the
      floor tier's render scale over eight frames, is within a stated tolerance
      of a reference rendered at twice the output extent with reconstruction off,
@@ -7304,8 +7304,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      pixels present in its region, each absent when its layer is) and
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
-   - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
-     `tests/Puck.World.Canaries`, `CanaryCeilings.json`.
+   - Touches: `experimental/tests/Puck.Parity`, `tests/Puck.Counters`,
+     `experimental/tests/Puck.World.Canaries`, `CanaryCeilings.json`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show the costs before the cadence changes: every pass re-rendering on a
@@ -7585,7 +7585,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      sky pixel are re-recorded in this change, each move explained.
    - Touches: `SdfWorldPackage.Fragment`, `passes/`, `passes/sdf-light-stage.hlsli`,
      `shade/sdf-sky.hlsli`, `SdfWorldPassRecorder`, `WorldRenderDefaults`,
-     `tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
+     `experimental/tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
    - Done when: `SdfPassPlanLawTests` plans `sky` and `composite` after `views`;
      a device law counts zero field evaluations in the sky pass for a pixel
      covered with all its neighbours and one for a pixel that misses;
@@ -7977,7 +7977,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      section and `worldStudioReflection`'s separate horizon.
    - Touches: `SdfWorldTables.SkyEnvironment.cs`, `shade/sdf-lighting.hlsli`,
      `shade/sdf-light.hlsli`, `WorldRenderDefaults`, the shipped worlds,
-     `tests/Puck.Parity`.
+     `experimental/tests/Puck.Parity`.
    - Done when: a law holds the coefficients of a constant sky to its
      irradiance exactly and of a two-colour sky to the analytic result within
      a stated tolerance (red leg: a layer marked camera-only must add no
@@ -8312,7 +8312,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       `puck counters --check` passes on the RTX 2060.
 
 **Expected counted wins.** Estimates derived from the code, read against the
-rows P18-1 records in `tests/Puck.Counters/sky-still.ceilings.json`,
+rows P18-1 records in `experimental/tests/Puck.Counters/sky-still.ceilings.json`,
 `sky-drift.ceilings.json`, `sky-twinkle.ceilings.json` and
 `sky-cycle.ceilings.json`, beside the floor workload's
 `counters.ceilings.json`. P is a view's render pixels (1,166,400 for a 1920 by
@@ -8437,7 +8437,7 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
 - **The sky defaults (P18-14).** The RTX 4070 component matrix retains the
   Full field at every tier and the existing shadow ladder. Half remains an
   authored option; lower counts alone do not qualify its images. The
-  [sky-default matrix](../../tests/Puck.Counters/sky-defaults/README.md) owns
+  [sky-default matrix](../../experimental/tests/Puck.Counters/sky-defaults/README.md) owns
   the observations and their limits. The same drift, twinkle, keyed, cloud
   and binary-shadow inputs at 1920 by 1080 still require RTX 2060 device
   records and passing checks. This floor qualification does not reopen a
@@ -8637,8 +8637,8 @@ programme is done.
   and indirect comparison; source preparation is not their verdict. Then use
   the same candidate's successfully built private CLI and World artifact on
   the RTX 2060, outside a remote session. Run the declared
-  [sky matrix](../../tests/Puck.Counters/sky-defaults/README.md) and
-  [indirect comparison](../../tests/Puck.Counters/indirect-comparison/README.md)
+  [sky matrix](../../experimental/tests/Puck.Counters/sky-defaults/README.md) and
+  [indirect comparison](../../experimental/tests/Puck.Counters/indirect-comparison/README.md)
   serially at their authored 1920 by 1080 output. Retain every backend's
   transcript, script and completion identity, reject device recovery or an
   unavailable required row, and record and check the saved paired reports

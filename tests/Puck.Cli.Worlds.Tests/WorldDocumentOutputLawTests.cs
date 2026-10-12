@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text;
 using Puck.Abstractions.Documents;
 using Puck.Testing;
 using Puck.World;
@@ -24,11 +23,6 @@ namespace Puck.Cli.Worlds.Tests;
 /// when the shipped worlds or the compile that writes them change, rather than by every run of this suite.</remarks>
 public sealed class WorldDocumentOutputLawTests {
     private static readonly string[] SourceTrees = ["src", "worlds"];
-
-    private static string SourceWorlds() => Path.Combine(
-        path1: RepositoryPaths.RequireRoot(),
-        path2: ShippedWorldDocuments.WorldDirectory
-    );
 
     // One document a tree run ships: its output-relative path, the bytes it must hold, the path it composes at (where
     // its source's compile composes it), and the file those bytes come from.
@@ -372,105 +366,6 @@ public sealed class WorldDocumentOutputLawTests {
             condition: (untracked.Count == 0),
             userMessage: $"a world document under src/ or worlds/ that git does not track is build output written into a source tree, or an orphan a rename left behind: {string.Join(separator: ", ", values: untracked)}"
         );
-    }
-    [Fact]
-    public void RenamingASourceLeavesNoLoadableOrphan() {
-        using var directory = new TemporaryDirectory();
-        var tree = Directory.CreateDirectory(path: directory.PathOf(name: "worlds/games")).Parent!.FullName;
-        var output = directory.PathOf(name: "out");
-        var sources = new[] { "games/go.puck", "games/tictactoe.puck" };
-
-        foreach (var source in sources) {
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: tree,
-                    path2: source
-                ),
-                sourceFileName: Path.Combine(
-                    path1: SourceWorlds(),
-                    path2: source
-                )
-            );
-        }
-
-        int Build() => ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: [
-            "compile",
-            "--tree",
-            tree,
-            "--output",
-            output,
-            .. Directory.EnumerateFiles(
-                path: tree,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: ("*" + WorldDocumentName.SourceSuffix)
-            ),
-        ])).ExitCode;
-
-        Assert.Equal(
-            actual: Build(),
-            expected: 0
-        );
-        Assert.True(condition: File.Exists(path: Path.Combine(
-            path1: output,
-            path2: "games/go.world.json"
-        )));
-
-        File.Move(
-            destFileName: Path.Combine(
-                path1: tree,
-                path2: "games/weiqi.puck"
-            ),
-            sourceFileName: Path.Combine(
-                path1: tree,
-                path2: "games/go.puck"
-            )
-        );
-
-        Assert.Equal(
-            actual: Build(),
-            expected: 0
-        );
-        Assert.Equal(
-            actual: Directory.EnumerateFiles(
-                path: output,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
-            ).Select(selector: path => Relative(
-                path: path,
-                root: output
-            )).Order(comparer: StringComparer.Ordinal),
-            expected: ["games/tictactoe.world.json", "games/weiqi.world.json"]
-        );
-        // Go draws as a world and tic-tac-toe is a fragment, so the renamed world's compiled world is the only one.
-        Assert.Equal(
-            actual: Directory.EnumerateFiles(
-                path: output,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: ("*" + CompiledWorld.Extension)
-            ).Select(selector: path => Relative(
-                path: path,
-                root: output
-            )),
-            expected: ["games/weiqi.puckb"]
-        );
-
-        // The old name reaches nothing, in the source tree or in the output.
-        foreach (var root in ((string[])[tree, output])) {
-            Assert.False(condition: PuckDocumentComposer.TryComposeWorldDocument(
-                chainBytes: out _,
-                composed: out _,
-                reason: out var reason,
-                rootBytes: Encoding.UTF8.GetBytes(s: """{ "schema": "puck.world.definition.v1", "imports": [ { "document": "games/go" } ] }"""),
-                rootResolvedPath: Path.Combine(
-                    path1: root,
-                    path2: "host.world.json"
-                )
-            ));
-            Assert.Contains(
-                actualString: reason,
-                expectedSubstring: "has neither a source"
-            );
-        }
     }
     /// <summary>The tree check passes over the output its own run wrote, and names a file whose bytes differ, one the
     /// output lacks, and one a run of the tree does not write, writing nothing under the output.</summary>

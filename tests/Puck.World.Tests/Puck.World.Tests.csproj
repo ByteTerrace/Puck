@@ -59,7 +59,6 @@
         <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
-        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
         <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
@@ -68,7 +67,6 @@
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
-        <Compile Include="../Shared/World/FrustumFitFixtures.cs" Link="World/FrustumFitFixtures.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/JournalDepthFixtures.cs" Link="World/JournalDepthFixtures.cs" />
         <Compile Include="../Shared/World/MachineOperationFixtures.cs" Link="World/MachineOperationFixtures.cs" />

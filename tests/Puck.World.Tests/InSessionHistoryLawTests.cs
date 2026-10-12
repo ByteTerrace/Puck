@@ -20,9 +20,7 @@ public sealed class InSessionHistoryLawTests {
     public static TheoryData<string, ulong> WorldsAndSeeds() {
         var data = new TheoryData<string, ulong>();
 
-        // Nexus is the shipped world whose tick costs the most, so each of its seeds is a class of its own
-        // (NexusSeekingLawTests): classes run side by side, and a theory's rows run one after another.
-        foreach (var world in new[] { "fixture", "snake" }) {
+        foreach (var world in new[] { "fixture" }) {
             foreach (var seed in new[] { 3UL, 77UL, 0x5EEDUL }) {
                 data.Add(p1: world, p2: seed);
             }
@@ -32,8 +30,6 @@ public sealed class InSessionHistoryLawTests {
     }
 
     private static WorldDefinition? Definition(string world) => (world switch {
-        "nexus" => AuthoredGameFixtures.Nexus,
-        "snake" => AuthoredGameFixtures.Program(module: "snake"),
         _ => null,
     });
     // A world declaring an int row with two cells the laws write, the edit a builder makes between ticks.

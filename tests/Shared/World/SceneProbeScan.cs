@@ -5,8 +5,8 @@ using Xunit;
 namespace Puck.World.Testing;
 
 /// <summary>The scan every suite that owns full hosts or scene probes holds its classes to: each class whose source
-/// names a probe owner (<c>WorldBootHarness</c>, <c>WorldSceneEmitter</c>, <c>WorldFramePresenter</c>,
-/// <c>SdfCompositionFrameSource</c> or <c>ComposedSdfWorldFixture</c>) sits in <see cref="SceneProbeCollection"/>, which
+/// names a probe owner (<c>WorldSceneEmitter</c>, <c>WorldFramePresenter</c> or
+/// <c>SdfCompositionFrameSource</c>) sits in <see cref="SceneProbeCollection"/>, which
 /// runs one class at a time beside the other parallel collections, or in a collection that disables parallelization and
 /// so runs alone. Their reserved instruction streams are large even when the live world is empty, so parallel probe
 /// classes multiply that temporary storage by the worker count.</summary>
@@ -14,7 +14,7 @@ internal static partial class SceneProbeScan {
     [GeneratedRegex(@"//[^\r\n]*|/\*.*?\*/", RegexOptions.Singleline)]
     private static partial Regex CommentsPattern();
     // Type references include target-typed construction and fixture fields, not just explicit constructor calls.
-    [GeneratedRegex(@"\b(?:WorldBootHarness|WorldSceneEmitter|WorldFramePresenter|SdfCompositionFrameSource|ComposedSdfWorldFixture)\b")]
+    [GeneratedRegex(@"\b(?:WorldSceneEmitter|WorldFramePresenter|SdfCompositionFrameSource)\b")]
     private static partial Regex ProbeOwnerPattern();
 
     /// <summary>Asserts that no two CPU scene-probe classes of <paramref name="assembly"/> run at once.</summary>

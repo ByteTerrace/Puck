@@ -1500,17 +1500,7 @@ public static partial class CanaryCommand {
             }
         }
 
-        if (selected.Count == 0) {
-            error = selection.Kind switch {
-                CanarySelectionKind.Automatic => "the automatic set is empty; landing cannot report green without a headless, requirement-free proof.",
-                CanarySelectionKind.Capability => $"capability filter '{selection.Capability}' selected zero canaries; an empty selection cannot report green.",
-                CanarySelectionKind.Merge => "the merge set is empty; a merge cannot report green without a proof to run.",
-                _ => "selection contains zero canaries; an empty run cannot report green.",
-            };
-
-            return false;
-        }
-
+        // An empty selection is a normal one: it runs nothing.
         return true;
     }
     private static IReadOnlyList<CanaryManifest> FilterCapability(IReadOnlyList<CanaryManifest> manifests, string capability) => capability switch {

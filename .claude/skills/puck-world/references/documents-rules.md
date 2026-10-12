@@ -54,7 +54,7 @@ reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none
 transfers resolve their `key`, `from`, and `to` before each transaction step;
 direct mutations use literal keys and zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.
-The [Solitaire guide](../../../../src/Puck.World/Assets/worlds/games/README.md)
+The [Solitaire guide](../../../../experimental/src/Puck.World/Assets/worlds/games/README.md)
 owns the collection's table selector, pile IDs, and request protocol.
 A placement's `parent` composes its frame over another's, and a
 `board`-named Grid topology anchors its origin to that placement. `$local:<name>` reads a value the
@@ -273,7 +273,7 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-The arena module (`src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
+The arena module (`experimental/src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
 that schedule a burn/freeze deadline, and `Level` rules that act while `$tick`
 has not yet reached it.

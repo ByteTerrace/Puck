@@ -20,8 +20,6 @@ public sealed class AffectedBaselineLawTests {
 
     [InlineData("src/Puck.World/Assets/worlds/game.puck")]
     [InlineData("src/Puck.World/Assets/package.puck")]
-    [InlineData("worlds/game.puck")]
-    [InlineData("worlds/package/modules/game.puck")]
     [InlineData("src/Puck.World.Transpiler/Samples/game.puck")]
     [InlineData("src/Puck.World.Transpiler/Samples/modules/game.puck")]
     [Theory]
@@ -35,28 +33,21 @@ public sealed class AffectedBaselineLawTests {
         Assert.Empty(collection: Select(path: "src/Unrelated/Thing.cs").Baselines);
     }
     [InlineData("Puck.State.Rebuild.Corpus", "corpus-inventory")]
-    [InlineData("Puck.World.Games.Tests", "state")]
     [InlineData("Puck.Maths.Tests", "maths-ledger")]
-    [InlineData("Puck.World.Browser.Tests", "browser-parity")]
     [Theory]
     public void TheOwningTestProjectReachesItsBaseline(string project, string artifact) {
         Assert.Equal(expected: [artifact], actual: Select(path: $"tests/{project}/Law.cs").Baselines.Select(selector: static baseline => baseline.Name));
     }
     [Fact]
     public void BaselinesFollowProjectDependenciesAndConsumersInOrdinalOrder() {
-        string[] all = ["browser-parity", "corpus-inventory", "maths-ledger", "state"];
+        string[] all = ["corpus-inventory", "maths-ledger"];
 
         Assert.Equal(expected: all, actual: Select(path: "src/Core/Value.cs").Baselines.Select(selector: static artifact => artifact.Name));
         Assert.Equal(expected: all, actual: Select(path: "build/changed.props").Baselines.Select(selector: static artifact => artifact.Name));
         Assert.Equal(expected: ["corpus-inventory"], actual: Select(path: "fixtures/data.json", consumer: true).Baselines.Select(selector: static artifact => artifact.Name));
     }
-    [InlineData("src/Puck.World/Assets/worlds/standard.puck", "browser-parity")]
-    [InlineData("src/Puck.World/Assets/worlds/quality.puck", "browser-parity")]
-    [InlineData("src/Puck.World/Assets/worlds/games/tictactoe.puck", "browser-parity")]
+    [InlineData("src/Puck.World/Assets/worlds/debug.puck", "corpus-inventory")]
     [InlineData("VerifiedCode.json", "maths-ledger")]
-    [InlineData("src/Puck.World/Assets/worlds/games/go.puck", "state")]
-    [InlineData("src/Puck.World/Assets/worlds/pipeline.puck", "state")]
-    [InlineData("worlds/parlor/lineup.puck", "state")]
     [Theory]
     public void ExternalTestDataReachesItsBaseline(string path, string name) {
         Assert.Contains(collection: Select(path: path).Baselines, filter: artifact => (artifact.Name == name));

@@ -46,7 +46,10 @@ dotnet test --project tests/Puck.Cli.Release.Tests/Puck.Cli.Release.Tests.csproj
 ```
 
 `tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs` builds a real official tree; run it alone with
-`--filter-class "*OfficialBuildCommandTests"`.
+`--filter-class "*OfficialBuildCommandTests"`. Quarantined: the official tree needs the root `puck` and basis
+`standard` documents, which moved to `experimental/`, so the tree-building laws and their fixture live in
+`experimental/tests/Puck.Cli.Release.Tests/Official/OfficialBuildCommandTests.cs`; only the porcelain unit law runs
+here.
 
 ## Documentation
 

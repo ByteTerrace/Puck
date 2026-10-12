@@ -1,9 +1,5 @@
 using System.Text.Json.Nodes;
 
-using Json.Schema;
-
-using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -35,19 +31,9 @@ public sealed class WorldSchemaCompletenessLawTests {
         "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/weight",
     };
     private static readonly Lazy<JsonObject> BundleHolder = new(valueFactory: BuildBundle);
-    private static readonly Lazy<JsonSchema> CompiledBundleHolder = new(valueFactory: () => SchemaVerdicts.Build(schema: Bundle));
-    private static readonly Lazy<JsonObject> ComposedIslandHolder = new(valueFactory: ComposeIsland);
 
     private static JsonObject Bundle => BundleHolder.Value;
-    private static JsonSchema CompiledBundle => CompiledBundleHolder.Value;
-    // Composed once for every law that reads it; a law that changes it works on its own deep clone.
-    private static JsonObject ComposedIsland => ComposedIslandHolder.Value;
 
-    private static void AssertValidatesAgainstBundle(JsonNode instance, string label) {
-        if (!CompiledBundle.Admits(instance: instance)) {
-            Assert.Fail(message: $"{label} failed schema validation:\n{CompiledBundle.Explain(instance: instance)}");
-        }
-    }
     private static JsonObject BuildBundle() {
         var split = Puck.World.WorldSchema.Export(postProcessPackages: []);
 
@@ -83,29 +69,6 @@ public sealed class WorldSchemaCompletenessLawTests {
 
         return false;
     }
-    private static IEnumerable<object[]> FragmentPaths(string folder) =>
-        ShippedWorldDocuments.Files(
-            directory: Path.Combine(
-                path1: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory),
-                path2: folder
-            ),
-            option: SearchOption.TopDirectoryOnly
-        ).Select(selector: static path => new object[] { path });
-    private static JsonObject ComposeIsland() {
-        Assert.True(
-            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                documents: PuckDocumentComposer.Instance,
-                path: IslandPath(),
-                tree: out var tree,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        return tree!;
-    }
-    private static string IslandPath() =>
-        RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/{WorldDocumentName.DocumentFile(name: "puck")}");
     private static bool IsClosedObject(JsonObject node) =>
         ((node["additionalProperties"] is JsonValue value) && value.TryGetValue<bool>(value: out var closed) && !closed);
     private static bool IsTyped(JsonObject node) =>
@@ -117,8 +80,6 @@ public sealed class WorldSchemaCompletenessLawTests {
         node.ContainsKey(propertyName: "$comment") ||
         node.ContainsKey(propertyName: "$ref") ||
         node.ContainsKey(propertyName: "properties"));
-    private static JsonNode ParseFragment(string path) =>
-        (JsonNode.Parse(utf8Json: ShippedWorldDocuments.Read(path: path)) ?? throw new InvalidDataException(message: $"{path} did not parse as JSON."));
     // Follows a site straight to its shape: a bare "#/$defs/X" $ref resolves to that def's own content; a
     // nullable site ("anyOf": [{"$ref"}, {"type":"null"}], see WorldSchema.Bundle) resolves through its $ref arm.
     // A node that is neither is already a shape — returned as-is.
@@ -310,21 +271,6 @@ public sealed class WorldSchemaCompletenessLawTests {
             }
         }
     }
-
-    // A document the old, fully-inlined bundle refused stays refused: additionalProperties:false at the root
-    // (preserved verbatim by both the old inlining and the new $defs form) rejects a key the document model never
-    // declared.
-    [Fact]
-    public void ADocumentTheOldBundleRefusedStillRefuses() {
-        var corrupted = ((JsonObject)ComposedIsland.DeepClone());
-
-        corrupted["thisPropertyWasNeverDeclaredByTheDocumentModel"] = true;
-
-        Assert.False(
-            condition: CompiledBundle.Admits(instance: corrupted),
-            userMessage: "an undeclared top-level property validated — additionalProperties:false regressed."
-        );
-    }
     [Fact]
     public void EveryArrayDeclaresItems() {
         var violations = new List<string>();
@@ -412,20 +358,6 @@ public sealed class WorldSchemaCompletenessLawTests {
             )
         );
     }
-    [MemberData(memberName: nameof(GameFragmentPaths))]
-    [Theory]
-    public void EveryGameFragmentValidatesAgainstTheBundle(string path) =>
-        AssertValidatesAgainstBundle(
-            instance: ParseFragment(path: path),
-            label: path
-        );
-    [MemberData(memberName: nameof(ModuleFragmentPaths))]
-    [Theory]
-    public void EveryModuleFragmentValidatesAgainstTheBundle(string path) =>
-        AssertValidatesAgainstBundle(
-            instance: ParseFragment(path: path),
-            label: path
-        );
     // Every named shape lives in exactly one place: a $defs entry, or the bundle root itself (which keeps its own
     // hand-written title — see WorldSchema.Bundle). An object with "properties" found anywhere else would mean a
     // titled shape the bundle-time hoist missed.
@@ -526,8 +458,6 @@ public sealed class WorldSchemaCompletenessLawTests {
             )
         );
     }
-    public static IEnumerable<object[]> GameFragmentPaths() => FragmentPaths(folder: "games");
-    public static IEnumerable<object[]> ModuleFragmentPaths() => FragmentPaths(folder: "modules");
     [Fact]
     public void RootIsSelfIdentifying() {
         var identity = ((JsonObject)(Bundle["x-puck"] ?? throw new InvalidOperationException(message: "the root carries no x-puck block.")));
@@ -609,12 +539,6 @@ public sealed class WorldSchemaCompletenessLawTests {
             )}"
         );
     }
-    [Fact]
-    public void TheComposedIslandValidatesAgainstTheBundle() =>
-        AssertValidatesAgainstBundle(
-            instance: ComposedIsland,
-            label: IslandPath()
-        );
     [Fact]
     public void UnconstrainedDefinitionsStayExplicit() {
         var gaps = Bundle["$defs"]!.AsObject()

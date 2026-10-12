@@ -290,6 +290,14 @@ solution. Its historical stages are prior art, not current verification. Use
 the live checks appropriate to the changed contract and report what remains
 untested; no single check covers the complete engine.
 
+While the debug world is the one live world, every other world and the
+canary, parity, determinism, qualification, verdict and game fixtures sit under
+`experimental/` with the laws that booted them, and their gates are not run
+until the owner calls for qualification
+([quarantined gates](../plans/open-items.md#quarantined-gates)). Until then
+the live checks are the build, the suites' remaining laws, the ledger and
+generator `--check` forms, and running the debug world.
+
 The [World suites](../../tests/Puck.World.Tests/README.md) cover documents,
 protocol, authoritative simulation, and shipped game state programs. The
 architecture gate runs during builds, including `PUCKARCH008`: it rejects a
@@ -298,7 +306,7 @@ compiled dependency denied by `PuckArchitectureDeniedApi` in
 The emulator batteries, Maths laws, build, and running application provide
 additional checks with distinct scopes.
 
-`puck parity` boots the [authored parity world](../../tests/Puck.Parity/README.md)
+`puck parity` boots the [authored parity world](../../experimental/tests/Puck.Parity/README.md)
 offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
 four verdicts: valid content, exact simulation-state hash agreement, the tick
 each frame refreshed its bound regions at matching the capture's tick, and pixel
@@ -353,7 +361,7 @@ rather than silently reinterpreting it.
 Cross-host determinism has its own check.
 [`puck determinism record`](../reference/cli.md#puck-determinismcross-host-determinism-attestation)
 boots each scenario of
-[the determinism manifest](../../tests/Puck.Determinism/determinism.json)
+[the determinism manifest](../../experimental/tests/Puck.Determinism/determinism.json)
 headless in-process and records every tick's per-system state hashes and the
 world's document-level hashes. `puck determinism compare` names the first tick
 and system, or document hash, where two recordings differ. CI records the
@@ -484,7 +492,7 @@ with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
 the one after, using `puck counters compare`. `puck counters --check` also holds
 every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/counters.ceilings.json`, judging each device against its own
+`tests/Puck.Counters/debug.ceilings.json` by default, judging each device against its own
 record, and `--record` records the running device's counts into them in the
 change that explains why a count moved.
 
@@ -528,13 +536,13 @@ own harness over its own fixtures, run from the repository root:
 node --test tests/Puck.World.Browser.Tests/wasm/sources.test.mjs
 ```
 
-Both harnesses skip themselves by name (never silently pass) when the AppBundle
-is absent. To re-record the determinism-canary baseline both the native tests
-and the Node harness compare against:
+That harness and its fixtures are quarantined at the same paths under
+`experimental/` while the debug world is the one live world.
 
-```powershell
-puck baselines browser-parity
-```
+Both harnesses skip themselves by name (never silently pass) when the AppBundle
+is absent. The determinism-canary baseline both used to compare against, and
+its `browser-parity` registration, are quarantined under `experimental/` with
+the worlds it recorded.
 
 See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
 and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the

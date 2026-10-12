@@ -172,8 +172,7 @@ on Linux and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
 distribution checks, and for the two generated ledgers `puck formats --check`
 (`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
-shape fingerprint of every strictly versioned format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
-cost of the automatic and merge canary selections; a count must equal its plan).
+shape fingerprint of every strictly versioned format).
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
@@ -206,14 +205,11 @@ key. A run whose key already has a Linux cache has nothing new to compare: the
 job looks the key up first, says in its log and summary that these inputs were
 already compared, and skips the rest. Only this job saves the Linux cache, so
 the cache's existence under a key is the record of a passing comparison.
-Its `determinism` job is the simulation's cross-host leg. The artifacts job
-records every scenario of
-[the determinism manifest](../../tests/Puck.Determinism/determinism.json) on
-Windows with `puck determinism record` into the `determinism-windows` artifact;
-the Linux job records the same manifest with the same verb and runs
-`puck determinism compare` on the two streams, which fails on the first tick and
-system, or the first document hash, where the hosts differ and prints the
-scenarios, ticks and hashes it compared.
+While the debug world is the one live world, CI has no cross-host determinism
+leg and no canary-cost check: the determinism manifest and the canaries are
+quarantined under `experimental/`
+([quarantined gates](../plans/open-items.md#quarantined-gates)). The artifacts
+job's published-host startup check boots the debug world.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
 Linux world verification runs each compiled assembly directly as `dotnet <assembly.dll>`,
@@ -299,14 +295,13 @@ the step in the same change.
 | `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
 | `puck derivations --check` | `artifacts.yml` | `derivations` |
-| `puck schema`, `registry`, `architecture`, `branding`, `formats` and `canary-ceilings --check` | `verify.yml` | the step of the same name |
+| `puck schema`, `registry`, `architecture`, `branding` and `formats --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather
 than static checks: the emulator batteries, the WebAssembly harness, the Linux
-SPIR-V comparison (`puck shaders compare`), Linux determinism (`puck determinism
-compare`), the published World's startup check, `puck nuget pack` and `smoke`,
+SPIR-V comparison (`puck shaders compare`), the published World's startup check, `puck nuget pack` and `smoke`,
 API documentation (`docs.yml`'s DocFX run, the command `puck docs build`
 runs), Bicep compilation, container images and
 deployment.

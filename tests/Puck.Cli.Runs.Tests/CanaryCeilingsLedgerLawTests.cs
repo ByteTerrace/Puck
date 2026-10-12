@@ -156,31 +156,6 @@ public sealed class CanaryCeilingsLedgerLawTests {
         );
     }
     [Fact]
-    public void TheShippedLedgerIsExactlyThePlanOfTheShippedManifests() {
-        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
-        Assert.True(
-            condition: CanaryCeilingsCommand.TryPlan(
-                error: out var planError,
-                planned: out var planned,
-                repositoryRoot: repositoryRoot
-            ),
-            userMessage: planError
-        );
-        Assert.True(
-            condition: CanaryCeilingsLedger.TryRead(
-                error: out var readError,
-                ledger: out var recorded,
-                repositoryRoot: repositoryRoot,
-                text: out var text
-            ),
-            userMessage: readError
-        );
-        Assert.Empty(collection: recorded!.Check(
-            ledgerText: text,
-            planned: planned!
-        ));
-    }
-    [Fact]
     public void TwoBranchesThatRecordDifferentRisesCollideTextually() {
         var (conflicts, merged) = LedgerMergeProbe.Merge(
             baseText: Base.Render(),

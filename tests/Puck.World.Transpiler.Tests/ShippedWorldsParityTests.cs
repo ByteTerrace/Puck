@@ -79,12 +79,6 @@ public class ShippedWorldsParityTests {
         Assert.True(condition: (mismatch is null), userMessage: mismatch);
     }
 
-    public static TheoryData<string> GetShippedWorldFiles() => ShippedWorlds.Files();
-    // Carries the same directive as its first `placements` row, plus placement rows a basis completes.
-    [Fact]
-    public void TestQuiltShardParity() {
-        TestShippedWorldRoundTripParity(relativePath: "shards/quilt-ne.world.json");
-    }
     // A `{"$replace": true}` basis-merge directive row in `rules` is not a rule.
     [Fact]
     public void TestReplaceDirectiveRuleRowParity() {
@@ -102,47 +96,6 @@ public class ShippedWorldsParityTests {
             originalJsonText: Document,
             basePath: ShippedWorlds.FindDirectory(),
             label: "replace-directive"
-        );
-    }
-    [MemberData(nameof(GetShippedWorldFiles))]
-    [Theory]
-    public void TestShippedWorldRoundTripParity(string relativePath) {
-        var worldsDir = ShippedWorlds.FindDirectory();
-        var fullPath = Path.Combine(
-            path1: worldsDir,
-            path2: relativePath
-        );
-
-        Assert.True(
-            condition: File.Exists(path: fullPath),
-            userMessage: $"Shipped world file not found: {fullPath}"
-        );
-
-        AssertDecompilationRoundTrips(
-            originalJsonText: File.ReadAllText(path: fullPath),
-            basePath: Path.GetDirectoryName(path: fullPath),
-            label: relativePath
-        );
-    }
-    [MemberData(nameof(GetShippedWorldFiles))]
-    [Theory]
-    public void TestShippedWorldRoundTripParityWithSql(string relativePath) {
-        var worldsDir = ShippedWorlds.FindDirectory();
-        var fullPath = Path.Combine(
-            path1: worldsDir,
-            path2: relativePath
-        );
-
-        Assert.True(
-            condition: File.Exists(path: fullPath),
-            userMessage: $"Shipped world file not found: {fullPath}"
-        );
-
-        AssertDecompilationRoundTrips(
-            originalJsonText: File.ReadAllText(path: fullPath),
-            basePath: Path.GetDirectoryName(path: fullPath),
-            label: $"{relativePath} (sql)",
-            sql: true
         );
     }
 }

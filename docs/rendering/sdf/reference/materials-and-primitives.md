@@ -103,9 +103,9 @@ trims are refused; use the outline itself for corner shaping. They are
 presentation geometry: deterministic field-contact requests refuse them by
 name. Author a separate supported contact shape when needed.
 
-The [path fixture](../../../../tests/Puck.Parity/paths.puck) exercises
+The [path fixture](../../../../experimental/tests/Puck.Parity/paths.puck) exercises
 arcs, a concave sheared outline, a hole, cubic curves, and smooth width changes.
-It has its own [cross-backend contract](../../../../tests/Puck.Parity/paths.contract.json).
+It has its own [cross-backend contract](../../../../experimental/tests/Puck.Parity/paths.contract.json).
 
 ## Degenerate profile admission
 

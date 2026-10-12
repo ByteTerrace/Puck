@@ -23,7 +23,7 @@ every package is complete.
   settled.
 - **Games.** Ten of sixteen are landed: Reversi, Hidden ranks, Hearts, Snake,
   Word spy, Paddleball, Arena, Rulepush, Tetromino, and Go. Lineup landed
-  outside the sixteen, in the [Parlor package](../../worlds/parlor/README.md#lineup).
+  outside the sixteen, in the [Parlor package](../../experimental/worlds/parlor/README.md#lineup).
 - **Embeddings** is done: the open defects in `Puck.Embeddings` and `puck embed`
   are closed, each with a law ([Embeddings](#embeddings-done)).
 - **C1** is open. The reference schedule is implemented in part
@@ -574,7 +574,7 @@ pointed at the result and re-recorded, and the JSON sources are deleted.
 **Check:** the forcing world's check above.
 
 **Open:** `puck decompile` refuses a document carrying a module instance's
-machine. `tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
+machine. `experimental/tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
 (and each of its four quilts) declares `/machines/0/name` as
 `arcade$agb-screen`, and the decompiler answers `'arcade$agb-screen' … is a name
 Puck generates … a module's use does not print back from the document it
@@ -657,7 +657,7 @@ names the gate and the values it saw.
 The runner half is landed and is what the construct lowers to: the `schedule`
 document section (rows of tick/principal/command/expect plus the derived export
 tick), the `verdict` state-row trait, `world.schedule`/`world.verdicts`, and
-`puck test` over `tests/Puck.World.Verdicts`.
+`puck test` over `experimental/tests/Puck.World.Verdicts`.
 
 What a green run now means. The section submits nothing unless the boot armed it
 with `--schedule-dir`, and a row may open only with a verb from a closed step
@@ -773,7 +773,7 @@ An authored `schedule` carries a refusal expectation and optional refusal text;
 that outcome as well as distinguishing authored names from generated
 `expect$N` rows.
 
-All five scheduled fixtures under `tests/Puck.World.Verdicts` are `.puck`
+All five scheduled fixtures under `experimental/tests/Puck.World.Verdicts` are `.puck`
 sources. Their parsed documents survive native decompile and compile exactly;
 `puck test` collects the authored schedule/verdict form through its normal
 composition and staging path without manufacturing a generated test block.
@@ -862,7 +862,7 @@ lists no embedding provider package (no `OpenAI` or `Azure.AI.OpenAI` entry).
 
 ### G4 — Tetromino
 
-**Status:** implemented as [games/tetromino.puck](../../src/Puck.World/Assets/worlds/games/tetromino.puck),
+**Status:** implemented as [games/tetromino.puck](../../experimental/src/Puck.World/Assets/worlds/games/tetromino.puck),
 the falling-block game under the name the decision record gives it. A piece's
 life is the `piece` workflow (spawn, fall, lock, clear); gravity is a `cycle`
 row a level; the lock delay is a `schedule` deadline; the full-row pattern reads
@@ -891,7 +891,7 @@ clears one line; the corpus inventory counts every claimed construct.
 
 ### G1 — Go
 
-**Status:** implemented as [games/go.puck](../../src/Puck.World/Assets/worlds/games/go.puck)
+**Status:** implemented as [games/go.puck](../../experimental/src/Puck.World/Assets/worlds/games/go.puck)
 at 19x19. Its `test` blocks show an atari, a single and a group capture, a
 suicide refusal, a ko refusal and the exchange that lifts it, the area count,
 and one CPU move, each in the export, and reproduce byte for byte. The
@@ -917,7 +917,7 @@ export.
 
 ### G16 — Rulepush
 
-**Status:** implemented as the [rulepush package](../../worlds/rulepush/README.md). The
+**Status:** implemented as the [rulepush package](../../experimental/worlds/rulepush/README.md). The
 rules are one module and each level is only its map; an overworld borders the
 three levels and opens a gate from the visitor's own record. The package's
 `test` blocks cover the check below except the hash comparison. The
@@ -1391,7 +1391,7 @@ it. A press on the seventh tick still leaves the ground behind, but as the
 double jump, which is why it spends the air jump.
 
 The `rim-drop`, `rim-refused`, `rim-round-trip` and `traveller-kit` canaries
-under `tests/Puck.World.Canaries` hold what the engine already does, measured
+under `experimental/tests/Puck.World.Canaries` hold what the engine already does, measured
 on the real executable. A body that walks off a deck through a border lying
 flat beneath it is handed to the world below while airborne, still falling,
 directly beneath the point it fell from and with no turn, with its per-body

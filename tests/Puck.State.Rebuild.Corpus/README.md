@@ -19,7 +19,9 @@ The corpus is three trees, enumerated where they live rather than copied:
 
 - `src/Puck.World/Assets/worlds/**/*.puck` — the shipped worlds, including the
   nine games decompiled from hand-authored JSON.
-- `worlds/**/*.puck` — the asset packages. A source emitting several worlds
+- Quarantined: the asset packages moved to `experimental/worlds/`, and the laws
+  over them to `experimental/tests/Puck.State.Rebuild.Corpus/`, so this tree is
+  not enumerated. `worlds/**/*.puck` — the asset packages. A source emitting several worlds
   (`rulepush.puck`, `beacons.puck`) decompiles as one composition
   (`WorldDecompiler.DecompileComposition`) and each world must come back as it
   was. A source emitting no world of its own is a module fragment, held through
@@ -34,7 +36,9 @@ The committed cartridges round-trip in `tests/Puck.GamingBricks.Transpiler.Tests
 (`TestEveryCommittedCartridgeSurvivesADecompileAndRecompile`), beside the gate
 that holds each to the document committed with it.
 
-A source the round trip cannot close on is listed in
+Quarantined: both exempt sources, and `ExemptSourceStillFailsForItsReason`, moved
+to `experimental/` with the worlds they read, so the live exemption ledger is
+empty. A source the round trip cannot close on is listed in
 `CorpusSources.RoundTripExemptions` with the reason it cannot, and stays under
 the document gate. `ExemptSourceStillFailsForItsReason` fails when a source
 round-trips again or fails for another reason than its row names, so the ledger
@@ -59,7 +63,9 @@ re-record it with:
 puck baselines corpus-inventory
 ```
 
-The same test holds each game package's claims: every construct a package names as what it proves must be counted
+Quarantined: the game-claims law moved to
+`experimental/tests/Puck.State.Rebuild.Corpus/CorpusInventoryTests.cs` with the tetromino source it reads. The same
+test holds each game package's claims: every construct a package names as what it proves must be counted
 in that package's own source. Tetromino claims a staged rule group, a scheduled deadline, a cycle trait, a pattern
 and its `match` read, a weighted draw that restarts on exhaustion, and a saturating row.
 

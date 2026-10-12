@@ -71,7 +71,7 @@ slashes too, held by `MsBuildPathSpellingLawTests`.
 | [docs/overview.md](docs/overview.md), [docs/architecture/README.md](docs/architecture/README.md) | What the engine does and how its runtime boundaries fit together. |
 | [docs/architecture/worlds.md](docs/architecture/worlds.md), [src/Puck.World.Server/README.md](src/Puck.World.Server/README.md) | How worlds are represented and run: documents, authoritative simulation, the server. |
 | [docs/plans/README.md](docs/plans/README.md) | Proposed engineering work, including [runtime and delivery](docs/plans/runtime-and-delivery.md) and [machines and cartridges](docs/plans/machines-and-cartridges.md). |
-| [docs/game/README.md](docs/game/README.md), [src/Puck.World/README.md](src/Puck.World/README.md) | The reference game's design and play programme, and the World's current commands. Read them only for game work. |
+| [docs/game/README.md](docs/game/README.md), [src/Puck.World/README.md](src/Puck.World/README.md) | The reference game's design and play programme, and the World's current commands. Read them only for game work. The debug world is the one live world; the game's other worlds are quarantined under `experimental/` (see the `experimental/` section). |
 | [docs/decisions/engine-design.md](docs/decisions/engine-design.md) | Settled engine design decisions, including [configuration and sessions](docs/decisions/engine-design.md#configuration-and-operations-remain-discoverable). |
 | [docs/reference/input.md](docs/reference/input.md) | Controller input (`src/Puck.Input`): architecture, feature matrix, hardware status. |
 | [docs/development/documentation.md](docs/development/documentation.md) | Prose, titles, filenames, README ownership and navigation. The `documentation` skill owns agent-side verification. |
@@ -217,9 +217,15 @@ delete code there once live code has eclipsed it. Never improve, fix, build or
 run it, or run its tests; its builds are expected to break as deletions land.
 It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 `Puck.Platform.Switch`, each firewalled from the root build
-([experimental/README.md](experimental/README.md)). Anything there that must
-keep working is rewritten as a real project or a `puck` verb. A deletion rides
-in the same change as the landing that eclipses it. Documents
+([experimental/README.md](experimental/README.md)). While the current campaign
+runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
+hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,
+the one live world and the World's default), each file at its old repository
+path, with the fixtures, laws, baselines and ledgers that only booted or tested
+them ([decision](docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs),
+[quarantined gates](docs/plans/open-items.md#quarantined-gates)). Anything there
+that must keep working is rewritten as a real project or a `puck` verb. A
+deletion rides in the same change as the landing that eclipses it. Documents
 citing the old `tools/…`, `src/Puck.World/scripts/…` or former Post locations
 are stale; correct them where they live.
 

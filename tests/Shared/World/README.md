@@ -6,6 +6,12 @@ library, so a suite compiles only the fixtures its laws use and references only
 the projects those fixtures need. A change to one of these files selects
 exactly the suites that link it ([`puck affected`](../../../docs/reference/cli.md#puck-affectedthe-checks-a-change-needs)).
 
+While the debug world is the one live world, the fixtures that only loaded a
+quarantined world (the tabletop games, the Solitaire family, the portal-window
+canary) sit at the same paths under `experimental/tests/Shared/`, and the laws
+this page cites as examples may be quarantined with the worlds they boot
+([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
+
 ## How the fixtures are split
 
 A fixture that reached past its subject is split into parts by what each part

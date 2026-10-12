@@ -2483,7 +2483,7 @@ pointer and paired camera through it
 ([frame values, extent and ports](#frame-values-extent-and-ports));
 a zero `cameraFov` means no camera is paired.
 [The Moth shader](../../src/Puck.World/Assets/pipelines/moth.hlsl) and
-[the genesis card](../../worlds/genesis/card.hlsl) are worked examples.
+[the genesis card](../../experimental/worlds/genesis/card.hlsl) are worked examples.
 
 Compile a single source stage from the repository root:
 

@@ -88,7 +88,7 @@ completed ticks. Its only contact with rendering is the
 capture to the capture directory's `puck.parity.manifest.v1` manifest as one
 entry: the frame that showed its tick, or a
 named `refusal` with its `detail` (the vocabulary is in the
-[parity README](../../tests/Puck.Parity/README.md)). While a capture waits for
+[parity README](../../experimental/tests/Puck.Parity/README.md)). While a capture waits for
 its frame, `AwaitsFrame` holds, and the host composes that frame before its
 next step. Both rendered hosts, windowed and offscreen, go further and step no
 tick past the armed one until the capture is served or refused (`HoldsClock`),

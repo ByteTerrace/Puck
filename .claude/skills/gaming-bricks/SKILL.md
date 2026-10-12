@@ -88,7 +88,7 @@ Post stages are authoritative; update stale skill guidance in the same change.
   for current tiers, assets, ARM/GBA diagnostics, co-simulation normalization,
   and the accuracy workflow.
 - For a rendered side-by-side accuracy comparison rather than a Post stage,
-  boot `src/Puck.World/Assets/worlds/tools/hgb-compare.puck` (an authored
+  boot `experimental/src/Puck.World/Assets/worlds/tools/hgb-compare.puck` (an authored
   cartridge beside a reference machine that boots empty until the runner
   supplies an image with `screen.insert 0 <path>`) or `hgb-mirror.puck` (a
   cartridge's live memory bound into world state beside an SDF diorama reading

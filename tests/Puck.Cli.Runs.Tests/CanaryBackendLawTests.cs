@@ -143,29 +143,6 @@ public sealed class CanaryBackendLawTests {
             manifests: [Manifest(id: "headless", shape: CanaryBootShape.Headless)]
         )));
     }
-    // The shipped offscreen proofs, planned through the real command tree: the default plans both backends and says
-    // so; --backend plans only the named one and says which did not run. Planning builds and boots nothing.
-    [Fact]
-    public void PlanningThroughTheCommandNamesTheBackendsThatRun() {
-        var both = Canary("--capability", "offscreen", "--plan");
-        var vulkan = Canary("--capability", "offscreen", "--plan", "--backend", "vulkan");
-
-        Assert.Equal(
-            actual: both.ExitCode,
-            expected: 0
-        );
-        Assert.Contains(actualString: both.Output, expectedSubstring: "canary plan pipeline-feedback on vulkan:");
-        Assert.Contains(actualString: both.Output, expectedSubstring: "canary plan pipeline-feedback on directx:");
-        Assert.Contains(actualString: both.Output, expectedSubstring: "canary plan: backend-declaring proofs run on vulkan and directx.");
-        Assert.Equal(
-            actual: vulkan.ExitCode,
-            expected: 0
-        );
-        Assert.Contains(actualString: vulkan.Output, expectedSubstring: "canary plan pipeline-feedback on vulkan:");
-        Assert.DoesNotContain(actualString: vulkan.Output, expectedSubstring: " on directx:");
-        Assert.Contains(actualString: vulkan.Output, expectedSubstring: "canary plan: backend-declaring proofs run on vulkan only (--backend vulkan), not on directx.");
-        Assert.DoesNotContain(actualString: vulkan.Error, expectedSubstring: "building Puck.World");
-    }
     [Fact]
     public void AnUnknownBackendIsRefusedByNameAtParse() {
         var (exitCode, _, error) = Canary("--capability", "offscreen", "--plan", "--backend", "d3d12");

@@ -1,15 +1,11 @@
 using System.Buffers.Binary;
-using System.Text.Json;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// The <c>source-conversion</c> canary's expectations are the CPU reference's, not recorded numbers. Each leg's five regions
-/// are rebuilt here from the rules its seed pass follows, converted through <see cref="ImageSourceConversion"/>, and every
-/// <c>imageRegion</c> bound in the manifest is held to the reference's pixels over that region: a bound that holds must
-/// equal every pixel, and a bound that must fail must differ from them by more than its tolerance.
+/// The <c>source-conversion</c> seed regions, rebuilt here from the rules each seed pass follows, carry the header words
+/// of their upload layouts.
 /// </summary>
 public sealed class SourceConversionCanaryFixtureTests {
     private const int Extent = 32;
@@ -212,40 +208,6 @@ public sealed class SourceConversionCanaryFixtureTests {
         2 => (200, 32, 160),
         _ => (16, 240, 96),
     };
-    // The transfer pass's working values at a paper white as a capture reads them back through the SDR display encode:
-    // clamped to 0-1 and alpha opaque, the encode's dither within one code of it.
-    private static byte[] Preview(byte[] region, double paperWhiteNits) {
-        var working = new float[((Extent * Extent) * 4)];
-        var rgba = new byte[working.Length];
-
-        ImageSourceConversion.ToWorking(
-            paperWhiteNits: paperWhiteNits,
-            region: region,
-            working: working
-        );
-
-        for (var index = 0; (index < working.Length); index++) {
-            rgba[index] = (((index % 4) == 3)
-                ? ((byte)0xFF)
-                : ImageSourceConversion.ToUnorm8(value: Math.Clamp(
-                    max: 1.0,
-                    min: 0.0,
-                    value: working[index]
-                )));
-        }
-
-        return rgba;
-    }
-    private static byte[] Convert(byte[] region) {
-        var rgba = new byte[((Extent * Extent) * 4)];
-
-        ImageSourceConversion.ToRgba8(
-            region: region,
-            rgba: rgba
-        );
-
-        return rgba;
-    }
     // The seed writes these header words itself; they must be the layout's own.
     private static uint[] SeedHeaderWords(byte[] region) => [.. Enumerable.Range(count: 8, start: 0).Select(selector: word => BinaryPrimitives.ReadUInt32LittleEndian(source: region.AsSpan(start: (word * 4))))];
 
@@ -278,70 +240,6 @@ public sealed class SourceConversionCanaryFixtureTests {
         Assert.Equal(
             expected: [2080, 1568, 4128, 8224],
             actual: [PaletteRegion(indexBase: 5U).Length, Nv12Region(matrix: ImageYuvMatrix.Bt709).Length, FourByteRegion(bytesOf: Bgra, format: ImagePixelFormat.B8G8R8A8Unorm, transfer: ImageTransferFunction.Srgb).Length, HdrRegion().Length]
-        );
-    }
-    [InlineData("positive", 5U, ImageYuvMatrix.Bt709, ImagePixelFormat.B8G8R8A8Unorm, ImageTransferFunction.Srgb, 1_000.0)]
-    [InlineData("discriminating", 6U, ImageYuvMatrix.Bt601, ImagePixelFormat.R8G8B8A8Unorm, ImageTransferFunction.Linear, 80.0)]
-    [Theory]
-    public void EveryImageRegionBoundIsTheCpuReferencesPixels(string leg, uint indexBase, ImageYuvMatrix matrix, ImagePixelFormat fourByte, ImageTransferFunction transfer, double hdrPaperWhite) {
-        var captures = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
-            ["hdr.png"] = Preview(paperWhiteNits: hdrPaperWhite, region: HdrRegion()),
-            ["nv12.png"] = Convert(region: Nv12Region(matrix: matrix)),
-            ["palette.png"] = Convert(region: PaletteRegion(indexBase: indexBase)),
-            ["rgba.png"] = Convert(region: FourByteRegion(bytesOf: Bgra, format: fourByte, transfer: ImageTransferFunction.Srgb)),
-            ["transfer.png"] = Preview(paperWhiteNits: DisplayOutput.SdrWhiteNits, region: FourByteRegion(bytesOf: Encoded, format: ImagePixelFormat.R8G8B8A8Unorm, transfer: transfer)),
-        };
-
-        using var manifest = JsonDocument.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Canaries/source-conversion/canary.json")));
-        var checkedRegions = 0;
-
-        foreach (var expectation in manifest.RootElement.GetProperty(propertyName: leg).GetProperty(propertyName: "expect").EnumerateArray()) {
-            if (expectation.GetProperty(propertyName: "type").GetString() != "imageRegion") {
-                continue;
-            }
-
-            var name = expectation.GetProperty(propertyName: "name").GetString()!;
-            var pixels = captures[expectation.GetProperty(propertyName: "capture").GetString()!];
-            var bounds = expectation.GetProperty(propertyName: "region").EnumerateArray().Select(selector: static value => value.GetDouble()).ToArray();
-            var minimum = expectation.GetProperty(propertyName: "minimum").EnumerateArray().Select(selector: static value => (value.GetDouble() * 255.0)).ToArray();
-            var maximum = expectation.GetProperty(propertyName: "maximum").EnumerateArray().Select(selector: static value => (value.GetDouble() * 255.0)).ToArray();
-            var tolerance = expectation.GetProperty(propertyName: "toleranceCodes").GetInt32();
-            var holds = expectation.GetProperty(propertyName: "holds").GetBoolean();
-            var inside = 0;
-            var outside = 0;
-
-            for (var y = 0; (y < Extent); y++) {
-                for (var x = 0; (x < Extent); x++) {
-                    var (u, v) = (((x + 0.5) / Extent), ((y + 0.5) / Extent));
-
-                    if ((u < bounds[0]) || (v < bounds[1]) || (u > bounds[2]) || (v > bounds[3])) {
-                        continue;
-                    }
-
-                    var within = Enumerable.Range(count: 4, start: 0).All(predicate: channel => {
-                        var code = pixels[((((y * Extent) + x) * 4) + channel)];
-
-                        return ((code >= (minimum[channel] - tolerance)) && (code <= (maximum[channel] + tolerance)));
-                    });
-
-                    if (within) {
-                        inside++;
-                    } else {
-                        outside++;
-                    }
-                }
-            }
-
-            Assert.True(
-                condition: (holds ? (outside == 0) : (inside == 0)),
-                userMessage: $"{leg} {name}: {inside} pixel(s) inside the bounds and {outside} outside"
-            );
-            checkedRegions++;
-        }
-
-        Assert.Equal(
-            actual: checkedRegions,
-            expected: ((leg == "positive") ? 20 : 37)
         );
     }
 }

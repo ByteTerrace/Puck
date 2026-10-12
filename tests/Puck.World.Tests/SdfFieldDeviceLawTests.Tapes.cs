@@ -20,18 +20,6 @@ public sealed partial class SdfFieldDeviceLawTests {
 
         VerifyTileTapes(services: device.Services, extension: ".dxil");
     }
-    [Fact]
-    public void VulkanNexusTileTapesPreserveTheFullMarchSamples() {
-        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfFieldDeviceLawTests));
-
-        VerifyNexusTapes(services: device.Services, extension: ".spv");
-    }
-    [Fact]
-    public void DirectXNexusTileTapesPreserveTheFullMarchSamples() {
-        using var device = DirectXTestDevices.Hardware();
-
-        VerifyNexusTapes(services: device.Services, extension: ".dxil");
-    }
 
     private static void VerifyTileTapes(GpuDeviceServices services, string extension) {
         var programs = TapePrograms().ToArray();
@@ -50,16 +38,6 @@ public sealed partial class SdfFieldDeviceLawTests {
                     userMessage: $"{programs[leg].Name}: this path must save counted evaluations itself");
             }
         }
-    }
-    private static void VerifyNexusTapes(GpuDeviceServices services, string extension) {
-        var (program, transforms, directions, parameters) = NexusFieldProbe();
-        var results = Run(kernel: GradientKernel(extension: extension, name: "sdf-tape-rays.comp"), services: services,
-            tapeBuildKernel: GradientKernel(extension: extension, name: "sdf-tape-rays-build.comp"),
-            legs: [GradientLeg(name: "Nexus", program: program)], points: directions, parameters: parameters,
-            transforms: transforms,
-            tapeWordsPerCase: SdfWorldPackage.SegmentTapeWordCountFor(segments: program.SkipSegmentCount, tokens: program.TapeTokenCount));
-
-        AssertTapeResults(results: results);
     }
     private static void AssertTapeResults(Vector4[] results) {
         for (var index = 0; (index < results.Length); index++) {

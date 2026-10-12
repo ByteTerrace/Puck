@@ -1,10 +1,23 @@
 # Render work counters
 
-The [indirect comparison batch](indirect-comparison/README.md) collects named
+While the debug world is the one live world, only its two workloads stay here:
+`debug.world.json` with `shadow.script.txt` and `avatar.world.json` with
+`avatar.script.txt`, their ceilings, and the report and ceilings schemas; the
+debug workload is `puck counters`' default. The floor ledger `Puck.World`
+embeds for the dynamic-resolution budget, recorded from the quarantined floor
+workload, lives beside its reader as `src/Puck.World/floor.ceilings.json`.
+Every other
+workload, script, batch and reference this page describes is quarantined at the
+same path under
+[`experimental/tests/Puck.Counters`](../../experimental/tests/Puck.Counters),
+and none is run until the owner calls for qualification
+([open items](../../docs/plans/open-items.md#quarantined-gates)).
+
+The [indirect comparison batch](../../experimental/tests/Puck.Counters/indirect-comparison/README.md) collects named
 method/input observations in four serial boots, retaining ordinary paired
 reports and their exact shared-session provenance. Gate discovery routes its
 recorded workload/script associations through the batch once.
-The [sky default matrix](sky-defaults/README.md) declares separate sky-form,
+The [sky default matrix](../../experimental/tests/Puck.Counters/sky-defaults/README.md) declares separate sky-form,
 independent field-scale and binary-shadow observations through engine readiness;
 its measured reports and chosen Full defaults hold on the RTX 4070; the selected
 images and RTX 2060 device qualification remain open.

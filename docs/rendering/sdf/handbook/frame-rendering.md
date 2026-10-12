@@ -668,7 +668,7 @@ before recording filled inputs. Every capture still starts the existing cold
 indirect solve and source epoch. A changed indirect publication invalidates
 temporal history through the usual history epoch comparison.
 
-The [`temporal-standing` canary](../../../../tests/Puck.World.Canaries/temporal-standing/canary.json)
+The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another
 convergence period, during which the World submits new shading and resolve
 work. After settling, its completed submission stays unchanged across further
@@ -691,7 +691,7 @@ pass and no texel written; at sharpness 0 the copy stays exact. A lone
 whole-display view that sharpens is placed by the root for that pass, as a
 tonemapped one is.
 
-The [`place-sharpen` canary](../../../../tests/Puck.World.Canaries/place-sharpen/canary.json)
+The [`place-sharpen` canary](../../../../experimental/tests/Puck.World.Canaries/place-sharpen/canary.json)
 captures the production Place kernel's output at equal extent. It checks exact
 pixel codes derived from the kernel at zero, full, and partial strength, and
 checks flat colors and saturated edges. Disabling `sharpen` at full strength

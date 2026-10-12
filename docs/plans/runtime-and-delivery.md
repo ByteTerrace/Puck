@@ -277,7 +277,7 @@ shared home, `puck compile`, `WorldAssets.targets`, the runtime cache. The
 codec, the header, the chunk registry (`CompiledWorldChunks`), both chunks,
 the three producers, and the boot's use of them are in place, and
 [the worlds manual](../architecture/worlds.md#compiled-worlds) owns their
-contract. Check: `CompiledCatalogLawTests` in `tests/Puck.World.Tests` boots
+contract. Check: `CompiledCatalogLawTests` (quarantined in `experimental/tests/Puck.World.Tests`) boots
 every compiled world the build shipped and counts a hit through the
 `world.boot` work source's `world.boot.compiled-hits`; `CompiledWorldLawTests`
 in `tests/Puck.World.Games.Tests` ignores a mismatched

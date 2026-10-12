@@ -6,6 +6,10 @@ views, the overlay and HUD frame, creations as the stamp pool emits them, the
 shadow slot allocator, picking, and the view graph's instances and pipelines.
 The suite references `Puck.World.Client` alone, whose closure carries the SDF VM
 and overlays, so a change to the authoritative simulation never selects it.
+
+Quarantined: `SdfLatticeCullCanaryFixtureLawTests`, which reads the
+`sdf-lattice-cull` canary's fixture, lives under
+[`experimental/tests/Puck.World.Client.Tests`](../../experimental/tests/Puck.World.Client.Tests).
 Laws that run a client against a live server or a compiled world are in
 [`Puck.World.Presentation.Tests`](../Puck.World.Presentation.Tests/README.md).
 

@@ -68,7 +68,7 @@ every row is held to its reason.
 
 **Every shipped source is lint- and format-gated.** `tests/Puck.Cli.Worlds.Tests/ShippedSourceLintLawTests.cs`
 runs `puck lint --strict` over every tracked source under `worlds/`,
-`src/Puck.World/Assets` (cartridges included) and `tests/Puck.World.Verdicts`, and
+`src/Puck.World/Assets` (cartridges included) and `experimental/tests/Puck.World.Verdicts`, and
 `FormatProjectionLawTests` holds every tracked source to what `puck format` prints. A
 shared `basis` that declares `schema` is a root and lints as a whole world, so it
 must be valid alone: Parlor's basis declares no bodies and each game owns its seat.

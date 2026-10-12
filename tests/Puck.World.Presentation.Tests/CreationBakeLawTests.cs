@@ -384,39 +384,6 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "pip"));
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
     }
-    /// <summary>The parity world ships its bakes: compiled beside its companion files, its <c>BAKE</c> chunk names a key for
-    /// every creation it draws and the pack carries each, so a boot from it holds them all, reconciles with nothing
-    /// scheduled and nothing baked, and ships (the leg that <c>puck parity</c> holds the device to).</summary>
-    [Fact]
-    public void TheParityWorldShipsItsBakesAndABootFromItsPackBakesNothing() {
-        using var directory = new TemporaryDirectory();
-
-        foreach (var file in Directory.GetFiles(path: Path.Combine(path1: AuthoredGameFixtures.Root, path2: "tests", path3: "Puck.Parity"))) {
-            File.Copy(
-                destFileName: directory.PathOf(name: Path.GetFileName(path: file)),
-                sourceFileName: file
-            );
-        }
-
-        var path = directory.PathOf(name: "parity.puck");
-
-        _ = CompileWithPack(path: path);
-
-        var store = new WorldBakeStore();
-        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
-        var creations = boot.Admission.Definition.Creations.Count;
-
-        Assert.True(condition: (creations > 0));
-        Assert.Equal(expected: creations, actual: store.HeldCount);
-
-        using var schedule = new WorldBakeSchedule(store: store);
-
-        schedule.Pump(definition: boot.Admission.Definition);
-        Assert.False(condition: schedule.IsBusy);
-        Assert.True(condition: schedule.Ships);
-        Assert.Equal(expected: (((long)creations), 0L, 0L, 0L), actual: Counts(schedule: schedule));
-        Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "vocabRig"));
-    }
     /// <summary>A bake held under a key that this baker cannot read, such as one a build before the impostor carried its
     /// material plane kept (a plane in the wrong place, or bytes cut short), never silently suppresses cards: the
     /// prototype draws through its field, the refusal is counted under <c>sdf.bakes.undecodable</c> once and named on the

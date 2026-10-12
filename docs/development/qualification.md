@@ -7,6 +7,11 @@ checkout, so what it proves is true of the bytes that ship. It needs a GPU on
 each backend it runs, so it runs on a GPU machine with no build or other GPU
 work beside it, like `puck parity` and the GPU canaries.
 
+While the debug world is the one live world, the release profile and the
+canaries and worlds it names are quarantined under `experimental/`, and
+qualification is not run until the owner calls for it
+([quarantined gates](../plans/open-items.md#quarantined-gates)).
+
 ## Running it
 
 Publish the World the way CI's artifact producer does, then qualify the
@@ -49,7 +54,7 @@ evidence survive (see [the CLI conventions](../reference/cli.md#conventions)).
 
 ## The release profile
 
-The profile is `tests/Puck.Qualification/release.profile.json`, a
+The profile is `experimental/tests/Puck.Qualification/release.profile.json`, a
 `puck.release.profile.v1` document. `puck schema` generates its schema beside
 it, and `puck qualify` refuses a profile that names a member the schema does
 not have, leaves out a required one, or describes a matrix it cannot run.

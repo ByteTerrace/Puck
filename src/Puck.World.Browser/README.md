@@ -276,7 +276,7 @@ arena through one FNV-1a accumulator—the shared comparator between a native ru
 and a wasm run of the identical document, ticks, and writes. The two scripted
 sequences below currently fold to the same hash: the row they write already
 holds the value they write, and neither judged tick moves the arena.
-`tests/Puck.World.Browser.Tests/BrowserParityRecordingTests.cs` runs two fixed
+`experimental/tests/Puck.World.Browser.Tests/BrowserParityRecordingTests.cs` runs two fixed
 scripted sequences (write a scalar row then judge tick 1; judge tick 1 then
 tick 2 with no write) over `games/tictactoe.puck` composed under
 `standard.puck`, and compares the resulting hash against
@@ -293,7 +293,7 @@ Only `games/tictactoe.puck` composes standalone under
 `mancala` all refuse—each names a host register, a look, or a body motion
 program that only the island's own body supplies, never the bare basis
 alone); the two canary fixtures are two scripted-write cases over that one
-document rather than two different fragments. The flagship `puck.world.json`
+document rather than two different fragments. The flagship `experimental/src/Puck.World/Assets/worlds/puck.world.json`
 parses and validates too (see "Verified scope boundary" below) but stays
 outside the canary fixtures above, which are scoped to the one document pair
 both runtimes already cross-check.
@@ -321,7 +321,7 @@ so machine admission appears in the deferred collection; its assembly initialize
 cannot change another host's machine catalog.
 
 **Verified consequence**: `Parse()` on the composed flagship
-island (`puck.world.json` over `standard.puck`) succeeds, its `deferred[]`
+island (`experimental/src/Puck.World/Assets/worlds/puck.world.json` over `standard.puck`) succeeds, its `deferred[]`
 naming every one of the three real GamingBrick console screens
 `modules/arcade.puck` (one of the island's fifteen imports) authors—
 `machines[0] (arcade$cgb-screen).configuration: validation is deferred because
@@ -351,7 +351,7 @@ never established, a zero channel, no navigation state, and no board cell under 
 `PlacementInfluenceOperand` alone reads `RuleFact.Absent`—an unrepresented
 influence provider is unknowable, never a falsely safe zero, exactly as
 `WorldRuleHost.Influence.cs` already answers it for the one real case that
-reads `Absent` today. `puck.world.json`'s own `dive`/`kart`/`jump` modules
+reads `Absent` today. `experimental/src/Puck.World/Assets/worlds/puck.world.json`'s own `dive`/`kart`/`jump` modules
 author rules reading these facts, so every such hostless read is recorded
 onto the judged tick's own trace as `hostFacts[]`
 (`{rule, operand, answer}`)—how an author sees which rules lean on a fact
@@ -410,7 +410,7 @@ the switch and 327,445 bytes without it (+30%, +96 KiB).
 
 `src/Puck.Dashboard/src/portal/tests/engine-timing.test.cjs` times every call
 an editing loop makes against this AppBundle under Node, over the shipped
-island (`puck.world.json` + `standard.puck` + its imports,
+island (`experimental/src/Puck.World/Assets/worlds/puck.world.json` + `standard.puck` + its imports,
 `~2.4 MB` of source JSON, composing to a `~428 KB` standalone document); the
 native columns are a recorded measurement of the identical calls under the JIT,
 for comparison. Medians of three runs each, one machine. No test re-measures

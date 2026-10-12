@@ -95,7 +95,7 @@ subject names them:
 ## Worlds have no in-code definition — the shipped `puck.world.json` walkthrough
 
 A boot with no `--world` override loads
-`src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
+`experimental/src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
 `standard.puck`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
 `state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
@@ -472,7 +472,7 @@ site spelling a private name, quoting the JSON path and the export list that wou
 bindings are `bindings`; every other read position is `reads`). The member is stripped from the composed tree, a
 document loaded as a world with `exports` on it refuses at validation, and `world.imports` prints each layer's
 `exports[...]`. Law suites:
-`tests/Puck.World.Games.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
+`experimental/tests/Puck.World.Games.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
 `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldExportsLawTests.cs`.
 Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.

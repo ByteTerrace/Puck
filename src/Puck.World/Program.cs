@@ -44,7 +44,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.definition.v1) to load: a .world.json document, or a .puck source compiled in memory. A .puck source that declares several worlds boots its entry world (see --entry). A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.definition.v1) to load: a .world.json document, or a .puck source compiled in memory. A .puck source that declares several worlds boots its entry world (see --entry). A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/debug.world.json (the debug world, compiled from debug.puck) beside the executable loads; failure to load that document also fails the boot.",
 };
 var entryOption = new Option<string?>(name: "--entry") {
     DefaultValueFactory = static _ => null,
@@ -280,7 +280,7 @@ if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenti
         return 1;
     }
 }
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
+// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/debug.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is

@@ -51,7 +51,6 @@
         <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
-        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
         <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
@@ -62,7 +61,6 @@
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
-        <Compile Include="../Shared/World/FrustumFitFixtures.cs" Link="World/FrustumFitFixtures.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
         <Compile Include="../Shared/World/NarrationPaths.cs" Link="World/NarrationPaths.cs" />
@@ -70,7 +68,6 @@
         <Compile Include="../Shared/World/RecordingNarrationSink.cs" Link="World/RecordingNarrationSink.cs" />
         <Compile Include="../Shared/World/SceneProbeCollection.cs" Link="World/SceneProbeCollection.cs" />
         <Compile Include="../Shared/World/SceneProbeScan.cs" Link="World/SceneProbeScan.cs" />
-        <Compile Include="../Shared/World/SolitaireFixtures.cs" Link="World/SolitaireFixtures.cs" />
         <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />
@@ -78,15 +75,12 @@
         <Compile Include="../Shared/World/VocabularyHooks.Client.cs" Link="World/VocabularyHooks.Client.cs" />
         <Compile Include="../Shared/World/WindowCameraFixtures.cs" Link="World/WindowCameraFixtures.cs" />
         <Compile Include="../Shared/World/WindowCrossingFixtures.cs" Link="World/WindowCrossingFixtures.cs" />
-        <Compile Include="../Shared/World/WorldDocumentCorpus.cs" Link="World/WorldDocumentCorpus.cs" />
         <Compile Include="../Shared/World/WorldHistoryHarness.cs" Link="World/WorldHistoryHarness.cs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
-             the game ships Assets/worlds (WorldAssetRowLoader). WorldSaveAuthoredDocumentLawTests boots the worlds that
-             author them, so the suite carries the same files at the same relative paths. -->
-        <None Include="../../src/Puck.World/Assets/worlds/music/**" LinkBase="Assets/worlds/music" CopyToOutputDirectory="PreserveNewest" />
+        <!-- A world's patch rows resolve their source against the executable's own directory, where the game ships
+             Assets/worlds (WorldAssetRowLoader). CompiledWorldFixtures copies the shipped patch beside the worlds it
+             compiles, so the suite carries the same files at the same relative paths. -->
         <None Include="../../src/Puck.World/Assets/worlds/patches/**" LinkBase="Assets/worlds/patches" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="../../src/Puck.World/Assets/worlds/tunes/**" LinkBase="Assets/worlds/tunes" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

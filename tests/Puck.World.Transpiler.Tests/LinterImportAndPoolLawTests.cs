@@ -69,19 +69,4 @@ public sealed class LinterImportAndPoolLawTests : IDisposable {
             source: Root
         );
     }
-    [Fact]
-    public void ThePackageThatStampsItsRulesLintsCleanOfUnusedAndUnresolvedFindings() {
-        var path = ShippedWorlds.PackageSourcePaths().Single(predicate: static path => path.EndsWith(comparisonType: StringComparison.Ordinal, value: "/worlds/rulepush/rulepush.puck"));
-        var diagnostics = WorldSourceDiagnostics.Diagnose(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: File.ReadAllText(path: path),
-            sourcePath: path
-        );
-        var findings = diagnostics.Where(predicate: static diagnostic => (diagnostic.Code is PuckDiagnosticCodes.LintUnusedLet or PuckDiagnosticCodes.LintUnresolvedState)).ToArray();
-
-        Assert.True(
-            condition: (findings.Length == 0),
-            userMessage: string.Join(separator: Environment.NewLine, values: findings.Select(selector: static diagnostic => $"{diagnostic.SourcePath} {diagnostic.Span}: {diagnostic.Message}"))
-        );
-    }
 }

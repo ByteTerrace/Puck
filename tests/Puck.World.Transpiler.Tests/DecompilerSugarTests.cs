@@ -14,29 +14,6 @@ public class DecompilerSugarTests {
         return Assert.IsType<JsonObject>(@object: compilation.Json);
     }
 
-    private static readonly string[] LiteralTypeKeyProbes = [
-        "\"$type\": \"compareState\"", "\"$type\":\"compareState\"",
-        "\"$type\": \"setState\"", "\"$type\":\"setState\"",
-        "\"$type\": \"all\"", "\"$type\":\"all\"",
-        "\"$type\": \"any\"", "\"$type\":\"any\"",
-        "\"$type\": \"not\"", "\"$type\":\"not\"",
-        "\"$type\": \"addState\"", "\"$type\":\"addState\"",
-        "\"$type\": \"transaction\"", "\"$type\":\"transaction\"",
-    ];
-
-    private static string DecompileWorld(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-
-        Assert.True(
-            condition: File.Exists(path: fullPath),
-            userMessage: $"Shipped world file not found: {fullPath}"
-        );
-        return WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
-    }
-
     [Fact]
     public void RecordsPoolsAndPoolEffectsDecompileToAuthoringSugar() {
         var root = JsonNode.Parse("""
@@ -151,18 +128,6 @@ public class DecompilerSugarTests {
             condition: JsonNode.DeepEquals(node1: root["views"]?["post"], node2: Recompile(source: puck)["views"]?["post"]),
             userMessage: puck
         );
-    }
-    [Fact]
-    public void RootWorldRulesCarryNoLiteralTypeDiscriminators() {
-        var puck = DecompileWorld(relativePath: "puck.world.json");
-
-        foreach (var probe in LiteralTypeKeyProbes) {
-            Assert.DoesNotContain(
-                actualString: puck,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: probe
-            );
-        }
     }
     // The shipped corpus authors every `prototypes[].document.shapes` array as a plain object/array literal (no
     // wrapping block statement reaches that position in the grammar — see AGENTS handoff notes), so shape-block

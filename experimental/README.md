@@ -20,6 +20,18 @@ regression to repair.
 | `scripts/recording` | `src/Puck.Recording/scripts/` | 2026-08-02 |
 | `Puck.BareMetal` | (never in the build) | — |
 | `Puck.Platform.Switch` | `src/Puck.Platform/Switch/` | — |
+| `src/`, `tests/`, `worlds/` | The same paths at the repository root | While the debug world is the one live world |
+
+The `src/`, `tests/` and `worlds/` trees hold every world but the debug world,
+each file at the repository path it had: the shipped worlds other than
+`debug.puck` and its basis chain, the root `worlds/` asset packages, every
+fixture world under `tests/`, and the laws, baselines and ledgers that existed
+only to boot or test them. A test file split between live and quarantined laws
+keeps its live half at its old path and its quarantined half here under the
+same name. The
+[decision](../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)
+records the ruling and the [open items](../docs/plans/open-items.md#quarantined-gates)
+list the gates waiting on these fixtures.
 
 None are in `Puck.slnx`; none are reached by the root build. Each carries a
 **firewall pair** — `Directory.Build.props` AND `Directory.Build.targets`,

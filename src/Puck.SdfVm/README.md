@@ -552,7 +552,7 @@ packing), run with `dotnet test`. `puck parity` boots the authored parity
 world offscreen on both backends and checks scheduled captures for content,
 exact state hashes, and per-tile pixel differences. The path-profile fixture
 is booted by hand on each backend and compared with `puck parity compare`;
-the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
+the [parity README](../../experimental/tests/Puck.Parity/README.md) has the recipe. GPU
 kernel behavior outside the parity stations is not verified by any machine
 check.
 The kernels read the instruction set from

@@ -76,7 +76,7 @@ only the instances and chains of shapes near it, skipping the rest by sphere
 bounds that move no answer
 ([queries and determinism](../../docs/rendering/sdf/handbook/queries-and-determinism.md)).
 `puck bench world`'s "shipped world: idle tick (median)" row with its per-tick
-contact work counts, and `tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs`,
+contact work counts, and `experimental/tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs`,
 are the read-backs.
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
@@ -543,7 +543,7 @@ rebuilds the domain in its new frame. This is not incremental SDF invalidation: 
 without a proof, and a baked one only when the
 replacement solid query proves every cell, clearance probe, and static edge query unchanged; later off-grid segment
 checks use the replacement query, and medium domains require the same field provider and synchronized revision.
-Capacity changes rebuild as well. The [granary authoring example](../Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
+Capacity changes rebuild as well. The [granary authoring example](../../experimental/src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
 combines these frames with preserved dealt instances and guarded reflow.
 
 Changing a navigation definition, or an edit whose proof affects that domain,

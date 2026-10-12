@@ -23,7 +23,7 @@ namespace Puck.Cli.Counters;
 /// </summary>
 public static class CountersCeilings {
     /// <summary>The ceilings the workload is held to, repository-relative.</summary>
-    public const string CeilingsPath = "tests/Puck.Counters/counters.ceilings.json";
+    public const string CeilingsPath = "tests/Puck.Counters/debug.ceilings.json";
 
     private const string Outside = "outside";
 

@@ -24,7 +24,7 @@ law 2's local walked crossing in
 sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
 `tests/Puck.World.Server.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
-legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
+legs in `experimental/tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
 `tests/Puck.World.Presentation.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
 `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
 classified so far. The design was read against the integration branch, and a

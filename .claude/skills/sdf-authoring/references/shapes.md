@@ -73,7 +73,7 @@ Path uses extrusion only, up to 128 compiled edges, and explicit normalized-spac
 tolerance. Panel, trims (including a trim referencing a Path), rounding, and
 chamfer are refused. Curves compile once into a packed edge table. Consult
 `docs/rendering/sdf/reference/materials-and-primitives.md#curved-path-profiles`
-for fields and semantics; `tests/Puck.Parity/paths.puck` is the forcing fixture.
+for fields and semantics; `experimental/tests/Puck.Parity/paths.puck` is the forcing fixture.
 
 A convex hull's points must lie in [-1, 1] on both axes, be distinct and
 non-collinear, and wind **strictly clockwise**.

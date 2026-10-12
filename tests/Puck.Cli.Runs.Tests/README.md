@@ -5,10 +5,16 @@ their ceilings, parity comparison, determinism, qualification verdicts, release 
 
 `CountersDetailLawTests` holds detail identity through readings and report comparisons, including skipped rows,
 device-aware ceilings and required zeros. Reports require explicit detail keys and pass detail labels. Ceilings retain
-those identities in compact measurement layouts. `CountersCeilingsCompactLawTests` compares every shipped ledger
-against fixed reports and exact checker messages in `Assets/counters-ceilings-equivalence.zip`, including missing and
-unexpected zero rows, changed classes, exceeded budgets, and device and driver changes. It also holds the writer's fixed
-point, kind defaults and device differences.
+those identities in compact measurement layouts. `CountersCeilingsCompactLawTests` holds the writer's fixed point, kind
+defaults and device differences. Quarantined: its comparison of every shipped ledger against fixed reports and exact
+checker messages in `Assets/counters-ceilings-equivalence.zip`, including missing and unexpected zero rows, changed
+classes, exceeded budgets, and device and driver changes, moved with that archive to
+`experimental/tests/Puck.Cli.Runs.Tests/`, since the archive captures ledgers that moved there.
+
+Quarantined: the laws that read the canary corpus, the parity documents, the determinism manifest, the release
+profile or the verdict worlds (`DeterminismLawTests`, most of `ParityBindingReferenceLawTests`, and the shipped-corpus
+laws of the canary, determinism-attestation and release-profile classes) live in
+`experimental/tests/Puck.Cli.Runs.Tests/` beside those files.
 
 `WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact over small git checkouts of their own,
 with a counting builder in place of `dotnet build`. Two resolutions of an unchanged tree build once, and concurrent
@@ -16,7 +22,8 @@ resolutions of one source state share one build. A one-byte uncommitted change u
 new key, while documentation and unreferenced projects do not. A publish that loses the race keeps the winner's build.
 Pruning keeps the most recently used builds and every leased one, and a killed run's leftover directories and lock
 files are removed only after six hours. `CanaryListenerLawTests` checks that the canary port probe hands out UDP
-ports, and that a World refusing its listener is classified as an infrastructure failure rather than unsupported.
+ports. Quarantined: its law that a World refusing its listener is classified as an infrastructure failure rather than
+unsupported boots a verdict world, and lives in `experimental/tests/Puck.Cli.Runs.Tests/CanaryListenerLawTests.cs`.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

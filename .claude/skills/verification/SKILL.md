@@ -34,7 +34,9 @@ A change to simulation state stays deterministic (`AGENTS.md` rule 4);
 two runs agree. `[VerifiedCode]` brands are enforced by the build (rule 7).
 
 Nothing else is a precondition. A red gate or CI run is information to act on,
-not a stop.
+not a stop. While the debug world is the one live world, the canary, parity,
+determinism and qualification fixtures and most counters workloads sit in
+`experimental/` ([quarantined gates](../../../docs/plans/open-items.md#quarantined-gates)).
 
 ## Optional checks
 

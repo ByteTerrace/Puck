@@ -1,11 +1,9 @@
 using Puck.Testing;
 using Puck.Commands;
 using System.Numerics;
-using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Puck.World.Server;
-using Puck.Hosting;
 using Xunit;
 
 namespace Puck.World.Games.Tests;
@@ -18,7 +16,7 @@ namespace Puck.World.Games.Tests;
 /// the sweep may mint a child's id.
 /// </summary>
 [Collection(AllocationCollection.Name)]
-public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
+public sealed partial class PlacementDealLawTests {
     private const string AnchorCreation = "anchor";
     private const string RowName = "accounts";
     private const string StoreCreation = "store";
@@ -784,126 +782,6 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             ),
             needle: "refused alongside inhabit/attach/respond/mirror/faceSources"
         );
-    }
-    /// <summary>A quiet tick — no row change, no other mutation — allocates nothing in the sweep: the per-tick
-    /// allocation of a dealt fixture at steady state is the same as the identical fixture without the deal facet,
-    /// on the code-built document and on the shipped granary court isolated from unrelated island simulation.</summary>
-    [Fact]
-    public void AQuietTickAllocatesNothingInTheSweep() {
-        var small = Measure(
-            definition: Dealt(
-                "a",
-                "b",
-                "c"
-            ),
-            seed: null
-        );
-        var smallControl = Measure(
-            definition: Document(
-                row: AccountsRow(
-                    "a",
-                    "b",
-                    "c"
-                ),
-                template: Template(deal: null)
-            ),
-            seed: null
-        );
-
-        output.WriteLine(message: $"fixture: dealt median {small:N0} bytes/tick, control median {smallControl:N0} bytes/tick");
-        Assert.True(
-            condition: (small <= smallControl),
-            userMessage: $"a dealt fixture's quiet tick allocated {small:N0} bytes against the control's {smallControl:N0}"
-        );
-
-        var source = AuthoredGameFixtures.Nexus;
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal) { "granaries$granaryCourt", "granaries$granaryStore", "granaries$granaryAnchor" };
-        var island = Fixtures.BuildDocument() with {
-            Text = source.Text,
-            CreationsRaw = [.. source.Creations.Where(predicate: row => ids.Contains(item: row.Id))],
-            PlacementRowsRaw = [.. source.Placements.Where(predicate: row => (row.Id is "granaries$granaryCourt" or "granaries$granaryStores"))],
-            StateRaw = new WorldStateSection(World: [.. source.State.Where(predicate: row => row.Name.Value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "granaries$"
-            ))]),
-        };
-        var template = Assert.Single(
-            collection: island.Placements,
-            predicate: static placement => (placement.Deal is not null)
-        );
-        var seed = new WorldMutation.Batch(
-            Principal: Principal.Console,
-            Mutations: [
-            new WorldMutation.UpsertStateCell(
-                    Principal: Principal.Console,
-                    Row: template.Deal!.Row,
-                    Key: "bytrcstp001",
-                    Value: 0L,
-                    Kind: WorldDocumentWriteKind.Set,
-                    Text: "bytrcstp001"
-                ),
-            new WorldMutation.UpsertStateCell(
-                    Principal: Principal.Console,
-                    Row: template.Deal!.Row,
-                    Key: "bytrcstp002",
-                    Value: 0L,
-                    Kind: WorldDocumentWriteKind.Set,
-                    Text: "bytrcstp002"
-                ),
-            new WorldMutation.UpsertStateCell(
-                    Principal: Principal.Console,
-                    Row: template.Deal!.Row,
-                    Key: "bytrcstp003",
-                    Value: 0L,
-                    Kind: WorldDocumentWriteKind.Set,
-                    Text: "bytrcstp003"
-                ),
-        ]
-        );
-        var granaries = Measure(
-            definition: island,
-            seed: seed
-        );
-        var granariesControl = Measure(
-            definition: (island with {
-                PlacementRowsRaw = [.. island.Placements.Select(selector: placement => (ReferenceEquals(
-                    objA: placement,
-                    objB: template
-                )
-            ? (placement with { Deal = null })
-            : placement))],
-            }),
-            seed: seed
-        );
-
-        output.WriteLine(message: $"granaries: dealt median {granaries:N0} bytes/tick, control median {granariesControl:N0} bytes/tick");
-        Assert.True(
-            condition: (granaries <= granariesControl),
-            userMessage: $"the granaries' quiet tick allocated {granaries:N0} bytes against the control's {granariesControl:N0}"
-        );
-    }
-
-    private static long Measure(WorldDefinition definition, WorldMutation? seed) {
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
-
-        if (seed is not null) {
-            fixture.Server.EnqueueMutation(mutation: seed);
-        }
-
-        for (var tick = 0; (tick < 8); tick++) {
-            fixture.Step(stepTicks: width);
-        }
-
-        var samples = new long[120];
-
-        for (var tick = 0; (tick < samples.Length); tick++) {
-            samples[tick] = AllocationWindow.Total(window: () => fixture.Step(stepTicks: width));
-        }
-
-        Array.Sort(array: samples);
-
-        return samples[(samples.Length / 2)];
     }
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
