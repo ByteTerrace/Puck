@@ -856,8 +856,8 @@ general rule: frame-index a measurement camera, never wall-clock it. The
 counts are exact: the calls a pass records are the same on every backend for
 the same inputs, and its march steps and texels written the same on every run
 of one backend, so no banding or averaging is needed the way a timestamp sample
-would require. `puck counters --check` holds a pinned workload's counts, pass by
-pass, to the counted-cost ceilings recorded for it. When
+would require. `puck counters compare` holds a pinned workload's counts from
+before a change to those from after it, pass by pass. When
 a counted-work comparison alone cannot answer the question, read the kernel
 disassembly or trace the code path instead.
 

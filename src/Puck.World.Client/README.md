@@ -140,8 +140,8 @@ separate constraint on dense populations; reusable appearances do not remove it.
   inside the allocation the ceiling sized and no frame reallocates or resets
   history. The controller reads one load signal: the views' GPU frame time, the
   present timing where the device times nothing, or the counted march steps
-  against a budget the counters ceilings record
-  (`WorldDynamicResolution.StepBudgetPerPixel`); a pin overrides all three. The
+  against a fixed budget per output pixel, the floor workload's world-node march
+  steps on the RTX 2060 (`WorldDynamicResolution.StepBudgetPerPixel`); a pin overrides all three. The
   `world.render-scale` grammar (`[view] [<scale>|floor <tier>|pin <scale>|auto
   [on|off]]`) is parsed in `Puck.World`'s `WorldRenderScaleCommand` and applied
   through `WorldSessionLevers`; pins and controllers are session state and never

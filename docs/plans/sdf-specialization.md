@@ -385,7 +385,7 @@ correctness and each applies to specialized code as follows:
 | Gate | What it holds for specialization |
 |---|---|
 | `puck parity` | Both backends boot the parity world, which settles specialized before its first capture (compiled at run time, since parity runs where `dxc` exists), so stations compare specialized against specialized; one leg under `world.specialization off` keeps the generic kernels covered. |
-| `puck counters --check` | Counted work is identical by construction, so no ceiling moves; a run that renders some frames generic and some specialized reads the same counts. A count that differs between the forms is a defect. |
+| `puck counters compare` | Counted work is identical by construction, so no count moves between a report from before and one from after; a run that renders some frames generic and some specialized reads the same counts. A count that differs between the forms is a defect. |
 | Canaries | The new `sdf-specialization` canary boots a world, adds a primitive with `world.row.set`, reads generic frames counted, then specialized ones after the build, and compares captures with `framesAgree`; `no-device-compile` boots a shipped world with `dxc` hidden and reads store hits with zero compiles. Both run on both backends with `--debug-layers`. |
 | Device laws | The device law above, on Vulkan, Direct3D 12 hardware and WARP. |
 | `SdfPassPlanLawTests`, `SdfPassBindingLawTests` | Unchanged plans and bindings: the forms share one interface. |
@@ -538,9 +538,9 @@ The program learns its own chains; no kernel reads them yet.
   compositions) from the live program.
 - Laws: `SdfProgramChainLawTests` in `tests/Puck.SignedDistance.Tests` (the key
   law above), `SdfEncodingProbeLawTests` and the regenerated fingerprint.
-- Gates: the SignedDistance and SdfVm suites, `puck shaders generate --check`,
-  `puck lengths --check`; and, because the packed words and the fingerprint
-  move, `puck parity`, `puck counters --check` and the field canaries on both
+- Gates: the SignedDistance and SdfVm suites, `puck shaders generate --check`;
+  and, because the packed words and the fingerprint
+  move, `puck parity`, `puck counters compare` and the field canaries on both
   backends.
 
 ### Phase 2 — The interpreter becomes its building blocks
@@ -558,8 +558,8 @@ and its switches become generated.
 - Laws: the table law (every opcode, shape and blend has a row, and every named
   function exists in the field tree), and a law refusing a hand-written
   `case SDF_OP_` outside the generated includes.
-- Gates: `puck counters --check` reads exactly the recorded counts with no
-  ceiling moved; `puck parity`; `SdfFieldDeviceLawTests`; the field and indirect
+- Gates: `puck counters compare` against the parent's report moves no count;
+  `puck parity`; `SdfFieldDeviceLawTests`; the field and indirect
   canaries with `--debug-layers` on both backends. The commit records each
   kernel's DXIL and SPIR-V bytes and compile time against the parent; the
   prototype's refactor moved them by a few per cent.
@@ -608,7 +608,7 @@ Residencies render specialized wherever a compiler can build their set.
   for the current one), and `SdfPipelineBuildLivenessLawTests` extended.
 - Canaries: the new `sdf-specialization`, and `no-device-compile` extended to
   name the generic fallback for an edit with no compiler.
-- Gates: `puck counters --check`, `puck parity`, every GPU canary and the device
+- Gates: `puck counters compare` against the parent's report, `puck parity`, every GPU canary and the device
   laws on both backends, and qualification's hidden-compiler cells.
 
 ### Phase 5 — Shipped specializations

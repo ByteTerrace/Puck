@@ -336,9 +336,6 @@ namespace Puck.World;
 // The counters report (puck.counters.report.v1) — the document `puck counters` writes and compares, sharing this
 // context's strictness so a foreign or damaged report is refused by name, and its schema rides the same exporter.
 [JsonSerializable(typeof(WorldCountersReport))]
-// The counters ceilings (puck.counters.ceilings.v1) `puck counters --check` holds a report to and `--record` writes.
-[JsonSerializable(typeof(WorldCountersCeilings))]
-[JsonSerializable(typeof(CountersCeilingsDocument))]
 [JsonSourceGenerationOptions(
     // Puck.Commands' own types are absent from this list deliberately: CommandValue and every binding enum carry
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
@@ -482,8 +479,6 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
     /// <summary>Gets the type info for <see cref="WorldCountersReport"/>.</summary>
     public JsonTypeInfo<WorldCountersReport> WorldCountersReport => Get<WorldCountersReport>();
-    /// <summary>Gets the type info for <see cref="WorldCountersCeilings"/>.</summary>
-    public JsonTypeInfo<WorldCountersCeilings> WorldCountersCeilings => Get<WorldCountersCeilings>();
     /// <summary>Gets the type info for <see cref="GpuDeviceIdentity"/>, as a counters report and <c>world.counters</c>
     /// spell it.</summary>
     public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => Get<Puck.Abstractions.Gpu.GpuDeviceIdentity>();

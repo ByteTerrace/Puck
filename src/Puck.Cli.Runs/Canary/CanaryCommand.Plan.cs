@@ -108,38 +108,9 @@ public static partial class CanaryCommand {
             : 1) * (RelaunchesLeg(manifest: manifest)
             ? 4
             : 2)) * manifest.TimeoutSeconds);
-    // The ledger member a selection is held to, or null when it names its proofs explicitly or is not a gate.
-    private static string? CeilingName(CanarySelection selection) => selection.Kind switch {
-        CanarySelectionKind.Automatic => "automatic",
-        CanarySelectionKind.Capability when (selection.Capability == "automatic") => "automatic",
-        CanarySelectionKind.Merge => "merge",
-        _ => null,
-    };
-
-    /// <summary>Names how <paramref name="plan"/> exceeds <paramref name="ceiling"/>, or returns <see langword="null"/>
-    /// when it fits.</summary>
-    /// <param name="plan">The selection's plan.</param>
-    /// <param name="ceiling">The ceiling it is held to.</param>
-    /// <param name="name">The ceiling's member of <c>CanaryCeilings.json</c>: <c>automatic</c> or <c>merge</c>.</param>
-    /// <returns>The refusal, or <see langword="null"/>.</returns>
-    public static string? CeilingRefusal(CanaryPlan plan, CanaryCeiling ceiling, string name) {
-        var over = new List<string>(capacity: 2);
-
-        if (plan.WorldBoots > ceiling.WorldBoots) {
-            over.Add(item: $"{plan.WorldBoots} World boots against {ceiling.WorldBoots}");
-        }
-        if (plan.BudgetSeconds > ceiling.LegBudgetSeconds) {
-            over.Add(item: $"a {plan.BudgetSeconds}-second leg budget against {ceiling.LegBudgetSeconds}");
-        }
-
-        return ((over.Count == 0)
-            ? null
-            : $"the selection plans {string.Join(separator: " and ", values: over)}, over the cost recorded for {name} in {CanaryCeilingsLedger.FileName}. Cut the set, or record the rise with 'puck canary-ceilings' in a reviewed change that states the new --plan counts.");
-    }
-
     // Prints the plan on stdout, one proof per line in authored order, then the totals. Every value is a count of the
     // manifests, so two runs over the same selection print the same text on any machine.
-    private static void PrintPlan(CanaryPlan plan, CanaryCeiling? ceiling, string? ceilingName) {
+    private static void PrintPlan(CanaryPlan plan) {
         foreach (var proof in plan.Proofs) {
             Console.WriteLine(value: $"canary plan {proof.Proof.Label}: legs=2 world-boots={proof.WorldBoots} spawns={(proof.WorldProcesses + proof.StubLaunches)} budget={proof.BudgetSeconds}s {(proof.Exclusive ? "alone" : (proof.Gpu ? "gpu" : "parallel"))}");
         }
@@ -157,10 +128,6 @@ public static partial class CanaryCommand {
         Console.WriteLine(value: $"canary plan: {plan.WorldBoots} World boot(s); {plan.LegSpawns} leg process spawn(s): {plan.WorldProcesses} World, {plan.StubLaunches} Puck.Launcher.Stub, {plan.PackageSpawns} shaders package.");
         Console.WriteLine(value: $"canary plan: build(s): Puck.World at most {plan.WorldBuilds} (none when the store holds this source state), Puck.Launcher.Stub {plan.StubBuilds}.");
         Console.WriteLine(value: $"canary plan: every leg ends at the quit the runner appends to its script; {plan.BudgetSeconds.ToString(provider: CultureInfo.InvariantCulture)}s of summed per-leg timeouts is the kill ceiling, not the length.");
-
-        if (ceiling is not null) {
-            Console.WriteLine(value: $"canary plan: ceiling recorded in {CanaryCeilingsLedger.FileName} ({ceilingName}): {ceiling.WorldBoots} World boot(s), {ceiling.LegBudgetSeconds}s leg budget.");
-        }
     }
 
     /// <summary>What a run actually started and how its legs ended, counted as it goes; every member is updated from

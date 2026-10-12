@@ -16,7 +16,6 @@ using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
-using Puck.Cli.Formats;
 using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Puck.Cli.Landing;
@@ -30,7 +29,6 @@ using Puck.Cli.Parity;
 using Puck.Cli.PublishRelease;
 using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
-using Puck.Cli.Ratchets;
 using Puck.Cli.Refusals;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
@@ -76,23 +74,18 @@ public static class PuckRootCommand {
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),
-            CanaryCeilingsCommand.Create(),
             CartridgeCostCommand.Create(),
-            RatchetCommand.CreateCommentSmells(),
             CountersCommand.Create(),
             DeclarationsCommand.Create(),
-            DerivationsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
-            FormatsCommand.Create(),
             GateCommand.Create(clock: clock, composition: Gate),
             HostCommand.Create(composition: Gate),
             LandingCommand.Create(),
             LawsCommand.Create(),
-            RatchetCommand.CreateLengths(),
             LocksCommand.Create(),
             McpCommand.Create(),
             NuGetCommand.Create(),

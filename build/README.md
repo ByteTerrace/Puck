@@ -36,13 +36,14 @@ the creation bakes those compiled worlds name there, and reports what it
 wrote (`--written`); the build copies exactly the reported files into the
 output's `Assets/worlds`. The run reads and keeps its bakes in the
 content-addressed `bakes` cache under the per-user Puck directory
-(`--bake-cache`), which every configuration and every checkout shares with
-`puck parity` and the World, and `dotnet clean` keeps, so a run bakes only the
-creations whose keys no build on the machine has baked: a new worktree bakes
-nothing another has baked, an engine change that reruns the compile bakes
-nothing, and an edited prototype bakes that prototype alone. A bake's key
-carries the bake code's fingerprint (`DerivationFingerprint.Bake`), so two
-checkouts whose bake code differs never share a key. `-p:PuckWorldBakeCache=<dir>`
+(`--bake-cache`), which every checkout shares with `puck parity` and the
+World, and `dotnet clean` keeps, so a run bakes only the creations whose keys no
+build on the machine has baked: a new worktree bakes nothing another has baked
+in the same configuration, and an edited prototype bakes that prototype alone.
+A bake's key carries the fingerprint of the compiled bake code
+(`CreationBakeDerivation.Fingerprint`: Puck.World.Authoring and every Puck
+assembly it reaches, without their checkout paths), so two builds whose bake
+code differs never share a key, and an edit to any of those assemblies rebakes. `-p:PuckWorldBakeCache=<dir>`
 names another cache. The run's one incremental output is the
 report, which every run writes last; a reported file that is gone removes the
 report, so the next build runs again. Only a compile knows which sources emit documents: a

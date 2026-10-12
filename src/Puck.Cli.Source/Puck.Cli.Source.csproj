@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The source and repository verbs: search, scan, references, declarations, derivations, architecture, the ratchet ledgers, and the docs checks. -->
+    <!-- The source and repository verbs: search, scan, references, declarations, derivations, architecture, and the docs checks. -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Source</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>
@@ -16,15 +16,5 @@
     <ItemGroup>
         <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />
         <ProjectReference Include="../Puck.Cli.Harness/Puck.Cli.Harness.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension only. The ratchet verbs
-             (puck lengths, puck comment-smells) and puck scan also reference it as an ordinary assembly, so the
-             ledger, its judgement and the per-file counts they check are the analyzers' own; it stays an analyzer
-             over this project too. -->
-        <ProjectReference
-            Update="../Puck.Analyzers/Puck.Analyzers.csproj"
-            ReferenceOutputAssembly="true"
-        />
     </ItemGroup>
 </Project>

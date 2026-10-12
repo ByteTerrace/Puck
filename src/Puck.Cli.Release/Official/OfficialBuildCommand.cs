@@ -129,7 +129,6 @@ public static class OfficialBuildCommand {
                 Documents: documents,
                 Engine: engine!,
                 Schema: OfficialManifest.CurrentSchema,
-                Shape: OfficialManifest.CurrentShape,
                 Signature: null,
                 Sources: sources,
                 WorldSchemaBundle: worldSchemaBundle

@@ -34,7 +34,6 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />

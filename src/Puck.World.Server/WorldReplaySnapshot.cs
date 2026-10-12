@@ -281,7 +281,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// step size from — and <see cref="Drive"/> refuses a disagreement with the embedded definition's own
 /// <see cref="WorldDefinition.SimulationRateHz"/>, right after deserializing it, for the identical reason the mount
 /// pin does: a wrong step size re-drives a different trajectory that would otherwise report as an ordinary mismatch.
-/// There is exactly one supported tape shape: the leading magic identifies a World tape and ShapeToken identifies
+/// There is exactly one supported tape shape: the leading magic identifies a World tape and Version identifies
 /// the current binary and authoritative-hash contract. Both are checked strictly; older development shapes have no
 /// compatibility reader.</para>
 /// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
@@ -293,16 +293,14 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A name, never a counter: this build writes and reads exactly one tape contract, and the tape's generated
-    // shape fingerprint (FormatShapes) is what refuses another layout at intake. The tape carries the recorded
+    // This build writes and reads exactly one tape contract; raise the version whenever its layout or the
+    // authoritative-hash contract changes, never reusing an earlier value, so a tape of another layout is refused at intake. The tape carries the recorded
     // authority, its typed rebuild origins and its document paths, each starting seat's full identity projection, the
     // companion tapes of a set, each departure and its rollback where the authority decided it, settlements by target
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint ShapeToken = 1u;
-    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
-    private const int MaxFingerprintChars = 32;
+    private const uint Version = 5u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>

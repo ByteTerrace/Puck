@@ -35,7 +35,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldCaptureFills`, `WorldScreenBinder.Producers.cs` (`src/Puck.World`) | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
-Before adding a mechanism, find the existing one (`AGENTS.md` rule 8): ask the
+Before adding a mechanism, find the existing one (`AGENTS.md` rule 7): ask the
 code with `puck references`, `puck declarations`, or `puck search -M 0` via the
 `symbol-analysis` and `content-search` skills.
 
@@ -462,9 +462,6 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    the stamp emitters or refuse the value there, then regenerate with
    `puck schema` and check with `puck schema --check`.
 
-Large additions to `SdfProgram.cs` belong in a partial file: the file-length
-ledger (`puck lengths`) only lets a recorded file shrink.
-
 [references/sync-pairs.md](references/sync-pairs.md) lists every C#↔HLSL
 coupling with its exact layout and marks which side is generated. Read it
 before editing an enum value, a packed word, a byte length, a binding, or a
@@ -763,15 +760,15 @@ These are one-line cautions; the owning pages hold the derivations.
   axis and the mesh cracks. `SdfBakerLawTests` hold it with a plate about a cell
   thick, counted by position, which scenes with sharp clamped features cannot
   be (coincident vertices read as shared edges there).
-- **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
-  `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
-  `puck derivations` follows their transitive source dependencies across
-  assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
-  carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
-  its first eight hexadecimal digits as an unsigned integer. Regenerate after
-  changing any reached declaration and verify with `puck derivations --check`.
-  `CreationBakeLawTests` pins each outcome's bytes, not the pack, so a
-  regenerated fingerprint or a moved pack shape moves no pin; re-record an
+- **The fingerprint follows the code.** `CreationBakeDerivation.Fingerprint`
+  is computed by the running build: a SHA-256 over the compiled content
+  (metadata, method bodies, resources, never the checkout path) of
+  `Puck.World.Authoring` and every `Puck.*` assembly it references,
+  transitively. Every bake key carries that full fingerprint, and the `BAKE`
+  chunk and bake-pack entries use its first eight hexadecimal digits as an
+  unsigned integer, so any edit to the baker's assemblies rebakes and nothing
+  needs regenerating. `CreationBakeLawTests` pins each outcome's bytes, not
+  the pack, so a moved fingerprint moves no pin; re-record an
   outcome pin there only when the change moves the bake's bytes. A held
   bake is keyed by the code that wrote it, so two lanes that change the bytes
   never share a key; a held bake this baker cannot decode draws the field,
@@ -793,8 +790,8 @@ These are one-line cautions; the owning pages hold the derivations.
   each usage's source format, stored format, color space and mip filter; the
   codecs, mip filters and octahedral normal pair live in `Puck.Assets.Textures`,
   where a GPU upload also reaches them. An encoder's bytes are pinned by
-  `TextureCodecLawTests`, so an encoder change re-records those pins, regenerates
-  `DerivationFingerprint.Bake` and `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
+  `TextureCodecLawTests`, so an encoder change re-records those pins and
+  `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
   (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
   law keeps and names).
   Material identity is never blended or compressed.
@@ -1788,8 +1785,8 @@ These are one-line cautions; the owning pages hold the derivations.
 
 ## Performance work
 
-Judged by code, disassembly, and deterministic work counters, which alone set
-ceilings and decide a cost claim. `world.gpu-timing` and `world.fps` readings are
+Judged by code, disassembly, and deterministic work counters, which alone decide
+a cost claim. `world.gpu-timing` and `world.fps` readings are
 evidence beside the counts of the same run, never alone, and are taken on a
 quiet machine ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
 Measure before and after on the same scene, as one GPU run at a time
@@ -1830,49 +1827,30 @@ translation to native code stays invisible, so it never replaces a
 cross-backend capture.
 
 For a repeatable before-and-after reading, `puck counters` boots
-`experimental/tests/Puck.Counters/counters.puck` offscreen on both backends, writes a
+`tests/Puck.Counters/debug.world.json` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
 Use `--world` and `--script` for another authored workload. The sky-still,
 sky-drift, sky-twinkle and sky-cycle fixtures use `experimental/tests/Puck.Counters/sky.script.txt`
-to isolate each sky change with cadence enabled; each has its own ceilings
-(`--ceilings tests/Puck.Counters/sky-<workload>.ceilings.json`). Report workload and script
-identity must match the ceilings; absent cadence samples are not measured zeros.
-The Nexus and courtyard workloads (`experimental/tests/Puck.Counters/nexus.world.json` and
+to isolate each sky change with cadence enabled; absent cadence samples are not
+measured zeros. The Nexus and courtyard workloads (`experimental/tests/Puck.Counters/nexus.world.json` and
 `courtyard.world.json`) inherit the shipped scenes and use `counters.script.txt`
-at the fixed counters camera and 1440x810 floor grid; their ceilings come from
-the floor GPU. Count the tape's and gradient selection's shape evaluations
-alongside the work they save; a lower derivative count alone is insufficient.
-`puck counters --check` holds every render node's deterministic and
-per-backend-deterministic submission counts, pass by pass and outside every
-pass, to `tests/Puck.Counters/debug.ceilings.json` by default
-(`puck.counters.ceilings.v1`): a count reads at most its ceiling, and a ceiling
-of zero is a required zero. The compact ledger stores only nonzero budgets,
-with interned measurement layouts grouped by node, pass and detail. Presence
-is enforced independently: an unexpected zero row, a missing zero row or a
-class change still fails. Derive default classes from `GpuWork.SubmissionKinds`
-and store only layout overrides. Keep the expanded rows' diagnostic order.
-Device documents contain only budget and layout differences from backend
-defaults, plus identity; storage sharing must not broaden which rows judge an
-unrecorded device. The [CLI reference](../../../docs/reference/cli.md#counted-cost-ceilings)
-owns the exact spelling, scope, recording and refusal rules.
-`--record` preserves every other device's effective readings and the first
-recorded device's position, although factoring shared defaults can change the
-stored differences. Its write is atomic, and refusal prints `not written: …`
-and exits 1. `--report <file>` judges or records a saved report without a GPU;
-otherwise the verb needs both backends and runs under the GPU grant.
-The dynamic-resolution step budget reads the backend's first device, expanded
-from shared defaults (`WorldDynamicResolution.StepBudgetPerPixel`).
-`CountersCeilingsCompactLawTests` round-trips the shipped ledgers and perturbed
-saved reports through the codec without a GPU. A format-only change migrates
-the ledgers from their existing readings, never by a GPU re-record.
+at the fixed counters camera and 1440x810 floor grid. Count the tape's and
+gradient selection's shape evaluations alongside the work they save; a lower
+derivative count alone is insufficient. Nothing records counts in the
+repository: judge a change by a report from before it and one from after it,
+on the same device. The verb needs both backends and runs under the GPU grant.
+The dynamic-resolution step budget is a constant
+(`WorldDynamicResolution.StepBudgetPerPixel`), the floor workload's world-node
+march steps per output pixel on the RTX 2060.
 
 **Qualification judges a published package, not a change.** `puck qualify
-<package>` holds CI's published World (`artifacts/world`, never a source build)
-to `experimental/tests/Puck.Qualification/release.profile.json` (`puck.release.profile.v1`,
-schema generated by `puck schema`). It verifies the entry assembly's
-ReadyToRun header, installs a clean copy, runs the profile's functional
+<package> --profile <file>` holds CI's published World (`artifacts/world`, never
+a source build) to a release profile (`puck.release.profile.v1`, schema
+generated by `puck schema`); the profile, quarantined at
+`experimental/tests/Puck.Qualification/release.profile.json`, is no default.
+It verifies the entry assembly's ReadyToRun header, installs a clean copy, runs the profile's functional
 canaries on it through `puck canary --world-artifact`, then runs the stability
 matrix through `WorldOffscreenLeg.Launch`. It never runs a second harness. Its
 evidence is `world.counters --json` (no `gpu.created.*` count may rise across
@@ -2913,16 +2891,16 @@ are [GPU legs](../verification/SKILL.md#gpu-legs):
 ```bash
 dotnet test tests/Puck.SignedDistance.Tests -c Release   # ISA packing, Lipschitz, parts, rigid leaves, grid, bakes; no device
 dotnet test tests/Puck.Shaders.Tests -c Release          # render node, forwarding chains, packages; no device
-puck parity                                              # parity world offscreen, Vulkan then Direct3D 12: content, exact stateHash, per-tile pixels
+puck parity --world <world.puck>                         # a parity world offscreen, Vulkan then Direct3D 12: content, exact stateHash, per-tile pixels
 puck canary <names> [--backend vulkan|directx]           # launches the real World against each manifest
 puck counters [--check]                                  # counters workload on both backends; deterministic counts must agree
-puck qualify artifacts/world                             # a published package against the release profile; --list boots nothing
+puck qualify artifacts/world --profile <file>            # a published package against a release profile; --list boots nothing
 ```
 
 A canary's verdict names the backend that ran it, so a `--backend` run never
 stands for both. `puck parity` has no such option: its state and pixel verdicts
 compare the two backends. The path-profile and camera-inside recipes are in the
-[parity README](../../../tests/Puck.Parity/README.md). The `pipeline-*`,
+[parity README](../../../experimental/tests/Puck.Parity/README.md). The `pipeline-*`,
 `interface-echo` and `no-device-compile` canaries exercise `Puck.Shaders`
 pipelines on a device; each manifest says what it proves.
 
@@ -3091,8 +3069,8 @@ retired views' in. Pending render completion fences survive an install's
 counter invalidation; device loss drops renders whose completion is unobserved.
 Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one
-demand), and the step budget comes from the embedded `counters.ceilings.json`,
-so `puck counters --record` moves the budget.
+demand), and the step budget is the constant
+`WorldDynamicResolution.StepBudgetPerPixel`.
 
 ## Route adjacent work
 

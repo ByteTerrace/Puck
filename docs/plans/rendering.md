@@ -1198,7 +1198,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte. The tape's
-shape token, the checkpoint version, the handshake key and the federation key
+version, the checkpoint version, the handshake key and the federation key
 each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
@@ -1466,7 +1466,7 @@ as surface nets did, for about a tenth more evaluations over a whole bake, and
 surface nets is deleted. It places a vertex per surface patch of a cell, so a
 plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
 shares an edge among more than two quads, at 0.26% more vertices than one vertex
-per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
+per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `CreationBakeDerivation.Fingerprint`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1480,8 +1480,8 @@ the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
 
-The bake key's code fingerprint is kept by `puck derivations` ([CLI
-reference](../reference/cli.md#puck-derivationscode-provenance-keys)). The open
+The bake key's code fingerprint is computed by the running build, from the
+compiled content of the assemblies that bake (`AssemblyReach.ContentFingerprint`). The open
 derivation-key slices are owned by
 [runtime and delivery](runtime-and-delivery.md#derivation-keys).
 
@@ -1538,7 +1538,7 @@ each texel's own material (the impostor stores a material plane). The CPU oracle
 the bounding radius, `SdfMeshLodLawTests` hold the selection and its handover, and
 `ParityBakeSelectionLawTests` hold the parity world's captures to meshes, so its
 references change with no impostor. The `sdf-bake-impostor` canary is the device
-check; it, `puck parity`, the bake canaries, `kernel-counters`, `counters --check`
+check; it, `puck parity`, the bake canaries, `kernel-counters`, `puck counters`
 (the mesh pass gains a descriptor write, and a pipeline bind and a draw when a card
 is recorded) and `device-loss` have not run since the impostor landed. Choosing
 per placement between a bake and the field by measured cost is P6's.
@@ -3079,12 +3079,12 @@ re-record explained in the same change.
      the instance, its edge and its barriers; an `indirect-cadence` canary reads
      scheduled rays only until the cache is traced and none after, and none on a
      pan with no new bricks (red leg: a schedule that re-traces what a camera
-     sees); parity is unchanged; `puck counters --check` holds every indirect
-     row's required zero in every recorded workload.
+     sees); parity is unchanged; `puck counters` reads every indirect row zero
+     in every workload that turns the lever off.
    - Counted-cost gate: at `medium` at most 8,192 rays and 860,160 trace
      evaluations a frame (rays, gradients, launches and feedback proofs), at
      most four bricks and 230,144 classification evaluations, the unresolved
-     share within the fixtures' ceilings, none on a completed still world or a
+     share no higher than the fixtures' last reports, none on a completed still world or a
      pan with no new demand, every byte of the memory table in `world.budget`,
      and every row zero with the lever off.
    - Verification state: the gather, trace and debug device laws and the
@@ -3340,8 +3340,8 @@ re-record explained in the same change.
       cache against screen-space indirect light over a probe fallback and
       against cone occlusion extended to one diffuse bounce, each counted
       across every view, light slot, history and byte.
-    - Done when: the chosen defaults' ceilings are recorded,
-      `puck counters --check` passes on the RTX 2060, and the comparison's rows
+    - Done when: the chosen defaults' reports on the RTX 2060 are compared with
+      `puck counters compare` against the parent's, and the comparison's rows
       are recorded with the bound that decided each alternative.
 
 **Sequencing with other lanes.**
@@ -5025,7 +5025,7 @@ Each commit is marked with what it waits on.
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
    - Every format that carries an intent is strict and has no reader for an
-     earlier shape: the tape's shape token, the checkpoint version
+     earlier shape: the tape's version, the checkpoint version
      (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
      (`WorldProtocol.WireProtocolKey`) and the federation key
      (`WorldFederationCodec.WireKey`). No tape is checked in.
@@ -6022,49 +6022,29 @@ counted rows recorded in the same change.
      ledger already counts per pass; the step adds only the attribution it lacks,
      putting the brick writes, the brick staging and the fillers
      `SdfWorldTables.SubmitUpload` records before its `upload` bracket under a
-     pass. `puck counters --check` holds
-     `puck counters`' report to a ceilings file beside the workload in
-     `tests/Puck.Counters` (a `puck.counters.ceilings.v1` document with its
-     generated schema), exiting 1
-     and naming the kind, pass and node over its ceiling; `puck counters --record`
-     records nonzero budgets and compact measurement layouts into it. A layout
-     requires every recorded row, including rows whose implicit budget is zero;
-     an unexpected row fails even when it reads zero. Deterministic kinds and
-     nonconflicting kernel zeros are shared by every device of their backend.
-     A fresh required zero whose count another retained device owns stays a
-     strict zero in the newly recorded device's record, preserving the other
-     device's readings.
-     Every other per-backend-deterministic kind is judged against the record of
-     the device the run is on, one record per device, and a device with no
-     record fails by name.
+     pass. `puck counters` reports each count per pass, and `puck counters
+     compare` names every count that moves between two reports.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
      `src/Puck.Cli.Runs/Counters`,
      `tests/Puck.Counters`, `SdfPassPlanLawTests`, `SdfWorldResidencyWorkLawTests`.
    - Done when: a law over the fake device holds the readback's placement in the
-     plan and the kinds' classes; the ceilings file states, for every pass, what
-     each kind must read, recorded with it: a ceiling for a pass that does the
-     work, and a required zero for a pass that cannot (cull-args marches
-     nothing) and for a pass the workload's tier skips (the shadow and ambient
-     passes and the meshless mesh pass at `low`), so a pass that starts counting
-     where it should not fails as surely as one over its ceiling; the
+     plan and the kinds' classes; a pass that cannot do a kind of work (cull-args
+     marches nothing) and a pass the workload's tier skips (the shadow and ambient
+     passes and the meshless mesh pass at `low`) read zero; the
      `world-counters` canary reads each pass against those expectations on both
-     backends; the ceilings file is recorded on the RTX 2060 at the floor tier,
-     and `puck counters --check` passes on it and is shown failing once on a
-     deliberately raised count and once on a required zero broken.
+     backends.
    - Counted-cost gate: the counter buffer's own cost, one clear, one copy and
-     their barriers per instance a frame, is the first row recorded, and every
-     other P14 pass's ceiling is recorded beside it.
+     their barriers per instance a frame, is the first row counted, beside every
+     other P14 pass's counts.
    - Status: landed. Every pass that marches or writes texels counts both kinds
      in its shaders: the SDF passes, the mesh pass, `place`, the overlay, the
      source conversions and every post-process package. A pass the frame skips
-     counts as skipped. `puck counters --check` and `--record` hold the report
-     to `puck.counters.ceilings.v1`. The `kernel-counters` canary holds a
-     volume's steps doubling with its samples and a post pass counting one texel
-     a pixel. `src/Puck.World/floor.ceilings.json` is recorded on the
-     RTX 2060 at the floor tier, and `--check` holds it there and fails on a
-     raised count and on a broken required zero.
+     counts as skipped. The `kernel-counters` canary holds a volume's steps
+     doubling with its samples and a post pass counting one texel a pixel. The
+     floor workload's world-node march steps on the RTX 2060 give dynamic
+     resolution its step budget (`WorldDynamicResolution.StepBudgetPerPixel`).
 2. **P15-2, jitter and history epochs.** The temporal contract, with
    reconstruction still off by default.
    - Delivers: the `jitter` and `historyFrames` pass-block values, the Halton
@@ -6174,8 +6154,7 @@ counted rows recorded in the same change.
      output beside the render targets.
    - Counted-cost gate: at reduced scale the resolve writes the output texels
      once; a placement with no other work stands in for that output. The
-     counted 1080p low workload's rows are in
-     `src/Puck.World/floor.ceilings.json`: `resolve` and `composite`
+     counted 1080p low workload's rows: `resolve` and `composite`
      each write 2,073,600 texels, and `sky` the render grid's 1,166,400. Resolve
      adds its output storage, bindings and one pipeline: a reduced view owns what
      the native graph at its render ceiling owns, with the render-grid color held
@@ -6338,9 +6317,9 @@ counted rows recorded in the same change.
    - Delivers: the counters workload recorded with each lever off and on at the
      floor tier, in the configurations the first open decision below lists, and `quality.puck`'s `low`, `medium` and `high`
      rows for the two levers as the lead decides.
-   - Touches: `quality.puck`, `tests/Puck.Counters`, the ceilings file.
-   - Done when: the chosen defaults' ceilings are recorded and `puck counters
-     --check` passes on the RTX 2060.
+   - Touches: `quality.puck`, `tests/Puck.Counters`.
+   - Done when: the chosen defaults' reports on the RTX 2060 are compared with
+     `puck counters compare` against the parent's.
 
 **Open decision for the lead.**
 
@@ -7293,8 +7272,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
      workloads. Both backends pass with debug layers and agree on the counted
      baseline. The still workload can skip a node entirely; an absent sample
-     is not a measured zero. Each workload's ceilings are recorded on the RTX 2060
-     at the floor tier, beside it as `sky-<workload>.ceilings.json`.
+     is not a measured zero. Each workload is measured on the RTX 2060
+     at the floor tier.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
@@ -7305,7 +7284,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `experimental/tests/Puck.Parity`, `tests/Puck.Counters`,
-     `experimental/tests/Puck.World.Canaries`, `CanaryCeilings.json`.
+     `experimental/tests/Puck.World.Canaries`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show the costs before the cadence changes: every pass re-rendering on a
@@ -8308,14 +8287,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
       `shadowFadeTicks` and `shadowOverflow` rows as the lead
       decides beside P15-8.
-    - Done when: the chosen defaults' ceilings are recorded and
-      `puck counters --check` passes on the RTX 2060.
+    - Done when: the chosen defaults' reports on the RTX 2060 are compared with
+      `puck counters compare` against the parent's.
 
 **Expected counted wins.** Estimates derived from the code, read against the
-rows P18-1 records in `experimental/tests/Puck.Counters/sky-still.ceilings.json`,
-`sky-drift.ceilings.json`, `sky-twinkle.ceilings.json` and
-`sky-cycle.ceilings.json`, beside the floor workload's
-`counters.ceilings.json`. P is a view's render pixels (1,166,400 for a 1920 by
+rows P18-1 counts over the `sky-still`, `sky-drift`, `sky-twinkle` and
+`sky-cycle` workloads in `experimental/tests/Puck.Counters`, beside the floor
+workload. P is a view's render pixels (1,166,400 for a 1920 by
 1080 view at the floor tier's half scale, which renders 1440 by 810), h the
 fraction of them that hit, and L the fraction in live tiles, at least h.
 
@@ -8509,7 +8487,7 @@ and the off-centre P2 lattice reads 1.0 from x = -1.75 to cell -1's copy at -3.
 
 **Done when** each of the seventeen groups builds and holds the brute-force
 distance sweep of `SdfWallpaperFoldLawTests` with off-centre prototypes, the
-ground's counted march steps do not rise (`puck counters --check`), parity holds,
+ground's counted march steps do not rise (`puck counters compare`), parity holds,
 and the symmetry LOD's switch is crossed under the device law.
 
 **Depends on:** the march's fold-wall crossing (`sdfMarchAdvance`) and, for

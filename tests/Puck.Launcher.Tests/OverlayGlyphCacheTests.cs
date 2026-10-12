@@ -60,7 +60,6 @@ public sealed class OverlayGlyphCacheTests {
         Assert.Equal(6, new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000])!.DistanceRange);
     }
     [InlineData("short")]
-    [InlineData("shape")]
     [InlineData("version")]
     [InlineData("dimensions")]
     [InlineData("range")]
@@ -78,11 +77,9 @@ public sealed class OverlayGlyphCacheTests {
 
         switch (fault) {
             case "short": bytes = bytes[..120]; break;
-            // The same magic and version under another shape fingerprint: the layout after it is unknown to this build.
-            case "shape": System.Text.Encoding.ASCII.GetBytes(bytes: bytes.AsSpan(start: 8), chars: "0000000000000000"); break;
-            case "version": BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: 4), value: 2); break;
-            case "dimensions": BinaryPrimitives.WriteInt32LittleEndian(destination: bytes.AsSpan(start: 24), value: int.MaxValue); break;
-            case "range": BinaryPrimitives.WriteSingleLittleEndian(destination: bytes.AsSpan(start: 32), value: float.NaN); break;
+            case "version": BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: 4), value: 99); break;
+            case "dimensions": BinaryPrimitives.WriteInt32LittleEndian(destination: bytes.AsSpan(start: 8), value: int.MaxValue); break;
+            case "range": BinaryPrimitives.WriteSingleLittleEndian(destination: bytes.AsSpan(start: 16), value: float.NaN); break;
         }
         File.WriteAllBytes(bytes: bytes, path: path);
         var actual = new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000]);
@@ -91,20 +88,6 @@ public sealed class OverlayGlyphCacheTests {
         Assert.Equal(expected.SdfWords.ToArray(), actual.SdfWords.ToArray());
         // The refused cache was not served: the rebuild rewrote the file as this build writes it.
         Assert.Equal(original, File.ReadAllBytes(path: path));
-    }
-    [Fact]
-    public void ThePackCarriesTheShapeTheLedgerRecords() {
-        using var directory = new TemporaryDirectory(prefix: "puck-glyph-shape-");
-
-        WriteSources(directory.RootPath);
-        _ = new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000]);
-
-        var bytes = File.ReadAllBytes(path: Assert.Single(collection: Directory.GetFiles(path: directory.RootPath, searchPattern: "*.pack")));
-
-        Assert.Equal(
-            FormatLedgerShapes.Of(id: "OverlayGlyphSdfPack.PackVersion"),
-            System.Text.Encoding.ASCII.GetString(bytes: bytes.AsSpan(length: 16, start: 8))
-        );
     }
     [Fact]
     public void ShippedAtlasCellsCanBePacked() {

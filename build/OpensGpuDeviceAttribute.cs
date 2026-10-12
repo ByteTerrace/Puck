@@ -12,8 +12,8 @@ namespace Puck;
 /// test class built on a marked base type or handed a marked fixture carries the trait. A software device (WARP) runs on
 /// the CPU and is not marked.
 /// <para>
-/// The type is <c>internal</c> and linked into every project as source (see <c>Directory.Build.props</c>), as
-/// <see cref="VerifiedCodeAttribute"/> is: the analyzer matches it by name, so a production assembly's copy marks its
+/// The type is <c>internal</c> and linked into every project as source (see <c>Directory.Build.props</c>): the
+/// analyzer matches it by name, so a production assembly's copy marks its
 /// members for every test assembly that references them.
 /// </para>
 /// </summary>

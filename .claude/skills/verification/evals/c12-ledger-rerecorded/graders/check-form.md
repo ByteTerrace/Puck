@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-lengths\s+--check
+schema\s+--check

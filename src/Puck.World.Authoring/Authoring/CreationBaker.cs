@@ -12,7 +12,7 @@ namespace Puck.World.Authoring;
 /// tier. Two bakes with one key are the same bytes, so the key's <see cref="Pin"/> names a bake in every cache.</summary>
 /// <param name="CreationPin">The creation's pin: the SHA-256 hex of its canonical bytes
 /// (<see cref="CreationCanonicalizer.Canonicalize"/>), which a world's prototype row carries as its hash.</param>
-/// <param name="Fingerprint">The bake producer's code fingerprint (<see cref="DerivationFingerprint.Bake"/>).</param>
+/// <param name="Fingerprint">The bake producer's code fingerprint (<see cref="CreationBakeDerivation.Fingerprint"/>).</param>
 /// <param name="Quality">The quality tier.</param>
 public readonly record struct CreationBakeKey(string CreationPin, string Fingerprint, SdfBakeQuality Quality) {
     /// <summary>Gets the key's own pin: the SHA-256 of its three parts, which names the bake in a store.</summary>
@@ -29,7 +29,7 @@ public readonly record struct CreationBakeKey(string CreationPin, string Fingerp
 
         return new CreationBakeKey(
             CreationPin: creationPin,
-            Fingerprint: DerivationFingerprint.Bake,
+            Fingerprint: CreationBakeDerivation.Fingerprint,
             Quality: quality
         );
     }
@@ -56,7 +56,6 @@ public static class CreationBaker {
     /// <returns><see langword="true"/> when the creation baked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    [Derivation(name: "bake")]
     public static bool TryBake(CreationDocument document, SdfBakeQuality quality, [NotNullWhen(returnValue: true)] out SdfBake? bake, out string reason, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: document);
         bake = null;

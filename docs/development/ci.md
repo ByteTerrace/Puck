@@ -27,9 +27,7 @@ holds a shell script only to glue a container or a step summary.
 workload, and a versioned, checksum-checked DXC archive on Windows. The SDK goes into a directory of its
 own: installing `wasm-tools` moves the workload set, and in the image's shared SDK directory that would
 also reinstall every workload the image ships. It restores
-the solution in locked mode and compiles Release with warnings as errors. The
-built candidate CLI runs `puck derivations --check` against the restored producer
-graph, so a stale bake fingerprint stops artifact production before packaging. It
+the solution in locked mode and compiles Release with warnings as errors. It
 packages those assemblies with `puck nuget pack --no-build`, which packs every
 project at once because a no-build pack only reads what the build wrote, publishes the
 Functions payload without rebuilding managed assemblies, and
@@ -79,17 +77,12 @@ critical path, so CI speed work leaves its AOT and optimisation settings alone.
 a fresh Windows checkout on each of four runners, verifies its commit and
 platform, and runs one shard of its manifest's test assemblies there
 (`puck artifacts test-windows --shard <i> --shards <n>`, the matrix's size).
-The shards split the manifest by the measured run times recorded in
-`TestDurations.json`: each assembly, longest first, joins the shard with the
-least recorded time so far, so the shards hold every assembly exactly once and
-none ends more than the longest assembly's time past an even split
-(`ArtifactsShardLawTests`). An assembly the table does not name, such as a new
-test project, weighs the median. Each shard writes its measured times as
-`durations.json` beside its TRX reports in its `test-diagnostics-<i>` artifact;
-`puck artifacts durations <directory>` over one run's downloaded reports
-re-records the table when the times drift. A shard runs each assembly as
-`dotnet <assembly.dll>`, two at a time and longest first, so its longest suite
-runs alongside the others; each run's output is printed whole when it finishes.
+The shards deal the manifest round-robin: in ordinal order, the assembly at
+index `i` joins shard `i` modulo the shard count, so the shards hold every
+assembly exactly once and differ in size by at most one
+(`ArtifactsShardLawTests`). A shard runs each assembly as
+`dotnet <assembly.dll>`, two at a time; each run's output is printed whole when
+it finishes, and its TRX reports go to the shard's `test-diagnostics-<i>` artifact.
 A failing assembly cancels nothing: every assembly in the shard runs, and the
 shard ends by naming each one that failed; one shard's failure cancels no other
 (`fail-fast: false`). The job installs the
@@ -156,9 +149,10 @@ change): a run that timed out before saving would leave every later run cold.
 The creation bake cache, which `Puck.World`'s world compile reads and fills
 ([`WorldAssets.targets`](../../build/WorldAssets.targets)), is restored and saved
 the same way by the `bake-cache` composite action. A bake's own key carries the
-bake code's fingerprint (`DerivationFingerprint.Bake`, which `puck derivations
---check` holds to the bake code), so the action's key leads with a hash of that
-fingerprint and restores only caches of the same fingerprint, then a hash of the
+fingerprint of the compiled bake code (`CreationBakeDerivation.Fingerprint`,
+computed by the running build from `Puck.World.Authoring` and the Puck
+assemblies it references), so the action's key leads with a hash of those
+projects' sources and restores only caches of the same sources, then a hash of the
 world sources under `src/Puck.World/Assets/worlds`, which decides when a run
 saves a new cache. A restored cache makes the world compile read every unchanged
 creation's bake rather than bake it; baking every creation measured four to six
@@ -170,9 +164,7 @@ producer saves on a miss of its exact key; the formatting job only restores.
 and AGB (Advanced GamingBrick) binaries
 on Linux and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
-distribution checks, and for the two generated ledgers `puck formats --check`
-(`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
-shape fingerprint of every strictly versioned format).
+distribution checks.
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
@@ -294,8 +286,7 @@ the step in the same change.
 | `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release` | `artifacts.yml` | `bootstrap` |
 | `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
-| `puck derivations --check` | `artifacts.yml` | `derivations` |
-| `puck schema`, `registry`, `architecture`, `branding` and `formats --check` | `verify.yml` | the step of the same name |
+| `puck schema`, `registry`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
@@ -595,7 +586,7 @@ The `setup-dxc` action installs the checksum-pinned compiler before source build
 `azure.yml` builds the Functions payload, the existing Storage/Front Door website
 layout with its documentation page, the stable official browser engine/content,
 and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
-Actors must answer `/healthz`; the silo must activate the primary Puck world,
+Actors must answer `/healthz`; the silo must activate the primary world (`debug`),
 checkpoint it, accept a QUIC connection with the expected key, and repeat those
 checks after container replacement using the same store. The gate also executes
 Caddy as its production UID with all Linux capabilities removed. The image strips
@@ -731,7 +722,7 @@ twice each through Front Door, asserting media type, `Cache-Control`, and an
 `X-Cache` edge hit for hashed scripts only, on every host the portal route
 serves.
 
-The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
+The primary world uses a Flexible VM scale set, `bytrcvmssp000`, at
 `play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
 the endpoint during worker replacement. The release permits exactly one worker,
 with manual application upgrades, automatic guest patching, and automatic
@@ -930,7 +921,9 @@ with the candidate image tagged `puck/world-silo:candidate` to check its entry p
 successful execution through the CLI alone cannot prove that the ordinary worker
 has its providers installed.
 
-`puck world prepare` packages Puck and its referenced neighbours. Official release
+`puck world prepare` packages the hosted primary world, the debug world
+(`src/Puck.World/Assets/worlds/debug.puck`, hosted as `debug`, the deployment's
+configured `worldName`), and any neighbours it references. Official release
 preparation pins the complete inventory, with a distinct retained signing key for
 each world and a matching door budget. Orleans membership is explicitly local. Checkpoints and journals live in
 Azure Blob Storage. The lifecycle extension monitors Azure Scheduled Events

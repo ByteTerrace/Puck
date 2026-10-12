@@ -128,7 +128,6 @@ file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponse
     public Task WriteHelloAsync(Stream stream, CancellationToken ct) => HandshakeWireFormat.WriteHelloAsync(
         ct: ct,
         key: 0xF00D,
-        shape: "0123456789abcdef",
         stream: stream
     );
     public Task WriteRequestAsync(Stream stream, FakeRequestKind kind, ReadOnlyMemory<byte> body, CancellationToken ct) {

@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Puck.Abstractions;
 using Puck.World;
 
 namespace Puck.Cli.Counters;
@@ -20,11 +19,11 @@ internal sealed record CountersBatchObservationEvidence(string Name, string Grou
 public static partial class CountersCommand {
     private static readonly TimeSpan BatchBudget = TimeSpan.FromMinutes(minutes: 15);
 
-    private static int RunBatch(string manifestPath, string? output, bool check, bool record, IReadOnlyList<string?> conflicts) {
+    private static int RunBatch(string manifestPath, string? output, IReadOnlyList<string?> conflicts) {
         var clock = Stopwatch.StartNew();
 
-        if (conflicts.Any(predicate: value => (value is not null)) || (check && record)) {
-            return CliExit.Refuse(verb: Verb, what: "--batch", why: "a batch owns its workload, scripts and ceilings; --world, --script, --report and --ceilings refuse beside it, and --check and --record cannot be combined");
+        if (conflicts.Any(predicate: value => (value is not null))) {
+            return CliExit.Refuse(verb: Verb, what: "--batch", why: "a batch owns its workload and scripts; --world and --script refuse beside it");
         }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) { return CliExit.Refused; }
         using var scratch = RunDirectory.Create(prefix: "puck-counters-batch-");
@@ -33,17 +32,6 @@ public static partial class CountersCommand {
         Console.Error.WriteLine(value: $"{Verb}: batch artifacts {CliPaths.ToDisplay(fullPath: scratch.Path)}");
         try {
             var batch = CountersBatchInput.Read(output: products, path: manifestPath);
-            var checks = new Dictionary<string, WorldCountersCeilings>(comparer: PuckPaths.Comparer);
-
-            foreach (var observation in batch.Groups.SelectMany(selector: group => group.Observations)) {
-                WorldCountersCeilings? existing = null;
-
-                if ((check || (record && File.Exists(path: observation.CeilingsPath)))
-                    && !CountersCeilings.TryRead(observation.CeilingsPath, out existing, out var reason)) {
-                    return CliExit.Refuse(verb: Verb, what: observation.CeilingsPath, why: reason);
-                }
-                if (check) { checks.Add(key: observation.CeilingsPath, value: existing!); }
-            }
             if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(batch.WorldPath, out var authored, out _, out var error)) {
                 return CliExit.Refuse(verb: Verb, what: "the batch workload", why: error.ReplaceLineEndings(replacementText: " "));
             }
@@ -69,7 +57,7 @@ public static partial class CountersCommand {
                 return CliExit.Refuse(verb: Verb, what: "the batch observations", why: collectionReason);
             }
             var evidence = new List<CountersBatchObservationEvidence>();
-            var reports = new List<(PreparedCountersObservation Observation, WorldCountersReport Report)>();
+            var reports = new List<WorldCountersReport>();
 
             foreach (var group in batch.Groups) {
                 foreach (var observation in group.Observations) {
@@ -84,7 +72,7 @@ public static partial class CountersCommand {
 
                     Directory.CreateDirectory(path: Path.GetDirectoryName(path: observation.ReportPath)!);
                     WriteReport(path: observation.ReportPath, report: report);
-                    reports.Add(item: (observation, report));
+                    reports.Add(item: report);
                     foreach (var item in pair) {
                         var legReport = Path.Combine(path1: products, path2: "observations", path3: $"{observation.Definition.Name}-{item.Backend}.json");
 
@@ -105,21 +93,7 @@ public static partial class CountersCommand {
             File.WriteAllText(evidencePath, JsonSerializer.Serialize(new CountersBatchEvidence(
                 CliPaths.ToDisplay(relativeTo: repositoryRoot, fullPath: Path.GetFullPath(path: manifestPath)), batch.ManifestHash, revision, evidence), CountersBatchInput.Json), Utf8);
             Console.Out.WriteLine(value: $"{Verb}: {evidence.Count} backend observations, {reports.Count} paired reports; provenance {CliPaths.ToDisplay(fullPath: evidencePath)}");
-            // A mismatch anywhere keeps all actual reports but records no batch ceilings.
-            var differences = reports.SelectMany(selector: item => CountersComparison.AcrossBackends(left: item.Report.Runs[0], right: item.Report.Runs[1])).ToArray();
-
-            if (differences.Length != 0) { return Report(differences: differences); }
-            var result = CliExit.Success;
-
-            foreach (var (observation, report) in reports) {
-                if (CliProcess.RemainingBudget(budget: BatchBudget, clock: clock) <= TimeSpan.Zero) {
-                    return CliExit.Refuse(verb: Verb, what: "--batch", why: "the fifteen-minute phase cap was exhausted before all reports were judged");
-                }
-                var verdict = Judge(report, (check ? checks[observation.CeilingsPath] : null), observation.CeilingsPath, record);
-
-                if (verdict != CliExit.Success) { result = verdict; }
-            }
-            return result;
+            return Report(differences: reports.SelectMany(selector: static report => CountersComparison.AcrossBackends(left: report.Runs[0], right: report.Runs[1])).ToArray());
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException
             or FormatException or ArgumentException or InvalidOperationException or KeyNotFoundException)) {
             return CliExit.Refuse(verb: Verb, what: "--batch", why: exception.Message.ReplaceLineEndings(replacementText: " "));

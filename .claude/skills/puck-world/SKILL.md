@@ -268,8 +268,8 @@ bindings (`RuleSchedule`, `IStateReader.TryRowVersion`); a rule whose read
 rows are unchanged keeps its closed verdict. A text cell, a removal, a draw, a
 shuffle, and a random or slice transfer take the same arena kernels
 (`WorldArenaTransforms.TryApply`), which compose but still export once.
-`puck bench world` measures the tick path on the fixture and the shipped
-world.
+`puck bench world [world]` measures the server tick path of the debug world, or
+of the world it is given, without a device.
 
 **Resolve a document's paths beside it.** Every relative path a world document
 authors (basis, imports, `references`, asset-row `source`, addon `modulePath`,
@@ -510,9 +510,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   (`CanaryCommand.CanaryLegSlots`; a manifest declaring `"exclusive": true`
   runs each leg alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
-  selection's World boots, spawns, builds and leg budget without running;
-  the automatic set and `--merge` are refused past the ceilings in
-  `CanaryCeilings.json` (`puck canary-ceilings` rewrites them). A GPU selection first warms the engine pipeline cache
+  selection's World boots, spawns, builds and leg budget without running.
+  A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts

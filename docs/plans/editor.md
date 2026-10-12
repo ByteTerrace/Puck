@@ -164,9 +164,7 @@ Each package's check is a set of laws in the test project that owns the code.
 Every law has a red leg: the same assertion run against the feature switched
 off, or against a planted defect, which must fail. A check that cannot fail
 proves nothing. A package adds a `puck canary` only where pixels are the honest
-evidence (a grid, a highlight or a debug view drawn on screen), and a new
-canary in the merge or automatic set records
-the rise in `CanaryCeilings.json` (`puck canary-ceilings`) in the same change. A package that adds
+evidence (a grid, a highlight or a debug view drawn on screen). A package that adds
 a verb adds its read-back and its entry in the build-mode binding group in the
 same change.
 
@@ -642,7 +640,7 @@ mutation is sent. Releasing commits one mutation, so one undo reverts the whole
 drag; Escape or a right click cancels and sends nothing. A gamepad drags along
 the camera-relative plane with the sticks, with the same commit rule, as the
 sculptor's pad model did. Before adding the ghost, check whether
-`world.reflow.preview` already draws proposed positions (rule 8).
+`world.reflow.preview` already draws proposed positions (AGENTS.md rule 7).
 
 **Touches:** `Puck.Overlays`, `Puck.World.Client` (the stamper's presentation
 override, the drag state), `Puck.World.Authoring` (`GridSnap`), the editor

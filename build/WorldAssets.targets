@@ -15,9 +15,9 @@
         <PuckWorldSourceDirectory>$(MSBuildProjectDirectory)/Assets/worlds</PuckWorldSourceDirectory>
         <!-- The bake cache is the per-user one (PuckUserDirectory.Resolve("bakes"): Puck under the local application data
              folder, or under the temporary directory where the platform names none), which `puck parity` and the World
-             read and fill too, so every checkout and configuration on the machine bakes a creation once. That is safe
-             because a bake's key carries the bake code's full fingerprint (DerivationFingerprint.Bake), so checkouts whose
-             bake code differs never share a key. -p:PuckWorldBakeCache=<dir> names another. -->
+             read and fill too, so every checkout on the machine bakes a creation once per configuration. That is safe
+             because a bake's key carries the fingerprint of the compiled bake code (CreationBakeDerivation.Fingerprint),
+             so builds whose bake code differs never share a key. -p:PuckWorldBakeCache=<dir> names another. -->
         <PuckUserLocalData>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))</PuckUserLocalData>
         <PuckUserLocalData Condition="'$(PuckUserLocalData)' == ''">$([System.IO.Path]::GetTempPath())</PuckUserLocalData>
         <PuckWorldBakeCache Condition="'$(PuckWorldBakeCache)' == ''">$([System.IO.Path]::TrimEndingDirectorySeparator('$(PuckUserLocalData)'))/Puck/bakes</PuckWorldBakeCache>

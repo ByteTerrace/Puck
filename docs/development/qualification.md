@@ -20,13 +20,13 @@ output directory:
 ```text
 dotnet build src/Puck.World -c Release
 dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
-puck qualify artifacts/world
+puck qualify artifacts/world --profile experimental/tests/Puck.Qualification/release.profile.json
 ```
 
 A CI download of the published World is the same directory and qualifies the
-same way. `puck qualify <package> --list` checks the package and prints the
-matrix and every cell's script without booting anything. `--profile` names
-another profile, and `--output` says where the report goes.
+same way. `puck qualify <package> --profile <file> --list` checks the package
+and prints the matrix and every cell's script without booting anything.
+`--profile` is required, and `--output` says where the report goes.
 
 A run first checks that the package's entry assembly exists and is in the
 profile's publish mode, then installs a clean copy of the package in the run's
@@ -55,8 +55,10 @@ evidence survive (see [the CLI conventions](../reference/cli.md#conventions)).
 ## The release profile
 
 The profile is `experimental/tests/Puck.Qualification/release.profile.json`, a
-`puck.release.profile.v1` document. `puck schema` generates its schema beside
-it, and `puck qualify` refuses a profile that names a member the schema does
+`puck.release.profile.v1` document, quarantined with the canaries and worlds it
+names while the debug world is the one live world, so `puck qualify` has no
+default profile. `puck schema` generates its schema at
+`tests/Puck.Qualification/puck.release.profile.v1.schema.json`, and `puck qualify` refuses a profile that names a member the schema does
 not have, leaves out a required one, or describes a matrix it cannot run.
 
 **Publish mode.** The package is framework-dependent ReadyToRun, the form CI

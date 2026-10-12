@@ -455,7 +455,7 @@ public static partial class AzureCommand {
         await PuckAsync(
             "world",
             "prepare",
-            "src/Puck.World/Assets/worlds",
+            HostedWorldSource,
             "--output",
             Path.Combine(
                 path1: output,

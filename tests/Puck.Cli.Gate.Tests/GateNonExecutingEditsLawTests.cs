@@ -39,8 +39,6 @@ public sealed class GateNonExecutingEditsLawTests : GateRunLaws {
 
         Assert.Equal(actual: exitCode, expected: CliExit.Success);
         Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["affected", "--merge-base", baseline, "--run", "--suite-jobs", "2"]));
-        Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["lengths", "--check"]));
-        Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["comment-smells", "--check"]));
         Assert.Contains(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["docs", "links"]));
         Assert.Equal(expected: gpu, actual: runner.Steps.Any(predicate: step => step.SequenceEqual(other: ["docs", "citations"])));
         Assert.Equal(expected: !prose, actual: runner.Steps.Any(predicate: step => ((step[0] == "format") && (step[1] == "--check"))));

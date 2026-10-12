@@ -48,7 +48,7 @@ public static class GateCommand {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
 
-        gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites, every recorded counters workload and docs citations, one step after another.";
+        gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites and docs citations, one step after another.";
         var recordOption = new Option<bool>("--record") { Description = "Requires --gpu; refresh canary coverage only after every qualification step passes." };
         var gpuJobsOption = Canary.CanaryGpuJobs.Create();
         var suiteJobsOption = AffectedSuites.Jobs();
@@ -63,9 +63,7 @@ public static class GateCommand {
             Baseline steps run only when affected reaches their owning project or declared data inputs.
             The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
             side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
-            Counters expands every
-            tests/Puck.Counters/*.ceilings.json using each recorded workload path and its sibling script when
-            present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
+            Checks write nothing; --record writes coverage.
             Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
             CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.
             A step that opens a device (the --gpu steps) also waits for an idle GPU, and a heavy suite

@@ -988,7 +988,6 @@ public sealed record WorldPrototypeReference(DocumentIdentifier Id, string Conte
 /// <summary>The content shared by prototypes, independently of their names in individual worlds.</summary>
 /// <param name="Document">The disclosed creation document.</param>
 /// <param name="Mesh">The disclosed mesh, when present.</param>
-[FormatPart("WorldFederationCodec.WireKey")]
 public sealed record WorldPrototypeContent(CreationDocument Document, WorldPrototypeMesh? Mesh);
 /// <summary>Stores and resolves projection prototype bodies through the existing content-addressed store.</summary>
 public static class WorldProjectionContent {
@@ -1028,7 +1027,6 @@ public static class WorldProjectionContent {
     /// <summary>Serializes exactly the disclosed prototype body, without its world-local name.</summary>
     /// <param name="prototype">The flattened prototype.</param>
     /// <returns>Its compact canonical bytes.</returns>
-    [FormatLeaf]
     public static byte[] Serialize(WorldPrototype prototype) => CanonicalJsonDocument.SerializeCompact(
         value: new WorldPrototypeContent(Document: prototype.Document, Mesh: prototype.Mesh),
         jsonTypeInfo: WorldJsonContext.Default.WorldPrototypeContent);

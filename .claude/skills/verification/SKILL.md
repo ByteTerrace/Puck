@@ -31,7 +31,7 @@ A lane lands on:
 
 A change to simulation state stays deterministic (`AGENTS.md` rule 4);
 `puck test --reproduce` on a world the change reaches is the quick way to see
-two runs agree. `[VerifiedCode]` brands are enforced by the build (rule 7).
+two runs agree.
 
 Nothing else is a precondition. A red gate or CI run is information to act on,
 not a stop. While the debug world is the one live world, the canary, parity,
@@ -47,14 +47,16 @@ your CLI copy (below).
 - **`puck gate --merge-base origin/<integration-branch>`** runs the affected
   suites, `test` worlds, catalog check, committed baseline checks and ledger
   check forms against the merge base. `--gpu` adds the affected canaries,
-  parity, device suites, counters workloads and docs citations, serially, and
+  parity, device suites and docs citations, serially, and
   is a GPU leg.
 - **`puck affected --merge-base origin/<integration-branch>`** prints the
-  selection the change reaches; `--run` runs it and `--gpu` adds its canaries
-  and parity. `--since <branch>` folds in landings after the lane started.
-- **`puck parity`**, **`puck canary <names>`** and **`puck counters --check`**
-  compare backends, launch the real World against a manifest, and judge counted
-  GPU work against recorded ceilings. All are GPU legs.
+  selection the change reaches; `--run` runs it and `--gpu` adds its canaries,
+  and names parity when chosen. `--since <branch>` folds in landings after the
+  lane started.
+- **`puck parity --world <file>`**, **`puck canary <names>`** and **`puck counters`**
+  compare backends, launch the real World against a manifest, and count GPU
+  work on both backends (`puck counters compare` holds a before report to an
+  after one). All but the compare are GPU legs.
 - **`puck laws prove`** runs a law with its fix withheld (`--fix <commit>` or
   `--file-list`) in a proof tree of its own and with it restored, and reports
   both legs. Use it when you want to know a new test can fail.
@@ -65,10 +67,6 @@ and commit the result with the change:
 
 | Owns | Check form |
 |---|---|
-| `FileLengths.json` | `puck lengths --check` |
-| `CommentSmells.json` | `puck comment-smells --check` |
-| `FormatVersions.json` | `puck formats --check` |
-| `CanaryCeilings.json` | `puck canary-ceilings --check` |
 | Formatting of touched files | `puck format --check --file-list <scratchpad>/<lane>-files.json` |
 | The project-map layering block | `puck architecture --check` |
 | `docs/world-name-registry.md` | `puck registry --check` |
@@ -76,8 +74,7 @@ and commit the result with the change:
 | A committed test baseline | `puck baselines <artifact> --check` |
 | Each project's `packages.lock.json` | `puck locks --check` |
 
-A recording verb that exits nonzero has not recorded, whatever file it wrote:
-`puck counters --record` exits 1 and writes nothing when the backends disagree.
+A recording verb that exits nonzero has not recorded, whatever file it wrote.
 
 ## Run verbs from your own CLI copy
 
@@ -152,10 +149,10 @@ the presentation modes.
   machine, and a timing is reported beside the counts of the same run.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, list the legs you would run in your hand-back report.
-- `puck counters --check` fails on a device the ledger has no record for with
-  `no ceilings recorded for <device>`; `puck counters --record` adds it, and
-  `--report <file>` judges a saved report with no GPU
-  ([rules](../../../docs/reference/cli.md#counted-cost-ceilings)).
+- Judge counted GPU work by two `puck counters` reports from the same device,
+  one before the change and one after, held to each other with
+  `puck counters compare`, which needs no GPU
+  ([rules](../../../docs/reference/cli.md#judging-a-change-by-counted-work)).
 
 ### GPU process checks and script runs
 

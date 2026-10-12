@@ -28,8 +28,7 @@ public static class VulkanShaderCapabilities {
     /// needs the <c>shaderDemoteToHelperInvocation</c> feature.</summary>
     public const uint DemoteToHelperInvocation = 5379u;
 
-    // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions, so
-    // puck formats ledgers none.
+    // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions.
     private const uint SpirvMagic = 0x07230203u;
     // The words of a module's header before its first instruction: magic, version, generator, bound and schema.
     private const int HeaderWords = 5;

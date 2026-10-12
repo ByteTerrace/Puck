@@ -45,8 +45,8 @@ world.budget
   `world.counters` also prints every other counter source the World
   registered, one section per source, and `--json` prints the same readout as
   one line of JSON. `puck counters` runs an authored workload offscreen on both
-  backends and checks these counts agree, and `--check` holds them, pass by
-  pass, to the counted-cost ceilings recorded for the workload; see the
+  backends and checks these counts agree, and `puck counters compare` holds a
+  report from before a change to one from after it, pass by pass; see the
   [CLI reference](../../../reference/cli.md#puck-counterswork-counter-collector).
 - **`world.budget`** prints the compose-time cost sheet: live program words and
   instances, the global step scale, volumes, scoped field clamps, and the

@@ -1,4 +1,3 @@
-using Puck.Testing;
 using Puck.Assets;
 using Puck.HumbleGamingBrick.Forge.Framework;
 using Xunit;
@@ -33,10 +32,7 @@ public sealed class PbakBundleContainerTests {
             ],
             formatVersion: formatVersion,
             header: ReadOnlyMemory<byte>.Empty
-        ).Encode(
-            magic: "PBAK"u8,
-            shape: FormatLedgerShapes.Of(id: "PbakBundle.SupportedVersion")
-        );
+        ).Encode(magic: "PBAK"u8);
     }
 
     [Fact]

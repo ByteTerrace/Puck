@@ -17,8 +17,8 @@ internal enum ReplayRefusal {
     [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict, Unsupported = true)]
     StartNotCheckpointable,
 
-    /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>
-    [Refusal(door: "replay.tape", condition: "the leading magic or shape token does not match this build's pinned .puckreplay shape", kind: RefusalKind.ProtocolFault)]
+    /// <summary>The leading magic or version does not match this build's pinned <c>.puckreplay</c> shape.</summary>
+    [Refusal(door: "replay.tape", condition: "the leading magic or version does not match this build's pinned .puckreplay shape", kind: RefusalKind.ProtocolFault)]
     ShapeMismatch,
 
     /// <summary>The recording's own simulation rate disagrees with the rate this build currently runs the

@@ -346,8 +346,8 @@ canary, parity, determinism, qualification, verdict and game fixtures sit under
 `experimental/` with the laws that booted them, and their gates are not run
 until the owner calls for qualification
 ([quarantined gates](../plans/open-items.md#quarantined-gates)). Until then
-the live checks are the build, the suites' remaining laws, the ledger and
-generator `--check` forms, and running the debug world.
+the live checks are the build, the suites' remaining laws, the generator
+`--check` forms, and running the debug world.
 
 The [World suites](../../tests/Puck.World.Tests/README.md) cover documents,
 protocol, authoritative simulation, and shipped game state programs. The
@@ -357,7 +357,8 @@ compiled dependency denied by `PuckArchitectureDeniedApi` in
 The emulator batteries, Maths laws, build, and running application provide
 additional checks with distinct scopes.
 
-`puck parity` boots the [authored parity world](../../experimental/tests/Puck.Parity/README.md)
+`puck parity --world <file>` boots a parity world, such as the quarantined
+[authored parity world](../../experimental/tests/Puck.Parity/README.md),
 offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
 four verdicts: valid content, exact simulation-state hash agreement, the tick
 each frame refreshed its bound regions at matching the capture's tick, and pixel
@@ -541,11 +542,7 @@ reserved capacity. For a repeatable reading, run
 boots the authored counters workload offscreen on each backend, writes a report
 with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
-the one after, using `puck counters compare`. `puck counters --check` also holds
-every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/debug.ceilings.json` by default, judging each device against its own
-record, and `--record` records the running device's counts into them in the
-change that explains why a count moved.
+the one after, using `puck counters compare`.
 
 Compare the same document, camera, resolution, quality settings, backend and
 build configuration before and after the change. Report these conditions with
@@ -690,7 +687,7 @@ must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
 The RTX 2060 and the RTX 4070 are the GPUs available for local testing, and
-the RTX 2060 records every counted-cost ceiling. Claims about the other
+the RTX 2060 is the floor device counted work is judged on. Claims about the other
 supported GPUs require vendor or driver documentation and should be framed as
 unverified when no device run exists.
 
@@ -914,41 +911,14 @@ meant to establish.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.
-- No source file over 2000 lines: `FileLengthAnalyzer` fails the build (LEN001)
-  unless `FileLengths.json` already records the file, and a recorded file may
-  only shrink (LEN002/LEN003). Split, then `puck lengths`—the ledger
-  never grows.
-- No new comment smell: `CommentSmellAnalyzer` fails the build (SMELL001)
-  when a file `CommentSmells.json` does not record carries an inline comment
-  in a named smell bucket, and a recorded file's count may only fall
-  (SMELL002/SMELL003). Rewrite or delete the comment, then
-  `puck comment-smells`. Both ledgers are
-  [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
-- A strictly versioned format token (a wire key, checkpoint or journal
-  version, replay shape token, baker version, magic, or `puck.<name>.vN`
-  schema) is recorded in `FormatVersions.json` with the shape fingerprint of its
-  source. Edit the source, then run `puck formats`, which rewrites the ledger and
-  each project's generated `FormatShapes.g.cs`; formatting preserves the
-  fingerprint. `puck formats --check` fails on any disagreement but never asks
-  for a token bump: the codec writes its fingerprint in its header or handshake
-  and refuses data of any other shape by name before any state changes, so a
-  token cannot say what the fingerprint does not. The fingerprint covers the
-  codec's layouts and the members of its files that touch bytes, the enums it
-  casts and the members it calls that carry `[FormatLeaf]`; a call into any other
-  repository member is recorded as open in the ledger, so a helper that decides a byte is marked
-  `[FormatLeaf]`, one that decides none is marked
-  `[FormatSeam("its behaviour sets no byte because …")]`, and a codec that
-  drives the engine moves that work out. Two lanes that edit one codec
-  differently conflict on its shape line in the ledger instead of colliding at
-  run time.
-  [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
-- The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
-  never declared by hand. A change that adds or removes canary cost runs
-  `puck canary-ceilings` and states the new `puck canary --merge --plan`
-  counts in its commit; `puck canary-ceilings --check` requires each recorded
-  count to equal its plan. When a merge conflicts in the file, rerun the verb
-  rather than recomputing counts.
-  [`puck canary-ceilings`](../reference/cli.md#puck-canary-ceilingsrecorded-gate-costs).
+- A strictly versioned format (a wire key, checkpoint or journal version,
+  replay tape version, magic, or `puck.<name>.vN` schema) carries its own
+  version or magic, which its codec writes in its header or handshake and
+  refuses any other by name before any state changes. Nothing records a
+  layout, so a change to a format's layout raises its version (or the digit
+  of its magic) in the same change, to a value it never had before; a version
+  that stays put or returns while its layout moves misreads old data instead of
+  refusing it.
 - A call through an unmanaged function pointer (`delegate* unmanaged`, any
   calling convention) may not use a signature that mentions a type parameter
   except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,

@@ -549,7 +549,7 @@ public static partial class WorldDecompiler {
     // expression happens to have exactly the "row[cell]" shape (a live cell read used as a dynamic key) — printing
     // strips the "$expr:" prefix (`ExpressionSpelling`'s own `Print`), but reparsing then reads "row[cell]" as a
     // `$cell:` indirection instead, a different key spelling for the same key text. Testing the round trip directly,
-    // rather than re-deriving `ExpressionSpelling`'s own key grammar, is what rule 8 asks for here.
+    // rather than re-deriving `ExpressionSpelling`'s own key grammar, is what AGENTS.md rule 7 asks for here.
     private static bool RowRefRoundTrips(string name, string? key) {
         var printed = FormatRowRef(
             key: key,
@@ -858,7 +858,7 @@ public static partial class WorldDecompiler {
         : FormatRowRef(FormatStateReference(node: obj["state"]), obj["key"]?.ToString())
     );
     // Prints a state/key pair through `ExpressionSpelling.TryPrintSource` rather than hand-built bracket
-    // concatenation (rule 8): a `key` carrying a `$expr:`/`$cell:` indirection prefix has its OWN print spelling
+    // concatenation (AGENTS.md rule 7): a `key` carrying a `$expr:`/`$cell:` indirection prefix has its OWN print spelling
     // (the prefix is stripped and the underlying expression reprinted, parenthesized when it is a bare name) that a
     // literal `state[key]` splice would get wrong, and the source dialect backquotes a keyless plain name one of
     // the caller's `ExpressionSpelling.WithLocals` locals shadows.

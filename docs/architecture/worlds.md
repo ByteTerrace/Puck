@@ -125,7 +125,7 @@ names it as deferred. Nothing is repaired or adapted.
 |---|---|---|
 | `DEFN` | The drawn, resolved definition as compact canonical JSON: the composed definition after its first-fill draws and the state references they fill, before host overrides, which every boot applies. Loading it parses the JSON in place of drawing again. | None |
 | `ASST` | For every music, table, tune, and patch row, in order of family then name: the family, row name, authored source, and the source file's 64-bit content hash, or its absence. | Each distinct asset source, by its authored spelling, read beside the document ([paths a document names](#paths-a-document-names)) |
-| `CURV` | Each drawn curve's exact compiled coefficients, stations and arc tables, in document order. `CompiledCurvatureSpline` reads and writes the binary form and refuses a foreign shape fingerprint. Loading seeds the shared curve cache before admission. | None; it reads `DEFN` |
+| `CURV` | Each drawn curve's exact compiled coefficients, stations and arc tables, in document order. `CompiledCurvatureSpline` reads and writes the binary form and refuses a foreign magic. Loading seeds the shared curve cache before admission. | None; it reads `DEFN` |
 | `BAKE` | The path of the bake pack relative to the document's directory, then every distinct bake key of the drawn definition's prototypes at the standard tier, as the key's pin, in ordinal order. The outcomes live in the pack, not here ([creation bakes](#creation-bakes)). Its version is the baker's. It does not derive on boot. | None; it reads `DEFN` |
 
 `CompiledWorldChunks` lists the derivations in the order they derive and load,

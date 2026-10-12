@@ -7,7 +7,6 @@ namespace Puck.Cli.Gate.Tests;
 
 public sealed class GateBaselineLawTests : GateRunLaws {
     [InlineData("src/Puck.World/Assets/worlds/game.puck", "corpus-inventory")]
-    [InlineData("VerifiedCode.json", "maths-ledger")]
     [InlineData("build/trigger.props", "corpus-inventory,maths-ledger")]
     [InlineData("docs/only.md", "")]
     [Theory]
@@ -28,7 +27,7 @@ public sealed class GateBaselineLawTests : GateRunLaws {
         Assert.Equal(expected: expected, actual: checks.Select(selector: static arguments => arguments[1]));
         var log = File.ReadAllText(path: directory.PathOf(name: "gate.log"));
         var summary = File.ReadAllLines(path: directory.PathOf(name: "gate.steps"));
-        var previous = runner.Events.IndexOf(item: "run derivations");
+        var previous = runner.Events.IndexOf(item: "run branding");
 
         foreach (var arguments in checks) {
             var name = ("baselines " + arguments[1]);
@@ -48,7 +47,7 @@ public sealed class GateBaselineLawTests : GateRunLaws {
         // Each canary's verdict reaches the console as it lands, and every step reports its wall time.
         Assert.Contains(actualString: gate.Output, expectedSubstring: "gate:   PASS: canary example held");
         Assert.Contains(actualString: gate.Output, expectedSubstring: "gate: affected canaries passed (");
-        Assert.Contains(actualString: gate.Output, expectedSubstring: "gate: derivations passed (");
+        Assert.Contains(actualString: gate.Output, expectedSubstring: "gate: branding passed (");
     }
     [Fact]
     public void PrintedBaselineCommandsParseAndAreExactlyWhatTheGateRuns() {

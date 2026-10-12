@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Reflection;
 using System.Text;
 using Puck.Assets;
 
@@ -46,39 +45,10 @@ public static class CompiledWorld {
     public static string EngineBuild => Build.Value;
 
     private static string ComputeEngineBuild() {
-        var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
-        var pending = new Stack<Assembly>();
-
-        pending.Push(item: typeof(WorldDefinition).Assembly);
-
-        while (pending.TryPop(result: out var assembly)) {
-            var name = (assembly.GetName().Name ?? string.Empty);
-
-            if (!modules.TryAdd(
-                key: name,
-                value: assembly.ManifestModule.ModuleVersionId
-            )) {
-                continue;
-            }
-
-            foreach (var reference in assembly.GetReferencedAssemblies()) {
-                if (
-                    (reference.Name is { } referenced) &&
-                    referenced.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "Puck."
-                ) &&
-                    !modules.ContainsKey(key: referenced)
-                ) {
-                    pending.Push(item: Assembly.Load(assemblyRef: reference));
-                }
-            }
-        }
-
         var text = new StringBuilder();
 
-        foreach (var (name, moduleVersionId) in modules) {
-            _ = text.Append(value: name).Append(value: ':').Append(value: moduleVersionId.ToString(format: "N")).Append(value: '\n');
+        foreach (var (name, assembly) in AssemblyReach.Of(root: typeof(WorldDefinition).Assembly)) {
+            _ = text.Append(value: name).Append(value: ':').Append(value: assembly.ManifestModule.ModuleVersionId.ToString(format: "N")).Append(value: '\n');
         }
 
         return AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).ToString();
@@ -124,8 +94,7 @@ public static class CompiledWorld {
             formatVersion: FormatVersion,
             header: writer.WrittenSpan.ToArray()
         ).Encode(
-            magic: Magic,
-            shape: FormatShapes.CompiledWorldFormatVersion
+            magic: Magic
         );
     }
     /// <summary>Returns the header a boot of <paramref name="authored"/> keys its compiled world by.</summary>
@@ -205,8 +174,7 @@ public static class CompiledWorld {
         try {
             var decoded = ChunkContainer.Decode(
                 content: content,
-                magic: Magic,
-                shape: FormatShapes.CompiledWorldFormatVersion
+                magic: Magic
             );
 
             if (decoded.FormatVersion != FormatVersion) {

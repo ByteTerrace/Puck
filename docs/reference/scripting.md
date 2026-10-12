@@ -125,15 +125,12 @@ A module agrees on a **byte contract**, not a function-call ABI. Every multi-byt
 little-endian; every fixed-point value is `FixedQ4816` raw `i64` bits (`One = 0x1_0000`). No
 `f32`/`f64` appears anywhere, in either direction.
 
-`AddonAbi.AbiVersion` is `1`, permanently—a **shape-identity token, not a sequence**. There is
-one addon ABI; this host speaks exactly that shape, and a guest reporting any other value faults
-`AbiMismatch` loudly at mount and never ticks. A breaking change re-keys the artifacts (the module
-regenerates, the hash pins move) while the token stays `1`. What tells two layouts apart is the shape
-fingerprint `puck formats` records for the host's side of the ABI (`AddonAbi.AbiShapeFingerprint`): every
-guest returns it, as one word, from `puck_abi_shape`, and a guest of another shape faults `AbiMismatch`
-naming both. The generated Rust constants (`ABI_SHAPE`) move with it, so a guest built before the ABI changed
-is refused at mount, and `puck wasm-stdlib` then `puck wasm build`, which rebuilds every committed guest, are owed after
-any change to the host's ABI source.
+`AddonAbi.AbiVersion` is the ABI's version. There is one addon ABI; this host speaks exactly that
+version, and a guest reporting any other value faults `AbiMismatch` loudly at mount and never ticks,
+naming both. A change to the ABI raises the version in the same change, and the generated Rust
+constant (`ABI_VERSION`) moves with it, so a guest built before the ABI changed is refused at mount;
+`puck wasm-stdlib` then `puck wasm build`, which rebuilds every committed guest, are owed after any
+change to the host's ABI source.
 
 ### Guest exports
 
@@ -146,7 +143,6 @@ host how many it wrote back.
 |--------|-----------|----------|---------|
 | `memory` | memory | yes | The guest linear memory the host reads and writes. |
 | `puck_abi_version` | `() -> i32` | yes | Returns `AddonAbi.AbiVersion`. Exact match or `AbiMismatch`. |
-| `puck_abi_shape` | `() -> i64` | yes | Returns `AddonAbi.AbiShape`, the ledger's ABI shape fingerprint as one word. Exact match or `AbiMismatch`. |
 | `puck_out_ptr` | `() -> i32` | yes | Byte offset of the guest→host output ring. |
 | `puck_out_cap` | `() -> i32` | yes | Output ring capacity in cells, `0..=MaxOutCells`. |
 | `puck_in_ptr` | `() -> i32` | yes | Byte offset of the host→guest input ring. |
@@ -642,7 +638,7 @@ deliberately carries no span.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
-| `AbiMismatch` | `puck_abi_version` returned anything but `AddonAbi.AbiVersion`, or `puck_abi_shape` anything but `AddonAbi.AbiShape`—a stale committed artifact. |
+| `AbiMismatch` | `puck_abi_version` returned anything but `AddonAbi.AbiVersion`—a stale committed artifact. |
 | `BadExport` | A missing or wrong-shaped export, a declared import, an out-of-range region, or a refused descriptor/source table. |
 | `DecodeError` | A malformed output batch—structural or vocabulary. |
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |

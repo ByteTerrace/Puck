@@ -43,7 +43,6 @@ public sealed class UpdateServiceTests : IDisposable {
         Revoked: null,
         Rollout: new ReleaseRollout(Percent: rolloutPercent),
         Schema: ReleaseManifest.CurrentSchema,
-        Shape: ReleaseManifest.CurrentShape,
         Signature: null,
         StateGeneration: 1,
         Version: version

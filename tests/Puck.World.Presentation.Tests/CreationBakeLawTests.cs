@@ -31,8 +31,8 @@ public sealed class CreationBakeLawTests {
         """;
 
     // Each prototype's outcome in the bake pack of this file's world: the bake's bytes, which no host may change. Keys and
-    // the pack's chunk versions carry DerivationFingerprint.Bake and its header the WorldBakePack shape, so a regenerated
-    // fingerprint or a moved shape moves the pack but none of these; re-record one only when the bake's bytes move.
+    // the pack's chunk versions carry CreationBakeDerivation.Fingerprint, so a rebuilt baker moves the pack but none of
+    // these; re-record one only when the bake's bytes move.
     private static readonly IReadOnlyDictionary<string, string> PinnedOutcomes = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["pip"] = "sha256-64/884f8f986699e2c2",
         ["block"] = "sha256-64/cb7f36f87189923e",
@@ -164,7 +164,7 @@ public sealed class CreationBakeLawTests {
             (key with { Quality = SdfBakeQuality.Preview }).Pin,
         ];
 
-        Assert.Equal(expected: DerivationFingerprint.Bake, actual: key.Fingerprint);
+        Assert.Equal(expected: CreationBakeDerivation.Fingerprint, actual: key.Fingerprint);
         Assert.All(collection: moved, action: pin => Assert.NotEqual(expected: key.Pin, actual: pin));
         Assert.Equal(expected: moved.Length, actual: moved.Distinct().Count());
     }
@@ -556,7 +556,7 @@ public sealed class CreationBakeLawTests {
         var chunk = new WorldBakeChunk(store: null);
         var pack = CompileWithPack(path: path);
 
-        Assert.Equal(expected: DerivationFingerprint.BakeChunkVersion, actual: chunk.Version);
+        Assert.Equal(expected: CreationBakeDerivation.ChunkVersion, actual: chunk.Version);
         Assert.False(condition: chunk.DerivesOnBoot);
         Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: File.ReadAllBytes(path: CompiledWorld.Beside(documentPath: path)), header: out _, reason: out var reason), userMessage: reason);
         Assert.True(condition: container.TryFind(chunk: out var stored, code: chunk.Code));
@@ -587,7 +587,7 @@ public sealed class CreationBakeLawTests {
 
         Assert.True(
             condition: (outcomes.All(predicate: static outcome => (PinnedOutcomes.GetValueOrDefault(key: outcome.PrototypeId) == outcome.Outcome)) && (outcomes.Length == PinnedOutcomes.Count)),
-            userMessage: $"this world's bakes at fingerprint {DerivationFingerprint.Bake} are {string.Join(separator: ", ", values: outcomes.Select(selector: static outcome => $"{outcome.PrototypeId} {outcome.Outcome}"))}, pinned as {string.Join(separator: ", ", values: PinnedOutcomes.Select(selector: static pin => $"{pin.Key} {pin.Value}"))}; re-record a pin only when the bake's bytes moved, never for a host.\n{Anatomy(pack: pack)}"
+            userMessage: $"this world's bakes at fingerprint {CreationBakeDerivation.Fingerprint} are {string.Join(separator: ", ", values: outcomes.Select(selector: static outcome => $"{outcome.PrototypeId} {outcome.Outcome}"))}, pinned as {string.Join(separator: ", ", values: PinnedOutcomes.Select(selector: static pin => $"{pin.Key} {pin.Value}"))}; re-record a pin only when the bake's bytes moved, never for a host.\n{Anatomy(pack: pack)}"
         );
     }
 
@@ -596,7 +596,7 @@ public sealed class CreationBakeLawTests {
     private static string Anatomy(byte[] pack) {
         static string Digest(ReadOnlySpan<byte> bytes) => AssetContentHash.Compute(content: bytes.ToArray()).ToString();
         static byte[] Floats(IEnumerable<float> values) => [.. values.SelectMany(selector: static value => BitConverter.GetBytes(value: value))];
-        var anatomy = new StringBuilder().Append(value: $"pack {pack.Length} bytes, shape {FormatShapesOf()}, host {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}, Vector512 {System.Runtime.Intrinsics.Vector512.IsHardwareAccelerated}, Avx512F {System.Runtime.Intrinsics.X86.Avx512F.IsSupported}, Fma {System.Runtime.Intrinsics.X86.Fma.IsSupported}, Gfni {System.Runtime.Intrinsics.X86.Gfni.IsSupported}\n");
+        var anatomy = new StringBuilder().Append(value: $"pack {pack.Length} bytes, host {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}, Vector512 {System.Runtime.Intrinsics.Vector512.IsHardwareAccelerated}, Avx512F {System.Runtime.Intrinsics.X86.Avx512F.IsSupported}, Fma {System.Runtime.Intrinsics.X86.Fma.IsSupported}, Gfni {System.Runtime.Intrinsics.X86.Gfni.IsSupported}\n");
 
         foreach (var request in WorldBakeStore.RequestsOf(definition: Definition(), quality: WorldBakeChunk.Quality)) {
             var outcome = WorldBakeStore.Bake(request: request, work: out var work);
@@ -615,7 +615,6 @@ public sealed class CreationBakeLawTests {
 
         return anatomy.ToString();
     }
-    private static string FormatShapesOf() => (typeof(WorldBakePack).Assembly.GetType(name: "Puck.World.FormatShapes")?.GetField(name: "WorldBakePackFormatVersion")?.GetValue(obj: null)?.ToString() ?? "unknown");
 
     [Fact]
     public void APackIsOneCanonicalFileAndRefusesWhatItCannotAccountFor() {

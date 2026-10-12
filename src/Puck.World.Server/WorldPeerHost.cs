@@ -39,9 +39,8 @@ public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int Peer
 /// </remarks>
 public sealed class WorldPeerHost : IDisposable {
     /// <summary>The ceiling on concurrent in-flight unauthenticated handshakes (a socket accepted but not yet
-    /// admitted or refused). A safety representation constant, never a document knob (AGENTS.md core rule 8's
-    /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
-    /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
+    /// admitted or refused). A safety representation constant, never a document knob: it sizes the
+    /// pre-admission connection table, not a per-world tunable.
     /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (4096, the admitted population
     /// bound) — a stalled handshake never reaches the population table at all, so it needs its own,
     /// smaller ceiling. 64 is chosen against this class's own documented design target ("a trusted-LAN connection
@@ -385,23 +384,9 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
-            var (offeredKey, offeredShape) = HandshakeWireFormat.ReadHello(hello: helloBuffer);
+            var offeredKey = HandshakeWireFormat.ReadHello(hello: helloBuffer);
 
             if (offeredKey == WorldFederationCodec.WireKey) {
-                if (!string.Equals(
-                    a: offeredShape,
-                    b: WorldFederationCodec.WireShape,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    await WriteFederationRefusal(
-                        ct: handshakeCt,
-                        detail: $"federation wire shape {offeredShape} is not this authority's {WorldFederationCodec.WireShape}",
-                        refusal: WorldFederationRefusal.WireShapeMismatch,
-                        stream: stream
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                    return;
-                }
-
                 if (!m_authenticator.IsConfigured) {
                     await WriteFederationRefusal(
                         ct: handshakeCt,
@@ -484,12 +469,11 @@ public sealed class WorldPeerHost : IDisposable {
 
             if (!WorldHelloDoor.TryAccept(
                 offeredKey: offeredKey,
-                offeredShape: offeredShape,
                 refusal: out var helloRefusal
             )) {
                 await WorldPeerWireFormat.WriteHelloRefusedAsync(
                     ct: handshakeCt,
-                    reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} shape {offeredShape} != server 0x{WorldProtocol.WireProtocolKey:x16} shape {WorldProtocol.WireShape}",
+                    reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}",
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 

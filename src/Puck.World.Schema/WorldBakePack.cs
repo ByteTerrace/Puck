@@ -1,6 +1,5 @@
 using System.Buffers;
 using Puck.Assets;
-using Puck.SignedDistance.Baking;
 
 namespace Puck.World;
 
@@ -10,7 +9,7 @@ namespace Puck.World;
 /// (<see cref="Puck.World.Authoring.CreationBakeKey.Pin"/>): its header lists the keys, each as its pin's hex, in
 /// strictly ascending ordinal order after a count, and chunk <c>i</c>, coded <c>BAKE</c> and versioned with the unsigned
 /// integer represented by the bake fingerprint's first eight hexadecimal digits
-/// (<see cref="DerivationFingerprint.BakeChunkVersion"/>), holds key <c>i</c>'s encoded outcome
+/// (<see cref="Puck.World.Authoring.CreationBakeDerivation.ChunkVersion"/>), holds key <c>i</c>'s encoded outcome
 /// (<see cref="Puck.World.Authoring.CreationBakeCodec"/>). A compiled world's <c>BAKE</c> chunk
 /// (<see cref="WorldBakeChunk"/>) names the keys it needs and where this file lies relative to its document.
 /// <para>A build writes one beside the root of its output (<see cref="FileName"/>), holding exactly the keys its
@@ -68,7 +67,7 @@ public sealed class WorldBakePack {
             chunks.Add(item: new ContainerChunk(
                 code: EntryCode,
                 payload: outcome,
-                version: DerivationFingerprint.BakeChunkVersion
+                version: Puck.World.Authoring.CreationBakeDerivation.ChunkVersion
             ));
         }
 
@@ -77,8 +76,7 @@ public sealed class WorldBakePack {
             formatVersion: FormatVersion,
             header: header.WrittenSpan.ToArray()
         ).Encode(
-            magic: Magic,
-            shape: FormatShapes.WorldBakePackFormatVersion
+            magic: Magic
         );
     }
     /// <summary>Returns the pack reference a document at <paramref name="documentPath"/> records for the pack at
@@ -124,8 +122,7 @@ public sealed class WorldBakePack {
         try {
             var container = ChunkContainer.Decode(
                 content: content,
-                magic: Magic,
-                shape: FormatShapes.WorldBakePackFormatVersion
+                magic: Magic
             );
 
             if (container.FormatVersion != FormatVersion) {

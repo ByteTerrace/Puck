@@ -5,7 +5,7 @@ namespace Puck.Cli.Counters;
 /// <summary>The driver pipeline cache every counters leg starts from and writes back, one directory per backend under
 /// the per-user Puck directory. A leg boots its World in a fresh state directory, whose empty <c>pipeline-cache</c>
 /// would otherwise make the driver build every pipeline again; the cache's hits and misses are pacing counts, so a
-/// warm cache changes no count a report compares or a ceiling judges.</summary>
+/// warm cache changes no count a report compares.</summary>
 public static class CountersPipelineCache {
     /// <summary>The per-user directory's name under <see cref="PuckUserDirectory.Root"/>.</summary>
     public const string DirectoryName = "counters-pipeline-cache";

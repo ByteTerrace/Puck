@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The convention rewriters (`puck format`), the format-shape ledger (`puck formats`), and the pull-request formatter. -->
+    <!-- The convention rewriters (`puck format`) and the pull-request formatter. -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Format</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>

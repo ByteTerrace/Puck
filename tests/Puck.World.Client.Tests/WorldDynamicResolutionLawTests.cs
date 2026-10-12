@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Numerics;
-using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -22,7 +21,7 @@ namespace Puck.World.Client.Tests;
 /// newly timed renders against the display period, so under a present-paced display, where every kept present reads
 /// exactly its period, the grid rises again when the GPU's time drops; where the device times nothing it is a new
 /// present's interval against the period; where neither is available, newly completed renders' counted march steps
-/// against the budget the committed counters ceilings give per output pixel, and no budget holds the ceiling. Every
+/// against the load source's step budget per output pixel, and no budget holds the ceiling. Every
 /// signal answers the same trace of load against budget with the same grids. A pin overrides them all, bounded
 /// by the floor and ceiling. The grids it chooses are extents the render graph quantizes, so the views' extents follow them.
 /// </summary>
@@ -465,36 +464,6 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.Equal(expected: WorldDynamicResolutionSignal.Steps, actual: counted.Signal);
     }
     [Fact]
-    public void TheStepBudgetIsTheCommittedFloorCeilingsPerOutputPixel() {
-        var path = Path.Combine(path1: RepositoryRoot(), path2: "src/Puck.World/floor.ceilings.json");
-        var ceilings = JsonSerializer.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings, utf8Json: File.OpenRead(path: path))!;
-
-        foreach (var backend in ceilings.Backends) {
-            // The floor device's record is the backend's first; a record of another device after it moves nothing.
-            var steps = backend.Ceilings.Concat(second: backend.Devices[0].Ceilings)
-                .Where(predicate: static ceiling => ((ceiling.Node == WorldDynamicResolution.BudgetNode) && (ceiling.Kind == "gpu.march.steps")))
-                .Sum(selector: static ceiling => ceiling.Ceiling);
-
-            Assert.True(condition: (steps > 0L), userMessage: $"the {backend.Backend} floor record holds no march steps for the world node");
-            Assert.Equal(expected: (((double)steps) / (((long)ceilings.Width) * ceilings.Height)), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: ceilings));
-
-            var other = new WorldCountersDeviceCeilings(
-                Ceilings: [.. backend.Devices[0].Ceilings.Select(selector: static ceiling => (ceiling with { Ceiling = (ceiling.Ceiling * 2L) }))],
-                Device: (backend.Devices[0].Device with { DeviceId = (backend.Devices[0].Device.DeviceId + 1U) })
-            );
-            var withOther = ceilings with {
-                Backends = [.. ceilings.Backends.Select(selector: candidate => (ReferenceEquals(objA: candidate, objB: backend) ? (candidate with { Devices = [.. candidate.Devices, other] }) : candidate))],
-            };
-
-            Assert.Equal(expected: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: ceilings), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: withOther));
-        }
-
-        // A backend nothing was recorded on reads the first backend; a document with no backend or no device gives no budget.
-        Assert.Equal(expected: WorldDynamicResolution.StepBudgetPerPixel(backend: ceilings.Backends[0].Backend, ceilings: ceilings), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "metal", ceilings: ceilings));
-        Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Backends = [] })));
-        Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Backends = [.. ceilings.Backends.Select(selector: static backend => (backend with { Devices = [] }))] })));
-    }
-    [Fact]
     public void APinOverridesTheLoadAndBothBoundsHoldIt() {
         var controller = new WorldDynamicResolution();
         var load = new ScriptedLoad(controller: controller);
@@ -545,16 +514,6 @@ public sealed class WorldDynamicResolutionLawTests {
 
         return ((shift >= 0) ? ((left << shift) <= right) : (left <= (right << -shift)));
     }
-    private static string RepositoryRoot() {
-        for (var directory = new DirectoryInfo(path: AppContext.BaseDirectory); (directory is not null); directory = directory.Parent) {
-            if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
-                return directory.FullName;
-            }
-        }
-
-        throw new InvalidOperationException(message: "No checkout holds the test assembly.");
-    }
-
     // A load whose timed renders, presents and completed renders the law scripts, each read once: a timed render takes
     // the given number of display periods of GPU time, each Present advances the present count by one at the given
     // number of display periods after the last and follows a completed render, and each completed render counts either

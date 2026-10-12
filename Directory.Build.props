@@ -103,29 +103,15 @@
         <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="RunDirectory.cs" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
-        <!-- Puck.Maths carries zero ProjectReferences by design (see Puck.Maths.csproj), so the [VerifiedCode]
-             marker attribute is linked into every project as source rather than shared via a project reference.
+    <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('OpensGpuDeviceAttribute.cs')))">
+        <!-- Puck.Maths carries zero ProjectReferences by design (see Puck.Maths.csproj), so the marker attributes
+             are linked into every project as source rather than shared via a project reference.
              The Condition guards against double-inclusion if Directory.Build.props is ever imported more than
              once for the same project — without it, a second pass would add the same Compile item twice, which
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build/VerifiedCodeAttribute.cs" Link="Properties/VerifiedCodeAttribute.cs" />
-        <!-- The format boundary markers `puck formats` reads from syntax; linked as source for the same reason. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatLeafAttribute.cs" Link="Properties/FormatLeafAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatSeamAttribute.cs" Link="Properties/FormatSeamAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatPartAttribute.cs" Link="Properties/FormatPartAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
-        <!-- The way onto the host's GPU, matched by name by GpuTraitAnalyzer (GPU001); linked like the brand. -->
+        <!-- The way onto the host's GPU, matched by name by GpuTraitAnalyzer (GPU001). -->
         <Compile Include="$(MSBuildThisFileDirectory)build/OpensGpuDeviceAttribute.cs" Link="Properties/OpensGpuDeviceAttribute.cs" />
-        <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
-             itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
-        <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />
-        <!-- The two ratchet ledgers: FileLengthAnalyzer reads the file-length ledger (LEN001-LEN004) and
-             CommentSmellAnalyzer the comment-smell ledger (SMELL001-SMELL004); `puck lengths` and
-             `puck comment-smells` regenerate them. -->
-        <AdditionalFiles Include="$(MSBuildThisFileDirectory)FileLengths.json" />
-        <AdditionalFiles Include="$(MSBuildThisFileDirectory)CommentSmells.json" />
     </ItemGroup>
 
     <!-- Every project except the analyzer itself (which would otherwise be a build-order cycle: the analyzer

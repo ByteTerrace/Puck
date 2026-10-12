@@ -3,14 +3,14 @@ using System.Numerics;
 namespace Puck.Maths;
 
 public sealed partial class CompiledCurvatureSpline {
+    // The final digit is the layout's version: raise it whenever the layout below changes.
     private const string Magic = "PUCKCUR1";
 
-    /// <summary>Writes the exact compiled coefficients and arc tables, with this codec's shape fingerprint.</summary>
+    /// <summary>Writes the exact compiled coefficients and arc tables after this codec's magic.</summary>
     /// <param name="writer">The destination; it remains open.</param>
     public void Write(BinaryWriter writer) {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Write(value: Magic);
-        writer.Write(value: FormatShapes.CompiledCurvatureSplineMagic);
         writer.Write(value: ((byte)(Closed ? 1 : 0)));
         writer.Write(value: TotalLengthRaw);
         writer.Write(value: m_segments.Length);
@@ -47,11 +47,11 @@ public sealed partial class CompiledCurvatureSpline {
     /// <summary>Reads one compiled spline without solving or narrowing any coefficient.</summary>
     /// <param name="reader">The source; it remains open and is positioned after the spline.</param>
     /// <returns>The exact stored spline.</returns>
-    /// <exception cref="InvalidDataException">The format, fingerprint, stations or arc tables are invalid.</exception>
+    /// <exception cref="InvalidDataException">The magic, stations or arc tables are invalid.</exception>
     public static CompiledCurvatureSpline Read(BinaryReader reader) {
         ArgumentNullException.ThrowIfNull(reader);
-        if ((reader.ReadString() != Magic) || (reader.ReadString() != FormatShapes.CompiledCurvatureSplineMagic)) {
-            throw new InvalidDataException(message: "Foreign compiled curvature spline shape.");
+        if (reader.ReadString() != Magic) {
+            throw new InvalidDataException(message: "Foreign compiled curvature spline magic.");
         }
         var closure = reader.ReadByte();
         var length = reader.ReadInt64();

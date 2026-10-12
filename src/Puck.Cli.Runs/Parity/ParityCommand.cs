@@ -6,20 +6,18 @@ using Puck.World;
 
 namespace Puck.Cli.Parity;
 
-/// <summary><c>puck parity</c> — the cross-backend check over the authored parity world. It boots the real
+/// <summary><c>puck parity</c> — the cross-backend check over a parity world the caller names. It boots the real
 /// <c>Puck.World</c> once per graphics backend with <c>host.presentation: offscreen</c> (no window is ever shown),
 /// lets the world's own <c>captures</c> rows land every tick-scheduled capture and write a
 /// <c>puck.parity.manifest.v1</c>, and then hands the two manifest directories to
 /// <see cref="ParityCompareCommand"/> — the content-gate / exact-state-hash / per-tile-pixel comparator — under the
-/// contract versioned beside the world (<c>tests/Puck.Parity/parity.contract.json</c>). Because both backends
-/// capture the same simulation ticks, the pair observes one moment by construction rather than by fence.</summary>
+/// contract versioned beside the world (<c>&lt;stem&gt;.contract.json</c> beside <c>&lt;stem&gt;.puck</c>). Because
+/// both backends capture the same simulation ticks, the pair observes one moment by construction rather than by
+/// fence.</summary>
 public static class ParityCommand {
-    private const string ContractPath = "tests/Puck.Parity/parity.contract.json";
+    private const string ContractSuffix = ".contract.json";
     private const string ScratchPrefix = "puck-parity-";
-    private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
-    // The authored source of the parity world, and the name of the document the tree compile emits from it.
-    private const string ShippedWorldName = "parity.world.json";
-    private const string SourcePath = "tests/Puck.Parity/parity.puck";
+    private const string SdfDocumentSuffix = ".sdf.json";
     // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
     private const ulong WaitMarginTicks = 30;
     // The ticks the leg turns temporal reconstruction on before the world's first converging station, so every view's
@@ -28,9 +26,35 @@ public static class ParityCommand {
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
-    private static int Run(bool bakes, bool debugLayers) {
+    // A parity world: its .puck source, the tree beside it the run compiles (every document and source the world names),
+    // the contract its captures are judged under and its companion SDF document, both named for the source's stem, and
+    // the document the tree compile emits from the source.
+    private sealed record ParityWorld(string Source) {
+        public string Tree => Path.GetDirectoryName(path: Source)!;
+        public string Stem => WorldDocumentName.OfSourceFile(path: Path.GetFileName(path: Source));
+        public string Contract => Path.Combine(path1: Tree, path2: (Stem + ContractSuffix));
+        public string SdfDocumentName => (Stem + SdfDocumentSuffix);
+        public string ShippedName => WorldDocumentName.DocumentFile(name: Stem);
+    }
+
+    private static int Run(string? source, bool bakes, bool debugLayers) {
+        if (source is null) {
+            return CliExit.Refuse(verb: "parity", what: "--world", why: "is required: name the parity world's .puck source. No live world is a parity world while the authored parity world is quarantined under experimental/tests/Puck.Parity.");
+        }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
+        }
+
+        var world = new ParityWorld(Source: Path.GetFullPath(path: source));
+
+        if (!WorldDocumentName.IsSourceFile(path: world.Source) || !File.Exists(path: world.Source)) {
+            return CliExit.Refuse(verb: "parity", what: CliPaths.ToDisplay(fullPath: world.Source), why: $"is not a parity world's {WorldDocumentName.SourceSuffix} source.");
+        }
+
+        foreach (var companion in (ReadOnlySpan<string>)[world.Contract, Path.Combine(path1: world.Tree, path2: world.SdfDocumentName)]) {
+            if (!File.Exists(path: companion)) {
+                return CliExit.Refuse(verb: "parity", what: CliPaths.ToDisplay(fullPath: world.Source), why: $"has no {CliPaths.ToDisplay(fullPath: companion)} beside it; a parity world carries its contract and its companion SDF document.");
+            }
         }
 
         using var run = RunDirectory.Create(prefix: ScratchPrefix);
@@ -40,12 +64,13 @@ public static class ParityCommand {
         return run.Conclude(exitCode: Run(
             bakes: bakes,
             debugLayers: debugLayers,
+            parityWorld: world,
             repositoryRoot: repositoryRoot,
             runDirectory: run.Path
         ));
     }
     // One parity run inside its run directory, which the caller concludes with the exit code this returns.
-    private static int Run(bool bakes, bool debugLayers, string repositoryRoot, string runDirectory) {
+    private static int Run(bool bakes, bool debugLayers, ParityWorld parityWorld, string repositoryRoot, string runDirectory) {
         var suiteClock = Stopwatch.StartNew();
 
         if (!WorldOffscreenLeg.TryResolveWorld(
@@ -69,7 +94,7 @@ public static class ParityCommand {
         // from the pack, so no capture depends on a bake made on the device.
         if (!TryShipWorld(
             artifact: world.Path,
-            repositoryRoot: repositoryRoot,
+            parityWorld: parityWorld,
             runDirectory: runDirectory,
             suiteClock: suiteClock,
             world: out var shippedWorld
@@ -85,6 +110,7 @@ public static class ParityCommand {
                 backend: backend,
                 bakes: bakes,
                 debugLayers: debugLayers,
+                sdfDocumentName: parityWorld.SdfDocumentName,
                 shippedWorld: shippedWorld,
                 runDirectory: runDirectory,
                 suiteClock: suiteClock,
@@ -101,10 +127,7 @@ public static class ParityCommand {
         }
 
         return Fold(compared: ParityCompareCommand.Run(
-            contractPath: Path.Combine(
-                path1: repositoryRoot,
-                path2: ContractPath
-            ),
+            contractPath: parityWorld.Contract,
             leftDir: Path.Combine(
                 path1: runDirectory,
                 path2: "captures-vulkan"
@@ -200,22 +223,19 @@ public static class ParityCommand {
     // The compile runs through the world compiler the World artifact's own build wrote beside it, since a compiled world holds only
     // for the engine build that derived it (CompiledWorld.EngineBuild) and the World artifact's build is the one that
     // boots it.
-    private static bool TryShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
+    private static bool TryShipWorld(string artifact, ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
         world = string.Empty;
 
         try {
-            return ShipWorld(artifact: artifact, repositoryRoot: repositoryRoot, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
+            return ShipWorld(artifact: artifact, parityWorld: parityWorld, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"ERROR: the parity tree could not ship: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
         }
     }
-    private static bool ShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
-        var tree = Path.Combine(
-            path1: repositoryRoot,
-            path2: Path.GetDirectoryName(path: SourcePath)!
-        );
+    private static bool ShipWorld(string artifact, ParityWorld parityWorld, string runDirectory, Stopwatch suiteClock, out string world) {
+        var tree = parityWorld.Tree;
         var output = Path.Combine(
             path1: runDirectory,
             path2: "world"
@@ -225,7 +245,7 @@ public static class ParityCommand {
         _ = Directory.CreateDirectory(path: output);
         world = Path.Combine(
             path1: output,
-            path2: ShippedWorldName
+            path2: parityWorld.ShippedName
         );
 
         foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
@@ -331,7 +351,7 @@ public static class ParityCommand {
 
         return null;
     }
-    private static int RunBackend(string artifact, string backend, bool bakes, bool debugLayers, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
+    private static int RunBackend(string artifact, string backend, bool bakes, bool debugLayers, string sdfDocumentName, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
         validation = null;
 
         var captureDirectory = Path.Combine(
@@ -358,7 +378,7 @@ public static class ParityCommand {
         // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
         var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
-            path2: Path.GetFileName(path: SdfDocumentPath)
+            path2: sdfDocumentName
         ).Replace(
             newChar: '/',
             oldChar: '\\'
@@ -424,15 +444,16 @@ public static class ParityCommand {
     }
     public static Command Create() {
         var command = new Command(
-            description: "Boot the authored parity world offscreen once per backend and compare the two runs.",
+            description: "Boot a parity world offscreen once per backend and compare the two runs.",
             name: "parity"
         );
 
         command.Detail(detail: """
-            Boots the world authored in tests/Puck.Parity/parity.puck offscreen once per backend (vulkan, directx — no
-            window is shown), runs each leg until 30 ticks past the last tick its captures rows schedule,
-            collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
-            under tests/Puck.Parity/parity.contract.json.
+            Boots the parity world --world names (a .puck source) offscreen once per backend (vulkan,
+            directx — no window is shown), runs each leg until 30 ticks past the last tick its captures rows
+            schedule, collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the
+            pair under the contract beside the source (<stem>.contract.json). Each leg composes the companion
+            SDF document beside it (<stem>.sdf.json).
 
             Per capture, four independent verdicts, in order: the content gate (a capture its
             producer refused by name, one missing, or one below its station's census floor never reaches
@@ -443,7 +464,7 @@ public static class ParityCommand {
             across a whole-frame mean). Failures write both frames, a delta heatmap, and a
             per-verdict summary beside the run.
 
-            The parity world ships its bakes: the run compiles the parity tree with the World artifact's own
+            The parity world ships its bakes: the run compiles the source's directory with the World artifact's own
             CLI and boots the compiled world, whose BAKE chunk holds every bake from its pack, and a leg that
             resolved a bake on the device (sdf.bakes.scheduled above zero) fails, so no capture depends on a
             local bake. The static creations draw their bakes, as a world that ships them does by default. With
@@ -467,10 +488,14 @@ public static class ParityCommand {
         bakesOption.AcceptOnlyFromAmong(values: ["on", "off"]);
         var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot each backend's leg with --debug-layers, the validation layer of that backend, and fail the run when a leg's stderr has a validation message or says the layer never loaded." };
 
+        var worldOption = new Option<string?>(name: "--world") { Description = "The parity world's .puck source, with its <stem>.contract.json and <stem>.sdf.json beside it. There is no default; a run without it is refused." };
+
         command.Options.Add(item: bakesOption);
         command.Options.Add(item: debugLayersOption);
+        command.Options.Add(item: worldOption);
         command.Subcommands.Add(item: ParityCompareCommand.Create());
         command.SetAction(action: result => Run(
+            source: result.GetValue(option: worldOption),
             bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal),
             debugLayers: result.GetValue(option: debugLayersOption)
         ));

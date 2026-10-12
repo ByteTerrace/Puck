@@ -7,7 +7,7 @@ it is the repository's only rules file. [The engine manual](docs/README.md)
 explains concepts, [development guidance](docs/development/README.md) explains
 procedures, and the skills under `.claude/skills/` hold each area's settled
 contracts and agent procedures: load the one that owns an area before working in
-it (rule 8). Rule 2 applies to this file as well: when it argues against a change
+it (rule 7). Rule 2 applies to this file as well: when it argues against a change
 you were asked to make, it is stale, and you correct it in the same change.
 
 ## Puck is pre-release
@@ -42,8 +42,8 @@ agent works in that mode by default, without asking:
     engine to seeing it in the running debug world.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
-    and counters ceilings, test durations, and `VerifiedCode` brands are being
-    deleted, with the verbs and analyzers that maintain them.
+    and counters ceilings, test durations, and `VerifiedCode` brands are
+    deleted, with the verbs and analyzers that maintained them.
   - Direct3D 12 is the primary backend during development; Vulkan catches up
     when the owner calls for qualification.
   - Every project stays in the build.
@@ -86,33 +86,6 @@ version itself adds something (a pin the build enforces, a minimum a feature
 needs); verification evidence goes in the commit message. Update incoming links and routing, agent routing included, in the
 change that moves a document.
 
-## Enforcement
-
-The build enforces `VerifiedCode` brands (rule 7) and two ratchet ledgers
-through `Puck.Analyzers`. In a ratchet ledger a recorded per-file count may only
-fall: `FileLengths.json` (LEN001 to LEN004, `puck lengths`) allows no source
-file over 2000 lines unless already recorded, and `CommentSmells.json`
-(SMELL001 to SMELL004, `puck comment-smells`) allows no comment smell in a file
-it does not record. The
-[CLI reference](docs/reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers)
-owns their rules. The architecture check, calibrated ceilings, determinism
-checks, parity and canaries are verbs an agent runs when they pay for
-themselves ([`verification`](.claude/skills/verification/SKILL.md#optional-checks)).
-
-`Puck.Post` is quarantined in `experimental/` and out of the build: do not cite
-it as a gate, run it, or write a stage for it. The engine contract it covered is
-a live gap, except the slice `puck parity` covers
-([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)).
-Presentation-only float and artistic work are outside the simulation-state
-determinism contract.
-
-These checks cover observable behavior (pixels, hashes, parity, determinism)
-and say nothing about the design being settled. Every name, shape, document and
-ABI is free to change. A check that fails because a deliberate change moved a
-hash, baseline or ceiling is re-recorded, never worked around. A label calling
-something frozen, closed or versioned describes it today; it is never a reason to
-leave it that way (rules 2 and 5).
-
 ## Core rules
 
 Every rule below serves one principle: choose what is best for Puck in the long
@@ -142,7 +115,8 @@ settles a question, decide by that principle and say why.
    re-record a persisted replay or baseline it invalidates when you next run
    it. `puck test --reproduce` shows two runs agree. Never preserve a wrong
    result to keep a hash, and never add a path that reproduces old-wrong
-   behavior.
+   behavior. Presentation-only float and artistic work are outside this
+   contract.
 5. **Zero consumers, zero legacy.** Nothing outside this repository consumes
    Puck. Backwards compatibility is a non-goal; never raise it or let it shape a
    change. Rename, reshape and delete freely, updating every internal caller in
@@ -157,27 +131,7 @@ settles a question, decide by that principle and say why.
    into its own working branch and merges anything else only when its brief
    says to. `main` is the owner's: never merge, squash or push onto it unless
    the owner asks, because a push to `main` deploys to Azure.
-7. **Branded code is settled; changing it is deliberate.** A member carrying
-   `[VerifiedCode("id", …)]` has been proven correct over its whole input space.
-   `VerifiedCode.json` seals the source that proof read: the member's
-   declaration plus the declarations its entry lists under `dependencies`, one
-   level deep and listed by hand, so the list is part of what a re-verification
-   decides. An edit inside the seal fails the build with VER001, quoting the new
-   hash. If the change is right, re-establish the brand's `basis` (`exhaustive`,
-   `exact-by-construction`, or `exact-by-proof`, whose entry carries the
-   argument to re-read first), paste the new hash, and say in the commit why the
-   member is still correct. To unbrand, delete the attribute and its entry
-   together (one alone is VER002). Never delete a brand to unblock a build.
-   VER003 means the declaration's shape cannot be fingerprinted honestly
-   (`partial`, a preprocessor directive, a misplaced brand): restructure, never
-   suppress.
-   VER004 to VER010 refuse a brand, entry or ledger that cannot be trusted; each
-   message names its fix. An entry's `assembly` is the compilation that sweeps
-   it. Formatting never edits a branded declaration: the fingerprint covers its
-   tokens, so a formatter pass that adds parentheses or named arguments trips
-   VER001, and layout is no reason to re-verify. Keep files that hold branded
-   members out of a formatter's `--file-list` unless the change re-verifies them.
-8. **Find the system before building one.** A "new" mechanism here is usually an
+7. **Find the system before building one.** A "new" mechanism here is usually an
    existing one under another name. Load the owning skill (`puck-world`,
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
    `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
@@ -186,12 +140,12 @@ settles a question, decide by that principle and say why.
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
    places to look. A second implementation is a defect, and a skill wrong about
    its own area is corrected in the same change.
-9. **Line endings are LF and are never a topic.** `.gitattributes`
+8. **Line endings are LF and are never a topic.** `.gitattributes`
    (`* text=auto eol=lf`) and `.editorconfig` hold the contract, with
    `*.bat`/`*.cmd` and `*.slnx` pinned CRLF in both. Never investigate, report,
    fix or work around an end-of-line difference. If a diff or formatter run
    appears to be about newlines, the setting is wrong and gets corrected there.
-10. **Durable knowledge lives in the repository.** Write an owner ruling, a
+9. **Durable knowledge lives in the repository.** Write an owner ruling, a
    correction, a hazard or a decision into its owning home in the change that
    learns it: this file for rules every agent follows, the owning skill for an
    area's procedures and hazards, `docs/decisions/` for settled design,
@@ -221,7 +175,10 @@ delete code there once live code has eclipsed it. Never improve, fix, build or
 run it, or run its tests; its builds are expected to break as deletions land.
 It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 `Puck.Platform.Switch`, each firewalled from the root build
-([experimental/README.md](experimental/README.md)). While the current campaign
+([experimental/README.md](experimental/README.md)). The engine contract
+`Puck.Post` covered is a live gap: `puck parity --world <file>` covers a slice of
+it once a parity world exists, and none does while the campaign runs
+([contributing](docs/development/contributing.md#engine-changes-and-verification-coverage)). While the current campaign
 runs, `experimental/src/`, `experimental/tests/` and `experimental/worlds/` also
 hold every world but the debug world (`src/Puck.World/Assets/worlds/debug.puck`,
 the one live world and the World's default), each file at its old repository
@@ -251,7 +208,7 @@ tools. In brief:
   timeout or wait that passes alone is a flake to report, and a wrong value is
   a failure to fix.
 - Judge performance by code, disassembly and load-independent counts; only
-  counts set a ceiling or gate a change. Wall-clock and GPU timing are evidence
+  counts gate a change. Wall-clock and GPU timing are evidence
   read beside those counts, never alone, and run on a quiet machine: the lead
   keeps every agent's builds, tests and GPU legs off the machine while one
   runs ([the rule](docs/decisions/rendering.md#the-pipeline-foundation)).

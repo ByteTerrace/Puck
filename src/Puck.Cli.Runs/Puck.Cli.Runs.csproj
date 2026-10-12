@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The verbs that boot a World and judge it: canary, canary-ceilings, counters, parity, qualify, landing, determinism, publish and schema. -->
+    <!-- The verbs that boot a World and judge it: canary, counters, parity, qualify, landing, determinism, publish and schema. -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Runs</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>

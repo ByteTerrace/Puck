@@ -7,7 +7,7 @@ namespace Puck.Transpiler.Parsing;
 
 // The opaque-span operand scanner (§1.2 of the sugar wave) and the row-reference reader (§2.2) built on it. Both
 // hand raw text to Puck.State.ExpressionSpelling.TryParse rather than re-implementing any part of its grammar
-// (rule 8): the scanner assigns no meaning to the characters it passes over, only tracking bracket/backquote depth
+// (AGENTS.md rule 7): the scanner assigns no meaning to the characters it passes over, only tracking bracket/backquote depth
 // and the handful of stop conditions §1.2 names.
 public static partial class PuckParser {
     private static readonly string[] ComparatorPunctuation = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">"];

@@ -18,16 +18,13 @@ internal static class IndependentAttestationImplementation {
     internal const string SealingAlgorithm = "ecdh-p256-hkdf-sha256-aes256gcm";
     internal const string SigningAlgorithm = "ecdsa-p256-sha256";
 
-    // The shape fingerprint the ledger records for the production codec: the one value an independent reader of this spec
-    // is told, read from the checked-in ledger and never from the codec under test.
-    private static readonly string Shape = Puck.Testing.FormatLedgerShapes.Of(id: "CborAttestationCodec.FormatVersion");
     private static readonly byte[] AeadLabel = "puck.attestation.sealed.aad.v1"u8.ToArray();
     private static readonly byte[] HkdfLabel = "puck.attestation.sealed.v1"u8.ToArray();
 
     internal static byte[] EncodeHeader(IndependentHeader header) {
         var writer = NewWriter();
 
-        writer.WriteStartArray(definiteLength: 10);
+        writer.WriteStartArray(definiteLength: 9);
         WriteHeaderFields(
             header: header,
             writer: writer
@@ -351,16 +348,12 @@ internal static class IndependentAttestationImplementation {
         var reader = NewReader(bytes: signedPortion);
 
         ExpectArray(
-            length: 12,
+            length: 11,
             reader: reader
         );
 
         if (reader.ReadUInt64() != 1UL) {
             throw new FormatException(message: "The independent decoder only accepts v1.");
-        }
-
-        if (reader.ReadTextString() != Shape) {
-            throw new FormatException(message: "The independent decoder only accepts the recorded shape fingerprint.");
         }
 
         var header = new IndependentHeader(
@@ -567,7 +560,7 @@ internal static class IndependentAttestationImplementation {
     private static byte[] EncodeSignedPortion(IndependentHeader header, ulong payloadKind, ReadOnlySpan<byte> payload) {
         var writer = NewWriter();
 
-        writer.WriteStartArray(definiteLength: 12);
+        writer.WriteStartArray(definiteLength: 11);
         WriteHeaderFields(
             header: header,
             writer: writer
@@ -718,7 +711,6 @@ internal static class IndependentAttestationImplementation {
     }
     private static void WriteHeaderFields(CborWriter writer, IndependentHeader header) {
         writer.WriteUInt64(value: 1UL);
-        writer.WriteTextString(value: Shape);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
         WriteOptionalText(
             writer: writer,

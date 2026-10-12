@@ -58,7 +58,7 @@ public sealed class WorldReleaseOfficialPackageTests {
         File.WriteAllText(
             Path.Combine(
                 path1: source.FullName,
-                path2: "puck.world.json"
+                path2: "primary.world.json"
             ),
             primary.ToJsonString()
         );
@@ -77,7 +77,7 @@ public sealed class WorldReleaseOfficialPackageTests {
         );
         Assert.Equal(
             0,
-            await WorldPrepareCommand.Create().Parse([source.FullName, "--output", output]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken)
+            await WorldPrepareCommand.Create().Parse([Path.Combine(path1: source.FullName, path2: "primary.world.json"), "--output", output]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken)
         );
         var published = File.ReadAllText(path: Path.Combine(
             path1: output,
