@@ -160,8 +160,10 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
 #endif
     // Occlusion follows the geometric normal. Material Soften changes the later lighting normal only.
     sdfSecondaryMarchActive = true;
+    sdfBoundedFieldActive = true;
     info.ambient = calcAO(surfacePoint, surface.normal, mask, stepScale, fast);
     sdfSecondaryMarchActive = false;
+    sdfBoundedFieldActive = false;
 #ifdef SDF_GROUP_SHADOW_GATHER
     sdfAmbientMaskActive = false;
 #endif

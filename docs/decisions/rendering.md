@@ -149,6 +149,30 @@ unified-memory devices included.
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
 
+**The shadow and ambient walks read a body no nearer than its influence
+sphere.** In the soft-shadow and ambient-occlusion marches, and only there, an
+instance reads as the larger of its field and the distance to its packed
+influence sphere, `max(field, |p - c| - r)`
+(`SdfProgram.InstanceBoundsSecondaryField`). A gauge, a non-uniform scale, a
+warp or a field op underestimates distance away from its surface, so a walk
+that reads the field alone evaluates such an instance until the gap to its
+sphere, divided by the rate its field certifies, reaches the running minimum,
+and always when it certifies none; on the debug world's Moth that costs most of
+a second of shadow work a frame. Read through the floor, every instance is
+rejected whole once the gap reaches the running minimum. The maximum is continuous, so it draws no contour
+rings, and it is sound: the sphere holds the solid those walks see, so outside
+it the gap is at most the true distance, and inside it the floor is negative and
+every surface and interior keeps its sign. The march never steps past a surface,
+and `SdfShadowQuery.Ceiling` still caps each query. What changes is the
+far-field estimate the penumbra reads: near an underestimating body it rises
+toward the true distance, so an avatar's soft shadow is lighter at its edges.
+That penumbra is accepted. Primary rays, surface normals, the debug views and
+the indirect walks read the field itself. An instance is bounded only under the
+root-union certificate, which keeps its floor out of any later operation on the
+shared accumulator, and never when an operand those walks drop (an optional
+intersection, xor or morph) or a lane erosion can widen its solid past the
+sphere; such an instance keeps its own field and its certified gain.
+
 **P6's five representation experiments are in the programme's scope.** They
 are a per-placement choice between the field, a bake and a mesh, decided by
 counted cost; shadows and ambient occlusion on meshes; capsule or ellipsoid

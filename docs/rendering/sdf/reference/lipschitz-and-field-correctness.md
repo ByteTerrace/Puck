@@ -236,7 +236,14 @@ times `SdfProgram.InstanceDistanceGain`: at most the inverse of
 parent sees it, and less for a gauge or a non-uniform scale, whose fields grow more slowly than
 distance (a smooth union's sag widens the bound until the gain absorbs it). Whole-instance
 rejection and the group-mask word summaries read that guarantee; an instance certifying no
-gain is never rejected whole. The directory's running-minimum skip never reads an instance
+gain is never rejected whole by it. The shadow and ambient-occlusion walks read the first
+guarantee instead wherever `SdfProgram.InstanceBoundsSecondaryField` holds: there an instance
+reads as `max(field, distance to the bound)`, which never exceeds the true distance because the
+bound contains the solid those walks see, and keeps every surface and interior because the
+floor is negative inside the bound. That needs the root-union certificate, so the floor feeds no
+later operation on the global accumulator, and an instance whose dropped operands (an optional
+intersection, xor or morph) or lane erosion could widen its solid past the bound keeps its own
+field ([the ruling](../../../decisions/rendering.md#the-pipeline-foundation)). The directory's running-minimum skip never reads an instance
 bound for a scope: a segment holding a push or pop is always evaluated, and the CPU evaluator
 culls only an instance that is a pure union with no scope.
 

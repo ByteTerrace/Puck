@@ -1,4 +1,4 @@
-// Generated from shader interface 'indirect' (sha256/b370ec34609c657556e1d47a87fb1127984974a1788165274acb44389f924193). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'indirect' (sha256/7879f41d793f946ad36d4d9626ff64ea6780db751f129281f7b5b620a392bc74). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_INDIRECT
 #define PUCK_SHADER_INTERFACE_INDIRECT
 
@@ -253,8 +253,8 @@ struct IndirectPass {
     [[vk::offset(2016)]] uint workCounterRow;
     [[vk::offset(2020)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa183DA6E6 : register(b0, space3);
-#define passGroup passGroupIsa183DA6E6
+[[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa09584F2A : register(b0, space3);
+#define passGroup passGroupIsa09584F2A
 [[vk::binding(1, 3)]] StructuredBuffer<int4> indirectBricks : register(t1, space3);
 [[vk::binding(2, 3)]] StructuredBuffer<uint4> indirectUpdates : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float4> indirectDirections : register(t3, space3);

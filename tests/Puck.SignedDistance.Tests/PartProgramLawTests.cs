@@ -81,6 +81,7 @@ public sealed class PartProgramLawTests {
         var rejects = (((20f - program.InspectInstance(index: 1).BoundRadius) * SdfProgram.DecodePartDistanceGain(entryCountLane: words[(entry + 2)])) >= 15f);
 
         Assert.False(condition: rejects, userMessage: "The bound of an optional intersection cannot reject the remaining subject.");
+        Assert.Equal(expected: 0u, actual: words[(entry + 2)] & SdfProgram.PartBoundedSecondaryFlag);
     }
 
     private static SdfProgram Build(List<SdfInstruction> instructions, SdfInstanceRange[] instances) => new(
@@ -435,9 +436,10 @@ public sealed class PartProgramLawTests {
             2u,
             words[(secondBindings + 1)]
         );
-        // Dynamic, two bindings, and the unit distance gain of two exact spheres in a hard-union scope.
+        // Dynamic, bounded in the shadow and ambient walks, two bindings, and the unit distance gain of two exact spheres in
+        // a hard-union scope.
         Assert.Equal(
-            0x80000002u | (SdfProgram.PartDistanceGainMask << SdfProgram.PartDistanceGainShift),
+            0x80000002u | SdfProgram.PartBoundedSecondaryFlag | (SdfProgram.PartDistanceGainMask << SdfProgram.PartDistanceGainShift),
             words[(table + 6)]
         );
         Assert.Equal(expected: 1f, actual: SdfProgram.DecodePartDistanceGain(entryCountLane: words[(table + 6)]));
