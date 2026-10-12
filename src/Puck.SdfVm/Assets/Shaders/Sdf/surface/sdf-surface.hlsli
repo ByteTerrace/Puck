@@ -1,5 +1,8 @@
 #ifndef PUCK_SDF_SURFACE_HLSLI
 #define PUCK_SDF_SURFACE_HLSLI
+#include "sdf-normals.hlsli"
+#include "sdf-shadow-gather.hlsli"
+#include "sdf-ambient.hlsli"
 
 // The surface and ambient stages: each reads the pixel's visibility record (sdf-visibility.hlsli), which primary wrote,
 // and writes its own rows. Every active pixel receives neutral N and S rows before the next dispatch, including misses
@@ -145,7 +148,9 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
     bool lit = active && (info.flags & 1u) != 0u;
     bool fast = worldUseFastAmbientOcclusion();
 #ifdef SDF_GROUP_SHADOW_GATHER
-    if (!fast) sdfBuildAmbientMask(surfacePoint, lit, lane);
+    // A program the shared mask cannot address walks the complete field (uniform: a program fact).
+    bool gathers = (!fast && sdfGroupMaskFits(sdfInstanceCount()));
+    if (gathers) sdfBuildAmbientMask(surfacePoint, lit, lane);
 #endif
     if (!lit) {
         if (active) sdfStoreVisibilityQueries(record, SDF_VISIBILITY_AMBIENT_QUERIES_WORD, 0.0);
@@ -156,7 +161,7 @@ void sdfResolveAmbient(float3 surfacePoint, uint cameraMask, uint2 pixel, uint v
     uint mask = fast ? cameraMask : SDF_INSTANCE_MASK_ALL;
     float initialQueries = sdfEvalCount;
 #ifdef SDF_GROUP_SHADOW_GATHER
-    sdfAmbientMaskActive = !fast;
+    sdfAmbientMaskActive = gathers;
 #endif
     // Occlusion follows the geometric normal. Material Soften changes the later lighting normal only.
     sdfSecondaryMarchActive = true;

@@ -36,8 +36,9 @@ Find the existing mechanism before adding one: `puck references`,
 
 ## Which dispatch owns the code
 
-A view is a chain of separate dispatches, each compiling one stage of
-`sdf-world-views.comp.hlsl` through a pass macro: `mask` → `beam` → `tape` →
+A view is a chain of separate dispatches; the hit passes share one entry point
+(`passes/sdf-hit-entry.hlsli`) and each compiles its own stage through a pass
+macro: `mask` → `beam` → `tape` →
 `cull-args` → `mesh` (graphics) → `primary` (`sdfPrimaryStage`) → `surface`
 (normals and curvature, `sdfResolveSurface`) → `ambient` (AO) → `shadow` →
 `receiver` (indirect light, with the cache only) → `views` (materials and
@@ -65,6 +66,12 @@ table in [kernels](references/kernels.md#the-frame) says what each writes.
   `sdfViewsFieldReads`, and indirect work runs as resumable procedures behind
   one `sdfIndirectServe` call. Never add `[noinline]`: a real SPIR-V call loses
   the device on NVIDIA's Vulkan driver.
+- **Keep each hit kernel's include closure its own.** A hit kernel includes the
+  common head (`passes/sdf-hit-pass.hlsli`), only its own stage module, then the
+  entry; a stage module includes what it reads beyond `passes/sdf-world.hlsli`
+  itself. The shader cache keys, and a reload recompiles, by include closure, so
+  routing a stage module through the aggregator or another wrapper makes an edit
+  to it recompile every hit kernel.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:

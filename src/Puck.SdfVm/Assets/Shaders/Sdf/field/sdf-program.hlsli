@@ -97,10 +97,14 @@ float4 sdfDynamicTransformRow(uint index) {
 // shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
 // GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (surface/sdf-shadow-gather.hlsli's
-// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 2048-word mask costs 8 KiB per group, not per lane.
-// Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The mask addresses the first 8192 instances in 1 KiB: a group's
+// shared memory sets how many groups an SM holds, and a mask over all SDF_MAX_INSTANCES (8 KiB) held the shadow and
+// ambient passes to five groups where their registers allow six and eight. A program with more instances takes each
+// gather's complete-field path instead (sdfGroupMaskFits). Other kernels retain the small inactive per-thread array;
+// nothing in them builds a mask.
 #ifdef SDF_GROUP_SHADOW_GATHER
-#define SDF_SHADOW_MASK_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
+#define SDF_SHADOW_MASK_WORDS 256u
+bool sdfGroupMaskFits(uint instanceCount) { return (((instanceCount + 31u) >> 5u) <= SDF_SHADOW_MASK_WORDS); }
 #define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
 groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
 groupshared uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];

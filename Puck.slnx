@@ -85,6 +85,7 @@
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <Project Path="src/Puck.World.Server/Puck.World.Server.csproj" />
         <Project Path="src/Puck.World.Silo/Puck.World.Silo.csproj" />
+        <Project Path="src/Puck.World.Vocabulary/Puck.World.Vocabulary.csproj" />
         <Project Path="src/Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
         <Project Path="src/Puck.Transpiler/Puck.Transpiler.csproj" />
         <Project Path="src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />

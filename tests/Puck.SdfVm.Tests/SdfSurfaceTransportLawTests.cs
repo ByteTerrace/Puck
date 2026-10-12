@@ -253,7 +253,7 @@ public sealed partial class SdfSurfaceTransportLawTests {
     }
     [Fact]
     public void TheKernelsCarryTheTransportWithTheColorsWeights() {
-        var views = CodeOf(path: "passes/sdf-hit-stages.hlsli");
+        var views = CodeOf(path: "passes/sdf-views-stage.hlsli");
         var resolve = CodeOf(path: "passes/sdf-resolve.comp.hlsl");
         var composite = CodeOf(path: "passes/sdf-composite.comp.hlsl");
         var sky = CodeOf(path: "passes/sdf-sky-pass.hlsli");

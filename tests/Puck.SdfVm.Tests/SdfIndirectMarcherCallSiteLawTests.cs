@@ -52,14 +52,14 @@ public sealed class SdfIndirectMarcherCallSiteLawTests {
     public void TheViewsStageReadsTheFieldThroughOneLoop() {
         Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-views-field.hlsli", signature: "SdfViewsFieldReads sdfViewsFieldReads("),
             pattern: @"\bmap(Core|Masked|Distance|DistanceMasked)?\s*\("));
-        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-hit-stages.hlsli", signature: "float3 sdfViewsStage("),
+        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-views-stage.hlsli", signature: "float3 sdfViewsStage("),
             pattern: @"\bsdfViewsFieldReads\s*\("));
         Assert.DoesNotMatch(expectedRegexPattern: @"\bmap(Core|Masked|Distance|DistanceMasked|Grad|GradMasked)?\s*\(",
             actualString: Body(path: "passes/sdf-light-stage.hlsli", signature: "float3 sdfLightStage("));
     }
     [Fact]
     public void TheViewsStageCallsTheDebugViewOnce() {
-        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-hit-stages.hlsli", signature: "float3 sdfViewsStage("),
+        Assert.Single(collection: Regex.Matches(input: Body(path: "passes/sdf-views-stage.hlsli", signature: "float3 sdfViewsStage("),
             pattern: @"\bsdfDebugView\s*\("));
     }
     [Fact]

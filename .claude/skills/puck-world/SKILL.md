@@ -63,7 +63,7 @@ live document row; it is not the way to author a new rule.
 | `src/Puck.World.Console` | Server-side console modules (`world.grant`, `world.row`, `world.state`, `world.wait`, `replay.*`, `world.history`) |
 | `src/Puck.World.Addons` | The scripting-guest addon host |
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host (`WorldMachineHost`, `WorldMachineCatalog`) |
-| `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
+| `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldSeatBindings` (over `Puck.World.Vocabulary`'s `WorldAffordances`), `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
 | `src/Puck.World` | The sole composition root: `Program.cs`, audio, the screen binder, the shipped worlds under `Assets/` |
 | `src/Puck.World.AgentBridge`, `.AgentHarness`, `.AgentHarness.Azure` | Optional agent-participant extensions; no base world project references them |
 

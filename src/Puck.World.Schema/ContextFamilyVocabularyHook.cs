@@ -2,8 +2,8 @@ namespace Puck.World;
 
 /// <summary>
 /// Injection seam for the built-in context-family names an authored <see cref="WorldSeatModeFamily"/> must not
-/// collide with (<c>Puck.World.Client.WorldContextFamilies.Families</c>) — <c>Puck.World.Schema</c> sits beneath
-/// <c>Puck.World.Client</c> in the layering, the same seam shape <see cref="InputSourceVocabularyHook"/> crosses for
+/// collide with (<c>Puck.World.WorldContextFamilies.Families</c>) — <c>Puck.World.Schema</c> sits beneath
+/// <c>Puck.World.Vocabulary</c> in the layering, the same seam shape <see cref="InputSourceVocabularyHook"/> crosses for
 /// the physical-control vocabulary. Each composition root wires this hook with a
 /// <see cref="System.Runtime.CompilerServices.ModuleInitializerAttribute"/> method, installed before any validator
 /// can run.

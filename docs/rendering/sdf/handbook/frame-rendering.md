@@ -110,7 +110,13 @@ and ambient occlusion.
 **primary** (`sdf-world-primary.comp.hlsl`) traces camera rays from their tile's entry
 depth, raised to the mesh projection's near plane when necessary, and writes
 each pixel's visibility record: ray parameter, identity, material and march data,
-misses included. **surface** adds the geometric normal and curvature to it.
+misses included. Its stepping samples ask for distance alone; only the accepted or
+resolved sample tracks material. Under a hard-union root, a visible instance that is
+one static box (a one-leaf rigid plan, corner radius allowed) is an operand of its
+own: a ray that enters its sharp hull on a face's flat part meets it there exactly,
+and the partless march omits it and ends at that depth, so a ground grazed near the
+horizon costs a slab test rather than dozens of steps. A ray that starts inside the
+hull or enters it where a corner rounds away marches the box as before. **surface** adds the geometric normal and curvature to it.
 **ambient** evaluates contact occlusion along those normals into the record.
 **shadow** gathers and marches each selected light from each lit surface,
 packing four 8-bit stable visibilities into the record's K word. Each active

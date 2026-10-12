@@ -525,8 +525,8 @@ that adds the document's arms to the engine's polymorphic bases
 Several validation/serialization paths genuinely need knowledge this project is
 denied. Each crosses through a static injection point every composition root
 wires with a module initializer before `Main` runs—one shared method,
-`Puck.World.Client.WorldSchemaVocabularyHooks.Install`, called by
-`WorldDataHookInstaller` (`Puck.World`), `WorldSiloDataHookInstaller`
+`Puck.World.WorldSchemaVocabularyHooks.Install` (`Puck.World.Vocabulary`), called by
+`WorldDataHookInstaller` (`Puck.World`), `CliWorldVocabulary` (`Puck.Cli.Worlds`), `WorldSiloDataHookInstaller`
 (`Puck.World.Silo`), and `TestHookInstaller` (`tests/Puck.World.Transpiler.Tests`), so a
 seam one process wires and another does not cannot exist:
 
@@ -539,7 +539,7 @@ seam one process wires and another does not cannot exist:
   name is a declared `Puck.Input.Devices.GamepadType` member.
 - `ContextFamilyVocabularyHook.cs` supplies the built-in context-family names an
   authored `seatModes` family must not collide with, derived from
-  `Puck.World.Client.WorldContextFamilies.Families` rather than mirrored here.
+  `Puck.World.WorldContextFamilies.Families` rather than mirrored here.
 - `MutationKindVocabularyHook.cs` round-trips a `MutationKindMask` field
   (`WorldGrant.KindMask`) by NAME (`verbs:UpsertStateCell,RemoveStateCell`)
   against `WorldMutationKindCatalog`, which lives in `Puck.World.Protocol`,

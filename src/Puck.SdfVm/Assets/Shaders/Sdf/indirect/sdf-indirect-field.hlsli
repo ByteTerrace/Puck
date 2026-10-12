@@ -182,7 +182,7 @@ uint sdfIndirectGather(float3 origin, float reach, uint lane) {
     uint count = sdfInstanceCount();
     uint directory = sdfInstanceDirectoryOffset();
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(directory, count);
-    if (reach <= 0.0 || !grid.enabled || !sdfCanTracePartsIndependently()) { return SDF_INSTANCE_MASK_ALL; }
+    if (reach <= 0.0 || !grid.enabled || !sdfGroupMaskFits(count) || !sdfCanTracePartsIndependently()) { return SDF_INSTANCE_MASK_ALL; }
     for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += 64u) { sdfShadowMaskWords[word] = 0u; }
     GroupMemoryBarrierWithGroupSync();
     SdfGridQuery query = sdfGridBall(origin, reach);

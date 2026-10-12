@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Puck.World.Client;
 using Puck.World.Transpiler.Composition;
 
 namespace Puck.World;

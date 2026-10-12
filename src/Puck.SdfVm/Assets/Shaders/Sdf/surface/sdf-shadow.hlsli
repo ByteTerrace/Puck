@@ -2,6 +2,9 @@
 // and the barrier behind its march before any lane clears the shared mask for the next light.
 #ifndef SURFACE_SDF_SHADOW_HLSLI
 #define SURFACE_SDF_SHADOW_HLSLI
+#include "sdf-normals.hlsli"
+#include "sdf-shadow-gather.hlsli"
+#include "sdf-ambient.hlsli"
 #ifdef SDF_SHADOW_PASS
 #include "../frame/sdf-reprojection.hlsli"
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"

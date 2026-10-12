@@ -81,7 +81,7 @@ public sealed class SdfShadowAmortizationLawTests {
     [Fact]
     public void RejectedShadowsAlsoRejectColorHistorySoTheResolveCannotKeepTheirTrail() {
         Assert.Contains("shadowHistoryRW[word + 4u] = shadowReactive", Source(path: "surface/sdf-shadow.hlsli"));
-        Assert.Contains("reactivity = max(reactivity, (float)shadowHistory[word + 4u])", Source(path: "passes/sdf-hit-stages.hlsli"));
-        Assert.Contains("!worldSoftShadowsDisabled() && (passGroup.shadowSlotCount > 1u)", Source(path: "passes/sdf-hit-stages.hlsli"));
+        Assert.Contains("reactivity = max(reactivity, (float)shadowHistory[word + 4u])", Source(path: "passes/sdf-views-stage.hlsli"));
+        Assert.Contains("!worldSoftShadowsDisabled() && (passGroup.shadowSlotCount > 1u)", Source(path: "passes/sdf-views-stage.hlsli"));
     }
 }

@@ -90,7 +90,14 @@ reaches the running minimum, and one with no certified gain remains an
 individual candidate, as do oversized bounds. Each sample asks the field
 only up to the clearance at which neither the stride, hit decision nor penumbra estimate
 can change, so candidates beyond it are rejected before they are evaluated;
-the visibility is the full field's.
+the visibility is the full field's. Every bound the walk rejects by also lowers a
+published lower bound of the field, and the running minimum starts at the clearance a
+stride to the reach would need, so each sample also reports a proven clearance at no
+extra evaluation. Past the step ceiling the stride takes every step that clearance
+proves can neither hit nor lower the estimate: a point `s` further on reads at least
+`c - s`, so `k (c - s) / (t + s)` stays at or above the visibility. Shadow rays
+through open space then grow their stride geometrically instead of at the ceiling's
+pace; the samples' positions move, the estimate's proof does not.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
 conservative sampled-region behavior as primary rays. The minimum stride steps
 through an occluder thinner than itself, but a stride that reaches a fold wall

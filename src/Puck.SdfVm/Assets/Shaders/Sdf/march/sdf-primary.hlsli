@@ -18,10 +18,14 @@ struct SdfPrimaryMarch {
     bool found;
 };
 
-SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) {
+// A stepping sample asks for distance alone; only the sample the march accepts or resolves tracks its material, so
+// every other sample skips the material winner and seam bookkeeping and reads the tape's segment masks. The distance
+// is the same either way: material tracking never changes the geometric accumulator.
+SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart, bool trackMaterial) {
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
     if (localPart) {
-        sdfTapeTrackMaterial = true;
+        // A local part march selects geometry only (sdfTracePrimarySurface); its attributes are never read.
+        sdfTapeTrackMaterial = false;
         sdfTapeSample(position, mask);
         sdfMaterialBlendWeight = 0.0;
         sdfMaterialBlendOther = 0;
@@ -33,12 +37,12 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         hit.lanes = 0.0;
         hit.instanceIndex = -1;
         hit.frameSlot = SDF_TRANSFORM_SLOT_NONE;
-        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, true, false, 0.0);
+        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, false, false, 0.0);
         hit.distance *= sdfProgramLayout.stepScale;
         return hit;
     }
 #endif
-    return mapMasked(position, mask);
+    return mapCore(position, mask, trackMaterial);
 }
 
 SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float marchStart,
@@ -90,7 +94,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         // Hit acceptance reads this exact point. Keep the product and sum separately rounded on both backends.
         precise float3 sampleAdvance = (rayDirection * traveled);
         precise float3 samplePosition = (rayOrigin + sampleAdvance);
-        SdfHit hit = sdfPrimarySample(samplePosition, instanceMaskBase, part, localPart);
+        SdfHit hit = sdfPrimarySample(samplePosition, instanceMaskBase, part, localPart, resolving);
 
         sdfEvalCount += 1.0; // one primary-march sample, or the exhaustion arm's one extra evaluation
         sdfWorkSteps += 1u;
@@ -173,6 +177,12 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
         if (refine) {
             refineSteps++;
+        }
+        else if (!overshoot && (fieldDistance < hitThreshold) && !localPart && !sdfPrimaryOmitParts) {
+            // The accepted sample asked for distance alone: sample the same point again with its attributes. Local
+            // part marches and the partless scene march select geometry only; the complete field resolves theirs.
+            resolving = true;
+            continue;
         }
         else if (!overshoot && (fieldDistance < hitThreshold)) {
             hitSurface = true;
@@ -359,6 +369,71 @@ SdfPrimarySurface sdfTracePrimarySurface(float3 rayOrigin, float3 rayDirection, 
     return surface;
 }
 
+#if defined(SDF_PRIMARY_PASS) && !defined(SDF_VM_DISABLE_PART_PROGRAMS) && !defined(SDF_VM_DISABLE_RIGID_PLAN)
+// Whether a directory segment's whole field is one static box: a one-leaf static rigid plan whose leaf is an enabled,
+// unfolded, union Box (sdfBox, its corner radius at most its smallest half extent). Its frame is the leaf's pose, the
+// field mapCore's rigid walk evaluates. Under the root-union certificate an instance that is that segment alone joins
+// the root by hard union, so a ray can meet it where it enters the box (sdfAnalyticBoxEntry) rather than over the steps
+// a march needs to approach a face it grazes.
+bool sdfAnalyticBox(uint segment, out float3 translation, out float4 rotation, out bool identity, out float4 box) {
+    translation = 0.0;
+    rotation = float4(0.0, 0.0, 0.0, 1.0);
+    identity = true;
+    box = 0.0;
+    if (segment >= sdfProgramLayout.segmentCount) { return false; }
+    uint4 segmentMeta = sdfProgramWord(sdfProgramLayout.segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segment) + 1u);
+    if ((segmentMeta.x & SDF_SEGMENT_RIGID_PLAN) == 0u) { return false; }
+    uint4 plan = sdfProgramWord(sdfProgramLayout.rigidPlanOffset + segment);
+    if ((plan.y != 1u) || (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) || !sdfProgramRange(plan.x, 1u, 3u)) { return false; }
+    uint4 pose = sdfProgramWord(plan.x);
+    float4 leafBound = asfloat(sdfProgramWord(plan.x + 2u));
+    uint shapeIndex = (pose.w & SDF_RIGID_LEAF_SHAPE_MASK);
+    if (((pose.w & SDF_RIGID_LEAF_FOLDED) != 0u) || !(leafBound.w >= 0.0) || (shapeIndex >= sdfProgramLayout.instructionCount)) { return false; }
+    uint4 header = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + shapeIndex);
+    if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(header)) || ((SDF_INSTRUCTION_SHAPE(header) & SDF_SHAPE_TYPE_MASK) != SDF_SHAPE_BOX) ||
+        (SDF_INSTRUCTION_BLEND(header) != SDF_BLEND_UNION)) { return false; }
+    box = asfloat(sdfProgramWord(sdfProgramLayout.dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex)));
+    translation = asfloat(pose.xyz);
+    identity = ((pose.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) != 0u);
+    rotation = (identity ? rotation : asfloat(sdfProgramWord(plan.x + 1u)));
+    return (all(isfinite(box)) && all(box.xyz > 0.0) && (box.w >= 0.0) && (box.w <= min(box.x, min(box.y, box.z))) &&
+        all(isfinite(translation)));
+}
+// Where the ray meets a box (sdfAnalyticBox) within [near, far]: SDF_FAR_DISTANCE when it misses the box's sharp hull,
+// which holds the rounded box, and the hull's entry when that lies on a face's flat part, which both share; a negative
+// value when the answer is not analytic (the ray starts inside the hull, or enters it where a corner rounds away), and
+// the march takes the box instead. The slab test runs in the leaf's frame.
+float sdfAnalyticBoxEntry(float3 rayOrigin, float3 rayDirection, float3 translation, float4 rotation, bool identity,
+    float4 box, float near, float far) {
+    float3 origin = (rayOrigin - translation);
+    float3 direction = rayDirection;
+    if (!identity) {
+        origin = rotatePointByInverseQuaternion(origin, rotation);
+        direction = rotatePointByInverseQuaternion(direction, rotation);
+    }
+    float3 inverse;
+    [unroll] for (uint axis = 0u; axis < 3u; axis++) {
+        float component = direction[axis];
+        inverse[axis] = (1.0 / ((abs(component) < 1.0e-20) ? ((component < 0.0) ? -1.0e-20 : 1.0e-20) : component));
+    }
+    float3 low = ((-box.xyz - origin) * inverse);
+    float3 high = ((box.xyz - origin) * inverse);
+    float3 entries = min(low, high);
+    float3 exits = max(low, high);
+    float entry = max(entries.x, max(entries.y, entries.z));
+    float exit = min(exits.x, min(exits.y, exits.z));
+    if ((exit < max(entry, near)) || (entry > far)) { return SDF_FAR_DISTANCE; }
+    if (entry < near) { return -1.0; }
+    // The flat part of the entered face: the other two coordinates at least the corner radius inside the hull.
+    float3 inside = (box.xyz - box.w - abs(origin + (direction * entry)));
+    bool faceX = ((entries.x >= entries.y) && (entries.x >= entries.z));
+    bool faceY = (!faceX && (entries.y >= entries.z));
+    bool faceZ = (!faceX && !faceY);
+    bool flat = ((faceX || (inside.x >= 0.0)) && (faceY || (inside.y >= 0.0)) && (faceZ || (inside.z >= 0.0)));
+    return (flat ? entry : -1.0);
+}
+#endif
+
 SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float marchStart,
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint) {
@@ -368,6 +443,40 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
 #endif
     SdfPrimaryMarch result = (SdfPrimaryMarch)0;
     SdfPrimarySurface best = (SdfPrimarySurface)0;
+    // The nearest analytic entry: under the root-union certificate a visible instance that is one analytic box segment
+    // (sdfAnalyticBox) is an operand of its own. Where the ray's answer is analytic it is met there and omitted from the
+    // partless march, which then ends there too; the complete field still resolves the selected depth's attributes below.
+    // Up to four such boxes a ray; the rest stay in the march.
+    float analytic = SDF_FAR_DISTANCE;
+#if defined(SDF_PRIMARY_PASS) && !defined(SDF_VM_DISABLE_PART_PROGRAMS) && !defined(SDF_VM_DISABLE_RIGID_PLAN)
+    sdfPrimaryAnalytic = uint4(SDF_SEGMENT_NONE, SDF_SEGMENT_NONE, SDF_SEGMENT_NONE, SDF_SEGMENT_NONE);
+    if (independent) {
+        uint slots = 0u;
+        uint word = 0xFFFFFFFFu, bits = 0u, first, last, index;
+        sdfNextVisibleInstanceRange(instanceMaskBase, sdfProgramLayout.instanceOffset, sdfProgramLayout.instanceCount,
+            word, bits, first, last, index);
+        [loop]
+        while ((first != SDF_SEGMENT_NONE) && (slots < 4u)) {
+            uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + index];
+            float3 translation;
+            float4 rotation;
+            bool identity;
+            float4 box;
+            if (((part.z & SDF_PART_LEAF_COUNT_MASK) == 0u) && (last == (first + 1u)) &&
+                (sdfProgramWord(sdfInstanceEntryOffset(sdfProgramLayout.instanceOffset, index) + 1u).x == SDF_BOUND_STATIC) &&
+                sdfAnalyticBox(first, translation, rotation, identity, box)) {
+                float entry = sdfAnalyticBoxEntry(rayOrigin, rayDirection, translation, rotation, identity, box, marchStart,
+                    min(farBound, farDistance));
+                if (entry >= 0.0) {
+                    sdfPrimaryAnalytic[slots++] = first;
+                    analytic = min(analytic, entry);
+                }
+            }
+            sdfNextVisibleInstanceRange(instanceMaskBase, sdfProgramLayout.instanceOffset, sdfProgramLayout.instanceCount,
+                word, bits, first, last, index);
+        }
+    }
+#endif
 
     // Two passes of ONE march call, so the kernel inlines the march's interpreter once for all of them. The first is the
     // full-scene march, or, when the parts trace independently, the march of everything but the parts, followed by the
@@ -381,8 +490,8 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         sdfPrimaryOmitParts = (independent && !resolve);
 
         SdfPrimaryMarch march = sdfTracePrimaryField(rayOrigin, rayDirection, (resolve ? best.traveled : marchStart),
-            firstExit, secondEntry, farBound, farDistance, instanceMaskBase, pixelFootprint, uint4(0u, 0u, 0u, 0u), false,
-            resolve);
+            firstExit, secondEntry, (resolve ? farBound : min(farBound, analytic)), farDistance, instanceMaskBase,
+            pixelFootprint, uint4(0u, 0u, 0u, 0u), false, resolve);
 
         if (resolve) {
             result.radius = march.radius;
@@ -404,6 +513,10 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         best.threshold = march.threshold;
         best.steps = march.steps;
         best.found = march.found;
+        if ((analytic < SDF_FAR_DISTANCE) && (!best.found || (analytic < best.traveled))) {
+            best.traveled = analytic;
+            best.found = true;
+        }
 
         // Enumerate candidates once per ray. Each local march evaluates a complete ordered part field,
         // including its cuts and smooth blends; an individual leaf never replaces its CSG parent.
