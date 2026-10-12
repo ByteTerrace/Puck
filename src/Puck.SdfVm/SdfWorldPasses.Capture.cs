@@ -45,13 +45,13 @@ public sealed partial class SdfWorldPasses {
             (solving.CannotFinishReason(since: entry.ConvergenceInvalidations) is { } unfinishable)) {
             return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete its capture's indirect solve: {unfinishable}");
         }
-        // A converging capture's fenced receivers must belong to the sample the next render takes. Completion of the
-        // preceding sample says nothing about a new sample's certificates, which its first render proves afresh.
-        if ((entry.Convergence is { IsActive: true } convergence) && ((entry.ReceiverSubmittedSurface is not { } submitted) ||
-            !ReferenceEquals(objA: submitted.Converging, objB: convergence) || (submitted.ConvergedSample != convergence.Samples))) {
-            return FrameRender.Waiting(reason: $"the instance '{instance}' awaits the receiver certificates of its converging sample {convergence.Samples}");
-        }
-        return ((view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } cache) && ReceiversComplete(cache: cache, entry: entry) &&
+        // A converging capture's sample admits every receiver and never defers one (SdfFrameBlock.UnboundedReceiverProofs),
+        // so each render of a sample completes its receivers by construction and counts. Waiting for a sample's fenced
+        // census would render it again uncounted, and its temporal history would take the sample as many more times as
+        // the fence took frames.
+        var converging = (entry.Convergence is { IsActive: true });
+
+        return ((view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } cache) && (converging || ReceiversComplete(cache: cache, entry: entry)) &&
             (cache.PublishedLightingSource is { Tainted: false }))
             ? FrameRender.Rendered
             : FrameRender.Waiting(reason: $"the instance '{instance}' awaits its capture source's complete fenced indirect solve and receiver certificates"));

@@ -149,11 +149,11 @@ captures {
     {
       palette [
         {
-          color: "#80FFCC"
+          color: "#58AB79"
           material: 0
         }
         {
-          color: "#4A805A"
+          color: "#263227"
           material: 1
         }
         {

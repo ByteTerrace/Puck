@@ -154,7 +154,8 @@ views reads both and the lighting bank, and makes no field query.
 The comparison methods compile into a separate comparison receiver kernel, leased only
 once a view selects one, so the default receiver stays small.
 The certificate retains the launch, clearance, complete allocation identity,
-transport revision and resolved or unresolved outcome. Every hit pass binds the
+certificate revision (advanced by placement, never by traced rays) and resolved or
+unresolved outcome. Every hit pass binds the
 beam's tile planes read-only. These dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.

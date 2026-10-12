@@ -2,6 +2,8 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// Placement and partitions read the field the views draw, its baked SampledRegion bricks included.
+#define SDF_SAMPLED_REGIONS
 // A probe's placement and a corner pair's segments are procedures one run serves, so the kernel inlines the interpreter once.
 #define SDF_INDIRECT_PROCS_CUSTOM
 #define SDF_INDIRECT_PROC_PLACE

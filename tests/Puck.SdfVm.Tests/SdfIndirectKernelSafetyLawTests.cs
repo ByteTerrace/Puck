@@ -8,6 +8,14 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed class SdfIndirectKernelSafetyLawTests {
+    // A kernel without SDF_SAMPLED_REGIONS reads every baked brick as the far field: the cache would then trace through
+    // a lattice height field the views draw, leave its probes dormant and its receivers unlit.
+    [InlineData("passes/sdf-indirect-classify.comp.hlsl")]
+    [InlineData("passes/sdf-indirect-trace.comp.hlsl")]
+    [InlineData("passes/sdf-indirect-shade.comp.hlsl")]
+    [Theory]
+    public void TheCacheKernelsReadTheBakedBricksTheViewsDraw(string kernel) =>
+        Assert.Contains(actualString: Source(path: kernel), expectedSubstring: "#define SDF_SAMPLED_REGIONS");
     [Fact]
     public void IrradianceSamplingKeepsOneBoundedCornerBody() {
         var source = Source(path: "indirect/sdf-indirect-irradiance.hlsli");

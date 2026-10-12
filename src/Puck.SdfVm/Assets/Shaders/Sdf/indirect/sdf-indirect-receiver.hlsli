@@ -123,7 +123,9 @@ bool sdfIndirectReceivePrepare(SdfPixel p, SdfSurfaceSample receiver, float3 sur
     float3 retainedLaunch;
     float retainedClearance;
     if (sdfIndirectReceiverCertificate(record, retainedLevel, retainedMask, retainedLaunch, retainedClearance)) {
-        if (sdfIndirectCertificateJoins(surfacePoint, retainedLaunch, retainedClearance, receiver.threshold)) {
+        // The receiver's pass block says whether this pixel's surface point is the one the certificate was last
+        // validated against; a launch ball the field understates need not reach an unchanged point.
+        if ((passGroup.preserveIndirectReceivers != 0u) || sdfIndirectCertificateJoins(surfacePoint, retainedLaunch, retainedClearance, receiver.threshold)) {
             if (retainedMask != 0u && sdfIndirectIrradianceSupported(retainedLaunch, retainedLevel, retainedMask,
                 passGroup.indirectReadGeneration, passGroup.indirectReadPublication)) {
                 sdfIndirectReceiverLevel = retainedLevel;

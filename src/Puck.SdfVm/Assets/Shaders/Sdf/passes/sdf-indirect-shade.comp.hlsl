@@ -3,6 +3,8 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// A hit's light visibility marches the field the views draw, its baked SampledRegion bricks included.
+#define SDF_SAMPLED_REGIONS
 #define SDF_SHADOW_FADE_SLOTS 2
 // A hit's slot visibilities are the one procedure the kernel runs; its fallback rays are their march calls.
 #define SDF_INDIRECT_PROCS_CUSTOM

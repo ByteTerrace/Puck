@@ -244,8 +244,11 @@ owns an eight-byte deferred/reader census, explicitly transfer-cleared before th
 receiver, written by it, read by views and read back after views from that
 version after the same fence.
 The receiver publishes its eight-word certificate through an explicit preserving
-visibility version, qualified by the complete allocation identity and transport
-revision. Primary clears it only on new visibility storage (recorder, buffer,
+visibility version, qualified by the complete allocation identity and the
+certificate revision (`SdfIndirectCache.CertificateRevision`), which a plan's
+allocation, eviction, placement or partition advances. Never advance it for traced
+rays: a solve then withdraws every receiver each frame it traces, and the receiver
+pass re-proves the whole view at its full allowance until the solve ends. Primary clears it only on new visibility storage (recorder, buffer,
 binding or extent). A new camera sample, jitter or geometry keeps it: the receiver
 pass keeps a certificate while its launch ball, widened by primary's acceptance
 threshold, still reaches the pixel's new surface point (`sdfIndirectCertificateJoins`),
@@ -257,10 +260,15 @@ brick writes are in the point-of-use geometry signature; unfinished bakes never
 preserve certificates. Completed unresolved results stand and deferred results retry.
 The fenced deferred count keeps the receiver and views active until
 completion without making unchanged Primary read the cache. Capture also waits
-for its own view's current fenced receiver scope, not only the shared solve, and
-a converging capture's scope must belong to its own sample: the submitted surface
-records the converging capture and its `RenderGraphConvergence.Samples` index, compared
-by identity, never by jitter value, which repeats every eight samples. A capture or `world.wait indirect` on a
+for its own view's current fenced receiver scope, not only the shared solve. A
+converging capture instead starts its receivers cold once (Primary clears every
+certificate on its first render), and each sample admits every receiver
+(`SdfFrameBlock.UnboundedReceiverProofs`) and defers none, a pending canonical
+claim computing the record again unpublished, so a sample's render completes its
+receivers by construction and counts without waiting a fence. Never wait a
+converging sample's fenced census: the sample renders again uncounted, its temporal
+history takes it once per frame the fence took, and which receivers a contended
+frame admitted leaks into the capture; two runs then differ. A capture or `world.wait indirect` on a
 solve that cannot finish (`SdfIndirectCache.CannotFinishReason`: transport
 withdrawn more than once since the wait began, or remaining work past
 `FinishFrameBound` produced frames at measured prices) is refused at once.

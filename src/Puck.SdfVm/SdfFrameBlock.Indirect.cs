@@ -48,10 +48,13 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectPreviousPublication), value: 0u);
         WriteIndirectPick(block: block, enabled: false, x: 0u, y: 0u);
     }
-    /// <summary>Preserves completed receiver certificates while Primary repeats its visibility storage; the receiver pass keeps
-    /// each only while its launch still joins the pixel's surface.</summary>
+    /// <summary>Writes whether completed receiver certificates stand as they are. In Primary's block it keeps them while
+    /// Primary repeats its visibility storage. In the receiver's block it keeps each one without the join test while
+    /// every pixel's surface point is the one the receiver pass last validated; otherwise the receiver keeps a
+    /// certificate only while its launch still joins the pixel's surface.</summary>
     /// <param name="block">The world pass block.</param>
-    /// <param name="preserve">Whether the visibility recorder, buffer, binding and extent are unchanged.</param>
+    /// <param name="preserve">For Primary, whether the visibility recorder, buffer, binding and extent are unchanged;
+    /// for the receiver, whether no Primary changed the surface since the receiver last submitted.</param>
     public static void WriteIndirectReceiverPreservation(Span<byte> block, bool preserve) =>
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.PreserveIndirectReceivers), value: (preserve ? 1u : 0u));
     /// <summary>Writes the frame-admitted shared proof allowance; zero defers unfinished receivers.</summary>
@@ -59,6 +62,15 @@ public static partial class SdfFrameBlock {
     /// <param name="count">The admitted receiver count.</param>
     public static void WriteIndirectReceiverBudget(Span<byte> block, int count) =>
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectReceiverProofs), value: checked((uint)count));
+
+    /// <summary>The receiver allowance a converging capture's samples take: every receiver of the sample is admitted,
+    /// so no sample renders with receivers deferred by admission order (<c>sdfIndirectAdmitReceiver</c>).</summary>
+    public const uint UnboundedReceiverProofs = uint.MaxValue;
+
+    /// <summary>Writes the unbounded receiver allowance of a converging capture's sample.</summary>
+    /// <param name="block">The world pass block.</param>
+    public static void WriteUnboundedIndirectReceiverBudget(Span<byte> block) =>
+        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectReceiverProofs), value: UnboundedReceiverProofs);
     /// <summary>Admits Near only after the current source's whole finite solve has completed under its view fence.</summary>
     /// <param name="block">The world pass block.</param>
     /// <param name="cache">The exact cache allocation bound by this view.</param>

@@ -98,7 +98,26 @@ public sealed partial class SdfIndirectCacheLawTests {
             BinaryPrimitives.ReadInt32LittleEndian(source: rig.Cache.Regions[1].Contents[(firstTrace + 12)..]));
     }
     [Fact]
-    public void ReceiverCertificatesFollowTransportButSurviveLightingAndAllowanceOnlySubmissions() {
+    public void APlanOfTracesAloneKeepsEveryReceiverCertificate() {
+        using var rig = new Rig();
+        var traced = false;
+
+        for (var frame = 0; ((frame < 64) && !traced); frame++) {
+            var revision = rig.Cache.CertificateRevision;
+
+            rig.Cache.Plan(inputs: Inputs);
+            if ((rig.Cache.TraceCount > 0) && (rig.Cache.PlaceCount == 0) && (rig.Cache.ClassifyCount == 0)) {
+                // Traced rays change no slot, cell or probe class a certificate's proof read, so a solve's tracing
+                // withdraws no receiver.
+                Assert.Equal(revision, rig.Cache.CertificateRevision);
+                traced = true;
+            }
+            rig.Cache.Submitted();
+        }
+        Assert.True(condition: traced, userMessage: "The schedule never planned traces alone.");
+    }
+    [Fact]
+    public void ReceiverCertificatesFollowPlacementButSurviveLightingAndAllowanceOnlySubmissions() {
         using var rig = new Rig();
         var before = rig.Cache.CertificateRevision;
 

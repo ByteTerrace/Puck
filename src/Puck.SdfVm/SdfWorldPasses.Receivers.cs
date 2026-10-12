@@ -3,12 +3,10 @@ using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-// A completed zero belongs to this exact allocation, transport scope and submitted surface sample.
+// A completed zero belongs to this exact allocation, certificate revision and submitted surface sample.
 internal readonly record struct SdfIndirectReceiverScope(long Allocation, uint Certificate, long Surface);
-// Converging and ConvergedSample name the converging capture and the sample index (RenderGraphConvergence.Samples) the
-// surface's render took, or null and zero outside convergence: the exact sample a converging capture serves.
 internal readonly record struct SdfIndirectReceiverSurface(object Recorder, IGpuBuffer Buffer, long Binding,
-    ulong Geometry, SdfReprojectionView Sample, long Cut, double Scale, bool Temporal, RenderGraphConvergence? Converging, int ConvergedSample);
+    ulong Geometry, SdfReprojectionView Sample, long Cut, double Scale, bool Temporal);
 
 public sealed partial class SdfWorldPasses {
     internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame, bool readsIndirect) => ((tables is not null) && (frame is not null) &&
@@ -59,12 +57,17 @@ public sealed partial class SdfWorldPasses {
     internal bool PrepareReceiverSurface(string instance, object recorder, IGpuBuffer buffer, ulong geometry, SdfReprojectionView sample, long cut, bool stableGeometry) {
         var entry = Refresh(instance: instance);
         var converging = ((entry.Convergence is { IsActive: true } active) ? active : null);
-        var surface = new SdfIndirectReceiverSurface(recorder, buffer, entry.Bindings, geometry, sample, cut, entry.CurrentScale, entry.RequestsTemporal,
-            converging, (converging?.Samples ?? 0));
+        var surface = new SdfIndirectReceiverSurface(recorder, buffer, entry.Bindings, geometry, sample, cut, entry.CurrentScale, entry.RequestsTemporal);
         var previous = entry.ReceiverSubmittedSurface;
 
         entry.ReceiverRecordedSurface = (stableGeometry ? surface : null);
-        var storage = (stableGeometry && (previous is { } stored) && ReferenceEquals(objA: stored.Recorder, objB: recorder) && ReferenceEquals(objA: stored.Buffer, objB: buffer) &&
+        // A converging capture starts its receivers cold, once: a certificate an earlier frame proved under a bounded,
+        // contended allowance would carry which receivers that frame admitted into the capture. Its samples then prove
+        // and retain certificates from that cold start alone.
+        var cold = ((converging is not null) && !ReferenceEquals(objA: entry.ColdConvergence, objB: converging));
+
+        if (cold) { entry.ColdConvergence = converging; }
+        var storage = (stableGeometry && !cold && (previous is { } stored) && ReferenceEquals(objA: stored.Recorder, objB: recorder) && ReferenceEquals(objA: stored.Buffer, objB: buffer) &&
             (stored.Binding == surface.Binding) && (stored.Scale == surface.Scale) &&
             ((stored.Sample.Width, stored.Sample.Height) == (sample.Width, sample.Height)));
         var preserve = (storage && (previous is { } submitted) && (submitted.Geometry == geometry) && (submitted.Sample == sample) &&
@@ -77,6 +80,22 @@ public sealed partial class SdfWorldPasses {
         var entry = Refresh(instance: instance);
 
         entry.ReceiverSubmittedSurface = entry.ReceiverRecordedSurface;
+    }
+    // Returns whether every pixel's surface point is the one the receiver pass last validated its certificate against:
+    // no primary since that receiver submission changed its storage, geometry, sample, cut or temporal mode, each of
+    // which advances ReceiverSurface. Such a certificate stands for its pixel without the launch-ball join test, which a
+    // field whose distances understate the true distance (a baked brick, a scaled part) can fail on an unchanged point.
+    internal bool PrepareReceiverValidation(string instance) {
+        var entry = Refresh(instance: instance);
+
+        entry.ReceiverRecordedValidation = entry.ReceiverSurface;
+        return ((entry.ReceiverSubmittedSurface is not null) && (entry.ReceiverValidatedSurface == entry.ReceiverSurface));
+    }
+    internal bool Converging(string instance) => (Refresh(instance: instance).Convergence is { IsActive: true });
+    internal void SubmittedReceiverValidation(string instance) {
+        var entry = Refresh(instance: instance);
+
+        entry.ReceiverValidatedSurface = entry.ReceiverRecordedValidation;
     }
     internal SdfIndirectReceiverScope PrepareReceivers(string instance, SdfIndirectCache cache) {
         var entry = Refresh(instance: instance);
@@ -112,6 +131,9 @@ public sealed partial class SdfWorldPasses {
 
     private sealed partial class Entry {
         public long ReceiverSurface;
+        public RenderGraphConvergence? ColdConvergence;
+        public long ReceiverRecordedValidation = -1;
+        public long ReceiverValidatedSurface = -1;
         public SdfIndirectReceiverSurface? ReceiverRecordedSurface;
         public SdfIndirectReceiverSurface? ReceiverSubmittedSurface;
         public SdfIndirectReceiverScope ReceiverScope;

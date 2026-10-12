@@ -93,7 +93,9 @@ static uint sdfIndirectApproachVisits = 0u;
 // limit, and no request defers for contention while the limit leaves room: only an exhausted allowance defers.
 bool sdfIndirectAdmitReceiver() {
     uint word = sdfIndirectReceiverProofWordOffset(passGroup.indirectTier);
-    uint limit = min(passGroup.indirectReceiverProofs, sdfIndirectReceiverProofBudget(passGroup.indirectTier));
+    // A converging capture's sample admits every receiver (SdfFrameBlock.UnboundedReceiverProofs).
+    uint limit = (passGroup.indirectReceiverProofs == 0xffffffffu) ? 0xffffffffu
+        : min(passGroup.indirectReceiverProofs, sdfIndirectReceiverProofBudget(passGroup.indirectTier));
     if (limit == 0u || !sdfIndirectRange(word, 1u)) { sdfIndirectReceiverDeferred = true; return false; }
     if (sdfIndirectLoad(word) < limit) {
         uint ticket;

@@ -2,6 +2,9 @@
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_DYNAMIC_TRANSFORMS
+// The cache's field is the field the views draw: a baked SampledRegion brick (a lattice height field, a baked carve)
+// blocks transport as it blocks the camera.
+#define SDF_SAMPLED_REGIONS
 // The trace runs its field work as one procedure (sdfIndirectKernelStep below), so the kernel inlines the interpreter once.
 #define SDF_INDIRECT_PROCS_CUSTOM
 #define SDF_INDIRECT_PROC_MARCH

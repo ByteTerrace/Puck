@@ -10,7 +10,7 @@ namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
-    public void AConvergingCaptureWaitsForTheSurfaceOfItsOwnSampleEvenWhereTheJitterRepeats() {
+    public void AConvergingCaptureCountsEachSampleOnItsOwnRenderWhileAStillCaptureWaitsForItsCensus() {
         var gpu = new FakeGpuDevice(holdFences: true);
         var pipelines = SdfTestPipelines.Cache();
         var source = Frame() with { FarDistance = 12f, IndirectTier = SdfIndirectTier.Medium, EnableCadenceGate = false };
@@ -39,10 +39,10 @@ public sealed partial class SdfWorldPassesLawTests {
             pipelines.Pipelines, gpu, false, out var runtime, out var refusal), userMessage: refusal?.Message);
         using var graph = runtime;
 
-        // Every fenced census reads no deferred receiver and one reader, so only the sample identity can hold a capture.
+        // Every fenced census reads deferred receivers beside one reader: a census a capture waits for never completes.
         gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length != (2 * sizeof(uint))) { return; }
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes, value: 0u);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes, value: 7u);
             BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[sizeof(uint)..], value: 1u);
         };
         var frame = 0L;
@@ -60,21 +60,20 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
             return residency.IsIndirectReady;
         }, building: () => (graph.Node(instance: 0).IsBuildingCandidate || graph.Node(instance: 1).IsBuildingCandidate), reason: () => graph.Render.Reason);
+        // A still capture waits for its receivers' fenced census, which here never reaches zero.
+        for (var still = 0; (still < 8); still++) { Produce(); }
+        Assert.False(condition: views.CaptureReadinessOf(instance: "world").IsRendered,
+            userMessage: "A still capture must wait for its receivers' fenced census.");
         var convergence = new RenderGraphConvergence(request: new FrameCaptureRequest("unused-converging-sample.png", converge: 9));
 
+        // A converging capture's samples admit every receiver and defer none, so each render of a sample completes its
+        // receivers and counts at once: waiting a fence would render the sample again uncounted, into its history.
         views.BeginConvergence(convergence: convergence, instance: "world");
-        TestLiveness.Within(frames: 16, step: () => {
+        for (var sample = 0; (sample < 8); sample++) {
             Produce();
-            return views.CaptureReadinessOf(instance: "world").IsRendered;
-        }, building: () => false, reason: () => $"{views.CaptureReadinessOf(instance: "world").Reason}; ready={residency.IsIndirectReady}; tainted={residency.Tables!.Indirect!.PublishedLightingSource?.Tainted}; readers={views.HasIndirectReaders(instance: "world")}");
-        // Eight counted samples later the Halton sequence repeats its first offset, but the submitted surface is still
-        // the first sample's: the ninth sample's receivers have not been proved.
-        for (var sample = 0; (sample < 8); sample++) { convergence.Count(); }
-        Assert.False(condition: views.CaptureReadinessOf(instance: "world").IsRendered,
-            userMessage: "A converging capture must wait for a surface its own sample recorded, not one whose jitter matches.");
-        TestLiveness.Within(frames: 16, step: () => {
-            Produce();
-            return views.CaptureReadinessOf(instance: "world").IsRendered;
-        }, building: () => false, reason: () => (views.CaptureReadinessOf(instance: "world").Reason ?? graph.Render.Reason));
+            Assert.True(condition: views.CaptureReadinessOf(instance: "world").IsRendered,
+                userMessage: $"Sample {sample}: {views.CaptureReadinessOf(instance: "world").Reason}; ready={residency.IsIndirectReady}");
+            convergence.Count();
+        }
     }
 }

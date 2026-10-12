@@ -328,6 +328,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     public void Submitted() {
         if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Primary)) { m_owner.SubmittedReceiverSurface(instance: m_context.Instance); }
+        if (!m_view.LightView && (m_part == SdfWorldPackage.Parts.Receiver)) { m_owner.SubmittedReceiverValidation(instance: m_context.Instance); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_view.LightView) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
             m_lightingSubmitted = true;
@@ -402,7 +403,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             var boundIndirect = BoundIndirect(recording: recording, tables: tables);
 
             m_comparison = (frame.Views[view].Quality.IndirectMethod != SdfIndirectMethod.Cache);
-            SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
+            SdfFrameBlock.WriteIndirectReceiverPreservation(block: recording.PassBlock, preserve: m_owner.PrepareReceiverValidation(instance: m_context.Instance));
+            // A converging capture fills each sample's receiver proofs without an allowance: a sample whose receivers
+            // admission order deferred would render again, and which receivers a contended frame admits is not
+            // reproducible.
+            if ((boundIndirect is { Frozen: false }) && m_owner.Converging(instance: m_context.Instance)) {
+                SdfFrameBlock.WriteUnboundedIndirectReceiverBudget(block: recording.PassBlock);
+            } else {
+                SdfFrameBlock.WriteIndirectReceiverBudget(block: recording.PassBlock, count: ((boundIndirect is null) ? 0 : residency.AdmitReceiverProofs(cache: boundIndirect)));
+            }
             SdfFrameBlock.WriteIndirectNear(block: recording.PassBlock, cache: boundIndirect, frame: frame, ready: residency.IsIndirectReady);
             // The selected pixel's near ray and replacing sources are the receiver's part of its record; views takes
             // the same armed request when it records next.

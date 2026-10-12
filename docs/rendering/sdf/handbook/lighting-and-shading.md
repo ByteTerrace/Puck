@@ -642,13 +642,15 @@ it enters the receiver's procedures, and a receiver they settle never enters
 them: the procedures' resumable state costs every pixel that enters them, field
 work or none.
 
-A converging capture counts a sample, and is served, only once the fenced
-receiver scope belongs to the sample its next render takes: the submitted surface
-records the capture and its sample index, which readiness compares by identity
-rather than by jitter, whose eight offsets repeat. Completion of the
-preceding sample says nothing about a new sample's certificates, which its
-first render proves afresh; serving that first render would read pixels whose
-receivers deferred.
+A converging capture starts its receivers cold: its first render clears every
+certificate, as new visibility storage does. Each of its samples then admits
+every receiver without an allowance, and a receiver whose canonical record
+another lane is still publishing computes it again unpublished rather than
+deferring, so a sample's render completes all its receivers and the sample counts
+at once. A capture that waited for each sample's fenced census would render the
+sample again, uncounted, for as many frames as the fence took, and its temporal
+history would take the sample that many times; which receivers a contended frame
+admitted before the capture would reach its pixels too. Two runs would differ.
 
 The views pass applies the complete lighting bank through the same certified
 component proof and irradiance weights as the solve. A missing approach uses
@@ -677,8 +679,11 @@ deferred counter has an explicit transfer reset before its receiver pass, whose 
 compute-written version views reads and supplies that view's fenced readback. A different camera's
 deferred work never delays this view's completion. Each receiver retains
 its exact certified point and completed result in the visibility record, independently
-of shared proof-hash collisions. The complete allocation identity and transport
-revision qualify this certificate. Primary preserves it while the same recorder
+of shared proof-hash collisions. The complete allocation identity and the
+certificate revision qualify this certificate; a plan that allocates, evicts,
+places or partitions a brick advances the revision, and one that only traces rays
+does not, since the proof read only slots, cells and probe classes, and the reader
+checks the published support it reads at every frame. Primary preserves it while the same recorder
 writes the same visibility storage (buffer, binding and render grid) over stable
 geometry; new storage or an unfinished bake clears it. A new camera sample, jitter
 or moving geometry keeps it: the receiver keeps a certificate while its certified

@@ -43,9 +43,11 @@ public static partial class SdfWorldPackage {
     public const string IndirectEpoch = "indirectEpoch";
     /// <summary>The complete 64-bit identity of the cache allocation qualifying a receiver certificate.</summary>
     public const string IndirectAllocation = "indirectAllocation";
-    /// <summary>The exact transport and slot revision qualifying a receiver certificate.</summary>
+    /// <summary>The exact slot, placement and partition revision qualifying a receiver certificate.</summary>
     public const string IndirectCertificateRevision = "indirectCertificateRevision";
-    /// <summary>Whether Primary rewrites the same visibility storage: recorder, buffer, binding and extent.</summary>
+    /// <summary>Whether certificates stand as they are: in Primary's block, whether Primary rewrites the same visibility
+    /// storage (recorder, buffer, binding and extent); in the receiver's, whether every pixel's surface point is the one
+    /// the receiver last validated its certificate against.</summary>
     public const string PreserveIndirectReceivers = "preserveIndirectReceivers";
     /// <summary>The visibility version after the receiver publishes only its receiver-certificate fields.</summary>
     public const string IndirectVisibility = "indirectVisibility";

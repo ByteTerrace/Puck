@@ -78,8 +78,11 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public IReadOnlyList<GpuRegion> Regions { get; }
     /// <summary>Gets the current geometry epoch.</summary>
     public uint Epoch { get; private set; }
-    /// <summary>Gets the exact scope of receiver certificates in this allocation. Transport or slot changes advance
-    /// it; lighting sweeps do not. A visibility certificate also carries the full allocation identity.</summary>
+    /// <summary>Gets the exact scope of receiver certificates in this allocation. A plan that allocates, evicts, places
+    /// or partitions a brick advances it, as do a reset and a geometry change; traced rays and lighting sweeps do not,
+    /// since a certificate holds a launch and the corners its proof reached through the cells, and its reader checks the
+    /// published support it reads at every frame. A visibility certificate also carries the full allocation
+    /// identity.</summary>
     public uint CertificateRevision { get; private set; } = 1;
     /// <summary>Gets the successful submission generation used by immutable feedback proofs.</summary>
     public uint Frame { get; private set; } = 1;
@@ -186,8 +189,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         InstructionCount = instructionCount;
         ApplyGeometryChanges();
         m_pending = m_schedule.Frame(inputs: inputs, prices: PlanPrices(instructionCount: instructionCount));
-        if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Placed.Count != 0) ||
-            (m_pending.Classified.Count != 0) || (m_pending.Traces.Count != 0)) {
+        if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Placed.Count != 0) || (m_pending.Classified.Count != 0)) {
             CertificateRevision = checked((CertificateRevision + 1u));
         }
         if ((m_pending.Allocated.Count != 0) || (m_pending.Evicted.Count != 0) || (m_pending.Traces.Count != 0)) { InvalidateLighting(); }

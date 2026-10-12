@@ -51,7 +51,8 @@ frame, and the `binding` and `bound` rows capture each instance's own output.
 
 Census material IDs name nearest-color buckets, not renderer material IDs.
 The lattice's top and shaded-face swatches follow their observed colors under
-the shared sky lighting. Recalibrating those swatches preserves the separate
+the shared sky lighting and the world's Medium indirect cache, which sees the
+lattice's baked brick. Recalibrating those swatches preserves the separate
 background bucket and the existing coverage floors.
 
 `parity.contract.json` is the per-station comparison contract (tile size,

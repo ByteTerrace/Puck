@@ -213,7 +213,10 @@ uint sdfIndirectProveStep() {
                 uint publication;
                 InterlockedCompareExchange(indirectCacheRW[proof + 6u], 0u, 0xffffffffu, publication);
                 sdfIndirectProveProc.receiverOwner = publication == 0u;
-                if (!sdfIndirectProveProc.receiverOwner && publication >= passGroup.indirectFrame) {
+                // A converging capture's sample (SdfFrameBlock.UnboundedReceiverProofs) computes the record again
+                // unpublished instead: deferring would leave which receivers render the sample to claim order.
+                if (!sdfIndirectProveProc.receiverOwner && publication >= passGroup.indirectFrame
+                    && passGroup.indirectReceiverProofs != 0xffffffffu) {
                     sdfIndirectReceiverDeferred = true;
                     sdfIndirectReceiverPermit = false;
                     return SdfIndirectStepReturn;

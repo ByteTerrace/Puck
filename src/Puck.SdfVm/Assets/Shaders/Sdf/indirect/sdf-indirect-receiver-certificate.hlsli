@@ -1,8 +1,8 @@
 #ifndef SDF_INDIRECT_RECEIVER_CERTIFICATE_HLSLI
 #define SDF_INDIRECT_RECEIVER_CERTIFICATE_HLSLI
 // This pixel owns a completed certificate independently of the shared acceleration hash's occupancy. New visibility storage
-// clears it, a surface point its launch ball no longer reaches withdraws it, and any transport or slot replacement changes
-// its exact allocation/revision scope. Deferred work is never stored as a completed unresolved answer.
+// clears it, a surface point its launch ball no longer reaches withdraws it, and any slot, placement or partition
+// replacement changes its exact allocation/revision scope (SdfIndirectCache.CertificateRevision). Deferred work is never stored as a completed unresolved answer.
 bool sdfIndirectReceiverRecordValid(uint record) {
     uint count, stride;
     sdfVisibilityRecordBuffer.GetDimensions(count, stride);
