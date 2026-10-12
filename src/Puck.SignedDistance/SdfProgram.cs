@@ -27,8 +27,8 @@ namespace Puck.SignedDistance;
 //                         whole range when the instance's per-tile mask bit is set and never touches it otherwise,
 //                         and the BEAM prepass reads only i0/i1 for its per-tile cull. shadingFlags bit 0 proves
 //                         the entire stream has no Detail shape; zero requires shade re-evaluation. See PackInstances.
-//   [.. + 1 + 2*instanceCount ..) = the WORLD-SEGMENT list (world render path only): one (worldSegmentCount, 0, 0,
-//                         0) header uvec4, then one uvec4 per WORLD segment (only .x used — kept uvec4-granular for
+//   [.. + 1 + 2*instanceCount ..) = the WORLD-SEGMENT list (world render path only): one (worldSegmentCount,
+//                         chainTableOffset, 0, 0) header uvec4, then one uvec4 per WORLD segment (only .x used — kept uvec4-granular for
 //                         simplicity), value = the segment-directory index of a segment owned by NO instance,
 //                         ascending. mapCore merges this always-evaluated list with the visible instances' segment
 //                         ranges by ascending segment index (the flat stream's blend order), so a map() call costs
@@ -49,6 +49,9 @@ namespace Puck.SignedDistance;
 //                         full interpreter for that segment.
 //   [.. after rigid leaves ..) = one tape certificate uvec4 per instruction: three float bounds and a flag byte,
 //                         with the compact ShapeBlend/PopField token index in the upper 24 bits of the last word.
+//   [.. after the certificates ..) = the CHAIN table, at the world-segment header's chainTableOffset: one (chainCount,
+//                         identityOffset, 0, 0) header uvec4, each directory segment's (first chain, chain count), two
+//                         segments a uvec4, then one 32-bit chain identity a word. See SdfProgram.Chains.
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldTables and
@@ -150,6 +153,12 @@ public sealed partial class SdfProgram {
     /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
+    /// <param name="packTapeCertificates">Whether to compute and pack the per-instruction tile-tape certificates and
+    /// tokens (default <see langword="true"/>, and the only value a program the renderer executes takes). A capacity
+    /// probe reads <see cref="PartCompilationWordCapacity"/> and the instance count alone, neither of which depends
+    /// on a certificate's value, so it passes <see langword="false"/> and skips the interval arithmetic that is more
+    /// than half of a large program's construction; the certificate words then stay zero, which reads as a live
+    /// instruction with no certificate (<see cref="TapeCertificate"/>).</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
@@ -160,7 +169,9 @@ public sealed partial class SdfProgram {
     /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
     /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
     /// the deterministic field's representation.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
+    /// <exception cref="InvalidOperationException">Two distinct chains of the program share one 32-bit
+    /// <see cref="SdfChain.Identity"/>.</exception>
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, bool packTapeCertificates = true) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
@@ -281,6 +292,8 @@ public sealed partial class SdfProgram {
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();
 
+        m_chainTable = BuildChainTable(segments: segments);
+
         var instructionCount = m_instructions.Length;
         var materialCount = materialTable.Length;
         var worldSegmentCount = 0;
@@ -334,7 +347,8 @@ public sealed partial class SdfProgram {
         var gridOffsetVectors = ((worldSegmentOffsetVectors + DirectoryHeaderVectors) + worldSegmentCount);
         var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
         var tapeOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
-        var convexPolygonOffsetVectors = (tapeOffsetVectors + instructionCount);
+        var chainTableOffsetVectors = (tapeOffsetVectors + instructionCount);
+        var convexPolygonOffsetVectors = (chainTableOffsetVectors + m_chainTable.Vectors);
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
         var convexPolygonWords = 0;
 
@@ -482,7 +496,11 @@ public sealed partial class SdfProgram {
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
-        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        m_words[((segmentOffsetVectors * WordsPerVector) + SegmentTapeLane)] = ((uint)tapeOffsetVectors);
+        if (packTapeCertificates) {
+            PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        }
+        PackChainTable(offset: chainTableOffsetVectors, worldSegmentOffset: worldSegmentOffsetVectors);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: pathOffsetVectors);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);

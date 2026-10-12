@@ -2819,8 +2819,17 @@ The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
-allocation (median over a sampled window, after a warmup), and a scripted
-Klondike deal's per-tick time and per-mutation allocation. A server
+allocation (median over a sampled window, after a warmup), the contact work
+behind each sampled tick as deterministic counts (certified sweeps and the
+bounds queries they charge, interval walks with their instructions and full
+rotation expansions, and point evaluations with their instructions, read from
+`physics.sweep`, `sdf.bounds` and `sdf.point`), and a scripted Klondike deal's
+per-tick time and per-mutation allocation. The screen machines
+emulate on worker threads the tick only submits to, and the back-to-back idle
+window is bounded by the slowest of them once their pending windows fill, so
+the lane also times the shipped tick paced at the simulation rate, beside the
+count of submissions that waited on a machine, and times each screen machine's
+own tick of emulation alone. A server
 construction includes admission, navigation, and runtime allocation, so this
 lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,
@@ -3010,7 +3019,7 @@ The offline twin of the in-engine `creation.sculpt(s)` console verbs (see
 
 - `puck creation sculpts`—lists every registered sculpt (`CreationSculptRegistry.All`) by name and description.
 - `puck creation sculpt <name> --world <path>`—reads the world file, runs the named sculpt's `SculptPatch` against it, echoes every operation's `(kind, path, verdict)`, then parses and validates the PATCHED document through `WorldDefinitionSerialization`/`WorldDefinitionValidator` before writing it back canonically. A refusal (unknown sculpt, malformed JSON, a patch fault, a validation failure) leaves the file untouched. Exit codes: 0 wrote, 1 the patch faulted or the patched document was refused, 2 a usage error (unknown sculpt, missing file).
-- `puck creation stats --world <path> [--prototype <id>]`—reports a creation's shape count against `WorldPlacementPolicy.MaxShapesPerStamp`, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage and named flare/shear/bumps/erode/cells shapes. It builds unit-scale static and pooled rest geometry through the live stampers and lists the global step scale plus every non-unit field-scope clamp, its instance/instruction range, and how many shapes share it. Animated prototypes use the pooled path. Text-bearing prototypes report clamp inspection unavailable because the offline command has no resolved font atlas; inspect `world.budget` in the render host. Field bounds are not measured GPU-time or march-count multipliers. Defaults to every prototype carrying a creation document; a geometry inspection failure exits 1.
+- `puck creation stats --world <path> [--prototype <id>]`—reports a creation's shape count against `WorldPlacementPolicy.MaxShapesPerStamp`, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage and named flare/shear/bumps/erode/cells shapes. It builds unit-scale static and pooled rest geometry through the live stampers and lists the global step scale plus every non-unit field-scope clamp, its instance/instruction range, and how many shapes share it, then each program's segments (rigid ones counted), the chains they run and its specialization set: distinct chains, shape types, blends and compose forms ([SDF program specialization](../plans/sdf-specialization.md#the-unit-of-specialization)). After the prototypes it prints the union of every reported program's set. Animated prototypes use the pooled path. Text-bearing prototypes report clamp inspection unavailable because the offline command has no resolved font atlas; inspect `world.budget` in the render host. Field bounds are not measured GPU-time or march-count multipliers. Defaults to every prototype carrying a creation document; a geometry inspection failure exits 1.
 
 `creation stats` also constructs the whole world's deterministic contact field
 through the runtime builder, including solid placements and screens. This runs

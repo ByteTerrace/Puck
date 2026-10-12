@@ -70,10 +70,14 @@ can never reach an already-built section. `WorldDefinition.StateCatalog`
 therefore keys its compiled product to the `StateRaw` reference
 (`ConditionalWeakTable`) and trusts a warm hit without re-walking the section's
 shape—the walk runs once, at the reference's first read, never again for
-that reference. The contact-solve share has no per-call shortcut: it is real
-per-body physics work against a program sized by every district's solid
-geometry. `puck bench world`'s "shipped world: idle tick (median)" row and
-`tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs` are the read-backs.
+that reference. The contact-solve share is real per-body physics work against
+a program sized by every district's solid geometry, but each field query walks
+only the instances and chains of shapes near it, skipping the rest by sphere
+bounds that move no answer
+([queries and determinism](../../docs/rendering/sdf/handbook/queries-and-determinism.md)).
+`puck bench world`'s "shipped world: idle tick (median)" row with its per-tick
+contact work counts, and `tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs`,
+are the read-backs.
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit`—a single ordered domain, drained in submission order.

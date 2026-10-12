@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Cameras;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -33,72 +34,41 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
         var bounds = Instances(frame: frame);
         var shapes = model.Count(predicate: static entry => (entry.Candidate is not null));
         var certified = model.Count(predicate: static entry => ((entry.Candidate is { } candidate) && ((candidate.Certificate.Flags & SdfTapeCertificate.Certified) != 0)));
-        var totals = new Totals[Partitions, Slabs];
         var studyPartitions = StudyPartitions();
+        var rows = ((Height + (Tile - 1)) / Tile);
+        var perRow = new TileRowTotals[rows];
+
+        // A tile's decisions read nothing another tile writes, so the rows of tiles run side by side, each into totals
+        // of its own; the sums below merge them in row order, and every merged value is an exact integer sum or a
+        // minimum or maximum, so the report equals the one a single thread would print.
+        try {
+            Parallel.For(
+                body: row => perRow[row] = TileRow(camera: camera, bounds: bounds, far: far, instructions: frame.Program.InstructionCount, model: model,
+                    shapes: shapes, studyPartitions: studyPartitions, y: (row * Tile)),
+                fromInclusive: 0,
+                toExclusive: rows
+            );
+        } catch (AggregateException failure) when ((failure.InnerExceptions.Count > 0)) {
+            ExceptionDispatchInfo.Capture(source: failure.InnerExceptions[0]).Throw();
+        }
+        var totals = new Totals[Partitions, Slabs];
         var studyTotals = new StudyTotals[studyPartitions.Length];
         var radiusTotals = new RadiusTotals[Slabs];
-        var mask = new bool[frame.Program.InstructionCount];
-        var retained = new bool[frame.Program.InstructionCount];
-        var zeroRadiusRetained = new bool[frame.Program.InstructionCount];
         var tiles = 0;
         var maskRejected = 0L;
         var belowThreshold = 0;
         var maskedKinds = new SortedDictionary<string, long>(comparer: StringComparer.Ordinal);
 
-        for (var y = 0; (y < Height); y += Tile) {
-            for (var x = 0; (x < Width); x += Tile) {
-                var cone = Cone(camera: camera, x: x, y: y);
-
-                Array.Fill(array: mask, value: true);
-                foreach (var bound in bounds) {
-                    if (!Visible(bound: bound, origin: camera.Position, cone: cone)) {
-                        Array.Fill(array: mask, value: false, startIndex: bound.First, count: (bound.End - bound.First));
-                    }
-                }
-                var selected = model.Where(predicate: entry => mask[entry.Index]).ToArray();
-                var maskedShapes = selected.Count(predicate: static entry => (entry.Candidate is not null));
-
-                foreach (var entry in selected) {
-                    if (entry.Candidate is { } candidate) {
-                        maskedKinds[candidate.Category] = (maskedKinds.GetValueOrDefault(key: candidate.Category) + 1);
-                    }
-                }
-                maskRejected += (shapes - maskedShapes);
-                var instructions = mask.Count(predicate: static visible => visible);
-
-                tiles++;
-                if (instructions < SdfProgram.TapeInstructionThreshold) {
-                    belowThreshold++;
-                    continue;
-                }
-                for (var partition = 0; (partition < Partitions); partition++) {
-                    for (var slab = 0; (slab < Slabs); slab++) {
-                        var ball = Ball(camera: camera, cone: cone, depthPower: (1 << partition), far: far, slab: slab);
-                        var sample = Walk(entries: selected, ball: ball, retained: retained);
-
-                        totals[partition, slab].Add(sample: sample, radius: ball.Radius);
-                        studyTotals[partition].Add(sample: sample, depthUnits: studyPartitions[partition].Width(slab: slab));
-                        if (partition == 2) {
-                            var zeroRadius = Walk(entries: selected, ball: ball with { Radius = 0 }, retained: zeroRadiusRetained);
-
-                            radiusTotals[slab].Add(other: CompareRadius(entries: selected, normal: sample,
-                                retained: retained, zeroRadius: zeroRadius, zeroRadiusRetained: zeroRadiusRetained));
-                        }
-                    }
-                }
-                for (var experiment = Partitions; (experiment < studyPartitions.Length); experiment++) {
-                    var partition = studyPartitions[experiment];
-
-                    for (var slab = 0; (slab < partition.SlabCount); slab++) {
-                        var ball = Ball(camera: camera, cone: cone, far: far,
-                            s0: (((float)partition.DepthUnits[slab]) / StudyDepthUnits),
-                            s1: (((float)partition.DepthUnits[(slab + 1)]) / StudyDepthUnits));
-                        var sample = Walk(entries: selected, ball: ball, retained: retained);
-
-                        studyTotals[experiment].Add(sample: sample, depthUnits: partition.Width(slab: slab));
-                    }
-                }
+        foreach (var row in perRow) {
+            tiles += row.Tiles;
+            maskRejected += row.MaskRejected;
+            belowThreshold += row.BelowThreshold;
+            foreach (var kind in row.MaskedKinds) { maskedKinds[kind.Key] = (maskedKinds.GetValueOrDefault(key: kind.Key) + kind.Value); }
+            for (var partition = 0; (partition < Partitions); partition++) {
+                for (var slab = 0; (slab < Slabs); slab++) { totals[partition, slab].Merge(other: row.Totals[partition, slab]); }
             }
+            for (var experiment = 0; (experiment < studyTotals.Length); experiment++) { studyTotals[experiment].Merge(other: row.Study[experiment]); }
+            for (var slab = 0; (slab < Slabs); slab++) { radiusTotals[slab].Add(other: row.Radius[slab]); }
         }
 
         output.WriteLine(message: $"{workload}: camera=(0,2.5,7)->(0,0.8,0) extent={Width}x{Height} tiles={tiles} slabs={Slabs} far={far} shapes={shapes} certified={certified} maskRejected={maskRejected} belowThresholdTiles={belowThreshold}");
@@ -138,6 +108,82 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
         DiagnoseTiles(camera: camera, far: far, entries: model, bounds: bounds, instructions: frame.Program.InstructionCount);
         Assert.True(condition: (droppedByPartition[2] > 0), userMessage: "No certified candidate lost in the production quartic partition's exhaustive camera coverage.");
         Assert.Equal(actual: tiles, expected: 4590);
+    }
+
+    // One row of tiles, walked the way a single thread walks the whole extent: the instance mask, then every partition's
+    // slabs, the zero-radius comparison of the production partition, and the diagnostic partition experiments.
+    private static TileRowTotals TileRow(CameraSnapshot camera, InstanceBound[] bounds, float far, int instructions, Entry[] model, int shapes,
+        StudyPartition[] studyPartitions, int y) {
+        var row = new TileRowTotals(partitions: studyPartitions.Length);
+        var mask = new bool[instructions];
+        var retained = new bool[instructions];
+        var zeroRadiusRetained = new bool[instructions];
+
+        for (var x = 0; (x < Width); x += Tile) {
+            var cone = Cone(camera: camera, x: x, y: y);
+
+            Array.Fill(array: mask, value: true);
+            foreach (var bound in bounds) {
+                if (!Visible(bound: bound, origin: camera.Position, cone: cone)) {
+                    Array.Fill(array: mask, value: false, startIndex: bound.First, count: (bound.End - bound.First));
+                }
+            }
+            var selected = model.Where(predicate: entry => mask[entry.Index]).ToArray();
+            var maskedShapes = selected.Count(predicate: static entry => (entry.Candidate is not null));
+
+            foreach (var entry in selected) {
+                if (entry.Candidate is { } candidate) {
+                    row.MaskedKinds[candidate.Category] = (row.MaskedKinds.GetValueOrDefault(key: candidate.Category) + 1);
+                }
+            }
+            row.MaskRejected += (shapes - maskedShapes);
+            var instructionsLeft = mask.Count(predicate: static visible => visible);
+
+            row.Tiles++;
+            if (instructionsLeft < SdfProgram.TapeInstructionThreshold) {
+                row.BelowThreshold++;
+                continue;
+            }
+            for (var partition = 0; (partition < Partitions); partition++) {
+                for (var slab = 0; (slab < Slabs); slab++) {
+                    var ball = Ball(camera: camera, cone: cone, depthPower: (1 << partition), far: far, slab: slab);
+                    var sample = Walk(entries: selected, ball: ball, retained: retained);
+
+                    row.Totals[partition, slab].Add(sample: sample, radius: ball.Radius);
+                    row.Study[partition].Add(sample: sample, depthUnits: studyPartitions[partition].Width(slab: slab));
+                    if (partition == 2) {
+                        var zeroRadius = Walk(entries: selected, ball: ball with { Radius = 0 }, retained: zeroRadiusRetained);
+
+                        row.Radius[slab].Add(other: CompareRadius(entries: selected, normal: sample,
+                            retained: retained, zeroRadius: zeroRadius, zeroRadiusRetained: zeroRadiusRetained));
+                    }
+                }
+            }
+            for (var experiment = Partitions; (experiment < studyPartitions.Length); experiment++) {
+                var partition = studyPartitions[experiment];
+
+                for (var slab = 0; (slab < partition.SlabCount); slab++) {
+                    var ball = Ball(camera: camera, cone: cone, far: far,
+                        s0: (((float)partition.DepthUnits[slab]) / StudyDepthUnits),
+                        s1: (((float)partition.DepthUnits[(slab + 1)]) / StudyDepthUnits));
+                    var sample = Walk(entries: selected, ball: ball, retained: retained);
+
+                    row.Study[experiment].Add(sample: sample, depthUnits: partition.Width(slab: slab));
+                }
+            }
+        }
+        return row;
+    }
+
+    private sealed class TileRowTotals(int partitions) {
+        public int Tiles;
+        public long MaskRejected;
+        public int BelowThreshold;
+
+        public readonly SortedDictionary<string, long> MaskedKinds = new(comparer: StringComparer.Ordinal);
+        public readonly Totals[,] Totals = new Totals[Partitions, Slabs];
+        public readonly StudyTotals[] Study = new StudyTotals[partitions];
+        public readonly RadiusTotals[] Radius = new RadiusTotals[Slabs];
     }
 
     private static string PartitionName(int partition) => partition switch { 0 => "uniform", 1 => "quadratic", _ => "quartic" };
@@ -253,6 +299,17 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
             UnsupportedLive += sample.UnsupportedLive; OverlapLive += sample.OverlapLive;
             NoCertificate += sample.NoCertificate; NoTransform += sample.NoTransform;
             DomainRejected += sample.DomainRejected; PrimitiveRejected += sample.PrimitiveRejected;
+        }
+        // The sum of two counts of the same slab: every count adds, and the radius range spans both.
+        public void Merge(Totals other) {
+            if (other.Considered == 0) { return; }
+            if (Considered == 0) { MinRadius = other.MinRadius; MaxRadius = other.MaxRadius; }
+            MinRadius = Math.Min(val1: MinRadius, val2: other.MinRadius);
+            MaxRadius = Math.Max(val1: MaxRadius, val2: other.MaxRadius);
+            Considered += other.Considered; Finite += other.Finite; Dropped += other.Dropped;
+            UnsupportedLive += other.UnsupportedLive; OverlapLive += other.OverlapLive;
+            NoCertificate += other.NoCertificate; NoTransform += other.NoTransform;
+            DomainRejected += other.DomainRejected; PrimitiveRejected += other.PrimitiveRejected;
         }
         public void Add(Totals other) => Add(sample: new Sample(Considered: other.Considered, DomainRejected: other.DomainRejected,
             Dropped: other.Dropped, Finite: other.Finite, NoCertificate: other.NoCertificate,

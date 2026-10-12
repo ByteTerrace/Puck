@@ -385,8 +385,11 @@ over `RotatePlane`). A new instruction touches every partner in one change:
 
 1. **C# model** — the enum, `SdfProgramBuilder` (including the hard-coded
    maximum its `RequireDefined` range checks accept), `SdfProgram` validation
-   and packing, and the Lipschitz analysis (`SdfProgram.Lipschitz.cs`). A new
-   parameter joins the part-program geometry key in
+   and packing, the Lipschitz analysis (`SdfProgram.Lipschitz.cs`), and its two
+   rows in `SdfOpRoles`: its role (`Of`) and the header lanes that select its
+   code (`CodeLanesOf`), which a chain's key reads (`SdfProgram.Chains.cs`). A
+   lane that only feeds arithmetic is data; keying it splits chains that share
+   code. A new parameter joins the part-program geometry key in
    `SdfProgram.PartPrograms.cs`, or parts differing only in it get shared.
 2. **Cull margins** — decide which channel covers the new instruction's reach:
    `MaxSmoothBlendRadius` (compose halo), `MaxScopedFieldReach` (a scoped field
@@ -438,7 +441,21 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    sweeps a new shape's or blend's point answers against its bounds. A rule may
    enclose rather than mirror (`Sweep` does), but it is never missing: a shape
    with no rule answers the unbounded interval, which empties its program's
-   frame.
+   frame. Both walks' cull (`SdfFieldEvaluator.Cull.cs`) admits blends by name,
+   each with the rule that makes a far candidate leave the answer bitwise (for
+   the box walk, its interval too), so a new blend is walked, never skipped,
+   until its rule is added there and `SdfFieldEvaluatorScopedCullLawTests`
+   covers it. The cull's proofs are reach certificates
+   (`SdfFieldEvaluator.Certificates.cs`) derived from the compiled fixed-point
+   stream: a shape is certified only by a per-shape argument bounding its point
+   field below the exact distance and, for the box walk, its interval's lower
+   end and width over a box. A new shape, or a changed point or interval rule
+   for a certified one, re-derives that argument in the same change, and
+   `SdfFieldEvaluatorCullBoundaryLawTests` covers it. Never certify from the
+   float program's skip spheres or an instance's declared bound: a quantized
+   rotation contracts far points, a float sum moves centres, a clipped scope's
+   solid is smaller than its operands bound, and an interval blend reading an
+   operand twice loosens its lower end, each of which changes an answer.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
@@ -584,6 +601,11 @@ reintroduce `[noinline]`.
 - A composition probe measures one worst case across every emitter. Any
   optional emission declares a `Probe` branch on its `ISdfSceneEmitter`, and
   probes reserve `SdfProgram.PartCompilationWordCapacity`, not `Words.Length`.
+  The probe is read for capacities alone, so it builds with
+  `packTapeCertificates: false`: the tile-tape certificates are more than half
+  of a large program's construction, no capacity depends on their values, and a
+  probe's tape words stay zero. A program the renderer executes always packs
+  them (the default); never read a certificate from a probe.
 - Emitter revisions compare componentwise; never sum or hash them, because some
   counters are assigned and can move down.
 - Static placement headroom covers both emission classes: a scoped creation
@@ -629,10 +651,20 @@ These are one-line cautions; the owning pages hold the derivations.
   Path, or a clipper only some walks apply certifies zero and stays on the full
   walk. Compiled parts join by hard union; generic instances additionally need the
   root-union certificate (`sdfCanTracePartsIndependently`). The shadow and
-  ambient group masks summarize each mask word as one sphere over its
-  certified ordinary-sized instances at their smallest gain
-  (`sdfSummarizeGroupMask`, others kept), so a many-instance body is rejected
-  once per word. The soft-shadow march queries
+  ambient walks alone (`sdfBoundedFieldActive`) read a bounded instance
+  (`SdfProgram.InstanceBoundsSecondaryField`, part entry `.z` bit 30,
+  `SDF_PART_BOUNDED_SECONDARY`) as `max(field, gap)` at a unit gain: mapCore
+  floors every candidate it composes into the root union at the gap, so the
+  floor is continuous and every surface and interior keeps its sign. That needs
+  the root-union certificate and a sphere holding the solid those walks see,
+  so an optional intersection, xor or morph, a lane erosion or an unmaskable
+  instance stays unbounded ([the ruling](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
+  Never set `sdfBoundedFieldActive` around another walk: primary, normals,
+  views and indirect read the field itself. The shadow and ambient group masks
+  summarize each mask word as one
+  sphere over its ordinary-sized instances at their smallest walk gain (1 when
+  bounded; `sdfSummarizeGroupMask`, zero-gain unbounded ones kept), so a
+  many-instance body is rejected once per word. The soft-shadow march queries
   `min(field, saturation)` through `sdfQueryDistanceCeiling`, the clearance past
   which neither its stride, hit decision nor estimate moves. Include the
   shading-scaled hit threshold as well as stride and penumbra saturation, the
@@ -1766,7 +1798,7 @@ Measure before and after on the same scene, as one GPU run at a time
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
 world.counters gpu     # per-node, per-pass counted work (dispatches, barriers, uploads, created objects)
-world.budget           # program words, instances, volumes, scope clamps
+world.budget           # program words, instances, volumes, scope clamps, segments, chains, vocabulary
 ```
 
 Compare the whole frame, not one pass: a cheaper beam can cost more primary

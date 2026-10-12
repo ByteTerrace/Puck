@@ -7,8 +7,8 @@ public sealed partial class SdfProgram {
     // KEEP IN SYNC with sdfTracePrimary in sdf-primary.hlsli.
     private const uint IndependentPartTracingFlag = 0x80000000u;
 
-    /// <summary>The part entry's leaf-count bits, below its distance gain (<see cref="PartDistanceGainShift"/>) and its
-    /// dynamic flag (bit 31).</summary>
+    /// <summary>The part entry's leaf-count bits, below its distance gain (<see cref="PartDistanceGainShift"/>), its
+    /// bounded-secondary flag (<see cref="PartBoundedSecondaryFlag"/>, bit 30) and its dynamic flag (bit 31).</summary>
     public const uint PartLeafCountMask = 0xffffu;
 
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
@@ -280,8 +280,10 @@ public sealed partial class SdfProgram {
             var entry = (((offset + 1) + index) * WordsPerVector);
             // mapCore's whole-instance skip (sdfInstanceCannotWin) and the group-mask word summary reject an instance
             // against its packed bound at this gain, a compiled part always and a generic one under the root-union
-            // certificate. A generic entry's zero leaf count keeps it on the generic walk.
-            var gainBits = (EncodePartDistanceGain(gain: InstanceDistanceGain(index: index)) << PartDistanceGainShift);
+            // certificate; the shadow and ambient walks read a bounded-secondary instance at a unit gain, its field floored
+            // at the gap. A generic entry's zero leaf count keeps it on the generic walk.
+            var gainBits = (EncodePartDistanceGain(gain: InstanceDistanceGain(index: index)) << PartDistanceGainShift)
+                | (InstanceBoundsSecondaryField(index: index) ? PartBoundedSecondaryFlag : 0u);
 
             m_words[(entry + 2)] = gainBits;
 

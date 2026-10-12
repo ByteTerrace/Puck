@@ -8,7 +8,7 @@ namespace Puck.SignedDistance.Tests;
 
 /// <summary>
 /// <see cref="SdfFieldEvaluator.TryDistanceBounds(Puck.Maths.FixedPosition, Puck.Maths.FixedPosition, out Puck.Maths.FixedInterval)"/> is certified: over a box, its interval holds every
-/// <see cref="SdfFieldEvaluator.TryDistance"/> answer at a point of the box. Each op, shape and blend is swept through
+/// <see cref="SdfFieldEvaluator.TryDistance(FixedPosition, out FixedQ4816, out int)"/> answer at a point of the box. Each op, shape and blend is swept through
 /// boxes from a single point to several units across, its corners and interior points evaluated by the point
 /// interpreter; a point box's interval stays within a few raws of its one answer, so a rule widened to the whole line
 /// fails as surely as one that misses an answer; only a sweep, whose rule encloses every parameter its point search

@@ -17,11 +17,6 @@ public sealed partial class GamingBrickEngine {
                     Choices: [.. ModelTokens.Keys]
                 ),
             new(
-                    "dmgSpeed",
-                    MachineFieldKind.Boolean,
-                    "Keep a DMG-rate tick budget across CPU speed changes."
-                ),
-            new(
                     "boot",
                     MachineFieldKind.String,
                     "Cold runs firmware; fast starts at cartridge handoff.",
@@ -165,10 +160,6 @@ public sealed partial class GamingBrickEngine {
             ? request.RequireAsset(fieldPath: "content.path").Image.ToArray()
             : null),
             savePath: request.SavePath,
-            dmgSpeed: (configuration.TryGetProperty(
-                propertyName: "dmgSpeed",
-                value: out var speed
-            ) && speed.GetBoolean()),
             audioSampleRate: request.AudioSampleRate,
             bootMode: boot,
             bootRomImage: (configuration.TryGetProperty(

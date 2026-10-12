@@ -34,7 +34,78 @@ public static partial class AzureCommand {
 
         return owner;
     }
-    private static async Task DeployInfrastructureAsync(string group, string? infrastructure) {
+    // Front Door refuses a rule set write that leaves two rules at one order, and Resource Manager writes a set's rules all
+    // at once, so a deployment that inserts or reorders a rule collides with the live rules it displaces. Moving those
+    // aside first lets the deployment's writes land in any order (FrontDoorRuleOrders).
+    private static async Task ParkFrontDoorRulesAsync(JsonNode plan, TimeProvider clock) {
+        const string Version = "2024-02-01";
+        var declared = FrontDoorRuleOrders.Declared(plan: plan);
+        var live = new List<FrontDoorRuleOrders.Rule>();
+
+        foreach (var set in declared.Select(selector: rule => rule.RuleSet).Distinct(comparer: StringComparer.OrdinalIgnoreCase)) {
+            var rules = await AzJsonAsync(
+                "rest",
+                "--method",
+                "get",
+                "--url",
+                $"https://management.azure.com{set}/rules?api-version={Version}",
+                "--query",
+                "value",
+                "-o",
+                "json"
+            );
+
+            live.AddRange(collection: rules.AsArray().Select(selector: rule => new FrontDoorRuleOrders.Rule(
+                Name: Text(value: rule!["name"]),
+                Order: rule["properties"]!["order"]!.GetValue<int>(),
+                RuleSet: set
+            )));
+        }
+        foreach (var move in FrontDoorRuleOrders.Park(
+            declared: declared,
+            live: live
+        )) {
+            var url = $"https://management.azure.com{move.Rule.RuleSet}/rules/{move.Rule.Name}?api-version={Version}";
+
+            Console.WriteLine(value: $"Front Door rule {move.Rule.Name} holds order {move.Rule.Order} that the deployment gives another rule; moving it to {move.To} until the deployment writes it.");
+            CliFiles.WriteJson(
+                path: "artifacts/front-door-rule-order.json",
+                value: new JsonObject { ["properties"] = new JsonObject { ["order"] = move.To } }
+            );
+            await AzAsync(
+                "rest",
+                "--method",
+                "patch",
+                "--url",
+                url,
+                "--body",
+                "@artifacts/front-door-rule-order.json",
+                "-o",
+                "none"
+            );
+            await RetryAsync(
+                action: async () => {
+                    var rule = await AzJsonAsync(
+                        "rest",
+                        "--method",
+                        "get",
+                        "--url",
+                        url,
+                        "-o",
+                        "json"
+                    );
+
+                    if (
+                        (Text(value: rule["properties"]!["provisioningState"]) != "Succeeded") ||
+                        (rule["properties"]!["order"]!.GetValue<int>() != move.To)
+                    ) { throw new InvalidOperationException(message: $"Front Door rule {move.Rule.Name} has not settled at order {move.To}."); }
+                },
+                attempts: 60,
+                clock: clock
+            );
+        }
+    }
+    private static async Task DeployInfrastructureAsync(TimeProvider clock, string group, string? infrastructure) {
         var owner = await SetOwnerAsync(group: group);
         var graph = await AzJsonAsync(
             "ad",
@@ -163,6 +234,10 @@ public static partial class AzureCommand {
         );
         if (((string?)plan["status"]) != "Succeeded") { throw new InvalidOperationException(message: "Production infrastructure planning failed."); }
         if (plan["changes"]!.AsArray().Any(predicate: change => (((string?)change!["changeType"]) == "Delete"))) { throw new InvalidOperationException(message: "Production plan includes resource deletion; inspect the retained plan."); }
+        await ParkFrontDoorRulesAsync(
+            clock: clock,
+            plan: plan
+        );
         CliFiles.WriteJson(
             path: "artifacts/production-outputs.json",
             value: await AzJsonAsync(

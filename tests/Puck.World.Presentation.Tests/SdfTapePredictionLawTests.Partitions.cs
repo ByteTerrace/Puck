@@ -16,6 +16,17 @@ public sealed partial class SdfTapePredictionLawTests {
         public long Considered, Dropped, Unsupported, Overlap;
         public long DepthConsidered, DepthDropped, DepthUnsupported;
 
+        public void Merge(StudyTotals other) {
+            checked {
+                Considered += other.Considered;
+                Dropped += other.Dropped;
+                Unsupported += other.Unsupported;
+                Overlap += other.Overlap;
+                DepthConsidered += other.DepthConsidered;
+                DepthDropped += other.DepthDropped;
+                DepthUnsupported += other.DepthUnsupported;
+            }
+        }
         public void Add(Sample sample, int depthUnits) {
             checked {
                 Considered += sample.Considered;

@@ -257,7 +257,10 @@ slots than the tables were built with. It is the single owner of every
 per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
-outcomes within the probe's ceilings cannot overrun the program allocation.
+outcomes within the probe's ceilings cannot overrun the program allocation. The
+probe is read for those capacities alone and builds without the tile-tape
+certificates (`packTapeCertificates: false`), whose values change no capacity
+(`SdfProgramCapacityProbeLawTests`).
 An upload changing only existing material values keeps geometry passes and
 indirect transport. It advances lighting and the next immutable solve source;
 material IDs, palette size and field/layout changes still invalidate geometry.

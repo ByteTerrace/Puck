@@ -228,12 +228,74 @@ Every point answer therefore lies inside its box's bounds, or both refuse. Every
 instruction joins the proof, so adding an instruction to a program can only
 shrink its frame.
 
-A bounds query pays only for what its box can reach. The walk skips a hard-union
-instance whose bound sphere lies, from every point of the box, at or beyond the
-running interval's upper end: the box form of `TryDistance`'s own instance cull,
-resting on the same sphere containment. A box near one object of many walks a
-fraction of the program, and the overload taking `instructionsWalked` reports
-the instructions it visited. A rotation reads each coordinate once per axis:
+A query pays only for what can move its answer. Both walks, `TryDistance` at a
+point and `TryDistanceBounds` over a box, skip only what they can prove leaves
+their answer exactly as walking every instruction would: the same distance,
+material and gradient at a point, the same interval over a box, so a certified
+sweep reads the same bounds and reaches the same outcome.
+
+The proofs are reach certificates (`SdfFieldEvaluator.Certificates.cs`), built
+once from the compiled fixed-point stream, never from the float program or an
+instance's declared bound. Each shape gets one by following its chain from its
+reset the way the walks evaluate it:
+- A quantized rotation is not an isometry. Its linear map contracts or dilates a
+  point by up to twice the quaternion's distance from unit length, in
+  proportion to the point's distance from the rotation's origin, so a
+  certificate's gain falls below one by that much, and the kernel's rounding
+  adds a few raws. A unit sphere a hundred thousand units out behind a
+  45-degree turn answers about 0.15 nearer than its exact sphere, and the
+  certificate allows for it.
+- Centres come from the compiled translations in double, so a translation of
+  2²⁴ then 1 lands where the fixed-point walk puts it, not where a float sum
+  would.
+- A uniform scale divides with rounding and scales every later candidate; a
+  fold, a non-uniform scale or any other point op leaves the chain without a
+  certificate.
+- Sphere, Box, ScreenSlab, Cylinder, Torus, Capsule and Trapezoid have one; any
+  other shape leaves its chain and instance always walked.
+
+A point certificate bounds the candidate below by its gain times the distance
+to its centre, less a radius. A box certificate bounds the candidate
+interval's lower end the same way, less a multiple of the box's half-diagonal
+for each rotation that turned the box (the interval rotation encloses the
+turned box in an axis-aligned one), and bounds the interval's width.
+
+The walks skip:
+- An **instance** that joins the answer by hard union: its shapes compose by
+  union outside a scope, and each scope is one level deep and pops by union.
+  A point walk skips it when its lowering members' certificates clear the
+  running answer: inside a scope a union is the lesser operand, a smooth union
+  at least that less k/4, and a subtraction or intersection at least the
+  accumulated operand, so the lowering members, less the scope's slack and
+  scaled by its pop, bound the instance. A clipped scope is bounded by its
+  operands, never by the smaller solid it clips to: intersecting two long,
+  perpendicular boxes makes a small cube, but the maximum of the two box
+  distances still underestimates distance to the cube at a diagonal point. A
+  box walk skips it when the lower end of every interval it can join reaches
+  the running upper end, which leaves the running interval bitwise. The
+  interval blends inside a scope read their operands more than once, so a
+  scoped instance's box certificate also carries what its blends can lose: a
+  lower bound and a width bound followed blend by blend when the program is
+  built.
+- A **chain** of shapes from a `ResetPoint` to the next one or an instance
+  boundary, when its certificate clears the running answer, inside a scope the
+  scope's. A union at or above the answer is not taken; a smooth union at least
+  its radius plus k·2⁻¹⁵ plus 16 raws above it rounds h to exactly one in either
+  walk and returns the answer bitwise; a subtraction whose negated candidate
+  lies at or below the answer is not taken. So a chain clears with its largest
+  smooth margin, and against the answer's negation too when it carves.
+- When every compose outside a scope is a hard union, the answer is the least
+  of the instances' own answers. The first instance the running answer cannot
+  skip first walks the nearest instance on its own; its answer joins where that
+  instance stands, and every instance whose certificate exceeds it (for a
+  point, strictly, which keeps an earlier equal candidate's material) is
+  skipped.
+
+A box near one
+object of many walks a fraction of the program; the overloads taking
+`instructionsWalked` report the instructions each walk visited, and
+`SdfFieldEvaluator.PointWork` and `SdfBoundsCache.ProcessWork` count them
+process-wide. A rotation reads each coordinate once per axis:
 the exact rotation is linear in the point, so its enclosure is that matrix over
 the box, widened by the four raws the point code's two rounded stages can miss
 it by, and met with the step-by-step enclosure. The matrix assumes neither
@@ -296,7 +358,15 @@ queries just off the face, and a large clearance times a large step scale to
 proposing the whole step. `SdfBoundsTightnessLawTests` holds a half turn's
 bounds to the unrotated program's over the box's image, and the box cull to
 walking under half of a twelve-object row while still enclosing every point
-answer. `SdfFieldOverflowLawTests` sweeps programs whose constants and
+answer. `SdfFieldEvaluatorCullLawTests`, `SdfFieldEvaluatorScopedCullLawTests`
+and `SdfFieldEvaluatorCullBoundaryLawTests` hold every point answer, material
+and gradient, and every box's bounds bit for bit, to a cull-off reference (the
+same instructions with no instance declared and every chain opened by a zero
+elongation, which keeps no certificate) across scoped, smooth, carved, clipped
+and tied instances, a quantized turn far out, a translation sum past a float's
+precision, a certified sweep reading a turned shape's loose interval, and
+random fields of turned, scaled and mirrored shapes.
+`SdfFieldOverflowLawTests` sweeps programs whose constants and
 positions reach the carrier's ends, and holds every point answer inside its
 bounds or both refusing.
 

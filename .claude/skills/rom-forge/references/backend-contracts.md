@@ -32,6 +32,13 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
   `0x02000200` the save mirror. Mode-0 background map uses screenblock 31; tiles and object graphics
   use their native VRAM regions. Code starts at `0x080000D8`, data at
   `0x0800C000`; the image is at least 64 KiB and grows with its data blob.
+- The AGB frame wait halts: the boot prologue sets DISPSTAT's V-blank enable
+  (bit 3) and IE's V-blank bit, IME stays clear, and each frame sync writes 1 to
+  IF to drop a stale request, then a zero byte to HALTCNT (`0x04000301`). The
+  next V-blank's request wakes the processor without dispatching anything.
+  Polling VCOUNT instead keeps the emulated processor busy all frame, which the
+  hosted machine pays for on every tick; `AdvancedIdleEquivalenceLawTests`
+  requires most of a run's cycles to be halted.
 - Thumb literal pools are DATA. `EmitLiteralPool` does not branch around them;
   emit a branch yourself wherever the instruction stream can fall through.
 - The AGB per-pixel surface is mode 4 drawn by BG2, so DISPCNT needs BG2's

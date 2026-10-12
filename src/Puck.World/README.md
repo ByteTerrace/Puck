@@ -2092,7 +2092,8 @@ facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
-their frozen envelopes, the Lipschitz step scale and march multiplier, the far
+their frozen envelopes, the Lipschitz step scale and march multiplier, its segments,
+chains and specialization vocabulary, the far
 distance with its reach multiplier, horizon-ray step tax, far-plane fog
 remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—

@@ -185,13 +185,11 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
         var rom = CreateCartridge(model: model);
         using var cold = new HumbleGamingBrickCore(
             model: model,
-            cartridgeRom: rom,
-            dmgSpeed: true
+            cartridgeRom: rom
         );
         using var fast = new HumbleGamingBrickCore(
             model: model,
             cartridgeRom: rom,
-            dmgSpeed: true,
             bootMode: MachineBootMode.Fast
         );
         using var seeded = MachineFactory.Create(configuration: new MachineConfiguration(

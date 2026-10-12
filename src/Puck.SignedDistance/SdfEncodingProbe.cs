@@ -18,7 +18,7 @@ public sealed record SdfEncodingProbeCall(string Name, IReadOnlyList<float> Inpu
 /// shape type, blend and lift, one per member of each enum an instruction lane carries (<see cref="SdfNoiseFlavor"/>,
 /// <see cref="SdfCellMode"/>, <see cref="SdfAxis"/>, <see cref="SdfPlane"/>, <see cref="SdfWallpaperGroup"/>), and calls
 /// that pack every side table and flag the kernels read: a material with every field and layer, compiled part programs,
-/// sweep, path and convex-polygon tables, instances and the instance grid.
+/// sweep, path and convex-polygon tables, instances and the instance grid, and the chain table.
 /// <para><see cref="Describe()"/> states, for each call's packed program, every word that holds an integer (a count, an
 /// offset, an enum, a flag, a packed bitfield), for each input which words move when that input alone is raised (the
 /// bits an integer word's change spans, and every float word that moves), and for each float word that moves, the input
@@ -244,6 +244,15 @@ public static class SdfEncodingProbe {
             inputs: [2.5f, 0.6f, 1f, 0.35f, 0.45f, 0.55f],
             name: "part-programs"
         );
+        // The chain table: segments merged and apart, a chain two segments share, a chain with code-selecting lanes, a
+        // scope's push cut at a reset and its pop closing an empty chain, and a field op cut at the program's end.
+        Call(name: "chain table", inputs: [0.31f, 0.37f, 0.41f, 0.5f, 0.43f, 0.06f], emit: static (b, m, v) => b
+            .ResetPoint().Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])).Sphere(v[3], m)
+            .Translate(offset: new Vector3(x: v[2], y: v[0], z: v[1])).Sphere(v[3], m)
+            .ResetPoint().Translate(offset: new Vector3(x: v[1], y: v[2], z: v[0])).Sphere(v[3], m)
+            .ResetPoint().PushField()
+            .ResetPoint().RotatePlane(driver: SdfAxis.Y, origin: 0f, plane: SdfPlane.XZ, rate: v[4]).Sphere(v[3], m).PopField()
+            .ResetPoint().Sphere(v[3], m).Onion(thickness: v[5]));
 
         return calls;
     }

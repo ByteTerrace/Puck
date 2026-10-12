@@ -184,11 +184,7 @@ public sealed class Machine : ISnapshotableMachine {
         // Accumulate against a cumulative target rather than the current instant, so the overshoot of the last
         // instruction is absorbed by the next call instead of accreting into drift.
         m_runTargetCycles += tCycles;
-
-        while (m_componentClock.Clock.CycleCount < m_runTargetCycles) {
-            m_busMaster.StepInstruction();
-        }
-
+        m_busMaster.RunUntil(dot: m_runTargetCycles);
         m_componentClock.Settle();
     }
     /// <summary>Serializes the machine's entire mutable state into a writer, in the same clock-first, then-each-component

@@ -1,10 +1,9 @@
 namespace Puck.AdvancedGamingBrick.Forge;
 
 /// <summary>
-/// The minimal polling kernel: direct boot with a zeroed BIOS means no BIOS SWI calls and no IRQ dispatch (the IRQ
-/// vector at 0x00000018 sits in zeroed BIOS ROM), so the kernel is a polled main loop — V-blank sync by watching
-/// VCOUNT, keypad held/pressed/previous edges read from KEYINPUT into the <see cref="AgbForgeMemoryMap"/> state
-/// block, a frame counter, the house 16-bit LCG PRNG (state × 5 + 1, output = the state's high byte; seed = the
+/// The minimal kernel: it makes no BIOS SWI calls and dispatches no interrupt (IME stays clear) — V-blank sync by
+/// halting until the V-blank request wakes the processor, keypad held/pressed/previous edges read from KEYINPUT into
+/// the <see cref="AgbForgeMemoryMap"/> state block, a frame counter, the house 16-bit LCG PRNG (state × 5 + 1, output = the state's high byte; seed = the
 /// frame counter XOR 0xA5C3, sampled at an input edge — input entropy only, never a wall clock), and a mode-3
 /// rectangle-fill draw helper. Emit the per-tick pieces inline and <see cref="EmitLibrary"/> once, anywhere control
 /// flow cannot fall into it.
@@ -126,46 +125,38 @@ public sealed class AgbForgeKernel {
         );
         m_emitter.BranchExchange(source: CoreRegister.Lr);
     }
-    // frameSync: waits out any in-progress V-blank, waits for the next one to start, polls KEYINPUT into the
-    // held/pressed/previous halfwords (active-high), and increments the 32-bit frame counter.
+    // frameSync: acknowledges any V-blank request already raised, halts until the next V-blank raises one (so a call
+    // made during a V-blank waits for the following one), polls KEYINPUT into the held/pressed/previous halfwords
+    // (active-high), and increments the 32-bit frame counter. Interrupts stay masked (IME clear), so the request only
+    // wakes the halt; nothing is dispatched.
     private void EmitFrameSyncRoutine() {
-        var waitOut = m_emitter.NewLabel();
-        var waitIn = m_emitter.NewLabel();
-
         m_emitter.MarkLabel(label: m_frameSyncLabel);
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.IoBase
+            value: AgbHw.InterruptEnable
         );
-        m_emitter.MarkLabel(label: waitOut);
-        m_emitter.LoadHalf(
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: AgbHw.VBlankInterrupt
+        );
+        m_emitter.StoreHalf(
             baseRegister: LowRegister.R0,
-            byteOffset: AgbHw.VerticalCounterOffset,
-            destination: LowRegister.R1
+            byteOffset: AgbHw.InterruptFlagsOffset,
+            source: LowRegister.R1
         );
-        m_emitter.CompareImmediate(
-            register: LowRegister.R1,
-            value: ((byte)AgbHw.ScreenHeight)
+        m_emitter.LoadConstant(
+            destination: LowRegister.R0,
+            value: AgbHw.PowerControl
         );
-        m_emitter.Branch(
-            condition: ThumbCondition.CarrySet,
-            label: waitOut
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: 0
         );
-        m_emitter.MarkLabel(label: waitIn);
-        m_emitter.LoadHalf(
+        m_emitter.StoreByte(
             baseRegister: LowRegister.R0,
-            byteOffset: AgbHw.VerticalCounterOffset,
-            destination: LowRegister.R1
+            byteOffset: AgbHw.HaltControlOffset,
+            source: LowRegister.R1
         );
-        m_emitter.CompareImmediate(
-            register: LowRegister.R1,
-            value: ((byte)AgbHw.ScreenHeight)
-        );
-        m_emitter.Branch(
-            condition: ThumbCondition.CarryClear,
-            label: waitIn
-        );
-
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
             value: AgbHw.KeyInput
@@ -286,8 +277,9 @@ public sealed class AgbForgeKernel {
         m_emitter.BranchExchange(source: CoreRegister.Lr);
     }
 
-    /// <summary>Emits the boot prologue: zero-fills the framework state region and sets DISPCNT to mode 3 with BG2
-    /// enabled. Clobbers r0–r2. The game's own screen clear and initial draw follow it.</summary>
+    /// <summary>Emits the boot prologue: zero-fills the framework state region, sets DISPCNT to mode 3 with BG2
+    /// enabled, and arms the V-blank request the frame sync halts on (DISPSTAT's V-blank enable and IE's V-blank
+    /// bit; IME stays clear). Clobbers r0–r2. The game's own screen clear and initial draw follow it.</summary>
     public void EmitBootPrologue() {
         var clearLoop = m_emitter.NewLabel();
 
@@ -329,6 +321,28 @@ public sealed class AgbForgeKernel {
         m_emitter.LoadConstant(
             destination: LowRegister.R1,
             value: AgbHw.Mode3WithBg2
+        );
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R0,
+            byteOffset: 0,
+            source: LowRegister.R1
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: AgbHw.VBlankStatusEnable
+        );
+        m_emitter.StoreHalf(
+            baseRegister: LowRegister.R0,
+            byteOffset: AgbHw.DisplayStatusOffset,
+            source: LowRegister.R1
+        );
+        m_emitter.LoadConstant(
+            destination: LowRegister.R0,
+            value: AgbHw.InterruptEnable
+        );
+        m_emitter.MoveImmediate(
+            destination: LowRegister.R1,
+            value: AgbHw.VBlankInterrupt
         );
         m_emitter.StoreHalf(
             baseRegister: LowRegister.R0,

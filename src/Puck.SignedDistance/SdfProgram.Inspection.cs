@@ -4,8 +4,9 @@ namespace Puck.SignedDistance;
 
 /// <summary>One live instance's packed ownership and the exact culling facts derived when its program was built.</summary>
 /// <param name="OwnedWords">Words exclusively owned by this instance: instruction headers/data/bounds, instance and
-/// segment rows, rigid leaves, shape side tables and per-instance part bindings. Shared palettes, grid and part assets
-/// are excluded and remain in the program's shared remainder.</param>
+/// segment rows, rigid leaves, chain-table entries and identities, shape side tables and per-instance part bindings.
+/// Shared palettes, grid and part assets, the chain table's header and the padding that rounds its entries and identities
+/// to whole vectors are excluded and remain in the program's shared remainder.</param>
 /// <param name="Shapes">ShapeBlend instructions in the instance.</param>
 /// <param name="ScopeClamps">Non-unit field-scope clamps in the instance.</param>
 /// <param name="BoundRadius">The packed culling radius, including padding or a parked/unmaskable sentinel.</param>
@@ -100,7 +101,7 @@ public sealed partial class SdfProgram {
                 clamps++;
             }
         }
-        return new SdfInstanceCost(OwnedWords: checked((vectors * WordsPerVector)), Shapes: shapes, ScopeClamps: clamps,
+        return new SdfInstanceCost(OwnedWords: checked(((vectors * WordsPerVector) + ChainTableWordsOf(endSegment: endSegment, firstSegment: firstSegment))), Shapes: shapes, ScopeClamps: clamps,
             BoundRadius: m_instanceBinning[index].Radius,
             Halo: (SmoothHalo(index: index) + MaxScopedFieldReach(first: instance.First, end: instance.End)),
             Unmaskable: (m_instanceBinning[index].Radius == UnmaskableBoundRadius),

@@ -509,12 +509,12 @@
               "sdf.world$primary": {
                 "values": {
                   "gpu.march.steps": 22770343,
-                  "gpu.shapes.evaluated": 665945898
+                  "gpu.shapes.evaluated": 665945947
                 }
               },
               "sdf.world$surface": {
                 "values": {
-                  "gpu.shapes.evaluated": 45908531
+                  "gpu.shapes.evaluated": 45908577
                 }
               },
               "sdf.world$tape": {
@@ -1099,12 +1099,12 @@
               "sdf.world$primary": {
                 "values": {
                   "gpu.march.steps": 22770345,
-                  "gpu.shapes.evaluated": 665945901
+                  "gpu.shapes.evaluated": 665945940
                 }
               },
               "sdf.world$surface": {
                 "values": {
-                  "gpu.shapes.evaluated": 45908536
+                  "gpu.shapes.evaluated": 45908582
                 }
               },
               "sdf.world$tape": {

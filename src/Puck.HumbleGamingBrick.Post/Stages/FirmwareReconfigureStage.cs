@@ -24,13 +24,11 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
         var rom = CreateCartridge(model: source);
         using var core = new HumbleGamingBrickCore(
             model: source,
-            cartridgeRom: rom,
-            dmgSpeed: true
+            cartridgeRom: rom
         );
         using var host = new MachineHost(
             model: source,
-            cartridgeRom: rom,
-            dmgSpeed: true
+            cartridgeRom: rom
         );
 
         for (var observation = 0; (observation < 2); ++observation) {
@@ -123,7 +121,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: HgbFirmware.GetImage(model: source),
             model: target,
-            options: $"{targetToken} dmgspeed cold"
+            options: $"{targetToken} cold"
         );
         RequireCoreExecution(core: core);
         RequireHostExecution(host: host);
@@ -187,7 +185,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             path: path
         );
         using var host = ((MachineHost)new GamingBrickEngine().Create(
-            options: $"cgb dmgspeed fast bios=\"{path}\"",
+            options: $"cgb fast bios=\"{path}\"",
             contentBytes: CreateCartridge(model: ConsoleModel.CgbE)
         ));
 
@@ -195,7 +193,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: image,
             model: ConsoleModel.CgbE,
-            options: $"cgb dmgspeed fast bios={path}"
+            options: $"cgb fast bios={path}"
         );
         RequireHostExecution(host: host);
 
@@ -214,7 +212,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: image,
             model: ConsoleModel.DmgC,
-            options: $"dmg dmgspeed fast bios={path}"
+            options: $"dmg fast bios={path}"
         );
         Require(
             condition: host.TryReconfigure(
@@ -227,7 +225,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: image,
             model: ConsoleModel.CgbE,
-            options: $"cgb dmgspeed fast bios={path}"
+            options: $"cgb fast bios={path}"
         );
 
         File.Delete(path: path);
@@ -242,7 +240,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: image,
             model: ConsoleModel.DmgB,
-            options: $"dmgb dmgspeed fast bios={path}"
+            options: $"dmgb fast bios={path}"
         );
 
         RequireHostRefusal(
@@ -274,7 +272,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             host: host,
             image: image,
             model: ConsoleModel.DmgB,
-            options: $"dmgb dmgspeed fast bios={path}"
+            options: $"dmgb fast bios={path}"
         );
     }
     private static byte[] CreateCartridge(ConsoleModel model) {

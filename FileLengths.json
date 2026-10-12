@@ -10,7 +10,6 @@
         "src/Puck.Maths/Algebra/MonogenicAlgebra.cs": 2207,
         "src/Puck.Maths/Oracle/Presentations.cs": 2297,
         "src/Puck.Maths/Oracle/PresentedAlgebra.cs": 2228,
-        "src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs": 2044,
         "src/Puck.State/Expressions/Runtime/ExpressionSpelling.cs": 2272,
         "src/Puck.Text/CffFontOutlines.cs": 2434,
         "src/Puck.Transpiler/Parsing/PuckParser.Rules.cs": 2059,

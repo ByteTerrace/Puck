@@ -137,6 +137,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PART_DISTANCE_GAIN_SHIFT", value: SdfProgram.PartDistanceGainShift);
         declarations.Bits(name: "SDF_PART_DISTANCE_GAIN_MASK", value: SdfProgram.PartDistanceGainMask);
         declarations.Real(name: "SDF_PART_DISTANCE_GAIN_UNIT", value: SdfProgram.PartDistanceGainUnit);
+        declarations.Bits(name: "SDF_PART_BOUNDED_SECONDARY", value: SdfProgram.PartBoundedSecondaryFlag);
         declarations.Count(name: "SDF_TAPE_SLAB_COUNT", value: SdfWorldPackage.TapeSlabCount);
         declarations.Count(name: "SDF_TAPE_HEADER_WORDS", value: SdfWorldPackage.TapeHeaderWords);
         declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);
@@ -152,6 +153,21 @@ public static class SdfIsaHlsl {
         declarations.Lane(lane: SdfProgram.InstanceFlagsLane, name: "SDF_INSTANCE_FLAGS");
         declarations.Lane(lane: SdfProgram.InstanceTapeTokenCountLane, name: "SDF_INSTANCE_TAPE_TOKENS");
         declarations.Lane(lane: SdfProgram.WorldSegmentCountLane, name: "SDF_WORLD_SEGMENT_COUNT");
+        declarations.Lane(lane: SdfProgram.ChainTableLane, name: "SDF_CHAIN_TABLE_OFFSET");
+        declarations.Section(title: "The chain table (SdfProgram.Chains): its header's lane accessors, each segment's first chain and chain count, and each chain's identity, read from the vector the index's division by the per-vector count selects.");
+        declarations.Lane(lane: SdfProgram.ChainCountLane, name: "SDF_CHAIN_COUNT");
+        declarations.Lane(lane: SdfProgram.ChainIdentitiesLane, name: "SDF_CHAIN_IDENTITIES_OFFSET");
+        declarations.Count(name: "SDF_CHAIN_SEGMENTS_PER_VECTOR", value: SdfProgram.ChainSegmentsPerVector);
+        declarations.Count(name: "SDF_CHAIN_IDENTITIES_PER_VECTOR", value: SdfProgram.ChainIdentitiesPerVector);
+        declarations.Expression(
+            name: "SDF_CHAIN_SEGMENT_FIRST(v, segment)",
+            value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * {SdfProgram.ChainSegmentWords}u) + {SdfProgram.ChainSegmentFirstWord}u])")
+        );
+        declarations.Expression(
+            name: "SDF_CHAIN_SEGMENT_COUNT(v, segment)",
+            value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * {SdfProgram.ChainSegmentWords}u) + {SdfProgram.ChainSegmentCountWord}u])")
+        );
+        declarations.Expression(name: "SDF_CHAIN_IDENTITY(v, chain)", value: "((v)[(chain) % SDF_CHAIN_IDENTITIES_PER_VECTOR])");
         declarations.Section(title: "Shape-lane flags and the type mask on a ShapeBlend instruction's header.");
         declarations.Bits(
             name: "SDF_SHAPE_DETAIL_FLAG",

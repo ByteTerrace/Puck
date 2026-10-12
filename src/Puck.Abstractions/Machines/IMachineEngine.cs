@@ -21,7 +21,7 @@ public interface IMachineEngine {
     /// <summary>Creates a machine from content and an options string this engine owns the vocabulary of. A null
     /// <paramref name="contentBytes"/> selects the provider's empty or built-in program state; a
     /// null or empty <paramref name="options"/> selects the engine's defaults.</summary>
-    /// <param name="options">The engine-specific options string (e.g. <c>agb dmgspeed</c>), or <see langword="null"/>.</param>
+    /// <param name="options">The engine-specific options string (e.g. <c>cgb fast</c>), or <see langword="null"/>.</param>
     /// <param name="contentBytes">The content image, or <see langword="null"/> to create an empty machine.</param>
     /// <param name="savePath">The content's persistent-save path, or <see langword="null"/> for an in-memory-only save.</param>
     /// <param name="audioSampleRate">The <see cref="IAudioMachine"/> output rate in frames per emulated second, or 0

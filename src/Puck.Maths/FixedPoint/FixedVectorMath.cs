@@ -602,9 +602,23 @@ public static class FixedVectorMath {
     private static UInt128 Square(long value) {
         var magnitude = FusedArithmetic.RawMagnitude(value: value);
 
-        return (((UInt128)magnitude) * magnitude);
+        return Math.BigMul(a: magnitude, b: magnitude);
     }
     private static bool TryRoot(UInt128 squaredSum, out FixedQ4816 result) {
+        // A sum inside 64 bits roots in 64 bits: its floor root is below 2³², so the square and the remainder test
+        // cannot wrap, and the rounded root fits the carrier.
+        if (squaredSum <= ulong.MaxValue) {
+            var narrow = ((ulong)squaredSum);
+            var narrowRoot = narrow.SquareRoot();
+
+            if ((narrow - (narrowRoot * narrowRoot)) > narrowRoot) {
+                ++narrowRoot;
+            }
+
+            result = FixedQ4816.FromRawBits(value: ((long)narrowRoot));
+            return true;
+        }
+
         var root = squaredSum.SquareRoot();
 
         if ((squaredSum - (root * root)) > root) {

@@ -189,7 +189,9 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     /// rather than the produced-frame cadence (the Advanced GamingBrick analogue of HumbleGamingBrick's
     /// <c>Machine.Run</c>). Steps whole instructions or halted idle cycles until the master clock has advanced at least
     /// <paramref name="cycles"/> further; the final instruction or DMA burst's overshoot is itself deterministic — identical
-    /// on every replay of the same budget sequence — so it drifts no state between runs. A non-positive budget, or a
+    /// on every replay of the same budget sequence — so it drifts no state between runs. Halted idle cycles inside which
+    /// nothing can happen are idled as one span (<see cref="AgbBus.IdleHalted"/>), leaving the state the single steps
+    /// would. A non-positive budget, or a
     /// bare test bus with no master clock, steps nothing.</summary>
     /// <param name="cycles">The master-cycle budget to advance this call.</param>
     /// <returns>The number of CPU steps, including halted idle steps.</returns>
@@ -205,6 +207,16 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         var steps = 0;
 
         while (m_concreteBus.Cycles < target) {
+            if (m_concreteBus.Halted) {
+                var idled = m_concreteBus.IdleHalted(limit: (target - m_concreteBus.Cycles));
+
+                if (idled > 0L) {
+                    steps += ((int)idled);
+
+                    continue;
+                }
+            }
+
             m_cpu.Step();
             ++steps;
         }

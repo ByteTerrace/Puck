@@ -20,12 +20,15 @@ contracts every phase keeps.
 
 ## Implementation status
 
-Nothing on this page has landed. It builds on the work that gives every kernel
-one field-evaluation call site and splits the indirect receiver out of the views
-kernel (described below as the call-site work), which has landed, so phases 1
-and 2 can start. A scratch prototype of the generator,
-outside the repository, produced the compile numbers quoted here; nothing of it
-is meant to be merged.
+Phase 1 has landed: every program packs its chain table and exposes its
+specialization set (`SdfProgram.Chains.cs`, `SdfChain`, `SdfSpecializationSet`),
+`world.budget` and `puck creation stats` print them, and no kernel reads them
+beyond the layout loader's offset. Phases 2 to 5 remain. The page builds on the
+work that gives every kernel one field-evaluation call site and splits the
+indirect receiver out of the views kernel (described below as the call-site
+work), which has landed. A scratch prototype of the generator, outside the
+repository, produced the compile numbers quoted here; nothing of it is meant to
+be merged.
 
 ## Why the interpreter costs what it does
 
@@ -91,11 +94,15 @@ Phase 1's read-back counts all of them from the live program.
 
 A world's specialization is its **chain set** with its **vocabulary**:
 
-- A *chain* is the run of instructions from a segment's start, or from the
-  previous compose, to the next compose, keyed by each instruction's opcode and
-  the header lanes that select code, never its data. A chain ending in a shape
-  records only that it ends in a shape; the shape's type belongs to the
-  vocabulary.
+- A *chain* is the run of instructions from the start of a segment range (a
+  `ResetPoint` or an instance boundary, `SdfProgram.SegmentRanges`), or from the
+  previous compose, through the next compose, keyed by each instruction's
+  opcode and the header lanes that select code, never its data. A chain ending
+  in a shape records only that it ends in a shape; the shape's type belongs to
+  the vocabulary. A run that reaches the end of its range with no compose is cut
+  there and is a chain of its own. Because chains follow ranges, not directory
+  entries, the merge of nearby skippable ranges into one directory entry, which
+  their bounds decide, never changes a chain.
 - The *vocabulary* is the set of shape types, blend operations and compose
   forms (union, smooth, morph, stairs and the rest) the program uses, including
   those reached through rigid-plan leaves and part programs.
@@ -208,12 +215,17 @@ kernel keeps, so phase 3 measures the specialized views and receiver kernels
 without them.
 
 The C# half is `SdfProgram.Chains` in `Puck.SignedDistance`: the chain table the
-program packs, the set it uses, and the key of each chain. Which header lanes
-select code is a column of `SdfOpRoles`: the shape and blend lanes of a shape,
-the compose form of a pop, the plane and axis selectors of `RotatePlane`,
-`AxialProfile`, `Shear`, `RepeatPolar` and `WallpaperFold`. The seed of
-`CellJitter` and `NoiseDisplace`, the octave count, and `GaussianPush`'s float
-bits in the shape lane are data.
+program packs, the set it uses (`SdfSpecializationSet`), and the key of each chain
+(`SdfChain`). Which header lanes select code is a column of `SdfOpRoles`
+(`CodeLanesOf`): the shape and blend lanes of a shape, the compose form of a pop,
+the plane and axis selectors of `RotatePlane`, `AxialProfile`, `Shear`,
+`RepeatPolar` and `WallpaperFold`, a wallpaper fold's group, a polar repeat's
+mirror flag, a cell jitter's noise flavor and a cell displacement's mode. The
+seed of `CellJitter`, `NoiseDisplace` and `CellDisplace`, the octave count, the
+palette strides in the material lane and `GaussianPush`'s float bits in the
+shape lane are data. Every directory segment has its chains in the table, rigid
+ones included: a kernel without dynamic transforms walks a dynamic rigid
+segment's instructions rather than its leaves.
 
 ### The field contracts the generated code keeps
 
@@ -512,13 +524,15 @@ one at a time per GPU.
 The program learns its own chains; no kernel reads them yet.
 
 - `SdfOpRoles` gains the column naming each opcode's code-selecting lanes.
-- A new partial, `SdfProgram.Chains.cs`, builds the chain table from
-  `SegmentRanges` and the rigid plan, computes each chain's key and 32-bit
-  identity, refuses a collision inside one program by name, and exposes the
-  program's specialization set (chains and vocabulary). The table packs after
-  the segment directory; its lane constants live in `SdfProgram.IsaLayout.cs`,
-  `SdfIsaHlsl` generates their accessors, `SdfEncodingProbe` gains a call that
-  packs a chain table, and `sdfLoadProgramLayout` reads the new offset.
+- A new partial, `SdfProgram.Chains.cs`, builds the chain table over every
+  directory segment, cut at `SegmentRanges`, computes each chain's key and
+  32-bit identity, refuses a collision inside one program by name, and exposes
+  the program's specialization set (chains and vocabulary). The table packs
+  after the tape certificates, and the world-segment list header's second lane
+  holds its offset, since every lane of the directory headers before it is
+  taken; its lane constants live in `SdfProgram.IsaLayout.cs`, `SdfIsaHlsl`
+  generates their accessors, `SdfEncodingProbe` gains a call that packs a chain
+  table, and `sdfLoadProgramLayout` reads the new offset.
 - Read-backs: `world.budget` and `puck creation stats` print segments, chains
   and vocabulary, which also closes the census's gaps (engine emitters, game
   compositions) from the live program.
@@ -567,7 +581,8 @@ Specialized kernels exist and are proved; nothing at run time selects them.
   SPIR-V function boundary.
 - A verb, `puck shaders specialize --world <path>`, prints a world's set, key,
   and each specialized kernel's size and compile time.
-- Laws: the replay law and key law in `tests/Puck.SdfVm.Tests`, and
+- Laws: the replay law in `tests/Puck.SdfVm.Tests` (the key law,
+  `SdfProgramChainLawTests`, landed with phase 1), and
   `SdfFieldDeviceLawTests.Specialized.cs` in `tests/Puck.World.Tests` (a GPU
   leg).
 

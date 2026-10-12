@@ -37,7 +37,9 @@ source and the two Post READMEs.
 The unified integer tick base is 2²⁴ ticks per second:
 
 - DMG and normal-speed CGB run at 2²² ticks per second.
-- Double-speed CGB runs at 2²³ ticks per second.
+- Double-speed CGB runs its processor at 2²³ ticks per second; the display, and
+  the host's pacing (`HumbleGamingBrickCore.CycleRate`), stay at 2²² dots per
+  second in every model.
 - GBA runs at 2²⁴ ticks per second.
 - One GBA tick is one 16.777216 MHz CPU cycle; one frame is 280,896 cycles.
 

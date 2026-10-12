@@ -52,7 +52,7 @@
         "src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs": 2,
         "src/Puck.Shaders/ShaderPipelineRenderNode.Work.cs": 1,
         "src/Puck.SignedDistance/Queries/SdfFieldEvaluator.Cells.cs": 1,
-        "src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs": 20,
+        "src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs": 19,
         "src/Puck.SignedDistance/SdfDomainExpansion.cs": 1,
         "src/Puck.SignedDistance/SdfInstanceGrid.cs": 2,
         "src/Puck.SignedDistance/SdfProgram.Lipschitz.cs": 1,

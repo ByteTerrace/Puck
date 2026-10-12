@@ -676,6 +676,19 @@ The platform reconciliation preserves the current Actors image and declared
 subnets, records a what-if plan, rejects resource deletion, and applies
 `main.bicep`. It does not grant CI Owner; that is identity-team setup.
 
+Front Door refuses a rule write that leaves two rules of a set at one order, and
+Resource Manager writes a set's rules all at once, so a deployment that inserts or
+reorders a rule collides with the live rules it displaces (`The delivery rules order
+values cannot have duplicates`), and a swap of two orders can never converge. Between
+the plan and the apply, `deploy-infrastructure` reads the live rules of every rule set
+the plan declares a rule in, and moves each live rule that holds an order another rule
+is declared at to an order above everything the set holds or will hold
+(`FrontDoorRuleOrders`, held by `FrontDoorRuleOrdersLawTests`). The apply then writes
+every rule at its declared order in any sequence. A rule that already holds its
+declared order never moves, so a converged set costs one read per rule set; a rule the
+template no longer names is moved the same way and stays at its parking order, since an
+incremental deployment removes nothing.
+
 Production uses `bytrcfuncp000`, Actors in `bytrccap001`, and `bytrcfdp000` Front
 Door over `bytrcstp001`. Image deployment uses immutable digests. Functions uses
 the official action with the prebuilt payload; an `always()` cleanup restores

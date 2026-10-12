@@ -72,8 +72,12 @@ public static class BenchRunner {
         worldCommand.Detail(detail: """
             Boots the shipped puck.world.json and the checked-in Klondike fixture document
             (Bench/klondike.fixture.puck) and prints one row per number: shipped-world server construction time,
-            idle-tick time and quiet-tick allocation (median over a sampled window, after a warmup), and a scripted
-            Klondike deal's per-tick time and per-mutation allocation. A server construction against the shipped world
+            idle-tick time and quiet-tick allocation (median over a sampled window, after a warmup), the contact work
+            per sampled tick as deterministic counts (sweeps, sweep bounds queries, interval walks with their
+            instructions and rotation expansions, point evaluations with their instructions), the tick paced at the
+            simulation rate with the count of submissions that waited on a screen machine's worker, each screen
+            machine's own tick of emulation timed alone, and a scripted Klondike deal's per-tick time and per-mutation
+            allocation. A server construction against the shipped world
             costs hundreds of milliseconds, past what an iteration-based job can amortize honestly, which is why this
             lane sits beside BenchmarkDotNet rather than inside it.
             """);
