@@ -1,8 +1,9 @@
 // The receiver's approach: a sphere-traced chain of complete-field samples along its camera ray, from half the finest
 // spacing short of the surface, each sample's clear ball reaching the next. The chain joins the receiver when a
 // sample's ball reaches the surface point within its slack: the larger of the surface sample's own clearance and the
-// primary acceptance threshold the surface point was accepted within. Its first sample, the farthest and widest ball,
-// is then the receiver's certified launch. The receiver pass marches it (sdf-indirect-receiver.hlsli) before a shared
+// primary acceptance threshold the surface point was accepted within. The joining sample is then the receiver's
+// certified launch: its ball reaches the surface point, so a camera sample that moves the point within the pixel keeps
+// the certificate. The receiver pass marches it (sdf-indirect-receiver.hlsli) before a shared
 // proof can read a canonical record; a receiver whose chain never joins launches along its normal under the shared
 // admission instead.
 #ifndef SDF_INDIRECT_APPROACH_HLSLI

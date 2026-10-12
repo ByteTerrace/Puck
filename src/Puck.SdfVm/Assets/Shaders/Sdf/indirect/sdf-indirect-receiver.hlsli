@@ -43,9 +43,11 @@ bool sdfIndirectIrradianceSupported(float3 launched, uint level, uint mask, uint
 // published support succeed, stored as the pixel's certificate. Status 0 is no receiver, 1 no published bank, 2 no
 // supported level, 3 a certified level, 4 a deferred proof and 5 a receiver outside the material path. A field receiver
 // first marches its approach (sdf-indirect-approach.hlsli): a fixed number of complete-field samples per pixel, outside
-// the shared admission, so a published canonical proof answers it with no admitted work. A mesh receiver, or one whose
-// approach joins no sample, launches along its normal under that admission. A procedure (sdfIndirectReceiveStep): each
-// approach sample is a query, each level's launch and proof a call, which its owner's run answers.
+// the shared admission, so a published canonical proof answers it with no admitted work; its launch is the chain sample
+// that joined, and a withdrawn certificate the new launch still reaches is inherited (sdfIndirectReceiveInherits). A
+// mesh receiver, or one whose approach joins no sample, launches along its normal under that admission. A procedure
+// (sdfIndirectReceiveStep): each approach sample is a query, each level's launch and proof a call, which its owner's run
+// answers.
 struct SdfIndirectReceiveProc {
     uint2 pixel;
     uint viewIndex;
@@ -57,12 +59,18 @@ struct SdfIndirectReceiveProc {
     float approachDistance;
     float surfaceClearance;
     uint approachStep;
-    float approachLaunch;
+    // The chain sample whose ball joined the surface point, and that ball; the surface point and zero without one.
     float3 approach;
     float approachClearance;
     uint level;
     float3 launched;
     float clearance;
+    // The withdrawn certificate the approach may still inherit (sdfIndirectReceiveInherits).
+    bool inherit;
+    uint inheritLevel;
+    uint inheritMask;
+    float3 inheritLaunch;
+    float inheritClearance;
     uint phase;
 };
 static SdfIndirectReceiveProc sdfIndirectReceiveProc = (SdfIndirectReceiveProc)0;
@@ -73,17 +81,100 @@ static const uint SdfIndirectReceiveProved = 2u;
 static const uint SdfIndirectReceiveSurface = 3u;
 static const uint SdfIndirectReceiveApproach = 4u;
 
-uint sdfIndirectReceiveBegin(SdfPixel p, SdfSurfaceSample receiver, float3 surfacePoint) {
+// The receiver's decisions that ask the field nothing: participation, demand, publication and the retained certificate.
+// Returns whether the receiver still needs its approach, launch and proof, which its procedure runs; a receiver that
+// does not never enters the procedure run, whose spilled state every pixel would otherwise pay for.
+bool sdfIndirectReceivePrepare(SdfPixel p, SdfSurfaceSample receiver, float3 surfacePoint) {
     sdfIndirectReceiveProc.pixel = p.pixel;
     sdfIndirectReceiveProc.viewIndex = p.viewIndex;
     sdfIndirectReceiveProc.rayDirection = p.rayDirection;
     sdfIndirectReceiveProc.receiver = receiver;
     sdfIndirectReceiveProc.surfacePoint = surfacePoint;
+    sdfIndirectReceiveProc.inherit = false;
+    if (passGroup.indirectTier == SdfIndirectTierOff) { return false; }
+    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
+    sdfIndirectReceiveProc.record = record;
+    if (!sdfIndirectReceiverRecordValid(record)) { return false; }
+    uint source = sdfVisibilitySource(sdfLoadVisibility(record).identity);
+    uint policy = SDF_INDIRECT_PARTICIPATION_CAST;
+    if (receiver.mesh) {
+        uint meshWords, meshStride;
+        sdfMeshRegion.GetDimensions(meshWords, meshStride);
+        if (source >= meshWords / SdfMeshDrawWords) { return false; }
+        uint flags = sdfMeshRegion[sdfMeshRecord(source) + SdfMeshFlagsWord];
+        policy = sdfIndirectPolicy((flags & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, (flags & SdfMeshDynamicFlag) != 0u);
+    } else if (source != 0u) {
+        if (!sdfProgramLayout.valid || source > sdfProgramLayout.instanceCount) { return false; }
+        policy = sdfInstanceIndirectPolicy(sdfWords[sdfInstanceEntryOffset(sdfProgramLayout.instanceOffset, source - 1u) + 1u]);
+    }
+    if (policy == SDF_INDIRECT_PARTICIPATION_OFF) { sdfIndirectReceiverStatus = 0u; return false; }
+    // Demand counts real receivers even before the cache publishes its first lighting bank.
+    uint receiverWords, receiverStride;
+    indirectDeferredRW.GetDimensions(receiverWords, receiverStride);
+    if (receiverWords > 1u) {
+        uint ignored;
+        InterlockedAdd(indirectDeferredRW[1], 1u, ignored);
+    }
+    sdfIndirectReceiverStatus = 1u;
+    if (passGroup.indirectReadPublication == 0u) { return false; }
+    sdfIndirectReceiverStatus = 2u;
+    uint retainedLevel;
+    uint retainedMask;
+    float3 retainedLaunch;
+    float retainedClearance;
+    if (sdfIndirectReceiverCertificate(record, retainedLevel, retainedMask, retainedLaunch, retainedClearance)) {
+        if (sdfIndirectCertificateJoins(surfacePoint, retainedLaunch, retainedClearance, receiver.threshold)) {
+            if (retainedMask != 0u && sdfIndirectIrradianceSupported(retainedLaunch, retainedLevel, retainedMask,
+                passGroup.indirectReadGeneration, passGroup.indirectReadPublication)) {
+                sdfIndirectReceiverLevel = retainedLevel;
+                sdfIndirectReceiverMask = retainedMask;
+                sdfIndirectReceiverLaunch = retainedLaunch;
+                sdfIndirectReceiverStatus = 3u;
+            }
+            return false;
+        }
+        sdfIndirectReceiveProc.inherit = (retainedMask != 0u);
+        sdfIndirectReceiveProc.inheritLevel = retainedLevel;
+        sdfIndirectReceiveProc.inheritMask = retainedMask;
+        sdfIndirectReceiveProc.inheritLaunch = retainedLaunch;
+        sdfIndirectReceiveProc.inheritClearance = retainedClearance;
+        sdfIndirectWithdrawReceiverCertificate(record);
+    }
+    sdfIndirectReceiveProc.approach = surfacePoint;
+    sdfIndirectReceiveProc.approachClearance = 0.0;
+    sdfIndirectReceiveProc.level = 0u;
+    return true;
+}
+
+// Begins the field work of a receiver sdfIndirectReceivePrepare left uncertified.
+uint sdfIndirectReceiveBegin() {
     sdfIndirectReceiveProc.phase = SdfIndirectReceiveBegun;
     return SdfIndirectProcReceive;
 }
 
-// The certificate a receiver stores when no level certifies it: none, or deferred to a later frame's proof.
+// Whether two points share a cell of a level.
+bool sdfIndirectSameCell(float3 a, float3 b, uint level) {
+    float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
+    int3 cellA, cellB;
+    return sdfIndirectCellAt(a, spacing, cellA) && sdfIndirectCellAt(b, spacing, cellB) && all(cellA == cellB);
+}
+
+// Whether the approach inherits the pixel's withdrawn certificate, as a receiver inherits a canonical record: within the
+// certificate's cell at its level, the new launch ball reaches the certified ball, so it joins the corners the
+// certificate proved through clear space, and the mask still has published support there.
+bool sdfIndirectReceiveInherits() {
+    float3 launch = sdfIndirectReceiveProc.approach;
+    float clearance = sdfIndirectReceiveProc.approachClearance;
+    uint level = sdfIndirectReceiveProc.inheritLevel;
+    if (!(clearance > 0.0) || level >= sdfIndirectLevelCount() || !sdfIndirectSameCell(launch, sdfIndirectReceiveProc.inheritLaunch, level)) { return false; }
+    float gap = length(launch - sdfIndirectReceiveProc.inheritLaunch);
+    return isfinite(gap) && gap <= clearance + max(sdfIndirectReceiveProc.inheritClearance, 0.0)
+        && sdfIndirectIrradianceSupported(launch, level, sdfIndirectReceiveProc.inheritMask, passGroup.indirectReadGeneration, passGroup.indirectReadPublication);
+}
+
+// The certificate a receiver stores when no level certifies it: none, or deferred to a later frame's proof. A completed
+// unresolved certificate stands while its surface point stays within the ball that joined it: the approach's launch
+// ball, or the surface point itself with no clearance.
 void sdfIndirectReceiveUncertified(uint record) {
     if (sdfIndirectReceiverDeferred) {
         sdfIndirectReceiverStatus = 4u;
@@ -94,60 +185,12 @@ void sdfIndirectReceiveUncertified(uint record) {
             if (deferredWords != 0u) { InterlockedAdd(indirectDeferredRW[0], 1u, ignored); }
         }
     }
-    sdfIndirectStoreReceiverCertificate(record, 0u, 0u, sdfIndirectReceiveProc.surfacePoint, 0.0, !sdfIndirectReceiverDeferred);
+    sdfIndirectStoreReceiverCertificate(record, 0u, 0u, sdfIndirectReceiveProc.approach, max(sdfIndirectReceiveProc.approachClearance, 0.0), !sdfIndirectReceiverDeferred);
 }
 
 uint sdfIndirectReceiveStep() {
     uint record = sdfIndirectReceiveProc.record;
     if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveBegun) {
-        if (passGroup.indirectTier == SdfIndirectTierOff) { return SdfIndirectStepReturn; }
-        record = worldVisibilityRecord(sdfIndirectReceiveProc.pixel, sdfIndirectReceiveProc.viewIndex);
-        sdfIndirectReceiveProc.record = record;
-        if (!sdfIndirectReceiverRecordValid(record)) { return SdfIndirectStepReturn; }
-        uint source = sdfVisibilitySource(sdfLoadVisibility(record).identity);
-        uint policy = SDF_INDIRECT_PARTICIPATION_CAST;
-        if (sdfIndirectReceiveProc.receiver.mesh) {
-            uint meshWords, meshStride;
-            sdfMeshRegion.GetDimensions(meshWords, meshStride);
-            if (source >= meshWords / SdfMeshDrawWords) { return SdfIndirectStepReturn; }
-            uint flags = sdfMeshRegion[sdfMeshRecord(source) + SdfMeshFlagsWord];
-            policy = sdfIndirectPolicy((flags & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, (flags & SdfMeshDynamicFlag) != 0u);
-        } else if (source != 0u) {
-            if (!sdfProgramLayout.valid || source > sdfProgramLayout.instanceCount) { return SdfIndirectStepReturn; }
-            policy = sdfInstanceIndirectPolicy(sdfWords[sdfInstanceEntryOffset(sdfProgramLayout.instanceOffset, source - 1u) + 1u]);
-        }
-        if (policy == SDF_INDIRECT_PARTICIPATION_OFF) { sdfIndirectReceiverStatus = 0u; return SdfIndirectStepReturn; }
-        // Demand counts real receivers even before the cache publishes its first lighting bank.
-        uint receiverWords, receiverStride;
-        indirectDeferredRW.GetDimensions(receiverWords, receiverStride);
-        if (receiverWords > 1u) {
-            uint ignored;
-            InterlockedAdd(indirectDeferredRW[1], 1u, ignored);
-        }
-        sdfIndirectReceiverStatus = 1u;
-        if (passGroup.indirectReadPublication == 0u) { return SdfIndirectStepReturn; }
-        sdfIndirectReceiverStatus = 2u;
-        uint retainedLevel;
-        uint retainedMask;
-        float3 retainedLaunch;
-        float retainedClearance;
-        if (sdfIndirectReceiverCertificate(record, retainedLevel, retainedMask, retainedLaunch, retainedClearance)) {
-            if (sdfIndirectCertificateJoins(sdfIndirectReceiveProc.surfacePoint, retainedLaunch, retainedClearance,
-                sdfIndirectReceiveProc.receiver.threshold)) {
-                if (retainedMask != 0u && sdfIndirectIrradianceSupported(retainedLaunch, retainedLevel, retainedMask,
-                    passGroup.indirectReadGeneration, passGroup.indirectReadPublication)) {
-                    sdfIndirectReceiverLevel = retainedLevel;
-                    sdfIndirectReceiverMask = retainedMask;
-                    sdfIndirectReceiverLaunch = retainedLaunch;
-                    sdfIndirectReceiverStatus = 3u;
-                }
-                return SdfIndirectStepReturn;
-            }
-            sdfIndirectWithdrawReceiverCertificate(record);
-        }
-        sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.surfacePoint;
-        sdfIndirectReceiveProc.approachClearance = 0.0;
-        sdfIndirectReceiveProc.level = 0u;
         if (!sdfIndirectReceiveProc.receiver.mesh) {
             sdfIndirectReceiveProc.approachStep = 0u;
             sdfIndirectReceiveProc.phase = SdfIndirectReceiveSurface;
@@ -162,7 +205,7 @@ uint sdfIndirectReceiveStep() {
         float3 direction = sdfIndirectReceiveProc.rayDirection;
         bool marching = false;
         if (sdfIndirectReceiveProc.phase == SdfIndirectReceiveSurface) {
-            // surfaceClearance holds the surface point's slack; the launch is the chain's first sample.
+            // surfaceClearance holds the surface point's slack; the launch is the chain's joining sample.
             sdfIndirectReceiveProc.surfaceClearance = sdfIndirectApproachSlack(ball, sdfIndirectReceiveProc.receiver.threshold);
             precise float3 retreat = direction * (spacing * SdfIndirectApproachRetreat);
             precise float3 start = sdfIndirectReceiveProc.surfacePoint - retreat;
@@ -171,10 +214,9 @@ uint sdfIndirectReceiveStep() {
             marching = sdfIndirectReceiveProc.surfaceClearance >= 0.0 && all(isfinite(start));
         } else if (ball > 0.0 && isfinite(ball)) {
             float3 sample = sdfIndirectPointAt(sdfIndirectReceiveProc.approachStart, direction, sdfIndirectReceiveProc.approachDistance);
-            if (sdfIndirectReceiveProc.approachStep == 1u) { sdfIndirectReceiveProc.approachLaunch = ball; }
             if (sdfIndirectApproachJoined(sdfIndirectReceiveProc.surfacePoint, sample, ball, sdfIndirectReceiveProc.surfaceClearance)) {
-                sdfIndirectReceiveProc.approach = sdfIndirectReceiveProc.approachStart;
-                sdfIndirectReceiveProc.approachClearance = sdfIndirectReceiveProc.approachLaunch;
+                sdfIndirectReceiveProc.approach = sample;
+                sdfIndirectReceiveProc.approachClearance = ball;
             } else {
                 // Each step lands on its sample's ball, so consecutive balls overlap and the chain stays connected.
                 sdfIndirectReceiveProc.approachDistance += ball;
@@ -217,6 +259,18 @@ uint sdfIndirectReceiveStep() {
             return SdfIndirectStepReturn;
         }
     }
+    if (sdfIndirectReceiveProc.inherit) {
+        sdfIndirectReceiveProc.inherit = false;
+        if (sdfIndirectReceiveInherits()) {
+            sdfIndirectReceiverLevel = sdfIndirectReceiveProc.inheritLevel;
+            sdfIndirectReceiverMask = sdfIndirectReceiveProc.inheritMask;
+            sdfIndirectReceiverLaunch = sdfIndirectReceiveProc.approach;
+            sdfIndirectReceiverStatus = 3u;
+            sdfIndirectStoreReceiverCertificate(record, sdfIndirectReceiverLevel, sdfIndirectReceiverMask, sdfIndirectReceiverLaunch,
+                sdfIndirectReceiveProc.approachClearance, true);
+            return SdfIndirectStepReturn;
+        }
+    }
     if (sdfIndirectReceiveProc.level < sdfIndirectLevelCount()) {
         uint level = sdfIndirectReceiveProc.level;
         float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
@@ -252,6 +306,7 @@ struct SdfIndirectReceiverProc {
     bool replaced;
     uint nearLoads;
     uint beforeVisits;
+    bool proving;
 #ifndef SDF_INDIRECT_COMPARISON
     bool previousSecondary;
     bool previousShadow;
@@ -269,23 +324,36 @@ static const uint SdfIndirectReceiverBegun = 0u;
 static const uint SdfIndirectReceiverReceived = 1u;
 static const uint SdfIndirectReceiverReplaced = 2u;
 
-uint sdfIndirectReceiverBegin(SdfPixel p, SdfSurfaceSample receiver, float3 surfacePoint) {
+// Readies one pixel's receiver and decides, asking the field nothing, whether it runs the procedure: for the field work
+// of an uncertified receiver, or for the replacement of a certified one's incoming light.
+bool sdfIndirectReceiverPrepare(SdfPixel p, SdfSurfaceSample receiver, float3 surfacePoint) {
     sdfIndirectReceiverProc.p = p;
     sdfIndirectReceiverProc.receiver = receiver;
     sdfIndirectReceiverProc.surfacePoint = surfacePoint;
+    sdfIndirectReceiverProc.selected = (SdfIndirectSources)0;
+    sdfIndirectReceiverProc.replaced = false;
+    sdfIndirectReceiverProc.nearLoads = 0u;
+    sdfIndirectReceiverProc.beforeVisits = sdfFieldVisits;
+    sdfIndirectApproachVisits = 0u;
+    sdfIndirectReceiverProc.proving = sdfIndirectReceivePrepare(p, receiver, surfacePoint);
+    if (sdfIndirectReceiverProc.proving) { return true; }
+    if (sdfIndirectReceiverStatus != 3u) { return false; }
+#ifdef SDF_INDIRECT_COMPARISON
+    return sdfIndirectAlternativeAdmitted(p);
+#else
+    return passGroup.indirectNearEnabled != 0u && sdfIndirectNearAdmitted(passGroup.indirectTier, passGroup.indirectMethod, p.pixel, passGroup.historyFrames);
+#endif
+}
+
+uint sdfIndirectReceiverBegin() {
     sdfIndirectReceiverProc.phase = SdfIndirectReceiverBegun;
     return SdfIndirectProcReceiver;
 }
 
 uint sdfIndirectReceiverStep() {
     if (sdfIndirectReceiverProc.phase == SdfIndirectReceiverBegun) {
-        sdfIndirectReceiverProc.selected = (SdfIndirectSources)0;
-        sdfIndirectReceiverProc.replaced = false;
-        sdfIndirectReceiverProc.nearLoads = 0u;
-        sdfIndirectReceiverProc.beforeVisits = sdfFieldVisits;
-        sdfIndirectApproachVisits = 0u;
         sdfIndirectReceiverProc.phase = SdfIndirectReceiverReceived;
-        return sdfIndirectCall(sdfIndirectReceiveBegin(sdfIndirectReceiverProc.p, sdfIndirectReceiverProc.receiver, sdfIndirectReceiverProc.surfacePoint));
+        if (sdfIndirectReceiverProc.proving) { return sdfIndirectCall(sdfIndirectReceiveBegin()); }
     }
     SdfPixel p = sdfIndirectReceiverProc.p;
     if (sdfIndirectReceiverProc.phase == SdfIndirectReceiverReceived) {
@@ -370,7 +438,7 @@ void sdfReceiverStage(SdfPixel p) {
         uint beforeLoads = sdfIndirectLoads;
         precise float3 rayTravel = p.rayDirection * s.t;
         precise float3 surfacePoint = p.rayOrigin + rayTravel;
-        sdfIndirectRun(sdfIndirectReceiverBegin(p, s, surfacePoint));
+        if (sdfIndirectReceiverPrepare(p, s, surfacePoint)) { sdfIndirectRun(sdfIndirectReceiverBegin()); }
         selected = sdfIndirectReceiverProc.selected;
         replaced = sdfIndirectReceiverProc.replaced;
         beforeLoads += sdfIndirectReceiverProc.nearLoads;

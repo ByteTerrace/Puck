@@ -618,13 +618,23 @@ sphere-traces along the camera ray from half the finest spacing back, each step
 landing on the previous sample's clear ball, so consecutive balls overlap. The
 chain joins the receiver when a sample's ball reaches the surface point within
 its slack: the larger of the surface sample's clearance and the threshold
-primary accepted the surface within. The chain's first sample, the widest ball,
-is then the receiver's launch. The approach takes the surface sample and at
+primary accepted the surface within. The joining sample is then the receiver's
+launch: its proof starts there, its certificate keeps it, and views reads the bank
+there. Its ball reaches the surface point, so a new camera sample that moves the
+point within the pixel keeps the certificate, where a ball half the finest
+spacing back along a grazing ray would not. The approach takes the surface sample and at
 most eight chain samples per uncertified receiver, a fixed per-pixel cost
 outside the shared receiver admission, so a receiver whose canonical proof is
-published spends no admitted work. A receiver whose chain never joins, at a
+published spends no admitted work. A receiver whose certificate the new surface
+point left, but whose new joining ball still reaches the withdrawn certificate's
+ball in its cell, inherits that certificate's level and mask, as a receiver
+inherits a canonical record, and spends no admitted work either. A receiver whose chain never joins, at a
 grazing angle or behind thin geometry, and a mesh receiver take the bounded
 normal launch under that admission.
+The pass decides participation, publication and a retained certificate before
+it enters the receiver's procedures, and a receiver they settle never enters
+them: the procedures' resumable state costs every pixel that enters them, field
+work or none.
 
 A converging capture counts a sample, and is served, only once the fenced
 receiver scope belongs to the sample its next render takes: the submitted surface
@@ -638,7 +648,10 @@ The views pass applies the complete lighting bank through the same certified
 component proof and irradiance weights as the solve. A missing approach uses
 the bounded normal launch. All views share the tier's finite new-proof allowance;
 its admission counter resets once through the residency's existing trace pass,
-including frames with no new transport rays. Each view owns a separate eight-byte deferred/reader census.
+including frames with no new transport rays. A receiver takes a ticket from the
+counter only while it reads the counter below the limit and hands back a ticket
+past it, so the counter ends at exactly the admitted count and only an exhausted
+allowance defers a receiver, never contention for the counter. Each view owns a separate eight-byte deferred/reader census.
 A shared proof is canonical: its record belongs to an anchor bin, not to a
 receiver. It is proved from the bin's centre within a fixed allowance, two
 component attempts and that anchor's clearance, so the record is a pure
@@ -657,16 +670,17 @@ the caller's own and are never shared. Each view's
 deferred counter has an explicit transfer reset before its receiver pass, whose preserving
 compute-written version views reads and supplies that view's fenced readback. A different camera's
 deferred work never delays this view's completion. Each receiver retains
-its exact launch and completed result in the visibility record, independently
+its exact certified point and completed result in the visibility record, independently
 of shared proof-hash collisions. The complete allocation identity and transport
 revision qualify this certificate. Primary preserves it while the same recorder
 writes the same visibility storage (buffer, binding and render grid) over stable
 geometry; new storage or an unfinished bake clears it. A new camera sample, jitter
-or moving geometry keeps it: the receiver keeps a certificate while its launch
+or moving geometry keeps it: the receiver keeps a certificate while its certified
 ball, widened by the threshold primary accepted the surface within, still reaches
 the pixel's new surface point, and withdraws it and proves the pixel again once
 the point has left (another object, a disocclusion). An unresolved certificate
-keeps the surface point itself and stands only within that threshold. Clearing
+keeps the approach's launch ball, or the surface point itself without one, and
+stands only within it and that threshold. Clearing
 every certificate on each new sample would make a view with a moving body prove
 every pixel each frame against the shared admission, leaving most deferred.
 Completed unresolved results also stand, while deferred results remain retryable.

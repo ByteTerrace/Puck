@@ -60,14 +60,23 @@ marched in `sdf-indirect-receiver.hlsli`): per uncertified field receiver, a
 complete-field surface sample, then at most eight sphere-traced samples along
 the camera ray from half the finest spacing back, whose overlapping balls join
 the surface point within the larger of its clearance and primary's acceptance
-threshold; the chain's first sample is the launch. Do not derive a ball from a
+threshold; the joining sample is the launch, the certificate and the bank's read
+point, so a jittered surface point stays within its ball and the certificate
+stands. A withdrawn certificate whose ball the new launch ball reaches in its cell
+passes its level and mask on (`sdfIndirectReceiveInherits`), the canonical-record
+rule applied to the pixel's own proof. Do not derive a ball from a
 camera mask, tape or independent part, and never move the approach back into
 primary: primary marches alike with indirect on and off, and visibility L.y is
 spare. The approach is fixed per-pixel work outside the shared receiver
 admission, so a published canonical proof answers it without admitted work;
 its visits are excluded from the receiver's measured price. A mesh, or a
 receiver whose approach joins no sample, takes the bounded normal launch under
-that admission.
+that admission. Decide participation, publication and a retained certificate
+before the procedure run (`sdfIndirectReceiverPrepare`): entering the run costs
+every pixel its spilled procedure state, field work or none. Receiver admission
+takes a ticket from the shared counter and hands back one past the limit; never
+reintroduce a bounded compare-exchange loop, whose contention defers receivers the
+allowance has room for and keeps a capture's census from ever reaching zero.
 
 Shared receiver-proof writes use a package `ComputeReadWrite` buffer input.
 Declare the access in both the package and its fragment; never bind a writable

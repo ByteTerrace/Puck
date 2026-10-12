@@ -54,15 +54,20 @@ public sealed class SdfIndirectAdmissionDeviceLawTests {
         Seed(value: uint.MaxValue);
         Request(1u);
         var overflow = Snapshot();
+
+        // Exactly the limit's requests at once, every lane contending for the counter in one dispatch.
+        Seed(value: 0u);
+        Request(count: 1u, x: 32u, y: 16u);
+        var contention = Snapshot();
         var result = Run(extension: extension, groups: groups, limit: Limit, rows: rows, services: services);
 
         Assert.Equal(new AdmissionResult(Accepted: 1, Counter: Limit, CounterReads: 64, Deferred: 63, Errors: 0, FieldQueries: 0, Requests: 64), Read(result, rows.Count, boundary));
         Assert.Equal(new AdmissionResult(Accepted: 0, Counter: Limit, CounterReads: 128, Deferred: 128, Errors: 0, FieldQueries: 0, Requests: 128), Read(result, rows.Count, full));
-        // With 64 contenders and 64 attempts, each loser can observe at most the other 63 successful increments.
+        // Contention defers nothing while the limit leaves room: every one of 64 contenders takes a ticket.
         Assert.Equal(new AdmissionResult(Accepted: 64, Counter: 64, CounterReads: 64, Deferred: 0, Errors: 0, FieldQueries: 0, Requests: 64), Read(result, rows.Count, reset));
         var pressure = Read(result, rows.Count, viewports);
 
-        Assert.InRange(actual: pressure.Accepted, low: 1u, high: Limit);
+        Assert.Equal(Limit, pressure.Accepted);
         Assert.Equal(pressure.Accepted, pressure.Counter);
         Assert.Equal(Requests, pressure.Requests);
         Assert.Equal(Requests, (pressure.Accepted + pressure.Deferred));
@@ -70,6 +75,8 @@ public sealed class SdfIndirectAdmissionDeviceLawTests {
         Assert.Equal(0u, pressure.FieldQueries);
         Assert.Equal(Requests, pressure.CounterReads);
         Assert.Equal(new AdmissionResult(Accepted: 0, Counter: uint.MaxValue, CounterReads: 64, Deferred: 64, Errors: 0, FieldQueries: 0, Requests: 64), Read(result, rows.Count, overflow));
+        // A request the limit has room for is admitted however many contend: contention alone never defers one.
+        Assert.Equal(new AdmissionResult(Accepted: Limit, Counter: Limit, CounterReads: Limit, Deferred: 0, Errors: 0, FieldQueries: 0, Requests: Limit), Read(result, rows.Count, contention));
         TestContext.Current.TestOutputHelper?.WriteLine(message: $"admission {extension}: {pressure}");
 
         rows.Clear();

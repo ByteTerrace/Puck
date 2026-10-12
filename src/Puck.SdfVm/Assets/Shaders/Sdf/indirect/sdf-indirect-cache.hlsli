@@ -88,17 +88,19 @@ static uint sdfIndirectReceiverVisits = 0u;
 // The field visits of the receiver's approach, per-pixel work outside the allowance its price measures.
 static uint sdfIndirectApproachBefore = 0u;
 static uint sdfIndirectApproachVisits = 0u;
-// The finite CAS loop never overflows the counter. Contention may defer a receiver, but cannot admit past the limit.
+// Each request reads the counter once and takes a ticket only while it reads below the limit; a ticket past the limit
+// is handed back. The counter therefore ends at exactly the admitted count, never wraps, and never admits past the
+// limit, and no request defers for contention while the limit leaves room: only an exhausted allowance defers.
 bool sdfIndirectAdmitReceiver() {
     uint word = sdfIndirectReceiverProofWordOffset(passGroup.indirectTier);
     uint limit = min(passGroup.indirectReceiverProofs, sdfIndirectReceiverProofBudget(passGroup.indirectTier));
     if (limit == 0u || !sdfIndirectRange(word, 1u)) { sdfIndirectReceiverDeferred = true; return false; }
-    uint observed = sdfIndirectLoad(word);
-    [loop] for (uint attempt = 0u; attempt < 64u && observed < limit; attempt++) {
-        uint previous;
-        InterlockedCompareExchange(indirectCacheRW[word], observed, observed + 1u, previous);
-        if (previous == observed) { sdfIndirectReceiverAdmitted = true; return true; }
-        observed = previous;
+    if (sdfIndirectLoad(word) < limit) {
+        uint ticket;
+        InterlockedAdd(indirectCacheRW[word], 1u, ticket);
+        if (ticket < limit) { sdfIndirectReceiverAdmitted = true; return true; }
+        uint ignored;
+        InterlockedAdd(indirectCacheRW[word], 0xffffffffu, ignored);
     }
     sdfIndirectReceiverDeferred = true;
     return false;
