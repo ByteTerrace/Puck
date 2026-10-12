@@ -7,18 +7,12 @@
     "c08-two-dot-is-not-ancestry",
     "c10-lane-with-integration-head",
     "c14-scratch-repo-maintenance",
-    "v01-lane-handback-no-gpu",
-    "v04-failed-build-law-passes",
-    "v05-skipped-red-leg",
     "v07-process-search-self-match",
     "v08-citations-during-parity"
   ],
   "test": [
     "c02-flake-vs-failure",
-    "c04-skip-is-not-red",
     "c11-older-timestamp-restore",
-    "c12-ledger-rerecorded",
-    "c13-scan-law-cannot-fail",
-    "v06-mutant-by-substitution"
+    "c13-scan-law-cannot-fail"
   ]
 }

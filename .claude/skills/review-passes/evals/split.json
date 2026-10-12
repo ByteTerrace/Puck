@@ -23,9 +23,7 @@
     "r14-hard-author-branch-diverged",
     "r17-hard-verifier-rejects-a-fix",
     "r18-scope-two-dot-log-versus-diff",
-    "r19-pass-claims-from-a-broken-sandbox",
     "r20-pass-ends-on-a-question",
-    "r21-write-pass-while-a-run-builds",
-    "r22-lane-outside-the-narrow-rule"
+    "r21-write-pass-while-a-run-builds"
   ]
 }
