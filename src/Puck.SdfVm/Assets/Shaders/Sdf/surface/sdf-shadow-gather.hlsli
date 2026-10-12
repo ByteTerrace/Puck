@@ -169,18 +169,18 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     uint instanceOffset = sdfInstanceDirectoryOffset();
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
-    if (!grid.enabled) {
+    if (!grid.enabled || !sdfGroupMaskFits(packedInstanceCount)) {
 #ifdef SDF_SHADOW_PASS
         if (sdfShadowMotionActive) {
             sdfShadowMovedFlat(lane);
             GroupMemoryBarrierWithGroupSync();
         }
 #endif
-        return 0u; // no grid — flat fallback (cheap for few instances; matches a would-be gather so the grid toggle is invariant)
+        // No grid, or more instances than the shared mask addresses: the flat field, exact like a gather (cheap for few
+        // instances; matching a would-be gather keeps the grid toggle invariant). The camera-tile approximation is
+        // taken only when that quality mode was requested.
+        return 0u;
     }
-
-    // Stage 1's shared mask covers SDF_MAX_INSTANCES. A large reserved pool is still an exact gather; the caller
-    // selects the camera-tile approximation only when that quality mode was requested.
 
     if (litCount == 0u) {
         return 2u; // nothing in this group marches a shadow; the cleared mask is complete
