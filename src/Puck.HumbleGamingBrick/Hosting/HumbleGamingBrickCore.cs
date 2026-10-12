@@ -53,7 +53,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
-            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{FormatShapes.MachineIdentityCurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"),
+            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{MachineIdentity.CurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"),
             configuration.BootRom,
             configuration.CartridgeRom
         );

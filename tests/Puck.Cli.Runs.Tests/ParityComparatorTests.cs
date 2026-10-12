@@ -175,17 +175,16 @@ public sealed class ParityComparatorTests : IDisposable {
 
         return path;
     }
-    private static void WriteManifestFile(string path, string backend, string captureLine, string? shape = null) =>
+    private static void WriteManifestFile(string path, string backend, string captureLine, string schema = "puck.parity.manifest.v1") =>
         File.WriteAllText(
-            contents: (((((("{\"schema\":\"puck.parity.manifest.v1\",\"shape\":\"" + (shape ?? FormatLedgerShapes.Of(id: "WorldCaptureManifest.SchemaId"))) + "\",\"backend\":\"") + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
+            contents: (((((("{\"schema\":\"" + schema) + "\",\"backend\":\"") + backend) + "\",\"world\":\"w\",\"captures\":[") + captureLine) + "]}"),
             path: path
         );
 
-    // A capture manifest carries the shape fingerprint the ledger records for its layout; the same schema under another shape is
-    // refused by the fingerprint's name before any member is read.
+    // A capture manifest of another schema is refused by the schema's name before any other member is read.
     [Fact]
-    public void AManifestOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
-        using var directory = new TemporaryDirectory(prefix: "puck-parity-shape-");
+    public void AManifestOfAnotherSchemaIsRefusedByItsName() {
+        using var directory = new TemporaryDirectory(prefix: "puck-parity-schema-");
 
         var path = Path.Combine(
             path1: directory.RootPath,
@@ -221,7 +220,7 @@ public sealed class ParityComparatorTests : IDisposable {
                 tick: 1
             ),
             path: path,
-            shape: "0000000000000000"
+            schema: "puck.parity.manifest.v0"
         );
         Assert.False(condition: ParityManifestLoader.TryLoadManifest(
             error: out var error,
@@ -230,7 +229,7 @@ public sealed class ParityComparatorTests : IDisposable {
         ));
         Assert.Contains(
             actualString: error,
-            expectedSubstring: "shape fingerprint '0000000000000000'"
+            expectedSubstring: "manifest schema 'puck.parity.manifest.v0' is not 'puck.parity.manifest.v1'"
         );
     }
 

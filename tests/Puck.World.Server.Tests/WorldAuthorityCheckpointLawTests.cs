@@ -300,12 +300,10 @@ public sealed class WorldAuthorityCheckpointLawTests {
         // other, and the federation key stays a distinct identity.
         Assert.True(condition: WorldHelloDoor.TryAccept(
             offeredKey: WorldProtocol.WireProtocolKey,
-            offeredShape: WorldProtocol.WireShape,
             refusal: out _
         ));
         Assert.False(condition: WorldHelloDoor.TryAccept(
             offeredKey: WorldProtocol.WireProtocolKey ^ 1UL,
-            offeredShape: WorldProtocol.WireShape,
             refusal: out var helloRefusal
         ));
         Assert.Equal(

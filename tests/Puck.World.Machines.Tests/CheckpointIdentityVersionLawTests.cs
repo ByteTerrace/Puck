@@ -2,16 +2,15 @@ using System.Globalization;
 using Puck.AdvancedGamingBrick;
 using Puck.HumbleGamingBrick;
 using Puck.Machines;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Machines.Tests;
 
-/// <summary>An emulator core's checkpoint identity names the shape fingerprint the ledger records for its snapshot layout,
-/// so a checkpoint of another layout is a different identity and a host refuses its restore by identity.</summary>
-public sealed class CheckpointIdentityShapeLawTests {
+/// <summary>An emulator core's checkpoint identity names its snapshot layout's version, so a checkpoint of another layout
+/// is a different identity and a host refuses its restore by identity.</summary>
+public sealed class CheckpointIdentityVersionLawTests {
     [Fact]
-    public void AnAdvancedCoresIdentityNamesTheLedgersShapeAndNoOtherShapeIsTheSameIdentity() {
+    public void AnAdvancedCoresIdentityNamesTheSnapshotVersionAndNoOtherVersionIsTheSameIdentity() {
         var bios = new byte[(16 * 1024)];
         var rom = new byte[0x200];
 
@@ -23,7 +22,7 @@ public sealed class CheckpointIdentityShapeLawTests {
         Assert.Equal(
             core.CheckpointIdentity,
             MachineCheckpointIdentity.Compute(
-                FormattableString.Invariant(formattable: $"puck.agb.core.v1/{FormatLedgerShapes.Of(id: "AgbMachineIdentity.CurrentVersion")}/False/False"),
+                FormattableString.Invariant(formattable: $"puck.agb.core.v1/{AgbMachineIdentity.CurrentVersion}/False/False"),
                 bios,
                 rom
             )
@@ -31,14 +30,14 @@ public sealed class CheckpointIdentityShapeLawTests {
         Assert.NotEqual(
             core.CheckpointIdentity,
             MachineCheckpointIdentity.Compute(
-                FormattableString.Invariant(formattable: $"puck.agb.core.v1/0000000000000000/False/False"),
+                FormattableString.Invariant(formattable: $"puck.agb.core.v1/{(AgbMachineIdentity.CurrentVersion + 1)}/False/False"),
                 bios,
                 rom
             )
         );
     }
     [Fact]
-    public void AHumbleCoresIdentityNamesTheLedgersShapeAndNoOtherShapeIsTheSameIdentity() {
+    public void AHumbleCoresIdentityNamesTheSnapshotVersionAndNoOtherVersionIsTheSameIdentity() {
         var rom = new byte[0x8000];
         var configuration = HgbFirmware.CreateConfiguration(
             bootMode: MachineBootMode.Fast,
@@ -48,10 +47,10 @@ public sealed class CheckpointIdentityShapeLawTests {
 
         using var core = new HumbleGamingBrickCore(configuration: configuration);
 
-        string Identity(string shape) => MachineCheckpointIdentity.Compute(
+        string Identity(int version) => MachineCheckpointIdentity.Compute(
             string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"puck.hgb.core.v1/{shape}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"
+                handler: $"puck.hgb.core.v1/{version}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"
             ),
             configuration.BootRom,
             configuration.CartridgeRom
@@ -59,11 +58,11 @@ public sealed class CheckpointIdentityShapeLawTests {
 
         Assert.Equal(
             core.CheckpointIdentity,
-            Identity(shape: FormatLedgerShapes.Of(id: "MachineIdentity.CurrentVersion"))
+            Identity(version: MachineIdentity.CurrentVersion)
         );
         Assert.NotEqual(
             core.CheckpointIdentity,
-            Identity(shape: "0000000000000000")
+            Identity(version: (MachineIdentity.CurrentVersion + 1))
         );
     }
 }

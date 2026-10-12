@@ -110,11 +110,6 @@
              once for the same project — without it, a second pass would add the same Compile item twice, which
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
-        <!-- The format boundary markers `puck formats` reads from syntax. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatLeafAttribute.cs" Link="Properties/FormatLeafAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatSeamAttribute.cs" Link="Properties/FormatSeamAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/FormatPartAttribute.cs" Link="Properties/FormatPartAttribute.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
         <!-- The way onto the host's GPU, matched by name by GpuTraitAnalyzer (GPU001). -->
         <Compile Include="$(MSBuildThisFileDirectory)build/OpensGpuDeviceAttribute.cs" Link="Properties/OpensGpuDeviceAttribute.cs" />
     </ItemGroup>

@@ -258,7 +258,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             token: token
         );
         Assert.Equal(
-            $"puck.world.qualification.v1 {FormatLedgerShapes.Of(id: "WorldReleaseQualificationRunner.Marker")}",
+            "puck.world.qualification.v1",
             File.ReadAllText(path: Path.Combine(
                 path1: output,
                 path2: "qualification.fixture"

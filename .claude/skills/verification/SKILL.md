@@ -65,7 +65,6 @@ and commit the result with the change:
 
 | Owns | Check form |
 |---|---|
-| `FormatVersions.json` | `puck formats --check` |
 | `CanaryCeilings.json` | `puck canary-ceilings --check` |
 | Formatting of touched files | `puck format --check --file-list <scratchpad>/<lane>-files.json` |
 | The project-map layering block | `puck architecture --check` |

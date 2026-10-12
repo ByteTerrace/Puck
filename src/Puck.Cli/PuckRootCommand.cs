@@ -16,7 +16,6 @@ using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
-using Puck.Cli.Formats;
 using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Puck.Cli.Landing;
@@ -79,13 +78,11 @@ public static class PuckRootCommand {
             CartridgeCostCommand.Create(),
             CountersCommand.Create(),
             DeclarationsCommand.Create(),
-            DerivationsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
-            FormatsCommand.Create(),
             GateCommand.Create(clock: clock, composition: Gate),
             HostCommand.Create(composition: Gate),
             LandingCommand.Create(),

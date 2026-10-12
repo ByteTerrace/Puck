@@ -33,21 +33,20 @@ public sealed class ParserLaxityTests {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
-    // The same format version under another shape fingerprint is refused by the fingerprint, before the domain or any
-    // later element is read: the domain is malformed too, and the refusal still names the shape.
+    // Another format version is refused by the version, before the domain or any later element is read: the domain
+    // is malformed too, and the refusal still names the version.
     [Fact]
-    public void ShapeFingerprint_SameVersionOtherShape_RefusesByNameBeforeAnyLaterElement() {
+    public void FormatVersion_OtherVersion_RefusesByNameBeforeAnyLaterElement() {
         var codec = new CborAttestationCodec();
-        var recorded = Puck.Testing.FormatLedgerShapes.Of(id: "CborAttestationCodec.FormatVersion");
-        var other = ((recorded[0] == '0') ? ('1' + recorded[1..]) : ('0' + recorded[1..]));
+        var other = (CborAttestationCodec.FormatVersion + 1);
 
         var exception = Assert.Throws<FormatException>(testCode: () => _ = codec.DecodeAttestation(wire: BuildHandWrittenAttestation(
             domainWidth: 31,
-            shape: other
+            version: other
         )));
 
         Assert.Contains(
-            expectedSubstring: $"shape fingerprint {other}",
+            expectedSubstring: $"format version {other}",
             actualString: exception.Message
         );
     }

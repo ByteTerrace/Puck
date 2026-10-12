@@ -98,14 +98,12 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
-| [`puck derivations`](#puck-derivationscode-provenance-keys) | generate or check bake fingerprints from their transitive source dependencies, and list the reach by assembly. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
-| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format's token and shape, and each project's generated `FormatShapes.g.cs`, or checks them with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
@@ -610,57 +608,6 @@ default design coordinates. Complex-script shaping remains a separate layer;
 generated atlases preserve source glyph IDs for it.
 
 ---
-
-## `puck derivations`—code provenance keys
-
-```text
-puck derivations [--check]
-```
-
-A bake's cache key contains the SHA-256 fingerprint of the code that produces
-it. The `[Derivation(name: "bake")]` entry points include creation baking and
-outcome encoding. The command reads the solution manifest and loads
-`Puck.World.Authoring` and its complete Release project reference graph through
-the same MSBuild workspace as `references`, follows calls and reads transitively,
-and resolves referenced repository assemblies back to their source. A
-per-project analyzer sees metadata across that boundary and cannot compute this
-reach on its own. The producer project is the bake slice's registered root;
-unrelated executables and their platform workloads are outside this load.
-
-The command writes
-`src/Puck.SignedDistance/Baking/DerivationFingerprint.cs` and lists one reached
-symbol per line, grouped by assembly. It reuses `TokenFingerprint`'s
-`csharp-tokens-v1` framing, ordering assembly-qualified declaration ids and
-partial declaration fragments canonically. Each fragment includes its ordered
-symbol and type bindings, so rebinding aliases changes the hash even when the
-set of reached declarations stays the same. Type headers and member bodies are
-separate: an uncalled sibling method does not move the key. Enum members and
-executable field/property initializers retain their source order because it
-determines implicit values and initialization effects. Initializers across partial
-type declarations retain their compilation order. Constructors,
-initializers, implicit conversions and virtual/interface implementations in the
-producer's dependency graph are included. Reached types also contribute their
-interface implementations and virtual members, including callbacks invoked inside
-external code. Concrete generic arguments contribute their public parameterless
-constructors because the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
-members for disposal, iteration, awaiting and deconstruction are included
-conservatively because the public operation tree does not expose every lowered
-call. External identities participate in the hash without external bodies.
-The generated fingerprint declaration is excluded
-from its own reach. External symbols stop the walk and are listed with their
-assembly identity; their implementation is outside the source hash. Reflection,
-dynamic dispatch and configurations other than Release remain outside this
-slice.
-
-`--check` writes no generated file and exits 1 naming a stale derivation. As with
-`references`, workspace loading can write design-time build intermediates under
-`obj/`. Regenerate after changing reached code, then rebuild consumers. Bake
-keys use the complete fingerprint. The `BAKE` chunk and pack entry version fields
-use its first four bytes as an unsigned big-endian integer; their content keys
-retain all 256 bits.
-
-The artifact producer runs this check after its Release build, before packaging,
-using the built candidate CLI and the restored source graph.
 
 ## `puck shaders`—shader compilation
 
@@ -2355,7 +2302,7 @@ The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
 nothing that depends on the host:
 
 ```text
-puck.determinism.stream.v1 <the shape fingerprint puck formats records for this layout>
+puck.determinism.stream.v1
 manifest <the manifest's content pin>
 components <one name per per-tick hash>
 scenario <name> <ticks>
@@ -3822,127 +3769,6 @@ recomputes a count by hand.
 
 The verb refuses (exit 2) when any manifest fails to load, since a plan over a partial set would record a falsely
 low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify.yml`.
-
-## `puck formats`—strict format tokens
-
-`FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
-tracked `src/` tree declares, each with its current token, declaring file and shape fingerprint. It is generated
-from the source, so the constants remain the one source of truth and the ledger is their checked-in mirror. The
-fingerprint, not the token, tells two layouts apart: each project that declares a format also holds a generated
-`FormatShapes.g.cs` with one constant per ledger entry, and the codec that owns the format writes that constant in its
-header or handshake and refuses data of any other shape by name (`… shape fingerprint X, expected Y`) before any state
-changes. A store that is content-identified, such as a bake keyed by its derivation fingerprint, already rejects by
-content and needs no header.
-
-```text
-puck formats            write FormatVersions.json and every FormatShapes.g.cs from the source
-puck formats --check    write nothing; exit 1 for an unrecorded, stale, retokened, reshaped, or moved format,
-                        an open call the ledger does not record, a ledger whose bytes differ from what the verb
-                        writes, or a FormatShapes.g.cs that disagrees with it
-puck formats --explain ID   print what one format's shape covers, by file, and the calls it leaves open
-```
-
-The check records shape and never demands a token bump: a format whose source changed is `reshaped` until
-`puck formats` records the new fingerprint, and the generated constant moves with it, so the codec that reads it
-refuses what was written under the old one.
-
-Both forms read tracked and non-ignored new C# sources under `src/`, excluding
-`*.g.cs` files. Staging a source does not change its recorded shape. A new codec
-participates in discovery before it is staged, and `--check` reports its missing
-entry without writing the ledger.
-
-Each source compiles with the usings its own project compiles it with. Both forms evaluate every tracked or unignored
-new project under `src/` with MSBuild (one `dotnet msbuild` run that reads items and builds nothing, with the
-package-restore imports under `obj/` and the workload imports switched off), so the project's `Using` items, implicit usings included, come from
-its project file, the `Directory.Build` files and the SDK that `global.json` pins, never from a build or restore. The
-`global using` directives a project's files state belong to that project. The closure is one compilation, so each file
-receives its own project's usings as file-scoped directives and no project's usings reach another's files. The files a
-project links in from outside `src/` (the `build/*.cs` markers and helpers) and a `FormatShapes` class per namespace that
-declares a format bind names but are never part of a shape. A name a covered unit writes that binds to nothing while its
-project's scope holds a repository type of that name is refused (`unresolved: <id> names <type>`), because the shape
-would be blind to that type. A project the evaluation cannot read refuses both forms.
-
-A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
-whose initializer is one of two things:
-
-- a named document schema literal, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
-- a literal under one of the recognized token member names (`WireKey`, `WireProtocolKey`, `ProtocolKey`,
-  `Revision`, `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `Format`, `FormatVersion`, `SupportedFormat`,
-  `Version`, `Magic`, `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`,
-  `AbiVersion`, `TokenAlgorithm`). A numeric
-  token whose bytes are a four- to eight-character printable code is spelled as that text, so the key
-  `0x354445464B435550` is recorded as `PUCKFED5`.
-
-Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
-needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
-
-An entry holds its id (`Type.Member`), the file declaring it, its token, a `shape` digest and, when the format's boundary
-has open calls, an `open` list, each on a line of its own. The digest covers canonical syntax of the format's *closure*,
-computed with the Roslyn semantic model over units: a type's layout (header and data members: fields, constants, enum
-members, auto-properties, static constructors) and each code member on its own. The roots are where encoding is: the
-layouts of the declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it), those files' members that
-touch bytes (a byte buffer, stream or binary reader or writer, a `u8` literal, a `[FormatLeaf]` member), and each unit
-anywhere that names the token. The rest of those files is neighbouring code: a method that drives the engine from decoded
-data is not the format's shape and is not open, and a helper an encoding member calls joins the closure through that
-call. A unit covers:
-
-- every enum it names, whole, and every constant it reads, so a reordered or renumbered enum a codec casts moves the
-  digest;
-- any other repository type it names, one level deep: the type's header and data members, never the types those members
-  name in turn;
-- a repository member it calls that is marked `[FormatLeaf]`, on the member or on a type that holds it, with that
-  member's own units in turn, and every override or implementation of a covered virtual or interface member, whether or
-  not the slot's own declaration has a body (an abstract property, an auto-property an override replaces, a static
-  abstract interface member); and a property whose body calls nothing in the repository.
-
-The depth limit applies to the types a layout names, not to what its initializers read: a covered layout's constants,
-enum values and method groups are followed whole, so a constant that chains through other classes, or a delegate a static
-field binds, is covered or open like any call. The calls the syntax does not name count too: a `foreach`'s
-`GetEnumerator`, `MoveNext` and `Current`, a `using`'s disposal, an `await`'s awaiter, a deconstruction, user-defined
-operators and conversions, and a method-group conversion.
-
-A closure over every call reaches the whole engine (a world codec's would hold ten thousand units), so the boundary is
-explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part
-of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
-`puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
-outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
-the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
-re-recorded. `puck formats --explain <id>`
-prints the units a format covers, by file, the calls it leaves open, and the names outside the repository it binds to
-nothing. Platform and package members are outside the repository and outside the digest.
-
-A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
-`.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest
-project's `FormatShapes.g.cs`, with one `internal static class FormatShapes` per namespace its declaring files use,
-holding a constant per entry named by the declaring symbol alone (`Type.Member` as `TypeMember`, whatever `@path` the
-ledger adds to tell two files' identical ids apart); a codec reads it unqualified from its own namespace. Two lanes that
-edit one codec differently write different digest lines, which conflict in the ledger, and git merges two identical edits
-without a conflict.
-
-The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
-without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
-call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
-are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
-Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
-move it. Unresolved calls retain their written syntax. The closure compiles the repository's sources against the shared
-framework alone, never the assemblies the computing process loads, so a call into a package member is unresolved in
-every host and the same source gives the same digest in the `puck` tool, a test suite's host and any machine on the
-framework. These are conservative source fingerprints: an implementation
-edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
-is refused.
-
-An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
-member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
-
-A machine-written document that the same build reads back carries a `shape` member beside its schema token: the writer
-stamps the constant its project generates, and the reader names a mismatch before it reads another member (the
-determinism stream's first line, the capture and release manifests, the retained deployment reference, the release
-group, receipt snapshot, fixture inventory and recovery root, the counters report, the counterpart attestation). A
-ledger a verb rewrites (`FormatVersions.json`, the canary ceilings and coverage, the lock files) carries
-none: its verb's `--check` is its shape check. A document nothing in the repository reads back is not stamped, and one
-whose magic belongs to an outside specification (SPIR-V, WebAssembly) is not a Puck format and is not ledgered.
-
-CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
 ## `puck baselines`—test baselines
 

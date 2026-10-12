@@ -1198,7 +1198,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte. The tape's
-shape token, the checkpoint version, the handshake key and the federation key
+version, the checkpoint version, the handshake key and the federation key
 each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
@@ -1466,7 +1466,7 @@ as surface nets did, for about a tenth more evaluations over a whole bake, and
 surface nets is deleted. It places a vertex per surface patch of a cell, so a
 plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
 shares an edge among more than two quads, at 0.26% more vertices than one vertex
-per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
+per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `CreationBakeDerivation.Fingerprint`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1480,8 +1480,8 @@ the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
 
-The bake key's code fingerprint is kept by `puck derivations` ([CLI
-reference](../reference/cli.md#puck-derivationscode-provenance-keys)). The open
+The bake key's code fingerprint is computed by the running build, from the
+compiled content of the assemblies that bake (`AssemblyReach.ContentFingerprint`). The open
 derivation-key slices are owned by
 [runtime and delivery](runtime-and-delivery.md#derivation-keys).
 
@@ -5025,7 +5025,7 @@ Each commit is marked with what it waits on.
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
    - Every format that carries an intent is strict and has no reader for an
-     earlier shape: the tape's shape token, the checkpoint version
+     earlier shape: the tape's version, the checkpoint version
      (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
      (`WorldProtocol.WireProtocolKey`) and the federation key
      (`WorldFederationCodec.WireKey`). No tape is checked in.

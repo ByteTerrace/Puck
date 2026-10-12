@@ -27,9 +27,7 @@ holds a shell script only to glue a container or a step summary.
 workload, and a versioned, checksum-checked DXC archive on Windows. The SDK goes into a directory of its
 own: installing `wasm-tools` moves the workload set, and in the image's shared SDK directory that would
 also reinstall every workload the image ships. It restores
-the solution in locked mode and compiles Release with warnings as errors. The
-built candidate CLI runs `puck derivations --check` against the restored producer
-graph, so a stale bake fingerprint stops artifact production before packaging. It
+the solution in locked mode and compiles Release with warnings as errors. It
 packages those assemblies with `puck nuget pack --no-build`, which packs every
 project at once because a no-build pack only reads what the build wrote, publishes the
 Functions payload without rebuilding managed assemblies, and
@@ -156,9 +154,10 @@ change): a run that timed out before saving would leave every later run cold.
 The creation bake cache, which `Puck.World`'s world compile reads and fills
 ([`WorldAssets.targets`](../../build/WorldAssets.targets)), is restored and saved
 the same way by the `bake-cache` composite action. A bake's own key carries the
-bake code's fingerprint (`DerivationFingerprint.Bake`, which `puck derivations
---check` holds to the bake code), so the action's key leads with a hash of that
-fingerprint and restores only caches of the same fingerprint, then a hash of the
+fingerprint of the compiled bake code (`CreationBakeDerivation.Fingerprint`,
+computed by the running build from `Puck.World.Authoring` and the Puck
+assemblies it references), so the action's key leads with a hash of those
+projects' sources and restores only caches of the same sources, then a hash of the
 world sources under `src/Puck.World/Assets/worlds`, which decides when a run
 saves a new cache. A restored cache makes the world compile read every unchanged
 creation's bake rather than bake it; baking every creation measured four to six
@@ -170,9 +169,7 @@ producer saves on a miss of its exact key; the formatting job only restores.
 and AGB (Advanced GamingBrick) binaries
 on Linux and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
-distribution checks, and for the two generated ledgers `puck formats --check`
-(`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
-shape fingerprint of every strictly versioned format).
+distribution checks.
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
@@ -294,8 +291,7 @@ the step in the same change.
 | `dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release` | `artifacts.yml` | `bootstrap` |
 | `dotnet build Puck.slnx -c Release --no-restore` | `artifacts.yml`, `format.yml` | `build` |
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
-| `puck derivations --check` | `artifacts.yml` | `derivations` |
-| `puck schema`, `registry`, `architecture`, `branding` and `formats --check` | `verify.yml` | the step of the same name |
+| `puck schema`, `registry`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them, such as `WorkflowGraphLawTests`, by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 

@@ -343,10 +343,9 @@ public sealed class CounterpartAttestationLawTests {
             expectedSubstring: "no key-bearing admission entries"
         );
     }
-    // The payload names the shape fingerprint the ledger records for its layout; a signed payload of the same schema under
-    // another shape verifies as a signature and is still refused by the fingerprint's name.
+    // A signed payload of another schema verifies as a signature and is still refused by the schema's name.
     [Fact]
-    public void AnAttestationOfTheSameSchemaAndAnotherShapeIsRefusedByItsFingerprint() {
+    public void AnAttestationOfAnotherSchemaIsRefusedByItsName() {
         using var trusted = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var spki = trusted.ExportSubjectPublicKeyInfo();
         var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki);
@@ -377,10 +376,7 @@ public sealed class CounterpartAttestationLawTests {
             document: "east",
             reason: out _
         ));
-        Assert.Equal(
-            actual: attested!.Shape,
-            expected: Puck.Testing.FormatLedgerShapes.Of(id: "WorldCounterpartAttestation.SchemaVersion")
-        );
+        Assert.NotNull(@object: attested);
 
         var codec = new CborAttestationCodec();
 
@@ -398,7 +394,7 @@ public sealed class CounterpartAttestationLawTests {
             userMessage: control
         );
         Assert.False(condition: TryVerifySigned(
-            attestation: (attested with { Shape = "0000000000000000" }),
+            attestation: (attested with { Schema = "puck.world.counterpart-attestation.v0" }),
             codec: codec,
             domain: domain,
             entries: [trust],
@@ -409,7 +405,7 @@ public sealed class CounterpartAttestationLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "shape fingerprint '0000000000000000'"
+            expectedSubstring: "counterpart attestation schema 'puck.world.counterpart-attestation.v0'"
         );
     }
     // A claim vouched for by a root the reading world never admitted refuses by name — the resolver trusts only

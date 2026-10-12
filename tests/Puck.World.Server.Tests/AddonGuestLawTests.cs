@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using Puck.Assets;
 using Puck.Scripting;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -25,7 +24,6 @@ public sealed class AddonGuestLawTests {
     private const string Handshake = """
           (data (i32.const 0) "\02\00\01\00\00\00\00\00\00\00\00\00\00\00\00\00\03\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
           (func (export "puck_abi_version") (result i32) (i32.const 1))
-          (func (export "puck_abi_shape") (result i64) (i64.const 0x@ABI_SHAPE@))
           (func (export "puck_channels_ptr") (result i32) (i32.const 0))
           (func (export "puck_channels_count") (result i32) (i32.const 2))
           (func (export "puck_out_ptr") (result i32) (i32.const 64))
@@ -88,7 +86,7 @@ public sealed class AddonGuestLawTests {
             engine: engine
         ).Load(path: path);
     }
-    private static AddonInstance Mount(ScriptingEngine engine, string wat, long fuelPerTick = AddonAbi.DefaultFuelPerTick, string? shape = null) {
+    private static AddonInstance Mount(ScriptingEngine engine, string wat, long fuelPerTick = AddonAbi.DefaultFuelPerTick) {
         var instance = new AddonInstance(
             channelResolver: new NoChannels(),
             descriptor: new AddonDescriptor(
@@ -99,7 +97,7 @@ public sealed class AddonGuestLawTests {
                 Name: "guest"
             ),
             engine: engine,
-            moduleInfo: Load(bytes: Encoding.UTF8.GetBytes(s: wat.Replace(newValue: (shape ?? FormatLedgerShapes.Of(id: "AddonAbi.AbiVersion")), oldValue: "@ABI_SHAPE@")), engine: engine)
+            moduleInfo: Load(bytes: Encoding.UTF8.GetBytes(s: wat), engine: engine)
         );
 
         if (instance.State == AddonState.Enabled) {
@@ -160,24 +158,6 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: 0, actual: tick.CellCount);
         Assert.Equal(expected: AddonState.Enabled, actual: guest.State);
     }
-    // A guest reports the host's ABI shape word from puck_abi_shape: the same version under any other shape faults at handshake
-    // as AbiMismatch, naming both shapes, before the guest's channels are read or anything is mounted.
-    [Fact]
-    public void AGuestOfTheSameVersionAndAnotherAbiShapeFaultsAtHandshake() {
-        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-        using var guest = Mount(
-            engine: engine,
-            shape: "0000000000000001",
-            wat: Quiet
-        );
-
-        Assert.Equal(expected: AddonState.Faulted, actual: guest.State);
-        Assert.Equal(expected: AddonFaultKind.AbiMismatch, actual: guest.Fault.Kind);
-        Assert.Contains(
-            actualString: guest.Fault.Detail,
-            expectedSubstring: $"guest ABI shape 0000000000000001, host speaks ABI shape {FormatLedgerShapes.Of(id: "AddonAbi.AbiVersion")}"
-        );
-    }
     // Every committed guest binary: the modules Puck.World ships and each verification guest's dist builds.
     public static TheoryData<string> CommittedGuests() => new(values: Directory.EnumerateFiles(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/addons"), searchPattern: "*.wasm")
         .Concat(second: Directory.EnumerateDirectories(path: RepositoryPaths.Resolve(relativePath: "wasm"))
@@ -186,13 +166,13 @@ public sealed class AddonGuestLawTests {
             .SelectMany(selector: static dist => Directory.EnumerateFiles(path: dist, searchPattern: "*.wasm")))
         .Select(selector: static path => Path.GetRelativePath(path: path, relativeTo: RepositoryPaths.RequireRoot()).Replace(newChar: '/', oldChar: '\\'))
         .Order(comparer: StringComparer.Ordinal));
-    // The committed guest binaries are built against this host's ABI shape: a stale one reports another word from
-    // puck_abi_shape (or none) and is refused here, so rebuilding them (`puck wasm build`) is owed whenever the ABI's
-    // shape moves. A guest may be refused for its own reason (channelwalk-bound65 declares one channel name too many),
-    // never for its ABI.
+    // The committed guest binaries are built against this host's ABI: a stale one reports another version from
+    // puck_abi_version and is refused here, so rebuilding them (`puck wasm build`) is owed whenever the ABI changes. A
+    // guest may be refused for its own reason (channelwalk-bound65 declares one channel name too many), never for its
+    // ABI.
     [MemberData(memberName: nameof(CommittedGuests))]
     [Theory]
-    public void ACommittedGuestBinaryReportsTheHostsAbiShape(string path) {
+    public void ACommittedGuestBinaryReportsTheHostsAbiVersion(string path) {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
         var instance = new AddonInstance(
             channelResolver: new NoChannels(),
@@ -208,7 +188,6 @@ public sealed class AddonGuestLawTests {
         );
 
         Assert.NotEqual(expected: AddonFaultKind.AbiMismatch, actual: instance.Fault.Kind);
-        Assert.DoesNotContain(expectedSubstring: AddonAbi.Exports.AbiShape, actualString: (instance.Fault.Detail ?? string.Empty));
     }
     [Fact]
     public void AGuestGrowsToTheCeilingAndIsRefusedOnePagePastIt() {

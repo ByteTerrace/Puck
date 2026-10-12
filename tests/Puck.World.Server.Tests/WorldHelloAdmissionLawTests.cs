@@ -4,14 +4,13 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>A seat's join carries the shape of the wire contract it speaks, and the Hello door refuses a join of this
-/// build's key under another shape by name before a seat is allocated.</summary>
-public sealed class WorldHelloShapeAdmissionLawTests {
+/// <summary>A seat's join carries the key of the wire contract it speaks, and the Hello door refuses a join of another
+/// key by name before a seat is allocated.</summary>
+public sealed class WorldHelloAdmissionLawTests {
     [Fact]
-    public void AJoinOfThisBuildsKeyUnderAnotherShapeIsRefusedByTheShapeAndTakesNoSeat() {
+    public void AJoinOfAnotherKeyIsRefusedByTheKeyAndTakesNoSeat() {
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var other = ((WorldProtocol.WireShape[0] == '0') ? ('1' + WorldProtocol.WireShape[1..]) : ('0' + WorldProtocol.WireShape[1..]));
         SessionReply? reply = null;
 
         transport.SubmitSession(
@@ -20,15 +19,14 @@ public sealed class WorldHelloShapeAdmissionLawTests {
                 Principal: Principal.Seat(slot: 1),
                 Slot: 1,
                 IdentityName: null,
-                WireProtocolKey: WorldProtocol.WireProtocolKey,
-                WireShape: other
+                WireProtocolKey: (WorldProtocol.WireProtocolKey ^ 1UL)
             )
         );
         Assert.NotNull(@object: reply);
         Assert.False(condition: reply.Value.Accepted);
         Assert.Contains(
             actualString: reply.Value.Reason,
-            expectedSubstring: nameof(WorldHelloRefusal.WireShapeMismatch)
+            expectedSubstring: nameof(WorldHelloRefusal.WireProtocolKeyMismatch)
         );
         Assert.Equal(
             expected: -1,
@@ -36,7 +34,7 @@ public sealed class WorldHelloShapeAdmissionLawTests {
         );
     }
     [Fact]
-    public void AJoinOfThisBuildsKeyAndShapeIsAdmitted() {
+    public void AJoinOfThisBuildsKeyIsAdmitted() {
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
         SessionReply? reply = null;
@@ -47,8 +45,7 @@ public sealed class WorldHelloShapeAdmissionLawTests {
                 Principal: Principal.Seat(slot: 1),
                 Slot: 1,
                 IdentityName: null,
-                WireProtocolKey: WorldProtocol.WireProtocolKey,
-                WireShape: WorldProtocol.WireShape
+                WireProtocolKey: WorldProtocol.WireProtocolKey
             )
         );
         Assert.True(condition: (reply?.Accepted == true));

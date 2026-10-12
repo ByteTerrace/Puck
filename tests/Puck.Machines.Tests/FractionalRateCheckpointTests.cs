@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using Puck.Testing;
 
 namespace Puck.Machines.Tests;
 
@@ -22,29 +21,14 @@ public sealed class FractionalRateCheckpointTests {
         );
     }
 
-    // A checkpoint opens with its format string, then the shape fingerprint the ledger records for the format, each
-    // length-prefixed by one byte, and ends in a SHA-256 over everything before it.
+    // A checkpoint opens with its format string, length-prefixed by one byte, and ends in a SHA-256 over everything
+    // before it.
     private const int FormatStringBytes = 22;
-    private const int FingerprintBytes = 16;
-    private const int FingerprintOffset = ((1 + FormatStringBytes) + 1);
 
+    // Another format string, with its content hash recomputed so only the format is wrong, is refused before the
+    // machine's pacing or state is read, and the host is untouched.
     [Fact]
-    public void ACheckpointCarriesTheShapeTheLedgerRecords() {
-        using var host = new TestHost(rate: NtscMasterClock);
-
-        _ = host.Advance(deltaTicks: 841UL);
-        Assert.Equal(
-            actual: System.Text.Encoding.ASCII.GetString(bytes: host.CaptureCheckpoint().AsSpan(
-                length: FingerprintBytes,
-                start: FingerprintOffset
-            )),
-            expected: FormatLedgerShapes.Of(id: "QueuedMachineCheckpoint.Format")
-        );
-    }
-    // The same format string under another shape fingerprint, with its content hash recomputed so only the shape is
-    // wrong, is refused by the fingerprint's name before the machine's pacing or state is read, and the host is untouched.
-    [Fact]
-    public void ACheckpointOfAnotherShapeRefusesByItsFingerprintAndLeavesTheHostUntouched() {
+    public void ACheckpointOfAnotherFormatRefusesAndLeavesTheHostUntouched() {
         using var source = new TestHost(rate: NtscMasterClock);
         using var target = new TestHost(rate: NtscMasterClock);
 
@@ -53,10 +37,7 @@ public sealed class FractionalRateCheckpointTests {
         var checkpoint = source.CaptureCheckpoint().ToArray();
         var untouched = target.CaptureCheckpoint();
 
-        System.Text.Encoding.ASCII.GetBytes(
-            bytes: checkpoint.AsSpan(start: FingerprintOffset),
-            chars: "0000000000000000"
-        );
+        checkpoint[FormatStringBytes] = ((byte)'0');
         System.Security.Cryptography.SHA256.HashData(
             destination: checkpoint.AsSpan(start: (checkpoint.Length - 32)),
             source: checkpoint.AsSpan(
@@ -69,7 +50,7 @@ public sealed class FractionalRateCheckpointTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "shape fingerprint 0000000000000000"
+            expectedSubstring: "machine checkpoint format is unsupported"
         );
         Assert.Equal(
             actual: target.CaptureCheckpoint(),

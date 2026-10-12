@@ -20,7 +20,7 @@ public sealed partial class WorldCompileCache {
             using var stream = new MemoryStream(bytes, Magic.Length, (body.Length - Magic.Length), writable: false);
             using var reader = new BinaryReader(stream, Encoding.UTF8);
 
-            if ((reader.ReadString() != FormatShapes.WorldCompileCacheMagic) || (reader.ReadString() != CompilerIdentity) || (reader.ReadString() != key)) { return null; }
+            if ((reader.ReadString() != CompilerIdentity) || (reader.ReadString() != key)) { return null; }
             var value = read(reader);
 
             if (stream.Position != stream.Length) { return null; }
@@ -42,7 +42,6 @@ public sealed partial class WorldCompileCache {
                     using var writer = new BinaryWriter(hashing, Encoding.UTF8, leaveOpen: true);
 
                     writer.Write(buffer: Magic);
-                    writer.Write(value: FormatShapes.WorldCompileCacheMagic);
                     writer.Write(value: CompilerIdentity);
                     writer.Write(value: key);
                     write(writer);
