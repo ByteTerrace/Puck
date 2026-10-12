@@ -153,6 +153,12 @@ public sealed partial class SdfProgram {
     /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
+    /// <param name="packTapeCertificates">Whether to compute and pack the per-instruction tile-tape certificates and
+    /// tokens (default <see langword="true"/>, and the only value a program the renderer executes takes). A capacity
+    /// probe reads <see cref="PartCompilationWordCapacity"/> and the instance count alone, neither of which depends
+    /// on a certificate's value, so it passes <see langword="false"/> and skips the interval arithmetic that is more
+    /// than half of a large program's construction; the certificate words then stay zero, which reads as a live
+    /// instruction with no certificate (<see cref="TapeCertificate"/>).</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
@@ -165,7 +171,7 @@ public sealed partial class SdfProgram {
     /// the deterministic field's representation.</exception>
     /// <exception cref="InvalidOperationException">Two distinct chains of the program share one 32-bit
     /// <see cref="SdfChain.Identity"/>.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, bool packTapeCertificates = true) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
@@ -490,7 +496,10 @@ public sealed partial class SdfProgram {
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
-        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        m_words[((segmentOffsetVectors * WordsPerVector) + SegmentTapeLane)] = ((uint)tapeOffsetVectors);
+        if (packTapeCertificates) {
+            PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
+        }
         PackChainTable(offset: chainTableOffsetVectors, worldSegmentOffset: worldSegmentOffsetVectors);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: pathOffsetVectors);

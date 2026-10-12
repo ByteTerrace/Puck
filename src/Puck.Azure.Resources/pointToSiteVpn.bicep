@@ -2,7 +2,7 @@
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param location string = resourceGroup().location
-param virtualNetworkResourceId string = '/subscriptions/fd49ea67-135b-449f-a62c-3e4b8d26d3d6/resourceGroups/byteterrace/providers/Microsoft.Network/virtualNetworks/bytrcvnetp000'
+param virtualNetworkResourceId string = resourceId('Microsoft.Network/virtualNetworks', 'bytrcvnetp000')
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Resources
@@ -22,7 +22,7 @@ module dnsResolver 'br/public:avm/res/network/dns-resolver:0.5.8' = {
     virtualNetworkResourceId: virtualNetworkResourceId
   }
 }
-module puplicIpAddress 'br/public:avm/res/network/public-ip-address:0.13.0' = {
+module publicIpAddress 'br/public:avm/res/network/public-ip-address:0.13.0' = {
   params: {
     availabilityZones: [
       1
@@ -52,7 +52,7 @@ module vpnGateway 'br/public:avm/res/network/virtual-network-gateway:0.12.0' = {
     }
     domainNameLabelScope: 'NoReuse'
     enableTelemetry: false
-    existingPrimaryPublicIPResourceId: puplicIpAddress.outputs.resourceId
+    existingPrimaryPublicIPResourceId: publicIpAddress.outputs.resourceId
     gatewayType: 'Vpn'
     location: location
     lock: {

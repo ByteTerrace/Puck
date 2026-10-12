@@ -262,7 +262,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
 
-        return builder.Build(gridWorkspace: m_gridWorkspace);
+        // The construction-time probe is read for its capacities alone, which no tile-tape certificate's value changes.
+        return builder.Build(
+            gridWorkspace: m_gridWorkspace,
+            packTapeCertificates: !context.Probe
+        );
     }
     // THE REBUILD TRIGGER, and it must not be able to CANCEL — reading this frame's components into m_pendingRevisions
     // and reporting whether any of them moved, in one pass.
