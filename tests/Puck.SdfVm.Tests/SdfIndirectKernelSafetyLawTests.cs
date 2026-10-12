@@ -125,8 +125,11 @@ public sealed class SdfIndirectKernelSafetyLawTests {
     public void TransportDispatchesValidateUpdatesBeforeTheirFirstGroupWork(string kernel, string budget) {
         var source = Source(path: $"passes/sdf-indirect-{kernel}.comp.hlsl");
 
-        // Each workgroup runs the chunk's item its group index names past indirectItemFirst, validated before any work.
-        Assert.Contains(actualString: source, expectedSubstring: "uint item = passGroup.indirectItemFirst + group.x;");
+        // Each workgroup runs the chunk's item its group index names past indirectItemFirst, validated before any work: an
+        // item a group, or for a partition, the item of the unit a group names past indirectUnitFirst.
+        Assert.Contains(actualString: source, expectedSubstring: ((kernel == "classify")
+            ? "uint item = passGroup.indirectItemFirst + (placing ? group.x : flat / SdfIndirectProbesPerBrick);"
+            : "uint item = passGroup.indirectItemFirst + group.x;"));
         Assert.Contains(actualString: source, expectedSubstring: $"item >= sdfIndirect{budget}Budget(passGroup.indirectTier)");
         if (kernel == "classify") {
             Assert.Contains(actualString: source, expectedSubstring: "indirectUpdates.GetDimensions(length, stride);");

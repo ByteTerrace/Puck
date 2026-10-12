@@ -7,8 +7,9 @@ namespace Puck.SdfVm;
 /// <summary>One admitted range of a kind's ordered work. Every item holds the same number of admission units in a fixed
 /// order, and the range is a contiguous run of those units over the items: it starts at <paramref name="UnitFirst"/>
 /// of item <paramref name="ItemFirst"/> and may continue into the following items. A chunk of whole items starts at
-/// unit zero and holds a multiple of the item's units. The dispatch runs one workgroup per item the range touches and
-/// carries the three values in its pass block, so only the range's units execute.</summary>
+/// unit zero and holds a multiple of the item's units. The dispatch runs one workgroup per item the range touches, or
+/// one per unit for a kind whose lanes share a unit (<see cref="SdfIndirectUnits.GroupsOf"/>), and carries the three
+/// values in its pass block, so only the range's units execute.</summary>
 /// <param name="ItemFirst">The first item the range touches, counted from the kind's first scheduled item.</param>
 /// <param name="UnitFirst">The first admitted unit within that item.</param>
 /// <param name="UnitCount">The admitted units, counted across item boundaries.</param>
@@ -51,11 +52,20 @@ public sealed record SdfIndirectChunk(int ItemFirst, int UnitFirst, int UnitCoun
 /// <param name="LaneUnits">With <paramref name="LaneDivisor"/>, the share of one unit's visits a single lane runs in
 /// sequence: one for a unit a lane runs alone, a probe's rays per lane for shading.</param>
 /// <param name="LaneDivisor">The divisor of <paramref name="LaneUnits"/>: the lanes one unit's work is spread over.</param>
+/// <param name="GroupPerUnit">Whether the kind's dispatch runs a workgroup per unit, its lanes sharing the unit, rather
+/// than a workgroup per item, a lane per unit.</param>
 public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPerUnit, long FixedUnitCost = 0, long FixedItemCost = 0, long SplitItemCost = 0,
-    long? MeasuredFieldCost = null, int LaneUnits = 1, int LaneDivisor = 1) {
+    long? MeasuredFieldCost = null, int LaneUnits = 1, int LaneDivisor = 1, bool GroupPerUnit = false) {
     /// <summary>Gets whether the device has measured this kind, so its fixed record bounds no longer apply.</summary>
     public bool IsMeasured => (MeasuredFieldCost is not null);
 
+    /// <summary>Gets the workgroups a chunk's dispatch runs: one per unit, or one per item the range touches.</summary>
+    /// <param name="chunk">The admitted range.</param>
+    /// <returns>The dispatch's workgroup count.</returns>
+    public int GroupsOf(SdfIndirectChunk chunk) {
+        ArgumentNullException.ThrowIfNull(chunk);
+        return (GroupPerUnit ? chunk.UnitCount : chunk.Items(unitsPerItem: UnitsPerItem));
+    }
     /// <summary>Prices one unit: its measured visits, or every query against the complete field and its fixed record
     /// visits before a measurement exists.</summary>
     /// <param name="instructionCount">The field program's instruction count.</param>
@@ -164,8 +174,11 @@ public static class SdfIndirectCost {
 
     /// <summary>Gets a brick's placement: one unit per probe, each probe's samples and gradients.</summary>
     public static SdfIndirectUnits PlaceUnits { get; } = new(UnitsPerItem: SdfIndirectLayout.ProbesPerBrick, QueriesPerUnit: (PlaceQueries / SdfIndirectLayout.ProbesPerBrick));
-    /// <summary>Gets a brick's partition: one unit per cell, each cell's directed segments.</summary>
-    public static SdfIndirectUnits ClassifyUnits { get; } = new(UnitsPerItem: SdfIndirectLayout.ProbesPerBrick, QueriesPerUnit: (ClassifyQueries / SdfIndirectLayout.ProbesPerBrick));
+    /// <summary>Gets a brick's partition: one unit per cell, each cell's directed segments. A cell's workgroup marches
+    /// its corner pairs on lanes of their own (<c>sdf-indirect-classify.comp.hlsl</c>), each lane a pair's forward and
+    /// reverse segments: about a fourteenth of the cell's visits in sequence.</summary>
+    public static SdfIndirectUnits ClassifyUnits { get; } = new(UnitsPerItem: SdfIndirectLayout.ProbesPerBrick, QueriesPerUnit: (ClassifyQueries / SdfIndirectLayout.ProbesPerBrick),
+        LaneDivisor: (IrradianceLattice.CellSegments / 2), GroupPerUnit: true);
     /// <summary>Gets a stratum's trace: one unit per ray, each ray's march, hit gradient and feedback proof.</summary>
     public static SdfIndirectUnits TraceUnits { get; } = new(UnitsPerItem: IrradianceLattice.RaysPerStratum, QueriesPerUnit: (TraceQueries / IrradianceLattice.RaysPerStratum));
     /// <summary>Gets one receiver's launch and proof; a receiver is its own item.</summary>

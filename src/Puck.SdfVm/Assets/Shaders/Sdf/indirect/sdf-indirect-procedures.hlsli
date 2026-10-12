@@ -29,8 +29,8 @@ uint sdfIndirectStep(uint procedure) {
 #ifdef SDF_INDIRECT_PROC_PLACE
         case SdfIndirectProcPlace: return sdfIndirectPlaceStep();
 #endif
-#ifdef SDF_INDIRECT_PROC_PARTITION
-        case SdfIndirectProcPartition: return sdfIndirectPartitionStep();
+#ifdef SDF_INDIRECT_PROC_PAIR
+        case SdfIndirectProcPair: return sdfIndirectPairStep();
 #endif
 #ifdef SDF_INDIRECT_PROC_VISIBILITIES
         case SdfIndirectProcVisibilities: return sdfIndirectVisibilitiesStep();

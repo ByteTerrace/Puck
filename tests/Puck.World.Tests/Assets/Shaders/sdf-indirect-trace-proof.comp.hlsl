@@ -7,7 +7,7 @@
 #define SDF_INDIRECT_PROCS_CUSTOM
 #define SDF_INDIRECT_PROC_MARCH
 #define SDF_INDIRECT_PROC_PLACE
-#define SDF_INDIRECT_PROC_PARTITION
+#define SDF_INDIRECT_PROC_PAIR
 #define SDF_INDIRECT_PROC_LAUNCH
 #define SDF_INDIRECT_PROC_SEGMENT
 #define SDF_INDIRECT_PROC_KERNEL
@@ -33,9 +33,30 @@ struct TraceProbeProc {
     uint mask;
     uint corner;
     SdfIndirectPlacement corners[8];
+    // The partition's corner pairs, marched one after another here where the classify kernel marches them side by side.
+    uint pair;
+    bool clear[28];
+    float3 forward[28];
+    float3 reverse[28];
     uint phase;
 };
 static TraceProbeProc traceProbeProc = (TraceProbeProc)0;
+
+// Calls the next corner pair's procedure from traceProbeProc.pair, recording a pair with an inactive corner as never
+// marched, or returns zero once every pair is decided.
+uint traceProbeNextPair() {
+    [loop] for (; traceProbeProc.pair < SdfIndirectCellPairs; traceProbeProc.pair++) {
+        uint first, second;
+        sdfIndirectCellPair(traceProbeProc.pair, first, second);
+        if (traceProbeProc.corners[first].classification != SdfIndirectClassInactive && traceProbeProc.corners[second].classification != SdfIndirectClassInactive) {
+            return sdfIndirectPairBegin(traceProbeProc.corners[first].position, traceProbeProc.corners[second].position);
+        }
+        traceProbeProc.clear[traceProbeProc.pair] = false;
+        traceProbeProc.forward[traceProbeProc.pair] = asfloat(0x7fc00000u).xxx;
+        traceProbeProc.reverse[traceProbeProc.pair] = asfloat(0x7fc00000u).xxx;
+    }
+    return 0u;
+}
 
 bool traceProbeUsesField(uint mode) {
     return mode == 0u || mode == 1u || mode == 2u || mode == 3u || mode == 4u || mode == 7u || mode == 10u;
@@ -145,11 +166,23 @@ uint sdfIndirectKernelStep() {
         if (traceProbeProc.corner < 8u) {
             return sdfIndirectCall(sdfIndirectPlaceBegin(traceProbeCorner(mode, traceProbeProc.corner), spacing));
         }
+        traceProbeProc.pair = 0u;
         traceProbeProc.phase = 4u;
-        return sdfIndirectCall(sdfIndirectPartitionBegin(traceProbeProc.corners, spacing));
+        uint first = traceProbeNextPair();
+        if (first != 0u) { return sdfIndirectCall(first); }
     }
-    if (phase == 4u) {
-        SdfIndirectCell cell = sdfIndirectPartitionProc.result;
+    // Also entered straight from the corners when no pair has two active corners.
+    if (traceProbeProc.phase == 4u) {
+        if ((phase == 4u) && (traceProbeProc.pair < SdfIndirectCellPairs)) {
+            uint pair = traceProbeProc.pair;
+            traceProbeProc.clear[pair] = sdfIndirectPairProc.clear;
+            traceProbeProc.forward[pair] = sdfIndirectPairProc.forward;
+            traceProbeProc.reverse[pair] = sdfIndirectPairProc.reverse;
+            traceProbeProc.pair = pair + 1u;
+            uint next = traceProbeNextPair();
+            if (next != 0u) { return sdfIndirectCall(next); }
+        }
+        SdfIndirectCell cell = sdfIndirectPartitionOfPairs(traceProbeProc.corners, traceProbeProc.clear, traceProbeProc.forward, traceProbeProc.reverse, spacing);
         if (mode == 2u) {
             traceResults[uint2(index, 8u)] = float4((float)(cell.components & 65535u), (float)(cell.components >> 16u), cell.offset, 0.0);
             traceResults[uint2(index, 9u)] = float4(cell.normal, 0.0);

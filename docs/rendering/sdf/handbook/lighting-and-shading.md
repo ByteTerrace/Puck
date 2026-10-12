@@ -413,7 +413,8 @@ its longest lane, whose visits run one after another: one lane alone runs
 under two field visits a microsecond there. A chunk therefore costs the larger of
 its visits and its longest lane's visits times `SdfIndirectCost.ChainLanes`
 (1,536), the throughput over that lane rate; a lane runs one unit, except that a
-shading lane runs a probe's rays in turn. A chunk whose longest lane alone
+shading lane runs a probe's rays in turn and a partition spreads a cell over
+lanes of its own, each priced at a fourteenth of the cell. A chunk whose longest lane alone
 outlasts the slice admits the units that run beside it at no further cost, up to
 that lane's own time.
 Placement, classification, tracing and shade share
@@ -451,7 +452,12 @@ item. The limit is the frame's slice once the kind is measured, or the kind's
 longest lane's own time when that is longer, and the submission cap before.
 Every chunk fits the limit, or holds a single unit larger than it, and
 together they cover each item exactly once, in order. The pass block names the chunk (`indirectItemFirst`, `indirectUnitFirst`
-and `indirectUnitCount`), and only those units execute. A transport plan submits one
+and `indirectUnitCount`), and only those units execute. A dispatch runs a
+workgroup per item the chunk touches, a lane per unit, except a partition: its
+chunk runs a workgroup per cell, whose lanes march the cell's corner pairs side by
+side (a pair's forward segment, then its reverse one when the forward is blocked),
+and the cell's first lane joins them in the reference partition's pair order, so
+the cell is the one `IrradianceCells.Partition` computes. A transport plan submits one
 chunk of each pass per produced frame, placement before partition before trace,
 and commits only with its last chunk. Until then the uploaded brick table lists a
 newly placed brick only once its placement completes and flags its partition only

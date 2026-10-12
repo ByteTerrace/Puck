@@ -111,32 +111,6 @@ uint sdfIndirectPlaceStep() {
     return SdfIndirectStepReturn;
 }
 
-// The cell's connected components over its eight placed corners: two corners join when the finite segment between
-// them is clear. A blocked pair's both directions record their blocked points, from which a two-component cell fits
-// the plane that orders its proof attempts. A procedure (sdfIndirectPartitionStep): each pair's segments are calls its
-// owner's run answers.
-struct SdfIndirectPartitionProc {
-    SdfIndirectPlacement corners[8];
-    float spacing;
-    uint roots[8];
-    float3 blocked[56];
-    uint blockedPairs[56];
-    uint blockedCount;
-    uint first;
-    uint second;
-    bool clear;
-    uint phase;
-    SdfIndirectCell result;
-};
-static SdfIndirectPartitionProc sdfIndirectPartitionProc = (SdfIndirectPartitionProc)0;
-
-uint sdfIndirectPartitionBegin(SdfIndirectPlacement corners[8], float spacing) {
-    sdfIndirectPartitionProc.corners = corners;
-    sdfIndirectPartitionProc.spacing = spacing;
-    sdfIndirectPartitionProc.phase = 0u;
-    return SdfIndirectProcPartition;
-}
-
 // The components and plane of a partition whose pairs are all decided. No field query.
 SdfIndirectCell sdfIndirectPartitionCell(SdfIndirectPlacement corners[8], uint roots[8], float3 blocked[56], uint blockedPairs[56], uint blockedCount, float spacing) {
     SdfIndirectCell cell = (SdfIndirectCell)0;
@@ -180,72 +154,87 @@ SdfIndirectCell sdfIndirectPartitionCell(SdfIndirectPlacement corners[8], uint r
     return cell;
 }
 
-uint sdfIndirectPartitionStep() {
-    bool advance = false;
-    if (sdfIndirectPartitionProc.phase == 0u) {
-        sdfIndirectPartitionProc.blockedCount = 0u;
-        [unroll] for (uint i = 0u; i < 8u; i++) { sdfIndirectPartitionProc.roots[i] = i; }
-        sdfIndirectPartitionProc.first = 0u;
-        sdfIndirectPartitionProc.second = 1u;
-    } else if (sdfIndirectPartitionProc.phase == 1u) {
-        // The forward segment: a clear pair joins, and a blocked one records its point and tries the reverse.
-        sdfIndirectPartitionProc.clear = sdfIndirectSegmentProc.clear;
-        if (!sdfIndirectPartitionProc.clear) {
-            if (all(isfinite(sdfIndirectSegmentProc.blockedPoint))) {
-                sdfIndirectPartitionProc.blocked[sdfIndirectPartitionProc.blockedCount] = sdfIndirectSegmentProc.blockedPoint;
-                sdfIndirectPartitionProc.blockedPairs[sdfIndirectPartitionProc.blockedCount++] = sdfIndirectPartitionProc.first | (sdfIndirectPartitionProc.second << 3u);
-            }
-            uint first = sdfIndirectPartitionProc.first;
-            uint second = sdfIndirectPartitionProc.second;
-            sdfIndirectPartitionProc.phase = 2u;
-            return sdfIndirectCall(sdfIndirectSegmentBegin(sdfIndirectPartitionProc.corners[second].position, sdfIndirectPartitionProc.corners[first].position, SdfIndirectSegmentSteps));
-        }
-        uint a = sdfIndirectPartitionProc.roots[sdfIndirectPartitionProc.first];
-        uint b = sdfIndirectPartitionProc.roots[sdfIndirectPartitionProc.second];
-        [unroll] for (uint k = 0u; k < 8u; k++) { if (sdfIndirectPartitionProc.roots[k] == b) { sdfIndirectPartitionProc.roots[k] = a; } }
-        advance = true;
-    } else {
-        if (all(isfinite(sdfIndirectSegmentProc.blockedPoint))) {
-            sdfIndirectPartitionProc.blocked[sdfIndirectPartitionProc.blockedCount] = sdfIndirectSegmentProc.blockedPoint;
-            sdfIndirectPartitionProc.blockedPairs[sdfIndirectPartitionProc.blockedCount++] = sdfIndirectPartitionProc.first | (sdfIndirectPartitionProc.second << 3u);
-        }
-        advance = true;
+// The corner pairs of a cell in IrradianceLattice.Segment's order: first ascending, then second above it.
+static const uint SdfIndirectCellPairs = 28u;
+void sdfIndirectCellPair(uint pair, out uint first, out uint second) {
+    first = 0u;
+    second = 1u;
+    [loop] for (uint k = 0u; k < pair && k < SdfIndirectCellPairs; k++) {
+        second++;
+        if (second >= 8u) { first++; second = first + 1u; }
     }
-    [loop]
-    for (;;) {
-        if (advance) {
-            advance = false;
-            sdfIndirectPartitionProc.second++;
-            if (sdfIndirectPartitionProc.second >= 8u) {
-                sdfIndirectPartitionProc.first++;
-                sdfIndirectPartitionProc.second = sdfIndirectPartitionProc.first + 1u;
-            }
-        }
-        if (sdfIndirectPartitionProc.first >= 7u) { break; }
-        uint first = sdfIndirectPartitionProc.first;
-        uint second = sdfIndirectPartitionProc.second;
-        if (sdfIndirectPartitionProc.corners[first].classification == SdfIndirectClassInactive || sdfIndirectPartitionProc.corners[second].classification == SdfIndirectClassInactive) {
-            advance = true;
+}
+
+// A cell's connected components over its eight placed corners (IrradianceCells.Partition): two corners join when the
+// finite segment between them is clear, and a blocked pair's both directions record their blocked points, from which a
+// two-component cell fits the plane that orders its proof attempts. A pair's segments are independent of every other
+// pair's, so each pair runs on its own: its forward segment and, only when that is blocked, its reverse segment, each
+// under its own allowance. A procedure (sdfIndirectPairStep): each segment is a call its owner's run answers.
+// sdfIndirectPartitionOfPairs then joins the decided pairs in their order.
+struct SdfIndirectPairProc {
+    float3 a;
+    float3 b;
+    bool clear;
+    float3 forward;
+    float3 reverse;
+    uint phase;
+};
+static SdfIndirectPairProc sdfIndirectPairProc = (SdfIndirectPairProc)0;
+
+uint sdfIndirectPairBegin(float3 a, float3 b) {
+    sdfIndirectPairProc.a = a;
+    sdfIndirectPairProc.b = b;
+    sdfIndirectPairProc.phase = 0u;
+    return SdfIndirectProcPair;
+}
+
+uint sdfIndirectPairStep() {
+    if (sdfIndirectPairProc.phase == 0u) {
+        sdfIndirectPairProc.clear = false;
+        sdfIndirectPairProc.forward = asfloat(0x7fc00000u).xxx;
+        sdfIndirectPairProc.reverse = asfloat(0x7fc00000u).xxx;
+        sdfIndirectPairProc.phase = 1u;
+        return sdfIndirectCall(sdfIndirectSegmentBegin(sdfIndirectPairProc.a, sdfIndirectPairProc.b, SdfIndirectSegmentSteps));
+    }
+    if (sdfIndirectPairProc.phase == 1u) {
+        sdfIndirectPairProc.clear = sdfIndirectSegmentProc.clear;
+        if (sdfIndirectPairProc.clear) { return SdfIndirectStepReturn; }
+        sdfIndirectPairProc.forward = sdfIndirectSegmentProc.blockedPoint;
+        sdfIndirectPairProc.phase = 2u;
+        return sdfIndirectCall(sdfIndirectSegmentBegin(sdfIndirectPairProc.b, sdfIndirectPairProc.a, SdfIndirectSegmentSteps));
+    }
+    sdfIndirectPairProc.reverse = sdfIndirectSegmentProc.blockedPoint;
+    return SdfIndirectStepReturn;
+}
+
+// The partition's joins and blocked points over pairs already marched, in pair order: pair p joins when clear[p] is
+// set, and otherwise records forward[p] then reverse[p], each when finite; a pair with an inactive corner is skipped.
+SdfIndirectCell sdfIndirectPartitionOfPairs(SdfIndirectPlacement corners[8], bool clear[28], float3 forward[28], float3 reverse[28], float spacing) {
+    uint roots[8];
+    [unroll] for (uint i = 0u; i < 8u; i++) { roots[i] = i; }
+    float3 blocked[56];
+    uint blockedPairs[56];
+    uint blockedCount = 0u;
+    [loop] for (uint pair = 0u; pair < SdfIndirectCellPairs; pair++) {
+        uint first, second;
+        sdfIndirectCellPair(pair, first, second);
+        if (corners[first].classification == SdfIndirectClassInactive || corners[second].classification == SdfIndirectClassInactive) { continue; }
+        if (clear[pair]) {
+            uint a = roots[first];
+            uint b = roots[second];
+            [unroll] for (uint k = 0u; k < 8u; k++) { if (roots[k] == b) { roots[k] = a; } }
             continue;
         }
-        sdfIndirectPartitionProc.phase = 1u;
-        return sdfIndirectCall(sdfIndirectSegmentBegin(sdfIndirectPartitionProc.corners[first].position, sdfIndirectPartitionProc.corners[second].position, SdfIndirectSegmentSteps));
+        if (all(isfinite(forward[pair]))) { blocked[blockedCount] = forward[pair]; blockedPairs[blockedCount++] = first | (second << 3u); }
+        if (all(isfinite(reverse[pair]))) { blocked[blockedCount] = reverse[pair]; blockedPairs[blockedCount++] = first | (second << 3u); }
     }
-    sdfIndirectPartitionProc.result = sdfIndirectPartitionCell(sdfIndirectPartitionProc.corners, sdfIndirectPartitionProc.roots,
-        sdfIndirectPartitionProc.blocked, sdfIndirectPartitionProc.blockedPairs, sdfIndirectPartitionProc.blockedCount, sdfIndirectPartitionProc.spacing);
-    return SdfIndirectStepReturn;
+    return sdfIndirectPartitionCell(corners, roots, blocked, blockedPairs, blockedCount, spacing);
 }
 
 #ifdef SDF_INDIRECT_PROC_PLACE
 SdfIndirectPlacement sdfIndirectPlace(float3 lattice, float spacing) {
     sdfIndirectRun(sdfIndirectPlaceBegin(lattice, spacing));
     return sdfIndirectPlaceProc.result;
-}
-#endif
-#ifdef SDF_INDIRECT_PROC_PARTITION
-SdfIndirectCell sdfIndirectPartition(SdfIndirectPlacement corners[8], float spacing) {
-    sdfIndirectRun(sdfIndirectPartitionBegin(corners, spacing));
-    return sdfIndirectPartitionProc.result;
 }
 #endif
 // The launch from a surface: a descent onto the surface, then an ascent to its receiver bias above it, both under the

@@ -135,7 +135,11 @@ produced `frame` from `cache-frame`, which can stand while shade advances.
 Never refuse or over-admit a heavy item: `SdfIndirectCost.Admit` splits it into
 unit-range `SdfIndirectChunk`s (probe, cell, ray or shaded ray) carried by the pass
 block's `indirectItemFirst`, `indirectUnitFirst` and `indirectUnitCount`; inactive
-lanes still join group barriers and count nothing. A plan commits with its last
+lanes still join group barriers and count nothing. A partition dispatches a
+workgroup per cell (`SdfIndirectUnits.GroupsOf`), its lanes marching the cell's
+corner pairs (`sdfIndirectPairStep`) and its first lane joining them in pair order
+(`sdfIndirectPartitionOfPairs`); the probe fixture's partition runs the same pair
+procedure and joins, held to `IrradianceCells.Partition`. A plan commits with its last
 chunk, its brick table withholds unfinished placements and partitions, and a split
 probe reduces from the cache's shade scratch only in its last chunk. Only a single
 query or indivisible unit over the cap refuses (`SdfIndirectCost.RefusalOf`), and

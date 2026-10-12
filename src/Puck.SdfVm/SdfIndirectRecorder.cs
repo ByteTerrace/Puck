@@ -39,8 +39,8 @@ internal sealed class SdfIndirectRecorder : IRenderGraphPackageRecorder, IRender
     // The pass's admitted chunk this frame: a transport step's chunk of its kind, or the shade batch's current chunk.
     private SdfIndirectChunk? Chunk => (IsShade ? m_built.Cache.ShadeChunk : m_built.Cache.TransportChunk(part: m_context.Part!));
     private SdfIndirectUnits Units => (IsShade ? m_built.Cache.ShadeUnits : m_built.Cache.TransportUnits(part: m_context.Part!));
-    // The workgroups the chunk touches, one per item.
-    private int Count => ((Chunk is { } chunk) ? chunk.Items(unitsPerItem: Units.UnitsPerItem) : 0);
+    // The chunk's workgroups: one per item it touches, or one per unit for a kind whose lanes share a unit.
+    private int Count => ((Chunk is { } chunk) ? Units.GroupsOf(chunk: chunk) : 0);
     private bool IsEnvironmentPin => (m_context.Part == SdfSkyEnvironmentGraph.Pin);
     private bool IsShade => (m_context.Part == SdfWorldPackage.IndirectShade);
     private SdfKernel Kernel => m_context.Part switch {
