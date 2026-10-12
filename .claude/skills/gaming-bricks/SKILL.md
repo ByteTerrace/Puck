@@ -31,6 +31,14 @@ Post stages are authoritative; update stale skill guidance in the same change.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates, not forked SM83 cores.
 - Preserve snapshot, replay, fork, and cross-machine link determinism.
+- Keep every idle fast path exact: an absorbed quiet stretch, a display ticked
+  alone, or a halted span leaves the state the reference stepping would.
+  `ComponentClock`'s `absorbsQuietStretches: false` and single `Step` calls are
+  the references; `ColourIdleEquivalenceLawTests` and
+  `AdvancedIdleEquivalenceLawTests` compare them over the shipped cartridges.
+  A ticked cycle withdraws both cached clock agreements, including the
+  others-only bound: rejoining the display to a stale bound can skip a timer
+  edge. `ClockAgreementLawTests` covers this with parked HBlank DMA.
 - Treat external suites and co-simulators as evidence; repository Post stages
   and golden replays are gates.
 
@@ -58,6 +66,11 @@ Post stages are authoritative; update stale skill guidance in the same change.
    canary drives it from a seat's pointer.
 6. Report exact commands, selected stages, asset-gated skips, and whether a
    failure is caused by the change or was already present.
+
+When a change reaches either emulator core, fetch the Tier B corpora with each
+battery's own `--fetch-corpora` (the archives and hashes its `corpora.json`
+pins) and run Tier B; the owner grants that download to every lane, so a
+missing corpus is fetched, not reported as a skip.
 
 ## Load references selectively
 

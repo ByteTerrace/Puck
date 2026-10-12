@@ -124,3 +124,19 @@ On Game Boy Color hardware, the CPU can operate at **8.388608 MHz** (double spee
 2. Software executes the `STOP` instruction.
 3. The oscillator PLL locks onto the high frequency, pausing for approximately 2,050 M-cycles while the hardware re-locks clocks.
 4. Execution resumes with bit 7 of `KEY1` (the current-speed bit) set; the core reads it as `IsDoubleSpeed`. In double speed, CPU M-cycles take only 2 base master clock cycles instead of 4, while the PPU and APU remain locked to their standard 4.194304 MHz clock domains.
+
+## Quiet stretches and halted idle
+
+`ComponentClock` ticks components in lockstep only where one of them has work.
+A stretch every CPU-domain component reports as plain counting is absorbed at
+once and settled when something next reads a component. While the display has
+work and nothing else does, the display alone is ticked once per whole dot the
+stretch crosses, at either speed, and the other components absorb the cycles.
+`Sm83.RunUntil`, which `Machine.Run` drives, spends a halted processor's
+machine cycles together: a stretch every component has agreed is plain counting
+raises no interrupt, so it is spent whole, and otherwise one machine cycle at a
+time with a wake check between them. All of it leaves exactly the state that
+ticking every component on every cycle and stepping every halted machine cycle
+would; `ComponentClock`'s `absorbsQuietStretches: false` is that reference, and
+`ColourIdleEquivalenceLawTests` (in `tests/Puck.AdvancedGamingBrick.Forge.Tests`)
+compares the two over the shipped Colour cartridges, double speed included.
