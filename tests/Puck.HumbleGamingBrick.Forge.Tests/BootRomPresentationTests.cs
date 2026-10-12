@@ -52,8 +52,7 @@ public sealed class BootRomPresentationTests {
                 model: model,
                 cartridgeRom: rom,
                 bootRom: BootRomBuilder.Build(model: model)
-            ),
-            dmgSpeed: true
+            )
         );
 
         core.ConfigureAudio(sampleRate: 48_000);

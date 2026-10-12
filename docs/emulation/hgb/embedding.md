@@ -55,9 +55,10 @@ flowchart LR
 
 `GamingBrickEngine` (`Id = "gaming-brick"`) is the `IMachineEngine`
 implementation a host resolves by id; its options string is an
-order-independent, space-separated token set—a model keyword plus an optional
-`dmgspeed` fairness pin that holds the tick-to-cycle budget fixed regardless of
-the KEY1 double-speed latch. A family token (`dmg`/`cgb`/`agb`, default `dmg`)
+order-independent, space-separated token set—a model keyword plus the
+startup tokens below. The host paces every model at 4,194,304 LCD dots per
+second, double speed included: double speed doubles the processor, not the
+display. A family token (`dmg`/`cgb`/`agb`, default `dmg`)
 selects that family's target revision—`DmgC`, `CgbE`, `Agb`—and a revision
 token (`dmg0`, `dmgb`, `dmgc`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgba`, `cgbb`,
 `cgbc`, `cgbd`, `cgbe`, `ags`) names one exactly.
@@ -114,8 +115,7 @@ using Puck.Machines;
 using var core = new HumbleGamingBrickCore(
     configuration: new MachineConfiguration(
         model: ConsoleModel.DmgC,
-        cartridgeRom: File.ReadAllBytes(args[0])),
-    dmgSpeed: true); // keep the reported pacing rate at the hardware dot rate
+        cartridgeRom: File.ReadAllBytes(args[0])));
 
 core.ConfigureAudio(sampleRate: 48_000);
 core.ApplyInput(input: MachinePads.Neutral);
@@ -144,7 +144,7 @@ using Puck.HumbleGamingBrick;
 IMachineEngine engine = new GamingBrickEngine();
 
 using IMachineRuntime machine = engine.Create(
-    options: "cgb dmgspeed",       // the target Color revision, fixed-speed fairness pin
+    options: "cgb fast",           // the target Color revision, starting at the cartridge handoff
     contentBytes: File.ReadAllBytes(args[0]),     // the cartridge ROM image
     savePath: null,           // in-memory battery saves for this example
     audioSampleRate: 48_000

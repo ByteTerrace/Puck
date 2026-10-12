@@ -76,7 +76,6 @@ public sealed partial class GamingBrickEngine {
                 var current = ParseOptions(reconfigurable.Options);
                 var options = FormatOptions(
                     boot: current.Boot,
-                    dmgSpeed: current.DmgSpeed,
                     model: model
                 );
 

@@ -11,9 +11,9 @@ namespace Puck.HumbleGamingBrick;
 /// so a peek/poke never races the running core.
 /// </summary>
 public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
-    // The machine's CPU T-cycle rate (2^22 per second); with EngineTicks.PerSecond it forms the exact rational the tick
-    // accumulator carries remainders in.
-    private const ulong MachineCyclesPerSecond = 4_194_304UL;
+    // The LCD dot rate (2^22 per second), which double speed leaves unchanged: it doubles the processor, not the display.
+    // With EngineTicks.PerSecond it forms the exact rational the tick accumulator carries remainders in.
+    private const ulong DotsPerSecond = 4_194_304UL;
     // One native ~59.7 Hz video frame in LCD dots (154 scanlines of 456 dots) — the PPU's frame period, independent of the
     // KEY1 double-speed CPU multiplier, so it keys the native-frame count in every model.
     private const ulong DotsPerFrame = (154UL * 456UL);
@@ -23,23 +23,21 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     private readonly ICartridge m_cartridge;
     private readonly IFramebuffer m_framebuffer;
     private readonly IJoypad m_joypad;
-    private readonly IKey1 m_key1;
     private readonly ILightGun m_lightGun;
     private readonly SystemBus m_systemBus;
     private readonly ITiltSensor m_tiltSensor;
+
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
+
     private readonly string? m_savePath;
-    private readonly bool m_dmgSpeed;
 
     /// <summary>Assembles and save-loads the machine.</summary>
     /// <param name="model">The hardware model to emulate.</param>
     /// <param name="cartridgeRom">The cartridge ROM image.</param>
     /// <param name="savePath">The cartridge's battery-save path, or <see langword="null"/> for an in-memory-only save.</param>
-    /// <param name="dmgSpeed">When <see langword="true"/>, the FAIRNESS pin: the tick-to-cycle budget stays at the DMG rate
-    /// regardless of the KEY1 double-speed latch, so the budget is a function of configuration alone.</param>
     /// <param name="bootMode">Cold startup runs the bundled Puck firmware; fast startup skips its presentation.</param>
     /// <param name="bootRom">An external boot image, or null for bundled Puck firmware.</param>
-    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, bool dmgSpeed = false, MachineBootMode bootMode = MachineBootMode.Cold, byte[]? bootRom = null)
+    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, MachineBootMode bootMode = MachineBootMode.Cold, byte[]? bootRom = null)
         : this(
         configuration: HgbFirmware.CreateConfiguration(
             bootMode: bootMode,
@@ -47,29 +45,24 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
             cartridgeRom: cartridgeRom,
             model: model
         ),
-        savePath: savePath,
-        dmgSpeed: dmgSpeed
+        savePath: savePath
     ) { }
     /// <summary>Builds a core for an external host's own update loop, with optional boot ROM and clock configuration.
     /// No renderer or background worker is required. Drive and dispose the core on its owning thread.</summary>
     /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
-    /// <param name="dmgSpeed">Whether to hold the reported pacing rate at 4,194,304 LCD dots/second, including
-    /// double speed. Choose true when using <see cref="CycleRate"/> to pace a hardware-speed host loop.</param>
-    public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
+    public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null) {
         CheckpointIdentity = MachineCheckpointIdentity.Compute(
-            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{FormatShapes.MachineIdentityCurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/{dmgSpeed}"),
+            FormattableString.Invariant(formattable: $"puck.hgb.core.v1/{FormatShapes.MachineIdentityCurrentVersion}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"),
             configuration.BootRom,
             configuration.CartridgeRom
         );
         m_savePath = savePath;
-        m_dmgSpeed = dmgSpeed;
         m_machine = MachineFactory.Create(configuration: configuration);
         m_audioSink = m_machine.GetRequiredService<IAudioSink>();
         m_cartridge = m_machine.GetRequiredService<ICartridge>();
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
-        m_key1 = m_machine.GetRequiredService<IKey1>();
         m_lightGun = m_machine.GetRequiredService<ILightGun>();
         m_systemBus = m_machine.GetRequiredService<SystemBus>();
         m_tiltSensor = m_machine.GetRequiredService<ITiltSensor>();
@@ -79,12 +72,12 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
 
     /// <inheritdoc/>
     public string CheckpointIdentity { get; }
+
     /// <inheritdoc/>
-    public MachineCycleRate CycleRate =>
-        new(cycles: ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
-            ? (2UL * MachineCyclesPerSecond)
-            : MachineCyclesPerSecond
-        ));
+    /// <remarks>Always the LCD dot rate, in every model and at either processor speed, because
+    /// <see cref="RunCycles"/> consumes dots.</remarks>
+    public MachineCycleRate CycleRate { get; } = new(cycles: DotsPerSecond);
+
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         ((long)(m_machine.Machine.Clock.CycleCount / DotsPerFrame));
@@ -206,8 +199,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
 
         // The live device swap: retarget the emulated hardware WITHOUT a reboot, poking the game's
         // cached detection flag (from the recipe table, keyed by title) so a dual-mode cartridge re-renders natively.
-        // The fairness pin is construction-fixed (it sizes the tick->cycle budget for determinism), so options only
-        // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.
+        // Options only move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.
         var title = m_cartridge.Header.Title;
         var pokes = ConsoleModeRecipes.PokesFor(
             target: model,

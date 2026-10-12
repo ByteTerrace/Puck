@@ -51,7 +51,7 @@ public sealed class CheckpointIdentityShapeLawTests {
         string Identity(string shape) => MachineCheckpointIdentity.Compute(
             string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"puck.hgb.core.v1/{shape}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}/False"
+                handler: $"puck.hgb.core.v1/{shape}/{((int)configuration.Model)}/{configuration.TickResolution.SubdivisionLog2}"
             ),
             configuration.BootRom,
             configuration.CartridgeRom
