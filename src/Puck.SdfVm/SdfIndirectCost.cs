@@ -31,42 +31,85 @@ public sealed record SdfIndirectChunk(int ItemFirst, int UnitFirst, int UnitCoun
     /// <returns>Whether the range's last item completes in this chunk.</returns>
     public bool EndsItem(int unitsPerItem) => (((((long)UnitFirst) + UnitCount) % unitsPerItem) == 0);
 }
-/// <summary>A kind's admission unit and its conservative price. The unit is the smallest piece of an item a dispatch can
-/// run on its own: a probe's placement, a cell's partition, a ray's trace or a ray's shading.</summary>
+/// <summary>A kind's admission unit and its price. The unit is the smallest piece of an item a dispatch can run on its
+/// own: a probe's placement, a cell's partition, a ray's trace, a ray's shading or a receiver's proof. Prices are counted
+/// visits: field instruction visits and cache record loads. A dispatch spends device time two ways, and a chunk is priced
+/// at the larger: its total visits at the device's throughput (<see cref="SdfIndirectCost.DeviceVisitsPerMicrosecond"/>),
+/// and its longest lane's visits, which run in sequence however few lanes share the device
+/// (<see cref="SdfIndirectCost.ChainLanes"/> lanes' worth of visits per visit of that chain).</summary>
 /// <param name="UnitsPerItem">The units in one work item, in their fixed order.</param>
 /// <param name="QueriesPerUnit">The counted full-field evaluations one unit performs at most.</param>
-/// <param name="FixedUnitCost">Bounded record visits per unit that do not run the field interpreter.</param>
-/// <param name="FixedItemCost">Bounded record visits per touched item, such as a probe's irradiance reduction.</param>
+/// <param name="FixedUnitCost">Bounded record visits per unit that do not run the field interpreter, priced until the
+/// kind is measured.</param>
+/// <param name="FixedItemCost">Bounded record visits per touched item, such as a probe's irradiance reduction, priced
+/// until the kind is measured.</param>
 /// <param name="SplitItemCost">Bounded record visits per item a chunk covers only in part, such as the stored rays a
-/// split probe writes and reads back for its reduction.</param>
-/// <param name="MeasuredFieldCost">The field instruction visits per unit the device counted for this kind's recent
-/// submissions (<see cref="SdfIndirectCache.MeasuredFieldCost"/>), or null before any was counted. It replaces the
-/// conservative field price, never exceeding it; the fixed record visits are added either way.</param>
+/// split probe writes and reads back for its reduction, priced until the kind is measured.</param>
+/// <param name="MeasuredFieldCost">The visits per unit the device counted for this kind's recent submissions
+/// (<see cref="SdfIndirectCache.MeasuredFieldCost"/>), field visits and record loads together, or null before any was
+/// counted. It replaces the conservative price and its fixed record visits, never exceeding the conservative unit.</param>
+/// <param name="LaneUnits">With <paramref name="LaneDivisor"/>, the share of one unit's visits a single lane runs in
+/// sequence: one for a unit a lane runs alone, a probe's rays per lane for shading.</param>
+/// <param name="LaneDivisor">The divisor of <paramref name="LaneUnits"/>: the lanes one unit's work is spread over.</param>
 public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPerUnit, long FixedUnitCost = 0, long FixedItemCost = 0, long SplitItemCost = 0,
-    long? MeasuredFieldCost = null) {
-    /// <summary>Prices one unit: its measured field visits, or every query against the complete field before a
-    /// measurement exists, plus its fixed record visits.</summary>
-    /// <param name="instructionCount">The field program's instruction count.</param>
-    /// <returns>The unit's instruction-visit estimate.</returns>
-    public long UnitCost(int instructionCount) {
-        var conservative = SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: QueriesPerUnit);
-        var field = ((MeasuredFieldCost is { } measured) ? Math.Clamp(value: measured, min: Math.Min(val1: 1L, val2: conservative), max: conservative) : conservative);
+    long? MeasuredFieldCost = null, int LaneUnits = 1, int LaneDivisor = 1) {
+    /// <summary>Gets whether the device has measured this kind, so its fixed record bounds no longer apply.</summary>
+    public bool IsMeasured => (MeasuredFieldCost is not null);
 
-        return checked((field + FixedUnitCost));
-    }
-    /// <summary>Prices one whole item against the complete field.</summary>
+    /// <summary>Prices one unit: its measured visits, or every query against the complete field and its fixed record
+    /// visits before a measurement exists.</summary>
     /// <param name="instructionCount">The field program's instruction count.</param>
-    /// <returns>The item's instruction-visit estimate.</returns>
-    public long ItemCost(int instructionCount) => checked(((UnitsPerItem * UnitCost(instructionCount: instructionCount)) + FixedItemCost));
-    /// <summary>Prices one chunk: its units, every item it touches and every item it covers only in part.</summary>
+    /// <returns>The unit's visit estimate.</returns>
+    public long UnitCost(int instructionCount) {
+        var conservative = checked((SdfIndirectCost.EstimateCost(instructionCount: instructionCount, queries: QueriesPerUnit) + FixedUnitCost));
+
+        return ((MeasuredFieldCost is { } measured) ? Math.Clamp(value: measured, min: Math.Min(val1: 1L, val2: conservative), max: conservative) : conservative);
+    }
+    /// <summary>Prices the visits one lane runs in sequence: its share of a unit.</summary>
+    /// <param name="instructionCount">The field program's instruction count.</param>
+    /// <returns>The lane's visit estimate, at least one.</returns>
+    public long LaneCost(int instructionCount) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(LaneDivisor);
+        return Math.Max(val1: 1L, val2: (((checked((UnitCost(instructionCount: instructionCount) * LaneUnits)) + LaneDivisor) - 1) / LaneDivisor));
+    }
+    /// <summary>Prices the device time of a dispatch's longest lane, in visits at the device's throughput: the lane's
+    /// sequential visits times <see cref="SdfIndirectCost.ChainLanes"/>, at most one submission's cap
+    /// (<see cref="SdfIndirectCost.SubmissionCostLimit"/>). No chunk costs less.</summary>
+    /// <param name="instructionCount">The field program's instruction count.</param>
+    /// <returns>The chain's visit-equivalent.</returns>
+    public long ChainCost(int instructionCount) =>
+        Math.Min(val1: SdfIndirectCost.SubmissionCostLimit, val2: checked((LaneCost(instructionCount: instructionCount) * SdfIndirectCost.ChainLanes)));
+    /// <summary>Prices the visits of one whole item against the complete field.</summary>
+    /// <param name="instructionCount">The field program's instruction count.</param>
+    /// <returns>The item's visit estimate.</returns>
+    public long ItemCost(int instructionCount) => checked(((UnitsPerItem * UnitCost(instructionCount: instructionCount)) + (IsMeasured ? 0 : FixedItemCost)));
+    /// <summary>Prices the visits one chunk performs: its units, and before measurement every item it touches and every
+    /// item it covers only in part.</summary>
     /// <param name="chunk">The admitted range.</param>
     /// <param name="instructionCount">The field program's instruction count.</param>
-    /// <returns>The chunk's instruction-visit estimate.</returns>
-    public long CostOf(SdfIndirectChunk chunk, int instructionCount) {
+    /// <returns>The chunk's visit estimate.</returns>
+    public long VisitsOf(SdfIndirectChunk chunk, int instructionCount) {
         ArgumentNullException.ThrowIfNull(chunk);
-        return checked((((chunk.UnitCount * UnitCost(instructionCount: instructionCount)) + (chunk.Items(unitsPerItem: UnitsPerItem) * FixedItemCost))
-            + (chunk.PartialItems(unitsPerItem: UnitsPerItem) * SplitItemCost)));
+        var units = checked((chunk.UnitCount * UnitCost(instructionCount: instructionCount)));
+
+        return (IsMeasured ? units
+            : checked(((units + (chunk.Items(unitsPerItem: UnitsPerItem) * FixedItemCost)) + (chunk.PartialItems(unitsPerItem: UnitsPerItem) * SplitItemCost))));
     }
+    /// <summary>Prices one chunk's device time in visits at the device's throughput: the larger of its visits and its
+    /// longest lane's chain (<see cref="ChainCost"/>).</summary>
+    /// <param name="chunk">The admitted range.</param>
+    /// <param name="instructionCount">The field program's instruction count.</param>
+    /// <returns>The chunk's device-time estimate, in visits.</returns>
+    public long CostOf(SdfIndirectChunk chunk, int instructionCount) =>
+        Math.Max(val1: VisitsOf(chunk: chunk, instructionCount: instructionCount), val2: ChainCost(instructionCount: instructionCount));
+    /// <summary>Gets the visits one chunk may hold under a limit: the limit, or the chain's device time when one lane
+    /// alone outlasts it, since a dispatch's other lanes then run beside that lane at no further cost; never more than
+    /// <see cref="SdfIndirectCost.SubmissionCostLimit"/>.</summary>
+    /// <param name="instructionCount">The field program's instruction count.</param>
+    /// <param name="limit">The frame's slice or a submission's cap.</param>
+    /// <returns>The chunk's visit allowance.</returns>
+    public long ChunkVisits(int instructionCount, long limit) =>
+        Math.Min(val1: SdfIndirectCost.SubmissionCostLimit, val2: Math.Max(val1: limit, val2: ChainCost(instructionCount: instructionCount)));
     /// <summary>Names why this kind cannot run within one submission: a single field query, or a single indivisible
     /// unit with its item's fixed cost, exceeds <see cref="SdfIndirectCost.SubmissionCostLimit"/>.</summary>
     /// <param name="instructionCount">The field program's instruction count.</param>
@@ -77,7 +120,7 @@ public readonly record struct SdfIndirectUnits(int UnitsPerItem, long QueriesPer
         if ((QueriesPerUnit > 0) && (query > SdfIndirectCost.SubmissionCostLimit)) {
             return $"one field query costs {query} instruction visits, exceeding the {SdfIndirectCost.SubmissionCostLimit} submission budget";
         }
-        var unit = checked(((UnitCost(instructionCount: instructionCount) + FixedItemCost) + ((UnitsPerItem > 1) ? SplitItemCost : 0)));
+        var unit = checked(((UnitCost(instructionCount: instructionCount) + (IsMeasured ? 0 : FixedItemCost)) + (((UnitsPerItem > 1) && !IsMeasured) ? SplitItemCost : 0)));
 
         return ((unit > SdfIndirectCost.SubmissionCostLimit)
             ? $"one indivisible unit of {QueriesPerUnit} queries costs {unit} instruction visits, exceeding the {SdfIndirectCost.SubmissionCostLimit} submission budget"
@@ -89,11 +132,16 @@ public static class SdfIndirectCost {
     /// <summary>The conservative instruction-visit allowance per indirect submission. This is an admission estimate,
     /// not a device-independent time guarantee; GPU qualification measures its watchdog margin.</summary>
     public const long SubmissionCostLimit = 67_108_864;
-    /// <summary>The calibrated device rate that turns a frame's indirect device time into counted field visits. The
-    /// slowest measured kind sets it: on the RTX 2060 floor desktop, puck.world's classification admitted a full
-    /// <see cref="SubmissionCostLimit"/> of measured visits per produced frame and took 447 to 517 ms of device time,
-    /// about 130 visits per microsecond. Faster kinds and devices finish their slice early.</summary>
-    public const long DeviceVisitsPerMicrosecond = 128;
+    /// <summary>The calibrated rate at which the device retires counted visits when a dispatch holds lanes enough to hide
+    /// their latency. It turns a frame's indirect device time into counted visits. Calibrated on the RTX 2060 floor
+    /// desktop; faster devices finish their slice early.</summary>
+    public const long DeviceVisitsPerMicrosecond = 1024;
+    /// <summary>The visits the device retires beside each visit of one lane's sequential chain: the throughput rate
+    /// (<see cref="DeviceVisitsPerMicrosecond"/>) over the rate one lane alone runs its dependent field visits. A
+    /// dispatch never finishes before its longest lane, however few lanes it holds, so a chunk costs at least its
+    /// longest lane's visits times this. Calibrated on the RTX 2060 floor desktop, where one lane runs well under two
+    /// field visits a microsecond.</summary>
+    public const long ChainLanes = 1536;
 
     /// <summary>Gets the counted field visits one produced frame admits for a tier's transport and lighting solve:
     /// its device-time slice (<see cref="SdfIndirectLayout.FrameMicroseconds"/>) at the calibrated device rate.</summary>
@@ -129,18 +177,19 @@ public static class SdfIndirectCost {
         ArgumentOutOfRangeException.ThrowIfNegative(instructionCount);
         return checked((queries * Math.Max(val1: 1, val2: instructionCount)));
     }
-    /// <summary>Partitions <paramref name="count"/> ordered work items into unit-range chunks that each fit one
-    /// submission's instruction-visit cap and together cover every unit from <paramref name="firstUnit"/> to the last
-    /// item's last unit exactly once, in order. Items that fit are admitted whole, as many to a chunk as the cap allows,
-    /// after the rest of an item already begun; an item over the cap is split into runs of its units, a run continuing
-    /// into the next item when the cap leaves room.</summary>
+    /// <summary>Partitions <paramref name="count"/> ordered work items into unit-range chunks that each fit one chunk's
+    /// visit allowance and together cover every unit from <paramref name="firstUnit"/> to the last item's last unit
+    /// exactly once, in order. The allowance is <paramref name="limit"/>, or the kind's chain cost when one lane alone
+    /// outlasts it (<see cref="SdfIndirectUnits.ChunkVisits"/>). Items that fit are admitted whole, as many to a chunk as
+    /// the allowance allows, after the rest of an item already begun; an item over it is split into runs of its units, a
+    /// run continuing into the next item when the allowance leaves room.</summary>
     /// <param name="count">The scheduled items.</param>
     /// <param name="units">The kind's admission unit and price.</param>
     /// <param name="instructionCount">The complete field program's instruction count.</param>
     /// <param name="firstUnit">The first unit still to admit, counted across items; zero admits every item.</param>
-    /// <param name="limit">The visits one chunk may take: a submission's cap, or a frame's device-time slice
-    /// (<see cref="FrameCost"/>). A unit over it still forms a chunk of its own; only a unit over the submission cap is
-    /// refused.</param>
+    /// <param name="limit">The device time one chunk may take, in visits: a submission's cap, or a frame's device-time
+    /// slice (<see cref="FrameCost"/>). A unit over it still forms a chunk of its own; only a unit over the submission
+    /// cap is refused.</param>
     /// <returns>The chunks in submission order; empty when there is nothing to admit.</returns>
     /// <exception cref="SdfIndirectCostRefusedException">A single field query or indivisible unit exceeds the submission cap.</exception>
     public static IReadOnlyList<SdfIndirectChunk> Admit(int count, SdfIndirectUnits units, int instructionCount, int firstUnit = 0, long limit = SubmissionCostLimit) {
@@ -160,14 +209,17 @@ public static class SdfIndirectCost {
         if (firstUnit == total) { return []; }
         var unitCost = units.UnitCost(instructionCount: instructionCount);
         var itemCost = units.ItemCost(instructionCount: instructionCount);
+        var budget = units.ChunkVisits(instructionCount: instructionCount, limit: limit);
+        var fixedItem = (units.IsMeasured ? 0 : units.FixedItemCost);
+        var splitItem = (units.IsMeasured ? 0 : units.SplitItemCost);
         var chunks = new List<SdfIndirectChunk>();
         var position = firstUnit;
 
         if (itemCost == 0) { return [new SdfIndirectChunk(ItemFirst: (position / size), UnitCount: (total - position), UnitFirst: (position % size))]; }
         var rest = (((position % size) == 0) ? null : new SdfIndirectChunk(ItemFirst: (position / size), UnitCount: (size - (position % size)), UnitFirst: (position % size)));
 
-        if ((itemCost <= limit) && ((rest is null) || (units.CostOf(chunk: rest, instructionCount: instructionCount) <= limit))) {
-            var whole = ((int)(limit / itemCost));
+        if ((itemCost <= budget) && ((rest is null) || (units.VisitsOf(chunk: rest, instructionCount: instructionCount) <= budget))) {
+            var whole = ((int)(budget / itemCost));
 
             if (rest is not null) {
                 chunks.Add(item: rest);
@@ -179,16 +231,16 @@ public static class SdfIndirectCost {
             return chunks;
         }
         if (units.RefusalOf(instructionCount: instructionCount) is { } refusal) { throw new SdfIndirectCostRefusedException(message: $"Indirect admission refused: {refusal}."); }
-        // An item over the cap never fits whole, so a run touches at most its own item and the start of the next. A run
-        // holds at least one unit, so a unit over a frame's slice still advances, one unit a chunk.
+        // An item over the allowance never fits whole, so a run touches at most its own item and the start of the next. A
+        // run holds at least one unit, so a unit over a frame's slice still advances, one unit a chunk.
         while (position < total) {
             var item = (position / size);
             var local = (position % size);
             var room = (size - local);
-            var leading = ((local != 0) ? units.SplitItemCost : 0);
-            var within = Math.Max(val1: 1L, val2: ((((limit - units.FixedItemCost) - units.SplitItemCost)) / unitCost));
+            var leading = ((local != 0) ? splitItem : 0);
+            var within = Math.Max(val1: 1L, val2: (((budget - fixedItem) - splitItem) / unitCost));
             var length = ((within < room) ? within
-                : Math.Max(val1: room, val2: Math.Min(val1: ((((limit - (2 * units.FixedItemCost)) - leading) - units.SplitItemCost) / unitCost), val2: ((room + size) - 1))));
+                : Math.Max(val1: room, val2: Math.Min(val1: ((((budget - (2 * fixedItem)) - leading) - splitItem) / unitCost), val2: ((room + size) - 1))));
             var admitted = ((int)Math.Min(val1: length, val2: (total - position)));
 
             chunks.Add(item: new SdfIndirectChunk(ItemFirst: item, UnitCount: admitted, UnitFirst: local));
@@ -206,9 +258,10 @@ public static class SdfIndirectCost {
     public static int WholeItems(int count, SdfIndirectUnits units, int instructionCount, long limit = SubmissionCostLimit) {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         var itemCost = units.ItemCost(instructionCount: instructionCount);
+        var budget = units.ChunkVisits(instructionCount: instructionCount, limit: limit);
 
         if (itemCost == 0) { return count; }
-        return ((itemCost <= limit) ? ((int)Math.Min(val1: count, val2: (limit / itemCost))) : 0);
+        return ((itemCost <= budget) ? ((int)Math.Min(val1: count, val2: (budget / itemCost))) : 0);
     }
     /// <summary>Names why the cache cannot run its tier against this frame's field within one submission, or returns
     /// null. Every kind's chunks are admitted only while a single field query and each indivisible unit fit the cap.</summary>
@@ -239,7 +292,8 @@ public static class SdfIndirectCost {
         return checked((DirectionalChannels(lights: frame.Lights) * SdfIndirectLightLayout.MarchSteps));
     }
     /// <summary>Gets a probe's shading: one unit per ray, with its continuation record visits, the probe's irradiance
-    /// reduction once per touched probe, and the stored rays a split probe writes and reads back.</summary>
+    /// reduction once per touched probe, and the stored rays a split probe writes and reads back. A probe's workgroup
+    /// gives each lane every <see cref="ShadeLanes"/>th ray in turn.</summary>
     /// <param name="layout">The cache tier.</param>
     /// <param name="frame">The pinned lighting source.</param>
     /// <returns>The shade pass's admission unit.</returns>
@@ -247,8 +301,12 @@ public static class SdfIndirectCost {
         ArgumentNullException.ThrowIfNull(layout);
         return new(UnitsPerItem: Math.Max(val1: 1, val2: layout.RaysPerProbe), QueriesPerUnit: ShadeRayQueries(frame: frame),
             FixedUnitCost: (8L * layout.RaysPerProbe), FixedItemCost: (((long)layout.RaysPerProbe) * SdfIndirectLayout.IrradianceTexels),
-            SplitItemCost: (2L * layout.RaysPerProbe));
+            SplitItemCost: (2L * layout.RaysPerProbe), LaneUnits: Math.Max(val1: 1, val2: (layout.RaysPerProbe / ShadeLanes)));
     }
+
+    /// <summary>The lanes of one probe's shading workgroup (<c>sdf-indirect-shade.comp.hlsl</c>'s group size).</summary>
+    public const int ShadeLanes = 64;
+
     /// <summary>Counts held and incoming directional channels independently, including duplicates.</summary>
     public static int DirectionalChannels(SdfLights lights) {
         var channels = 0;

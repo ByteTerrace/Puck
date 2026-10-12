@@ -4,13 +4,14 @@ using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
 
-// Admission prices each kind's unit by the field instruction visits the kernels counted for it. Every indirect kernel
-// adds its lanes' visits and units to monotonic counters in the cache buffer (SdfIndirectLayout.Cost*); the transport
-// recorder copies them after each trace dispatch, and the residency's produced-frame boundary reads every completed
-// copy, in submission order, as differences. A kind is priced at the largest of its last PriceWindow measurements,
-// never above the conservative price (every query against the complete program), which still prices a kind no
-// submission has measured yet. Prices change only at a produced-frame boundary: a pending plan's unsubmitted units are
-// then admitted again at the new prices from their first unsubmitted unit, so no chunk is recorded at two prices.
+// Admission prices each kind's unit by the visits its kernels counted for it: field instruction visits and cache record
+// loads. Every indirect kernel adds its lanes' visits and units to monotonic counters in the cache buffer
+// (SdfIndirectLayout.Cost*); the transport recorder copies them after each trace dispatch, and the residency's
+// produced-frame boundary reads every completed copy, in submission order, as differences. A kind is priced at the
+// largest of its last PriceWindow measurements, never above the conservative price (every query against the complete
+// program, with the kind's fixed record bounds), which still prices a kind no submission has measured yet. Prices change
+// only at a produced-frame boundary: a pending plan's unsubmitted units are then admitted again at the new prices from
+// their first unsubmitted unit, so no chunk is recorded at two prices.
 public sealed partial class SdfIndirectCache {
     /// <summary>The measurements a kind's price is the largest of.</summary>
     public const int PriceWindow = 4;

@@ -15,8 +15,9 @@ public sealed partial class SdfIndirectCache {
     /// <summary>Gets the geometry invalidations that withdrew admitted transport, a reset included.</summary>
     public long Invalidations { get; private set; }
     /// <summary>Gets the produced frames the current transport and finite lighting solve still need at the measured
-    /// prices, or null while a kind with work left has no measurement. Each frame submits at most its device slice
-    /// (<see cref="FrameCost"/>) and one plan's item budgets of transport, and one shade batch.</summary>
+    /// prices, or null while a kind with work left has no measurement. Each frame submits at most one chunk of each
+    /// kind, the chunks together within its device slice (<see cref="FrameCost"/>) unless one alone outlasts it, and one
+    /// plan's item budgets of transport and one shade batch.</summary>
     public long? RemainingFrames {
         get {
             var remaining = m_schedule.Remaining;
@@ -27,9 +28,9 @@ public sealed partial class SdfIndirectCache {
 
             if (((remaining.Placements > 0) && (place.MeasuredFieldCost is null)) || ((remaining.Partitions > 0) && (classify.MeasuredFieldCost is null)) ||
                 ((remaining.Strata > 0) && (trace.MeasuredFieldCost is null))) { return null; }
-            var transportCost = checked((((remaining.Placements * place.ItemCost(instructionCount: instructions))
-                + (remaining.Partitions * classify.ItemCost(instructionCount: instructions))) + (remaining.Strata * trace.ItemCost(instructionCount: instructions))));
-            var transport = Math.Max(val1: Frames(cost: transportCost), val2: (Batches(count: Math.Max(val1: remaining.Placements, val2: remaining.Partitions), budget: Layout.ClassifyBudget)
+            var transport = Math.Max(val1: checked(((Frames(units: place, items: remaining.Placements, instructionCount: instructions)
+                + Frames(units: classify, items: remaining.Partitions, instructionCount: instructions)) + Frames(units: trace, items: remaining.Strata, instructionCount: instructions))),
+                val2: (Batches(count: Math.Max(val1: remaining.Placements, val2: remaining.Partitions), budget: Layout.ClassifyBudget)
                 + Batches(count: remaining.Strata, budget: Layout.TraceBudget)));
             var probes = ((m_solve is { } solve) ? solve.RemainingProbes
                 : (((long)(Layout.BounceLimit + 1)) * (m_slots.Count * ((long)SdfIndirectLayout.ProbesPerBrick))));
@@ -39,8 +40,7 @@ public sealed partial class SdfIndirectCache {
             if ((Lighting?.CapturedFrame is not { } source) || (MeasuredFieldCost(kind: SdfIndirectLayout.CostShade) is not { } shade)) {
                 return ((transport > FinishFrameBound) ? transport : null);
             }
-            var units = ShadeUnitsOf(frame: source);
-            var lighting = Math.Max(val1: Frames(cost: checked((probes * units.ItemCost(instructionCount: source.Program.InstructionCount)))),
+            var lighting = Math.Max(val1: Frames(units: ShadeUnitsOf(frame: source), items: probes, instructionCount: source.Program.InstructionCount),
                 val2: Batches(count: probes, budget: Math.Max(val1: 1, val2: SdfIndirectWork.ShadeProbeBudget(frame: source, layout: Layout, measuredFieldCost: shade))));
 
             return checked((transport + lighting));
@@ -62,8 +62,13 @@ public sealed partial class SdfIndirectCache {
             : null);
     }
 
-    // Each produced frame admits its device slice of transport and lighting.
-    private long Frames(long cost) => (((cost + FrameCost) - 1) / FrameCost);
+    // Each produced frame admits one chunk of a kind: its device slice of visits, or its chain's when one lane outlasts it.
+    private long Frames(SdfIndirectUnits units, long items, int instructionCount) {
+        var visits = checked((items * units.ItemCost(instructionCount: instructionCount)));
+        var chunk = units.ChunkVisits(instructionCount: instructionCount, limit: FrameCost);
+
+        return (((visits + chunk) - 1) / chunk);
+    }
     private static long Batches(long count, int budget) => ((budget <= 0) ? 0 : (((count + budget) - 1) / budget));
     private void CountInvalidation() => Invalidations++;
 }

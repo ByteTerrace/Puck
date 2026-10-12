@@ -96,12 +96,19 @@ the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
 ordinary World-set regions; do not read later live light records midway through
 a sweep. `SdfIndirectCache` publishes only complete submitted sweeps, separately
 from geometry trace completion, and retains the published source while a newer
-source is solving. Admission prices every kind's unit at the field instruction
-visits its kernels measured (`SdfIndirectCache.Prices.cs`: the map walks count
-`sdfFieldVisits`, the kernels report visits and units through
+source is solving. Admission prices every kind's unit at the visits its kernels
+measured (`SdfIndirectCache.Prices.cs`: the map walks count `sdfFieldVisits`, the
+cache kernels add their record loads `sdfIndirectLoads` and shade a quarter visit
+per reduced ray, the kernels report visits and units through
 `sdfIndirectReportCost`, the trace recorder copies the counters and the
 produced-frame boundary reads fenced copies in order), never above the
-conservative complete-program price that prices an unmeasured kind. Shade
+conservative complete-program price that prices an unmeasured kind; a measured
+kind drops its fixed record bounds (`SdfIndirectUnits.IsMeasured`), which its
+count replaces. A chunk costs the larger of its visits and its longest lane's
+visits times `SdfIndirectCost.ChainLanes` (`SdfIndirectUnits.CostOf`; `LaneUnits`
+and `LaneDivisor` name a lane's share of a unit): a narrow dispatch is latency-bound,
+so pricing it by visits alone lets one frame's chunk run tens of milliseconds. A
+chunk whose chain alone outlasts the slice fills to the chain (`ChunkVisits`). Shade
 admission bounds all pinned directional fallback queries by the tier's
 existing trace-evaluation allowance and `SdfIndirectCost` instruction budget
 until the shade unit is measured.

@@ -381,18 +381,23 @@ box, a block of more than 512 entries or 16 distinct mask words, and any other
 program walk every instance.
 
 Admission prices each kind's unit (a probe's placement, a cell's partition, a
-ray's trace, a ray's shading and an admitted receiver) at the field instruction
-visits the device measured for it. The field walk counts its visits: one per
+ray's trace, a ray's shading and an admitted receiver) at the visits the device
+measured for it. The field walk counts its visits: one per
 instance it reads (parked and non-casting instances included), one per
 directory segment it tests, every instruction of a segment it does not cull and
-every leaf of a part program it composes.
+every leaf of a part program it composes. The cache kernels add the cache
+records they load, and shading adds a quarter visit for each ray every lane of a
+probe reduces; a measured kind's count replaces the bounds its conservative
+price holds for continuation searches, the irradiance reduction and split-probe
+scratch.
 Every indirect kernel adds its lanes' visits and units to monotonic counters at
 the end of the cache allocation; the trace recorder copies them after its
 dispatch, and the residency's produced-frame boundary reads every fenced copy, in
 submission order, as differences. A kind is priced at the largest of its last
 four measurements, never above the conservative price, every counted evaluation
 (each march's step cap included) against the complete program's instruction
-count, which still prices a kind before its first measurement. A cleared cache
+count with the kind's record bounds, which still prices a kind before its first
+measurement. A cleared cache
 restarts the counter baseline; prices change only at a produced-frame boundary,
 where a pending plan's unsubmitted units are admitted again at the new prices. A
 measured shade unit replaces the evaluation-count batch ceiling, which stood in
@@ -400,16 +405,23 @@ for that price. `world.lighting` echoes each kind's price (`prices=`).
 Indirect cache work has a per-frame budget in device time: the tier's slice
 (`SdfIndirectLayout.FrameMicroseconds`), 2 ms at Medium, an eighth of a 60 FPS
 frame, and 4 ms at High. The renderer holds the slice in counted visits at a
-calibrated device rate, `SdfIndirectCost.DeviceVisitsPerMicrosecond` (128),
-which the slowest measured kind set: on the RTX 2060, puck.world's
-classification took 447 to 517 ms of device time for 67,108,864 measured visits.
-Medium's slice is therefore 256,000 visits a frame and High's 512,000, a count
-that stays load-independent. Placement, classification, tracing and shade share
+calibrated device rate, `SdfIndirectCost.DeviceVisitsPerMicrosecond` (1,024),
+the rate the RTX 2060 retires visits at when a dispatch holds lanes enough to
+hide their latency, so Medium's slice is 2,048,000 visits a frame and High's
+4,096,000, a count that stays load-independent. A dispatch never finishes before
+its longest lane, whose visits run one after another: one lane alone runs
+under two field visits a microsecond there. A chunk therefore costs the larger of
+its visits and its longest lane's visits times `SdfIndirectCost.ChainLanes`
+(1,536), the throughput over that lane rate; a lane runs one unit, except that a
+shading lane runs a probe's rays in turn. A chunk whose longest lane alone
+outlasts the slice admits the units that run beside it at no further cost, up to
+that lane's own time.
+Placement, classification, tracing and shade share
 the slice once the device has measured every transport kind; before, while
 conservative prices overstate the work, a frame admits one submission's cap of
 67,108,864 visits, the most any single submission may take. A frame's first
 chunk is admitted whatever its cost, so a unit larger than the slice still
-advances, one unit a frame; only a unit over the submission cap is refused.
+advances, one chunk a frame; only a unit over the submission cap is refused.
 Shade also counts continuation-record searches and irradiance reduction,
 including when direct lighting is disabled. Transport, light rectangles and the
 shared receiver allowance advance across frames; a frame never drains a pending
@@ -435,8 +447,9 @@ A work item above the cost limit is split across submissions, never refused whol
 admission units: a probe's placement, a cell's partition, a ray's trace, or a ray's
 shading. Items that fit are admitted whole, as many to a chunk as the limit allows;
 a heavier item is cut into runs of its units, and a run may continue into the next
-item. The limit is the frame's slice once the kind is measured and the submission
-cap before. Every chunk fits the limit, or holds a single unit larger than it, and
+item. The limit is the frame's slice once the kind is measured, or the kind's
+longest lane's own time when that is longer, and the submission cap before.
+Every chunk fits the limit, or holds a single unit larger than it, and
 together they cover each item exactly once, in order. The pass block names the chunk (`indirectItemFirst`, `indirectUnitFirst`
 and `indirectUnitCount`), and only those units execute. A transport plan submits one
 chunk of each pass per produced frame, placement before partition before trace,

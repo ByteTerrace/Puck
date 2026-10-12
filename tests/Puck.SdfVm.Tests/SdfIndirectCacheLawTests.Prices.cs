@@ -116,13 +116,13 @@ public sealed partial class SdfIndirectCacheLawTests {
     [InlineData(10u)]
     [InlineData(400_000u)]
     [Theory]
-    public void AMeasuredTransportStepTakesTheTiersDeviceSliceOrOneIndivisibleUnit(uint visitsPerUnit) {
+    public void AMeasuredTransportStepTakesTheTiersDeviceSliceOrOneChunkWhoseLongestLaneOutlastsIt(uint visitsPerUnit) {
         using var rig = new Rig();
         var cache = rig.Cache;
         var slice = SdfIndirectCost.FrameCost(layout: cache.Layout);
 
-        // Medium's 2 ms at the calibrated device rate.
-        Assert.Equal(actual: slice, expected: 256_000L);
+        // Medium's 2 ms at the RTX 2060's 1,024 visits a microsecond.
+        Assert.Equal(actual: slice, expected: 2_048_000L);
         Assert.Equal(SdfIndirectCost.SubmissionCostLimit, cache.FrameDeviceLimit);
         cache.ObserveCost(counters: Uniform(units: 0, visits: 0), generation: cache.CostGeneration, sequence: 1);
         cache.ObserveCost(counters: Uniform(units: 4, visits: (visitsPerUnit * 4u)), generation: cache.CostGeneration, sequence: 2);
@@ -131,11 +131,14 @@ public sealed partial class SdfIndirectCacheLawTests {
 
         do {
             cache.Plan(inputs: Inputs, instructionCount: Instructions);
-            var units = new[] { SdfWorldPackage.IndirectPlace, SdfWorldPackage.IndirectClassify, SdfWorldPackage.IndirectTrace }
-                .Sum(selector: part => (cache.TransportChunk(part: part)?.UnitCount ?? 0));
+            var chunks = new[] { SdfWorldPackage.IndirectPlace, SdfWorldPackage.IndirectClassify, SdfWorldPackage.IndirectTrace }
+                .Select(selector: part => cache.TransportChunk(part: part)).OfType<SdfIndirectChunk>().ToArray();
 
-            Assert.True(condition: ((cache.TransportStepCost <= slice) || (units == 1)),
-                userMessage: $"A step of {units} units costs {cache.TransportStepCost} visits past the {slice}-visit slice.");
+            // A step fits the slice, or holds one chunk whose longest lane alone outlasts it, and no step takes more
+            // than a submission.
+            Assert.True(condition: ((cache.TransportStepCost <= slice) || (chunks.Length == 1)),
+                userMessage: $"A step of {chunks.Length} chunks costs {cache.TransportStepCost} visits past the {slice}-visit slice.");
+            Assert.True(condition: (cache.TransportStepCost <= SdfIndirectCost.SubmissionCostLimit), userMessage: $"{cache.TransportStepCost}");
             cache.Submitted();
             steps++;
         } while (!cache.TransportComplete && (steps < 100_000));

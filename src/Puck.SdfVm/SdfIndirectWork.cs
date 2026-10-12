@@ -54,7 +54,7 @@ public static class SdfIndirectWork {
     /// allowance and the evaluation-count bound, which stands in for that price, no longer applies.</summary>
     /// <param name="layout">The cache tier.</param>
     /// <param name="frame">The immutable lighting source.</param>
-    /// <param name="measuredFieldCost">The shade unit's measured field visits (<see cref="SdfIndirectCache.MeasuredFieldCost"/>),
+    /// <param name="measuredFieldCost">The shade unit's measured visits (<see cref="SdfIndirectCache.MeasuredFieldCost"/>),
     /// or null to price every fallback query against the complete program.</param>
     /// <returns>The probe count admitted per batch.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>

@@ -163,7 +163,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) {
         // A dormant or inactive probe's stratum is still an admitted unit: the host cannot see the classification, so the
         // measured price averages the rays it schedules, the ones that trace nothing included.
-        sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits, active ? 1u : 0u);
+        sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits + sdfIndirectLoads, active ? 1u : 0u);
         return;
     }
     SdfIndirectRay ray = (SdfIndirectRay)0;
@@ -186,7 +186,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     DeviceMemoryBarrierWithGroupSync();
     // The stratum's last ray marks it traced: every earlier ray was written by this group or an earlier chunk.
     if (active && lane == 63u) { InterlockedOr(indirectCacheRW[index * SdfIndirectProbeWords + 3u], 1u << (SdfIndirectTracedShift + update.y)); }
-    sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits, active ? 1u : 0u);
+    sdfIndirectReportCost(SdfIndirectCostTrace, sdfFieldVisits + sdfIndirectLoads, active ? 1u : 0u);
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
     sdfWorkTexels = active ? 1u : 0u;
     puckCountDetail(detail, sdfIndirectEvaluations - sdfIndirectLaunchEvaluations - sdfIndirectProofEvaluations, sdfWorkTexels, 0u, 0u, 0u);

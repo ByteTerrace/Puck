@@ -32,5 +32,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     sdfIndirectShadeProbe(index, update.z, lattice, lane, passGroup.indirectReadGeneration,
         passGroup.indirectReadPublication, passGroup.indirectWriteGeneration,
         passGroup.indirectWritePublication, passGroup.indirectFeedback, rayFirst, rayEnd);
-    sdfIndirectReportCost(SdfIndirectCostShade, sdfFieldVisits, (lane == 0u && rayEnd > rayFirst) ? rayEnd - rayFirst : 0u);
+    // A probe's last chunk reduces every ray on each lane: shared-memory reads and multiply-adds, priced at a quarter
+    // visit a ray, as the RTX 2060 retires them beside a probe's cache record loads.
+    uint reduction = (rayEnd >= rays) ? (rays / 4u) : 0u;
+    sdfIndirectReportCost(SdfIndirectCostShade, sdfFieldVisits + sdfIndirectLoads + reduction, (lane == 0u && rayEnd > rayFirst) ? rayEnd - rayFirst : 0u);
 }

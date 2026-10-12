@@ -34,6 +34,8 @@ public sealed partial class SdfWorldResidency {
         m_receiverBudgetLogged = true;
     }
 
-    // The shared allowance at the admitted receiver's measured price.
-    private static long ReceiverCost(SdfIndirectCache cache, int count) => checked((((long)count) * cache.ReceiverUnits.ItemCost(instructionCount: cache.InstructionCount)));
+    // The shared allowance at the admitted receiver's measured price, never below its longest lane's chain.
+    private static long ReceiverCost(SdfIndirectCache cache, int count) => ((count == 0) ? 0
+        : Math.Max(val1: checked((((long)count) * cache.ReceiverUnits.ItemCost(instructionCount: cache.InstructionCount))),
+            val2: cache.ReceiverUnits.ChainCost(instructionCount: cache.InstructionCount)));
 }

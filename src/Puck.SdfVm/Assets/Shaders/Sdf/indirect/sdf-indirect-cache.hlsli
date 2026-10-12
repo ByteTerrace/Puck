@@ -24,7 +24,8 @@ uint sdfIndirectLoad(uint word) {
 void sdfIndirectStore(uint word, uint value) {
     if (sdfIndirectRange(word, 1u)) { indirectCacheRW[word] = value; }
 }
-// Adds the active lanes' field instruction visits and work units to one kind's monotonic cost counters
+// Adds the active lanes' visits (field instruction visits, and cache record loads for the cache kernels) and work units
+// to one kind's monotonic cost counters
 // (SdfIndirectLayout.Cost*), one atomic pair per wave. The counters wrap; the host reads their differences between
 // its fenced readbacks and prices that kind's admission by the visits per unit the device counted.
 void sdfIndirectReportCost(uint kind, uint visits, uint units) {
