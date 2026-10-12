@@ -334,6 +334,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
     /// the frame is scheduled.</summary>
     public void BeginFrame() {
+        if (m_tables?.Indirect is { } cache) { cache.CaptureHold = (m_convergence is { Completion.IsCompleted: false }); }
         IndirectFrameBudget.BeginFrame(deviceLimit: (m_tables?.Indirect?.FrameDeviceLimit ?? SdfIndirectCost.SubmissionCostLimit));
         m_tables?.Indirect?.BeginFrame();
         m_receiverBudgetLogged = false;

@@ -138,6 +138,9 @@ proofs) every produced frame. The slice is the tier's device time
 (`SdfIndirectLayout.FrameMicroseconds`) at `SdfIndirectCost.DeviceVisitsPerMicrosecond`,
 held in counted visits; it applies once every transport kind is measured, and
 one submission's cap applies before. A frame's first device chunk always admits.
+While a capture holds the clock (the residency's pending capture request) the slice
+is `SdfIndirectCache.CaptureHoldFactor` times the tier's, as the indirect plan
+prescribes; the held frames present nothing, so a capture's solve takes fewer of them.
 Never raise the slice to make a scene converge: make the prices accurate.
 Indirect complete-field samples walk their instance-grid block (`sdfIndirectGridBlock`,
 mirroring `SdfInstanceGridPointQuery.TryBlock`, whose law proves the bound sound):

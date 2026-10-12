@@ -70,8 +70,17 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the shared receiver admission for this field across all views in one frame.</summary>
     public int ReceiverProofBudget => SdfIndirectCost.WholeItems(count: Layout.ReceiverProofBudget, instructionCount: InstructionCount, units: ReceiverUnits);
     /// <summary>Gets the counted visits one produced frame admits for transport and the lighting solve: the tier's
-    /// device-time slice (<see cref="SdfIndirectCost.FrameCost"/>).</summary>
-    public long FrameCost => Math.Max(val1: 1L, val2: SdfIndirectCost.FrameCost(layout: Layout));
+    /// device-time slice (<see cref="SdfIndirectCost.FrameCost"/>), times <see cref="CaptureHoldFactor"/> while a
+    /// capture holds the clock.</summary>
+    public long FrameCost => Math.Max(val1: 1L, val2: (SdfIndirectCost.FrameCost(layout: Layout) * (CaptureHold ? CaptureHoldFactor : 1)));
+
+    /// <summary>The multiple of the tier's slice a frame admits while a capture holds the clock: the held frames
+    /// present nothing a player sees, so the capture's solve takes fewer of them.</summary>
+    public const int CaptureHoldFactor = 4;
+
+    /// <summary>Gets or sets whether a capture holds the clock this frame. The residency sets it at each produced
+    /// frame's start, before admission renews.</summary>
+    public bool CaptureHold { get; set; }
     /// <summary>Gets the residency-owned allocation published by the graph.</summary>
     public IGpuBuffer Buffer { get; }
     /// <summary>Gets the brick, transport-update, direction, submitted-strata and shade-update regions.</summary>

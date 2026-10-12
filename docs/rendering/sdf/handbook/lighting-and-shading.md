@@ -408,7 +408,10 @@ frame, and 4 ms at High. The renderer holds the slice in counted visits at a
 calibrated device rate, `SdfIndirectCost.DeviceVisitsPerMicrosecond` (1,024),
 the rate the RTX 2060 retires visits at when a dispatch holds lanes enough to
 hide their latency, so Medium's slice is 2,048,000 visits a frame and High's
-4,096,000, a count that stays load-independent. A dispatch never finishes before
+4,096,000, a count that stays load-independent. While a capture holds the clock
+the slice is `SdfIndirectCache.CaptureHoldFactor` (4) times as large: the held
+frames present nothing a player sees, and the capture's solve finishes in a
+quarter of the frames. A dispatch never finishes before
 its longest lane, whose visits run one after another: one lane alone runs
 under two field visits a microsecond there. A chunk therefore costs the larger of
 its visits and its longest lane's visits times `SdfIndirectCost.ChainLanes`

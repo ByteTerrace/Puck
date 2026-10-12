@@ -64,6 +64,7 @@ public sealed partial class SdfWorldPassesLawTests {
         for (var still = 0; (still < 8); still++) { Produce(); }
         Assert.False(condition: views.CaptureReadinessOf(instance: "world").IsRendered,
             userMessage: "A still capture must wait for its receivers' fenced census.");
+        Assert.False(condition: residency.Tables!.Indirect!.CaptureHold, userMessage: "No capture holds the clock yet.");
         var convergence = new RenderGraphConvergence(request: new FrameCaptureRequest("unused-converging-sample.png", converge: 9));
 
         // A converging capture's samples admit every receiver and defer none, so each render of a sample completes its
@@ -73,6 +74,8 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
             Assert.True(condition: views.CaptureReadinessOf(instance: "world").IsRendered,
                 userMessage: $"Sample {sample}: {views.CaptureReadinessOf(instance: "world").Reason}; ready={residency.IsIndirectReady}");
+            // The capture holds the clock, so its frames take the held multiple of the slice.
+            Assert.True(condition: residency.Tables!.Indirect!.CaptureHold);
             convergence.Count();
         }
     }

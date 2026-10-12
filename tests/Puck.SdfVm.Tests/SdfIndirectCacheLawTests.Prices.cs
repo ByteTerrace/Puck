@@ -155,6 +155,32 @@ public sealed partial class SdfIndirectCacheLawTests {
         }
     }
     [Fact]
+    public void ACaptureHoldAdmitsTheHeldMultipleOfTheSliceAFrame() {
+        using var rig = new Rig();
+        var cache = rig.Cache;
+        var slice = SdfIndirectCost.FrameCost(layout: cache.Layout);
+
+        cache.ObserveCost(counters: Uniform(units: 0, visits: 0), generation: cache.CostGeneration, sequence: 1);
+        cache.ObserveCost(counters: Uniform(units: 4, visits: 400), generation: cache.CostGeneration, sequence: 2);
+        Assert.Equal(slice, cache.FrameDeviceLimit);
+        // A held frame presents nothing a player sees: the capture's solve takes the held multiple of the slice.
+        cache.CaptureHold = true;
+        Assert.Equal((slice * SdfIndirectCache.CaptureHoldFactor), cache.FrameDeviceLimit);
+        Assert.Equal((slice * SdfIndirectCache.CaptureHoldFactor), cache.FrameCost);
+        cache.CaptureHold = false;
+        Assert.Equal(slice, cache.FrameDeviceLimit);
+
+        static uint[] Uniform(uint visits, uint units) {
+            var counters = new uint[SdfIndirectLayout.CostWords];
+
+            for (var kind = 0; (kind < SdfIndirectLayout.CostKinds); kind++) {
+                counters[(2 * kind)] = visits;
+                counters[((2 * kind) + 1)] = units;
+            }
+            return counters;
+        }
+    }
+    [Fact]
     public void QueuedGeometryWaitsForTheRunningSolveThenWithdrawsItsTransport() {
         using var rig = new Rig();
         var cache = rig.Cache;
