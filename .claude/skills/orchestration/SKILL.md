@@ -103,6 +103,19 @@ qualifies its own local lanes and the GPU legs, not every partner's CPU suites.
 A gate blocks a lane, never a partner: the partner takes its next work from its
 track or the ready queue.
 
+Qualify a lane once, on the head it lands from. A gate costs an hour on a busy
+machine, and every move of the integration branch invalidates it, so:
+
+- A lane whose change owes GPU legs runs no `puck gate` without `--gpu`: that
+  gate repeats inside the `--gpu` gate it still needs. Until the lead grants the
+  GPU, it stops at a zero-warning build of what it touched, its new and changed
+  laws with their red legs proved, and the `--check` forms of files it changed.
+- A lane parked for a shared resource (the GPU, another lane's landing) merges
+  no intermediate integration tip. It merges the tip once, when it is about to
+  qualify, and the lead never asks it to catch up in between.
+- When several lanes wait on one GPU, grant it to them in landing order and let
+  each merge the tip its predecessor left, so no lane qualifies twice.
+
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
 it afterwards.
