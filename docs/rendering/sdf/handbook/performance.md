@@ -51,7 +51,7 @@ world.budget
 - **`world.budget`** prints the compose-time cost sheet: live program words and
   instances, the global step scale, volumes, scoped field clamps, and the
   program's directory segments (rigid ones counted), the chains they run and its
-  [specialization set](../../../plans/sdf-specialization.md#the-unit-of-specialization):
+  [specialization set](../../../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs):
   distinct chains, shape types, blends and compose forms. Confirm
   that the scene submits the geometry you think it does before you believe a
   count.

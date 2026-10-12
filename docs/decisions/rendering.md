@@ -10,6 +10,28 @@ submission, and retirement contracts, the ownership seam between the shader
 subsystem, the backends, and World, and the pause, reset, and reload semantics.
 Their observable guarantees are preserved, not every current API shape.
 
+## The frame does not interpret SDF programs
+
+The runtime renderer stops evaluating SDF bytecode per pixel per frame. The
+interpreter's ceiling is measured. With the interpreter compiled away
+entirely, the upper bound of per-world specialization,
+the avatar-free debug workload still spent 8.6 ms in primary and 54 ms in shadow
+on the RTX 2060 against a 16.7 ms frame. On the debug world at `high`, cutting
+primary march steps fourfold and shadow steps twofold cut their time only
+1.4-fold (primary 47 to 33 ms, shadow 123 to 85 ms, 4.9 to 6.8 FPS), because
+the remaining cost is the fixed price of each program walk. No tuning of the
+walk reaches the frame-rate bar.
+
+Worlds are mostly static and sculpted in the editor, so evaluation belongs at
+edit time, as in the shipped SDF engines that hold 60 FPS on weaker hardware.
+SDF programs remain the authored representation, and the interpreter remains the
+evaluator for baking, CPU queries and the editor. The frame reads what a bake
+produced. Two bake targets are measured against each other on the debug world:
+a sparse distance volume marched by texture reads, and baked meshes rasterized
+with shadow maps. One passes when its whole frame holds 16.7 ms worst-case on
+the RTX 2060 at `high`, 1280×900. If both pass, the owner chooses by look.
+Interpreter tuning stops; the specialization plan is withdrawn.
+
 ## The pipeline foundation
 
 **Fixtures before features.** The first bounded deliverable is repeatable

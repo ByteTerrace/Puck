@@ -29,7 +29,6 @@ The reference game's remaining engineering, its creatures and scale, the finder 
 
 Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that replaces the SDF engine as the host of rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, and assets derived from SDFs, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
 
-- [SDF program specialization](sdf-specialization.md)—compiling the field code each world renders into its own kernels, with the generic interpreter as the fallback while they build.
 
 ## [Editor](editor.md)
 
