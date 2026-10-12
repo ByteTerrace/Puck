@@ -595,7 +595,7 @@ The `setup-dxc` action installs the checksum-pinned compiler before source build
 `azure.yml` builds the Functions payload, the existing Storage/Front Door website
 layout with its documentation page, the stable official browser engine/content,
 and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
-Actors must answer `/healthz`; the silo must activate the primary Puck world,
+Actors must answer `/healthz`; the silo must activate the primary world (`debug`),
 checkpoint it, accept a QUIC connection with the expected key, and repeat those
 checks after container replacement using the same store. The gate also executes
 Caddy as its production UID with all Linux capabilities removed. The image strips
@@ -731,7 +731,7 @@ twice each through Front Door, asserting media type, `Cache-Control`, and an
 `X-Cache` edge hit for hashed scripts only, on every host the portal route
 serves.
 
-The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
+The primary world uses a Flexible VM scale set, `bytrcvmssp000`, at
 `play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
 the endpoint during worker replacement. The release permits exactly one worker,
 with manual application upgrades, automatic guest patching, and automatic
@@ -930,7 +930,9 @@ with the candidate image tagged `puck/world-silo:candidate` to check its entry p
 successful execution through the CLI alone cannot prove that the ordinary worker
 has its providers installed.
 
-`puck world prepare` packages Puck and its referenced neighbours. Official release
+`puck world prepare` packages the hosted primary world, the debug world
+(`src/Puck.World/Assets/worlds/debug.puck`, hosted as `debug`, the deployment's
+configured `worldName`), and any neighbours it references. Official release
 preparation pins the complete inventory, with a distinct retained signing key for
 each world and a matching door budget. Orleans membership is explicitly local. Checkpoints and journals live in
 Azure Blob Storage. The lifecycle extension monitors Azure Scheduled Events

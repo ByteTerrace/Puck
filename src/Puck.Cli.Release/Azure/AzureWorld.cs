@@ -18,6 +18,13 @@ public static partial class AzureCommand {
     /// machine content and assets resolve beside, which a silo document in the image names as its
     /// <c>documentDirectory</c>.</summary>
     public const string ImageWorldsDirectory = "/app/worlds";
+    /// <summary>The source of the primary world the release prepares and the silo hosts, repository-relative. The silo
+    /// image prepares the same file (<c>src/Puck.World.Silo/Dockerfile</c>), and the deployment's configured
+    /// <c>worldName</c> (<c>src/Puck.Azure.Resources/main.bicepparam</c>) is its document name,
+    /// <see cref="HostedWorldName"/>.</summary>
+    public const string HostedWorldSource = "src/Puck.World/Assets/worlds/debug.puck";
+    /// <summary>Gets the document name of <see cref="HostedWorldSource"/>: the world the silo hosts as its primary.</summary>
+    public static string HostedWorldName => Puck.World.WorldDocumentName.OfSourceFile(path: Path.GetFileName(path: HostedWorldSource));
 
     private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null, string? documentDirectory = null) {
         var result = new JsonObject {

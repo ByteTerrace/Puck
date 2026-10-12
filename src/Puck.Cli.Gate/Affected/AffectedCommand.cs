@@ -393,8 +393,9 @@ public static class AffectedCommand {
             failed.Add(item: "catalog");
         }
 
-        // The canaries boot real Worlds and parity holds both GPU backends, so they run only when asked for, after every
-        // CPU check: the canaries' legs side by side up to --gpu-jobs on the GPU, then parity.
+        // The canaries boot real Worlds, so they run only when asked for, after every CPU check, their legs side by side
+        // up to --gpu-jobs on the GPU. Parity takes the parity world it compares, and no live world is one, so a run
+        // that chooses parity names it without running it.
         if (
             gpu &&
             (plan.Canaries.Count > 0) &&
@@ -403,12 +404,8 @@ public static class AffectedCommand {
             failed.Add(item: "canaries");
         }
 
-        if (
-            gpu &&
-            plan.Parity &&
-            (CliRoot.Invoke(args: ["parity"], root: root) != 0)
-        ) {
-            failed.Add(item: "parity");
+        if (gpu && plan.Parity) {
+            Console.Error.WriteLine(value: "affected: parity is chosen but not run: no live world is a parity world; run `puck parity --world <file>` against one.");
         }
 
         if (failed.Count > 0) {
@@ -539,10 +536,10 @@ public static class AffectedCommand {
     /// <param name="description">What the verb compares against the merge base.</param>
     /// <returns>The option.</returns>
     internal static Option<string> MergeBase(string description) => new(name: "--merge-base") { Description = description };
-    /// <summary>Creates <c>--gpu</c>, which adds the chosen canaries and parity to a run; <c>puck affected</c> and
+    /// <summary>Creates <c>--gpu</c>, which adds the chosen canaries to a run; <c>puck affected</c> and
     /// <c>puck gate</c> share it.</summary>
     /// <returns>The option.</returns>
-    internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries, up to --gpu-jobs legs on the GPU at once, and then parity, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
+    internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries, up to --gpu-jobs legs on the GPU at once, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
 
     /// <summary>Creates <c>puck affected</c>.</summary>
     /// <param name="composition">What the verb reads from the verbs composed beside it.</param>
@@ -613,8 +610,8 @@ public static class AffectedCommand {
               tests of up to --suite-jobs of them at once; a heavy suite starts first and waits on the
               machine-wide heavy-suite admission before its run. Each suite prints its verdict and wall
               time as it ends. It then runs the worlds and the catalog check. --run --gpu then runs the chosen canaries, up to
-              --gpu-jobs legs on the GPU at once, and then parity. Baseline checks run only through
-              puck gate.
+              --gpu-jobs legs on the GPU at once, and names parity when it is chosen without running it:
+              puck parity takes the parity world it compares. Baseline checks run only through puck gate.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);

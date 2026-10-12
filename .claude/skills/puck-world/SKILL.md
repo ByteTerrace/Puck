@@ -268,8 +268,8 @@ bindings (`RuleSchedule`, `IStateReader.TryRowVersion`); a rule whose read
 rows are unchanged keeps its closed verdict. A text cell, a removal, a draw, a
 shuffle, and a random or slice transfer take the same arena kernels
 (`WorldArenaTransforms.TryApply`), which compose but still export once.
-`puck bench world` measures the tick path on the fixture and the shipped
-world.
+`puck bench world [world]` measures the server tick path of the debug world, or
+of the world it is given, without a device.
 
 **Resolve a document's paths beside it.** Every relative path a world document
 authors (basis, imports, `references`, asset-row `source`, addon `modulePath`,

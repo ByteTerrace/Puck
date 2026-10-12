@@ -50,9 +50,10 @@ your CLI copy (below).
   parity, device suites, counters workloads and docs citations, serially, and
   is a GPU leg.
 - **`puck affected --merge-base origin/<integration-branch>`** prints the
-  selection the change reaches; `--run` runs it and `--gpu` adds its canaries
-  and parity. `--since <branch>` folds in landings after the lane started.
-- **`puck parity`**, **`puck canary <names>`** and **`puck counters --check`**
+  selection the change reaches; `--run` runs it and `--gpu` adds its canaries,
+  and names parity when chosen. `--since <branch>` folds in landings after the
+  lane started.
+- **`puck parity --world <file>`**, **`puck canary <names>`** and **`puck counters --check`**
   compare backends, launch the real World against a manifest, and judge counted
   GPU work against recorded ceilings. All are GPU legs.
 - **`puck laws prove`** runs a law with its fix withheld (`--fix <commit>` or

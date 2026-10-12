@@ -44,10 +44,11 @@ public static class BenchRunner {
             description: "Run the BenchmarkDotNet micro-benchmarks over the Maths, SDF, and state kernels.",
             name: "kernels"
         ) { benchmarkArguments };
+        var worldArgument = new Argument<string?>(name: "world") { Arity = ArgumentArity.ZeroOrOne, Description = $"The world's .puck source or .world.json document. Default: the debug world, {WorldBenchmarks.DefaultWorldRelativePath}." };
         var worldCommand = new Command(
             description: "Time the Puck.World.Server tick path with a plain stopwatch harness.",
             name: "world"
-        );
+        ) { worldArgument };
         var command = new Command(
             description: "Measure kernels, the server tick path, World startup, and the cost schedule's evidence.",
             name: "bench"
@@ -70,19 +71,17 @@ public static class BenchRunner {
             past a `--` separator: `puck bench kernels -- --help`.
             """);
         worldCommand.Detail(detail: """
-            Boots the shipped puck.world.json and the checked-in Klondike fixture document
-            (Bench/klondike.fixture.puck) and prints one row per number: shipped-world server construction time,
-            idle-tick time and quiet-tick allocation (median over a sampled window, after a warmup), the contact work
-            per sampled tick as deterministic counts (sweeps, sweep bounds queries, interval walks with their
-            instructions and rotation expansions, point evaluations with their instructions), the tick paced at the
-            simulation rate with the count of submissions that waited on a screen machine's worker, each screen
-            machine's own tick of emulation timed alone, and a scripted Klondike deal's per-tick time and per-mutation
-            allocation. A server construction against the shipped world
-            costs hundreds of milliseconds, past what an iteration-based job can amortize honestly, which is why this
-            lane sits beside BenchmarkDotNet rather than inside it.
+            Loads one world, the debug world unless another is named, builds its server without a device, and
+            prints one row per number: server construction time, idle-tick time and quiet-tick allocation (median
+            over a sampled window, after a warmup), the contact work per sampled tick as deterministic counts
+            (sweeps, sweep bounds queries, interval walks with their instructions and rotation expansions, point
+            evaluations with their instructions), the tick paced at the simulation rate with the count of
+            submissions that waited on a screen machine's worker, and each screen machine's own tick of emulation
+            timed alone. A server construction can cost hundreds of milliseconds, past what an iteration-based job
+            can amortize honestly, which is why this lane sits beside BenchmarkDotNet rather than inside it.
             """);
         kernelsCommand.SetAction(action: parseResult => Run(benchmarkArguments: (parseResult.GetValue(argument: benchmarkArguments) ?? [])));
-        worldCommand.SetAction(action: _ => WorldBenchmarks.Run());
+        worldCommand.SetAction(action: parseResult => WorldBenchmarks.Run(world: parseResult.GetValue(argument: worldArgument)));
 
         return command;
     }

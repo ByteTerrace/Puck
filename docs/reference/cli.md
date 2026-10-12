@@ -82,7 +82,7 @@ whose command no longer breaks its rule, until the row is deleted.
 
 | Verb | What it is |
 |---|---|
-| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites, worlds and catalog check, and `--run --gpu` the canaries and parity too. |
+| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites, worlds and catalog check, and `--run --gpu` the canaries too. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -120,10 +120,10 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
-| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots the authored parity world offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
+| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
-| [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against the release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
+| [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against a release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck refusals`](#puck-refusalsrefusal-census) | the source census of the refusals `world.refusals` lists, which the refusal-catalog-census canary holds the running World's scan to. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
@@ -279,7 +279,7 @@ puck artifacts durations <directory>
 puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
-puck world prepare <worlds-directory> --output <directory>
+puck world prepare <primary-world> --output <directory>
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json]
 puck world release finalize
@@ -313,10 +313,13 @@ deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
 including hidden files.
 
-`world prepare` uses the engine's composer and validator to package Puck and its
-referenced neighbours under canonical hosted file names. It rebases provider-declared
-asset paths from nested documents to the common worlds directory; the image retains
-the neighbouring asset directories. `world probe` checks
+`world prepare` uses the engine's composer and validator to package a primary
+world (its `.puck` source or `.world.json` document) and the neighbours it
+references under canonical hosted file names; no reference may leave the primary
+world's directory. The silo image and the Azure release prepare the debug world,
+`src/Puck.World/Assets/worlds/debug.puck`, which production hosts as `debug`. It
+rebases provider-declared asset paths from nested documents to the common worlds
+directory; the image retains the neighbouring asset directories. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
 and contacts the supplied host. `wasm build` builds every committed WebAssembly guest with Cargo, one build per variant
 each crate declares under `[package.metadata.puck]` in its `Cargo.toml`, writes each module to every repository path
@@ -559,10 +562,11 @@ refused, and so is the exact name beside `beacons/north.world.json` or
 `beacons/north.puck`, because a reference to `beacons/north` resolves to that
 file and never to the declared world. Each role is derived from the document: `shard` under
 `shards/`, `basis` for `standard`, `world` for a document with a `documentId`,
-and `fragment` otherwise. The root `puck` and the basis `standard` resolve by
-name like every other document, so either can be authored as `.puck` or as
-`.world.json`, and the build refuses when either is missing. `composed[].name`
-is the root's document name, `puck`.
+and `fragment` otherwise. The root is the world production hosts, `debug`
+(`src/Puck.World/Assets/worlds/debug.puck`, the same world `world prepare`
+packages for the silo). It resolves by name like every other document, so it can
+be authored as `.puck` or as `.world.json`, and the build refuses when it is
+missing. `composed[].name` is the root's document name, `debug`.
 
 `verify` holds a manifest it did not build to the same rules. It refuses two
 `documents` whose names differ only in letter case or repeat exactly, with the
@@ -965,8 +969,10 @@ as it ends; a failed one follows it with its whole report, each failed test
 with its message and stack, and a failed build prints its errors and runs no
 suite, so the log `puck gate` keeps names every failure. `--gpu`, which needs
 `--run`, then runs the chosen canaries, up to `--gpu-jobs` legs on the GPU at
-once, and then parity: they boot real Worlds and hold both GPU backends, so they run only
-when asked for, on a machine with no competing build or GPU work.
+once: they boot real Worlds, so they run only when asked for, on a machine with
+no competing build or GPU work. A chosen `parity` is named on standard error and
+not run, because `puck parity` takes the parity world it compares and no live
+world is one.
 [`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
 candidate's own CLI.
 
@@ -1967,15 +1973,19 @@ law rather than by a directory sweep.
 
 ## `puck parity`—cross-backend parity over the authored parity world
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+`puck parity --world <file>` takes the parity world it compares, a `.puck`
+source, and has no default: a run without `--world` is refused by name. The
+parity world, `experimental/tests/Puck.Parity/parity.puck`, is quarantined while the debug world is the one live world, which authors no
+`captures` rows and has no contract, so the verb is not run until the owner
+calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
-`puck parity` boots `experimental/tests/Puck.Parity/parity.puck` once per graphics
+`puck parity --world <file>` boots the world once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
 the same simulation ticks, each pair observes one moment by construction.
 The parity world ships its bakes as a released world does: the run compiles
-the parity tree into its artifacts with the World artifact's own CLI (a
+the source's directory into its artifacts with the World artifact's own CLI (a
 compiled world holds only for the engine build that derived it), copying every
 other file of the tree beside it, and each leg boots that copy, whose `BAKE`
 chunk holds every bake from its bake pack. Each leg ends by reading
@@ -1996,9 +2006,10 @@ Each leg runs until 30 ticks past the last tick the world's `captures` rows
 schedule, read from the world itself, so a new station needs no change here; a
 world that cannot be read, or whose last tick leaves no room for those 30, is
 refused by name before a leg starts.
-The two manifest directories are then compared by `puck parity compare` under
-the contract versioned beside the world
-(`experimental/tests/Puck.Parity/parity.contract.json`).
+Each leg composes the world's companion SDF document, `<stem>.sdf.json` beside
+the source. The two manifest directories are then compared by `puck parity
+compare` under the contract versioned beside the world, `<stem>.contract.json`.
+A source without both companions is refused by name before anything builds.
 With `--debug-layers` each leg boots its World under its backend's validation
 layer, with the same arguments and the same rule as `puck canary
 --debug-layers`: a `[vulkan-debug] validation` line, any `[d3d12-debug]` line,
@@ -2011,8 +2022,8 @@ capture, so a `VALIDATION-FAIL` fails the run (exit 1) after every capture's
 verdicts are printed.
 
 ```text
-puck parity                                            full run: both backends, then compare
-puck parity --debug-layers                             the same, each leg under its backend's validation layer
+puck parity --world <file>                             full run: both backends, then compare
+puck parity --world <file> --debug-layers              the same, each leg under its backend's validation layer
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 
@@ -2406,16 +2417,18 @@ on Windows and on Linux and compares the two streams
 
 ## `puck qualify`—package qualification
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
 ```text
-puck qualify <package> [--profile <file>] [--list] [--output <file>]
+puck qualify <package> --profile <file> [--list] [--output <file>]
 ```
 
 `puck qualify` holds a producer-built `Puck.World` package, such as CI's
-`artifacts/world`, to the release profile
-(`experimental/tests/Puck.Qualification/release.profile.json`, a `puck.release.profile.v1`
-document whose schema `puck schema` generates). It never builds: it checks
+`artifacts/world`, to the release profile `--profile` names (a
+`puck.release.profile.v1` document whose schema `puck schema` generates); it
+has no default. The release profile,
+`experimental/tests/Puck.Qualification/release.profile.json`, is quarantined
+with the canaries and worlds it names while the debug world is the one live
+world, and the verb is not run until the owner calls for qualification
+([quarantined gates](../plans/open-items.md#quarantined-gates)). It never builds: it checks
 that the package's entry assembly is in the profile's publish mode, installs a
 clean copy, runs the profile's functional canaries on the copy's World with
 `puck canary --world-artifact`, then runs the stability matrix offscreen
@@ -2811,25 +2824,21 @@ separate evidence, and unresolved rows remain unmodeled.
 
 ### `puck bench world`
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
-The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
-`puck.world.json` and a checked-in Klondike fixture document
-(`Bench/klondike.fixture.puck`, spliced the way
-`experimental/tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
-project referencing the test project) and prints one row per number—
-shipped-world server construction time, idle-tick time and quiet-tick
-allocation (median over a sampled window, after a warmup), the contact work
-behind each sampled tick as deterministic counts (certified sweeps and the
-bounds queries they charge, interval walks with their instructions and full
-rotation expansions, and point evaluations with their instructions, read from
-`physics.sweep`, `sdf.bounds` and `sdf.point`), and a scripted Klondike deal's
-per-tick time and per-mutation allocation. The screen machines
-emulate on worker threads the tick only submits to, and the back-to-back idle
-window is bounded by the slowest of them once their pending windows fill, so
-the lane also times the shipped tick paced at the simulation rate, beside the
-count of submissions that waited on a machine, and times each screen machine's
-own tick of emulation alone. A server
+The `Puck.World.Server` tick-path lane: `puck bench world [world]` loads one
+world, the debug world (`src/Puck.World/Assets/worlds/debug.puck`) unless a
+`.puck` source or `.world.json` document is named, builds its server without a
+device, and prints one row per number—server construction time, idle-tick time
+and quiet-tick allocation (median over a sampled window, after a warmup), and
+the contact work behind each sampled tick as deterministic counts (certified
+sweeps and the bounds queries they charge, interval walks with their
+instructions and full rotation expansions, and point evaluations with their
+instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). The
+screen machines emulate on worker threads the tick only submits to, and the
+back-to-back idle window is bounded by the slowest of them once their pending
+windows fill, so the lane also times the tick paced at the simulation rate,
+beside the count of submissions that waited on a machine, and times each screen
+machine's own tick of emulation alone; a world with no screen machines prints
+the paced tick alone. A server
 construction includes admission, navigation, and runtime allocation, so this
 lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,
@@ -2838,12 +2847,8 @@ switcher as its own sub-verb rather than inside it:
 
 ```sh
 puck bench world
+puck bench world path/to/world.puck
 ```
-
-Regenerate the fixture document only when
-`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Shared/World/Fixtures.cs) or
-`experimental/src/Puck.World/Assets/worlds/games/klondike.puck` changes underneath
-it—it is a checked-in snapshot, not derived at run time.
 
 ### `puck bench startup`
 

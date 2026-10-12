@@ -15,9 +15,9 @@ namespace Puck.Cli.Official;
 // its name — each
 // published byte for byte), documents[] (every document that workspace authors, named by its document name
 // (WorldDocumentName) and described by its own JSON — never a full WorldDefinition parse, which most fragments refuse
-// standalone by design — each naming the sources[] file that authors it), and composed[] (the root document `puck`,
-// resolved through its whole basis-and-imports graph, parsed, migrated, validated, and re-serialized — the one
-// document this tree proves boots). A .puck source authors exactly the names it emits (WorldCompilation.DocumentNames):
+// standalone by design — each naming the sources[] file that authors it), and composed[] (the root document, the world
+// production hosts (AzureCommand.HostedWorldName), resolved through its whole basis-and-imports graph, parsed,
+// migrated, validated, and re-serialized — the one document this tree proves boots). A .puck source authors exactly the names it emits (WorldCompilation.DocumentNames):
 // its stem, or one per world a composition source declares, or none for a module library, so a .world.json file named
 // like a library, or like a composition that declares no world of its stem, is that name's carrier; a .world.json file
 // beside the source of its name emitting that name is never read. Every authored document name is unique ignoring
@@ -26,7 +26,8 @@ public static class OfficialWorldDocumentScanner {
     private const string BasisDocumentName = "standard";
     private const string BasisMemberName = "basis";
     private const string ImportsMemberName = "imports";
-    private const string RootDocumentName = "puck";
+
+    private static string RootDocumentName => Azure.AzureCommand.HostedWorldName;
 
     // One document the workspace authors: its document name, the sources[] file that authors it, and its JSON.
     private readonly record struct AuthoredDocument(string Name, string Source, byte[] Bytes);
@@ -286,17 +287,15 @@ public static class OfficialWorldDocumentScanner {
             }
         }
 
-        // The root and the basis are documents like any other: each resolves by name to its source when it has one.
-        foreach (var required in ((ReadOnlySpan<string>)[RootDocumentName, BasisDocumentName])) {
-            if (!authored.Exists(match: document => string.Equals(
-                a: document.Name,
-                b: required,
-                comparisonType: StringComparison.Ordinal
-            ))) {
-                reason = $"no document named '{required}' ({WorldDocumentName.SourceFile(name: required)} or {WorldDocumentName.DocumentFile(name: required)}) is authored under {full}.";
+        // The root is a document like any other: it resolves by name to its source when it has one.
+        if (!authored.Exists(match: document => string.Equals(
+            a: document.Name,
+            b: RootDocumentName,
+            comparisonType: StringComparison.Ordinal
+        ))) {
+            reason = $"no document named '{RootDocumentName}' ({WorldDocumentName.SourceFile(name: RootDocumentName)} or {WorldDocumentName.DocumentFile(name: RootDocumentName)}) is authored under {full}.";
 
-                return false;
-            }
+            return false;
         }
 
         var entries = new List<OfficialDocumentEntry>();

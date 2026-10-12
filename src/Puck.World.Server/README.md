@@ -75,7 +75,7 @@ a program sized by every district's solid geometry, but each field query walks
 only the instances and chains of shapes near it, skipping the rest by sphere
 bounds that move no answer
 ([queries and determinism](../../docs/rendering/sdf/handbook/queries-and-determinism.md)).
-`puck bench world`'s "shipped world: idle tick (median)" row with its per-tick
+`puck bench world`'s "world: idle tick (median)" row with its per-tick
 contact work counts, and `experimental/tests/Puck.World.Games.Tests/HandleTickPathLawTests.cs`,
 are the read-backs.
 
