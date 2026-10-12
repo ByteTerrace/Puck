@@ -33,6 +33,10 @@ agent works in that mode by default, without asking:
   where running cannot show the behavior and the test will outlive the next
   rewrite. An existing test that a change breaks is updated or deleted in that
   change, never preserved as a constraint.
+- The owner's target for the suite: the smallest set of tests that reaches 100%
+  line coverage, plus a short keep-list of invariant tests the owner approves
+  (determinism replay hashes, exact fixed-point results), which coverage alone
+  cannot see. Code no test and no live world reaches is deleted, not tested.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.
