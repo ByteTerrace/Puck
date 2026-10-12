@@ -538,8 +538,8 @@ The program learns its own chains; no kernel reads them yet.
   compositions) from the live program.
 - Laws: `SdfProgramChainLawTests` in `tests/Puck.SignedDistance.Tests` (the key
   law above), `SdfEncodingProbeLawTests` and the regenerated fingerprint.
-- Gates: the SignedDistance and SdfVm suites, `puck shaders generate --check`,
-  `puck lengths --check`; and, because the packed words and the fingerprint
+- Gates: the SignedDistance and SdfVm suites, `puck shaders generate --check`;
+  and, because the packed words and the fingerprint
   move, `puck parity`, `puck counters --check` and the field canaries on both
   backends.
 

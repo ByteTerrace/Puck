@@ -4,14 +4,12 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-using Puck.Analyzers;
 using Puck.Cli.Source;
 
 namespace Puck.Cli.Scan.Analyzers;
 
 // The comment-weakness report: the same non-XML inline-comment corpus as CommentAnalyzer, each comment bucketed by
-// Puck.Analyzers.CommentSmellClassifier, the classification CommentSmellAnalyzer ratchets in every build.
-// Orthogonally: every comment carries blockSize, the run of consecutive comment lines it belongs to,
+// CommentSmellClassifier. Orthogonally: every comment carries blockSize, the run of consecutive comment lines it belongs to,
 // because the dominant rot is a BLOCK property no per-line rule can see — a 92-line essay is 92
 // individually innocent lines. And any comment that NAMES a cross-artifact referent is resolved against
 // the corpus, in two tiers that must not be conflated: a FILE referent (shader or document) that

@@ -120,8 +120,7 @@ is expected to do, and each `LedgerRomStage` (`SuiteCatalog` discovers its
 cases, `LedgerEvaluator` applies the rules below, `ProbeRunner` dispatches to
 the probe named on the row) compares the ROM's actual behavior against it.
 `Expectations.json` is generated, never hand-edited—the stage is the runner
-that fails when it disagrees with its own source, the same shape as
-`FileLengths.json`/`VerifiedCode.json`—and every run writes the candidate
+that fails when it disagrees with its own source—and every run writes the candidate
 that would replace it; see [Accepting](#accepting).
 
 A row records the suite, the ROM's path relative to that suite's on-disk root,

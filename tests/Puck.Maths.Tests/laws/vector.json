@@ -1538,7 +1538,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedVector3 op_CheckedAddition, op_CheckedSubtraction and op_CheckedUnaryNegation, every component, and the refusal",
-        "Against": "The exact BigInteger sum, difference and negation per lane: the operator must answer them exactly when all three fit the signed 64-bit raw and throw OverflowException when any one does not. The claim decides representability by a BigInteger range comparison, sharing nothing with the branded scalar operators the subject lifts",
+        "Against": "The exact BigInteger sum, difference and negation per lane: the operator must answer them exactly when all three fit the signed 64-bit raw and throw OverflowException when any one does not. The claim decides representability by a BigInteger range comparison, sharing nothing with the scalar operators the subject lifts",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

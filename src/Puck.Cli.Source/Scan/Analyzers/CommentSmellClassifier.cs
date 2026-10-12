@@ -2,18 +2,17 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-namespace Puck.Analyzers;
+namespace Puck.Cli.Scan.Analyzers;
 
 /// <summary>
-/// Buckets a non-XML inline comment by the kind of weakness it represents. The premise is that self-documenting code
-/// needs no inline comment, so every one is a smell to triage. Buckets, first match wins:
-/// <see cref="SyncCoupling"/>, <see cref="DebtMarker"/>, <see cref="BannerDivider"/>,
+/// Buckets a non-XML inline comment by the kind of weakness it represents, for <see cref="CommentSmellScan"/>. The
+/// premise is that self-documenting code needs no inline comment, so every one is a smell to triage. Buckets, first
+/// match wins: <see cref="SyncCoupling"/>, <see cref="DebtMarker"/>, <see cref="BannerDivider"/>,
 /// <see cref="CommentedOutCode"/>, <see cref="NarrativeHistory"/>, <see cref="DeadProvenance"/>, and
-/// <see cref="Unclassified"/> for the rest. Every bucket but <see cref="Unclassified"/> is a named smell, which is
-/// what <see cref="CountSmells"/> counts for <c>CommentSmells.json</c>. The classification is syntactic; whether an
-/// unclassified comment is true is a claim only a reader of the code can settle.
+/// <see cref="Unclassified"/> for the rest. The classification is syntactic; whether an unclassified comment is true
+/// is a claim only a reader of the code can settle.
 /// </summary>
-public static class CommentSmellClassifier {
+internal static class CommentSmellClassifier {
     /// <summary>A prose guardrail over a constraint the compiler cannot see (source order) or cannot span (a
     /// C#-to-shader contract). These mark a missing single source of truth rather than a documentation gap.</summary>
     public const string SyncCoupling = "sync-coupling";
@@ -132,28 +131,6 @@ public static class CommentSmellClassifier {
         }
 
         return Unclassified;
-    }
-    /// <summary>Counts a syntax tree's inline comments that fall in a named smell bucket — every bucket but
-    /// <see cref="Unclassified"/>. XML documentation comments are not inline comments and are never counted.</summary>
-    /// <param name="root">The tree's root node.</param>
-    /// <returns>The file's comment-smell count.</returns>
-    public static int CountSmells(SyntaxNode root) {
-        var count = 0;
-
-        foreach (var trivia in root.DescendantTrivia()) {
-            if (
-                IsInlineComment(trivia: trivia) &&
-                !string.Equals(
-                a: Classify(body: Body(text: trivia.ToString())),
-                b: Unclassified,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                count++;
-            }
-        }
-
-        return count;
     }
     /// <summary>Returns whether a trivia is an inline comment: a <c>//</c> or <c>/* */</c> comment, never XML
     /// documentation.</summary>

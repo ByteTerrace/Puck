@@ -29,9 +29,8 @@ reasoning behind every decision is in
   unstarted prerequisite.
 - **Landed:** the baked solid query, `WorldSolidField`, `WorldOutputHub`
   narration, and `WorldDeadlineTable`; the `WorldServer` facade split and its
-  constraints (every record the checkpoint codec reads sits at the top level of
-  its namespace, and the file-length and comment-smell ratchet ledgers are
-  enforced at build time, with the file-length ceiling at 2,000 lines); the
+  constraint that every record the checkpoint codec reads sits at the top level
+  of its namespace; the
   release manifest, group store,
   coordinator, CLI verbs, and the maintenance-and-recovery sequence (owned by
   [the server README](../../src/Puck.World.Server/README.md#hosted-release-records)

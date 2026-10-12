@@ -462,9 +462,6 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    the stamp emitters or refuse the value there, then regenerate with
    `puck schema` and check with `puck schema --check`.
 
-Large additions to `SdfProgram.cs` belong in a partial file: the file-length
-ledger (`puck lengths`) only lets a recorded file shrink.
-
 [references/sync-pairs.md](references/sync-pairs.md) lists every C#↔HLSL
 coupling with its exact layout and marks which side is generated. Read it
 before editing an enum value, a packed word, a byte length, a binding, or a

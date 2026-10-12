@@ -596,7 +596,7 @@ public static class AffectedCommand {
               must match. Files with conditional directives, parse errors, additions and deletions are
               not judged. A manifest edit confined to root title and binding selects a canary-check
               line and puck canary --list <id...>, which --run strictly loads without booting a World.
-              Gate repository checks remain: format, lengths, comment-smells and docs links, with
+              Gate repository checks remain: format and docs links, with
               docs citations in the GPU gate.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and

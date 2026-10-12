@@ -125,7 +125,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] The product tree (startable today).
 - [ ] The ledger (startable today).
 - [x] The facade split, in the rebuild's WP11e.
-- [x] The facade's remaining constraints: checkpoint records out of the server classes, the comment-smell ledger, a lower file-length ceiling.
+- [x] The facade's remaining constraint: checkpoint records out of the server classes.
 - [ ] Compiled worlds: the container's remaining gaps (a hit still validates and compiles, the hosted-load and replay doors, checkpoint and tape references, cache eviction); simulation chunks; everything else. One validated load, the container, its header and the `DEFN`, `ASST` and `BAKE` chunks are landed.
 - [ ] The presentation view: the projection's mechanism defects and the conformance law (startable today); the static sections as disclosure decisions; target registers and the authoring envelope; bound state as per-recipient observations; the primary client onto the view.
 - [ ] Release pairs: group-scoped restore, definition-edit preservation, a qualified pair with the operator exercise.

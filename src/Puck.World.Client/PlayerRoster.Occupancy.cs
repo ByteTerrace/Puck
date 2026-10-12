@@ -3,7 +3,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 /// <summary>The roster's seat-vacated fact and the edge it raises. Split from <see cref="PlayerRoster"/>'s main file
-/// purely for length (LEN001); every member here shares that type's single-threaded, no-lock discipline and its
+/// purely for length; every member here shares that type's single-threaded, no-lock discipline and its
 /// fields.</summary>
 public sealed partial class PlayerRoster {
     /// <inheritdoc/>

@@ -6,7 +6,7 @@ namespace Puck.World.Client;
 /// <summary>The roster's device-kind bookkeeping: per-kind (<c>keyboard&lt;N&gt;</c>/<c>mouse&lt;N&gt;</c>/
 /// <c>gamepad&lt;N&gt;</c>/<c>camera&lt;N&gt;</c>) token minting and resolution, the camera default-seating policy,
 /// and the <c>world.devices</c>/<c>world.device-profiles</c> read-backs. Split from <see cref="PlayerRoster"/>'s
-/// main file purely for length (LEN001); every member here shares that type's single-threaded, no-lock discipline
+/// main file purely for length; every member here shares that type's single-threaded, no-lock discipline
 /// and its fields.</summary>
 public sealed partial class PlayerRoster {
     private static readonly (string Prefix, InputDeviceKind Kind)[] DeviceTokenPrefixes = [

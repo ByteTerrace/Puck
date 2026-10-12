@@ -47,10 +47,6 @@ cross-artifact referent — a shader filename, an `UPPER_SNAKE` define — as
 resolved or dangling. A dangling referent your change created is tier one, one
 already dangling in a file you are editing is tier two, and one anywhere else is
 tier three. Flags are in [the CLI reference](../../../docs/reference/cli.md#puck-scansource-sweep).
-The same classification is a build gate: `CommentSmells.json` records each
-file's smell count, and a count may only fall (SMELL001–SMELL004). A smell
-your change adds fails the build; fix the comment rather than raising the
-ledger, and run `puck comment-smells` after removing one.
 Pass the directory you touched as the root, because the default root is all of
 `src`, and acting on everything a tree-wide sweep returns is exactly the
 widening this skill exists to prevent.

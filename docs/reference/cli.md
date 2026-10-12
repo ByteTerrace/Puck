@@ -93,7 +93,6 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs) | records the World boots and summed leg budget of the two canary gate selections in `CanaryCeilings.json`, or checks it with `--check`; a recorded count must equal its plan. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
-| [`puck comment-smells`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `CommentSmells.json`, the ratchet ledger the comment-smell build error (SMELL001–SMELL004) reads, or checks it with `--check`; a recorded count only falls. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
@@ -111,7 +110,6 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -877,9 +875,8 @@ base, so passing both is refused.
   `canary-check <id>` and the shared `puck canary --list <id...>` command;
   `--run` executes it without building or booting a World. Invalid prose still
   fails strict loading. An execution or verdict field change chooses the run.
-  These rules leave the gate's repository checks intact: lengths,
-  comment-smells and docs links, format for changed C# sources, and docs
-  citations in the GPU gate. JSON manifests are not formatter inputs.
+  These rules leave the gate's repository checks intact: docs links, format
+  for changed C# sources, and docs citations in the GPU gate. JSON manifests are not formatter inputs.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file or `NativeMethods.txt` stands for its project's
   sources. A restore lock (`packages.lock.json`) reaches its own project's
@@ -1088,7 +1085,7 @@ to run, but prevent recording. Checks leave their ledgers untouched;
 at each start and exit, naming the step, its exit code (`-` until it exits),
 elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
 console summary names both files. The CLI copy and format list are removed. Each
-step's console verdict carries its wall time (`gate: lengths passed (3s)`), the
+step's console verdict carries its wall time (`gate: docs links passed (3s)`), the
 canary step echoes each canary's `PASS`/`FAIL` verdict as it lands, and a wait for
 host capacity names what holds it back: the process holding the GPU, named again
 when it changes, or the CPU and memory reading.
@@ -2979,7 +2976,7 @@ puck scan [<root=src>] [--only comments,comment-smells,locks,clones]
 | Analyzer | Emits |
 |---|---|
 | `comments` | every non-XML inline comment (`//` and `/* */`). |
-| `comment-smells` | those comments bucketed by weakness (sync-coupling / debt-marker / banner-divider / commented-out-code / narrative-history / dead-provenance / unclassified), the classification [`puck comment-smells`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) ratchets per file, plus each cross-artifact referent (a shader file name or an `UPPER_SNAKE` define) tagged resolved or dangling. |
+| `comment-smells` | those comments bucketed by weakness (sync-coupling / debt-marker / banner-divider / commented-out-code / narrative-history / dead-provenance / unclassified), plus each cross-artifact referent (a shader file name or an `UPPER_SNAKE` define) tagged resolved or dangling. |
 | `locks` | synchronization sites, kind-tagged: `lock` statements, lock-primitive declarations, `Monitor.*`/`Interlocked.*` calls, `[MethodImpl(Synchronized)]`. |
 | `clones` | structurally identical callable bodies and nested blocks, Type-1/Type-2 fingerprinted; gated by `--min-tokens`/`--min-statements`, and `--no-blocks` drops the block pass. |
 
@@ -3487,7 +3484,7 @@ project exposes through `InternalsVisibleTo` binds as the build binds it.
 establishing the `.editorconfig` baseline the custom passes layer onto. Folder
 mode loads and restores no project, so the selection alone decides what it
 reaches, and a compile item a project links in from outside the root, such as
-`build/VerifiedCodeAttribute.cs`, is never touched. It defines no preprocessor
+`build/OpensGpuDeviceAttribute.cs`, is never touched. It defines no preprocessor
 symbols, so code under `#if SYMBOL` is left as written. Without `--check` it
 **rewrites any whitespace drift in the root**, which on an unswept root is the
 whitespace sweep for that root; the tree-wide sweep is deliberately its own,
@@ -3594,7 +3591,7 @@ unreadable or unparseable source, or a tool failure.
   populates it.
   It also reports the project's `Compile` items, so a source linked in from
   outside the project directory—`build/RepositoryPaths.cs`,
-  `build/VerifiedCodeAttribute.cs`—joins the compilation and the calls that
+  `build/OpensGpuDeviceAttribute.cs`—joins the compilation and the calls that
   touch its types bind. Alongside the closure the passes read the generated
   global-usings file and any emitted generator output from that configuration's
   `obj/`.
@@ -3799,56 +3796,6 @@ matches its project (or was recorded); 1 drift was found or the restore failed;
 
 ---
 
-## `puck lengths` and `puck comment-smells`—ratchet ledgers
-
-A ratchet ledger holds one count per source file and lets that count only fall. It declares a ceiling that no
-unrecorded file may exceed, and it records each file already over the ceiling at the count it was recorded at. The
-repository keeps two ledgers of this one shape (`RatchetLedger` in `Puck.Analyzers`), each read in every
-compilation by an analyzer wired like `VerifiedCode.json`:
-
-| Ledger | Count | Ceiling | Analyzer and rules | Verb |
-|---|---|---|---|---|
-| `FileLengths.json` | lines: line breaks plus one | 2000 | `FileLengthAnalyzer`, LEN001–LEN004 | `puck lengths` |
-| `CommentSmells.json` | inline comments in a named smell bucket | 0 | `CommentSmellAnalyzer`, SMELL001–SMELL004 | `puck comment-smells` |
-
-The four rules are the same for both ledgers:
-
-- an unrecorded file over the ceiling fails the build (LEN001, SMELL001);
-- a recorded file whose count rises past its recorded count fails (LEN002, SMELL002);
-- a recorded file that falls to the ceiling or below fails until its entry is removed (LEN003, SMELL003);
-- a missing or off-schema ledger fails (LEN004, SMELL004).
-
-A new file therefore starts at or under the ceiling, and a recorded file only gets shorter, or loses smells.
-Generated trees (`*.g.cs`, auto-generated headers) are outside both rules.
-
-A comment's smell bucket comes from the classifier `puck scan --only comment-smells` reports with, so that scan
-names each comment a count includes. The buckets are sync-coupling, debt-marker, banner-divider,
-commented-out-code, narrative-history and dead-provenance. Unclassified comments and XML documentation are not
-counted.
-
-An analyzer sees one compilation at a time, so an entry whose file was deleted or moved never reaches it. Each
-verb walks the tracked `src/`, `tests/`, and `build/` trees instead, and measures every file with its analyzer's
-own count.
-
-```text
-puck lengths                  rewrite FileLengths.json from the tree: remove stale entries, lower fallen ones;
-                              refuses (exit 2, naming the file) to raise a recorded count or record a new file
-puck lengths --check          write nothing; report a ledger not in its canonical form, and stale, risen, and
-                              unrecorded-over-ceiling files; exit 1 on any
-puck lengths --ceiling <n>    lower the ceiling to n and record every file over it at its current count
-puck comment-smells [--check | --ceiling <n>]
-                              the same three forms over CommentSmells.json
-```
-
-Splitting a recorded file, or rewriting its smelly comments, is the expected way to change a ledger: shrink the
-file, run the verb, and the entry lowers or disappears. A ceiling only falls. `--ceiling` refuses a raise, and it
-creates a missing ledger.
-
-Each ledger has one spelling, the one its verb writes: entries in ordinal key order, four-space indentation, and
-one final line feed. `--check` reports a ledger whose bytes differ from that form as drift, even when every count
-holds, so a hand edit that reorders or respaces an entry fails the check rather than churning the next rewrite.
-Running the verb without `--check` rewrites the ledger in its canonical form.
-
 ## `puck canary-ceilings`—recorded gate costs
 
 While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
@@ -3991,7 +3938,7 @@ A machine-written document that the same build reads back carries a `shape` memb
 stamps the constant its project generates, and the reader names a mismatch before it reads another member (the
 determinism stream's first line, the capture and release manifests, the retained deployment reference, the release
 group, receipt snapshot, fixture inventory and recovery root, the counters report, the counterpart attestation). A
-ledger a verb rewrites (`FormatVersions.json`, the canary ceilings and coverage, the ratchet ledgers, the lock files) carries
+ledger a verb rewrites (`FormatVersions.json`, the canary ceilings and coverage, the lock files) carries
 none: its verb's `--check` is its shape check. A document nothing in the repository reads back is not stamped, and one
 whose magic belongs to an outside specification (SPIR-V, WebAssembly) is not a Puck format and is not ledgered.
 

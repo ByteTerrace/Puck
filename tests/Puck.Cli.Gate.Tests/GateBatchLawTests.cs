@@ -124,7 +124,7 @@ public sealed class GateRecordLawTests : GateBatchLaws {
     public void RecordRequiresGpuAndEveryEarlierStepToPass(bool gpu, bool fails) {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-record-law-");
-        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: "")) { ExitCode = args => ((fails && (args[0] == "lengths")) ? 1 : 0) };
+        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: "")) { ExitCode = args => ((fails && (args[0] == "architecture")) ? 1 : 0) };
         var result = Gate(branches, runner, directory, gpu: gpu, record: true);
 
         Assert.Equal(actual: result.ExitCode, expected: (!gpu ? CliExit.Refused : (fails ? CliExit.Failed : CliExit.Success)));
