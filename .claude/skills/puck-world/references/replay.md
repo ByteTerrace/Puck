@@ -772,7 +772,7 @@ The contracts a change must keep:
 
 - A change that moves simulation math is EXPECTED to change replay hashes
   (`AGENTS.md` rule 4); recorded tapes it moves are re-recorded when those
-  checks next run ([optional checks](../../verification/SKILL.md#optional-checks)).
+  checks next run.
 - Tape byte-layout and semantic changes update the first format in place; do
   not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the

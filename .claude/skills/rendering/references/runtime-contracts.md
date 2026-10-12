@@ -6,8 +6,7 @@ scheduling types in `src/Puck.Hosting/Graph`) and every package, producer and
 host that feeds it. A change to the runtime keeps each one, and a review of such
 a change hunts each one's violations. Each section states the rule, how the code
 holds it, the laws that pin it, and where the code is weaker than the rule. The
-mechanism detail stays in [../SKILL.md](../SKILL.md#shader-manifests-and-pipelines)
-and [Frame graphs](../../../../docs/reference/shaders.md#frame-graphs); this file
+mechanism detail stays in [Frame graphs](../../../../docs/reference/shaders.md#frame-graphs); this file
 does not repeat it.
 
 ## 1. Image lifetime is leased per image and per reader

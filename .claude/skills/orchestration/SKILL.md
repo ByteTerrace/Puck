@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns the landing bar, optional checks and GPU execution; review-passes owns launching and closing optional review-and-fix passes; documentation owns agent-document authoring and checks.
+description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns the landing bar, optional checks and GPU execution; review-passes owns launching and closing optional review-and-fix passes.
 ---
 
 # Orchestration
@@ -115,8 +115,13 @@ fluctuate with what else is open and do not define a machine's capability.
 Allocate one GPU leg per GPU at a time, and let CPU work, builds included, run
 beside it: a correctness leg's verdict does not depend on load, and a leg that
 times out under load is re-run once alone and reported as a flake. Only
-wall-clock work needs a quiet machine. Use
-[`verification`](../verification/SKILL.md#gpu-legs) for grants, GPU work
+wall-clock work needs a quiet machine, and the lead takes it: a lane judges
+by counts and lists the timing reads it wants, and the lead runs them in a
+window it has cleared of every other lane's builds, suites, evals and World
+runs. A brief that measures boot, compile or frame time grants no GPU and
+takes no timing while other lanes run. Booting `Puck.World` is a GPU leg
+even when only its startup is measured. Use
+[`verification`](../verification/SKILL.md#what-uses-the-gpu) for GPU work
 classification and execution.
 
 Run a load governor on any machine that hosts many agents, through
@@ -135,13 +140,8 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   disk than the pressure threshold, so a running agent waits rather than being
   killed.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.
-- The thresholds scale with the machine, and the code is their source of truth
+- The thresholds scale with the machine; the code is their source of truth
   (`HostLoadThresholds.For`, [CLI reference](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
-  A 16 GB, six-thread machine has capacity while CPU is under 50% and free RAM
-  over 5 GB, and is under pressure below 2 GB free; a 32 GB, 16-thread machine
-  has capacity while CPU is under 60% and free RAM over 10 GB, and is under
-  pressure below 4 GB free. Below 10 GB of free disk every machine is under
-  pressure.
 
 Deliberate CPU contention, such as a burner for a flake proof, is CPU work like
 any other and may run beside another lane's GPU leg. A leg of that lane that
@@ -248,4 +248,4 @@ listed name, which survives a restart where its bridge address does not.
 |---|---|
 | [`verification`](../verification/SKILL.md) | The landing bar, optional checks, private CLI copies and GPU execution. |
 | [`review-passes`](../review-passes/SKILL.md) | Optional review passes: briefs, companion launch commands and landing fixes on the author's branch. |
-| [`documentation`](../documentation/SKILL.md) | Writing and checking agent-facing documents and skills. |
+| [`boy-scout`](../boy-scout/SKILL.md) | Keeping agent-facing documents and skills in step with a change; [Writing documentation](../../../docs/development/documentation.md) owns their prose and the skill evaluation procedure. |

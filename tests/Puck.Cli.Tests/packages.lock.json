@@ -2115,7 +2115,8 @@
           "Puck.Cli.Shaders": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
-          "Puck.World.Server": "[1.0.0, )"
+          "Puck.World.Server": "[1.0.0, )",
+          "Puck.World.Vocabulary": "[1.0.0, )"
         }
       },
       "puck.launcher": {
@@ -2214,7 +2215,8 @@
           "Puck.SdfVm": "[1.0.0, )",
           "Puck.World.Authoring": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
-          "Puck.World.Schema": "[1.0.0, )"
+          "Puck.World.Schema": "[1.0.0, )",
+          "Puck.World.Vocabulary": "[1.0.0, )"
         }
       },
       "puck.world.console": {
@@ -2308,6 +2310,16 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
+          "Puck.World.Schema": "[1.0.0, )"
+        }
+      },
+      "puck.world.vocabulary": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       }

@@ -2,7 +2,7 @@ namespace Puck.World;
 
 /// <summary>One state of a <see cref="WorldSeatModeFamily"/>.</summary>
 /// <param name="Name">The state's stable name — the token <c>player.mode &lt;family&gt; &lt;state&gt;</c> takes and the
-/// value <c>Client.WorldContextFamilies</c> context rows key on.</param>
+/// value <c>WorldContextFamilies</c> context rows key on.</param>
 /// <param name="Target">The control application this state drives, or <see langword="null"/> for an ordinary state
 /// (the seat drives its own body normally). <c>"camera"</c> is the only admitted value: entering the state possesses
 /// the seat's declared camera body (see <see cref="CameraPlacementIdPrefix"/>) through the ordinary Engage door
@@ -18,7 +18,7 @@ public sealed record WorldSeatModeState(string Name, string? Target = null) {
 }
 /// <summary>An AUTHORED per-seat mode family — a document-declared name plus its admitted states.
 /// <c>player.mode &lt;family&gt; &lt;state&gt; [seat]</c> flips a seat's published state within the family;
-/// <c>Puck.World.Client.WorldContextFamilies</c> context rows may then map a (family, state) pair to a binding group
+/// <c>Puck.World.WorldContextFamilies</c> context rows may then map a (family, state) pair to a binding group
 /// exactly as a built-in family does.</summary>
 /// <param name="Name">The family's stable name. Must not collide with a built-in family name (<c>roster</c>,
 /// <c>engagement</c>, <c>layout</c>) or the reserved <c>state:</c> prefix.</param>

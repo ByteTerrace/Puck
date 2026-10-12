@@ -25,6 +25,7 @@
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_FRAME_INSTANCE_GRID
 #include "sdf-world.hlsli"
+#include "../march/sdf-cone.hlsli"
 
 // The per-tile instance mask, written through sdfInstanceMasksRW: a FLAT uint buffer, passGroup.instanceMaskWordCount
 // (the host-written live program width) elements per (viewport, tile) entry. Entry `t`'s mask is words

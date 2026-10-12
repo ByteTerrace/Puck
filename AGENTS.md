@@ -5,10 +5,13 @@ simulation, presentation and hosted machines. This file holds the rules every
 agent task follows, whatever the tool: Codex and Claude Code both read it, and
 it is the repository's only rules file. [The engine manual](docs/README.md)
 explains concepts, [development guidance](docs/development/README.md) explains
-procedures, and the skills under `.claude/skills/` hold each area's settled
-contracts and agent procedures: load the one that owns an area before working in
-it (rule 7). Rule 2 applies to this file as well: when it argues against a change
-you were asked to make, it is stale, and you correct it in the same change.
+procedures, and the skills under `.claude/skills/` map each area: where its code
+lives, the contracts that bite, and how to run it. Load the one that owns an
+area before working in it (rule 7). A skill stays only while its evaluation
+shows it changes outcomes
+([evaluating a skill](docs/development/documentation.md#evaluate-an-agent-skill)).
+Rule 2 applies to this file as well: when it argues against a change you were
+asked to make, it is stale, and you correct it in the same change.
 
 ## Puck is pre-release
 
@@ -80,7 +83,7 @@ slashes too.
 | [docs/game/README.md](docs/game/README.md), [src/Puck.World/README.md](src/Puck.World/README.md) | The reference game's design and play programme, and the World's current commands. Read them only for game work. The debug world is the one live world; the game's other worlds are quarantined under `experimental/` (see the `experimental/` section). |
 | [docs/decisions/engine-design.md](docs/decisions/engine-design.md) | Settled engine design decisions, including [configuration and sessions](docs/decisions/engine-design.md#configuration-and-operations-remain-discoverable). |
 | [docs/reference/input.md](docs/reference/input.md) | Controller input (`src/Puck.Input`): architecture, feature matrix, hardware status. |
-| [docs/development/documentation.md](docs/development/documentation.md) | Prose, titles, filenames, README ownership and navigation. The `documentation` skill owns agent-side verification. |
+| [docs/development/documentation.md](docs/development/documentation.md) | Prose, titles, filenames, README ownership, navigation, the XML documentation register, and how to evaluate an agent skill. |
 
 Docs state current behavior, limitations and open work in the present tense.
 They name no dates, no commit SHAs and no versions of outside tools, unless the
@@ -137,7 +140,7 @@ settles a question, decide by that principle and say why.
    existing one under another name. Load the owning skill (`puck-world`,
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
    `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
-   `content-search`, `documentation`, `boy-scout`, `verification`,
+   `content-search`, `boy-scout`, `verification`,
    `review-passes`, `orchestration`), then ask the code with `puck references`,
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
    places to look. A second implementation is a defect, and a skill wrong about
@@ -309,7 +312,11 @@ in a line rather than restating it.
 A command started in the background already reports when it exits. Never start
 a second job that only waits for or polls another; do other work meanwhile, or
 run the command in the foreground with a long timeout when the next step needs
-its result.
+its result. Watch each thing you need to see mid-run (failure lines,
+progress) with one Monitor, never one per milestone or threshold. A bash
+wait loop or "wait until" command in place of that Monitor is the same
+waiter in another tool, and a second watcher on a job is waste whichever
+tool runs it. Stop each Monitor once its job ends.
 
 For a run with many parts, keep a checklist in the session scratchpad, named
 for the run, tick items as they finish, and add what you find. A question the

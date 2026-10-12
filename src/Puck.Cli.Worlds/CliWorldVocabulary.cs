@@ -2,7 +2,6 @@ using Puck.Abstractions;
 using Puck.AdvancedGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.World;
-using Puck.World.Client;
 using Puck.World.Machines;
 
 namespace Puck.Cli;

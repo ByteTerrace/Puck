@@ -6233,7 +6233,7 @@ counted rows recorded in the same change.
      with its presets, which each camera or session view reads only when its
      quality asks for reconstruction.
    - Touches: `SdfWorldPackage.Fragment`, `passes/sdf-resolve.comp.hlsl`,
-     `passes/sdf-hit-stages.hlsli`, `SdfWorldPasses`, `place.comp.hlsl`,
+     `passes/sdf-views-stage.hlsli`, `SdfWorldPasses`, `place.comp.hlsl`,
      `PlacePackage`, `WorldSessionLevers`, `WorldRenderLeverCommandModule`,
      `quality.puck`, `experimental/tests/Puck.Parity`.
    - Done when: a `temporal-convergence` canary's still scene, resolved at the

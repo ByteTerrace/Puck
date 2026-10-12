@@ -275,12 +275,22 @@ world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
 ```
 
 Each kernel installs as soon as its DXIL compiles, quickest first, and prints
-`[shaders.reload: request=N installed pipelines=K kernels=…]`; the views
-kernels, which shading and material edits reach, land long before the
-receiver and indirect kernels, which take minutes of DXC time. The reload
-writes into the build's shader cache, so the next build publishes those kernels
-without compiling them. A change to a C# struct, buffer layout or binding needs
-the C# loop instead.
+`[shaders.reload: request=N installed pipelines=K kernels=…]`. A kernel
+recompiles only when a file in its include closure changed, and each hit
+kernel's closure is its own stage: an edit to `passes/sdf-light-stage.hlsli`
+recompiles the three views kernels and nothing else, an edit to
+`indirect/sdf-indirect-receiver.hlsli` the two receivers, and every other
+kernel is a cache hit. An edit to a module every kernel reads (the
+interpreter under `field/`, or `passes/sdf-world.hlsli`'s modules) recompiles
+them all, and the receiver's DXIL, minutes of DXC time, then decides when the
+request settles. The reload writes into the build's shader cache, so the next
+build publishes those kernels without compiling them. A change to a C# struct,
+buffer layout or binding needs the C# loop instead.
+
+The world compile the build runs (`build/WorldAssets.targets`) reruns only when
+a world source, a pipeline source, or an assembly it loaded changes. It
+validates through `Puck.World.Vocabulary` and never loads `Puck.World.Client`,
+so a client edit compiles one project and skips it.
 
 Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
 the CPU at the stated load:
@@ -291,15 +301,17 @@ the CPU at the stated load:
 | | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
 | | of which the build after the edit | 12.7–15.3 s (12–65% load) |
 | | of which boot to `world.wait ready` | 10.2–12.2 s |
-| C#, edit in `Puck.World.Client` | build, which also reruns the world compile, then boot | 18.2 s + 12.2 s (26% load) |
 | HLSL, edit in `passes/sdf-light-stage.hlsli` | reload to the first views kernel installed | 11.1 s (37% load), 22.6 s (100% load) |
 | | to every views variant installed | 25.2 s (37% load) |
-| | to the request settling (receiver DXIL) | 111 s (37% load) |
 
-Boot to readiness is about 4 s of process start before the document loads,
-2.5 s of the render-capacity probe (`SdfCompositionFrameSource` builds the
-worst-case program, 118 million words), and 4 to 5 s of window, device,
-pipelines and first frames.
+A `Puck.World.Client` edit (one project, no world compile) and a light-stage
+reload's settling (the three views kernels) have no reading on the current
+code yet. The last boot reading was about 4 s of process start before the
+document loads, 2.5 s of the render-capacity probe, and 4 to 5 s of window,
+device, pipelines and first frames. The probe is measured from its emission
+(`SdfProgramBuilder.MeasureCapacity`) and packs no program, so it allocates no
+worst-case stream (118 million words on the debug world) and runs none of the
+build's analysis.
 
 ### Verify a change
 

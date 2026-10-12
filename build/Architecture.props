@@ -241,11 +241,20 @@
              plus Puck.Assets, Puck.Audio (IWorldAudioFrameFeed/IWorldAudioCueSink narrow the frame/scene producers'
              AudioSnapshot/mixer-facing reads), Puck.Input (WorldEditorBindings), Puck.Launcher
              (PresentPacingControl), Puck.Overlays (the editor gizmo/HUD write surface), Puck.Scripting
-             (WorldAffordances' command vocabulary), Puck.SdfVm (Views), Puck.SignedDistance directly (Queries), and
+             (the addon source shapes), Puck.World.Vocabulary (WorldAffordances and WorldContextFamilies, which the
+             seat bindings read), Puck.SdfVm (Views), Puck.SignedDistance directly (Queries), and
              Puck.Shaders (the render graph package catalog every composition root's
              document validator checks a views.post row's package against). No Puck.World.Server, no Backends row, no
              Presentation row: this project reads the document and the wire, never the authoritative fold. -->
-        <PuckArchitectureProfile Include="Puck.World.Client" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Overlays;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.SdfVm.Model;Puck.Shaders;Puck.Shaders.Model;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Client" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Overlays;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.SdfVm.Model;Puck.Shaders;Puck.Shaders.Model;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Vocabulary" />
+        <!-- The document vocabulary row (docs/project-map.md's Puck.World.Vocabulary row): WorldAffordances,
+             WorldContextFamilies and WorldSchemaVocabularyHooks, the one wiring of Puck.World.Schema's injection seams.
+             Puck.Input for the physical source vocabulary, Puck.Shaders for the render graph package catalog a
+             views.post row is checked against, Puck.World.Protocol for the mutation-kind catalog. Exact equality
+             enforces what the split exists for: no Puck.World.Client, Puck.World.Server, Puck.SdfVm or presentation
+             row, so the world compile (Puck.Cli.Worlds) validates through it without loading the client, and an edit
+             to the client reruns no world compile. -->
+        <PuckArchitectureProfile Include="Puck.World.Vocabulary" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Shaders;Puck.Shaders.Model;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The addon guest host, split out of Puck.World.Server so the authoritative server carries no
              WASM/Wasmtime surface of its own — everything Puck.World.Server's profile carries (Addons references
              Server directly), plus Puck.Scripting itself (the guest ABI AddonSimulationPump, hosted directly in

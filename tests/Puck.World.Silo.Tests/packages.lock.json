@@ -2026,7 +2026,8 @@
           "Puck.SdfVm": "[1.0.0, )",
           "Puck.World.Authoring": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
-          "Puck.World.Schema": "[1.0.0, )"
+          "Puck.World.Schema": "[1.0.0, )",
+          "Puck.World.Vocabulary": "[1.0.0, )"
         }
       },
       "puck.world.console": {
@@ -2120,6 +2121,16 @@
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.world.vocabulary": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.World.Protocol": "[1.0.0, )",
+          "Puck.World.Schema": "[1.0.0, )"
         }
       }
     }

@@ -1,7 +1,7 @@
 using Puck.Input;
 using Puck.Input.Devices;
 
-namespace Puck.World.Client;
+namespace Puck.World;
 
 /// <summary>
 /// The ONE wiring of every <c>Puck.World.Schema</c> injection seam, called from each composition root's

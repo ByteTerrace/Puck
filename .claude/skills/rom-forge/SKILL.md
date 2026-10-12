@@ -1,353 +1,134 @@
 ---
 name: rom-forge
-description: Guides Puck's data-first cartridge authoring in Puck.GamingBricks.Forge, its CGB and AGB native document compilers, and the in-engine forge console. Covers authoring, compiling, and decompiling `.puck` cartridge sources (`puck.cartridge.v1`) and their diagnostics, plus SM83/Thumb emitters, hardware kernels, Tune audio documents, boot-ROM tools and emulator-driven verification. Use for ROM source schemas, `.puck` cartridge authoring or compile/decompile errors, cartridge editing/build/play/export, native rule or graphics generation, and cartridge/boot/save seams. The `.puck` language core (grammar, CLI verbs) belongs to the puck-dsl skill; emulator core behavior belongs to gaming-bricks.
+description: Maps Puck's data-first cartridge authoring in Puck.GamingBricks.Forge, its CGB and AGB native document compilers, and the in-engine forge console. Covers authoring, compiling, and decompiling `.puck` cartridge sources (`puck.cartridge.v1`) and their diagnostics, plus SM83/Thumb emitters, hardware kernels, Tune audio documents, boot-ROM tools and emulator-driven verification. Use for ROM source schemas, `.puck` cartridge authoring or compile/decompile errors, cartridge editing/build/play/export, native rule or graphics generation, and cartridge/boot/save seams. The `.puck` language core (grammar, CLI verbs) belongs to the puck-dsl skill; emulator core behavior belongs to gaming-bricks.
 ---
 
 # ROM documents and native compilers
 
-The user's current instructions outrank this file. Update stale instructions
-in the same change rather than preserving an obsolete workflow.
+A map of cartridge authoring: where it lives, the contracts that bite, and how
+to see a cartridge run. When this file and the code disagree, the code wins and
+this file is corrected in the same change.
 
-## Authoring a cartridge
+## Where things live
 
-`.puck` is the cartridge's authorial source; `puck.cartridge.v1` JSON is the derived, engine-consumed
-artifact and stays committed beside it (`tetromino.cgb.puck` / `tetromino.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
-/ `hgb-mirror.cgb.cartridge.json`, `pip.agb.puck` / `pip.agb.cartridge.json`, and `light-gun.cgb.puck`, the target the `light-gun` canary aims at). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
-(`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`) compiles every committed
-source and byte-compares it against its committed document, so the two can never drift apart quietly.
-Never hand-edit the generated JSON: regenerate it from the source.
-
-`Puck.GamingBricks.Transpiler` is the `puck.cartridge.v1` vocabulary: it knows what a cartridge's sections
-mean. The language itself — the one-spelling grammar, `let`/`template`/`for`, units, the compile-time
-collection builtins and lambdas (`range`/`length`/`concat`/`map`/`filter`/`reduce`/`distinct`/`sort`/
-`groupBy`), the `puck compile`/`decompile`/`lint`/`format`/`lsp` verbs and their flags, and the shared
-diagnostics catalog belong to the puck-dsl skill; read that rather than re-deriving the grammar here. This
-skill owns the cartridge vocabulary's own shape and the loop that turns a `.puck` edit into a running,
-observable cartridge.
-
-**The rule-body asymmetry.** A cartridge rule admits control flow a world rule mostly refuses: `repeat <count>
-as <name> { }` (count a compile-time literal 1..255) with `break`, call-form gates (`key(<button>,
-held|pressed|released)`), and every compound-assignment operator (`+= -= *= /= %= &= |= ^= <<= >>=`) all trip a
-world-vocabulary refusal — `if … { } else { }`/chained `else if` does not, since a world rule lowers it to its
-own conditional effect (`puck-world` owns that shape). Writing `repeat`/`break`/a call-form gate/a compound
-assignment into a `puck.world.definition.v1` document instead trips **PUCK037** (control flow the vocabulary's rule
-shape has nothing to lower onto), **PUCK038** (a call-form gate where only comparisons are legal), or
-**PUCK039** (a compound assignment the vocabulary's effects carry no operator for) —
-`src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`. Porting a cartridge idiom into a world document, or a
-world rule's straight-line habit into a cartridge, is the concrete way this bites.
-
-A rule step or gate lowers to JSON as:
-
-| DSL form | Lowers to |
+| Thing | Where |
 |---|---|
-| `a = b`, and `+= -= *= /= %= &= \|= ^= <<= >>=` | `set`, operation absent (assignment) or `Add`/`Subtract`/`Multiply`/`Divide`/`Remainder`/`BitAnd`/`BitOr`/`BitXor`/`ShiftLeft`/`ShiftRight` |
-| `if <gate> { … } else { … }`, chained `else if` | `if` with `when`/`then`/`else` |
-| `repeat <count> as <name> { … }` | `repeat` (a play-time loop; distinct from the document-only, compile-time `for`) |
-| `break` | `break` |
-| `map(row:, column:, tile:, palette:)`, `play(sound:)`, `fade(amount:, toward:)`, `blit`, `plot`, `blend`, `clock`, `save`, `load`, `stop` | the like-named step |
-| `key(<button>, held\|pressed\|released)` | a `key` condition reading `$key:<button>:<mode>` |
-| `==` `!=` `<` `<=` `>` `>=`, composed with `and`/`or`/`not` | a `compare` condition, composed as `all`/`any`/`not` |
+| The `puck.cartridge.v1` model, validation, canonicalization, the `CartridgeDraft` editor, `ICartridgeCompiler`, the cost model | `src/Puck.GamingBricks.Forge` (`CartridgeDocuments`, `CartridgeValidation`, `CartridgeCost`, `CartridgeLimits`); its README has the source contract |
+| The cartridge `.puck` vocabulary | `src/Puck.GamingBricks.Transpiler` |
+| Native CGB compiler (SM83 code, 2bpp tiles, maps, palettes) | `HgbCartridgeCompiler` in `src/Puck.HumbleGamingBrick.Forge` |
+| Native AGB compiler (Thumb code, mode-0 4bpp graphics) | `AgbCartridgeCompiler` in `src/Puck.AdvancedGamingBrick.Forge` |
+| Shared audio compilation | `AudioDocumentCompiler`, `ApuNotePeriod` in the shared forge package; `TuneRom.Build` for world audio |
+| Boot ROMs | `BootRomBuilder`, `BootDivPrediction`, `BootRomLayout` in `Puck.HumbleGamingBrick.Forge`; the native ARM7TDMI firmware in [`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md) |
+| The in-engine console | `src/Puck.World/ForgeCommandModule.cs` (`forge.new/open/show/set/remove/undo/check/build/save/export/play`) |
+| Shipped sources | `src/Puck.World/Assets/cartridges/*.cgb.puck`, `*.agb.puck`, each with its committed `.cartridge.json` |
 
-Verified against the shipped `tetromino.cgb.puck` (compiled with `puck compile --validate`), an input gate and
-control flow read:
+Both compilers consume the same rules, variables, sprites and input conditions.
+Source data determines behavior: never add a game-name switch or copy gameplay
+into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets and
+`Puck.State`, never on World.
 
-```
-rule "steer" {
-  when ph == 0
-  ...
-  if key(left, held) {
-    want = 1
-  }
-  if key(right, held) {
-    want = 2
-  }
-  ...
-}
-```
-
-(`src/Puck.World/Assets/cartridges/tetromino.cgb.puck`, rules `steer` and `fall`, elided to the gate usage — `key(...)` is a
-gate condition only; it is not a readable operand inside an expression, unlike a plain state name.) A nested, guarded loop:
-
-```
-rule "scan" {
-  when ph == 2
-  repeat 5 as k {
-    if rcur >= 18 {
-      break
-    }
-    ...
-  }
-  ...
-}
-```
-
-(`tetromino.cgb.puck`, rule `scan`; a `repeat`'s index name — `k` above — must be a declared variable, the same as
-any other read.) A `map` step writing a background cell reads `map(column: "c2", palette: "pcol", row: "r2",
-tile: "1")` (rule `settle`). The compile-time collection builtins keep big data
-sections short and reach a document field, never a rule body:
-
-```
-arrays [
-  { name: "field", initial: map(range(0, 180), i => 0) }
-]
-```
-
-## Verifying a cartridge edit
-
-The loop from source to a running, observable cartridge:
+## From source to a running cartridge
 
 1. Edit the `.puck` source.
-2. `puck compile <name>.cgb.puck --output <name>.cgb.cartridge.json --validate` — `--validate` runs the
-   forge's own `CartridgeDocuments.Validate` over the lowered JSON; lowering alone only proves the source was
-   well formed, never that the cartridge is legal. `puck-dsl` lists the verb's other flags.
-3. In a running `Puck.World`, load the compiled document: `forge.open <name>.cgb.cartridge.json` for a local
-   draft, or `forge.play <screen-index> <name>.cgb.cartridge.json` to hot-load straight into a screen (an
-   arcade cabinet's, among others). **Both verbs are JSON-only** — `forge.open` calls `CartridgeDocuments.Parse`
-   on raw bytes and `forge.play` refuses any output path that does not end `.cartridge.json`
-   (`src/Puck.World/ForgeCommandModule.cs`) — so the `.puck` step always happens before the console is
-   involved; there is no transparent in-engine compile for cartridges the way `PuckWorldLoader` gives worlds.
-4. `capture.start` to LOOK at the result. Cartridges are verified IN a world, never a bespoke driver harness.
+2. `puck compile <name>.cgb.puck --output <name>.cgb.cartridge.json --validate`.
+   `--validate` runs `CartridgeDocuments.Validate` over the lowered JSON;
+   lowering alone proves only that the source was well formed.
+3. In a running `Puck.World`, `forge.open <file>.cartridge.json` for a local
+   draft, or `forge.play <screen-index> <file>.cartridge.json` to hot-load into a
+   screen. **Both verbs take only compiled JSON**: `forge.play` refuses a path
+   not ending in `.cartridge.json`, and there is no in-engine compile of a
+   `.puck` cartridge.
+4. Look at it: `capture.start`, or a screenshot. Cartridges are verified in a
+   world, never in a bespoke driver.
 
-## Player authoring
+The committed `.cartridge.json` beside each source is derived: regenerate it by
+compiling the source and commit both halves.
+`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`
+byte-compares them. Never hand-edit the JSON.
 
-`src/Puck.GamingBricks.Forge` owns `puck.cartridge.v1`, validation,
-canonicalization, the `CartridgeDraft` JSON Pointer editor, graphics encoding,
-and `ICartridgeCompiler`. It depends on Abstractions, Assets and `Puck.State` (whose comparison and opcode
-vocabularies its rules share), never on World, and is packable.
-Read its README for the source contract and runnable console walkthrough.
+`forge.play` saves canonical source and submits a `WorldScreenOp.Insert` with
+the acting principal through `IServerLink`; never bypass the server's screen
+authority. Failed draft edits leave the draft intact; compile, save and play
+always validate.
 
-`HgbCartridgeCompiler` in `Puck.HumbleGamingBrick.Forge` emits native CGB
-SM83 code, 2bpp tiles, maps and palettes. `AgbCartridgeCompiler` in
-`Puck.AdvancedGamingBrick.Forge` emits Thumb code and mode-0 4bpp graphics.
-Both consume the same rules, variables, sprites and input conditions. Source
-data determines behavior; never add a game-name switch or copy gameplay into
-a C# template. Authored sample sources and generated cartridge JSON live under `src/Puck.World/Assets/cartridges`.
+## Contracts that bite
 
-`src/Puck.World/ForgeCommandModule.cs` provides local console/seat drafts and
-`forge.new/open/show/set/remove/undo/check/build/save/export/play` in every
-boot shape. JSON tails retain quotes through `WorldCommandArguments`.
-Draft edits can temporarily violate the schema; compile/save/play always
-validate. Failed edits leave the draft intact. Source paths are explicit;
-there are no environment-variable settings. `forge.play` saves canonical
-cartridge source, then submits `WorldScreenOp.Insert` with the acting principal
-through `IServerLink`; the registered content provider compiles that source.
-Never bypass the server's screen authority or replay/content hashing. Both verbs are JSON-only (see
-"Verifying a cartridge edit" above for the `.puck` step that precedes them).
+- **Cartridge rules admit what world rules refuse.** `repeat <n> as <name> { }`
+  with `break`, call-form gates (`key(<button>, held|pressed|released)`) and
+  every compound assignment are legal in a cartridge rule; in a world document
+  they are **PUCK037**, **PUCK038** and **PUCK039**. `key(...)` is a gate only,
+  not an operand. A `repeat` index name must be a declared variable.
+- **Rule bodies are step trees** (`set`/`if`/`repeat`/`break`/`map`/`blit`/
+  `play`/`stop`/`save`/`load`). An operand is a `Puck.State.ExpressionProgram`;
+  `CartridgeExpressions.Reads` is the admitted operation subset and anything
+  outside it is refused at its own spelling.
+- **Targets differ; validation says how.** cgb and agb; byte and two-byte
+  state; no DMG and no ROM banking. Consult the validator before calling a
+  feature portable. The light sensor `$light` exists only on `cgb`.
+- **Colour is per-palette:** up to 8 palettes on cgb and 16 on agb,
+  `mapPalettes` per background cell, a sprite picks an object palette.
+- **Map writes land a frame late on both targets:** they queue and drain in the
+  next vertical blank. Validation bounds a frame's map writes to the queue's 24
+  entries.
+- **A sound is a music track or a one-shot effect.** A track is one to four
+  voice parts, one to a channel, and validation refuses an effect on any voice
+  a track occupies, since the effect would cut that part off. Put the effect on
+  a free voice or move the music part.
+- **Keep the two sound drivers in register sync.** Stream step widths are
+  `duration` plus five register bytes for pulse one and wave, four for pulse two
+  and noise; `AgbSoundDriver` maps the same registers to the AGB's legacy sound
+  ports.
+- **Saves.** `AgbSaveModule` needs its identifier text in the image or nothing
+  persists; saves persist every byte.
 
-The current schema has explicit limits and omissions: cgb/agb targets,
-byte and two-byte state, addressable byte arrays, 8x8 or tall sprites, runtime background writes,
-cartridge audio, battery-backed state, and rule bodies that are step TREES
-(`set`/`if`/`repeat`/`break`/`map`/`blit`/`play`/`stop`/`save`/`load`), not flat
-action lists. An operand is a `Puck.State.ExpressionProgram` in its infix spelling
-and a gate is a `Puck.State.ActionPredicate`, so `(a + b) * 2`, `field[i + 1]`,
-`any` and `not` are all authorable; `CartridgeExpressions.Reads` is the admitted
-operation subset and everything outside it is refused at its own spelling. A
-button reads through `$key:<button>:<mode>`, which is why input composes under
-`not`. The light sensor reads through the bare operand `$light` (1 while the
-infrared receiver sees light: a light gun on a lit pixel, or a linked lamp); only
-`cgb` has a receiver, so validation refuses it on `agb` and the advanced profile
-carries no weight for it. It has no gate sugar. A write target is `{state, key}`, the key being a bare number, a bare cell
-read, or `$expr:` plus the index's infix spelling.
+## Cost is measured, never estimated
 
-The schema does not claim DMG or ROM banking. Common primitives preserve their authored semantics on both
-targets; hardware-specific features have explicit validation gates. Consult the validator before describing
-a feature as portable. Wide slots precede byte slots in the shared layout, and saves persist every byte.
-Byte expressions reject wide literals and reads instead of truncating them differently across targets.
+`CartridgeCost` prices a document in abstract work units against
+`CartridgeCostProfile`'s per-target weights; `CartridgeDocuments.Estimate`
+reports the frame bound and nothing refuses on it. Weights come from
+`puck cartridge-cost`, which boots `CartridgeCostMeasurement`'s probe documents
+on both machines. Never hand-count an emitter's instructions into a weight or
+adjust a weight to make a document fit; a new primitive is measured by adding
+its shape to `CartridgeCostMeasurement.Shapes`. An unmeasured primitive prices
+as `CostBound.Unmodeled`, which poisons the whole estimate. Never compare unit
+totals across targets. A blit repaints with the display off, so frames stop
+advancing while it runs; `CartridgeLimits.BlitCellCount` bounds its size.
 
-Colour is per-palette, not global: `palettes.background` / `palettes.object` hold
-up to 8 palettes on cgb and 16 on agb, `mapPalettes` picks one per background
-cell, and a sprite picks an object palette. cgb carries the cell attributes in
-video bank one (low three bits) and agb packs them into the screen entry's top
-four bits; a runtime `map` write carries its own optional `palette`, and the cgb
-queue drains twice — once a bank — to land the tile and the attribute.
+## Boot ROMs
 
-A sound is EITHER a music track or a one-shot effect. A track is 1-4 voice
-parts, one to a channel; validation refuses an effect on any voice a track
-occupies. The four sequencers are identical and a loop start is the only thing
-that separates a track from a one-shot: a voice carrying one rewinds at the
-terminator, a voice without one stops and mutes. Stream step widths are
-`duration` + FIVE register bytes for pulse one (NR10-NR14) and for wave
-(NR30-NR34), FOUR for pulse two (NR21-NR24) and noise (NR41-NR44) — keep the
-encoder and both drivers' register counts in sync. A music part's hold SUSTAINS
-where a one-shot's mutes, which is why the two cannot share a row appender.
+`BootRomBuilder.Build(ConsoleModel)` emits each revision's boot program. The
+handoff counter (`BootDivPrediction`'s tables) is the contract, pinned from
+outside by the `boot-rom-handoff` Post stage against the mooneye `boot_div-*`
+cartridges; never move a table value to make a boot agree with it. The builder
+solves its straight-line tail against the emitted image; never hand-count
+instruction timings into its constants. Runtime packages embed generated images
+(`HgbFirmware.GetImage`) and never reference Forge. Regenerate with
+`puck firmware` and verify the bytes.
 
-`AudioDocumentCompiler` and `ApuNotePeriod` live in the SHARED forge package, not
-the humble one: the advanced machine's legacy sound channel takes the same four
-registers, so one compiled track drives both. `AgbSoundDriver` remaps them to the
-halfword pair at 0x04000068 / 0x0400006C — KEEP IN SYNC with the humble driver's
-port order. `AgbSaveModule` writes the byte-wide window at 0x0E000000 and the
-image must carry its identifier text, which is how a host recognizes the backup
-kind; without it the window reads open bus and nothing persists. Add those by extending data, validation, both relevant backends and
-native execution tests, not by a hidden special case.
+## Seeing it work
 
-## Backend contracts
+- Compile a cartridge and play it in a world (above). For World integration,
+  drive the real host over stdin (`puck-world`); a build alone is not a play
+  test.
+- The forge suites (`tests/Puck.HumbleGamingBrick.Forge.Tests`,
+  `tests/Puck.AdvancedGamingBrick.Forge.Tests`, whose `CartridgeCompilerTests`
+  runs cartridges on both real emulators) are there to run when they reach the
+  change.
+- **Settle out of OAM DMA before reading the bus.** A fixed stepping boundary
+  can land inside OAM DMA, where WRAM reads 0xFF. Every SM83 verifier calls
+  `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames; use
+  `Framework.VerifyMachineDriver`, which already does.
+- **Wait on the observable fact, not a duration.** `RunFramesUntil` advances
+  until a condition holds and fails at a frame cap. Reach a shared starting
+  position once and hand it out with `VerifyMachineDriver.Snapshot`/`Restore`.
 
-Read [references/backend-contracts.md](references/backend-contracts.md) for memory addresses, register
-bits, the cost model, and native-compiler instruction-level behavior — none of it has a DSL spelling, so
-it stays out of the authoring loop above. It is dense and hard-won; rewrite only to correct a fact, never
-to shorten.
+[references/backend-contracts.md](references/backend-contracts.md) holds memory
+addresses, register bits and the native compilers' instruction-level behavior.
 
-## Other maintained tools
+## Route adjacent work
 
-The existing `Framework/` low-level APIs remain for Tune/native tooling.
-`GameFramework`, `GameManifest`, `AssetLinker`, sound/save/PRNG helpers and
-PBAK readers are not the player editor. PBAK has no live producer; do not
-present that legacy route as in-engine art authoring.
-
-`TuneRom.Build(AudioDocument, string)` remains the live world-audio compiler.
-Audio/synth documents live in Assets; keep the forge packages independent of
-World. `HgbImage` contains native image encoders; `AudioDocumentCompiler`
-shares the integer note-period calculations with the audio subsystem.
-
-## The authored boot ROMs (`BootRomBuilder`)
-
-`BootRomBuilder.Build(ConsoleModel)` emits the boot ROM a revision executes from
-reset: 256 bytes for a monochrome revision, 2304 for a Color one (mapped
-0x0000-0x00FF and 0x0200-0x08FF, the cartridge header showing through the gap).
-It is a real boot program — header-checksum verification with a wedge on mismatch
-(the companion-console revisions check neither logo nor checksum), an original
-PUCK wordmark scrolled in, a rising-fifth pulse chime (silent on companion revisions),
-the compatibility-mode selector and compatibility-palette load for
-a cartridge without the color flag, the revision's register handoff, and the unmap
-at 0x00FE so the program counter falls into 0x0100.
-
-- **Presentation and admission are independent.** `BootRomBuilder.Build(model, mark)` defaults to
-  `BootRomMark.Compatible`, which displays the original four-tile PUCK wordmark and accepts ordinary, Puck and
-  independently authored header logos. Explicit `Era` and `House` remain strict diagnostic policies with a compact
-  monogram and a 48-byte comparison table. A header bitmap is editable data, not authentication or an enforceable
-  Puck-only distribution. Calibration boots the matching emitted policy; never calibrate one instruction layout
-  against another. No policy expands cartridge artwork into the framebuffer.
-- **The handoff counter is the contract.** `BootDivPrediction`'s tables are the
-  budget; the Color image carries those same tables and computes its target from
-  the cartridge header, plus the revision's own offset from those shared tables
-  (`BootRomLayout.HandoffCounterExtra`, which carries `Cgb0Extra`/`AgbExtra`).
-  The program resets the divider and then consumes exactly the predicted count,
-  so everything before the reset is free and everything after it is straight
-  line.
-- **The tables are pinned from outside; the solve is not evidence.** The same
-  `Compute(model, header)` call seeds the post-boot state, sets the emitted
-  image's target, and steers the builder's solve, so a wrong table produces a
-  matching boot. The `boot-rom-handoff` stage breaks that by booting the named
-  mooneye `boot_div-*` reference cartridges and checking both the prediction and
-  the authored image against the counter each cartridge asserts. That covers one
-  header on every revision; every other table row is unpinned outside this
-  repository, and the stage's pass detail says so. Never move a table value to
-  make a boot agree with it.
-- **The straight line is SOLVED, not counted.** `BootRomBuilder` boots the image
-  it just emitted against `BootRomProbeCartridge` headers and adjusts two
-  machine-cycle constants until the handoff counter and scanline land. Never
-  hand-count instruction timings into these constants, and never let the solved
-  tail absorb a per-revision offset — that is `HandoffCounterExtra`'s job, added
-  by the emitted table walk.
-- **The compatibility palettes are the index registers' cause.** The image carries
-  `CompatibilityPalette`'s selection tables and loads the chosen background and two
-  object palettes eight bytes at a time through BCPD/OCPD auto-increment, which is
-  the only thing that lands BCPS/OCPS on 0x88/0x90 (read back 0xC8/0xD0). The data
-  ports read sealed in compatibility mode, so palette RAM contents are not compared
-  there (the capture is gated on the compatibility authority) and the seeded path
-  carries no palette-RAM seed. Space for those tables comes from the low window
-  (`BootRomLowWindow`, between the entry jump and the unmap) and from carrying the
-  divider's checksum contributions as one common value plus a row per checksum
-  that differs (`BootRomChecksumTable`).
-- **Equivalence surface.** `BootRomHandoff.Compare` has ONE runner, the POST's
-  `boot-rom-handoff` stage; the forge tests pin each revision's image to a
-  recorded hash instead. The compared surface is the processor register file, the
-  divider counter, every readable high-page register, high RAM through 0xFFFE,
-  the interrupt-enable register, and Color palette RAM where the compatibility
-  authority (`DmgCompatibilityState.IsActive`) says the silicon runs natively —
-  never on the model alone. `Capture` mutates nothing: it snapshots the machine
-  around the palette walk and restores it. Only the picture-pipeline and
-  audio-generator sub-register phase is outside the surface — it is not reachable
-  from an executing program. The LY-comparison bit is IN it and is not masked:
-  a revision whose seeded handoff parks at LY==LYC==0 carries the latch set, so
-  its status register reads 0x84.
-- Runtime packages embed explicitly generated images; they never reference Forge or calibrate while loading a game.
-  `HgbFirmware.GetImage(model)` returns a private copy. Regenerate with the owning `puck firmware` verb and verify
-  its bytes before packaging.
-- `MachineBootMode` selects cold or fast startup independently of image selection. Fast startup retains the selected
-  image's `MachineIdentity` fingerprint; cold and fast instances of that same image can restore complete snapshots.
-  A firmware-free seeded diagnostic remains a different identity. Component power-on initialization uses
-  `MachineConfiguration.ExecutesBootRom`, not a null-image test.
-
-The native ARM7TDMI firmware is separate from `BootRomBuilder`'s SM83 `Agb`/`Ags`
-compatibility images. Its source and build contract live in
-[`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md).
-Use `puck firmware agb --verify` with that document's explicit LLVM paths to
-check the generated image; never substitute a runtime Forge dependency or a
-managed SWI shortcut. Keep its permissive provenance and package-local notices
-with the image. Route native service, music-driver and download changes through
-the [Advanced Post firmware stages](../../../src/Puck.AdvancedGamingBrick.Post/README.md#tiers),
-using local retail firmware only as a black-box functional oracle and never as
-source or a bundled asset.
-
-## Per-frame cost is measured, never estimated
-
-`CartridgeCost` prices a document in abstract work units and
-`CartridgeDocuments.Estimate` reports the frame's bound beside the target's
-reservation; nothing refuses on it. The units name no processor,
-clock or instruction count; one unit is an eleventh of a `set` step writing a
-literal to a variable. Weights come from `puck cartridge-cost`, which boots
-`CartridgeCostMeasurement`'s probe documents (in `Puck.GamingBricks.Forge`) on both
-real machines and bisects the largest per-frame iteration count each sustains at
-full frame rate; cost per iteration is inversely proportional to that capacity. Never hand-count an emitter's instruction sequence into a weight,
-and never adjust a weight to make a document fit.
-
-`CartridgeCostProfile` carries separate weights and reservations for each target. A multiply has different
-relative cost on SM83 and Thumb, so changing `/target` can change the estimate and cadence. Never compare raw
-unit totals across targets or describe the advisory estimate as a proof of frame timing.
-
-A blit SUSPENDS frame production rather than costing work: with the display off no
-vertical blank arrives, so the frame counter does not advance. Measured, a
-rectangle degrades cadence steeply past 120 tiles and stalls the document entirely
-near 168, which is what `CartridgeLimits.BlitCellCount` pins. Never raise it
-without re-measuring.
-
-`map` writes queue and drain in the next frame's vertical blank on BOTH targets —
-AGB stages and drains at its frame sync deliberately, so a cell changed this frame
-appears the frame after on either machine. Validation bounds a frame's map writes
-to the queue's 24 entries so a write can never be silently dropped; the push
-subroutine's drop path must stay unreachable. `blit` carries a measured weight on
-each target (`CartridgeCostProfile.Blit`, from the `blit20x6` measurement shape);
-a blit much larger than that shape costs more than the weight says, which is why
-`BlitCellCount` bounds it.
-
-A primitive with no measured weight prices as `CostBound.Unmodeled`, which
-poisons the whole estimate rather than contributing an invented number, so the
-document builds with no usable advice. Adding a primitive means measuring it: add
-its shape to `CartridgeCostMeasurement.Shapes`, run `puck cartridge-cost`, and fold
-the reported capacities in. Nothing refuses a probe for cost, so the search reaches
-past any reservation without touching it. `CostBound` and `CostModelProfile`
-live in `Puck.Maths` and are shared with `Puck.State`'s rule cost; each subsystem
-owns its own coefficients.
-
-## Verification
-
-Show a forge change working by compiling a cartridge and playing it in a world
-(below). The two forge test projects are there to run when they reach the
-change: `CartridgeCompilerTests` builds JSON source, exercises
-editing/refusals, pins deterministic output after round-trip, and runs inputs,
-comparisons, arithmetic and sprite/graphics observations on both real
-emulators. Emitter probes and boot-image hash tests are separate.
-Compiler validation cannot prove an arbitrary player's game correct; no
-hidden demo verifier runs during document compilation.
-
-Every SM83 verifier calls `VerifyMachineSettle.SettleOutOfOamDma` after
-stepping frames and before bus reads: a fixed cycle boundary can land inside
-DMA and falsely read gated WRAM as 0xFF. `Framework.VerifyMachineDriver`
-already applies this rule.
-
-Wait on the observable fact, not a duration: both verify drivers' `RunFramesUntil`
-advance until a condition holds and fail at a frame cap, so a test pays only for
-the frames its fact needs. A position several tests start from (a title, a menu,
-a game in play) is reached once through the cartridge's own path and handed out
-with `VerifyMachineDriver.Snapshot`/`Restore`; keep one test that walks that path
-and asserts each step (`TetrominoCartridgeFixture` is the shape). A cadence claim is
-a rate over an exact span, so it stays one `RunFrames` call.
-
-For World integration, run the actual host through stdin using the puck-world
-skill. Verify source editing, canonical save/open, ROM export and accepted
-screen insertion for both targets; a build alone is not a play test.
-
-Keep XML API docs, package READMEs, the shared source guide, World's command
-entry, project map and this skill synchronized. Named arguments, m_ fields,
-and the repository analyzers apply; do not raise complexity ceilings.
+| Skill | Route there for |
+|---|---|
+| `puck-dsl` | `.puck` grammar, the compile/lint/format verbs, PUCKnnn diagnostics. |
+| `gaming-bricks` | Emulator core behavior and the Post batteries. |
+| `puck-world` | Driving the World over stdin; screens and authority. |

@@ -8,6 +8,8 @@
 // stage; the debug views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
 #define PASSES_SDF_LIGHT_STAGE_HLSLI
+#include "../shade/sdf-environment.hlsli"
+#include "../shade/sdf-surface-shading.hlsli"
 #include "../shade/sdf-light.hlsli"
 #include "../shade/sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS

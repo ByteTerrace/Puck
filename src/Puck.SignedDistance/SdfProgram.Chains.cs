@@ -178,7 +178,7 @@ public sealed partial class SdfProgram {
     // Every directory segment's chains in order (SegmentFirst[s] .. SegmentFirst[s + 1]), and the program's set.
     private sealed record ChainTable(SdfChain[] Chains, int[] SegmentFirst, SdfSpecializationSet Set) {
         // The vectors the packed table spans: its header, its segment entries and its identity list.
-        public int Vectors => checked(((DirectoryHeaderVectors + EntryVectors(segments: (SegmentFirst.Length - 1))) + ((Chains.Length + (ChainIdentitiesPerVector - 1)) / ChainIdentitiesPerVector)));
+        public int Vectors => ChainTableVectorsOf(chains: Chains.Length, segments: (SegmentFirst.Length - 1));
 
         public static int EntryVectors(int segments) => ((segments + (ChainSegmentsPerVector - 1)) / ChainSegmentsPerVector);
     }

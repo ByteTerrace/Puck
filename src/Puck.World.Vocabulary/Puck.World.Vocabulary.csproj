@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The vocabulary a world document is validated against and the one wiring of Puck.World.Schema's injection seams
+         (WorldSchemaVocabularyHooks). It sits below Puck.World.Client so the world compile (Puck.Cli.Worlds) validates
+         with it without loading the client, and an edit to the client reruns no world compile. -->
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+        <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>

@@ -163,7 +163,7 @@ another's grid. A view at a native ceiling that asks for nothing temporal uses
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
 `Fragment`, and a view asking for temporal reconstruction uses
 `SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
-reactivity buffer and the history, [SKILL](../SKILL.md#temporal-reconstruction)).
+reactivity buffer and the history).
 In `Fragment`: views writes `currentColor` (one retained allocation) at the active
 render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
 at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
@@ -175,11 +175,13 @@ scheduled extent equals the rect's pixels. No output-sized surface is written
 until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
 module supplies both kernels' filter and has no SDF-layer dependency.
 
-Primary, surface, ambient, shadow, the receiver and views share `sdf-world-views.comp.hlsl`'s
-entry point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
-`SDF_SHADOW_PASS`, `SDF_RECEIVER_PASS` (with `SDF_INDIRECT_COMPARISON` for the comparison receiver) and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments. The
-wrapper defines `SDF_PRIMARY_READ` for every pass except primary, and
-`SDF_VIEWS_PASS` for the views kernels, and each kernel compiles only its own
+Primary, surface, ambient, shadow, the receiver and views share one entry point
+(`passes/sdf-hit-entry.hlsli`) through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
+`SDF_SHADOW_PASS`, `SDF_RECEIVER_PASS` (with `SDF_INDIRECT_COMPARISON` for the comparison receiver) and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments.
+Each wrapper defines its pass macro, includes the common head
+(`passes/sdf-hit-pass.hlsli`), its own stage module and the entry, so its include
+closure holds no other pass's stage. The head defines `SDF_PRIMARY_READ` for every pass except primary,
+`SDF_VIEWS_PASS` for the views kernels and `SDF_QUERY_REJECTION_BOUND` for shadow, and each kernel compiles only its own
 stage over the pixel the entry point gathers (`sdfPixelAt`): `sdfPrimaryStage`,
 `sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage`, `sdfReceiverStage` or `sdfViewsStage`. Only
 the ambient and shadow kernels define `SDF_GROUP_SHADOW_GATHER` and hold a

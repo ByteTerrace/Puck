@@ -1,6 +1,7 @@
 // The views stage's field reads, through the kernel's one interpreter call site.
 #ifndef PASSES_SDF_VIEWS_FIELD_HLSLI
 #define PASSES_SDF_VIEWS_FIELD_HLSLI
+#include "../surface/sdf-normals.hlsli"
 #ifdef SDF_VIEWS_PASS
 #include "../debug/sdf-debug-reads.hlsli"
 
