@@ -37,6 +37,18 @@ agent works in that mode by default, without asking:
   line coverage, plus a short keep-list of invariant tests the owner approves
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Code no test and no live world reaches is deleted, not tested.
+- The owner's velocity rulings:
+  - Edit to running: under 30 seconds from changing a C# or HLSL file in the
+    engine to seeing it in the running debug world.
+  - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
+    derivation fingerprint, the file-length and comment-smell ratchets, canary
+    and counters ceilings, test durations, and `VerifiedCode` brands are being
+    deleted, with the verbs and analyzers that maintain them.
+  - Direct3D 12 is the primary backend during development; Vulkan catches up
+    when the owner calls for qualification.
+  - Every project stays in the build.
+  - Every push to `main` keeps deploying, through a pipeline made as fast as
+    possible.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.
