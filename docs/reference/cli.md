@@ -2819,8 +2819,12 @@ The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `tests/Shared/World/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
-allocation (median over a sampled window, after a warmup), and a scripted
-Klondike deal's per-tick time and per-mutation allocation. A server
+allocation (median over a sampled window, after a warmup), the contact work
+behind each sampled tick as deterministic counts (certified sweeps and the
+bounds queries they charge, interval walks with their instructions and full
+rotation expansions, and point evaluations with their instructions, read from
+`physics.sweep`, `sdf.bounds` and `sdf.point`), and a scripted Klondike deal's
+per-tick time and per-mutation allocation. A server
 construction includes admission, navigation, and runtime allocation, so this
 lane measures it once with a plain stopwatch
 harness (`WorldBenchmarks.cs`,

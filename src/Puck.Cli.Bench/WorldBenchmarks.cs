@@ -4,6 +4,8 @@ using System.Diagnostics;
 
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
+using Puck.Physics;
+using Puck.SignedDistance.Queries;
 using Puck.World;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -139,6 +141,7 @@ internal static class WorldBenchmarks {
 
         var allocationSamples = new long[SampleTicks];
         var elapsedTicksSamples = new long[SampleTicks];
+        var countsBefore = ReadContactWork();
 
         for (var tick = 0; (tick < SampleTicks); tick++) {
             var timestampBefore = Stopwatch.GetTimestamp();
@@ -146,6 +149,8 @@ internal static class WorldBenchmarks {
             allocationSamples[tick] = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             elapsedTicksSamples[tick] = (Stopwatch.GetTimestamp() - timestampBefore);
         }
+
+        var countsAfter = ReadContactWork();
 
         Array.Sort(array: allocationSamples);
         Array.Sort(array: elapsedTicksSamples);
@@ -155,7 +160,33 @@ internal static class WorldBenchmarks {
 
         rows.Add(item: ("shipped world: idle tick (median)", $"{medianElapsedMs:F3} ms"));
         rows.Add(item: ("shipped world: quiet-tick allocation (median)", $"{medianAllocation:N0} bytes"));
+
+        // The contact work behind the tick, as deterministic counts: what a timing row is read beside.
+        for (var kind = 0; (kind < ContactWorkKinds.Length); kind++) {
+            rows.Add(item: ($"shipped world: {ContactWorkKinds[kind].Name} per tick", $"{((countsAfter[kind] - countsBefore[kind]) / ((double)SampleTicks)):F1}"));
+        }
     }
+
+    // The certified sweep's work and the immutable field's bounds work it spends, in report order.
+    private static readonly WorkKind[] ContactWorkKinds = [
+        FixedContactSweepWork.Sweeps,
+        FixedContactSweepWork.BoundsQueries,
+        SdfBoundsCache.Evaluations,
+        SdfBoundsCache.Instructions,
+        SdfBoundsCache.Rotations,
+        SdfFieldEvaluator.PointEvaluations,
+        SdfFieldEvaluator.PointInstructions,
+    ];
+
+    private static long[] ReadContactWork() => [
+        FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.Sweeps),
+        FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.BoundsQueries),
+        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Evaluations),
+        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Instructions),
+        SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Rotations),
+        SdfFieldEvaluator.PointWork.Read(kind: SdfFieldEvaluator.PointEvaluations),
+        SdfFieldEvaluator.PointWork.Read(kind: SdfFieldEvaluator.PointInstructions),
+    ];
     private static void PrintTable(List<(string Name, string Value)> rows) {
         var nameWidth = rows.Max(selector: row => row.Name.Length);
 

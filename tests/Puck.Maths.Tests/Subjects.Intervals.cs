@@ -38,6 +38,16 @@ internal static partial class Subjects {
         if (Mismatch(name: $"A × B for {name}", actual: (a * b), expected: Oracles.IntervalProduct(leftLower: aLower, leftUpper: aUpper, rightLower: bLower, rightUpper: bUpper)) is { } product) { return product; }
         if (Mismatch(name: $"A ÷ B for {name}", actual: (a / b), expected: Oracles.IntervalQuotient(leftLower: aLower, leftUpper: aUpper, rightLower: bLower, rightUpper: bUpper)) is { } quotient) { return quotient; }
 
+        // A point divisor that is a power of two, of either sign, at a drawn shift the carrier holds: the drawn pairs
+        // almost never land on one, and the positive one divides by a shift whose ceiling must still round up.
+        var powerShift = ((int)(unchecked((ulong)right[3]) % 63UL));
+
+        foreach (var power in ((long[])[(1L << powerShift), -(1L << powerShift),])) {
+            var divisor = FixedInterval.FromPoint(value: FixedQ4816.FromRawBits(value: power));
+
+            if (Mismatch(name: $"A ÷ [{power}, {power}] raws for A = {a}", actual: (a / divisor), expected: Oracles.IntervalQuotient(leftLower: aLower, leftUpper: aUpper, rightLower: power, rightUpper: power)) is { } powerQuotient) { return powerQuotient; }
+        }
+
         // |A| over the exact endpoints: the nearer magnitude below (zero when A straddles zero), the farther above.
         var absoluteLow = (((aLower <= 0L) && (aUpper >= 0L)) ? BigInteger.Zero : BigInteger.Min(left: BigInteger.Abs(value: exactALower), right: BigInteger.Abs(value: exactAUpper)));
         var absoluteHigh = BigInteger.Max(left: BigInteger.Abs(value: exactALower), right: BigInteger.Abs(value: exactAUpper));

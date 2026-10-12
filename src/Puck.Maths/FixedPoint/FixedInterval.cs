@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -39,7 +41,7 @@ public readonly record struct FixedInterval {
     /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/>.</exception>
     public FixedInterval(FixedQ4816 lower, FixedQ4816 upper) {
         if (lower > upper) {
-            throw new ArgumentException(message: $"An interval's lower endpoint {lower} exceeds its upper endpoint {upper}.", paramName: nameof(lower));
+            ThrowDisordered(lower: lower, upper: upper);
         }
 
         Lower = lower;
@@ -131,10 +133,20 @@ public readonly record struct FixedInterval {
             return Entire;
         }
 
-        var a = (((Int128)left.Lower.Value) * right.Lower.Value);
-        var b = (((Int128)left.Lower.Value) * right.Upper.Value);
-        var c = (((Int128)left.Upper.Value) * right.Lower.Value);
-        var d = (((Int128)left.Upper.Value) * right.Upper.Value);
+        // A point factor makes the four corners two, and two points one: the same extremes, fewer products.
+        if (right.Lower == right.Upper) {
+            var low = Math.BigMul(a: left.Lower.Value, b: right.Lower.Value);
+            var high = Math.BigMul(a: left.Upper.Value, b: right.Lower.Value);
+
+            return ((low <= high)
+                ? Exact(lower: (low >> FractionBitCount), upper: Ceiling(shift: FractionBitCount, value: high))
+                : Exact(lower: (high >> FractionBitCount), upper: Ceiling(shift: FractionBitCount, value: low)));
+        }
+
+        var a = Math.BigMul(a: left.Lower.Value, b: right.Lower.Value);
+        var b = Math.BigMul(a: left.Lower.Value, b: right.Upper.Value);
+        var c = Math.BigMul(a: left.Upper.Value, b: right.Lower.Value);
+        var d = Math.BigMul(a: left.Upper.Value, b: right.Upper.Value);
 
         return Exact(
             lower: (Int128.Min(x: Int128.Min(x: a, y: b), y: Int128.Min(x: c, y: d)) >> FractionBitCount),
@@ -145,6 +157,21 @@ public readonly record struct FixedInterval {
     public static FixedInterval operator /(FixedInterval left, FixedInterval right) {
         if (left.IsUnbounded || right.IsUnbounded || right.Contains(value: FixedQ4816.Zero)) {
             return Entire;
+        }
+
+        // A point divisor makes the four corners two, and a point dividend one: the same extremes, fewer quotients.
+        if (right.Lower == right.Upper) {
+            var denominator = right.Lower.Value;
+
+            var (lowFloor, lowCeiling) = DirectedQuotient(denominator: denominator, numerator: (((Int128)left.Lower.Value) << FractionBitCount));
+
+            if (left.Lower == left.Upper) {
+                return Exact(lower: lowFloor, upper: lowCeiling);
+            }
+
+            var (highFloor, highCeiling) = DirectedQuotient(denominator: denominator, numerator: (((Int128)left.Upper.Value) << FractionBitCount));
+
+            return Exact(lower: Int128.Min(x: lowFloor, y: highFloor), upper: Int128.Max(x: lowCeiling, y: highCeiling));
         }
 
         Span<long> numerators = [left.Lower.Value, left.Upper.Value];
@@ -438,6 +465,9 @@ public readonly record struct FixedInterval {
         ? "(−∞, +∞)"
         : $"[{Lower}, {Upper}]");
 
+    [DoesNotReturn]
+    private static void ThrowDisordered(FixedQ4816 lower, FixedQ4816 upper) =>
+        throw new ArgumentException(message: $"An interval's lower endpoint {lower} exceeds its upper endpoint {upper}.", paramName: nameof(lower));
     // The bounded interval of two exact raw endpoints, or the top when either leaves the carrier.
     private static FixedInterval Exact(Int128 lower, Int128 upper) =>
         (((lower < long.MinValue) || (upper > long.MaxValue))
@@ -461,8 +491,29 @@ public readonly record struct FixedInterval {
     // Int128's arithmetic shift is the floor; the ceiling is the negated floor of the negation.
     private static Int128 Ceiling(Int128 value, int shift) =>
         -((-value) >> shift);
-    // The floor and ceiling of numerator/denominator for a non-zero denominator.
+    // The floor and ceiling of numerator/denominator for a non-zero denominator. A positive power-of-two denominator is
+    // an arithmetic shift, which floors, and its ceiling the negated floor of the negation; a numerator inside the
+    // 64-bit range divides in 64 bits, whose truncated quotient and remainder are Int128's (long.MinValue is left out,
+    // since its quotient by −1 is not a long).
     private static (Int128 Floor, Int128 Ceiling) DirectedQuotient(Int128 numerator, long denominator) {
+        if ((denominator > 0L) && long.IsPow2(value: denominator)) {
+            var shift = ((int)long.TrailingZeroCount(value: denominator));
+
+            return ((numerator >> shift), Ceiling(shift: shift, value: numerator));
+        }
+
+        if ((numerator > long.MinValue) && (numerator <= long.MaxValue)) {
+            var (narrowQuotient, narrowRemainder) = Math.DivRem(left: ((long)numerator), right: denominator);
+
+            if (narrowRemainder == 0L) {
+                return (narrowQuotient, narrowQuotient);
+            }
+
+            return (((narrowRemainder < 0L) != (denominator < 0L))
+                ? ((((Int128)narrowQuotient) - 1), narrowQuotient)
+                : (narrowQuotient, (((Int128)narrowQuotient) + 1)));
+        }
+
         var quotient = Int128.DivRem(left: numerator, right: denominator);
         var floor = quotient.Quotient;
         var ceiling = quotient.Quotient;

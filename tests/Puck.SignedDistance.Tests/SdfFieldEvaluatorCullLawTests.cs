@@ -9,22 +9,30 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>Proves <see cref="SdfFieldEvaluator"/>'s instance cull is exact-by-construction: wrapping a scattered
 /// field's per-object shapes in <see cref="SdfProgramBuilder.Instance"/> bounds (so the evaluator may skip an
 /// out-of-reach one) must never change a distance, gradient, material, or cast hit the SAME instruction sequence
-/// produces when emitted with no instance metadata at all — the "cull off" reference, since an evaluator over a
-/// program declaring no instances has nothing to cull.</summary>
+/// produces when emitted with no instance metadata and every chain opened by a zero elongation — the "cull off"
+/// reference, since a program declaring no instances has no instance to cull and a chain through an elongation keeps
+/// no certificate to skip it by.</summary>
 public sealed class SdfFieldEvaluatorCullLawTests {
     private const int UnionInstanceCount = 12;
 
     // Builds the same field twice over the same instruction sequence: `culled` wraps each per-object shape in an
     // Instance bound the evaluator's cull may act on, `unwrapped` emits the identical instructions with no instance
-    // metadata, so its evaluator declares no instance and skips nothing. Includes one instance of each blend family
-    // IsPureUnionInstance must refuse to cull (SmoothUnion, Subtraction, a PushField/PopField scope) alongside the
-    // plain-Union majority, so a law run over both programs exercises the cull's positive and negative cases together.
+    // metadata and a zero elongation after each ResetPoint, so its evaluator skips nothing. Includes one instance of
+    // each blend family a union instance cannot join the answer by (SmoothUnion, Subtraction, a scope holding a field
+    // edit) alongside the plain-Union majority, so a law run over both programs exercises the cull's positive and
+    // negative cases together.
     private static (SdfFieldEvaluator Culled, SdfFieldEvaluator Unwrapped) BuildFixture() {
         var culledBuilder = new SdfProgramBuilder();
         var unwrappedBuilder = new SdfProgramBuilder();
         var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        void Unwrap(SdfProgramBuilder builder) {
+            if (ReferenceEquals(objA: builder, objB: unwrappedBuilder)) {
+                _ = builder.Elongate(extents: Vector3.Zero);
+            }
+        }
 
         _ = culledBuilder.Plane(
             material: material,
@@ -47,6 +55,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
             void Emit(SdfProgramBuilder builder) {
                 _ = builder.ResetPoint();
+                Unwrap(builder: builder);
                 _ = builder.Translate(offset: center);
                 _ = builder.Sphere(
                     blend: SdfBlendOp.Union,
@@ -71,6 +80,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitSmooth(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: smoothCenter);
             _ = builder.Sphere(
                 blend: SdfBlendOp.SmoothUnion,
@@ -95,6 +105,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitSubtract(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: subtractCenter);
             _ = builder.Sphere(
                 blend: SdfBlendOp.Subtraction,
@@ -118,6 +129,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitScoped(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: scopedCenter);
             _ = builder.PushField(compose: SdfBlendOp.Union);
             _ = builder.Sphere(
@@ -141,11 +153,9 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             new SdfFieldEvaluator(program: unwrappedBuilder.Build())
         );
     }
-    // Every witness instance declares a bound far out along +X but places its shapes at the origin, under the one near
-    // sphere, in a material of its own. The bound does not contain the shapes, so a skipped instance and an evaluated
-    // one answer differently at the origin: any body that runs there wins the union with a negative distance and the
-    // witness material. A query answering exactly the near sphere's own distance and material has therefore run none
-    // of the bodies, and each skip cost one bound test.
+    // Every witness instance places its shapes far out along +X, after the one near sphere, in a material of its own. A
+    // query near the origin that visits exactly the instructions the near sphere alone visits has run none of their
+    // bodies.
     private static (SdfFieldEvaluator Witnessed, SdfFieldEvaluator NearOnly, int WitnessMaterial) BuildFarInstanceWitnesses(int instanceCount, int shapesPerInstance) {
         var witnessedBuilder = new SdfProgramBuilder();
         var nearOnlyBuilder = new SdfProgramBuilder();
@@ -172,21 +182,23 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         EmitNear(builder: nearOnlyBuilder);
 
         for (var index = 0; (index < instanceCount); index++) {
+            var center = new Vector3(
+                x: (1000f + (index * 25f)),
+                y: 0f,
+                z: 0f
+            );
+
             _ = witnessedBuilder.Instance(
-                boundCenter: new Vector3(
-                    x: (1000f + (index * 25f)),
-                    y: 0f,
-                    z: 0f
-                ),
+                boundCenter: center,
                 boundRadius: ((shapesPerInstance * 1.0f) + 1.0f),
                 emit: builder => {
                     for (var shape = 0; (shape < shapesPerInstance); shape++) {
                         _ = builder.ResetPoint();
-                        _ = builder.Translate(offset: new Vector3(
+                        _ = builder.Translate(offset: (center + new Vector3(
                             x: (shape * 0.1f),
                             y: 0f,
                             z: 0f
-                        ));
+                        )));
                         _ = builder.Sphere(
                             blend: SdfBlendOp.Union,
                             material: witnessMaterial,
@@ -440,21 +452,23 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
             Assert.True(condition: nearOnly.TryDistance(
                 distance: out var nearDistance,
+                instructionsWalked: out var nearWalked,
                 material: out var nearMaterial,
                 position: position
             ));
             Assert.True(condition: witnessed.TryDistance(
                 distance: out var distance,
+                instructionsWalked: out var walked,
                 material: out var material,
                 position: position
             ));
             Assert.True(
-                condition: ((distance == nearDistance) && (material == nearMaterial)),
-                userMessage: $"at ({x}, {y}, {z}) a far instance body ran: answered {distance} in material {material}, the near sphere alone answers {nearDistance} in material {nearMaterial}"
+                condition: ((distance == nearDistance) && (material == nearMaterial) && (walked == nearWalked)),
+                userMessage: $"at ({x}, {y}, {z}) the walk visited {walked} instructions and answered {distance} in material {material}; the near sphere alone visits {nearWalked} and answers {nearDistance} in material {nearMaterial}"
             );
         }
 
-        // Inside the first bound the cull may not skip, so the same program answers with a body: the witnesses bite.
+        // At the first instance the cull cannot skip it, so the same program answers with a body: the witnesses bite.
         Assert.True(condition: witnessed.TryDistance(
             distance: out _,
             material: out var boundMaterial,

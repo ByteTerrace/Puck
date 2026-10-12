@@ -7,7 +7,7 @@ namespace Puck.SignedDistance.Queries;
 /// decision can depend on the field's value, and the grid's bound everywhere else.
 /// </summary>
 /// <remarks>
-/// <para><see cref="TryDistance"/> answers the exact field wherever the grid's bound falls below <see cref="Band"/>,
+/// <para><see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> answers the exact field wherever the grid's bound falls below <see cref="Band"/>,
 /// so a consumer comparing the value against any threshold up to the contact reach the band was built from reads the
 /// same value the exact evaluator would; above the band it answers the bound, a value at or below the exact one that
 /// never drops below the band. Both gradient overloads always read the exact evaluator.</para>
@@ -28,7 +28,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <summary>Creates a banded evaluator.</summary>
     /// <param name="exact">The exact evaluator the grid was baked from.</param>
     /// <param name="grid">The grid over <paramref name="exact"/>'s program.</param>
-    /// <param name="contactReach">The largest value any consumer of <see cref="TryDistance"/> compares the field
+    /// <param name="contactReach">The largest value any consumer of <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> compares the field
     /// against, in world units — the band starts this far plus the grid's slack from every surface.</param>
     /// <exception cref="ArgumentNullException"><paramref name="exact"/> or <paramref name="grid"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="contactReach"/> is negative.</exception>
@@ -56,7 +56,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <inheritdoc/>
     QueryCapabilities IWorldQuery.Capabilities => ((IWorldQuery)m_exact).Capabilities;
 
-    /// <summary>Gets the field value below which <see cref="TryDistance"/> always answers the exact evaluator.</summary>
+    /// <summary>Gets the field value below which <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> always answers the exact evaluator.</summary>
     public FixedQ4816 Band { get; }
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => m_exact.Capabilities;
