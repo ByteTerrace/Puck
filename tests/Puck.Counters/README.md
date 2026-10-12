@@ -2,11 +2,8 @@
 
 While the debug world is the one live world, only its two workloads stay here:
 `debug.world.json` with `shadow.script.txt` and `avatar.world.json` with
-`avatar.script.txt`, their ceilings, and the report and ceilings schemas; the
-debug workload is `puck counters`' default. The floor ledger `Puck.World`
-embeds for the dynamic-resolution budget, recorded from the quarantined floor
-workload, lives beside its reader as `src/Puck.World/floor.ceilings.json`.
-Every other
+`avatar.script.txt`, and the report schema; the debug workload is
+`puck counters`' default. Every other
 workload, script, batch and reference this page describes is quarantined at the
 same path under
 [`experimental/tests/Puck.Counters`](../../experimental/tests/Puck.Counters),
@@ -15,28 +12,30 @@ and none is run until the owner calls for qualification
 
 The [indirect comparison batch](../../experimental/tests/Puck.Counters/indirect-comparison/README.md) collects named
 method/input observations in four serial boots, retaining ordinary paired
-reports and their exact shared-session provenance. Gate discovery routes its
-recorded workload/script associations through the batch once.
+reports and their exact shared-session provenance.
 The [sky default matrix](../../experimental/tests/Puck.Counters/sky-defaults/README.md) declares separate sky-form,
 independent field-scale and binary-shadow observations through engine readiness;
 its measured reports and chosen Full defaults hold on the RTX 4070; the selected
 images and RTX 2060 device qualification remain open.
 
 These workloads feed [`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector),
-which runs the same offscreen world on Vulkan and Direct3D 12 and records the
+which runs the same offscreen world on Vulkan and Direct3D 12 and reports the
 work each render pass performs. The measurements count work, not elapsed time.
+Nothing records them in the repository: a change is judged by a report from
+before it and one from after it on the same device, held to each other with
+`puck counters compare`.
 
-| Workload | Scene | Script | Ceilings |
-|---|---|---|---|
-| `counters.puck` | Two blocks and their caps | `counters.script.txt` | `counters.ceilings.json` |
-| `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` | `nexus.ceilings.json` |
-| `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` | `courtyard.ceilings.json` |
-| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` | `debug.ceilings.json` |
-| `avatar.world.json` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` | `avatar.ceilings.json` |
-| `sky-still.puck` | An unchanging sky | `sky.script.txt` | `sky-still.ceilings.json` |
-| `sky-drift.puck` | Moving clouds | `sky.script.txt` | `sky-drift.ceilings.json` |
-| `sky-twinkle.puck` | Twinkling stars | `sky.script.txt` | `sky-twinkle.ceilings.json` |
-| `sky-cycle.puck` | A changing sky cycle | `sky.script.txt` | `sky-cycle.ceilings.json` |
+| Workload | Scene | Script |
+|---|---|---|
+| `counters.puck` | Two blocks and their caps | `counters.script.txt` |
+| `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` |
+| `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` |
+| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` |
+| `avatar.world.json` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` |
+| `sky-still.puck` | An unchanging sky | `sky.script.txt` |
+| `sky-drift.puck` | Moving clouds | `sky.script.txt` |
+| `sky-twinkle.puck` | Twinkling stars | `sky.script.txt` |
+| `sky-cycle.puck` | A changing sky cycle | `sky.script.txt` |
 
 The dense workloads inherit their scenes' geometry and behavior. Each fixes
 one camera at `(0, 2.5, 7)`, looking at `(0, 0.8, 0)`, with a vertical field of
@@ -48,72 +47,44 @@ ticks before its one reading.
 
 The debug workload uses the same camera at the medium preset instead, with
 temporal reconstruction and indirect lighting off and the exact shadow mask and
-march, so every frame marches every lit pixel's shadow afresh. Its ceilings
-hold the shadow pass's shape evaluations, most of them the Moth's: a field walk
-that rejects none of the avatar's gauge-built pool instances whole doubles them
-(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver). Those
-counts predate the shadow and ambient walks' bounded field, which rejects every
-Moth instance whole at a unit gain, and both avatar ledgers wait on a
-re-record on each backend.
+march, so every frame marches every lit pixel's shadow afresh. Its shadow
+pass's shape evaluations are most of them the Moth's: a field walk that rejects
+none of the avatar's gauge-built pool instances whole doubles them
+(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver, measured
+before the shadow and ambient walks' bounded field, which rejects every Moth
+instance whole at a unit gain).
 
 The seated-avatar workload is the debug world as played: its 1280×720 output
 shows the Moth seated before the default third-person camera, at the shipped
 high preset with temporal reconstruction and indirect lighting off and the
 exact shadow mask and march, read 30 ticks after readiness. The Moth is 179
 pool instances built mostly of superellipsoid gauges and non-uniformly scaled
-profiles, so its ceilings hold every field pass's walk of a many-instance body:
+profiles, so its counts show every field pass's walk of a many-instance body:
 an avatar whose instances lose their distance gains doubles the shadow pass's
-shape evaluations (1,282,324,096 against a recorded 640,428,760 over 40.3M
-march steps on the RTX 2060's Vulkan driver).
+shape evaluations (1,282,324,096 against 640,428,760 over 40.3M march steps on
+the RTX 2060's Vulkan driver).
 
 Run these commands from the repository root using a private copy of the
-candidate's built CLI. Each command runs both GPU backends; run them serially
-on each GPU whose counts the ledger holds. A first recording creates the
-Nexus or courtyard ceilings file at the path shown, using measured counts:
+candidate's built CLI. Each command runs both GPU backends; run them serially,
+one GPU at a time:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/nexus.world.json --script tests/Puck.Counters/counters.script.txt --ceilings tests/Puck.Counters/nexus.ceilings.json --record --output <reports>/nexus.json
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/courtyard.world.json --script tests/Puck.Counters/counters.script.txt --ceilings tests/Puck.Counters/courtyard.ceilings.json --record --output <reports>/courtyard.json
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/nexus.world.json --script tests/Puck.Counters/counters.script.txt --output <reports>/nexus.json
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/courtyard.world.json --script tests/Puck.Counters/counters.script.txt --output <reports>/courtyard.json
 ```
 
-Each backend's ledger holds shared deterministic ceilings and required zeros,
-plus a `devices` array for counts that depend on the GPU. These include march
-steps, shape evaluations and analytic gradient evaluations. A device record
-is identified by backend, PCI vendor and device identifiers, and driver
-implementation. Driver versions remain recorded evidence; updating a driver
-keeps its record and reports a note. Recording replaces the shared ceilings
-and that device's record while preserving the other device records. A check
-on an unrecorded device fails by name; record that device on its own GPU.
-The [counted-cost ceilings reference](../../docs/reference/cli.md#counted-cost-ceilings)
-owns the complete recording and refusal rules.
-
-An existing report from the same production workload can supply the record
-without another GPU run. It must contain both backends and their device
-identities; a primary-reference report has the wrong script identity:
-
-```text
-dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/nexus.json --ceilings tests/Puck.Counters/nexus.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --report <reports>/courtyard.json --ceilings tests/Puck.Counters/courtyard.ceilings.json --record
-```
-
-The ledgers contain measured counts rather than placeholders. Once a world's
-matching `.ceilings.json` exists, `puck gate --gpu` discovers that workload
-and uses its recorded `counters.script.txt`. Each world contributes one gate
-step, regardless of how many devices its ledger holds.
-
-Use `--check` in place of `--record` to judge the recorded ceilings. Keep each
-report beside the corresponding comparison report: `counters compare` names
-every changed comparable count, including intentional savings. Comparisons of
-renderer optimizations use law-level or compiled variants and retain the same
-world, camera, extent and hit samples.
+Keep each report beside the corresponding comparison report:
+`counters compare` names every changed comparable count, including
+intentional savings. Comparisons of renderer optimizations use law-level or
+compiled variants and retain the same world, camera, extent and hit samples.
 
 `primary-reference.script.txt` applies the `primary-reference` shader tree
 through `world.shaders.reload` while simulation is paused. Its primary wrapper
 defines `SDF_TAPE_REFERENCE` and includes the production kernel, so the
 reference compiles out only primary's tape reads. The tape pass still runs and
 counts its own cost. The script then advances the same 120 ticks as
-`counters.script.txt`. Run both worlds with this reference before the ordinary
-recording commands above:
+`counters.script.txt`. Run both worlds with this reference beside the ordinary
+runs above:
 
 ```text
 dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/nexus.world.json --script tests/Puck.Counters/primary-reference.script.txt --output <reports>/nexus-primary-reference.json
@@ -130,8 +101,7 @@ the optimized report's `sdf.world$tape` shape count. The Nexus requires
 require `tape < 0.25 × (full - pruned)`, equal primary `gpu.march.steps`, and
 passing parity. Shader compiler and pipeline lifetime counts differ because
 the reference reloads one kernel. The two scripts have different identities;
-record production ceilings only with `counters.script.txt`. The compare verb
-compares their measured rows without applying a ceilings file.
+the compare verb compares their measured rows.
 
 The `sdf.transforms.*` totals count actual packing work over produced frames,
 including interpolated poses between ticks. They have class `pacing`, so
@@ -209,14 +179,3 @@ pass-block upload. The tape clears its enable words and evaluates no shapes in
 this empty field. The GPU transcript checks the complete exact rows. The
 `pipeline-counters` fixture also evaluates no SDF shapes and pins zero in both
 shape columns.
-
-When counted passes or shape work change, record each affected device in the
-existing workload ledgers:
-
-```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/counters.puck --script tests/Puck.Counters/counters.script.txt --ceilings tests/Puck.Counters/counters.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-still.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-still.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-drift.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-drift.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-twinkle.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-twinkle.ceilings.json --record
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/sky-cycle.puck --script tests/Puck.Counters/sky.script.txt --ceilings tests/Puck.Counters/sky-cycle.ceilings.json --record
-```

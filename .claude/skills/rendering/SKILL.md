@@ -1785,8 +1785,8 @@ These are one-line cautions; the owning pages hold the derivations.
 
 ## Performance work
 
-Judged by code, disassembly, and deterministic work counters, which alone set
-ceilings and decide a cost claim. `world.gpu-timing` and `world.fps` readings are
+Judged by code, disassembly, and deterministic work counters, which alone decide
+a cost claim. `world.gpu-timing` and `world.fps` readings are
 evidence beside the counts of the same run, never alone, and are taken on a
 quiet machine ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
 Measure before and after on the same scene, as one GPU run at a time
@@ -1827,43 +1827,23 @@ translation to native code stays invisible, so it never replaces a
 cross-backend capture.
 
 For a repeatable before-and-after reading, `puck counters` boots
-`experimental/tests/Puck.Counters/counters.puck` offscreen on both backends, writes a
+`tests/Puck.Counters/debug.world.json` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
 Use `--world` and `--script` for another authored workload. The sky-still,
 sky-drift, sky-twinkle and sky-cycle fixtures use `experimental/tests/Puck.Counters/sky.script.txt`
-to isolate each sky change with cadence enabled; each has its own ceilings
-(`--ceilings tests/Puck.Counters/sky-<workload>.ceilings.json`). Report workload and script
-identity must match the ceilings; absent cadence samples are not measured zeros.
-The Nexus and courtyard workloads (`experimental/tests/Puck.Counters/nexus.world.json` and
+to isolate each sky change with cadence enabled; absent cadence samples are not
+measured zeros. The Nexus and courtyard workloads (`experimental/tests/Puck.Counters/nexus.world.json` and
 `courtyard.world.json`) inherit the shipped scenes and use `counters.script.txt`
-at the fixed counters camera and 1440x810 floor grid; their ceilings come from
-the floor GPU. Count the tape's and gradient selection's shape evaluations
-alongside the work they save; a lower derivative count alone is insufficient.
-`puck counters --check` holds every render node's deterministic and
-per-backend-deterministic submission counts, pass by pass and outside every
-pass, to `tests/Puck.Counters/debug.ceilings.json` by default
-(`puck.counters.ceilings.v1`): a count reads at most its ceiling, and a ceiling
-of zero is a required zero. The compact ledger stores only nonzero budgets,
-with interned measurement layouts grouped by node, pass and detail. Presence
-is enforced independently: an unexpected zero row, a missing zero row or a
-class change still fails. Derive default classes from `GpuWork.SubmissionKinds`
-and store only layout overrides. Keep the expanded rows' diagnostic order.
-Device documents contain only budget and layout differences from backend
-defaults, plus identity; storage sharing must not broaden which rows judge an
-unrecorded device. The [CLI reference](../../../docs/reference/cli.md#counted-cost-ceilings)
-owns the exact spelling, scope, recording and refusal rules.
-`--record` preserves every other device's effective readings and the first
-recorded device's position, although factoring shared defaults can change the
-stored differences. Its write is atomic, and refusal prints `not written: …`
-and exits 1. `--report <file>` judges or records a saved report without a GPU;
-otherwise the verb needs both backends and runs under the GPU grant.
-The dynamic-resolution step budget reads the backend's first device, expanded
-from shared defaults (`WorldDynamicResolution.StepBudgetPerPixel`).
-`CountersCeilingsCompactLawTests` round-trips the shipped ledgers and perturbed
-saved reports through the codec without a GPU. A format-only change migrates
-the ledgers from their existing readings, never by a GPU re-record.
+at the fixed counters camera and 1440x810 floor grid. Count the tape's and
+gradient selection's shape evaluations alongside the work they save; a lower
+derivative count alone is insufficient. Nothing records counts in the
+repository: judge a change by a report from before it and one from after it,
+on the same device. The verb needs both backends and runs under the GPU grant.
+The dynamic-resolution step budget is a constant
+(`WorldDynamicResolution.StepBudgetPerPixel`), the floor workload's world-node
+march steps per output pixel on the RTX 2060.
 
 **Qualification judges a published package, not a change.** `puck qualify
 <package>` holds CI's published World (`artifacts/world`, never a source build)
@@ -3085,8 +3065,8 @@ retired views' in. Pending render completion fences survive an install's
 counter invalidation; device loss drops renders whose completion is unobserved.
 Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one
-demand), and the step budget comes from the embedded `counters.ceilings.json`,
-so `puck counters --record` moves the budget.
+demand), and the step budget is the constant
+`WorldDynamicResolution.StepBudgetPerPixel`.
 
 ## Route adjacent work
 

@@ -510,9 +510,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   (`CanaryCommand.CanaryLegSlots`; a manifest declaring `"exclusive": true`
   runs each leg alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
-  selection's World boots, spawns, builds and leg budget without running;
-  the automatic set and `--merge` are refused past the ceilings in
-  `CanaryCeilings.json` (`puck canary-ceilings` rewrites them). A GPU selection first warms the engine pipeline cache
+  selection's World boots, spawns, builds and leg budget without running.
+  A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts

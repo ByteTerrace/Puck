@@ -91,7 +91,6 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
-| [`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs) | records the World boots and summed leg budget of the two canary gate selections in `CanaryCeilings.json`, or checks it with `--check`; a recorded count must equal its plan. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
@@ -271,7 +270,6 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 ```sh
 puck artifacts capture | restore | test-world
 puck artifacts test-windows [--shard <index> --shards <count>]
-puck artifacts durations <directory>
 puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
@@ -297,14 +295,9 @@ through the producer's manifest. `test-windows` runs each with the CPU selection
 `puck affected` uses (`--filter-not-trait Category=Gpu`) and leaves out the laws
 that read a build tree (`--filter-not-trait Category=BuildTree`), which a
 restored archive is not. `--shard <index> --shards <count>` runs one zero-based
-shard of the manifest, one per CI runner: the shards split it by the run times
-`TestDurations.json` records, longest first into the shard with the least time
-so far, so together they run every assembly exactly once; an assembly the table
-does not name weighs the median. Without them the one shard is the whole
-manifest. Each run writes the times it measured to `durations.json` in
-`artifacts/test-results`, and `durations <directory>` records the table from
-every shard's `durations.json` under the directory, one run's, each rounded up to
-a whole second. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
+shard of the manifest, one per CI runner: the shards deal it round-robin in
+ordinal order, so together they run every assembly exactly once. Without them
+the one shard is the whole manifest. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
 including hidden files.
@@ -1446,7 +1439,7 @@ puck canary --merge                 run the merge gate: the automatic set plus e
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
-puck canary --plan                  print a selection's counts and ceiling without building or running
+puck canary --plan                  print a selection's counts without building or running
 puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
 
@@ -1470,14 +1463,7 @@ building or running anything: one line per proof, then the legs (alone, on
 the GPU, and headless), the World boots, the processes the run would start for its legs,
 the builds, and the summed per-leg timeouts. Every value is a count of the
 manifests, so the output is the same on every machine, and a GPU selection can
-be costed on a machine without a GPU. The two gate selections, the automatic
-set (`puck canary`, `--capability automatic`, and `puck landing`) and
-`--merge`, are each held to a ceiling of World boots and summed leg budget
-recorded in `CanaryCeilings.json` ([`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs)).
-A gate whose plan exceeds its recorded ceiling is refused with exit 2 before
-anything builds, naming both numbers. A change that deliberately grows a gate
-records the rise with `puck canary-ceilings` in the same change and states the
-new `--plan` counts.
+be costed on a machine without a GPU.
 
 A selection with an offscreen or windowed proof on a named backend warms the
 engine's pipeline cache before any leg starts. The runner boots the first
@@ -2021,20 +2007,18 @@ run, so a performance change can be judged by counted work rather than by time.
 `puck bench` stays the only tool that measures wall-clock time.
 
 ```text
-puck counters [--world <file>] [--script <file>] [--output <file>] [--check | --record] [--ceilings <file>]
+puck counters [--world <file>] [--script <file>] [--output <file>]
                                            run the workload on both backends and write the report
-puck counters --report <file> [--check | --record] [--ceilings <file>]
-                                           judge or record a saved report
-puck counters --batch <manifest> [--output <directory>] [--check | --record]
+puck counters --batch <manifest> [--output <directory>]
                                            collect ordered observations once per group/backend
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `experimental/tests/Puck.Counters/counters.puck` once per backend
+The run boots `tests/Puck.Counters/debug.world.json` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
-leg runs `experimental/tests/Puck.Counters/counters.script.txt` on the World's console. The
+leg runs `tests/Puck.Counters/shadow.script.txt` on the World's console. A counters
 script turns off the cadence gate so every frame renders every pass, pauses the
 simulation until the engine is ready, resumes it, waits a pinned number of
 ticks, and asks for one `world.counters --json` reading, so both backends read
@@ -2048,22 +2032,19 @@ pacing counts. A leg is cut off after ten minutes, and the whole run, the World
 build included, after thirty.
 
 `--world` and `--script` select another authored `.puck` or JSON workload and its console
-script. Both paths are recorded in the report and must match its ceilings.
+script. Both paths are recorded in the report.
 The [Nexus and courtyard workloads](../../tests/Puck.Counters/README.md) inherit
 the real overworld hub and Moth courtyard. They use `counters.script.txt`, the
 same fixed camera, and the floor preset's 1440×810 render grid inside a
 1920×1080 output, with temporal reconstruction and dynamic resolution off.
-Their ceilings are `nexus.ceilings.json` and `courtyard.ceilings.json`, recorded
-on the floor GPU with `--ceilings` naming the corresponding file. They measure
-per-tile pruning and winner-gradient work without changing scene geometry.
+They measure per-tile pruning and winner-gradient work without changing scene
+geometry.
 The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
 requires. The cycle also carries a lighting-only panel, counting its projection
-and analytic reflection work. Each has its own ceilings beside it, with a record for each device
-that ran it (`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
-default ceilings cover only the default workload. A cadence-omitted node has no completed sample
+and analytic reflection work. A cadence-omitted node has no completed sample
 in the report, so missing rows must not be read as measured zeros.
 
 The report is a `puck.counters.report.v1` document. Its schema,
@@ -2094,8 +2075,7 @@ An explicit null detail identifies a pass total or work outside named rows.
 Sky layers and shadow slots have labels within their pass, alongside its
 `plain` remainder; all detail rows sum to that pass's totals. Skipped and
 standing passes retain their labels with no counts. Comparisons include those
-labels, and ceilings record their zero rows using the same class and
-required-zero rules as the totals. Detail identities and frame-slot buffer
+labels. Detail identities and frame-slot buffer
 capacity grow during the installed graph's run. The sky counts each layer
 evaluation, each procedural hash and each field-run texture load under
 `gpu.sky.evaluations`, `gpu.sky.hashes` and `gpu.sky.texture-loads`.
@@ -2120,13 +2100,13 @@ different sources, a note on standard error says so.
 `--batch` reads a `puck.counters.batch.v1` manifest with `world` and ordered
 `groups`. Each group names a `prelude` script, ordered `observations` and its
 `completion` (`indirect` by default, or `engine` for sky-only work). Each
-observation names its `name`, `method` (`cache`, `screen` or `cone`), `script`,
-`report` and `ceilings`. Input and ceiling paths are relative to the manifest.
+observation names its `name`, `method` (`cache`, `screen` or `cone`), `script`
+and `report`. Input paths are relative to the manifest.
 Report paths are relative to the output directory, must stay within it and
 cannot overwrite inputs, group transcript directories, the retained World build
 log or the reserved provenance products. Names use filesystem identity where
-they name stored evidence. Names, scripts,
-report paths and ceiling paths are distinct. Unknown manifest fields refuse.
+they name stored evidence. Names, scripts and
+report paths are distinct. Unknown manifest fields refuse.
 
 The collector launches Vulkan then Direct3D 12 for each group, serially, with
 that prelude followed by its observation scripts in the same World session.
@@ -2159,102 +2139,27 @@ completed submission, while cumulative host counters include the prelude and
 earlier observations. The collector does not subtract readings or turn them
 into costs for an isolated 120-tick interval.
 
-Missing, extra, malformed, refused or mismatched observations fail collection.
-All reports must agree under the existing backend rules before `--record`
-can write any measured ceilings. `--check` reads each observation's declared
-ceilings. `--batch` refuses beside `--world`, `--script`, `--report` or
-`--ceilings`. The [indirect comparison workload](../../experimental/tests/Puck.Counters/indirect-comparison/README.md)
+Missing, extra, malformed, refused or mismatched observations fail collection,
+and every paired report must agree under the backend rules. `--batch` refuses
+beside `--world` or `--script`. The [indirect comparison workload](../../experimental/tests/Puck.Counters/indirect-comparison/README.md)
 uses two tier groups to collect sixty actual backend observations in four
 serial boots, yielding thirty paired reports.
 
-### Counted-cost ceilings
+### Judging a change by counted work
 
-`--check` holds the run's report to the counted-cost ceilings in
-`tests/Puck.Counters/debug.ceilings.json` by default, a `puck.counters.ceilings.v1`
-document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
-`puck schema` generates. At the workload's resolution, the file states for each
-backend what every render node's GPU submission kinds may read, pass by pass
-and outside every pass: each deterministic or per-backend-deterministic count
-reads at most its ceiling, and a ceiling of zero is a required zero. The SDF
-view counts field queries as march steps (`gpu.march.steps`), primitive distance
-evaluations (`gpu.shapes.evaluated`), primitive gradient evaluations
+The SDF view counts field queries as march steps (`gpu.march.steps`), primitive
+distance evaluations (`gpu.shapes.evaluated`), primitive gradient evaluations
 (`gpu.shapes.gradients`) and texels written (`gpu.texels.written`). Shape
 evaluations include the tape pass, winner selection and primitive
 finite-difference taps, so reducing gradient work cannot hide its selection
-cost. These kernel counts are among the ceilings, so a pass that cannot do
-such work (`sdf.world$cull-args` marches nothing) and a pass the floor tier
-skips (the shadow and ambient passes, and the mesh pass of a meshless frame)
-hold required zeros.
+cost. To judge a change, collect a report on the same device before and after
+it and compare the two with `puck counters compare`; each moved count is named
+with its backend, class, kind, pass, detail and node. Nothing records counts in
+the repository.
 
-The document stores nonzero budgets under backend, node, pass and detail.
-A missing budget is zero; the separate measurement layout still requires the
-row to be present. An unrecorded row fails even when it reads zero, and a
-recorded zero row that disappears fails as not measured. A skipped pass
-supplies zero only for the detail labels it actually reports.
-
-`layouts` shares repeated ordered kind lists. A kind's default class comes
-from `GpuWork.SubmissionKinds`; a layout's `classes` object holds only
-exceptions, such as dispatches in a device-following `upload` pass. Within a
-node and pass, `shared` and `device` contain pairs of measurement-block order
-and layout index. Order preserves the checker's diagnostic order. `values`
-contains only nonzero budgets, each on its own line, and `details` nests the
-same shape under each detail label. The empty pass key means work outside
-passes; a literal empty label is `~1`, and `~` in a pass label is escaped as
-`~0`. Object keys are ordinal, kind and measurement order is retained, and
-rewriting unchanged readings produces identical bytes.
-
-Each backend's `ceilings` supplies shared budgets and the first device's
-layout as defaults. Every device holds its identity and only differing budgets
-and layouts. A nonzero device budget joins the backend defaults only when
-all recorded devices share that value. Storage sharing does not widen the
-measurement scope: deterministic rows and nonconflicting kernel zeros judge
-every device; other per-backend rows judge their own device. A fresh kernel
-zero whose count another retained device owns remains scoped to the recording
-device. No zero budget or zero marker is stored.
-
-A device record is keyed by backend, PCI vendor and device, and driver
-implementation (`driver.id`). A run on an unrecorded device fails with
-`no ceilings recorded for <device>; run puck counters --record on it` and
-still checks the shared measurement scope. A driver update keeps the record
-and prints a note naming both versions. Each recorded row must be measured
-with its recorded class, or its pass must be reported as not executed.
-Failures retain the backend, class, kind, pass, detail and node, distinguishing
-an exceeded budget, a broken zero, an absent measurement, a changed class and
-an unrecorded row.
-
-`--record` takes every counted reading as its ceiling and includes every
-submission kind of an unexecuted pass in the layout. It replaces the shared
-measurement scope, resolution and current device's readings, retaining other
-devices' readings and their first-recorded order. Factoring defaults can change
-their stored differences without changing what those devices are held to.
-The runtime's dynamic-resolution budget uses the backend's first device,
-including its inherited values.
-
-A record writes nothing when the backends disagree on a deterministic count
-or pass state, the workload or script differs, a deterministic shared ceiling
-conflicts with another device's reading, or the merged ledger fails its own
-report. It prints `not written: …` and exits 1. An unreadable existing ledger
-refuses before a workload runs. Writes use a flushed temporary file and atomic
-replacement; a failed replacement preserves the original file. `--output`
-must differ from the ceilings path. Re-record only in the change that explains
-why counts move, never from wall-clock or GPU timing. `--ceilings <file>`
-selects another ledger.
-
-`--report <file>` judges or records a saved `puck.counters.report.v1` report
-instead of running the workload, so it boots nothing and needs no GPU;
-`--world`, `--script` and `--output` select a run and refuse beside it.
-
-```text
-puck counters --check [--ceilings <file>] [--report <file>]   hold the counts to their ceilings
-puck counters --record [--ceilings <file>] [--report <file>]  record the counts into the ceilings
-```
-
-Exit codes: `puck counters` exits 0 when the backends agree and every count
-holds its ceiling, 1 when a deterministic count or pass state differs or a
-ceiling fails, a device with no record included, and 2 for a build, leg or
-reading refusal, including a missing GPU device or shader tool, a ceilings file
-that is missing or not a ceilings document, or a saved report that is not a
-report. `counters compare`
+Exit codes: `puck counters` exits 0 when the backends agree, 1 when a
+deterministic count or pass state differs, and 2 for a build, leg or reading
+refusal, including a missing GPU device or shader tool. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
 
@@ -3087,8 +2992,7 @@ describes. The same run writes the projection schema beside the root
 (`puck.world.projection.v1.schema.json`), the silo document's schema
 (`src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json`), and the
 schema of the report `puck counters` writes
-(`tests/Puck.Counters/puck.counters.report.v1.schema.json`) and of the ceilings
-it checks (`tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`), the schema of the
+(`tests/Puck.Counters/puck.counters.report.v1.schema.json`), the schema of the
 release profile `puck qualify` reads
 (`tests/Puck.Qualification/puck.release.profile.v1.schema.json`), and the
 frame-graph schema (`src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json`). Running `puck schema` also DELETES any section file the current
@@ -3743,32 +3647,6 @@ matches its project (or was recorded); 1 drift was found or the restore failed;
 
 ---
 
-## `puck canary-ceilings`—recorded gate costs
-
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
-`CanaryCeilings.json` at the repository root records what the two gate selections of
-[`puck canary`](#puck-canaryreal-world-behavioral-proofs), the automatic set and `--merge`, cost: World boots and
-the summed per-leg timeouts, as `--plan` counts them over the checked-in manifests. The ledger is generated; nothing
-in the source declares a ceiling by hand.
-
-```text
-puck canary-ceilings            write CanaryCeilings.json from the manifests' plans
-puck canary-ceilings --check    write nothing; exit 1 when a recorded count differs from its plan in
-                                either direction, or the ledger's bytes differ from what the verb writes
-```
-
-A run or `--plan` of a gate selection is refused before anything builds when its plan *exceeds* the recorded count.
-`--check` is stricter, and requires equality, for two reasons. A rise is a deliberate change, so the lane that adds
-cost records it in the same change and states the new counts in its commit. A fall is recorded too: otherwise the
-headroom a lane freed would be spendable by any other lane without a reviewed change. Equality also settles
-concurrent changes. Two lanes that record different counts edit the same lines and conflict at merge; two lanes
-that record the same count merge cleanly to a ledger that no longer equals the combined plan, so `--check` fails
-until `puck canary-ceilings` records the merged manifests' real counts. The resolver reruns the verb and never
-recomputes a count by hand.
-
-The verb refuses (exit 2) when any manifest fails to load, since a plan over a partial set would record a falsely
-low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify.yml`.
 
 ## `puck baselines`—test baselines
 

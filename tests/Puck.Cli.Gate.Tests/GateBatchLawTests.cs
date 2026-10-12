@@ -15,25 +15,14 @@ internal sealed class GateClock : TimeProvider {
     public void Advance(TimeSpan duration) => m_ticks += duration.Ticks;
 }
 
-/// <summary>The counters workloads the batch laws write into their scratch checkouts.</summary>
-public abstract class GateBatchLaws : GateRunLaws {
-    private protected static void Workload(Branches branches, string name, bool ceilings = true, bool script = false) {
-        branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.world.json", text: "{}");
-        if (ceilings) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.ceilings.json", text: $$"""{"workload":"tests/Puck.Counters/{{name}}.world.json"}"""); }
-        if (script) { branches.Checkout.Write(name: $"tests/Puck.Counters/{name}.script.txt", text: "world.counters --json"); }
-    }
-}
-/// <summary><see cref="GateRun"/> runs the device suites, every recorded workload and the citations after affected only with the GPU, launches no build that leaves an MSBuild node behind, and flushes its step summary as it goes.</summary>
-public sealed class GateBatchLawTests : GateBatchLaws {
+/// <summary><see cref="GateRun"/> runs the device suites and the citations after affected only with the GPU, launches no build that leaves an MSBuild node behind, and flushes its step summary as it goes.</summary>
+public sealed class GateBatchLawTests : GateRunLaws {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void DeviceSuitesThenEveryRecordedWorkloadThenCitationsFollowAffectedOnlyWithGpu(bool gpu) {
+    public void DeviceSuitesThenCitationsFollowAffectedOnlyWithGpu(bool gpu) {
         using var branches = new Branches();
 
-        Workload(branches, "z", script: true);
-        Workload(branches, "a");
-        Workload(branches, "unrecorded", ceilings: false, script: true);
         using var directory = new TemporaryDirectory(prefix: "puck-gate-batch-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
@@ -42,7 +31,7 @@ public sealed class GateBatchLawTests : GateBatchLaws {
 
         if (!gpu) {
             Assert.Empty(collection: runner.Devices);
-            Assert.DoesNotContain(collection: runner.Steps, filter: step => ((step[0] == "counters") || step.SequenceEqual(other: ["docs", "citations"])));
+            Assert.DoesNotContain(collection: runner.Steps, filter: step => step.SequenceEqual(other: ["docs", "citations"]));
             return;
         }
         Assert.True(condition: (deviceStart > runner.Events.IndexOf(item: "run affected")));
@@ -54,9 +43,8 @@ public sealed class GateBatchLawTests : GateBatchLaws {
 
             Assert.Equal([.. AffectedCommand.TestArguments(suite: suite), .. GatePlan.DeviceSuites.Single(predicate: device => (device.Suite == suite)).Selection], arguments);
         }
-        Assert.Equal(new[] { "run Puck.World.Tests", "run Puck.DirectX.Tests", "run Puck.Vulkan.Tests", "run Puck.Platform.Windows.Tests", "run counters a", "run counters z", "run docs citations" },
+        Assert.Equal(new[] { "run Puck.World.Tests", "run Puck.DirectX.Tests", "run Puck.Vulkan.Tests", "run Puck.Platform.Windows.Tests", "run docs citations" },
             runner.Events.Skip(count: deviceStart).Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "run ")));
-        Assert.All(runner.Steps.Where(predicate: step => (step[0] == "counters")), step => Assert.Contains(collection: step, expected: "--check"));
     }
     [Fact]
     public void EveryBuildAndTestTheGateAndAffectedLaunchLeavesNoMSBuildNodeBehind() {
@@ -115,7 +103,7 @@ public sealed class GateBatchLawTests : GateBatchLaws {
     }
 }
 /// <summary><see cref="GateRun"/> records only with the GPU and only once every earlier qualification step passed.</summary>
-public sealed class GateRecordLawTests : GateBatchLaws {
+public sealed class GateRecordLawTests : GateRunLaws {
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -140,7 +128,6 @@ public sealed class GateRecordLawTests : GateBatchLaws {
     public void RecordIsWithheldForEachPossibleFailedQualificationStep() {
         using var branches = new Branches();
 
-        Workload(branches, "a");
         branches.Checkout.Write(name: "build/trigger.props", text: "<Project />");
         branches.Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n\n");
         // The change is the same for every failure, so it is read once; each failure executes it under its own runner.
@@ -158,17 +145,15 @@ public sealed class GateRecordLawTests : GateBatchLaws {
     }
 }
 /// <summary><see cref="GateRun"/> consults admission immediately before each heavy step, waits for the GPU only on device steps, and refuses before starting a step whose admission timed out.</summary>
-public sealed class GateAdmissionLawTests : GateBatchLaws {
+public sealed class GateAdmissionLawTests : GateRunLaws {
     [Fact]
     public void EveryHeavyStepAndNoLightStepConsultsAdmissionImmediatelyBeforeRunning() {
         using var branches = new Branches();
-
-        Workload(branches, "a");
         using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
-        string[] heavy = ["build", "affected", "Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "counters a", "docs citations", "affected record"];
+        string[] heavy = ["build", "affected", "Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests", "docs citations", "affected record"];
 
         Assert.Equal(heavy.Select(selector: name => ("admit " + name)), runner.Events.Where(predicate: entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "admit ")));
         foreach (var name in heavy) { Assert.Equal(("run " + name), runner.Events[(runner.Events.IndexOf(item: ("admit " + name)) + 1)]); }
@@ -176,13 +161,11 @@ public sealed class GateAdmissionLawTests : GateBatchLaws {
     [Fact]
     public void OnlyADeviceStepWaitsForAnIdleGpuAndOnlyAHeavySuiteForAnotherHeavyRun() {
         using var branches = new Branches();
-
-        Workload(branches, "a");
         using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
         Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
-        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.World.Tests", true, true), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("counters a", true, false), ("docs citations", true, false), ("affected record", true, false)], actual: runner.Admissions);
+        Assert.Equal(expected: [("build", false, false), ("affected", false, false), ("Puck.World.Tests", true, true), ("Puck.DirectX.Tests", true, false), ("Puck.Vulkan.Tests", true, false), ("Puck.Platform.Windows.Tests", true, false), ("docs citations", true, false), ("affected record", true, false)], actual: runner.Admissions);
         // The baselines and affected's suites run CPU tests alone: none of their classes carries the Gpu trait.
         Assert.All(collection: GatePlan.Steps.Where(predicate: static step => ((step.Kind is GateStepKind.Build or GateStepKind.Baseline) || (step.Name == "affected"))), action: static step => Assert.False(condition: step.Gpu));
     }

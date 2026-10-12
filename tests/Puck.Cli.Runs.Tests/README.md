@@ -1,15 +1,10 @@
 # Puck.Cli.Runs.Tests
 
-These laws hold the verbs that boot a World and judge it: canary accounting, plans, legs and manifests, counters and
-their ceilings, parity comparison, determinism, qualification verdicts, release profiles and the World artifact build.
+These laws hold the verbs that boot a World and judge it: canary accounting, plans, legs and manifests, counters
+reports, parity comparison, determinism, qualification verdicts, release profiles and the World artifact build.
 
-`CountersDetailLawTests` holds detail identity through readings and report comparisons, including skipped rows,
-device-aware ceilings and required zeros. Reports require explicit detail keys and pass detail labels. Ceilings retain
-those identities in compact measurement layouts. `CountersCeilingsCompactLawTests` holds the writer's fixed point, kind
-defaults and device differences. Quarantined: its comparison of every shipped ledger against fixed reports and exact
-checker messages in `Assets/counters-ceilings-equivalence.zip`, including missing and unexpected zero rows, changed
-classes, exceeded budgets, and device and driver changes, moved with that archive to
-`experimental/tests/Puck.Cli.Runs.Tests/`, since the archive captures ledgers that moved there.
+`CountersDetailLawTests` holds detail identity through readings and report comparisons, including skipped rows.
+Reports require explicit detail keys and pass detail labels.
 
 Quarantined: the laws that read the canary corpus, the parity documents, the determinism manifest, the release
 profile or the verdict worlds (`DeterminismLawTests`, most of `ParityBindingReferenceLawTests`, and the shipped-corpus

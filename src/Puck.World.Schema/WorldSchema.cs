@@ -61,9 +61,6 @@ public static partial class WorldSchema {
     /// <summary>The counters report schema's stable identity — the tag <see cref="WorldCountersReport.SchemaVersion"/>
     /// carries.</summary>
     public const string CountersReportSchemaId = WorldCountersReport.SchemaVersion;
-    /// <summary>The counters ceilings schema's stable identity — the tag <see cref="WorldCountersCeilings.SchemaVersion"/>
-    /// carries.</summary>
-    public const string CountersCeilingsSchemaId = WorldCountersCeilings.SchemaVersion;
     /// <summary>The JSON Schema draft this document declares.</summary>
     public const string DraftUri = "https://json-schema.org/draft/2020-12/schema";
     /// <summary>The projection schema's stable identity — the tag <see cref="WorldProjectionDocument.SchemaVersion"/>
@@ -1875,14 +1872,6 @@ public static partial class WorldSchema {
             schemaId: CountersReportSchemaId,
             title: $"Puck counters report ({CountersReportSchemaId})",
             type: typeof(WorldCountersReport)
-        );
-    /// <summary>Exports the JSON Schema for <see cref="WorldCountersCeilings"/> as one document.</summary>
-    /// <returns>The generated schema root.</returns>
-    public static JsonObject ExportCountersCeilings() =>
-        ExportDocument(
-            schemaId: CountersCeilingsSchemaId,
-            title: $"Puck counters ceilings ({CountersCeilingsSchemaId})",
-            type: typeof(WorldCountersCeilings)
         );
     /// <summary>Exports the JSON Schema for <see cref="WorldSiloDefinition"/> as one document. Unsplit, like
     /// <see cref="ExportProjection"/>: a six-field document has no section large enough to earn a file of its

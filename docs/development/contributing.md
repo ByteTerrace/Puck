@@ -490,11 +490,7 @@ reserved capacity. For a repeatable reading, run
 boots the authored counters workload offscreen on each backend, writes a report
 with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
-the one after, using `puck counters compare`. `puck counters --check` also holds
-every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/debug.ceilings.json` by default, judging each device against its own
-record, and `--record` records the running device's counts into them in the
-change that explains why a count moved.
+the one after, using `puck counters compare`.
 
 Compare the same document, camera, resolution, quality settings, backend and
 build configuration before and after the change. Report these conditions with
@@ -637,7 +633,7 @@ must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
 The RTX 2060 and the RTX 4070 are the GPUs available for local testing, and
-the RTX 2060 records every counted-cost ceiling. Claims about the other
+the RTX 2060 is the floor device counted work is judged on. Claims about the other
 supported GPUs require vendor or driver documentation and should be framed as
 unverified when no device run exists.
 
@@ -869,13 +865,6 @@ meant to establish.
   of its magic) in the same change, to a value it never had before; a version
   that stays put or returns while its layout moves misreads old data instead of
   refusing it.
-- The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
-  never declared by hand. A change that adds or removes canary cost runs
-  `puck canary-ceilings` and states the new `puck canary --merge --plan`
-  counts in its commit; `puck canary-ceilings --check` requires each recorded
-  count to equal its plan. When a merge conflicts in the file, rerun the verb
-  rather than recomputing counts.
-  [`puck canary-ceilings`](../reference/cli.md#puck-canary-ceilingsrecorded-gate-costs).
 - A call through an unmanaged function pointer (`delegate* unmanaged`, any
   calling convention) may not use a signature that mentions a type parameter
   except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,

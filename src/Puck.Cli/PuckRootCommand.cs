@@ -74,7 +74,6 @@ public static class PuckRootCommand {
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),
-            CanaryCeilingsCommand.Create(),
             CartridgeCostCommand.Create(),
             CountersCommand.Create(),
             DeclarationsCommand.Create(),
