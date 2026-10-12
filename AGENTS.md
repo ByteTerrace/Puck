@@ -82,14 +82,16 @@ change that moves a document.
 
 ## Enforcement
 
-The build, the architecture gate, `VerifiedCode` brands (rule 7), calibrated
-ceilings, determinism checks and two ratchet ledgers are enforced. In a ratchet
-ledger a recorded per-file count may only fall: `FileLengths.json` (LEN001 to
-LEN004, `puck lengths`) allows no source file over 2000 lines unless already
-recorded, and `CommentSmells.json` (SMELL001 to SMELL004, `puck comment-smells`)
-allows no comment smell in a file it does not record. The
+The build enforces `VerifiedCode` brands (rule 7) and two ratchet ledgers
+through `Puck.Analyzers`. In a ratchet ledger a recorded per-file count may only
+fall: `FileLengths.json` (LEN001 to LEN004, `puck lengths`) allows no source
+file over 2000 lines unless already recorded, and `CommentSmells.json`
+(SMELL001 to SMELL004, `puck comment-smells`) allows no comment smell in a file
+it does not record. The
 [CLI reference](docs/reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers)
-owns their rules.
+owns their rules. The architecture check, calibrated ceilings, determinism
+checks, parity and canaries are verbs an agent runs when they pay for
+themselves ([`verification`](.claude/skills/verification/SKILL.md#optional-checks)).
 
 `Puck.Post` is quarantined in `experimental/` and out of the build: do not cite
 it as a gate, run it, or write a stage for it. The engine contract it covered is
@@ -98,10 +100,10 @@ a live gap, except the slice `puck parity` covers
 Presentation-only float and artistic work are outside the simulation-state
 determinism contract.
 
-Enforcement covers observable behavior (pixels, hashes, parity, determinism) and
-says nothing about the design being settled. Every name, shape, document and ABI
-is free to change. A gate that fails because a deliberate correction moved a
-hash is re-recorded in the same change, never worked around. A label calling
+These checks cover observable behavior (pixels, hashes, parity, determinism)
+and say nothing about the design being settled. Every name, shape, document and
+ABI is free to change. A check that fails because a deliberate change moved a
+hash, baseline or ceiling is re-recorded, never worked around. A label calling
 something frozen, closed or versioned describes it today; it is never a reason to
 leave it that way (rules 2 and 5).
 
@@ -122,23 +124,19 @@ settles a question, decide by that principle and say why.
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
-   0 or less runs until the window closes). `puck canary` gates game behavior
+   0 or less runs until the window closes). `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
-   stderr. Never substitute a build-only gate, add a `--validate-*` flag, or add
-   a Post stage for a game feature. The shared engine contract (cross-backend
-   render path, SDF VM ISA, document schemas, deterministic numerics) has no
-   automated gate beyond `puck parity`; say plainly what stays uncovered.
+   stderr. Never substitute a build-only check, add a `--validate-*` flag, or
+   add a Post stage for a game feature.
 4. **Determinism pins the mapping, not the values.** No wall clock, RNG or float
    in simulation state; input becomes per-tick `CommandSnapshot`s; fixed-point
    math comes from `Puck.Maths`. Same document and same input give bit-identical
    state on every run, machine and backend at a fixed code version. A deliberate
-   correction to math or logic is expected to change state hashes: make it,
-   re-run the gates it reaches (`puck test --reproduce`, `puck parity`, the
-   canaries, the emulator batteries) to prove determinism still holds, and
-   re-record the persisted replays and baselines it invalidates in the same
-   change. The gates compare runs with each other and pin no historical values.
-   Never preserve a wrong result to keep a hash, and never add a path that
-   reproduces old-wrong behavior.
+   correction to math or logic is expected to change state hashes: make it, and
+   re-record a persisted replay or baseline it invalidates when you next run
+   it. `puck test --reproduce` shows two runs agree. Never preserve a wrong
+   result to keep a hash, and never add a path that reproduces old-wrong
+   behavior.
 5. **Zero consumers, zero legacy.** Nothing outside this repository consumes
    Puck. Backwards compatibility is a non-goal; never raise it or let it shape a
    change. Rename, reshape and delete freely, updating every internal caller in
@@ -218,28 +216,23 @@ run it, or run its tests; its builds are expected to break as deletions land.
 It holds `Puck.Post`, `Puck.Bench`, both `scripts/` trees, `Puck.BareMetal` and
 `Puck.Platform.Switch`, each firewalled from the root build
 ([experimental/README.md](experimental/README.md)). Anything there that must
-keep working is rewritten as a real project or a `puck` verb, under the gate.
-A deletion rides in the same change as the landing that eclipses it, once a
-mechanical check shows the live code covers what the deleted code did; name that
-check in the commit. Documents
+keep working is rewritten as a real project or a `puck` verb. A deletion rides
+in the same change as the landing that eclipses it. Documents
 citing the old `tools/…`, `src/Puck.World/scripts/…` or former Post locations
 are stale; correct them where they live.
 
 ## Verification
 
 Load the [`verification`](.claude/skills/verification/SKILL.md) skill before
-calling any change verified. It routes through `puck gate` and
-`puck laws prove`, and gives the steps to run by hand where a brief rules a
-verb out. Its rules in brief:
+calling any change verified. A change lands on a zero-warning build of what it
+touched and the change shown working by running or measuring it
+([the landing bar](.claude/skills/verification/SKILL.md#the-landing-bar)).
+Gates, parity, canaries, counters, baselines and review passes are optional
+tools. In brief:
 
-- Run every gate from a copy of the head's own built CLI in a directory only
-  your lane uses, never the global `puck` tool.
-- Run ratchet and generator verbs with `--check` while verifying; their bare
-  form rewrites the file.
-- Measure `puck affected` against the lane's merge base, and never test
-  binaries a failed build left behind.
-- Prove every new or changed law red by withholding the fix
-  (`puck laws prove`), never by reverting files in a shared tree.
+- Run every `puck` verb from a copy of the head's own built CLI in a directory
+  only your lane uses, never the global `puck` tool.
+- Never test binaries a failed build left behind.
 - GPU legs run one at a time per GPU, under a grant the lead issues, and CPU
   work runs beside them: a correctness leg's verdict does not depend on load,
   and two GPU-bound jobs never overlap. A failed leg is re-run once alone: a
@@ -258,11 +251,11 @@ verb out. Its rules in brief:
   the index too. Prefer a separate commit when another task may have staged
   work.
 - Commit subjects are lowercase `area: sentence` (`vulkan: …`), with the
-  verification evidence in the body. Commits carry no `Co-Authored-By` trailer.
+  what you ran to show it working in the body. Commits carry no `Co-Authored-By` trailer.
 - A delegated session has exactly one long-lived working branch, and every
   brief it receives lands there. A brief starts by merging the integration
   branch's current tip into it: merge, never rebase. Push it fast-forward only,
-  once its gates pass.
+  once it meets the landing bar.
 - Create no per-lane, per-review or per-batch remote branch. A review pass runs
   in a worktree of the author's own branch and its fixes land there as commits
   ([`review-passes`](.claude/skills/review-passes/SKILL.md)). A local
@@ -273,8 +266,9 @@ verb out. Its rules in brief:
   integration tip, every line `git diff <integration tip> HEAD` removes must be
   one you meant to remove: an unexplained deletion is someone else's work lost
   in a merge or squash, and green suites prove only the behavior they cover.
-  `puck landing --against <tip> --base <authoring base>` makes this check
-  mechanically before it runs the automatic canary set, a GPU leg. To squash, reset to the
+  `git diff` shows it; `puck landing --against <tip> --base <authoring base>`
+  makes the same check mechanically and then runs the automatic canary set, a
+  GPU leg. To squash, reset to the
   commit your work started from, never to a remote ref that may have moved.
 - Every commit carries the checkout's configured git identity, whoever made it.
   Establish a commit's origin from `git reflog` and by diffing it against what
@@ -327,8 +321,8 @@ the message that carries the next action. Stop and ask only when the work
 cannot continue without the owner, or before an owner-only action: pushing
 `main`, force-pushing or deleting a remote branch (the branch rules above),
 deploying to Azure, publishing a package, or changing or deleting anything
-outside this repository. Refactoring, deleting inside the repository and adding
-verification under the gate need no one's permission.
+outside this repository. Refactoring, deleting inside the repository, and
+changing tests, gates and CI need no one's permission.
 
 The lead and every agent are trusted experts with free rein to refactor and
 improve Puck. Decide, deliver the work in batches for review on your working

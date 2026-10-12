@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; a prototype bake or texture codec; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; a prototype bake or texture codec; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -1789,7 +1789,7 @@ These are one-line cautions; the owning pages hold the derivations.
 ## Performance work
 
 Judged by code, disassembly, and deterministic work counters, which alone set
-ceilings and gate a change. `world.gpu-timing` and `world.fps` readings are
+ceilings and decide a cost claim. `world.gpu-timing` and `world.fps` readings are
 evidence beside the counts of the same run, never alone, and are taken on a
 quiet machine ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
 Measure before and after on the same scene, as one GPU run at a time
@@ -1841,8 +1841,8 @@ to isolate each sky change with cadence enabled; each has its own ceilings
 identity must match the ceilings; absent cadence samples are not measured zeros.
 The Nexus and courtyard workloads (`tests/Puck.Counters/nexus.world.json` and
 `courtyard.world.json`) inherit the shipped scenes and use `counters.script.txt`
-at the fixed counters camera and 1440x810 floor grid. Record their own ceilings
-on the floor GPU. Count the tape's and gradient selection's shape evaluations
+at the fixed counters camera and 1440x810 floor grid; their ceilings come from
+the floor GPU. Count the tape's and gradient selection's shape evaluations
 alongside the work they save; a lower derivative count alone is insufficient.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
@@ -1864,11 +1864,9 @@ and exits 1. `--report <file>` judges or records a saved report without a GPU;
 otherwise the verb needs both backends and runs under the GPU grant.
 The dynamic-resolution step budget reads the backend's first device, expanded
 from shared defaults (`WorldDynamicResolution.StepBudgetPerPixel`).
-After changing the codec, compare all shipped ledgers and perturbed saved
-reports through `CountersCeilingsCompactLawTests`, run the schema counters laws
-and the dynamic-resolution budget laws, and run every recorded workload's
-`counters --check` on the granted device. A format-only change migrates the
-ledgers from their existing readings, never by a GPU re-record.
+`CountersCeilingsCompactLawTests` round-trips the shipped ledgers and perturbed
+saved reports through the codec without a GPU. A format-only change migrates
+the ledgers from their existing readings, never by a GPU re-record.
 
 **Qualification judges a published package, not a change.** `puck qualify
 <package>` holds CI's published World (`artifacts/world`, never a source build)
@@ -1982,10 +1980,9 @@ off writes only the current reactivity word, counted as one stored word,
 without reading or writing the four K-history words. The
 `interleaved`, `ownership`, `light-motion`, `occluder-motion`, `receiver` and
 `reprojected` detail rows partition secondary lit pixels and their march steps
-with reuse on; off-switch fresh marches stay in the plain shadow row.
-Run `temporal-shadows` on both backends for image qualification. Qualify its
-receiver-only shader mutation separately, and record the counted-quarter
-comparison and floor-device ceilings before claiming savings verified.
+with reuse on; off-switch fresh marches stay in the plain shadow row. A claim
+that amortization saves work rests on those rows' counted comparison; the
+`temporal-shadows` canary captures the images on both backends.
 
 One shadow kernel and one kernel per views variant serve every fade capacity:
 they compile both fade slots and read the active fade count from the pass
@@ -2892,126 +2889,55 @@ Never copy bytecode between trees or add a second cache: the cache
 is the one. To make a host really compile, as `puck shaders compare --build`
 must, point `-p:PuckShaderCacheDirectory` at an empty directory.
 
-The [`verification`](../verification/SKILL.md) skill owns the gate route, the
-CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which
-checks a render change owes. Say plainly what a change was not checked against. Only `puck parity`'s
-stations gate GPU kernel behavior by machine.
+`dotnet build src/Puck.SdfVm -c Release` runs DXC and needs `dxc` on `PATH`.
 
-```bash
-dotnet build src/Puck.SdfVm -c Release                      # runs DXC; needs dxc on PATH
-dotnet test tests/Puck.SignedDistance.Tests -c Release      # ISA packing, Lipschitz, parts, rigid leaves, grid, SdfBakerLawTests
-dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
-dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
-dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests"
-dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
-dotnet test tests/Puck.World.Client.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Presentation.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
-puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
-puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
-puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
-puck canary shadow-slots --debug-layers                      # two shadow slots at high, one at medium, unused and inactive fade slots zero on both backends
-puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
-puck counters --check                                       # counters workload on both backends; deterministic counts must agree and hold their ceilings
-puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
-puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
-puck canary --capability gpu --backend vulkan               # a per-change GPU check on one backend (vulkan or directx); the verdict names the backend, so it is never the both-backend pass
-dotnet test tests/Puck.Shaders.Tests -c Release             # includes ShaderPipelineRenderNodeLawTests, ShaderPipelineVersionLawTests and ShaderPackageLawTests (no device)
-```
-
-The sixteen pipeline canaries are the machine check for `Puck.Shaders` pipelines:
-an arithmetic feedback oracle, the shipped ink pipeline's exposure regions, a
-broken middle-pass edit followed by a corrected one, two valid edits back to
-back (only the latest renders), compute-compute-fullscreen
-over half-float intermediates, sparse bindings, a raw buffer and the
-`vertex: "Position"` adapter with per-stage oracles through output selection,
-a resize installed while paused and applied while running, exact per-pass work
-counts that must read the same on both backends, a committed per-instance
-override that renders after a relaunch on the saved document, a relocated
-package whose source tree is gone rendering a saved override (an altered
-package file fails by its pin), a candidate refused by `SHADERPIPE_BUDGET`
-under a `pipeline.budget` cap with exact counts while the installed graph keeps
-running, a running instance whose graph is replaced and whose row is removed
-and reloaded three times over, an edit whose second image `gpu.faults` fails on
-the real device, refused with `GPU_CREATION_FAULT` while the instance's owned
-bytes return to its installed graph's and a clean retry installs, two indexed,
-depth-tested geometry passes continuing one color and one depth attachment,
-with a fullscreen pass sampling by UV the right way up, a generated echo pass
-reading back every frame-block sentinel (an echo expecting two members to hold
-each other's sentinel turns their pixels red), one generated echo per shipped
-interface family (the ink passes, the package canary's tint, `sdf.film-grain`,
-`place`, `overlay` and the SDF engine's `sdf.world`; `sdf.bricks` and the
-conversion packages share ink finish's block) reading its frame and pass blocks
-back (`interface-echo`,
-each perturbed twin turning its last pixel red), and, in a World with `dxc`
-hidden from its path, the shipped ink pipeline rendering from its stored
-package and a relocated package from its binaries while an unpackaged source
-row is refused by `SHADERPKG_ABSENT`.
-Each proof runs once per backend, and an absent GPU or compiler is reported as
-unsupported rather than passed, except in a leg that hides the compiler.
-`puck canary --backend vulkan` (or `directx`) runs each proof on that backend
-alone for a per-change check; the plan and verdict lines name the backend
-that ran, and `--merge` refuses the option because the gate holds both. A
-claim that holds on both backends still needs a run without it. `puck parity`
-has no such option: its state and pixel verdicts compare the two backends. Under
-`puck canary --debug-layers` the runner fails every leg on any
-`[vulkan-debug] validation` or `[d3d12-debug]` line, and on
-`[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
-`Puck.Cli`). On Vulkan the flag also turns on synchronization validation
-(`VulkanNativeInstanceApi.LinkCreateChain`, `VulkanInstanceCreateChainLawTests`),
-so a missing or short barrier fails the leg as a `SYNC-HAZARD-*` line; fix the
-barrier in the engine, never filter the message. A buffer the host reads after a
-submission gets a barrier to `GpuStage.Host` and `GpuAccess.HostRead` behind its
-last device write (`GpuKernelCounters.RecordCopy`, `VulkanSurfaceReadback.Record`). The Vulkan loader's `general` notices about the machine's own
-layers do not count, and the Direct3D 12 drain never prints a pipeline-library
-miss, which the cache counts instead. No manifest asserts validation lines
-itself; run `pipeline-churn` and `pipeline-fault` with `--debug-layers` for
-the validation proof.
-`ShaderPipelineRenderNodeLawTests` drive the render node through its factory
-seams without a device: refusal of a candidate, a float-output candidate, a
-selection or a resize whose allocation fails partway (exact disposal counts),
-every creation of a replacement failed in turn through `GpuCreationFaults`,
-a planned steady state and replacement peak equal to the bytes the fake
-creates for every graph shape (the fake counts them independently), a candidate
-one byte over the budget refused with nothing created and the same candidate
-installed at exactly its peak, zero managed bytes per steady-state
-frame (including a float output), retirement of the old graph once the queue
-finishes the node's latest submission and never through a device drain, with
-only the two published images outliving it, owned bytes that stay at one graph
-plus those images across eight paused replacements, disposal that waits on
-nothing after a refused candidate and a paused superseding install, no shader module or pipeline created on the frame thread by any
-install (counted by creating thread), the installed graph presented on every
-frame while a build is held in the driver, a reload that installs on a paused
-node without a step while the replaced image stays published, a selection on
-that unrendered graph held for its first frame, and a resize that rebuilds
-beside the installed graph, restarts only history whose extent changed, and
-installs while paused without rendering.
-`ShaderPipelineVersionLawTests` plan a forwarding chain declared out of order
-(readers before the overwrite, a cycle refused naming both passes, each
-forward refusal by its code, one storage per chain) and check that the node
-records exactly the planned barriers on the fake.
-Their `.Work` partial derives the feedback graph's exact per-pass counts
-(`GpuWorkReport` lines), proves a reset, reload or resize withdraws
-the sample until a newer submission completes, and checks the
-`pipeline-counters` canary's expected lines against its own fixtures, so a
-change that moves a count updates the law and the canary together.
-Pipeline buffers are raw (`ByteAddressBuffer`), bound through
-`IGpuBindings.WriteBuffer` with a zero element stride.
-`puck parity` checks a content gate, the exact `stateHash`, and per-tile pixels
-under `tests/Puck.Parity/parity.contract.json`; a station's thresholds are
-recalibrated by hand in the change that moves them, never tightened unasked.
-The path-profile fixture (`paths.puck`) is booted by hand on each backend
-and compared with `puck parity compare … --contract tests/Puck.Parity/paths.contract.json`;
-the camera-inside world is booted by hand to prove every capture refuses. Both
-recipes are in the [parity README](../../../tests/Puck.Parity/README.md). There
-is no text or glyph station. Headless runs register no render envelope, so
-placement admission always fits there; verify headroom or probe changes by
-adding a placement live in a rendered session.
-
-Then look at it: `dotnet run --project src/Puck.World -c Release --
+A render change lands on the
+[landing bar](../verification/SKILL.md#the-landing-bar): a clean build of what
+it touched and the change shown working. For render work, show it by running
+it and looking: `dotnet run --project src/Puck.World -c Release --
 --exit-after-seconds 0`, or, with a world already attached over MCP,
 `puck_exec` and `puck_capture_frame` against the live process. A claim about
-how something renders is unverified until a capture has been inspected on both
-backends.
+how something renders rests on an inspected capture, and a cost claim on
+counted work ([Performance work](#performance-work)); say which backends you
+looked at and what the change was not checked against. Headless runs register
+no render envelope, so placement admission always fits there; check headroom or
+probe changes by adding a placement live in a rendered session.
+
+These tools are [optional checks](../verification/SKILL.md#optional-checks),
+for when a change reaches more than running it shows. Those that open a device
+are [GPU legs](../verification/SKILL.md#gpu-legs):
+
+```bash
+dotnet test tests/Puck.SignedDistance.Tests -c Release   # ISA packing, Lipschitz, parts, rigid leaves, grid, bakes; no device
+dotnet test tests/Puck.Shaders.Tests -c Release          # render node, forwarding chains, packages; no device
+puck parity                                              # parity world offscreen, Vulkan then Direct3D 12: content, exact stateHash, per-tile pixels
+puck canary <names> [--backend vulkan|directx]           # launches the real World against each manifest
+puck counters [--check]                                  # counters workload on both backends; deterministic counts must agree
+puck qualify artifacts/world                             # a published package against the release profile; --list boots nothing
+```
+
+A canary's verdict names the backend that ran it, so a `--backend` run never
+stands for both. `puck parity` has no such option: its state and pixel verdicts
+compare the two backends. The path-profile and camera-inside recipes are in the
+[parity README](../../../tests/Puck.Parity/README.md). The `pipeline-*`,
+`interface-echo` and `no-device-compile` canaries exercise `Puck.Shaders`
+pipelines on a device; each manifest says what it proves.
+
+Under `--debug-layers` (`puck canary --debug-layers`, or the World flag) any
+`[vulkan-debug] validation` or `[d3d12-debug]` line, or `[d3d12] debug layer
+requested but not loaded`, is a failure (`DebugLayerOutput` in `Puck.Cli`). On
+Vulkan the flag also turns on synchronization validation
+(`VulkanNativeInstanceApi.LinkCreateChain`, `VulkanInstanceCreateChainLawTests`),
+so a missing or short barrier prints a `SYNC-HAZARD-*` line; fix the barrier in
+the engine, never filter the message. A buffer the host reads after a
+submission gets a barrier to `GpuStage.Host` and `GpuAccess.HostRead` behind its
+last device write (`GpuKernelCounters.RecordCopy`, `VulkanSurfaceReadback.Record`).
+The Vulkan loader's `general` notices about the machine's own layers do not
+count, and the Direct3D 12 drain never prints a pipeline-library miss, which
+the cache counts instead.
+
+Pipeline buffers are raw (`ByteAddressBuffer`), bound through
+`IGpuBindings.WriteBuffer` with a zero element stride.
 
 ## Converging captures
 
@@ -3071,8 +2997,8 @@ only while `SdfTemporalHistory.Stands` finds a render now would feed the same
 temporal inputs (jitter always; previous view and poses where the pass reads
 motion). A new temporal input a pass reads joins `Stands` in the same change.
 `SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
-runtime's convergence laws hold these. Run the `temporal-jitter` and
-`temporal-motion` canaries on both backends after changing this contract.
+runtime's convergence laws hold these without a device; the `temporal-jitter`
+and `temporal-motion` canaries exercise it on one.
 
 ## Temporal reconstruction
 
@@ -3110,11 +3036,11 @@ arrival residency's (`SdfWorldPipelines.RequestResolve`, from the build source
 `CanFollow` fails and a temporal view crossing a portal holds the departed world
 (`ATemporalViewCrossesToAnotherResidencyInPlace`; `portal-walk` crosses with
 `world.temporal on` and holds its crossing frame to a relaunch's spatial one
-exactly). Run `temporal-convergence`,
-`temporal-ghosting`, `temporal-disocclusion` and `temporal-reset` on both
-backends with `--debug-layers` after changing the resolve, the fragment or the
-reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
-hold the plan and the convergence rule without a device.
+exactly). `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
+hold the plan and the convergence rule without a device; the
+`temporal-convergence`, `temporal-ghosting`, `temporal-disocclusion` and
+`temporal-reset` canaries exercise the resolve, the fragment and the
+reprojection on one.
 
 `temporal-standing` pins the absence of further temporal shading and resolve
 work after a still camera converges. The completed World submission stays the
@@ -3123,8 +3049,7 @@ retain the previous sample's counts, so those historical counts are not new
 work. Its camera-pan control resumes both passes. `place-sharpen` captures the
 production Place pass at equal extent and checks exact analytic UNORM colors
 at zero, full and partial strength, with flat and saturated edges. Its control
-disables `sharpen` while keeping full strength. Run both on Vulkan and Direct3D
-12 with `--debug-layers`; both require `gpu` and belong to the merge selection.
+disables `sharpen` while keeping full strength.
 
 ## Dynamic resolution
 
@@ -3164,9 +3089,7 @@ counter invalidation; device loss drops renders whose completion is unobserved.
 Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one
 demand), and the step budget comes from the embedded `counters.ceilings.json`,
-so `puck counters --record` moves the budget. Run
-`WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary on both
-backends with `--debug-layers` after changing it.
+so `puck counters --record` moves the budget.
 
 ## Route adjacent work
 
@@ -3178,5 +3101,5 @@ backends with `--debug-layers` after changing it.
 | `maths-usage` | Fixed-point primitives and determinism for the query evaluator and anything simulation-facing. |
 | `dotnet10-performance` | C# hot paths on the host side (packing, emission, grid building). |
 | `documentation` | Editing the rendering handbook, reference pages, or READMEs. |
-| `verification` | Running gates, proving red legs, GPU legs under a grant, flake versus failure. |
-| `review-passes` | Briefing a review-and-fix pass over a render lane; the runtime contracts supply its hunt list. |
+| `verification` | The landing bar, optional checks, GPU legs one at a time per GPU, flake versus failure. |
+| `review-passes` | A review-and-fix pass over a render lane when one is called for; the runtime contracts supply its hunt list. |

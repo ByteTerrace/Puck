@@ -83,17 +83,14 @@ current declarations and read each entry's `basis`, `argument`, and
 
 ## Verify
 
-The floor is one command — `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`,
-under thirty seconds. It is the Default tier, and the only one carrying the
-coverage ratchet and both leg gates, so every change owes it and most changes
-owe nothing more. Run the Deep tier (`--explicit on --filter-trait tier=Deep`) before committing;
-the Exhaustive tier on demand only. No tier measures time; cost is `puck bench`'s.
-
-**Do not reflexively run the `exhaustive` tier.** It takes minutes; narrow it to one law with
-`--explicit on --filter-display-name '<law-id>*'` (maths-laws owns the filter's details). Run it only when the member you touched names it as its gate of
-record. A public API change also requires a law or precise waiver
-under `maths-laws`. Report the exact commands, and distinguish failures caused
-by the change from pre-existing ones.
+The quick check is one command — `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`,
+under thirty seconds. It runs the Default tier, which carries the coverage
+ratchet and both leg checks: a new public Maths member fails it until
+`maths-laws` classifies the member with a law or a precise waiver. The Deep
+tier (`--explicit on --filter-trait tier=Deep`) and the Exhaustive tier are
+optional; Exhaustive takes minutes, so narrow it to one law with
+`--explicit on --filter-display-name '<law-id>*'`. No tier measures time; cost
+is `puck bench`'s. Report the exact commands you ran.
 
 ## Load the full reference selectively
 

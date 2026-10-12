@@ -770,11 +770,11 @@ The contracts a change must keep:
 
 ## Rules for changes
 
-- A change that moves simulation math is EXPECTED to change replay hashes;
-  re-record any persisted tape it invalidates in the same change
-  (`AGENTS.md` rule 4).
-- Tape byte-layout and semantic changes update the first format in place. Regenerate
-  relevant verification recordings; do not add compatibility readers or version bumps.
+- A change that moves simulation math is EXPECTED to change replay hashes
+  (`AGENTS.md` rule 4); recorded tapes it moves are re-recorded when those
+  checks next run ([optional checks](../../verification/SKILL.md#optional-checks)).
+- Tape byte-layout and semantic changes update the first format in place; do
+  not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the
   shared command leaf, and its vector fields cross only when every lane is
   finite (refused on both encode and decode); keep its explicit two-direction

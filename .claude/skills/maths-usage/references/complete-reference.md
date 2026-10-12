@@ -288,8 +288,8 @@ binds each id to the code that runs it. Per-member classification — covered an
 by which case, waived, or uncovered — is queryable in `coverage-manifest.json`
 beside them.
 
-**The floor: one command.** Anything under `src/Puck.Maths` owes this, whichever
-wing it touched, and in the ordinary case owes nothing else:
+**The quick check: one command.** It is the cheapest way to see a change under
+`src/Puck.Maths` working, whichever wing it touched:
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
@@ -312,8 +312,8 @@ in a change loop.
 | Tier | Command | Budget | When |
 |---|---|---|---|
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
-| **Default** | *(a plain run — no filter)* | < 30 s | **every change**, unconditionally |
-| Deep | `--explicit on --filter-trait tier=Deep` | minutes | **before you commit**, and before any rounding change lands |
+| **Default** | *(a plain run — no filter)* | < 30 s | the quick check for a change |
+| Deep | `--explicit on --filter-trait tier=Deep` | minutes | optional breadth, worth it for a rounding change |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
@@ -322,12 +322,11 @@ when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.
 
-Then, by what you touched — **only if the member's classification still points
-at one of these**:
+To look closer at what you touched, these are the families that cover it:
 
-| You touched | Also run |
+| You touched | Families |
 |---|---|
-| A rounding path, a value kernel, an exhaustive claim | the suite again with `--explicit on --filter-trait tier=Deep` — Deep is the tier that has to pass before a rounding change lands |
+| A rounding path, a value kernel, an exhaustive claim | the suite with `--explicit on --filter-trait tier=Deep` |
 | `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
 | `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
 | `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
@@ -364,18 +363,16 @@ derived from those declarations on every run, so a row closes only by correcting
 the doc (or the code) and re-spelling the leg — mechanism in
 [FixedPoint → Verifying changes](../../../../src/Puck.Maths/FixedPoint/README.md#verifying-changes).
 
-**A changed hash after a deliberate correction is not a failure.** Re-run the
-tier to prove determinism still holds, and re-record any persisted replays or
-baselines the correction invalidates in the same change.
+**A changed hash after a deliberate correction is not a failure.** Re-record a
+persisted replay or baseline the correction invalidates when you next run it.
 
 ---
 
 ## 4. Governance
 
-Whether a specialized primitive may be collapsed into the generic algebra tier
-is decided by two standing gates: the generic replacement must carry the **same
-correctness and the same performance guarantees**. No retained artifact
-establishes the performance evidence behind the existing type boundaries; the
-`complex.*`, `split.*`, and `algebra.quadratic-*` law families pin only the
-correctness half. Treat retained types as retained. Revisit one only by
-remeasuring from scratch, and never collapse one on argument alone.
+A specialized primitive collapses into the generic algebra tier when the
+generic replacement carries the **same correctness and the same performance**.
+No retained artifact holds the performance evidence behind the existing type
+boundaries, and the `complex.*`, `split.*`, and `algebra.quadratic-*` law
+families pin only the correctness half, so measure the performance side before
+collapsing one.

@@ -558,8 +558,8 @@ idempotent status.
 
 ## Verification
 
-Run the focused laws after changing frames, handoff continuity, hysteresis,
-contact sweeping, or crossing durability:
+The focused laws for frames, handoff continuity, hysteresis, contact sweeping,
+and crossing durability:
 
 ```text
 dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests"
@@ -568,7 +568,8 @@ dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release 
 dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 
-Run `puck canary seamless-adjacency` for the driven crossing on NW's east face
+To watch a crossing run end to end, use `puck canary seamless-adjacency` for
+the driven crossing on NW's east face
 (its tape set pairs NW's departure with NE's own taped arrival and names the
 crossing verified),
 `puck canary quilt-nw-gap-edge-carry` for the undriven one (a body placed past

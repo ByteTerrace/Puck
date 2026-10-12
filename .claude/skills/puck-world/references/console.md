@@ -455,8 +455,8 @@ That table carries the only three facts the document model cannot supply: whethe
 the section is a keyed list, which member is its key, and its
 upsert/remove `WorldMutation` pair. These two generic verbs are the whole surface; a
 per-section verb is the regression this design exists to prevent. `puck schema` documents payload shapes — cite it, but there is
-deliberately NO runtime schema validation (owner deferred the gate; validation
-stays at the full-document revalidation on apply).
+deliberately NO runtime schema validation (validation stays at the
+full-document revalidation on apply).
 
 Same rule for per-field convenience: a BESPOKE per-section verb that reads a row,
 changes one field, and submits the whole row back is a stale read against the

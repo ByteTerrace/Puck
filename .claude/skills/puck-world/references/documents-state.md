@@ -770,18 +770,14 @@ respawn, and pickup state in records. Interaction geometry resolves the logical
 role to a body, while effects read or write the same instance through lexical
 bindings.
 
-Pool lifetime tests must include release/reclaim and export/reload, including a
-reclaimed nonzero generation and pair carriers. Exercise module read/action
-exports through lexical bindings and include lossless compile/decompile laws.
-For retained turns, declare the complete pool closure (domain, generation, and
-field rows), account for depth plus one pending segment, and cover claim/release,
-advancing-field clocks, checkpoint/hash continuation, outside-row invalidation,
-and atomic `rewindGroup`. A write outside the closure makes the turn unrewindable;
+Pool lifetime hazards are release/reclaim and export/reload, including a
+reclaimed nonzero generation and pair carriers; module read/action exports go
+through lexical bindings and compile/decompile losslessly. A retained turn
+declares its complete pool closure (domain, generation, and field rows) and
+accounts for depth plus one pending segment; claim/release, advancing-field
+clocks, checkpoint/hash continuation, outside-row invalidation and atomic
+`rewindGroup` all hold across it. A write outside the closure makes the turn unrewindable;
 it must never be silently omitted from a compact retained record.
 
 After changing this surface, regenerate schema, vocabulary, and name-registry
-outputs with their CLI owners and run the affected `tests/Puck.State.Tests`,
-`tests/Puck.State.Rules.Tests`, `tests/Puck.World.Transpiler.Tests` and World
-suites — `puck affected` against the merge base names which of
-`tests/Puck.World.Tests` and the Server, Client, Games, Machines, Presentation
-and Silo suites the change reaches. A generated projection probe must cover every new arm.
+outputs with their CLI verbs.

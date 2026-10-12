@@ -195,8 +195,8 @@ that needs a higher stress rate authors its own `rateHz`. Every entity is advanc
 a `PlayerIntent` — poses are never accepted from outside the simulation;
 drivers only produce inputs, poses flow out through the tick snapshot. The
 guarantee pins the MAPPING, not the values: a deliberate correction to math
-or logic is EXPECTED to change replay hashes — make the correction and
-re-record any persisted tape it invalidates in the same change. Client-side
+or logic is EXPECTED to change replay hashes — make the correction, and never
+keep a wrong value to hold a hash. Client-side
 (`src/Puck.World.Client`, and `src/Puck.World`'s presentation glue) is presentation: floats are fine there, nothing
 feeds back into the tick.
 
@@ -487,8 +487,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   of the process as one set, and a crossing is verified only when its
   departure and arrival are both on tapes of that set; a crossing to a remote
   or untaped authority is `NOT VERIFIED` and fails the verb.
-- Committed proofs: `puck canary` manifests under `tests/Puck.World.Canaries/`
-  for every load-bearing seam, including `world.grant`-driven claims (a
+- `puck canary` runs the manifests under `tests/Puck.World.Canaries/`, an
+  optional check (see
+  [optional checks](../verification/SKILL.md#optional-checks)). They cover
+  seams such as `world.grant`-driven claims (a
   command claim's `stream` override lets an accepted outcome expect its
   confirmation on stderr, the shape server narration always uses) and
   multi-authority federation (`four-corners-sharded`: a leg's `authorities`
@@ -504,21 +506,20 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   runs each leg alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
   selection's World boots, spawns, builds and leg budget without running;
-  the automatic set and `--merge` are refused past their ceilings recorded
-  in `CanaryCeilings.json`, which a deliberate growth records with
-  `puck canary-ceilings` in the same change. A GPU selection first warms the engine pipeline cache
+  the automatic set and `--merge` are refused past the ceilings in
+  `CanaryCeilings.json` (`puck canary-ceilings` rewrites them). A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
-  are proved in `tests/Puck.World.Server.Tests` (`AuthorityAdministrationLawTests`,
-  `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
-  behind — its history is in git, and its contract is validated by running
-  the app until a law or canary owns it. New verification needs no one's
-  permission: it lives as laws, canaries or `puck` verbs under the gate.
-  Standalone runners, record directories and `--validate-*` flags stay banned
-  (`AGENTS.md` rule 3). Do not repair a rotted fixture — quarantine it and move
-  on (validation currency is running the app). A retired runner is deleted with
-  its directory, never kept alive to announce that it no longer runs.
+  are exercised in `tests/Puck.World.Server.Tests` (`AuthorityAdministrationLawTests`,
+  `EngageAuthorityLawTests`, `ControlApplicationLawTests`).
+- **Verify by running or measuring**: run `Puck.World`, a stdin script, or a
+  `puck test` world ([the landing bar](../verification/SKILL.md#the-landing-bar)).
+  Write a test only where running cannot show the behavior and the test will
+  outlive the next rewrite; a test the change breaks is updated or deleted in
+  the same change. Standalone runners, record directories and `--validate-*`
+  flags stay banned (`AGENTS.md` rule 3); a retired runner is deleted with its
+  directory.
 
 A minimal smoke session:
 

@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns gates, red legs and GPU execution; review-passes owns launching and closing cross-family review-and-fix passes; documentation owns agent-document authoring and checks.
+description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns the landing bar, optional checks and GPU execution; review-passes owns launching and closing optional review-and-fix passes; documentation owns agent-document authoring and checks.
 ---
 
 # Orchestration
@@ -67,91 +67,32 @@ to no one lane: a delegate edits them for what its change delivers, ticking an
 item it closed and correcting text its change made stale, and the brief says so.
 
 The message is the notification; git is the record. Inspect the reported
-changes and checks before merging, following
-[`verification`](../verification/SKILL.md). At each merge, turn every GPU leg
-or re-record owed in a commit body into a tracked item: the commit records a
-debt, but assigns it to no lane. Carry each item into the lane's own GPU run and
-close it only with that run's evidence.
-
-## Follow the owner's qualification scope
-
-An owner taking over a prepared campaign may require one combined qualification
-on one machine. In that case, integrate the named branches serially in a local
-candidate, keep the integration target at its last green head, and use focused
-checks while resolving source overlaps. Run the full CPU gate and the owner's
-single GPU qualification on the stable combined head before fast-forwarding the
-target. One heavy build or gate owns the machine at a time. A failure is fixed
-and rechecked with the smallest affected selection; repeating the full
-qualification requires a concrete reason. The per-lane route below applies
-when the owner has not supplied that combined scope.
+changes and what the lane ran to show them working before merging
+([landing bar](../verification/SKILL.md#the-landing-bar)).
 
 ## Land each lane on its own
 
-A lane lands as soon as its own head passes: the lead merges the integration
-head into it, runs `puck gate --merge-base <integration-branch> --gpu` on that
-head, and fast-forwards the integration branch. Qualification is
-measured in minutes. Never hold a finished lane for others to make a batch, and
-never assemble a multi-lane qualification branch; a lane that cannot land alone
-is a dependency to name in the brief, not a reason to wait.
+A lane lands as soon as it meets the
+[landing bar](../verification/SKILL.md#the-landing-bar): the lead merges the
+integration head into it, builds what the merge touched, and fast-forwards the
+integration branch. Never hold a finished lane for others to make a batch; a
+lane that cannot land alone is a dependency to name in the brief. Gates,
+parity, canaries and counters checks run when the owner asks for a
+qualification, on the head the owner names. A red check on the integration
+branch is the next piece of work, not a reason to stop landing.
 
-Spread qualification across the fleet. A partner merges the integration head
-into its own branch and runs `puck gate` without `--gpu` on its own machine
-before it pushes, naming the verdict in its push; the lead then adds only the
-GPU legs that need its devices and the fast-forward. The lead's machine
-qualifies its own local lanes and the GPU legs, not every partner's CPU suites.
-
-A gate blocks a lane, never a partner: the partner takes its next work from its
-track or the ready queue.
-
-While the owner holds a campaign in progress, no lane runs gates: a lane lands
-on a zero-warning build of what it touched and its own laws with their red legs
-proved, and parity, canaries, counters checks and `puck gate` wait until the
-owner calls for qualification. Timings and captures the work itself needs are
-not gates and still run.
-
-Qualify a lane once, on the head it lands from. A gate costs an hour on a busy
-machine, and every move of the integration branch invalidates it, so:
-
-- A lane whose change owes GPU legs runs no `puck gate` without `--gpu`: that
-  gate repeats inside the `--gpu` gate it still needs. Until the lead grants the
-  GPU, it stops at a zero-warning build of what it touched, its new and changed
-  laws with their red legs proved, and the `--check` forms of files it changed.
-- A lane parked for a shared resource (the GPU, another lane's landing) merges
-  no intermediate integration tip. It merges the tip once, when it is about to
-  qualify, and the lead never asks it to catch up in between.
-- When several lanes wait on one GPU, grant it to them in landing order and let
-  each merge the tip its predecessor left, so no lane qualifies twice.
-- A check already failing at the base is never run again to be judged: name
-  the known failures (from the base's own run) in the brief, run the selection
-  without them (`puck canary <names>`, `--backend`), and rerun a known failure
-  only to show it now passes. A known timeout waited out again buys nothing.
-- Give every brief with GPU legs a time box and a short list of what to do
-  when a leg fails: rerun once alone, record as known or open, and hand back.
-  Investigating a failure is a lane of its own, never the integrator's.
+A brief that grants GPU legs carries a time box and what to do when a leg
+fails: rerun it once alone, then fix it or hand it back as open. Investigating
+a failure is a lane of its own, never the integrator's.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
 it afterwards.
 
-Before calling a counted-work change a regression, read the history: a commit may
-have deliberately changed what is counted and owed a re-record. An owed line in a
-commit body is a debt. Track each one when merging, and settle it on the lane's
-merged head, under a GPU grant when it needs the GPU, before it lands, with the
-reason in the commit that records it. A counters ceiling the lane moves is
-re-recorded on every device the ledger holds, each on its own machine
-([`verification`](../verification/SKILL.md#gpu-legs)).
-
 Partners cannot see unpushed lanes. When a partner designs against code that
 exists only on the lead's machine, send it those lanes' contracts and answer its
 contract questions from the local code; a stale remote makes false "failing"
 claims.
-
-When a lane moves counted work, run every counters workload under
-`tests/Puck.Counters` it reaches, not just the default. Inspect the directory
-before naming the inputs: the worlds, scripts and ceilings sit directly in it.
-Read each ledger's workload and script paths to select the matching inputs. Run
-each set as
-`puck counters --check --world <world> --script <script> --ceilings <file>`.
 
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated
@@ -223,8 +164,8 @@ model on subtle or correctness-heavy work. Codex's two models, Astra
 both free to use and encouraged, for implementation and for review-and-fix
 passes; pass `--model` and `--effort` on every launch
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Keep every
-Codex slot implementing; a review takes a slot only under the narrow rule in
-[`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review).
+Codex slot implementing; a review is optional
+([`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review)).
 Delegating to subagents needs no one's permission. A follow-on wave much larger
 than the last (dozens of agents, or a second full fan-out) is a spend decision:
 state its plan and cost to the owner in one sentence before launching it.
@@ -250,14 +191,13 @@ thing the owner cares about, not machine load alone:
 
 - time from a lane's last commit to its landing on the integration branch;
 - implementation slots (Codex and agent) not implementing right now;
-- review passes per landed lane, and qualification wall time per landing;
 - the board's age against the newest lane change.
 
 Arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a
-lane waiting more than an hour to land, an idle slot with ready work, a second
-review on a lane outside determinism, formats or federation, or a stale board.
+lane waiting more than an hour to land, an idle slot with ready work, a review
+or check holding a lane that already meets the landing bar, or a stale board.
 
 When an owner correction reveals a process rule, change the repository skill
 that drives the behavior (this one, `review-passes`, `verification`) in the
@@ -273,7 +213,7 @@ play. When no written contract settles it, rule by the long-term principle in
 [AGENTS.md](../../../AGENTS.md#core-rules), write the ruling into the contract's
 owning document in the same change, and let the owner review it with the
 delivered batch; take it to the owner first only when it is a product
-trade-off. Never weaken or delete a law to make the merge pass.
+trade-off. Change a test only to match the ruled behavior.
 
 ## Message partners
 
@@ -301,6 +241,6 @@ listed name, which survives a restart where its bridge address does not.
 
 | Skill | Route there for |
 |---|---|
-| [`verification`](../verification/SKILL.md) | Gate selection, private CLI copies, red legs, GPU execution and finished-lane evidence. |
-| [`review-passes`](../review-passes/SKILL.md) | When a lane gets a review, review briefs, companion launch commands, fix verification and landing on the author's branch. |
+| [`verification`](../verification/SKILL.md) | The landing bar, optional checks, private CLI copies and GPU execution. |
+| [`review-passes`](../review-passes/SKILL.md) | Optional review passes: briefs, companion launch commands and landing fixes on the author's branch. |
 | [`documentation`](../documentation/SKILL.md) | Writing and checking agent-facing documents and skills. |
