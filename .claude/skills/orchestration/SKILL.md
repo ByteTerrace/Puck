@@ -31,6 +31,11 @@ it, or delegate it to them. Every queue item has exactly one recorded owner, and
 a handoff records the new one; an item with two owners is a defect to resolve
 before either partner continues.
 
+A delegated lane does its brief itself and starts no sub-agents of its own. A
+lane that fans out hands back before its children finish, their reports never
+reach it, and the integration it owed falls to another round. When work splits,
+the lead splits it into lanes.
+
 ## Write and track assignments
 
 [AGENTS.md](../../../AGENTS.md#delegated-work) owns what a brief holds and how
