@@ -39,9 +39,8 @@ public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int Peer
 /// </remarks>
 public sealed class WorldPeerHost : IDisposable {
     /// <summary>The ceiling on concurrent in-flight unauthenticated handshakes (a socket accepted but not yet
-    /// admitted or refused). A safety representation constant, never a document knob (AGENTS.md core rule 8's
-    /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
-    /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
+    /// admitted or refused). A safety representation constant, never a document knob: it sizes the
+    /// pre-admission connection table, not a per-world tunable.
     /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (4096, the admitted population
     /// bound) — a stalled handshake never reaches the population table at all, so it needs its own,
     /// smaller ceiling. 64 is chosen against this class's own documented design target ("a trusted-LAN connection

@@ -642,7 +642,7 @@ mutation is sent. Releasing commits one mutation, so one undo reverts the whole
 drag; Escape or a right click cancels and sends nothing. A gamepad drags along
 the camera-relative plane with the sticks, with the same commit rule, as the
 sculptor's pad model did. Before adding the ghost, check whether
-`world.reflow.preview` already draws proposed positions (rule 8).
+`world.reflow.preview` already draws proposed positions (AGENTS.md rule 7).
 
 **Touches:** `Puck.Overlays`, `Puck.World.Client` (the stamper's presentation
 override, the drag state), `Puck.World.Authoring` (`GridSnap`), the editor
