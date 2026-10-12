@@ -228,12 +228,38 @@ Every point answer therefore lies inside its box's bounds, or both refuse. Every
 instruction joins the proof, so adding an instruction to a program can only
 shrink its frame.
 
-A bounds query pays only for what its box can reach. The walk skips a hard-union
-instance whose bound sphere lies, from every point of the box, at or beyond the
-running interval's upper end: the box form of `TryDistance`'s own instance cull,
-resting on the same sphere containment. A box near one object of many walks a
-fraction of the program, and the overload taking `instructionsWalked` reports
-the instructions it visited. A rotation reads each coordinate once per axis:
+A query pays only for what can move its answer. Both walks, `TryDistance` at a
+point and `TryDistanceBounds` over a box, skip the same slices
+(`SdfFieldEvaluator.Cull.cs`):
+- An **instance** that joins the answer by hard union, whose bound sphere lies
+  at or beyond the running answer (for a box, its upper end) from the point or
+  from every point of the box. A scoped instance qualifies too when each scope
+  is one level deep and pops by hard union: inside it a union is the lesser
+  operand, a smooth union at least that less k/4, and a subtraction or
+  intersection at least the accumulated operand, so its radius is widened by
+  that slack, and it is also skipped when every member's own reach sphere
+  clears.
+- A **chain** of shapes from a `ResetPoint` to the next one or an instance
+  boundary, when the sphere around the program's reach sphere of each of its
+  shapes (`SdfProgram.ShapeReachSphere`) clears the running answer, inside a
+  scope the scope's. A union at or above the answer is not taken; a smooth
+  union at least its radius plus a few raws above it rounds h to one and
+  returns the answer bitwise; a subtraction whose negated candidate lies at or
+  below the answer is not taken. So a chain clears with its largest smooth
+  radius as margin, and against the answer's negation too when it carves.
+- When every compose outside a scope is a hard union, the answer is the least
+  of the instances' own answers. The first instance the running answer cannot
+  skip first walks the nearest instance on its own; its answer joins where that
+  instance stands, and every instance whose reach exceeds it (for a point,
+  strictly, which keeps an earlier equal candidate's material) is skipped.
+
+A point walk's skips move no distance, material or gradient. A box walk's skips
+keep its interval an enclosure of every point answer, though a walked
+instance's loose interval could have lowered the lower end. A box near one
+object of many walks a fraction of the program; the overloads taking
+`instructionsWalked` report the instructions each walk visited, and
+`SdfFieldEvaluator.PointWork` and `SdfBoundsCache.ProcessWork` count them
+process-wide. A rotation reads each coordinate once per axis:
 the exact rotation is linear in the point, so its enclosure is that matrix over
 the box, widened by the four raws the point code's two rounded stages can miss
 it by, and met with the step-by-step enclosure. The matrix assumes neither
@@ -296,7 +322,12 @@ queries just off the face, and a large clearance times a large step scale to
 proposing the whole step. `SdfBoundsTightnessLawTests` holds a half turn's
 bounds to the unrotated program's over the box's image, and the box cull to
 walking under half of a twelve-object row while still enclosing every point
-answer. `SdfFieldOverflowLawTests` sweeps programs whose constants and
+answer. `SdfFieldEvaluatorCullLawTests` and `SdfFieldEvaluatorScopedCullLawTests`
+hold every point answer, material and gradient to a cull-off reference (the same
+instructions with no instance declared and every chain opened by a zero
+elongation, which keeps no reach sphere) across scoped, smooth, carved and tied
+instances, and every box's bounds around that reference's answers.
+`SdfFieldOverflowLawTests` sweeps programs whose constants and
 positions reach the carrier's ends, and holds every point answer inside its
 bounds or both refusing.
 

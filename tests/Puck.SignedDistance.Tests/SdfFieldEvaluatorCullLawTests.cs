@@ -9,14 +9,15 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>Proves <see cref="SdfFieldEvaluator"/>'s instance cull is exact-by-construction: wrapping a scattered
 /// field's per-object shapes in <see cref="SdfProgramBuilder.Instance"/> bounds (so the evaluator may skip an
 /// out-of-reach one) must never change a distance, gradient, material, or cast hit the SAME instruction sequence
-/// produces when emitted with no instance metadata at all — the "cull off" reference, since an evaluator over a
-/// program declaring no instances has nothing to cull.</summary>
+/// produces when emitted with no instance metadata and every chain opened by a zero elongation — the "cull off"
+/// reference, since a program declaring no instances has no instance to cull and a chain through an elongation keeps
+/// no reach sphere to skip it by.</summary>
 public sealed class SdfFieldEvaluatorCullLawTests {
     private const int UnionInstanceCount = 12;
 
     // Builds the same field twice over the same instruction sequence: `culled` wraps each per-object shape in an
     // Instance bound the evaluator's cull may act on, `unwrapped` emits the identical instructions with no instance
-    // metadata, so its evaluator declares no instance and skips nothing. Includes one instance of each blend family
+    // metadata and a zero elongation after each ResetPoint, so its evaluator skips nothing. Includes one instance of each blend family
     // IsPureUnionInstance must refuse to cull (SmoothUnion, Subtraction, a PushField/PopField scope) alongside the
     // plain-Union majority, so a law run over both programs exercises the cull's positive and negative cases together.
     private static (SdfFieldEvaluator Culled, SdfFieldEvaluator Unwrapped) BuildFixture() {
@@ -25,6 +26,12 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        void Unwrap(SdfProgramBuilder builder) {
+            if (ReferenceEquals(objA: builder, objB: unwrappedBuilder)) {
+                _ = builder.Elongate(extents: Vector3.Zero);
+            }
+        }
 
         _ = culledBuilder.Plane(
             material: material,
@@ -47,6 +54,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
             void Emit(SdfProgramBuilder builder) {
                 _ = builder.ResetPoint();
+                Unwrap(builder: builder);
                 _ = builder.Translate(offset: center);
                 _ = builder.Sphere(
                     blend: SdfBlendOp.Union,
@@ -71,6 +79,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitSmooth(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: smoothCenter);
             _ = builder.Sphere(
                 blend: SdfBlendOp.SmoothUnion,
@@ -95,6 +104,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitSubtract(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: subtractCenter);
             _ = builder.Sphere(
                 blend: SdfBlendOp.Subtraction,
@@ -118,6 +128,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitScoped(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
+            Unwrap(builder: builder);
             _ = builder.Translate(offset: scopedCenter);
             _ = builder.PushField(compose: SdfBlendOp.Union);
             _ = builder.Sphere(

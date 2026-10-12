@@ -38,6 +38,20 @@ public sealed partial class SdfProgram {
 
         return ReadSkipSphere(word: (BoundsWord() + ((BoundRecordVectors * instruction) * WordsPerVector)), modeMask: uint.MaxValue);
     }
+    /// <summary>Reads the host's reach sphere of one shape: whatever blend joins it, every candidate the shape offers is
+    /// at least the distance to this sphere, the promise the packed per-shape skip sphere makes for a union shape, kept
+    /// here for every shape on a static rigid chain. A query that knows how its blend composes decides whether a far
+    /// candidate can move its answer.</summary>
+    /// <param name="instruction">The zero-based instruction index.</param>
+    /// <returns>The world-space sphere, radius padded as the packed spheres are, with <see cref="BoundModeStatic"/>; or
+    /// <see cref="BoundModeNone"/> when the instruction is no shape or its chain admits no sphere.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The index is absent.</exception>
+    public SdfSkipSphere ShapeReachSphere(int instruction) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: instruction);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: instruction, other: m_instructions.Length);
+
+        return m_shapeReach[instruction];
+    }
     /// <summary>Reads the packed skip sphere of one segment-directory entry.</summary>
     /// <param name="segment">The zero-based directory entry, below <see cref="SkipSegmentCount"/>.</param>
     /// <returns>The sphere, with <see cref="BoundModeNone"/> when the segment always evaluates.</returns>
@@ -107,6 +121,9 @@ public sealed partial class SdfProgram {
 
         bool Owns(int instruction) => ((instruction >= instance.First) && (instruction < instance.End));
     }
+
+    // Per instruction, the host's reach sphere (see ShapeReachSphere), filled by the bounds analysis.
+    private readonly SdfSkipSphere[] m_shapeReach;
 
     // The first word of the per-instruction bound table, then of the segment directory that follows it.
     private int BoundsWord() => ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * ((int)m_words[ProgramMaterialCountLane]))) * WordsPerVector);

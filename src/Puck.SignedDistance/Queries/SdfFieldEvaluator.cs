@@ -31,15 +31,10 @@ namespace Puck.SignedDistance.Queries;
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
 //
-// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/CanCullInstance): a
-// program instance whose whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere
-// bound (SdfInstanceRange, the same bound the GPU beam prepass tile-culls with); TryDistance skips such an
-// instance's instruction slice whenever that bound proves it cannot beat the running best-so-far distance.
-// Exact-by-construction — the skip changes no returned distance, material, or gradient — because a hard union can
-// only ever lower the accumulator, never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any
-// instance containing a PushField/PopField or a bare Onion/Dilate, are never culled: their compose can depend on a
-// candidate farther than the current best, which a bound-only skip cannot reproduce bit-for-bit. Skipping an instance
-// also skips its own point-transform chain, which nothing after it can observe: the program refuses a stream whose
+// THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
+// conservative world-space sphere proves it cannot beat the answer. A point walk's skip changes no distance, material
+// or gradient; a box walk's skip keeps its interval an enclosure of every point answer. Skipping also skips the
+// skipped slice's own point-transform chain, which nothing after it can observe: the program refuses a stream whose
 // next segment reads a point without a ResetPoint of its own (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
 public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (field/sdf-program.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
@@ -94,11 +89,17 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // a chamfer's bevel arm makes the field OVERESTIMATE, so a march advancing by the
     // raw value steps past thin geometry and tunnels.
     private readonly FixedQ4816 m_stepScale;
-    // One conservative world-space bound per hard-union instance (see BuildCullBounds/IsPureUnionInstance), sorted by
-    // First ascending — the order program.Instances declares them in, since only one instance is open at a time.
-    // Empty when the program declares no cullable instance, so TryDistance's cull check is then a single comparison
-    // that never fires and every existing program's answers are unchanged.
+    // One conservative world-space bound per cullable instance (see BuildCullBounds), sorted by First ascending — the
+    // order program.Instances declares them in, since only one instance is open at a time.
     private readonly CullBound[] m_cullBounds;
+    // The member spheres of every scoped instance in m_cullBounds, each instance's a contiguous run.
+    private readonly MemberSphere[] m_members;
+    // Per instruction, the slot of the skippable chain a ResetPoint opens in m_segmentBounds; minus one otherwise.
+    private readonly int[] m_segmentSlots;
+    private readonly SegmentBound[] m_segmentBounds;
+    // Whether every compose outside a scope is a hard union, so the answer is the least of the instances' own answers
+    // and a walk may evaluate its nearest instance first (see ComposesByHardUnion).
+    private readonly bool m_primeable;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -117,7 +118,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         m_instructions = Compile(program: program);
         m_stepScale = ConservativeStepScale(value: program.StepScale);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
-        m_cullBounds = BuildCullBounds(program: program);
+        (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program);
+        (m_segmentSlots, m_segmentBounds) = BuildSegments(compiled: m_instructions, program: program);
+        m_primeable = ComposesByHardUnion(compiled: m_instructions);
+        (m_rotationSlots, m_rotationBounds) = BuildRotationBounds(instructions: m_instructions);
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             // A Detail-flagged shape never reaches the field this evaluator computes (see the ShapeBlend case
@@ -473,93 +477,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             paramName: nameof(convexPolygonProfiles)
         );
     }
-    // Builds this evaluator's exact cull table: one conservative world-space bound per instance whose whole compose
-    // chain is a hard union (IsPureUnionInstance) — the only shape a bound-only skip is provably bit-identical to full evaluation for
-    // (see CanCullInstance's remarks). A program with no such instance yields an empty table.
-    private static CullBound[] BuildCullBounds(SdfProgram program) {
-        var instances = program.Instances;
-        var instructions = program.Instructions;
-        var result = new List<CullBound>(capacity: instances.Count);
-
-        for (var index = 0; (index < instances.Count); index++) {
-            var instance = instances[index];
-
-            // A plane, or any compose the program itself marks as reaching every tile, has no finite bound however
-            // small the instance declared; the program's own test is the one the GPU prepass trusts.
-            if (
-                instance.IsDynamic ||
-                !program.InstanceHasDistanceLowerBound(index: index) ||
-                !IsPureUnionInstance(
-                instance: instance,
-                instructions: instructions
-            )
-            ) {
-                continue;
-            }
-
-            result.Add(item: new CullBound(
-                CenterX: FixedQ4816.FromDouble(value: instance.Center.X),
-                CenterY: FixedQ4816.FromDouble(value: instance.Center.Y),
-                CenterZ: FixedQ4816.FromDouble(value: instance.Center.Z),
-                End: instance.End,
-                First: instance.First,
-                Radius: FixedQ4816.FromDouble(value: ((instance.Radius * CullBoundRadiusScale) + CullBoundRadiusPadding))
-            ));
-        }
-
-        return result.ToArray();
-    }
-    // The bound test: the true Euclidean distance from worldPosition to any point the instance's geometry can ever
-    // occupy is at least (distance-to-center - radius), the same sphere-containment guarantee the GPU beam prepass
-    // already relies on for its own tile cull (SdfInstanceRange's remarks). A hard-union candidate can therefore win
-    // only when that lower bound still beats the running best; ">=" (not ">") matches ResolveWinner's own strict "<"
-    // for Union, so a tie never wins and skipping it changes nothing.
-    private static bool CanCullInstance(CullBound bound, FixedQ4816 resultDistance, FixedVector3 worldPosition) {
-        var delta = new FixedVector3(
-            X: (worldPosition.X - bound.CenterX),
-            Y: (worldPosition.Y - bound.CenterY),
-            Z: (worldPosition.Z - bound.CenterZ)
-        );
-
-        return ((delta.Length - bound.Radius) >= resultDistance);
-    }
-    // An instance is cullable only when every instruction it owns is either a rigid point transform that never reads
-    // or writes the running accumulator (ResetPoint/Translate/Rotate/Scale/Repeat/RepeatLimited/SymmetryPlane/
-    // Elongate) or a ShapeBlend composing by plain SdfBlendOp.Union. Under that restriction the instance's own bound
-    // (a world-space sphere containing every shape it can ever place, however its local point transforms) proves
-    // every candidate it can produce is at least the bound's own lower-bound distance from the query point — so a
-    // union fold over any number of such candidates cannot lower resultDistance below what CanCullInstance already
-    // tests. PushField/PopField/Onion/Dilate, or any other blend (Subtraction/Intersection/smooth/chamfer/Xor),
-    // disqualifies the instance: each composes into the shared accumulator in a way a bound-only skip does not
-    // reproduce bit-for-bit.
-    private static bool IsPureUnionInstance(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) {
-        for (var index = instance.First; (index < instance.End); index++) {
-            switch (instructions[index].Op) {
-                case SdfOp.ResetPoint:
-                case SdfOp.Translate:
-                case SdfOp.Rotate:
-                case SdfOp.Scale:
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited:
-                case SdfOp.SymmetryPlane:
-                case SdfOp.Elongate: {
-                        continue;
-                    }
-                case SdfOp.ShapeBlend: {
-                        if (instructions[index].Blend != ((uint)SdfBlendOp.Union)) {
-                            return false;
-                        }
-
-                        continue;
-                    }
-                default: {
-                        return false;
-                    }
-            }
-        }
-
-        return true;
-    }
     // === The blend accumulator (KEEP IN SYNC with mapCore's shared blend tail + blendShape/blendSmoothUnion) ===========
     // Mirrors the shader's semantics EXACTLY, including op order effects: the material winner is resolved from the
     // PRE-blend (current, candidate) pair using the SAME strict compares a SHAPE or a POP_FIELD candidate gets, then
@@ -587,7 +504,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/field/sdf-shapes.hlsli)
     // ======================================================================================================================
 
-    private static FixedQ4816 EvaluateShape(CompiledInstruction instruction, FixedVector3 p) {
+    private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p) {
         return ((SdfShapeType)instruction.Shape) switch {
             SdfShapeType.Sphere => SdfSphere(
             p: p,
@@ -744,7 +661,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     // The PRE-BAKED quaternion already ran sin/cos host-side. Route through the canonical fused fixed-point kernel so
     // CPU queries do not insert different intermediate rounding boundaries from every other quaternion consumer.
-    private static FixedVector3 RotateByInverseQuaternion(FixedVector3 p, CompiledInstruction instruction) {
+    private static FixedVector3 RotateByInverseQuaternion(FixedVector3 p, in CompiledInstruction instruction) {
         var rotation = new FixedQuaternion(
             X: instruction.Data0X,
             Y: instruction.Data0Y,
@@ -1511,13 +1428,15 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================
 
-    private static FixedVector3 Vector(CompiledInstruction instruction) =>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static FixedVector3 Vector(in CompiledInstruction instruction) =>
         new(
             X: instruction.Data0X,
             Y: instruction.Data0Y,
             Z: instruction.Data0Z
         );
-    private static FixedVector3 Vector1(CompiledInstruction instruction) =>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static FixedVector3 Vector1(in CompiledInstruction instruction) =>
         new(
             X: instruction.Data1X,
             Y: instruction.Data1Y,
@@ -1584,294 +1503,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             )
         ) != MarchOutcome.Miss);
     /// <inheritdoc/>
-    /// <remarks>The evaluated point is the exact world-space displacement from the world origin — <c>position</c>
-    /// REBASED against <see cref="FixedPosition.Zero"/>, not its raw <see cref="FixedPosition.Local"/> offset. The
-    /// wrapped <see cref="SdfProgram"/> bakes its geometry in world space around that origin, so reading <c>.Local</c>
-    /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
-    /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
-    /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
-    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, when
-    /// the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), or when it lies outside
-    /// <see cref="Frame"/>, where some step of the evaluation could leave the carrier and wrap.</remarks>
-    public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
-        distance = FixedQ4816.Zero;
-        material = 0;
-
-        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
-        if (
-            !m_hasShape ||
-            !position.TryDelta(
-            delta: out var worldPosition,
-            origin: FixedPosition.Zero
-        ) ||
-            !IsInFrame(point: worldPosition)
-        ) {
-            return false;
-        }
-
-        var localPosition = worldPosition;
-        var distanceScale = FixedQ4816.One;
-        var resultDistance = FarDistance;
-        var resultMaterial = 0;
-        Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
-        var scopeDepth = 0;
-        var cullIndex = 0;
-
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            if (
-                (cullIndex < m_cullBounds.Length) &&
-                (m_cullBounds[cullIndex].First == index)
-            ) {
-                var bound = m_cullBounds[cullIndex];
-
-                cullIndex++;
-
-                if (CanCullInstance(
-                    bound: bound,
-                    resultDistance: resultDistance,
-                    worldPosition: worldPosition
-                )) {
-                    index = (bound.End - 1);
-
-                    continue;
-                }
-            }
-
-            var instruction = m_instructions[index];
-
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
-                        localPosition = worldPosition;
-                        distanceScale = FixedQ4816.One;
-                        break;
-                    }
-                case SdfOp.Translate: {
-                        localPosition -= Vector(instruction: instruction);
-                        break;
-                    }
-                case SdfOp.Rotate: {
-                        localPosition = RotateByInverseQuaternion(
-                            instruction: instruction,
-                            p: localPosition
-                        );
-                        break;
-                    }
-                case SdfOp.Scale: {
-                        localPosition = FixedVector3.Divide(
-                            left: localPosition,
-                            right: Vector(instruction: instruction)
-                        );
-                        distanceScale *= instruction.Data0W;
-                        break;
-                    }
-                case SdfOp.Repeat: {
-                        var spacing = Vector(instruction: instruction);
-                        var inverseSpacing = Vector1(instruction: instruction);
-
-                        localPosition -= FixedVector3.Multiply(
-                            left: spacing,
-                            right: FixedVector3.Round(value: FixedVector3.Multiply(
-                                left: localPosition,
-                                right: inverseSpacing
-                            ))
-                        );
-                        break;
-                    }
-                case SdfOp.RepeatLimited: {
-                        var spacing = Vector(instruction: instruction);
-                        var limit = Vector1(instruction: instruction);
-                        var rounded = FixedVector3.Round(value: FixedVector3.Divide(
-                            left: localPosition,
-                            right: spacing
-                        ));
-
-                        localPosition -= FixedVector3.Multiply(
-                            left: spacing,
-                            right: FixedVector3.Clamp(
-                                maximum: limit,
-                                minimum: -limit,
-                                value: rounded
-                            )
-                        );
-                        break;
-                    }
-                case SdfOp.SymmetryPlane: {
-                        var normal = Vector(instruction: instruction);
-                        var t = (FixedVector3.Dot(
-                            left: localPosition,
-                            right: normal
-                        ) + instruction.Data0W);
-                        var twiceMin = (FixedQ4816.Min(
-                            x: t,
-                            y: FixedQ4816.Zero
-                        ) * Two);
-
-                        localPosition -= (normal * twiceMin);
-                        break;
-                    }
-                case SdfOp.Elongate: {
-                        var extents = Vector(instruction: instruction);
-
-                        localPosition -= FixedVector3.Clamp(
-                            maximum: extents,
-                            minimum: -extents,
-                            value: localPosition
-                        );
-                        break;
-                    }
-                case SdfOp.Onion: {
-                        resultDistance = (FixedQ4816.Abs(value: resultDistance) - instruction.Data0X);
-                        break;
-                    }
-                case SdfOp.CellDisplace: {
-                        resultDistance += (instruction.Data0Y * (SampleCells(
-                            (localPosition * instruction.Data0X),
-                            instruction.Shape,
-                            ((SdfCellMode)instruction.Blend),
-                            instruction.Data0Z
-                        ) - Half));
-                        break;
-                    }
-                case SdfOp.Dilate: {
-                        resultDistance -= instruction.Data0X;
-                        break;
-                    }
-                case SdfOp.PushField: {
-                        scopes[scopeDepth++] = (resultDistance, resultMaterial);
-                        resultDistance = FarDistance;
-                        resultMaterial = 0;
-                        break;
-                    }
-                case SdfOp.PopField: {
-                        var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
-                        var candidateDistance = resultDistance;
-                        var candidateMaterial = resultMaterial;
-
-                        // Data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step
-                        // count in Data1.z (KEEP IN SYNC with mapCore's pop and AnalyzeLipschitz).
-                        var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
-                        var candidateScale = instruction.Data1Y;
-
-                        if (candidateScale > FixedQ4816.Zero) {
-                            candidateDistance *= candidateScale;
-                        }
-
-                        resultDistance = savedFieldDistance;
-                        resultMaterial = savedFieldMaterial;
-
-                        if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
-                            var laneVal = FixedQ4816.Zero;
-                            var from = instruction.Data0Y;
-                            var to = instruction.Data0Z;
-                            var t = FixedQ4816.Clamp(
-                                value: ((laneVal - from) / (to - from)),
-                                minimum: FixedQ4816.Zero,
-                                maximum: FixedQ4816.One
-                            );
-
-                            resultDistance = (((FixedQ4816.One - t) * savedFieldDistance) + (t * candidateDistance));
-                            resultMaterial = ((t >= Half)
-                                ? candidateMaterial
-                                : savedFieldMaterial
-                            );
-                            break;
-                        }
-
-                        if (isStairs) {
-                            var r = instruction.Data1X;
-                            var n = instruction.Data1Z;
-
-                            if (
-                                (n >= FixedQ4816.One) &&
-                                (r > FixedQ4816.Zero)
-                            ) {
-                                var s = (r / n);
-                                var twoS = (s * Two);
-                                var isSub = (instruction.Blend == ((uint)SdfBlendOp.StairsSubtraction));
-                                var a = savedFieldDistance;
-                                var b = candidateDistance;
-                                var u = (isSub
-                                    ? ((-b) - r)
-                                    : (b - r)
-                                );
-                                var arg = ((u - a) + s);
-                                var m = (arg - (twoS * FixedQ4816.Floor(value: (arg / twoS))));
-                                var w = (m - s);
-                                var dStairs = (Half * ((u + a) + FixedQ4816.Abs(value: w)));
-
-                                if (isSub) {
-                                    resultDistance = FixedQ4816.Max(
-                                        x: FixedQ4816.Max(
-                                            x: a,
-                                            y: -b
-                                        ),
-                                        y: -dStairs
-                                    );
-                                    resultMaterial = (((-b) > a)
-                                        ? candidateMaterial
-                                        : savedFieldMaterial
-                                    );
-                                } else {
-                                    resultDistance = FixedQ4816.Min(
-                                        x: FixedQ4816.Min(
-                                            x: a,
-                                            y: b
-                                        ),
-                                        y: dStairs
-                                    );
-                                    resultMaterial = ((b < a)
-                                        ? candidateMaterial
-                                        : savedFieldMaterial
-                                    );
-                                }
-                                break;
-                            }
-                        }
-
-                        (resultDistance, resultMaterial) = Compose(
-                            current: resultDistance,
-                            currentMaterial: resultMaterial,
-                            candidate: candidateDistance,
-                            candidateMaterial: candidateMaterial,
-                            blend: instruction.Blend,
-                            smooth: instruction.Data1X
-                        );
-                        break;
-                    }
-                case SdfOp.ShapeBlend: {
-                        // A SHADING-ONLY shape (SdfInstruction.Detail) never reaches contact/gravity/collision — this
-                        // evaluator has no shade-mode counterpart, so it is simply absent from every field it walks.
-                        if (instruction.Detail) {
-                            break;
-                        }
-
-                        var candidateDistance = (EvaluateShape(
-                            instruction: instruction,
-                            p: localPosition
-                        ) * distanceScale);
-
-                        (resultDistance, resultMaterial) = Compose(
-                            current: resultDistance,
-                            currentMaterial: resultMaterial,
-                            candidate: candidateDistance,
-                            candidateMaterial: instruction.Material,
-                            blend: instruction.Blend,
-                            smooth: instruction.Data1X
-                        );
-                        break;
-                    }
-                default: {
-                        throw new UnreachableException(message: $"The constructor validated every instruction's op is supported; op {instruction.Op} reached the interpreter unvalidated.");
-                    }
-            }
-        }
-
-        distance = resultDistance;
-        material = resultMaterial;
-
-        return true;
-    }
-    /// <inheritdoc/>
     public bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient) =>
         TryFieldGradient(
             epsilon: GradientEpsilon,
@@ -1885,7 +1516,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <param name="position">The world-space point to evaluate.</param>
     /// <param name="epsilon">The finite-difference probe span in world units, or a non-positive value for the default.</param>
     /// <param name="gradient">The unit-length gradient, when the method returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when every probe <see cref="TryDistance"/> call succeeded and the raw gradient was
+    /// <returns><see langword="true"/> when every probe <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> call succeeded and the raw gradient was
     /// non-zero.</returns>
     public bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient) {
         gradient = FixedVector3.Zero;
@@ -2002,16 +1633,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             );
         }
     }
-    // One hard-union instance's conservative world-space bound, converted to FixedQ4816 ONCE at construction (see
-    // BuildCullBounds) — the fixed-point, safety-padded twin of SdfInstanceRange's float Center/Radius.
-    private readonly record struct CullBound(
-        int First,
-        int End,
-        FixedQ4816 CenterX,
-        FixedQ4816 CenterY,
-        FixedQ4816 CenterZ,
-        FixedQ4816 Radius
-    );
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816
     // ONCE at construction (see Compile). Field names mirror the shader's data0.x/y/z/w and data1.x/y/z/w swizzles
     // directly so a shape/op body reads as a transcription of its mapCore counterpart, not a re-derivation.

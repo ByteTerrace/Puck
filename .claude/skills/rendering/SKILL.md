@@ -401,7 +401,10 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    sweeps a new shape's or blend's point answers against its bounds. A rule may
    enclose rather than mirror (`Sweep` does), but it is never missing: a shape
    with no rule answers the unbounded interval, which empties its program's
-   frame.
+   frame. Both walks' cull (`SdfFieldEvaluator.Cull.cs`) admits blends by name,
+   each with the rule that makes a far candidate leave the answer bitwise, so a
+   new blend is walked, never skipped, until its rule is added there and
+   `SdfFieldEvaluatorScopedCullLawTests` covers it.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and

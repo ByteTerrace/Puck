@@ -202,7 +202,6 @@ public sealed partial class SdfProgram {
                 case SdfOp.ShapeBlend: {
                         if (
                             chainBoundable &&
-                            (((uint)SdfBlendOp.Union) == instruction.Blend) &&
                             // Sweep and Path cap their local candidate at SDF_FAR_DISTANCE. The kernel's world-unit
                             // far guard only protects that cap when the accumulated scale does not shrink it.
                             ((scale >= 1f) || ((instruction.Shape != ((uint)SdfShapeType.Sweep)) && (instruction.Shape != ((uint)SdfShapeType.Path)))) &&
@@ -220,6 +219,18 @@ public sealed partial class SdfProgram {
                                 value: (localCenter * scale)
                             ));
                             var chainRadius = (localRadius * scale);
+
+                            // The candidate's sphere is the shape's own, whatever blend joins it; the host keeps it for
+                            // every static shape (ShapeReachSphere), the kernels only for a union they may skip.
+                            if (dynamicSlot == NoDynamicTransformSlot) {
+                                m_shapeReach[index] = new SdfSkipSphere(Center: chainCenter, Mode: BoundModeStatic, Radius: ((chainRadius * BoundRadiusScale) + BoundRadiusPadding), Slot: 0);
+                            }
+
+                            if (((uint)SdfBlendOp.Union) != instruction.Blend) {
+                                segmentEligible = false;
+
+                                break;
+                            }
 
                             // Dynamic: the post-dynamic local geometry folds into the radius, so the entity's orientation
                             // can never move the shape outside offset + dynPos ± radius — rotation-free in the shader.
