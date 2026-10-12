@@ -115,6 +115,13 @@ machine, and every move of the integration branch invalidates it, so:
   qualify, and the lead never asks it to catch up in between.
 - When several lanes wait on one GPU, grant it to them in landing order and let
   each merge the tip its predecessor left, so no lane qualifies twice.
+- A check already failing at the base is never run again to be judged: name
+  the known failures (from the base's own run) in the brief, run the selection
+  without them (`puck canary <names>`, `--backend`), and rerun a known failure
+  only to show it now passes. A known timeout waited out again buys nothing.
+- Give every brief with GPU legs a time box and a short list of what to do
+  when a leg fails: rerun once alone, record as known or open, and hand back.
+  Investigating a failure is a lane of its own, never the integrator's.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
