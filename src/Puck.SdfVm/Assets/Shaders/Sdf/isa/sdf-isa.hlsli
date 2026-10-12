@@ -176,6 +176,16 @@
 #define SDF_INSTANCE_FLAGS(v)            ((v).z)
 #define SDF_INSTANCE_TAPE_TOKENS(v)      ((v).w)
 #define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
+#define SDF_CHAIN_TABLE_OFFSET(v)        ((v).y)
+
+// The chain table (SdfProgram.Chains): its header's lane accessors, each segment's first chain and chain count, and each chain's identity, read from the vector the index's division by the per-vector count selects.
+#define SDF_CHAIN_COUNT(v)                  ((v).x)
+#define SDF_CHAIN_IDENTITIES_OFFSET(v)      ((v).y)
+#define SDF_CHAIN_SEGMENTS_PER_VECTOR       2u
+#define SDF_CHAIN_IDENTITIES_PER_VECTOR     4u
+#define SDF_CHAIN_SEGMENT_FIRST(v, segment) ((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * 2u) + 0u])
+#define SDF_CHAIN_SEGMENT_COUNT(v, segment) ((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * 2u) + 1u])
+#define SDF_CHAIN_IDENTITY(v, chain)        ((v)[(chain) % SDF_CHAIN_IDENTITIES_PER_VECTOR])
 
 // Shape-lane flags and the type mask on a ShapeBlend instruction's header.
 #define SDF_SHAPE_DETAIL_FLAG       0x80000000u

@@ -298,6 +298,15 @@ public sealed class CreationCommandTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "2 shape(s) sharing one clamp"
         );
+        Assert.Matches(
+            actualString: output,
+            expectedRegexPattern: @"segments \d+ \(\d+ rigid\) running \d+ chain\(s\); specialization \d+ distinct chain\(s\), shapes "
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "specialization of every reported prototype, static and pooled: "
+        );
         Assert.Equal(
             before,
             File.ReadAllBytes(path: path)
