@@ -307,7 +307,11 @@ in a line rather than restating it.
 A command started in the background already reports when it exits. Never start
 a second job that only waits for or polls another; do other work meanwhile, or
 run the command in the foreground with a long timeout when the next step needs
-its result.
+its result. A Monitor, a sleep loop and a "wait until" command are all such
+jobs. A running command gets at most one Monitor, and only when you act on a
+mid-run event such as a failure line; never one per progress milestone, never
+a snapshot, and never a second for a job something already watches. Stop each
+waiter once its job ends.
 
 For a run with many parts, keep a checklist in the session scratchpad, named
 for the run, tick items as they finish, and add what you find. A question the
