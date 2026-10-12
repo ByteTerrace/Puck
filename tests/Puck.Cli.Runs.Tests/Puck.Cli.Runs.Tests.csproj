@@ -19,7 +19,6 @@
     <ItemGroup>
         <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
         <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
-        <Compile Include="../Shared/Cli/LedgerMergeProbe.cs" Link="LedgerMergeProbe.cs" />
         <Compile Include="../Shared/Cli/SchedulingCohorts.cs" Link="SchedulingCohorts.cs" />
         <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />

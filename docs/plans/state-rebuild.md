@@ -103,11 +103,6 @@ list, so no buffer is aliased across facades. Everything a facade exposes only
 to the rest of its own assembly is `internal`, and a member nothing outside its
 declaring type reads is private.
 
-`RuleArenaFixture` is one arena over the catalog its rules compiled against,
-loaded per position through `StateArena.TryLoad`, with `RuleLatch.Reset`
-before each judge, because the shipped tabletop judges are `Edge` rules and a
-latch shared across positions judges the first alone.
-
 ## Work packages
 
 A package lists **Owns**, **Deliverables**, **Check** (the command and the
@@ -206,7 +201,7 @@ is what the write sees. The arena's admission is the compose's admission:
 envelope, reserved cells, eviction and clock settling are enforced there and
 nowhere else. The arena recomputes a derived board on a keyed write,
 `WorldDefinitionValidator.Discrete.cs` checks against that recompute through
-`BoardDerivation`, and `RuleArenaFixture`'s consumers read the arena. A cell
+`BoardDerivation`. A cell
 token parses through `CellValue.TryParse`. `BatchComposeLawTests` pins the
 compose refusal text.
 

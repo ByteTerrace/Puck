@@ -53,13 +53,6 @@ Use the smallest fixture that exercises the behavior under test:
 - `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
   and tables into that minimal world. A poker hand must not build the Nexus
   navigation graph or simulate unrelated creatures.
-- `RuleArenaFixture` compiles a state program once per test, then loads each
-  candidate into the arena and judges it as one tick, with the derived boards
-  the arena's own import recomputes. A row the arena already holds unchanged —
-  the same row instance, its generation unmoved — is not reloaded, so build
-  candidates by replacing only the rows that vary and reuse the rest. Exhaustive
-  rule checks retain all candidate combinations; physical sampling and mutation
-  admission use server tests alongside them.
 - A deterministic run several laws read is computed once and shared as its
   immutable results, never as a live server: `ShippedWorldIdleRuns` holds two
   independent idle boots of the island, and `ShippedWorldStateBaselines.Run`

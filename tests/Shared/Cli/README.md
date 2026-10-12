@@ -12,7 +12,6 @@ suites that link it ([`puck affected`](../../../docs/reference/cli.md#puck-affec
 | `GitScratchCheckout.cs` | A small git checkout the law owns, with automatic maintenance off. |
 | `ThreadPoolFloor.cs` | A raised thread-pool minimum, so laws that block on child processes never starve the in-process servers beside them. |
 | `SchedulingCohorts.cs` | Cohorts of workers held at barriers, so a scheduling law counts admissions rather than timing them. |
-| `LedgerMergeProbe.cs` | A three-way `git merge-file` of two ledger versions over their ancestor, so a law shows concurrent changes collide without a repository. |
 | `TrackedPuckSources.cs` | Every tracked `.puck` source outside `experimental/`, as theory data. |
 | `ScheduledWorldBoot.cs` | One authored test world booted headless through the real `Puck.World` executable with a piped script. |
 | `AffectedMemoryTree.cs` | An in-memory tree for `puck affected`'s document and stand-in laws. |

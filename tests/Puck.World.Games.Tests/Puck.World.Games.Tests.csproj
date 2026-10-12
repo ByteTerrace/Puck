@@ -48,7 +48,6 @@
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/Laws.cs" Link="World/Laws.cs" />
-        <Compile Include="../Shared/World/RuleArenaFixture.cs" Link="World/RuleArenaFixture.cs" />
         <Compile Include="../Shared/World/StateFixtures.Server.cs" Link="World/StateFixtures.Server.cs" />
         <Compile Include="../Shared/World/StateFixtures.cs" Link="World/StateFixtures.cs" />
         <Compile Include="../Shared/World/TestMachines.Bricks.cs" Link="World/TestMachines.Bricks.cs" />

@@ -71,8 +71,7 @@ a typed request into a live, owning wrapper.
 Plus a handful of top-level helpers: `VulkanException`, `VulkanResultExtensions`,
 `VulkanFramePresenter`, `VulkanPhysicalDeviceSelector`, `VulkanQueueSubmitter`,
 `VulkanNativeLibrary`, `VulkanMarshalHelpers`, `Utf8StringArray`, `VulkanPipelineLayouts`, and small
-value types (`VulkanQueueFamilySelection`, `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`,
-`VulkanShaderStageFlags`).
+value types (`VulkanQueueFamilySelection`, `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`).
 
 ---
 
@@ -95,7 +94,6 @@ value types (`VulkanQueueFamilySelection`, `VulkanPushConstantBinding`, `VulkanV
 | Descriptors / samplers |—| `IVulkanDescriptorApi` |—|
 | Frame present |—(`VulkanFramePresenter`) | `IVulkanFramePresentationApi` |—|
 | Offscreen image |—| `IVulkanOffscreenImageApi` |—|
-| Pipeline statistics |—| `IVulkanPipelineStatisticsApi` |—|
 
 ---
 
@@ -449,7 +447,7 @@ The logical-device factory probes and enables these only when the device fully s
 callers still re-probe before relying on a path, and fall back otherwise:
 
 - **Pipeline executable properties**—`VK_KHR_pipeline_executable_properties` for diagnostics
-  (compiled register counts, etc.); pixel-neutral read-back via `IVulkanPipelineStatisticsApi`.
+  (compiled register counts, etc.); nothing reads them back yet.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
 - **Block-compressed textures**—`textureCompressionBC`, which a baked mesh's BC4, BC5,
@@ -576,7 +574,7 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanNativeLibrary` (loader resolution and `LibraryPathOverride`),
 `VulkanMarshalHelpers` and `Utf8StringArray` (see [Marshalling](#marshalling)),
 `VulkanPipelineLayouts`, and the small value types `VulkanQueueFamilySelection`,
-`VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
+`VulkanPushConstantBinding` and `VulkanVertexBufferBinding`.
 
 ## Validation
 

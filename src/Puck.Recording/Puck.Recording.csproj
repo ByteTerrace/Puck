@@ -16,6 +16,5 @@
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <!-- CaptureSink encodes each captured frame through PngEncoder. -->
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
-        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

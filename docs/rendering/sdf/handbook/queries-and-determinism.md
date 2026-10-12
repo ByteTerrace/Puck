@@ -156,9 +156,8 @@ deliberate: an evaluator that silently interpreted *part* of a program and
 guessed at the rest would be worse than one that refuses outright, because
 its wrong answers would look exactly like right ones.
 
-`WorldQueryProviders.ForWorld` is the resolver a sim asks for the right
-provider; a sim binds only `IWorldQuery` itself; nothing downstream needs to
-know or care which provider answered.
+A sim binds only `IWorldQuery` itself; nothing downstream needs to know or care
+which provider answered.
 
 A third reading sits between the two. `SdfDistanceGrid` keeps the live
 evaluator's exact values at the corners of world-space cells, and because the
@@ -486,5 +485,4 @@ all if a different consumer read it differently.
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
   `src/Puck.Maths/FixedPoint/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
-  `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
-  `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.
+  `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`.
