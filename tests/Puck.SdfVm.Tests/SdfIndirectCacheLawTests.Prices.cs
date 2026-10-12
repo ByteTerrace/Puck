@@ -163,10 +163,10 @@ public sealed partial class SdfIndirectCacheLawTests {
         cache.ObserveCost(counters: Uniform(units: 0, visits: 0), generation: cache.CostGeneration, sequence: 1);
         cache.ObserveCost(counters: Uniform(units: 4, visits: 400), generation: cache.CostGeneration, sequence: 2);
         Assert.Equal(slice, cache.FrameDeviceLimit);
-        // A held frame presents nothing a player sees: the capture's solve takes the held multiple of the slice.
+        // A held frame presents nothing a player sees: the capture's solve takes four slices a frame.
         cache.CaptureHold = true;
-        Assert.Equal((slice * SdfIndirectCache.CaptureHoldFactor), cache.FrameDeviceLimit);
-        Assert.Equal((slice * SdfIndirectCache.CaptureHoldFactor), cache.FrameCost);
+        Assert.Equal((slice * 4L), cache.FrameDeviceLimit);
+        Assert.Equal((slice * 4L), cache.FrameCost);
         cache.CaptureHold = false;
         Assert.Equal(slice, cache.FrameDeviceLimit);
 
