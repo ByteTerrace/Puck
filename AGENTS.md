@@ -307,11 +307,11 @@ in a line rather than restating it.
 A command started in the background already reports when it exits. Never start
 a second job that only waits for or polls another; do other work meanwhile, or
 run the command in the foreground with a long timeout when the next step needs
-its result. A Monitor, a sleep loop and a "wait until" command are all such
-jobs. A running command gets at most one Monitor, and only when you act on a
-mid-run event such as a failure line; never one per progress milestone, never
-a snapshot, and never a second for a job something already watches. Stop each
-waiter once its job ends.
+its result. Watch each thing you need to see mid-run (failure lines,
+progress) with one Monitor, never one per milestone or threshold. A bash
+wait loop or "wait until" command in place of that Monitor is the same
+waiter in another tool, and a second watcher on a job is waste whichever
+tool runs it. Stop each Monitor once its job ends.
 
 For a run with many parts, keep a checklist in the session scratchpad, named
 for the run, tick items as they finish, and add what you find. A question the
