@@ -29,8 +29,9 @@ public sealed partial class SdfFieldEvaluator {
     private const long ScopeBlendRoundingRaws = 8L;
 
     // Every cullable instance, in First order: a hard-union instance, or a scoped instance joining through a hard-union
-    // pop. A plane, or any compose the program itself marks as reaching every tile, has no finite bound however small
-    // the instance declared; the program's own test is the one the GPU prepass trusts.
+    // pop, with a unit distance gain (SdfProgram.InstanceDistanceGain), so its field is at least the distance to its
+    // sphere. A plane, or any compose reaching every tile, has none however small the instance declared; the program's
+    // own test is the one the GPU prepass trusts.
     private static (CullBound[] Bounds, MemberSphere[] Members) BuildCullBounds(SdfProgram program, CompiledInstruction[] compiled) {
         var instances = program.Instances;
         var instructions = program.Instructions;
@@ -40,7 +41,7 @@ public sealed partial class SdfFieldEvaluator {
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
 
-            if (instance.IsDynamic || !program.InstanceHasDistanceLowerBound(index: index)) {
+            if (instance.IsDynamic || (program.InstanceDistanceGain(index: index) < 1f)) {
                 continue;
             }
 
@@ -226,7 +227,7 @@ public sealed partial class SdfFieldEvaluator {
 
         return true;
     }
-    // A scoped instance either walk may skip: the instance already admits the distance lower bound (similarity
+    // A scoped instance either walk may skip: the instance already has a unit distance gain (similarity
     // transforms only, exact-gauge shapes, union, subtraction and intersection blends with their smooth forms), every
     // shape outside a scope composes by hard union, and every scope is one level deep, composes into the running answer
     // through a hard-union pop, and carries the same candidate scale. Inside a scope a hard union is the lesser

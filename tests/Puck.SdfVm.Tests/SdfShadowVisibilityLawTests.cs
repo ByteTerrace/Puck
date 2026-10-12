@@ -29,18 +29,20 @@ public sealed class SdfShadowVisibilityLawTests {
         const float HitThreshold = 1f;
 
         Assert.True(condition: (((float)field) > HitThreshold));
-        var clipped = MathF.Min(x: ((float)field), y: (SdfShadowQuery.Ceiling(stepCeiling: 0.08f, traveled: 0.02f, stepScale: 1000f, programStepScale: program.StepScale, sharpness: 9f) * program.StepScale));
+        var clipped = MathF.Min(x: ((float)field), y: (SdfShadowQuery.Ceiling(stepCeiling: 0.08f, traveled: 0.02f, stepScale: 1000f, programStepScale: program.StepScale, sharpness: 9f, visibility: 1f) * program.StepScale));
 
         Assert.False(condition: (clipped < HitThreshold), userMessage: "Clipping a clear sample must not turn it into a hit at the shading-scaled threshold.");
     }
-    [InlineData(0.02f, 1000f, 1f, 9f)]
-    [InlineData(0.12f, 0.12f, 0.5f, 9f)]
-    [InlineData(1.6f, 1f, 1f, 0.1f)]
-    [InlineData(9f, 0.001f, 0.001f, 1000f)]
+    [InlineData(0.02f, 1000f, 1f, 9f, 1f)]
+    [InlineData(0.12f, 0.12f, 0.5f, 9f, 1f)]
+    [InlineData(1.6f, 1f, 1f, 0.1f, 1f)]
+    [InlineData(9f, 0.001f, 0.001f, 1000f, 1f)]
+    [InlineData(4f, 1f, 1f, 0.5f, 0.3f)]
+    [InlineData(6f, 0.7f, 0.9f, 0.25f, 0.011f)]
     [Theory]
-    public void SaturationNeighboursKeepStrideHitAndVisibilityBits(float traveled, float scale, float programScale, float sharpness) {
+    public void SaturationNeighboursKeepStrideHitAndVisibilityBits(float traveled, float scale, float programScale, float sharpness, float visibility) {
         var stepCeiling = MathF.Max(x: 0.08f, y: (traveled * 0.05f));
-        var ceiling = SdfShadowQuery.Ceiling(programStepScale: programScale, sharpness: sharpness, stepCeiling: stepCeiling, stepScale: scale, traveled: traveled);
+        var ceiling = SdfShadowQuery.Ceiling(programStepScale: programScale, sharpness: sharpness, stepCeiling: stepCeiling, stepScale: scale, traveled: traveled, visibility: visibility);
 
         foreach (var value in new[] { float.BitDecrement(x: ceiling), ceiling, float.BitIncrement(x: ceiling), (ceiling * 2f) }) {
             var full = (value * programScale);
@@ -49,8 +51,8 @@ public sealed class SdfShadowVisibilityLawTests {
             Assert.Equal(actual: (clipped < (0.001f * scale)), expected: (full < (0.001f * scale)));
             Assert.Equal(BitConverter.SingleToInt32Bits(value: Math.Clamp(max: stepCeiling, min: 0.02f, value: full)),
                 BitConverter.SingleToInt32Bits(value: Math.Clamp(max: stepCeiling, min: 0.02f, value: clipped)));
-            var fullVisibility = ((traveled >= 0.12f) ? MathF.Min(x: 1f, y: ((sharpness * (full / scale)) / traveled)) : 1f);
-            var clippedVisibility = ((traveled >= 0.12f) ? MathF.Min(x: 1f, y: ((sharpness * (clipped / scale)) / traveled)) : 1f);
+            var fullVisibility = ((traveled >= 0.12f) ? MathF.Min(x: visibility, y: ((sharpness * (full / scale)) / traveled)) : visibility);
+            var clippedVisibility = ((traveled >= 0.12f) ? MathF.Min(x: visibility, y: ((sharpness * (clipped / scale)) / traveled)) : visibility);
 
             Assert.Equal(BitConverter.SingleToInt32Bits(value: fullVisibility), BitConverter.SingleToInt32Bits(value: clippedVisibility));
         }

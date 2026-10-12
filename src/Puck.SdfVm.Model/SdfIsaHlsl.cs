@@ -134,7 +134,9 @@ public static class SdfIsaHlsl {
         declarations.Lane(lane: SdfProgram.SegmentTapeLane, name: "SDF_SEGMENT_TAPE_OFFSET");
         declarations.Count(name: "SDF_TAPE_INSTRUCTION_THRESHOLD", value: SdfProgram.TapeInstructionThreshold);
         declarations.Bits(name: "SDF_PART_LEAF_COUNT_MASK", value: SdfProgram.PartLeafCountMask);
-        declarations.Bits(name: "SDF_PART_NO_DISTANCE_BOUND", value: SdfProgram.PartNoDistanceBoundFlag);
+        declarations.Count(name: "SDF_PART_DISTANCE_GAIN_SHIFT", value: SdfProgram.PartDistanceGainShift);
+        declarations.Bits(name: "SDF_PART_DISTANCE_GAIN_MASK", value: SdfProgram.PartDistanceGainMask);
+        declarations.Real(name: "SDF_PART_DISTANCE_GAIN_UNIT", value: SdfProgram.PartDistanceGainUnit);
         declarations.Count(name: "SDF_TAPE_SLAB_COUNT", value: SdfWorldPackage.TapeSlabCount);
         declarations.Count(name: "SDF_TAPE_HEADER_WORDS", value: SdfWorldPackage.TapeHeaderWords);
         declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);

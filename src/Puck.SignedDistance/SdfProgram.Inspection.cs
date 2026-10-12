@@ -9,12 +9,13 @@ namespace Puck.SignedDistance;
 /// <param name="Shapes">ShapeBlend instructions in the instance.</param>
 /// <param name="ScopeClamps">Non-unit field-scope clamps in the instance.</param>
 /// <param name="BoundRadius">The packed culling radius, including padding or a parked/unmaskable sentinel.</param>
-/// <param name="Halo">Soft-blend and scoped-field outward reach before float-safety padding.</param>
+/// <param name="Halo">Soft-blend and scoped-field outward reach before float-safety padding, including the clearance a
+/// smooth union's sag needs at the instance's <see cref="SdfProgram.InstanceDistanceGain"/>.</param>
 /// <param name="Unmaskable">Whether no finite bound can mask this instance.</param>
 /// <param name="FieldRescale">The largest product of factors <c>L</c> along a nested scope path dividing its field before
 /// it joins the parent (<see cref="SdfFieldScopeClamp.StepScale"/> is <c>1/L</c>), or 1 when no scope does. The packed bound
-/// contains geometry and blend influence, but only <see cref="SdfProgram.InstanceHasDistanceLowerBound"/> admits
-/// comparison of the field with distance to that bound divided by this factor.</param>
+/// contains geometry and blend influence; <see cref="SdfProgram.InstanceDistanceGain"/>, at most the inverse of this
+/// factor, is what the field certifies against distance to that bound.</param>
 public readonly record struct SdfInstanceCost(int OwnedWords, int Shapes, int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, float FieldRescale);
 /// <summary>One packed skip sphere, as the kernels read it: <c>mapCore</c> skips the shape or segment it bounds when the
 /// sample's distance to the sphere cannot beat the running minimum.</summary>
@@ -115,7 +116,7 @@ public sealed partial class SdfProgram {
         }
         return new SdfInstanceCost(OwnedWords: checked((vectors * WordsPerVector)), Shapes: shapes, ScopeClamps: clamps,
             BoundRadius: m_instanceBinning[index].Radius,
-            Halo: (MaxSmoothBlendRadius(first: instance.First, end: instance.End) + MaxScopedFieldReach(first: instance.First, end: instance.End)),
+            Halo: (SmoothHalo(index: index) + MaxScopedFieldReach(first: instance.First, end: instance.End)),
             Unmaskable: (m_instanceBinning[index].Radius == UnmaskableBoundRadius),
             FieldRescale: rescale);
 
