@@ -316,15 +316,15 @@ distribution's supplied machine catalog; pumped addon state still refuses captur
 ## Production deployment
 
 The [Azure workflow](../../docs/development/ci.md#azure-production-deployment) deploys the primary
-Puck world as a pinned row on a single regular VMSS worker. QUIC requires
+world, the debug world (`debug`), as a pinned row on a single regular VMSS worker. QUIC requires
 UDP ingress and Linux `libmsquic`; Container Apps does not expose UDP. The silo
 uses its own managed identity, private blob container, and persistent federation
-key. The container test boots Puck, verifies its QUIC key and checkpoint, replaces
+key. The container test boots the primary world, verifies its QUIC key and checkpoint, replaces
 the container, and verifies recovery against the same store. The deployment
 contract above owns resource names, grants, and operator setup.
 
 Hosted neighbour definitions must already be composed and use canonical world
-file names. `puck world prepare` prepares Puck and its references with the
+file names. `puck world prepare` prepares the primary world and its references with the
 engine composer, rebasing nested machine asset paths to the shared worlds
 directory. A colocated row with neither `host.authority` nor `host.listen` signs
 as its stable instance name, matching `WorldServer.AuthorityIdentity`, and opens

@@ -8,9 +8,14 @@ namespace Puck.Cli.Automation;
 public static class WorldPrepareCommand {
     // Hosted storage addresses worlds by document name (WorldDocumentName), independently of repository directories.
     // Composition reads each basis and import from its .puck source where one exists, so the authored worlds
-    // directory prepares without a prior build.
-    private static int Run(string output, string root) {
+    // directory prepares without a prior build. The primary world's directory is the root no reference may leave.
+    private static int Run(string output, string primary) {
+        if (!WorldDocumentName.IsSourceFile(path: primary) && !WorldDocumentName.IsDocumentFile(path: primary)) {
+            return CliExit.Refuse(verb: "world prepare", what: CliPaths.ToDisplay(fullPath: primary), why: $"names no world: the primary world is a {WorldDocumentName.SourceSuffix} source or a {WorldDocumentName.DocumentSuffix} document.");
+        }
 
+        var root = Path.GetDirectoryName(path: primary)!;
+        var primaryName = WorldDocumentName.OfCarrierFile(path: Path.GetFileName(path: primary));
         var machines = CliWorldVocabulary.EnsureInstalled();
         var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machines);
 
@@ -21,7 +26,7 @@ public static class WorldPrepareCommand {
 
         pending.Enqueue(item: Path.Combine(
             path1: root,
-            path2: WorldDocumentName.DocumentFile(name: "puck")
+            path2: WorldDocumentName.DocumentFile(name: primaryName)
         ));
         while (pending.TryDequeue(result: out var path)) {
             if (!visited.Add(item: path)) {
@@ -114,12 +119,12 @@ public static class WorldPrepareCommand {
                 WorldDefinitionSerialization.Serialize(definition: definition)
             );
         }
-        Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with Puck as the primary world.");
+        Console.WriteLine(value: $"Prepared {visited.Count} hosted world definitions, with {primaryName} as the primary world.");
         return 0;
     }
 
     public static Command Create() {
-        var worldsArgument = new Argument<string>(name: "worlds-directory") { Description = "The authored worlds directory: puck.world.json, the neighbours it references, and the sources and documents they compose." };
+        var primaryArgument = new Argument<string>(name: "primary-world") { Description = "The primary world's .puck source or .world.json document. Its directory holds the neighbours it references and the sources and documents they compose; no reference may leave it." };
         var outputOption = CliOptions.Output(
             description: "The directory the composed hosted documents are written to, one per canonical world name.",
             required: true
@@ -127,11 +132,11 @@ public static class WorldPrepareCommand {
         var command = new Command(
             description: "Compose the primary world and its referenced neighbours with the engine's own composer.",
             name: "prepare"
-        ) { worldsArgument, outputOption };
+        ) { primaryArgument, outputOption };
 
         command.SetAction(action: parseResult => Run(
             output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: outputOption)),
-            root: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: worldsArgument))
+            primary: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: primaryArgument))
         ));
         return command;
     }

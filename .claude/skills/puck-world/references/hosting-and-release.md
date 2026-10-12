@@ -83,7 +83,7 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys. 
 Endpoint naming and world/host alias conventions are owned by
 [CI and releases](../../../../docs/development/ci.md); deployment values belong in `main.bicepparam`.
 
-Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
+Azure CI packages the debug world, `Assets/worlds/debug.puck`, and any neighbours it references
 with `puck world prepare`; hosted references use canonical world file
 names. The storage-neighbour resolver parses and migrates the composed document
 with state-expression binding, then reduces it to seam facts; it does not validate
@@ -93,7 +93,7 @@ loaded world. Failed drain saves can be retried; closed ingress stays frozen.
 An activation's federation subject and `WorldInstance.ListenEndpoint` come from
 the published definition, independently of checkpoint network fields. Reload
 checks that activation binding; moving an endpoint requires a fresh activation.
-`puck azure test-world-container --image <image>` boots the primary Puck row, verifies a durable
+`puck azure test-world-container --image <image>` boots the primary (`debug`) row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
 Unmanaged pinned activation waits for host startup, establishes its initial checkpoint,

@@ -543,7 +543,7 @@ public static partial class AzureCommand {
                 var name = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: source));
                 var world = CliFiles.ReadJson(path: source);
 
-                if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"{DeploymentListenAddress}:{Port}"; }
+                if (name == HostedWorldName) { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"{DeploymentListenAddress}:{Port}"; }
                 var published = await authority.PublishDefinitionBytesAsync(
                     cancellationToken: CancellationToken.None,
                     definition: Encoding.UTF8.GetBytes(s: world.ToJsonString()),
@@ -561,7 +561,7 @@ public static partial class AzureCommand {
             keyFile: "/fixture/federation.pk8",
             owner: Owner,
             store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } },
-            world: "puck"
+            world: HostedWorldName
         );
 
         silo["stateDir"] = "/fixture/state";

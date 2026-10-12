@@ -11,9 +11,6 @@ namespace Puck.Cli.Qualification;
 /// a pipeline threshold exactly when its workload churns a pipeline.
 /// </summary>
 public static class ReleaseProfileLoader {
-    /// <summary>The profile <c>puck qualify</c> reads when none is named, repository-relative.</summary>
-    public const string DefaultPath = "tests/Puck.Qualification/release.profile.json";
-
     private const int MaxExtent = 16384;
     private const string WorldSuffix = ".world.json";
 

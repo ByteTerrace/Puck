@@ -663,7 +663,7 @@ param resources = {
       name: '${prefix}idp008'
       tags: { PetName: 'Puck World' }
     }
-    worldName: 'puck'
+    worldName: 'debug'
   }
   worldSiloActionGroup: {
     name: '${prefix}agp000'

@@ -306,7 +306,8 @@ compiled dependency denied by `PuckArchitectureDeniedApi` in
 The emulator batteries, Maths laws, build, and running application provide
 additional checks with distinct scopes.
 
-`puck parity` boots the [authored parity world](../../experimental/tests/Puck.Parity/README.md)
+`puck parity --world <file>` boots a parity world, such as the quarantined
+[authored parity world](../../experimental/tests/Puck.Parity/README.md),
 offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
 four verdicts: valid content, exact simulation-state hash agreement, the tick
 each frame refreshed its bound regions at matching the capture's tick, and pixel

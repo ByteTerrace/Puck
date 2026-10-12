@@ -29,7 +29,7 @@ public static class QualifyCommand {
 
     public static Command Create() {
         var packageArgument = new Argument<string>(name: "package") { Description = "The producer-built Puck.World package directory, as CI's publish writes it. Never built here." };
-        var profileOption = new Option<string?>(name: "--profile") { Description = $"The release profile; {ReleaseProfileLoader.DefaultPath} when omitted." };
+        var profileOption = new Option<string>(name: "--profile") { Description = $"The release profile, a {ReleaseProfile.SchemaVersion} document.", Required = true };
         var listOption = new Option<bool>(name: "--list") { Description = "Verify the package and print the matrix and every cell's script without running anything." };
         var outputOption = CliOptions.Output(description: "Where the report is written; the run's scratch directory when omitted.");
         var command = new Command(
@@ -38,9 +38,9 @@ public static class QualifyCommand {
         ) { packageArgument, listOption, outputOption, profileOption };
 
         command.Detail(detail: $"""
-            Reads the release profile ({ReleaseProfileLoader.DefaultPath}, a {ReleaseProfile.SchemaVersion} document)
-            and verifies the package: its entry assembly exists and is in the profile's publish mode. Then it
-            installs a clean copy of the package in the run's scratch directory and qualifies that copy:
+            Reads the release profile (--profile, a {ReleaseProfile.SchemaVersion} document) and verifies the
+            package: its entry assembly exists and is in the profile's publish mode. Then it installs a clean copy
+            of the package in the run's scratch directory and qualifies that copy:
 
               the functional canaries the profile names, run on the copy's World (puck canary --world-artifact);
               the stability matrix: every workload at every resolution on every backend, offscreen, each cell
@@ -68,24 +68,18 @@ public static class QualifyCommand {
             list: parseResult.GetValue(option: listOption),
             output: parseResult.GetValue(option: outputOption),
             package: parseResult.GetRequiredValue(argument: packageArgument),
-            profilePath: parseResult.GetValue(option: profileOption)
+            profilePath: parseResult.GetRequiredValue(option: profileOption)
         ));
 
         return command;
     }
 
-    private static int Run(string package, string? profilePath, bool list, string? output) {
+    private static int Run(string package, string profilePath, bool list, string? output) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
 
-        var profileFile = ((profilePath is null)
-            ? Path.Combine(
-                path1: repositoryRoot,
-                path2: ReleaseProfileLoader.DefaultPath
-            )
-            : Path.GetFullPath(path: profilePath)
-        );
+        var profileFile = Path.GetFullPath(path: profilePath);
 
         if (!ReleaseProfileLoader.TryLoad(
             path: profileFile,

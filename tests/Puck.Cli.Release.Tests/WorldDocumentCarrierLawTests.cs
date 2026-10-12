@@ -14,7 +14,7 @@ namespace Puck.Cli.Release.Tests;
 /// <remarks>The official build once keyed names ordinally while the other enumerations ignored case, so
 /// <c>Foo.puck</c> beside <c>foo.world.json</c> published two documents for what a Windows checkout resolves as one.</remarks>
 public sealed class WorldDocumentCarrierLawTests {
-    private const string NoRootRefusal = "no document named 'puck'";
+    private static readonly string NoRootRefusal = $"no document named '{Puck.Cli.Azure.AzureCommand.HostedWorldName}'";
     private const string Refusal = "whose names differ only in letter case; a document name is unique ignoring case";
     private const string RepeatedRefusal = "both carry the document 'beacons/north'; a document name is unique ignoring case";
     // A composition that declares the worlds north and south beside it: two documents no file carries.
