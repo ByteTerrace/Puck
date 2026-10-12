@@ -1846,7 +1846,7 @@ on the floor GPU. Count the tape's and gradient selection's shape evaluations
 alongside the work they save; a lower derivative count alone is insufficient.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
-pass, to `tests/Puck.Counters/counters.ceilings.json`
+pass, to `tests/Puck.Counters/debug.ceilings.json` by default
 (`puck.counters.ceilings.v1`): a count reads at most its ceiling, and a ceiling
 of zero is a required zero. The compact ledger stores only nonzero budgets,
 with interned measurement layouts grouped by node, pass and detail. Presence

@@ -14,8 +14,8 @@ namespace Puck.World.Games.Tests;
 /// ignored whole; and a boot from a compiled world admits byte for byte the definition a fresh draw admits. The
 /// boots count through the <c>world.boot</c> work source's <c>compiled-hits</c> and <c>chunk-derivations</c>. Each
 /// derivation's product is pinned to its version, so a deliberate change to a derivation moves the version. That every
-/// shipped world the World's build compiled boots from its compiled world is <c>Puck.World.Tests</c>'
-/// <c>CompiledCatalogLawTests</c>, beside the build that writes the catalog.
+/// shipped world the World's build compiled boots from its compiled world was held by <c>CompiledCatalogLawTests</c>,
+/// which is quarantined in <c>experimental/tests</c>.
 /// </summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class CompiledWorldLawTests {

@@ -51,7 +51,6 @@
         <Compile Include="../Shared/World/ClientFixtures.cs" Link="World/ClientFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
-        <Compile Include="../Shared/World/ComposedSdfWorldFixture.cs" Link="World/ComposedSdfWorldFixture.cs" />
         <Compile Include="../Shared/World/CreationFixtures.Emission.cs" Link="World/CreationFixtures.Emission.cs" />
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />

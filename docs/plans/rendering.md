@@ -6062,7 +6062,7 @@ counted rows recorded in the same change.
      counts as skipped. `puck counters --check` and `--record` hold the report
      to `puck.counters.ceilings.v1`. The `kernel-counters` canary holds a
      volume's steps doubling with its samples and a post pass counting one texel
-     a pixel. `tests/Puck.Counters/counters.ceilings.json` is recorded on the
+     a pixel. `src/Puck.World/floor.ceilings.json` is recorded on the
      RTX 2060 at the floor tier, and `--check` holds it there and fails on a
      raised count and on a broken required zero.
 2. **P15-2, jitter and history epochs.** The temporal contract, with
@@ -6175,7 +6175,7 @@ counted rows recorded in the same change.
    - Counted-cost gate: at reduced scale the resolve writes the output texels
      once; a placement with no other work stands in for that output. The
      counted 1080p low workload's rows are in
-     `tests/Puck.Counters/counters.ceilings.json`: `resolve` and `composite`
+     `src/Puck.World/floor.ceilings.json`: `resolve` and `composite`
      each write 2,073,600 texels, and `sky` the render grid's 1,166,400. Resolve
      adds its output storage, bindings and one pipeline: a reduced view owns what
      the native graph at its render ceiling owns, with the render-grid color held

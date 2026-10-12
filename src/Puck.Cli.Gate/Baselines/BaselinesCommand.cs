@@ -22,19 +22,9 @@ public static class BaselinesCommand {
     public static IReadOnlyList<BaselineArtifact> Artifacts { get; } = [
         new(
             CheckedFiles: null,
-            CommittedDirectory: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity",
-            Description: "The browser determinism canary's native state hashes, which the wasm harness also reads.",
-            Inputs: ["src/Puck.World/Assets/worlds/standard.puck", "src/Puck.World/Assets/worlds/quality.puck", "src/Puck.World/Assets/worlds/games/tictactoe.puck"],
-            Name: "browser-parity",
-            Project: "Puck.World.Browser.Tests",
-            RunArguments: CliTestRun.Class(fullName: "Puck.World.Browser.Tests.BrowserParityRecordingTests"),
-            Runs: 1
-        ),
-        new(
-            CheckedFiles: null,
             CommittedDirectory: "tests/Puck.State.Rebuild.Corpus",
             Description: "The author-expression corpus inventory, inventory.md.",
-            Inputs: ["src/Puck.World/Assets/**/*.puck", "worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
+            Inputs: ["src/Puck.World/Assets/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
             Name: "corpus-inventory",
             Project: "Puck.State.Rebuild.Corpus",
             RunArguments: CliTestRun.Class(fullName: "Puck.State.Rebuild.Corpus.CorpusInventoryTests"),
@@ -51,18 +41,6 @@ public static class BaselinesCommand {
             Project: "Puck.Maths.Tests",
             RunArguments: [],
             Runs: 1
-        ),
-        // Two runs in two processes must write identical records, so a nondeterministic world fails the recording
-        // rather than pinning one outcome of a coin flip.
-        new(
-            CheckedFiles: null,
-            CommittedDirectory: "tests/Puck.World.Games.Tests/ShippedWorldStateBaselines",
-            Description: "Each shipped world's canonical state export and tick-cost record after its scripted sequence.",
-            Inputs: ["src/Puck.World/Assets/worlds/**/*.puck", "src/Puck.World/Assets/worlds/**/*.world.json", "tests/Puck.World.Fixtures/**/*.puck", "worlds/parlor/**/*.puck"],
-            Name: "state",
-            Project: "Puck.World.Games.Tests",
-            RunArguments: CliTestRun.Class(fullName: "Puck.World.Games.Tests.ShippedWorldStateBaselineTests"),
-            Runs: 2
         ),
     ];
 

@@ -466,7 +466,7 @@ public sealed class WorldDynamicResolutionLawTests {
     }
     [Fact]
     public void TheStepBudgetIsTheCommittedFloorCeilingsPerOutputPixel() {
-        var path = Path.Combine(path1: RepositoryRoot(), path2: "tests/Puck.Counters/counters.ceilings.json");
+        var path = Path.Combine(path1: RepositoryRoot(), path2: "src/Puck.World/floor.ceilings.json");
         var ceilings = JsonSerializer.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings, utf8Json: File.OpenRead(path: path))!;
 
         foreach (var backend in ceilings.Backends) {

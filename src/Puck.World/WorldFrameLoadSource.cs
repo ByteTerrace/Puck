@@ -13,7 +13,7 @@ namespace Puck.World;
 /// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
 /// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
 /// submissions; and their budget per output pixel from the counters ceilings the floor device committed
-/// (<c>tests/Puck.Counters/counters.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
+/// (<c>src/Puck.World/floor.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
 /// backend (<see cref="WorldDynamicResolution.StepBudgetPerPixel"/>). A timed or counted reading sums the view's newest submissions not read before, through a
 /// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
 /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>

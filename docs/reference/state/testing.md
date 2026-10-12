@@ -99,7 +99,11 @@ syntax, and the [`puck test` reference](../cli.md#puck-testtest-worlds) covers e
 
 ## Compare shipped worlds against their baselines
 
-`tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` holds one canonical state
+While the debug world is the one live world, these baselines, their tests and
+the `puck baselines state` registration are quarantined under `experimental/`;
+this section describes them as they were.
+
+`experimental/tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` holds one canonical state
 export per shipped game, taken after a fixed scripted input sequence, together
 with the sequence and the game's per-tick work budget. The baselines are
 evidence for review: after a change, you re-record them and read what moved.
@@ -111,7 +115,7 @@ dotnet test tests/Puck.World.Games.Tests -c Release --filter-class "*ShippedWorl
 To re-record, run `puck baselines state`, and `puck baselines state --check`
 to compare without writing. The verb runs the baseline tests twice and refuses
 to write if the two runs differ, so a nondeterministic world fails the
-recording. The [baseline README](../../../tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
+recording. The [baseline README](../../../experimental/tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
 describes each file. The README also
 explains which parts of the authoritative hash the export shows as values and
 which it shows only as digests.

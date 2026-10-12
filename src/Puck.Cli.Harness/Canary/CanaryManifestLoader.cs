@@ -1728,10 +1728,9 @@ public static partial class CanaryManifestLoader {
     /// shape an author curating manifests wants, so a refusal always points at a single, unambiguous cause.
     /// <paramref name="strict"/> false (every running shape) instead SKIPS a manifest that refuses to load, collects
     /// its reason into <paramref name="refused"/> keyed by directory name, and keeps loading the rest: one rotten
-    /// manifest — a dead world path, a stale command claim — must never block every OTHER proof from running, which
-    /// is exactly the failure mode that once left the whole gate dark for weeks. A structural refusal that is not
-    /// about any one manifest (no canary directory at all, a stray root file, zero directories, zero SURVIVING
-    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.
+    /// manifest — a dead world path, a stale command claim — never blocks every other proof from running. No canary directory, or one with no canary in it, is an empty suite: discovery
+    /// succeeds with no manifest. A structural refusal that is not about any one manifest (a stray root file, every
+    /// manifest refused) still fails outright in both modes.
     /// When <paramref name="only"/> names ids, discovery is restricted to those directories and refuses unknown ids;
     /// the named manifests still pass every strict load check.</summary>
     public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error, IReadOnlySet<string>? only = null) {
@@ -1747,13 +1746,15 @@ public static partial class CanaryManifestLoader {
         refused = skipped;
         error = string.Empty;
 
+        // No canary directory is an empty suite: discovery selects nothing, and only a named id is refused.
         if (!Directory.Exists(path: canaryRoot)) {
-            error = $"canary discovery found no manifest directory at {CliPaths.ToDisplay(
-                fullPath: canaryRoot,
-                relativeTo: repositoryRoot
-            )}; an empty suite cannot prove anything.";
+            if (only is { Count: > 0 }) {
+                error = $"unknown canary id(s): {string.Join(separator: ", ", values: only.Order(comparer: StringComparer.Ordinal))}.";
 
-            return false;
+                return false;
+            }
+
+            return true;
         }
 
         var rootFiles = Directory.GetFiles(
@@ -1785,9 +1786,7 @@ public static partial class CanaryManifestLoader {
         }
 
         if (directories.Length == 0) {
-            error = "canary discovery found zero manifests; an empty suite cannot report green.";
-
-            return false;
+            return true;
         }
 
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);

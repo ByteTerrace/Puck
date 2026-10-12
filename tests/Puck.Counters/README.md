@@ -2,9 +2,11 @@
 
 While the debug world is the one live world, only its two workloads stay here:
 `debug.world.json` with `shadow.script.txt` and `avatar.world.json` with
-`avatar.script.txt`, their ceilings, and the report and ceilings schemas.
-`counters.ceilings.json` also stays, because `Puck.World` embeds it for the
-dynamic-resolution budget, but its workload is quarantined. Every other
+`avatar.script.txt`, their ceilings, and the report and ceilings schemas; the
+debug workload is `puck counters`' default. The floor ledger `Puck.World`
+embeds for the dynamic-resolution budget, recorded from the quarantined floor
+workload, lives beside its reader as `src/Puck.World/floor.ceilings.json`.
+Every other
 workload, script, batch and reference this page describes is quarantined at the
 same path under
 [`experimental/tests/Puck.Counters`](../../experimental/tests/Puck.Counters),

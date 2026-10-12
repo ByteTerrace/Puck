@@ -6,8 +6,6 @@ namespace Puck.World.Testing;
 internal static partial class AuthoredGameFixtures {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<WorldDefinition>> Loaded = new(comparer: StringComparer.Ordinal);
 
-    public static WorldDefinition Nexus => Load(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
-
     /// <summary>Returns the world document at <paramref name="relativePath"/>, compiled when it is a <c>.puck</c> source
     /// and loaded, composed, and validated the way the host boots it. A load under the default catalog runs once per
     /// suite; the definition is shared, so a caller derives from it with <c>with</c> and never mutates it.</summary>

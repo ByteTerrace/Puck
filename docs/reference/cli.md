@@ -1030,17 +1030,15 @@ against the merge base of `HEAD` and `--merge-base` (default
 17. `formats`: `puck formats --check`.
 18. `canary-ceilings`: `puck canary-ceilings --check`.
 19. `derivations`: `puck derivations --check`.
-20. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-21. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-22. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
-23. `baselines state`: `puck baselines state --check` when reached.
-24. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-25. `parity`: `puck parity` when selected, only with `--gpu`.
-26. `Puck.World.Tests`: device suite, only with `--gpu`.
-27. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-28. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-29. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-30. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
+20. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+21. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+22. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+23. `parity`: `puck parity` when selected, only with `--gpu`.
+24. `Puck.World.Tests`: device suite, only with `--gpu`.
+25. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+26. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+27. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+28. `counters`: only with `--gpu`, recorded `.ceilings.json` files below
     `tests/Puck.Counters` in ordinal order, using their actual `workload` and
     `script` paths. A declared `.batch.json` association routes its complete
     measured observation set once through `puck counters --batch <manifest> --check`;
@@ -1048,8 +1046,8 @@ against the merge base of `HEAD` and `--merge-base` (default
     run `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the recorded
     script supplies it, or the verb's default when absent.
-31. `docs citations`: `puck docs citations`, only with `--gpu`.
-32. `affected record`: `puck affected --record`, only with `--gpu --record`
+29. `docs citations`: `puck docs citations`, only with `--gpu`.
+30. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -2246,7 +2244,7 @@ serial boots, yielding thirty paired reports.
 ### Counted-cost ceilings
 
 `--check` holds the run's report to the counted-cost ceilings in
-`tests/Puck.Counters/counters.ceilings.json`, a `puck.counters.ceilings.v1`
+`tests/Puck.Counters/debug.ceilings.json` by default, a `puck.counters.ceilings.v1`
 document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
 `puck schema` generates. At the workload's resolution, the file states for each
 backend what every render node's GPU submission kinds may read, pass by pass
@@ -4030,18 +4028,19 @@ baseline is what a recording replaces; a run that does not write its records, or
 
 | Artifact | Committed files | Owning tests |
 |---|---|---|
-| `browser-parity` | `experimental/tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 | `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier (Smoke and Default) |
-| `state` | `<world>.state.json` and `<world>.cost.json` in `tests/Puck.World.Games.Tests/ShippedWorldStateBaselines` | `ShippedWorldStateBaselineTests` |
+
+The `state` and `browser-parity` baselines and their tests are quarantined with
+the worlds they recorded, under `experimental/tests`.
 
 ```text
 puck baselines <artifact>           build, run, and promote the fresh records over the committed files
 puck baselines <artifact> --check   build, run, and exit 1 on any committed file that differs
 ```
 
-`state` runs its tests twice, in two processes, and refuses when the two runs wrote different records, so a
-nondeterministic world fails the recording. `maths-ledger --check` compares only the two artifacts the law
+An artifact whose `Runs` is above one runs its tests that many times, in separate processes, and refuses when the
+runs wrote different records. `maths-ledger --check` compares only the two artifacts the law
 declarations generate, `coverage-manifest.json` and `leg-ledger.md`; `frontier.json` and `RESULTS.md` are run
 records that move on every green run.
 

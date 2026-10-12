@@ -4,8 +4,8 @@ The coverage map is quarantined with the canaries it maps: while the debug world
 is the one live world, every canary and the last recorded
 `canary-coverage.json` live under
 [`experimental/tests`](../../experimental/tests/Puck.Affected/canary-coverage.json),
-and `puck affected` refuses until a canary directory and a fresh recording exist
-again ([open items](../../docs/plans/open-items.md#quarantined-gates)).
+and with no canary directory `puck affected` selects no canary
+([open items](../../docs/plans/open-items.md#quarantined-gates)).
 The rest of this page describes the map as the verb reads it.
 
 `canary-coverage.json` records which `Puck.World` source files each

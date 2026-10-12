@@ -8,7 +8,7 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli.Release/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "daf2ae7865a1235e";
+        public const string WorldReleaseExerciseResultCurrentSchema = "ca37be4b29ed1606";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli.Release/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
         public const string WorldReleaseQualificationRunnerMarker = "616097e9ff426e1c";
     }

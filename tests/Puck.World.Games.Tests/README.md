@@ -12,9 +12,9 @@ references no client, renderer or graphics backend.
 
 Its fixtures come from [`tests/Shared/World`](../Shared/World/README.md), with the
 server vocabulary hooks and the Gaming Brick machine catalog. That every shipped
-world the World's own build compiled boots from its compiled world is `CompiledCatalogLawTests` in
-[`Puck.World.Tests`](../Puck.World.Tests/README.md), beside the build that writes
-the catalog.
+world the World's own build compiled boots from its compiled world was held by
+`CompiledCatalogLawTests` in [`Puck.World.Tests`](../Puck.World.Tests/README.md),
+which is quarantined under `experimental/tests`.
 
 Quarantined: the laws that boot the island, the game modules, the root `worlds/`
 packages, the moth courtyard, `pipeline.puck`, the fixture worlds of

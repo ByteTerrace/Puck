@@ -9,7 +9,7 @@ using Puck.World;
 namespace Puck.Cli.Counters;
 
 /// <summary><c>puck counters</c> — the work-counter collector. It boots the authored counters workload
-/// (<c>tests/Puck.Counters/counters.puck</c>, driven by <c>counters.script.txt</c> beside it, unless
+/// (the debug world's shadow workload, <c>tests/Puck.Counters/debug.world.json</c>, driven by <c>shadow.script.txt</c> beside it, unless
 /// <c>--world</c> and <c>--script</c> select another workload) offscreen once per
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
@@ -20,9 +20,9 @@ namespace Puck.Cli.Counters;
 /// format and each actual transcript, script and completion identity.</summary>
 public static partial class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
-    public const string ScriptPath = "tests/Puck.Counters/counters.script.txt";
+    public const string ScriptPath = "tests/Puck.Counters/shadow.script.txt";
     /// <summary>The workload's world document, repository-relative.</summary>
-    public const string WorldPath = "tests/Puck.Counters/counters.puck";
+    public const string WorldPath = "tests/Puck.Counters/debug.world.json";
 
     private const string ReportFileName = "counters.report.json";
     private const string ScratchPrefix = "puck-counters-";
@@ -512,9 +512,9 @@ public static partial class CountersCommand {
             and node. Standard error carries progress; transcripts stay in the run's scratch directory.
 
             --world and --script select another authored workload and its script. The report carries both paths,
-            so a ceilings file for a different workload or script refuses the comparison. The sky-still,
-            sky-drift, sky-twinkle and sky-cycle fixtures under tests/Puck.Counters isolate sky change classes; each
-            has its own ceilings beside it (sky-<workload>.ceilings.json), which --ceilings names.
+            so a ceilings file for a different workload or script refuses the comparison. The seated-avatar
+            workload (avatar.world.json, run by avatar.script.txt) has its own ceilings beside it
+            (avatar.ceilings.json), which --ceilings names.
 
             --check holds the report to the counted-cost ceilings, a {WorldCountersCeilings.SchemaVersion}
             document (schema: tests/Puck.Counters/{WorldCountersCeilings.SchemaVersion}.schema.json). They state,

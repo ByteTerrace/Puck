@@ -492,7 +492,7 @@ with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
 the one after, using `puck counters compare`. `puck counters --check` also holds
 every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/counters.ceilings.json`, judging each device against its own
+`tests/Puck.Counters/debug.ceilings.json` by default, judging each device against its own
 record, and `--record` records the running device's counts into them in the
 change that explains why a count moved.
 
@@ -540,12 +540,9 @@ That harness and its fixtures are quarantined at the same paths under
 `experimental/` while the debug world is the one live world.
 
 Both harnesses skip themselves by name (never silently pass) when the AppBundle
-is absent. To re-record the determinism-canary baseline both the native tests
-and the Node harness compare against:
-
-```powershell
-puck baselines browser-parity
-```
+is absent. The determinism-canary baseline both used to compare against, and
+its `browser-parity` registration, are quarantined under `experimental/` with
+the worlds it recorded.
 
 See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
 and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the
