@@ -669,6 +669,21 @@ These are one-line cautions; the owning pages hold the derivations.
   reaches that minimum cannot lower it;
   `SdfShadowQuery.Ceiling` is the CPU arithmetic reference. A skipped instance publishes no fold wall, as a skipped
   segment does not, so march sample positions can move while staying sound.
+  In the shadow pass (`SDF_QUERY_REJECTION_BOUND`) that ceiling is the reject
+  ceiling every rejection site in `mapCore` compares through
+  `SDF_REJECT_INCUMBENT`, while the running minimum is seeded higher
+  (`sdfShadowProofCeiling`) and each rejection lowers `sdfQueryRejectedBound` by
+  the bound it rejected by; a rejection inside a field scope bounds only by the
+  reject ceiling. A new rejection site in `mapCore` compares the same way and
+  records its bound. The march strides on `min(returned, rejected bound)`, past
+  the step ceiling only as far as that clearance proves no hit and no lower
+  estimate. The shared group masks address the first 8192 instances
+  (`sdfGroupMaskFits`); a larger program takes each gather's complete-field path.
+  Under the root-union certificate, primary meets a visible one-segment static
+  box instance (`sdfAnalyticBox`) by a slab test where the ray enters its hull on
+  a face's flat part, and the partless march omits that segment
+  (`sdfPrimaryAnalytic`); keep the flat-part test with any change to `sdfBox`'s
+  corner rounding.
   `Xor` is maskable with a union-margin bound; do not add it to the unmaskable
   gate.
 - **A field scope is a real per-sample cost.** Scoped segments skip the

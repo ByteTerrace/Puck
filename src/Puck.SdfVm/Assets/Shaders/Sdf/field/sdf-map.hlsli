@@ -3,14 +3,41 @@
 #define FIELD_SDF_MAP_HLSLI
 // Only the primary whole-part traversal sets this. Other query paths keep the complete field.
 static bool sdfPrimaryOmitParts = false;
+#ifdef SDF_PRIMARY_PASS
+// The directory segments the primary traversal meets analytically (sdfAnalyticBox), which its partless march omits with
+// the parts. SDF_SEGMENT_NONE marks an empty slot.
+static uint4 sdfPrimaryAnalytic = uint4(SDF_SEGMENT_NONE, SDF_SEGMENT_NONE, SDF_SEGMENT_NONE, SDF_SEGMENT_NONE);
+#endif
 // A distance-only query's ceiling, in mapCore's units before the program's step scale: the walk starts its running
 // minimum here, so it returns min(field, ceiling) and every skip sphere and part bound rejects against it. Only a
 // caller that saturates at the ceiling sets it, and only when sdfCanTracePartsIndependently certifies that the root is
 // a hard union of independent operands (any other root composition would read the ceiling as an operand): the exact
 // ambient rungs and the soft-shadow march. Callers restore SDF_FAR_DISTANCE.
 static float sdfQueryDistanceCeiling = SDF_FAR_DISTANCE;
+// A soft-shadow query's lower bound on everything its walk rejected (SDF_QUERY_REJECTION_BOUND, the shadow pass only):
+// every rejection decides against min(running minimum, sdfQueryRejectCeiling), so the walk evaluates exactly what a
+// walk seeded at that ceiling evaluates, while the running minimum may start higher, at sdfQueryDistanceCeiling. Each
+// rejection lowers sdfQueryRejectedBound to the bound it rejected by (an instance's gap times its gain, a sphere's
+// gap), and mapCore publishes it in the returned distance's units. min(returned, sdfQueryRejectedBound) is then a lower
+// bound of the field, and its minimum with the reject ceiling is the reject-ceiling walk's value bit for bit. A
+// rejection inside a field scope compares a scope's own accumulator, so it bounds the field only by the reject ceiling.
+#ifdef SDF_QUERY_REJECTION_BOUND
+static float sdfQueryRejectCeiling = SDF_FAR_DISTANCE;
+static float sdfQueryRejectedBound = SDF_FAR_DISTANCE;
+#define SDF_REJECT_INCUMBENT(d) min((d), sdfQueryRejectCeiling)
+#define SDF_RECORD_REJECTED(b) (sdfQueryRejectedBound = min(sdfQueryRejectedBound, (b)))
+#else
+#define SDF_REJECT_INCUMBENT(d) (d)
+#define SDF_RECORD_REJECTED(b)
+#endif
 #if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
 bool sdfPartCannotImprove(uint instance, float3 p, float distance);
+// A part outside its contact box reads above the contact level, which is at least the incumbent it was tested against.
+bool sdfPartCannotImproveRecorded(uint instance, float3 p, float incumbent) {
+    bool skips = sdfPartCannotImprove(instance, p, incumbent);
+    if (skips) { SDF_RECORD_REJECTED(incumbent); }
+    return skips;
+}
 #endif
 // A folded rigid leaf's point: the pose before its fold run, then the run as written with the generic interpreter's
 // exact formulas (symmetry plane, repeat, limited repeat, and the translate/rotate/identity scale between them). Bit k
@@ -185,6 +212,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     SdfHit result;
 
     result.distance = sdfQueryDistanceCeiling;
+#ifdef SDF_QUERY_REJECTION_BOUND
+    sdfQueryRejectedBound = SDF_FAR_DISTANCE;
+#endif
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
@@ -251,8 +281,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         testedWord = maskWordIndex;
                         float4 sphere = sdfGroupMaskSpheres[maskWordIndex];
                         float gap = (length(worldPosition - sphere.xyz) - sphere.w);
-                        if ((sphere.w >= 0.0) && (result.distance < SDF_FAR_DISTANCE * sdfGroupMaskScales[maskWordIndex]) && (gap > 0.0) &&
-                            ((gap * sdfGroupMaskScales[maskWordIndex]) >= result.distance)) {
+                        if ((sphere.w >= 0.0) && (SDF_REJECT_INCUMBENT(result.distance) < SDF_FAR_DISTANCE * sdfGroupMaskScales[maskWordIndex]) &&
+                            (gap > 0.0) && ((gap * sdfGroupMaskScales[maskWordIndex]) >= SDF_REJECT_INCUMBENT(result.distance))) {
+                            SDF_RECORD_REJECTED(gap * sdfGroupMaskScales[maskWordIndex]);
                             uint kept = sdfGroupMaskKept[maskWordIndex];
                             maskWordBits &= kept;
                             if (((kept >> (pendingInstance & 31u)) & 1u) == 0u) {
@@ -267,7 +298,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float gain = (bounded ? 1.0 : sdfPartDistanceGain(part));
                     if ((partReady || rootUnion) && (gain > 0.0)) {
                         float gap = sdfInstanceGap(instanceOffset, pendingInstance, worldPosition);
-                        if (sdfInstanceCannotWin(gap, gain, result.distance)) {
+                        if (sdfInstanceCannotWin(gap, gain, SDF_REJECT_INCUMBENT(result.distance))) {
+                            SDF_RECORD_REJECTED(gap * gain);
                             sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                                 maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
                             continue;
@@ -281,7 +313,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 if (partReady) {
                     if (!sdfPrimaryOmitParts
 #if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
-                        && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
+                        && !sdfPartCannotImproveRecorded(pendingInstance, worldPosition, SDF_REJECT_INCUMBENT(result.distance))
 #endif
                     ) {
                         sdfFieldVisits += (part.z & SDF_PART_LEAF_COUNT_MASK);
@@ -306,6 +338,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
         if (segment >= segmentCount || (previousSegment != SDF_SEGMENT_NONE && segment <= previousSegment)) { return sdfIsaErrorHit(); }
         previousSegment = segment;
+#ifdef SDF_PRIMARY_PASS
+        if (sdfPrimaryOmitParts && any(sdfPrimaryAnalytic == segment)) { continue; }
+#endif
         // A bounded walk floors every candidate a floored instance composes into the root union (sdfBoundedFieldActive).
         bool segmentFloored = ((segmentInstance >= 0) && (((uint)segmentInstance) == flooredInstance));
         if (sdfTapeNextSegment(segment, segment + 1u) != segment) { continue; }
@@ -339,11 +374,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // A dynamic sphere without the dynamic-transform buffer (non-world paths) stays unready: evaluate fully.
             // Squared-distance form of length(p - c) - radius >= runningMin (the max keeps a negative running
             // minimum from flipping the sign). The far guard preserves capped Sweep candidates; see TryGetSweepBound.
-            if (boundReady && (result.distance <= SDF_FAR_DISTANCE)) {
+            if (boundReady && (SDF_REJECT_INCUMBENT(result.distance) <= SDF_FAR_DISTANCE)) {
                 float3 toCenter = (worldPosition - boundCenter);
-                float clearance = max((result.distance + segmentBound.w), 0.0);
+                float clearance = max((SDF_REJECT_INCUMBENT(result.distance) + segmentBound.w), 0.0);
 
                 if (dot(toCenter, toCenter) >= (clearance * clearance)) {
+                    SDF_RECORD_REJECTED((fieldDepth == 0u) ? (length(toCenter) - segmentBound.w) : sdfQueryRejectCeiling);
                     continue;
                 }
             }
@@ -401,15 +437,16 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // distant bones before pose/shape payload loads. Negative radius marks a non-Union/unbounded leaf.
                     float4 leafBound = asfloat(sdfProgramWord(leafOffset + 2u));
 
-                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)
+                    if ((leafBound.w >= 0.0) && (SDF_REJECT_INCUMBENT(result.distance) <= SDF_FAR_DISTANCE)
 #ifdef SDF_TAPE_BUILD
                         && !sdfTapeBuilding
 #endif
                     ) {
                         float3 toLeafCenter = (rigidBasePosition - leafBound.xyz);
-                        float leafClearance = max((result.distance + leafBound.w), 0.0);
+                        float leafClearance = max((SDF_REJECT_INCUMBENT(result.distance) + leafBound.w), 0.0);
 
                         if (dot(toLeafCenter, toLeafCenter) >= (leafClearance * leafClearance)) {
+                            SDF_RECORD_REJECTED(length(toLeafCenter) - leafBound.w);
                             continue;
                         }
                     }
@@ -1020,11 +1057,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
 #endif
 
-                        if (shapeBoundReady && (result.distance <= SDF_FAR_DISTANCE)) {
+                        if (shapeBoundReady && (SDF_REJECT_INCUMBENT(result.distance) <= SDF_FAR_DISTANCE)) {
                             float3 toShapeCenter = (worldPosition - shapeBoundCenter);
-                            float shapeClearance = max((result.distance + shapeBound.w), 0.0);
+                            float shapeClearance = max((SDF_REJECT_INCUMBENT(result.distance) + shapeBound.w), 0.0);
 
                             if (dot(toShapeCenter, toShapeCenter) >= (shapeClearance * shapeClearance)) {
+                                SDF_RECORD_REJECTED((fieldDepth == 0u) ? (length(toShapeCenter) - shapeBound.w) : sdfQueryRejectCeiling);
                                 break;
                             }
                         }
@@ -1242,6 +1280,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Consumers receive the clamped field. Primary acceptance uses that field with its footprint threshold; shadow
     // penumbra estimation separately removes the global clamp — see softShadowVisibility in surface/sdf-occlusion.hlsli.
     result.distance *= stepScale;
+#ifdef SDF_QUERY_REJECTION_BOUND
+    sdfQueryRejectedBound *= stepScale;
+#endif
     // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
     // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
     // non-conformal warp (twist/bend) sits upstream of the fold. SDF_STEP_BOUND_NONE stays effectively unbounded.
