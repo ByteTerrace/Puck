@@ -18302,6 +18302,7 @@
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
         "prime-field.is-prime-vs-witness-oracle",
+        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.montgomery-chains-exhaustive",
         "prime-field.narrow-primality-bands",
         "prime-field.pseudoprime-populations",
@@ -18322,6 +18323,7 @@
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
         "prime-field.is-prime-vs-witness-oracle",
+        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.montgomery-chains-exhaustive",
         "prime-field.narrow-primality-bands",
         "prime-field.pseudoprime-populations",
@@ -18477,6 +18479,7 @@
         "deep.prime-field-baillie-and-populations",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
+        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.pseudoprime-populations",
         "prime-field.word-decision-dispatch"
       ],
@@ -18489,6 +18492,7 @@
         "deep.prime-field-lucas-vs-companion-matrix",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
+        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.lucas-vs-companion-matrix",
         "prime-field.pseudoprime-populations",
         "prime-field.selfridge-symbols-vs-reciprocity"
@@ -23462,16 +23466,26 @@
     },
     {
       "CoveredBy": [
-        "prime-field.baillie-composition"
+        "prime-field.baillie-composition",
+        "prime-field.montgomery-reduction-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Add(System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "prime-field.baillie-composition"
+        "prime-field.baillie-composition",
+        "prime-field.montgomery-reduction-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Add(System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Canonical(System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
@@ -23487,6 +23501,30 @@
         "prime-field.strong-round-vs-oracle"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Encode(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Fold(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.FoldedLazyModulusCeiling",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.LazyModulusCeiling",
       "State": "covered"
     },
     {
@@ -23565,6 +23603,14 @@
     },
     {
       "CoveredBy": [
+        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceLazy(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-field.montgomery-reduction-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.ReduceNarrow(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
@@ -23573,7 +23619,8 @@
     {
       "CoveredBy": [
         "prime-field.baillie-composition",
-        "prime-field.lucas-vs-companion-matrix"
+        "prime-field.lucas-vs-companion-matrix",
+        "prime-field.montgomery-reduction-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Subtract(System.UInt64,System.UInt64)",
       "State": "covered"
@@ -23581,7 +23628,8 @@
     {
       "CoveredBy": [
         "prime-field.baillie-composition",
-        "prime-field.lucas-vs-companion-matrix"
+        "prime-field.lucas-vs-companion-matrix",
+        "prime-field.montgomery-reduction-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Subtract(System.UInt64,System.UInt64,System.UInt64)",
       "State": "covered"

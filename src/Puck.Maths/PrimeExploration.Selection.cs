@@ -38,7 +38,7 @@ public static partial class PrimeExploration {
     /// <para>
     /// When <typeparamref name="TGenerator"/> holds no references, the generator is treated as a pure value: its
     /// draws are a function of its fields alone, so a copy taken after a draw restores the stream exactly. Wide
-    /// candidates are then decided speculatively, three filter survivors at a time, with their base-two rounds
+    /// candidates are then decided speculatively, four filter survivors at a time, with their base-two rounds
     /// interleaved; the generator is restored to the copy taken after the winning draw. The selected prime, the
     /// final generator state and success or failure are those of deciding each candidate in draw order, and no
     /// draw is made past the budget. A generator whose draws depend on anything outside its own fields must hold a
@@ -272,7 +272,7 @@ public static partial class PrimeExploration {
             }
 
             var passes = ((PrimeKernels.BaseTwoBatchWidth == count)
-                ? PrimeKernels.PassesBaseTwoBatch(first: pending[0], second: pending[1], third: pending[2])
+                ? PrimeKernels.PassesBaseTwoBatch(values: pending)
                 : -1);
 
             for (var i = 0; (i < count); ++i) {

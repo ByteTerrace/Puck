@@ -141,15 +141,16 @@ internal static partial class Subjects {
                 typeof(ArgumentOutOfRangeException), "maxAttempts", "custom random-prime empty budget"));
     }
     public static string? PrimeSelectionSpeculativeMatchesSequential() {
-        // Wide bands where batches fill, a uint-straddling band whose narrow candidates interrupt batches, the full
-        // carrier with its exceptional primes, and a short window; budgets from one draw upward so that the budget
-        // runs out before, inside and after a batch.
+        // Wide bands where batches fill, a uint-straddling band whose narrow candidates interrupt batches, bands
+        // straddling each lazy-arithmetic ceiling so that batches mix moduli on both sides of it, the full carrier
+        // with its exceptional primes, and a short window; budgets from one draw upward so that the budget runs out
+        // before, inside and after a batch.
         (ulong Low, ulong High)[] intervals = [
             ((1UL << 63), ulong.MaxValue), (1_000_000_000_000_000_000, 1_000_000_000_000_999_999),
-            (((1UL << 32) + 1UL), (1UL << 33)), (90_000, (1UL << 40)), (0, ulong.MaxValue),
-            (18_446_744_073_709_551_557, ulong.MaxValue), ((uint.MaxValue - 4_000UL), (uint.MaxValue + 4_000UL)),
+            (((1UL << 32) + 1UL), (1UL << 33)), (90_000, (1UL << 40)), ((1UL << 57), (1UL << 59)), ((1UL << 61), (1UL << 63)),
+            (0, ulong.MaxValue), (18_446_744_073_709_551_557, ulong.MaxValue), ((uint.MaxValue - 4_000UL), (uint.MaxValue + 4_000UL)),
         ];
-        int[] budgets = [1, 2, 3, 4, 5, 6, 7, 8, 13, 256];
+        int[] budgets = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16, 256];
 
         foreach (var (low, high) in intervals) {
             foreach (var budget in budgets) {
