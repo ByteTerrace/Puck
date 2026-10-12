@@ -108,6 +108,18 @@ assembly retain their configured concurrency; production deadlines are unchanged
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
+
+Every assembly run also measures line coverage (the `Microsoft.Testing.Extensions.CodeCoverage`
+extension, with `build/CodeCoverage.config`) and writes a Cobertura report beside
+its TRX. The **Check line coverage** job downloads every shard's results and runs
+`puck artifacts coverage`, which merges the reports (a line is covered when any
+run hit it) and fails unless every line of live `src/` code is covered and every
+live project was loaded by some run. The suite's target is the smallest set of
+tests that reaches that, plus the owner's keep-list of invariant tests coverage
+cannot see ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). The runners have no
+GPU, so code only a device reaches is left out through one list,
+`build/CoverageGpuOnly.txt`, and nowhere else. The job writes the full list of
+uncovered lines to `coverage.txt` in the results directory.
 Every assembly must discover tests; hardware-dependent cases may still skip.
 Explicit tests, including the Maths suite's Deep and Exhaustive tiers, stay out of a
 direct assembly run exactly as they stay out of a plain `dotnet test`.

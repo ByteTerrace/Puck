@@ -39,6 +39,13 @@ public static class CliTestRun {
     /// <param name="fileName">The report's file name in it.</param>
     /// <returns>The options.</returns>
     public static string[] Report(string directory, string fileName) => ["--results-directory", directory, "--report-xunit-trx", "--report-xunit-trx-filename", fileName];
+    /// <summary>Measures the run's line coverage of the <c>Puck.*</c> assemblies it loads and writes it as a Cobertura
+    /// report. The settings file (<c>build/CodeCoverage.config</c>) selects the modules and leaves out generated
+    /// sources.</summary>
+    /// <param name="settings">The coverage settings file.</param>
+    /// <param name="output">The Cobertura report's path.</param>
+    /// <returns>The options.</returns>
+    public static string[] Coverage(string settings, string output) => ["--coverage", "--coverage-output-format", "cobertura", "--coverage-output", output, "--coverage-settings", settings];
     /// <summary>Reads the counts of a run's closing summary from its console output: the <c>total:</c>,
     /// <c>failed:</c>, <c>succeeded:</c> and <c>skipped:</c> lines after the last <c>Test run summary:</c> line.</summary>
     /// <param name="output">The run's standard output, one line per entry.</param>

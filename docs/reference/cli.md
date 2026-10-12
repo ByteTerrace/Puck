@@ -270,6 +270,7 @@ the [cartridge forge guide](../emulation/shared/cartridge-forge.md). A full run 
 ```sh
 puck artifacts capture | restore | test-world
 puck artifacts test-windows [--shard <index> --shards <count>]
+puck artifacts coverage [--results <directory>]
 puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
@@ -297,7 +298,13 @@ that read a build tree (`--filter-not-trait Category=BuildTree`), which a
 restored archive is not. `--shard <index> --shards <count>` runs one zero-based
 shard of the manifest, one per CI runner: the shards deal it round-robin in
 ordinal order, so together they run every assembly exactly once. Without them
-the one shard is the whole manifest. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
+the one shard is the whole manifest. Each run also writes a Cobertura line-coverage
+report beside its TRX report (`build/CodeCoverage.config` selects the `Puck.*`
+assemblies). `coverage` merges every report under `--results` (default
+`artifacts/test-results`), writes the verdict and every uncovered line range to
+`coverage.txt` there, and exits 1 unless every measured `src/` line is covered and
+every `src/` project in `Puck.slnx` was loaded, leaving out the prefixes
+`build/CoverageGpuOnly.txt` lists as reachable only on a GPU. `docs build` is described with [the `docs` family](#puck-docsthe-documentation-family). `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
 including hidden files.

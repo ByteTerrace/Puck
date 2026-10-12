@@ -27,7 +27,14 @@ A lane lands on:
 3. Tests kept honest. Write a test only where running cannot show the behavior
    and the test will outlive the next rewrite. A test the change breaks is
    updated or deleted in the same change, never kept as a constraint. Run the
-   tests you added or touched.
+   tests you added or touched. CI requires 100% line coverage of live `src/`
+   code from the CPU suites (`puck artifacts coverage`, in `build.yml`), so new
+   code lands with a test that reaches it, and code nothing reaches is
+   deleted. Code only a
+   GPU reaches goes in `build/CoverageGpuOnly.txt`, the one exclusion list.
+   To see a suite's coverage locally, run it as
+   `dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
+   and merge with `puck artifacts coverage --results <dir>`.
 
 A change to simulation state stays deterministic (`AGENTS.md` rule 4);
 `puck test --reproduce` on a world the change reaches is the quick way to see
