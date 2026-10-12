@@ -110,7 +110,7 @@ dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
 
 Every assembly run also measures line coverage (the `Microsoft.Testing.Extensions.CodeCoverage`
-extension, with `build/CodeCoverage.config`) and writes a Cobertura report beside
+extension, with `build/CodeCoverage.config`) and keeps a compact form of its Cobertura report beside
 its TRX. The **Check line coverage** job downloads every shard's results and runs
 `puck artifacts coverage`, which merges the reports (a line is covered when any
 run hit it) and fails unless every line of live `src/` code is covered and every

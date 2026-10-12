@@ -38,6 +38,21 @@ public sealed class CoverageReportLawTests {
         Assert.Contains(expectedSubstring: "  src/Puck.B/", actualString: writer.ToString());
     }
     [Fact]
+    public void ACompactReportMergesAsItsCoberturaReportDid() {
+        using var directory = new TemporaryDirectory();
+        var report = Report(directory: directory, fileName: "/_/src/Puck.A/A.cs", lines: [(1, 2), (2, 0), (5, 1)], name: "0-A.cobertura.xml");
+        var expected = CoverageReport.Merge(reports: [report]);
+        var compact = CoverageReport.Compact(report: report);
+
+        Assert.False(condition: File.Exists(path: report));
+        Assert.Equal(expected: directory.PathOf(name: "0-A.coverage.tsv"), actual: compact);
+        Assert.Equal(expected: $"src/Puck.A/A.cs\t1,5\t2{Environment.NewLine}", actual: File.ReadAllText(path: compact));
+        var merged = CoverageReport.Merge(reports: [compact, Report(directory: directory, fileName: "src/Puck.A/A.cs", lines: [(2, 1)], name: "1-A.cobertura.xml")]);
+
+        Assert.Equal(expected: expected.Keys, actual: merged.Keys);
+        Assert.Equal(expected: [true, true, true], actual: merged["src/Puck.A/A.cs"].Values);
+    }
+    [Fact]
     public void TheGpuOnlyListLeavesItsLinesAndProjectsOut() {
         using var directory = new TemporaryDirectory();
         var files = CoverageReport.Merge(reports: [

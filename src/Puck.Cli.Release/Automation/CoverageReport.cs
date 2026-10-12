@@ -42,14 +42,60 @@ public static class CoverageReport {
 
         return relative.Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") ? null : relative;
     }
-    /// <summary>Merges Cobertura reports: for each source file, every line a report lists, and whether any report hit
-    /// it.</summary>
+    /// <summary>The extension of a compact report (<see cref="WriteCompact"/>): a Cobertura report a CI run uploads is
+    /// tens of megabytes, its compact form a few hundred kilobytes.</summary>
+    public const string CompactExtension = ".coverage.tsv";
+
+    /// <summary>Writes merged coverage compactly: one line per source file, its path, the lines a run hit and the
+    /// lines none did, tab-separated, each list comma-separated. <see cref="Merge"/> reads it back.</summary>
+    /// <param name="files">The merged coverage.</param>
+    /// <param name="writer">The destination.</param>
+    public static void WriteCompact(SortedDictionary<string, SortedDictionary<int, bool>> files, TextWriter writer) {
+        foreach (var (path, lines) in files) {
+            writer.Write(value: path);
+            writer.Write(value: '\t');
+            writer.Write(value: string.Join(separator: ',', values: lines.Where(predicate: static line => line.Value).Select(selector: static line => line.Key)));
+            writer.Write(value: '\t');
+            writer.WriteLine(value: string.Join(separator: ',', values: lines.Where(predicate: static line => !line.Value).Select(selector: static line => line.Key)));
+        }
+    }
+    /// <summary>Replaces a Cobertura report with its compact form beside it (<c>name.cobertura.xml</c> becomes
+    /// <c>name.coverage.tsv</c>).</summary>
+    /// <param name="report">The Cobertura report's path; it is deleted.</param>
+    /// <returns>The compact report's path.</returns>
+    public static string Compact(string report) {
+        var compact = (report[..report.LastIndexOf(comparisonType: StringComparison.Ordinal, value: ".cobertura.xml")] + CompactExtension);
+
+        using (var writer = new StreamWriter(path: compact)) { WriteCompact(files: Merge(reports: [report]), writer: writer); }
+        File.Delete(path: report);
+        return compact;
+    }
+    /// <summary>Merges reports, Cobertura or compact (<see cref="CompactExtension"/>): for each source file, every
+    /// line a report lists, and whether any report hit it.</summary>
     /// <param name="reports">The reports' paths.</param>
     /// <returns>Each repository-relative source file's lines, mapped to whether any run hit them.</returns>
     public static SortedDictionary<string, SortedDictionary<int, bool>> Merge(IEnumerable<string> reports) {
         var files = new SortedDictionary<string, SortedDictionary<int, bool>>(comparer: StringComparer.Ordinal);
 
         foreach (var report in reports) {
+            if (report.EndsWith(comparisonType: StringComparison.Ordinal, value: CompactExtension)) {
+                foreach (var entry in File.ReadLines(path: report)) {
+                    var fields = entry.Split(separator: '\t');
+
+                    if (!files.TryGetValue(key: fields[0], value: out var known)) {
+                        known = [];
+                        files.Add(key: fields[0], value: known);
+                    }
+                    for (var column = 1; (column <= 2); column++) {
+                        foreach (var number in fields[column].Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ',')) {
+                            var line = int.Parse(s: number, provider: System.Globalization.CultureInfo.InvariantCulture);
+
+                            known[line] = (known.GetValueOrDefault(key: line) || (column == 1));
+                        }
+                    }
+                }
+                continue;
+            }
             using var reader = XmlReader.Create(inputUri: report, settings: new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore });
             SortedDictionary<int, bool>? lines = null;
 

@@ -356,7 +356,10 @@ public static class ArtifactsCommand {
                     fileName: "dotnet",
                     workingDirectory: root
                 );
+                var coverage = Path.Combine(path1: root, path2: Results, path3: $"{Array.IndexOf(array: manifest, value: assembly):D3}-{name}.cobertura.xml");
 
+                // The shard uploads its results; the compact form is what `coverage` needs, at a fraction of the size.
+                if (File.Exists(path: coverage)) { CoverageReport.Compact(report: coverage); }
                 lock (console) {
                     Console.Write(value: run.Stdout);
                     Console.Error.Write(value: run.Stderr);
@@ -379,7 +382,10 @@ public static class ArtifactsCommand {
     private static int Coverage(string results) {
         var root = RepositoryPaths.RequireRoot();
         var directory = Path.GetFullPath(path: Path.Combine(path1: root, path2: results));
-        var reports = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.cobertura.xml").Order(comparer: StringComparer.Ordinal).ToArray();
+        var reports = Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.*")
+            .Where(predicate: static path => (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cobertura.xml") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: CoverageReport.CompactExtension)))
+            .Order(comparer: StringComparer.Ordinal)
+            .ToArray();
 
         if (reports.Length == 0) { throw new InvalidDataException(message: $"No coverage reports under {results}."); }
         var gpuOnly = CoverageReport.ParseGpuOnly(text: File.ReadAllText(path: Path.Combine(path1: root, path2: CoverageReport.GpuOnlyList)));

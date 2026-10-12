@@ -300,7 +300,7 @@ shard of the manifest, one per CI runner: the shards deal it round-robin in
 ordinal order, so together they run every assembly exactly once. Without them
 the one shard is the whole manifest. Each run also writes a Cobertura line-coverage
 report beside its TRX report (`build/CodeCoverage.config` selects the `Puck.*`
-assemblies). `coverage` merges every report under `--results` (default
+assemblies), kept in its compact form (`.coverage.tsv`: per file, the lines hit and missed). `coverage` merges every report, Cobertura or compact, under `--results` (default
 `artifacts/test-results`), writes the verdict and every uncovered line range to
 `coverage.txt` there, and exits 1 unless every measured `src/` line is covered and
 every `src/` project in `Puck.slnx` was loaded, leaving out the prefixes
