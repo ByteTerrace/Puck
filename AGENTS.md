@@ -51,6 +51,10 @@ agent works in that mode by default, without asking:
     possible.
   - Self-modification is explicitly approved: agents edit AGENTS.md, the
     skills and their evals as part of ordinary work.
+  - Removing or changing gate steps, CI steps and the tests that pin them is
+    explicitly approved as ordinary work.
+  - While the debug world is the one live world, production deploys it: `world
+    prepare` and the Azure release build from `debug.puck`.
 - The gates, ledgers, red-leg proofs and review passes described in this file
   and the skills were written by agents, not ordered by the owner. They are
   tools to use when they pay for themselves, never preconditions for landing.
