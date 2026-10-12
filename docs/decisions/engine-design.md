@@ -188,10 +188,10 @@ an accidental internal design. Package and release promises, when made, need
 their own explicit compatibility policy rather than being inferred from an
 internal schema's version label.
 
-A format's shape, not its version label, is what refuses data it cannot read.
-Nothing has been released, so a token is only a name: `FormatVersions.json`
-records each format's shape fingerprint, and the codec that owns a wire,
-checkpoint, tape or cache writes that fingerprint in its header or handshake
-and refuses any other by name before any state changes. The ledger never asks
-for a token bump. A store identified by its content, such as a bake keyed by
-its derivation fingerprint, already rejects by content and needs no header.
+A format's own magic and version are what refuse data it cannot read. The codec
+that owns a wire, checkpoint, tape or cache writes them in its header or
+handshake and refuses any other by name before any state changes, and a change
+to its layout raises the version in the same change. No ledger records a
+layout. A store identified by its content, such as a bake keyed by the
+fingerprint of the compiled code that baked it, already rejects by content and
+needs no header.

@@ -24,9 +24,7 @@ reasoning behind every decision is in
   Each migration must preserve the composed definition and its state baseline,
   replace source-facing references, and keep executable-relative references
   naming the generated `.world.json` output. The build ships those generated
-  documents, not the authored sources. Format shape fingerprints already remove
-  source trivia before normalization; that work is implemented rather than an
-  unstarted prerequisite.
+  documents, not the authored sources.
 - **Landed:** the baked solid query, `WorldSolidField`, `WorldOutputHub`
   narration, and `WorldDeadlineTable`; the `WorldServer` facade split and its
   constraints (every record the checkpoint codec reads sits at the top level of
@@ -228,8 +226,8 @@ the product loaded from the compiled world byte for byte, and a deliberate
 change to a derivation moves that chunk's version and re-records its pin
 (`CompiledWorldLawTests`; `CreationBakeLawTests` for `BAKE`) in the same change. A chunk's version is set by hand for
 `DEFN` and `ASST` (`CompiledWorldChunks.cs`); for `BAKE` it is the fingerprint of
-the baking code, which `puck derivations --check` holds current. [Derivation
-keys](#derivation-keys) owns moving the rest onto fingerprints.
+the compiled baking code (`CreationBakeDerivation`), which every build computes. The
+[derivation keys](#derivation-keys) package owns moving the rest onto fingerprints.
 
 **One validated load (landed).** Owns `WorldDefinitionValidator.ValidateCore`'s
 callers and `WorldServer.RecompileRules`'s. One validation receipt reaches the
@@ -324,17 +322,15 @@ canary and `puck parity` from compiled worlds on both backends.
 #### Derivation keys
 
 A derived product is keyed by the code that makes it, so a deliberate change to
-that code moves the key and nothing is served stale. `puck derivations` computes
-the fingerprint of the bake producer's transitive source into
-`DerivationFingerprint.Bake`, which the bake keys and the `BAKE` chunk's version
-read; [the command reference](../reference/cli.md#puck-derivationscode-provenance-keys)
-owns what the verb does today. Two other products are not yet keyed this way.
-Each slice reuses the verb's machinery: a `[Derivation]` entry point names the
-producer, the generated fingerprint carries its reach, and `--check` refuses a
-stale one.
+that code moves the key and nothing is served stale. The running build computes
+it: `CreationBakeDerivation.Fingerprint` is the content fingerprint of
+`Puck.World.Authoring` and every Puck assembly it reaches
+(`AssemblyReach.ContentFingerprint`), which the bake keys and the `BAKE` chunk's
+version read. Nothing records it, so nothing goes stale. Two other products are
+not yet keyed this way. Each slice reuses that machinery: the producer's assembly
+roots the reach, and the reach's fingerprint is the key.
 
-**Owns:** `DerivationsCommand`, `DerivationReach`, `DerivationAttribute` and the
-generated `DerivationFingerprint`, and the two products below.
+**Owns:** `AssemblyReach`, `CreationBakeDerivation`, and the two products below.
 
 **Delivers, as two independent slices:**
 
@@ -354,16 +350,12 @@ generated `DerivationFingerprint`, and the two products below.
    simulation-chunks and everything-else packages add declares which side it is
    on. Per-chunk fingerprints for `DEFN` and `ASST` are not taken: they would
    gain a kept compiled world across a rebuild only if the header gave up the
-   engine build, which is the stronger key (module ids cover reflection,
-   dispatch and package code the token fingerprint does not read). Nothing
+   engine build, which is the stronger key. Nothing
    re-records: no hash, baseline or shipped compiled world moves, because the
    compile at build already re-derives every world. Check: a law that every
    registered chunk either lists an assembly inside the engine build's reach
    and carries zero, or carries its derivation's fingerprint and names its
-   `[Derivation]` entry point; `puck derivations --check` red after an edit to a
-   source a fingerprinted chunk reads, shown once. Sequenced after Cloud C's
-   format-token sweep and the derivation reach changes in flight, which touch
-   the same files.
+   producer's assembly.
 2. **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
    path, the pipeline's name, every closure file's pin, and each pass's interface
    and declarations pins. It reads nothing of the code that compiles and writes

@@ -134,8 +134,6 @@ pub const CAP_MUTATE: u64 = 8;
 pub const CAP_OBSERVE: u64 = 2;
 
 // `Puck.Scripting.AddonAbi` constants (`src/Puck.Scripting/AddonAbi.cs`).
-/// `AddonAbi.AbiShapeFingerprint` (`"411c436c3c5b56d2"`).
-pub const ABI_SHAPE_FINGERPRINT: &str = "411c436c3c5b56d2";
 /// `AddonAbi.AbiVersion` (`1`).
 pub const ABI_VERSION: i32 = 1;
 /// `AddonAbi.ChannelDescriptorBytes` (`16`).
@@ -172,9 +170,6 @@ pub const MAX_STACK_BYTES: usize = 524288;
 pub const ONE: i64 = 65536;
 /// `AddonAbi.OutCellBytes` (`32`).
 pub const OUT_CELL_BYTES: usize = 32;
-
-/// `Puck.Scripting.AddonAbi.AbiShape`: the host's addon ABI shape fingerprint `411c436c3c5b56d2` as the word every guest returns from `puck_abi_shape`.
-pub const ABI_SHAPE: u64 = 0x411c436c3c5b56d2;
 
 // `Puck.Scripting.AddonAbi.OutCellOffsets` — the guest→host output cell field offsets.
 /// `AddonAbi.OutCellOffsets.A` (`8`).

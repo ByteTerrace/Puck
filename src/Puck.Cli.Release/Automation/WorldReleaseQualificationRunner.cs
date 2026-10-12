@@ -30,8 +30,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
 
     private const string Marker = "puck.world.qualification.v1";
 
-    // The whole content of a fixture's marker file: the token, then the shape fingerprint of the fixture layout it marks.
-    public const string MarkerFileContent = ((Marker + " ") + FormatShapes.WorldReleaseQualificationRunnerMarker);
+    // The whole content of a fixture's marker file: the token naming the fixture layout it marks.
+    public const string MarkerFileContent = Marker;
 
     private readonly TimeProvider m_clock = (clock ?? TimeProvider.System);
     private readonly IWorldReleaseQualificationContainers m_containers = (containers ?? new WorldReleaseQualificationDocker(clock: (clock ?? TimeProvider.System)));
@@ -300,7 +300,6 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
 
         if (
             (result.Schema != WorldReleaseExerciseResult.CurrentSchema) ||
-            (result.Shape != WorldReleaseExerciseResult.CurrentShape) ||
             (result.ReceiptSeedHash != expectedReceipts) ||
             (result.ImportedReceiptHash != expectedReceipts) ||
             (result.ContinuedReceiptHash != expectedReceipts)
@@ -572,7 +571,6 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         }
         var evidence = JsonSerializer.SerializeToUtf8Bytes(new {
             Schema = Marker,
-            Shape = FormatShapes.WorldReleaseQualificationRunnerMarker,
             SourceRelease = source?.Identity,
             TargetRelease = target.Identity,
             SourceImage = aImage,

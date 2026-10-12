@@ -4,22 +4,15 @@ using Xunit;
 
 namespace Puck.Cli.Release.Tests;
 
-/// <summary>Laws for the shape fingerprint a qualification fixture's marker file names after its token: the fixture builder
-/// writes the one the ledger records, and a leg refuses a fixture marked with the same token and another shape by the
+/// <summary>Laws for a qualification fixture's marker file: a leg refuses a fixture marked with another token by the
 /// marker, before it restores anything.</summary>
-public sealed class QualificationMarkerShapeLawTests {
+public sealed class QualificationMarkerLawTests {
     [Fact]
-    public void TheMarkerFileNamesTheTokenThenTheShapeTheLedgerRecords() =>
-        Assert.Equal(
-            actual: $"puck.world.qualification.v1 {FormatLedgerShapes.Of(id: "WorldReleaseQualificationRunner.Marker")}",
-            expected: WorldReleaseQualificationRunner.MarkerFileContent
-        );
-    [Fact]
-    public async Task AFixtureMarkedUnderAnotherShapeIsRefusedBeforeAnythingIsRestored() {
+    public async Task AFixtureMarkedWithAnotherTokenIsRefusedBeforeAnythingIsRestored() {
         using var directory = new TemporaryDirectory(prefix: "puck-qualification-marker-");
 
         File.WriteAllText(
-            contents: "puck.world.qualification.v1 0000000000000000",
+            contents: "puck.world.qualification.v0",
             path: Path.Combine(
                 path1: directory.RootPath,
                 path2: "qualification.fixture"

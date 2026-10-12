@@ -691,7 +691,7 @@ public sealed partial class WorldReplayTape {
     /// crossing between them.</returns>
     /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
     /// <exception cref="InvalidDataException">The file is not a <c>.puckreplay</c> recording, does not carry this
-    /// build's tape shape token — greenfield, so a foreign shape is refused outright rather than read tolerantly;
+    /// build's tape version — greenfield, so a foreign shape is refused outright rather than read tolerantly;
     /// re-record it — carries a value no pinned wire set names, or pins a mounted addon set the fresh world would not
     /// reproduce.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug in the re-drive (see

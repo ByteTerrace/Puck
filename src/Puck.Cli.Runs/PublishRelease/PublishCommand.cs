@@ -64,7 +64,6 @@ public static class PublishCommand {
             Revoked: null,
             Rollout: new ReleaseRollout(Percent: rolloutPercent),
             Schema: ReleaseManifest.CurrentSchema,
-            Shape: ReleaseManifest.CurrentShape,
             Signature: null,
             StateGeneration: stateGeneration,
             Version: version

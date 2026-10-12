@@ -58,7 +58,6 @@ internal static class WorldAuthorityRecoveryRootCodec {
 
     private sealed record Envelope(
         [property: JsonPropertyName("schema")] string Schema,
-        [property: JsonPropertyName("shape")] string Shape,
         [property: JsonPropertyName("owner")] Guid Owner,
         [property: JsonPropertyName("world")] string World,
         [property: JsonPropertyName("operation")] Guid OperationId,
@@ -70,7 +69,6 @@ internal static class WorldAuthorityRecoveryRootCodec {
     public static byte[] Encode(WorldAuthorityIdentity identity, Guid operationId, WorldAuthorityRootSnapshot root) => JsonSerializer.SerializeToUtf8Bytes(
         new Envelope(
             Schema,
-            FormatShapes.WorldAuthorityRecoveryRootCodecSchema,
             identity.Owner,
             identity.World.Value,
             operationId,
@@ -96,24 +94,24 @@ internal static class WorldAuthorityRecoveryRootCodec {
                 return false;
             }
 
-            // The shape is named before any other member is looked at: a root written under another layout is refused by
-            // its fingerprint, not by whichever member of it this build happens to miss first.
+            // The schema is named before any other member is looked at: a root of another version is refused by its schema,
+            // not by whichever member of it this build happens to miss first.
             if (
                 document.RootElement.TryGetProperty(
-                    propertyName: "shape",
-                    value: out var shape
+                    propertyName: "schema",
+                    value: out var schema
                 ) &&
-                ((shape.ValueKind != JsonValueKind.String) || !string.Equals(
-                a: shape.GetString(),
-                b: FormatShapes.WorldAuthorityRecoveryRootCodecSchema,
+                ((schema.ValueKind != JsonValueKind.String) || !string.Equals(
+                a: schema.GetString(),
+                b: Schema,
                 comparisonType: StringComparison.Ordinal
             ))
             ) {
-                reason = $"recovery-root shape fingerprint {shape.GetRawText()} is not '{FormatShapes.WorldAuthorityRecoveryRootCodecSchema}'";
+                reason = $"recovery-root schema {schema.GetRawText()} is not '{Schema}'";
                 return false;
             }
 
-            var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) { "schema", "shape", "owner", "world", "operation", "rootVersion", "capturedAt", "root" };
+            var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) { "schema", "owner", "world", "operation", "rootVersion", "capturedAt", "root" };
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var property in document.RootElement.EnumerateObject()) {

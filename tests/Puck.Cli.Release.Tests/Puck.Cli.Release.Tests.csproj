@@ -31,7 +31,6 @@
         <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
         <Compile Include="../Shared/Cli/GitScratchCheckout.cs" Link="GitScratchCheckout.cs" />
         <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
     <ItemGroup>

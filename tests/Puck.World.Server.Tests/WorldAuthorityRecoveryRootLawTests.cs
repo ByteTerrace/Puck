@@ -299,10 +299,9 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
             cancellation
         ));
     }
-    // A recovery root carries the shape fingerprint the ledger records for its layout; a root of the same schema under
-    // another shape is refused by the fingerprint's name, before any other member is read.
+    // A recovery root of another schema is refused by the schema's name, before any other member is read.
     [Fact]
-    public async Task ARecoveryRootOfAnotherShapeIsRefusedByItsFingerprint() {
+    public async Task ARecoveryRootOfAnotherSchemaIsRefusedByItsName() {
         using var directory = new TemporaryDirectory();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
@@ -359,17 +358,16 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
                 oldChar: '/'
             )
         );
-        var recorded = FormatLedgerShapes.Of(id: "WorldAuthorityRecoveryRootCodec.Schema");
         var text = File.ReadAllText(path: path);
 
         Assert.Contains(
             actualString: text,
-            expectedSubstring: $"\"shape\":\"{recorded}\""
+            expectedSubstring: "\"schema\":\"puck.authority.recovery-root.v1\""
         );
         File.WriteAllText(
             contents: text.Replace(
-                newValue: "0000000000000000",
-                oldValue: recorded
+                newValue: "puck.authority.recovery-root.v0",
+                oldValue: "puck.authority.recovery-root.v1"
             ),
             path: path
         );
@@ -382,7 +380,7 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "shape fingerprint"
+            expectedSubstring: "recovery-root schema"
         );
     }
 }

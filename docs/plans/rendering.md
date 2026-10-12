@@ -1466,7 +1466,7 @@ as surface nets did, for about a tenth more evaluations over a whole bake, and
 surface nets is deleted. It places a vertex per surface patch of a cell, so a
 plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
 shares an edge among more than two quads, at 0.26% more vertices than one vertex
-per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
+per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `CreationBakeDerivation.Fingerprint`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1480,8 +1480,8 @@ the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
 
-The bake key's code fingerprint is kept by `puck derivations` ([CLI
-reference](../reference/cli.md#puck-derivationscode-provenance-keys)). The open
+The bake key's code fingerprint is computed by the running build, from the
+compiled content of the assemblies that bake (`AssemblyReach.ContentFingerprint`). The open
 derivation-key slices are owned by
 [runtime and delivery](runtime-and-delivery.md#derivation-keys).
 

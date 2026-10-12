@@ -175,10 +175,10 @@ Update every authored document's `addons` row that pins a module whose printed h
 
 **The committed bytes' provenance is not gate-enforced.** No build step proves a committed `.wasm`
 was built from the Rust beside it here; they can drift silently if someone edits one without the
-other. `Puck.World.Server.Tests` does refuse every committed module that reports an ABI shape other
-than the host's (`ACommittedGuestBinaryReportsTheHostsAbiShape`). Refreshing the modules is therefore
+other. `Puck.World.Server.Tests` does refuse every committed module that reports an ABI version other
+than the host's (`ACommittedGuestBinaryReportsTheHostsAbiVersion`). Refreshing the modules is therefore
 a **deliberate step**: run `puck wasm build` whenever a guest's (or a `puck-stdlib` dependency's)
-source or the host's ABI shape changes, then update every pinning row's `hash` to match the printed
+source or the host's ABI changes, then update every pinning row's `hash` to match the printed
 value **in the same change**. An unrefreshed hash after a real source change means the host is
 running stale bytes under a pin that no longer describes them; a refreshed module with a stale hash
 means the host refuses to load it at all. Neither is silent, but only the first is wrong.
@@ -222,7 +222,7 @@ wasm-tools print target/wasm32-unknown-unknown/release/puck_addon_default.wasm |
 ```
 
 The import list must be empty. The export list must cover the full required surface—`memory`,
-`puck_abi_version`, `puck_abi_shape`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
+`puck_abi_version`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
 `puck_channels_ptr`, `puck_channels_count`, `puck_on_tick`, and optionally `puck_init`. Signatures
 and semantics are in
 [the ABI contract](../docs/reference/scripting.md#guest-exports).

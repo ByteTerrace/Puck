@@ -14,7 +14,6 @@
         <ProjectReference Include="../../src/Puck.Commands/Puck.Commands.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />

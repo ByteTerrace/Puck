@@ -18,9 +18,8 @@ namespace Puck.HumbleGamingBrick;
 /// <param name="RomHash">A 64-bit fingerprint of the cartridge ROM.</param>
 /// <param name="RomLength">The cartridge ROM length in bytes.</param>
 public readonly record struct MachineIdentity(int Version, int Model, ulong BootRomHash, ulong RomHash, int RomLength) {
-    /// <summary>The current snapshot format version. The serialized field layout is identified by its recorded shape
-    /// (<c>puck formats</c>), which an incompatible snapshot fails to match, so changing the layout is not a reason to
-    /// change this number.</summary>
+    /// <summary>The current snapshot format version. Raise it whenever the serialized field layout changes, so a
+    /// snapshot of another layout is rejected rather than misread.</summary>
     public const int CurrentVersion = 1;
 
     /// <summary>Computes an identity for a console model and its immutable ROM images using a stable FNV-1a fingerprint.</summary>

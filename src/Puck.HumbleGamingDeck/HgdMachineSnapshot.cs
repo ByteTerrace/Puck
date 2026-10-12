@@ -13,7 +13,8 @@ namespace Puck.HumbleGamingDeck;
 /// <param name="ImageLength">The complete image length.</param>
 public readonly record struct HgdMachineIdentity(int Version, HgdConsoleModel Model, HgdPowerOnProfile PowerOn,
     HgdCartridgeHeader Header, ulong ImageHash, ulong PrgHash, ulong ChrHash, int ImageLength) {
-    /// <summary>The complete machine snapshot layout, including separate volatile and nonvolatile board memory.</summary>
+    /// <summary>The complete machine snapshot layout, including separate volatile and nonvolatile board memory. Raise it
+    /// whenever the serialized field layout changes.</summary>
     public const int CurrentVersion = 1;
 
     /// <summary>Computes the stamp from all execution inputs.</summary>

@@ -871,24 +871,13 @@ meant to establish.
   (SMELL002/SMELL003). Rewrite or delete the comment, then
   `puck comment-smells`. Both ledgers are
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
-- A strictly versioned format token (a wire key, checkpoint or journal
-  version, replay shape token, baker version, magic, or `puck.<name>.vN`
-  schema) is recorded in `FormatVersions.json` with the shape fingerprint of its
-  source. Edit the source, then run `puck formats`, which rewrites the ledger and
-  each project's generated `FormatShapes.g.cs`; formatting preserves the
-  fingerprint. `puck formats --check` fails on any disagreement but never asks
-  for a token bump: the codec writes its fingerprint in its header or handshake
-  and refuses data of any other shape by name before any state changes, so a
-  token cannot say what the fingerprint does not. The fingerprint covers the
-  codec's layouts and the members of its files that touch bytes, the enums it
-  casts and the members it calls that carry `[FormatLeaf]`; a call into any other
-  repository member is recorded as open in the ledger, so a helper that decides a byte is marked
-  `[FormatLeaf]`, one that decides none is marked
-  `[FormatSeam("its behaviour sets no byte because …")]`, and a codec that
-  drives the engine moves that work out. Two lanes that edit one codec
-  differently conflict on its shape line in the ledger instead of colliding at
-  run time.
-  [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
+- A strictly versioned format (a wire key, checkpoint or journal version,
+  replay tape version, magic, or `puck.<name>.vN` schema) carries its own
+  version or magic, which its codec writes in its header or handshake and
+  refuses any other by name before any state changes. Nothing records a
+  layout, so a change to a format's layout raises its version (or the digit
+  of its magic) in the same change; a version that stays put while its layout
+  moves misreads old data instead of refusing it.
 - The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
   never declared by hand. A change that adds or removes canary cost runs
   `puck canary-ceilings` and states the new `puck canary --merge --plan`

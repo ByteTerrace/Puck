@@ -105,8 +105,6 @@ internal static class AddonAbiRustPort {
             sb: sb,
             type: typeof(AddonAbi)
         );
-        sb.Append(value: "/// `Puck.Scripting.AddonAbi.AbiShape`: the host's addon ABI shape fingerprint `").Append(value: AddonAbi.AbiShapeFingerprint).Append(value: "` as the word every guest returns from `puck_abi_shape`.\n");
-        sb.Append(value: "pub const ABI_SHAPE: u64 = 0x").Append(value: AddonAbi.AbiShapeFingerprint).Append(value: ";\n\n");
         AppendConstGroup(
             comment: "`Puck.Scripting.AddonAbi.OutCellOffsets` — the guest→host output cell field offsets.",
             csharpTypeName: "AddonAbi.OutCellOffsets",

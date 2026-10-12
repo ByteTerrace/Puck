@@ -262,8 +262,7 @@ public sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<PbakSp
     private static List<(string FourCc, byte[] Payload)> ReadChunks(byte[] blob) {
         var container = ChunkContainer.Decode(
             content: blob,
-            magic: "PBAK"u8,
-            shape: FormatShapes.PbakBundleSupportedVersion
+            magic: "PBAK"u8
         );
 
         if (container.FormatVersion != SupportedVersion) {

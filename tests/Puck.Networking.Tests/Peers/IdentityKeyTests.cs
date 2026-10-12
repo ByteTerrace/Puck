@@ -85,7 +85,6 @@ public sealed class IdentityKeyTests {
         var offer = new WireWriter();
 
         offer.WriteUInt64(value: PeerWireProtocol.ProtocolKey);
-        offer.WriteString(value: Puck.Testing.FormatLedgerShapes.Of(id: "PeerWireProtocol.ProtocolKey"));
         offer.WriteBlock(value: offeredKey);
         offer.WriteBlock(value: RandomNumberGenerator.GetBytes(count: PeerWireProtocol.ChallengeBytes));
 

@@ -470,22 +470,6 @@ public static class ParityManifestLoader {
             throw new ParityDocumentRefusal(message: $"{context} schema '{schema}' is not '{expected}'.");
         }
     }
-    private static void RequireShape(JsonElement element, string context, string expected) {
-        var shape = CliStrictJson.ReadRequiredString(
-            context: context,
-            element: element,
-            member: "shape",
-            refusal: Refusal
-        );
-
-        if (!string.Equals(
-            a: shape,
-            b: expected,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw new ParityDocumentRefusal(message: $"{context} shape fingerprint '{shape}' is not '{expected}'; capture it again.");
-        }
-    }
 
     public static bool TryLoadContract(string path, out ParityContract contract, out string error) {
         contract = null!;
@@ -581,12 +565,12 @@ public static class ParityManifestLoader {
                 refusal: Refusal
             );
 
-            // The shape is named before any other member is looked at: a manifest written under another layout is refused
-            // by its fingerprint, not by whichever member of it this build happens to miss first.
-            RequireShape(
+            // The schema is named before any other member is looked at: a manifest of another version is refused by its
+            // schema, not by whichever member of it this build happens to miss first.
+            RequireSchema(
                 context: "manifest",
                 element: root,
-                expected: WorldCaptureManifest.CurrentShape
+                expected: WorldCaptureManifest.SchemaId
             );
             CliStrictJson.RequireOnlyMembers(
                 element: root,
@@ -594,15 +578,9 @@ public static class ParityManifestLoader {
                 unknownMemberDetail: "strict documents refuse fields the comparator does not read.",
                 refusal: Refusal,
                 "schema",
-                "shape",
                 "backend",
                 "world",
                 "captures"
-            );
-            RequireSchema(
-                context: "manifest",
-                element: root,
-                expected: WorldCaptureManifest.SchemaId
             );
 
             var backend = CliStrictJson.ReadRequiredString(

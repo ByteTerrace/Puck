@@ -72,16 +72,6 @@ public static partial class CountersCommand {
 
             return false;
         }
-        if (!string.Equals(
-            a: report.Shape,
-            b: WorldCountersReport.CurrentShape,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            reason = $"a report of another shape: its shape fingerprint is '{report.Shape}', not '{WorldCountersReport.CurrentShape}'; record it again";
-            report = null;
-
-            return false;
-        }
 
         reason = string.Empty;
 

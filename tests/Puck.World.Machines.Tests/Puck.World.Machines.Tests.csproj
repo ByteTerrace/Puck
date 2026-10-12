@@ -28,7 +28,6 @@
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />

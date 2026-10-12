@@ -37,7 +37,6 @@
     <ItemGroup>
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
-        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>

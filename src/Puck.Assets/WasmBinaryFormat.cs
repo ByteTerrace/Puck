@@ -8,6 +8,6 @@ public static class WasmBinaryFormat {
     public const uint Version1 = 1;
 
     /// <summary>Gets the four magic bytes every WebAssembly binary module begins with: the specification's, not a format
-    /// Puck versions, so <c>puck formats</c> ledgers none.</summary>
+    /// Puck versions.</summary>
     public static ReadOnlySpan<byte> WasmMagic => "\0asm"u8;
 }

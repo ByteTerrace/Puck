@@ -73,8 +73,6 @@ jobs:
         with:
           key: ${{ steps.bake-cache.outputs.key }}
           mode: save
-      - name: Verify bake derivation fingerprints
-        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll derivations --check
       # The shaders the build just compiled with the pinned DXC, at their repository paths, for the Linux job that holds
       # its own DXC build of this commit to them byte for byte (verify.yml, shader-bytecode).
       - name: Collect the compiled shader bytecode

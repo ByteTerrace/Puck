@@ -1,16 +1,15 @@
 using System.Security.Cryptography;
 using Puck.Networking.Peers;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.Networking.Tests.Peers;
 
-/// <summary>The Hello offer names the shape of the peer wire contract after its protocol key, and a peer that offers this
-/// build's key under another shape is refused <see cref="PeerRefusal.ProtocolMismatch"/> before its key or challenge is
-/// looked at. Runs over an in-memory connection pair with the law standing in for the far side.</summary>
-public sealed class HandshakeShapeLawTests {
+/// <summary>The Hello offer opens with the peer wire contract's protocol key, and a peer that offers another key is
+/// refused <see cref="PeerRefusal.ProtocolMismatch"/> before its key or challenge is looked at. Runs over an in-memory
+/// connection pair with the law standing in for the far side.</summary>
+public sealed class HandshakeProtocolKeyLawTests {
     [Fact]
-    public async Task TheOfferCarriesTheLedgersShapeAndAnotherShapeIsRefusedAsAProtocolMismatch() {
+    public async Task TheOfferCarriesTheProtocolKeyAndAnotherKeyIsRefusedAsAProtocolMismatch() {
         var ct = TestContext.Current.CancellationToken;
         var identityA = PeerIdentity.Create();
 
@@ -49,15 +48,10 @@ public sealed class HandshakeShapeLawTests {
             expected: PeerWireProtocol.ProtocolKey,
             actual: reader.ReadUInt64()
         );
-        Assert.Equal(
-            expected: FormatLedgerShapes.Of(id: "PeerWireProtocol.ProtocolKey"),
-            actual: reader.ReadRequiredString(field: "protocol shape")
-        );
 
         var other = new WireWriter();
 
-        other.WriteUInt64(value: PeerWireProtocol.ProtocolKey);
-        other.WriteString(value: "0000000000000000");
+        other.WriteUInt64(value: (PeerWireProtocol.ProtocolKey ^ 1UL));
         other.WriteBlock(value: identityA.SubjectPublicKeyInfo);
         other.WriteBlock(value: RandomNumberGenerator.GetBytes(count: PeerWireProtocol.ChallengeBytes));
         await WireFrame.WriteAsync(
@@ -75,7 +69,7 @@ public sealed class HandshakeShapeLawTests {
         );
         Assert.Contains(
             actualString: thrown.Failure.Detail,
-            expectedSubstring: "protocol shape 0000000000000000"
+            expectedSubstring: "offered protocol key"
         );
         Assert.Empty(collection: peerA.Links);
     }
