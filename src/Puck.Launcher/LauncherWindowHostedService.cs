@@ -39,6 +39,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
     private readonly TimeProvider m_time;
+    private readonly HostFrameTimeline m_timeline;
     private readonly INativeWindowFactory m_windowFactory;
 
     public LauncherWindowHostedService(
@@ -62,10 +63,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         StandardInputBacklog inputBacklog,
         INativeWindowFactory windowFactory,
         IEnumerable<GpuCreationFaults> faults,
-        TimeProvider time
+        TimeProvider time,
+        HostFrameTimeline timeline
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(time);
+        ArgumentNullException.ThrowIfNull(timeline);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
@@ -113,6 +116,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_registry = registry;
         m_textSource = textSource;
         m_time = time;
+        m_timeline = timeline;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
             name: nameof(IFixedStepSimulation),
@@ -354,6 +358,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // The number of whole fixed steps this iteration ran — feeds the frame context's DeltaTicks below.
                     var fixedSteps = 0UL;
 
+                    m_timeline.BeginIteration();
                     window.PollEvents();
 
                     // PollEvents may have processed a display change. Immediately discard both old-monitor facts, then
@@ -509,6 +514,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     hostFrame++;
+                    m_timeline.Mark(phase: HostFramePhase.Input);
 
                     m_textSource.Collect();
 
@@ -525,6 +531,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         m_terminal.RequestExit();
                     }
 
+                    m_timeline.Mark(phase: HostFramePhase.Commands);
+
                     var deltaTicks = clock.Sample();
                     // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
                     var stepTicks = ResolveStepTicks(simulation: m_simulation);
@@ -540,6 +548,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // Simulation-routed console handlers run while snapshots are applied above. Flush their real
                     // results in this iteration rather than leaving them buffered until the next rendered frame.
                     m_bufferedOutput.Flush();
+                    m_timeline.NoteSteps(steps: ((int)fixedSteps));
+                    m_timeline.Mark(phase: HostFramePhase.Simulate);
 
                     var width = window.Width;
                     var height = window.Height;
@@ -561,6 +571,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             height: height,
                             width: width
                         );
+                        m_timeline.Mark(phase: HostFramePhase.Begin);
 
                         if (
                             (width > 0) &&
@@ -580,6 +591,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             // A windowed display presents whatever the root has, rendered for this frame or not.
                             var surface = m_root.ProduceFrame(context: in frameContext).Surface;
 
+                            m_timeline.Mark(phase: HostFramePhase.Produce);
+
                             m_capture?.Capture(
                                 context: in frameContext,
                                 readback: m_presentReadback,
@@ -587,6 +600,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             );
 
                             m_presenter.Present(surface: surface);
+                            m_timeline.Mark(phase: HostFramePhase.Present);
                         }
 
                         deviceLoss.NoteFrameProduced();
@@ -689,7 +703,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 spinThreshold: spinThreshold,
                                 time: m_time
                             );
+
+                            if (nextRenderDeadline > nowTimestamp) {
+                                m_timeline.NoteLate(ticks: (m_time.GetTimestamp() - nextRenderDeadline));
+                            }
                         }
+
+                        m_timeline.Mark(phase: HostFramePhase.Wait);
                     }
                 }
 
@@ -735,8 +755,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         }
     }
 
+    // The pump sleeps through most of each slot and must wake on its deadline: at normal priority the pacer's wait
+    // returned up to 5.7 ms late, which alone pushed a 2 ms frame past its 60 Hz slot; at the highest it wakes within
+    // about a millisecond (host.frames reports the lateness).
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => LauncherHostLoop.RunPump(
         name: "Puck.Launcher Window Pump",
+        priority: ThreadPriority.Highest,
         pump: () => RunWindowLoop(stoppingToken: stoppingToken)
     );
 }

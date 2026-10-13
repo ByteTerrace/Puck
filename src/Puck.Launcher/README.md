@@ -40,6 +40,20 @@ Each loop, its input capture clock, and device recovery use the same registered
 `TimeProvider`, which defaults to the system clock. `OffscreenTickPacingLawTests`
 makes its frames slow through that provider.
 
+The windowed loop runs at the highest thread priority, so its pacer wakes on
+its slot: at normal priority the wait returned up to 5.7 ms late on a quiet
+machine. It records each iteration in a `HostFrameTimeline`, which the
+windowed-only `host.frames [frames] [budget-ms] [worst]` verb reads: the
+interval's average, median, 99th percentile and maximum over the last iterations,
+the count over a budget (one 60 Hz period by default), the most work any
+iteration did outside the pacer's wait, how late the pacer woke, the garbage
+collections and their pause time, and the slowest iterations split into input,
+commands, simulate (with its fixed steps), begin, produce, present and wait.
+`host.frames reset` starts a fresh window. It is the worst-frame reading a
+frame-time bar is judged by; `world.fps` reads a two-second window and counts
+the frame in progress at the moment it runs, so a script reads it once before
+it measures, or the first call's compilation lands in the reading.
+
 Each host loop runs on its own thread, and its hosted service's task faults
 with whatever the loop threw, so a failing loop stops the host instead of
 killing the process. A presenter whose `Activate` throws is reported as

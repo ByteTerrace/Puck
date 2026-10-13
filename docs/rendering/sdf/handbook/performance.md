@@ -189,6 +189,14 @@ The same discipline applies whenever you compare `world.counters gpu` counts by 
   (the present pacer), not a performance-comparison tool: under vsync it
   reports your monitor's cadence, not the engine's cost — compare `world.counters gpu`
   counts instead.
+- **Read `host.frames` for the worst frame.** The windowed host keeps a
+  timeline of its last 4,096 iterations; `host.frames reset`, a wait, then
+  `host.frames 600` gives the interval's distribution, the most work an
+  iteration did, how late the pacer woke, and each slowest iteration split into
+  simulate, begin, produce, present and wait, with its garbage collections
+  ([Puck.Launcher](../../../../src/Puck.Launcher/README.md)). A spike whose
+  produce phase is large is CPU work on the frame thread; one whose wait is
+  large and late is the pacer.
 
 ---
 

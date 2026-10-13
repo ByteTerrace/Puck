@@ -311,6 +311,8 @@ public static class LauncherServiceRegistration {
         // only arm it with their chosen ICaptureSink (PNG sequence, recording session, verifier, and so on).
         services.TryAddSingleton<FrameCaptureController>();
         services.AddSingleton(implementationInstance: HostPacing.WallClock);
+        services.TryAddSingleton(implementationFactory: static sp => new HostFrameTimeline(time: sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<ICommandModule, HostFrameCommandModule>();
         services.AddHostedService<LauncherWindowHostedService>();
         AddStandardInputReader(services: services);
 

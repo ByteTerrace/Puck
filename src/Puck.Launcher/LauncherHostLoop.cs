@@ -82,7 +82,7 @@ internal static class LauncherHostLoop {
     // (a device that never comes up, a render root that throws) faults its hosted service and stops the host with the
     // exception in hand, where an unhandled exception on a raw thread would end the process before anything reports.
     // The pump must return once its stopping token is cancelled: the host's StopAsync waits for this task.
-    public static Task RunPump(Action pump, string name) {
+    public static Task RunPump(Action pump, string name, ThreadPriority priority = ThreadPriority.Normal) {
         var completion = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         _ = StartBackgroundThread(
@@ -94,15 +94,17 @@ internal static class LauncherHostLoop {
                     completion.SetException(exception: exception);
                 }
             },
-            name: name
+            name: name,
+            priority: priority
         );
 
         return completion.Task;
     }
-    public static Thread StartBackgroundThread(Action action, string name) {
+    public static Thread StartBackgroundThread(Action action, string name, ThreadPriority priority = ThreadPriority.Normal) {
         var thread = new Thread(start: () => action()) {
             IsBackground = true,
             Name = name,
+            Priority = priority,
         };
 
         thread.Start();
