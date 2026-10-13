@@ -239,8 +239,8 @@ arguments reproduce both the answer and the final generator state; this API adds
 no entropy.
 
 Candidates within `uint` use the exact `uint` test. Above it, reciprocal filters
-reject factors from 7 through 163 (35 inverse/ceiling pairs, 560 bytes built
-once), then Baillie–PSW decides; its completeness over `ulong` rests on the
+reject factors from 7 through 163, the 35 inverse/ceiling pairs of the trial
+division table's entries for them, then Baillie–PSW decides; its completeness over `ulong` rests on the
 published exhaustive computation below 2^64
 ([Baillie, Fiori and Wagstaff](https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf)).
 Small intervals find their first and last table index with one population count
@@ -274,9 +274,10 @@ for exactly as long as a step lasts and a fifth would wait on it. At the top of
 the carrier one survivor in six is prime, so a width of three decides 2.0
 batches per selected prime, four 1.6 and five 1.4. A batch walks in the widest
 of the arithmetics the [primality](#primality) section describes that its
-largest modulus admits: lazily below 2^60, centered below 2^62, exactly
-above. Below 2^60 a centered batch measures about thirty per cent slower than
-the lazy one, which keeps that region.
+largest modulus admits: lazily below 2^60, signed below 2^63, exactly
+above. Below 2^60 a signed batch measures 7 to 18 per cent slower per selected
+prime than the lazy one, which keeps that region: four chains keep the
+multiplier busy, and the lazy step issues the fewest instructions.
 
 Each chain raises two to the negated odd part `-d` of `n - 1 = d·2^s` rather
 than to `d`. The two powers are inverses, and so are their squares, so one is
@@ -296,8 +297,12 @@ the product cost the same, so one seed serves every batch.
 `prime-field.base-two-batch-vs-modular-power` compares it with plain modular
 exponentiation, the thirty-six strong base-two pseudoprimes
 `(6k + 1)(12k + 1)(18k + 1)` above 2^63 included.
-The filter depth stays at 163: with interleaved rounds the modelled request
-cost is flat from 163 to 331 and rises beyond, and the depth never changes the
+The filter depth stays at 163, tested one prime at a time: with interleaved
+rounds the modelled request cost is flat from 163 to 331 and rises beyond. The
+word decision's vector rungs, at depths of 40, 64 and 128 primes, measure
+within a few per cent of it on AVX-512 and 5 to 18 per cent slower per selected
+prime on AVX2, where most candidates leave at the first prime that divides them
+and a vector pays for lanes they never reach. The depth never changes the
 selected prime, the draws or the final state.
 
 ## Enumerating an interval
@@ -481,69 +486,109 @@ the derivation.
 ## Primality
 
 `IsPrime(ulong)` sends `uint` values to the exact `IsPrime(uint)` kernel.
-Larger values reject factors 2, 3 and 5, then
-use Baillie–PSW: a base-two strong round followed by the strong Lucas test with
-Selfridge Method A. Its exactness throughout `ulong` rests on published
-exhaustive computation and the equivalence of Methods A and A*, as the
+Larger values reject even values and, by trial division, multiples of the 128
+odd primes through 727, then use Baillie–PSW: a base-two strong round followed
+by the strong Lucas test with Selfridge Method A. Its exactness throughout
+`ulong` rests on published exhaustive computation and the equivalence of
+Methods A and A*, as the
 [finite-field reference](../../src/Puck.Maths/FiniteFields/README.md#primality-on-ulong)
 explains. `IsPrime(ulong)`, enumeration, factorization, finite fields and random
-selection share this decision; the random selector adds its small-factor filter
-first.
+selection share this decision; the random selector runs its own small-factor
+filter first, and enumeration and counting presieve instead of trial-dividing.
+
+Trial division tests a value against each prime's inverse modulo 2^64: the
+value is a multiple exactly when the product does not exceed
+`floor((2^64 − 1) / p)`. The table holds the inverses and ceilings of the 128
+primes, built once from the base-prime table and cache aligned, and the test
+stops at the first vector that holds a divisor. The vector rungs fold the word
+onto one 32-bit value per prime first: its four 16-bit digits, each balanced to
+a signed lane by one exclusive-or, weighted by the residues of `2^16i` of least
+magnitude and lifted by a per-prime offset, give a nonnegative value below
+2^32 congruent to the word, which the 32-bit inverse test decides. Two
+multiply-add-adjacent instructions, two additions and one 32-bit multiply test
+sixteen primes per AVX-512 vector and eight per AVX2 vector, where a 64-bit
+product would take three 32-bit multiplies for four; folding measures 8 to 19
+per cent faster per call on AVX2 and no slower on AVX-512. A host without the
+multiply-add-adjacent instruction multiplies by 64-bit inverses, and the scalar
+rung remains. A prime `p` is worth testing while the round it spares, taken
+with probability about `1/p`, costs more than the test, so a vector of `k`
+primes pays while `p < k·R/c`, for a round of `R` cycles and a vector of `c`.
+The base-two round costs from about 250 cycles near 2^33 to about 750 at the
+top of the carrier, and an AVX2 vector of eight costs three to four cycles,
+which puts the break-even prime between about 500 and 1,500; 727 sits inside
+that band. About five in six odd values stop there, against about one in two
+after 3 and 5 alone. `PrimeKernels.HasTrialFactor512`, `256`,
+`128` and `Scalar` are the rungs, and
+`prime-field.trial-division-rungs-vs-remainder` compares each with remainders
+by an independently listed set of primes. Factorization strips 3 through 59
+with the same table's first sixteen entries before it calls the decision.
 
 Each multiplication chain uses `ScaledResidueRing64`'s REDC, with no division
 inside the chain. Baillie–PSW derives the modulus's inverse and reduced radix
-once and shares them between its two rounds. Below 2^62 the base-two round is
-one centered chain of the selection batch's walk, described under
-[a random prime](#a-random-prime): it raises two to `-d` from a seed
-`2^-a` over the low bits of `0 - d`, most significant bit first, and doubles the
-whole square before each centered reduction, `M(2^b·x²)`, so no step branches on
-an exponent bit and none folds. Below 2^60 the lazy step of the batch is
-admissible too, and the centered one measures no slower there, so the single
-round is centered throughout. From 2^62 it takes two as `one + one` in
-Montgomery form and walks `d` least significant bit first in exact arithmetic.
+once and shares them between its two rounds. Below 2^63 the base-two round is
+one signed chain of the selection batch's walk, described under
+[a random prime](#a-random-prime): it raises two to `-d` from a seed `2^-a` over
+the low bits of `0 - d`, most significant bit first, and fuses each doubling
+into the reduction, so no step branches on an exponent bit and none folds.
+Below 2^60 the lazy step of the batch is admissible too, and the signed one
+measures no slower there, so the single round is signed throughout. From 2^63
+it takes two as `one + one` in Montgomery form and walks `d` least significant
+bit first: its squares carry a borrow instead of folding, and the products of
+the set bits run as a chain of their own beside them. A doubling fused into the
+reduction would carry the square's high word past the carrier there, and the
+branch on each bit reads the exponent alone and resolves ahead of the chain, so
+its mispredicts cost less than a product on every bit.
 `PrimeKernels.PassesBaseTwoRound` is its checked shell, and
 `prime-field.base-two-round-vs-modular-power` compares it with plain modular
-exponentiation. The strong Lucas test walks one norm-one
-trace ladder for every Selfridge `Q`: the traces `C_k` of `z = a / b`, the ratio
-of the roots of `x² − x + Q`, cost one square and one cross product per bit and
-carry no power of `Q`, and with `d = 2h + 1` the pair `(C_h, C_(h+1))` decides
-`U_d = 0` and `V_d = 0` exactly, on composite values too. From 2^61, where the
-ladder runs centered and then exact, it selects the term to square by a mask on
-a bit of the index's Gray code instead of branching on the index bit, which
-mispredicts about half the time; below 2^61 the shorter lazy step keeps the
-branch, which there costs no more than the select's latency. The `uint` kernel's
-base-two round uses a 64-bit radix with lazy reduction. The arbitrary-width
+exponentiation. The strong Lucas test walks one norm-one trace ladder for every
+Selfridge `Q`: the traces `C_k` of `z = a / b`, the ratio of the roots of
+`x² − x + Q`, cost one square and one cross product per bit and carry no power
+of `Q`, and with `d = 2h + 1` the pair `(C_h, C_(h+1))` decides `U_d = 0` and
+`V_d = 0` exactly, on composite values too. It selects the term to square by a
+mask on a bit of the index's Gray code instead of branching on the index bit,
+which mispredicts about half the time. The arbitrary-width
 `BigIntegerFunctions` twelve-base threshold is separate.
+
+`IsPrime(uint)` reads an odd value below 65536 from the odd-prime bitmap over
+the base-prime table. Above it, the narrow trial-division rungs
+`PrimeKernels.HasNarrowTrialFactor512`, `256`, `128` and `Scalar` test the same
+128 primes with the folding rungs' inverses modulo 2^32, sixteen, eight or four
+lanes to a native multiply, and a value with no factor through 727 below 733² is prime. The rest
+take the word decision's signed seeded base-two round, corrected by the 2,256
+base-two strong pseudoprimes below 2^32 coprime to 105, which makes the answer
+exact; a fingerprint bitmap over them settles almost every value without a
+search.
 
 Below `ScaledResidueRing64.LazyModulusCeiling`, 2^60, the interleaved
 base-two chains of random selection carry residues lazily: a REDC lifted by the
 modulus comes back below twice the modulus, a doubling is a shift of the
 reduction's two high halves, and nothing is folded until a residue is compared,
-where `Canonical` recovers it.
-Every operand a chain multiplies stays below four times the modulus, and the
-ceiling is what keeps the lifted quotient of two such operands below twice the
-modulus, so the next doubling stays below four times it. Below
-`CenteredModulusCeiling`, 2^62, the batches and the single round carry signed,
-centered representatives instead: centered REDC, `ReduceCentered` and
-`ReduceCenteredSquare`, reads the correction factor `q = lo(T)·n⁻¹` as a signed
-word, so `(T − q·n) / 2^64` is the exact difference of signed high words, and
-with the doubling applied to the whole square an accumulator within the modulus
-of zero stays in `(−n/2, n)` with no fold at all. The strong Lucas trace ladder
-subtracts `t` or two from every product inside the reduction. Below its own lazy
-ceiling, 2^61, it lifts the quotient by twice the modulus less the constant, so
-its traces stay below four times the modulus with no fold, two such operands
-still giving a quotient below twice the modulus; from 2^61 to 2^62 it runs
-centered, its constants centered into `[−(n−1)/2, (n−1)/2]` and its traces within
-twice the modulus of zero with no fold. The centered ladder is admissible below
-2^61 as well, but its step is longer than the lazy one's there. The decision is
-the exact chain's decision at every value, pinned by
+where `Canonical` recovers it. Every operand a chain multiplies stays below four
+times the modulus, and the ceiling is what keeps the lifted quotient of two such
+operands below twice the modulus, so the next doubling stays below four times
+it. Below `SignedModulusCeiling`, 2^63, the batches, the single round and the
+Lucas ladder carry signed representatives within the modulus of zero instead.
+`ReduceSigned`, `ReduceSignedSquareSubtract` and `ReduceSignedSquare` read the
+correction factor `q = lo(T)·n⁻¹` unsigned, so `(T − q·n) / 2^64` is the exact
+difference of `T`'s signed high word and the unsigned high word of `q·n`, which
+lies in `[0, n)`. A square, doubled or not, keeps an accumulator within the
+modulus of zero with no fold at all; the doubling shifts the inverse rather than
+the operand, so a step's critical path is two truncated multiplies, one high
+multiply and one subtraction. The Lucas ladder subtracts `t` or two, centered
+into `[−(n−1)/2, (n−1)/2]`, from every product's high word and folds that once by
+its sign while the reduction's multiplies run, which keeps its traces within the
+modulus of zero too. Above 2^63 no signed word holds such a representative:
+`ReduceBorrowedSquare` carries one as a word and a borrow mask, the single
+round's squares fold nothing, and the ladder and the batches fold after every
+product. The decision is the exact chain's decision at every value, pinned by
 `prime-field.unreduced-chains-vs-exact-decision`,
-`prime-field.centered-reduction-interval-vs-big-integer` and
+`prime-field.signed-reduction-interval-vs-big-integer` and
 `prime-field.lucas-trace-ladder-vs-recurrence`; what changes is the chain's
-step, which drops the compare-and-mask fold after every product and every
-doubling. The JIT turns a select inside a loop into a branch rather than a
+step. The JIT turns a select inside a loop into a branch rather than a
 conditional move, and a data-dependent branch on the chain mispredicts about
-half the time, so the exact chains above 2^62 keep their masks.
+half the time, so the exact chains above 2^63 keep their masks, whose
+compare-and-mask fold costs about four cycles more than a conditional move on
+each product.
 
 ## Constellations
 
@@ -565,7 +610,7 @@ Four classes hold them, one per domain:
 
 | Class | Holds |
 |---|---|
-| `PrimeKernels` | The word-sized primality and factorization machinery, the odd-prime rank `CountOddPrimesBelow` and the Selfridge symbol table `SelfridgeSymbol` |
+| `PrimeKernels` | The word-sized primality and factorization machinery, the trial-division rungs `HasTrialFactor512`, `256`, `128` and `Scalar` and their narrow twins `HasNarrowTrialFactor512`, `256`, `128` and `Scalar`, the odd-prime rank `CountOddPrimesBelow` and the Selfridge symbol table `SelfridgeSymbol` |
 | `PrimeDivisionKernels` | The leaf quotients `DivideGourdonQuotients512`, `256`, `128` and `Scalar`, the packed bitmap positions `DivideGourdonSegmentPositions512`, `256` and `Scalar` with their units-below lookups, and division by a fixed divisor through `FloorReciprocal` and `DivideByFloorReciprocal` |
 | `PrimeLeafKernels` | The hard-leaf survivor filters `FilterGourdonHardLeavesCompress`, `Pack256`, `Pack128` and `Scalar`, the thirty-wheel leaf sieve `CombinatorialLeafSieve` with its `CombinatorialPrefixCursor`, and the wheel tables they read |
 | `PrimeSieveKernels` | The presieve groups and patterns, `FilterSmallPrimes`, the packet residues and `PacketOffset`, and the wheel's clear-mask and unit-count tables |

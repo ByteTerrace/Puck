@@ -266,8 +266,8 @@ internal static partial class LawRegistry {
             id: "prime-field.montgomery-reduction-vs-big-integer"
         ),
         ClaimCase(
-            claim: Subjects.CenteredReductionMatchesBigInteger,
-            id: "prime-field.centered-reduction-interval-vs-big-integer"
+            claim: Subjects.SignedReductionMatchesBigInteger,
+            id: "prime-field.signed-reduction-interval-vs-big-integer"
         ),
         ClaimCase(
             claim: Subjects.UnreducedChainsMatchExactDecision,

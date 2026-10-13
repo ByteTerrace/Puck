@@ -865,6 +865,7 @@ internal static partial class LawRegistry {
         ClaimCase(claim: Subjects.PrimeCombinatorialCubeNear1E19, id: "exhaustive.prime-selection-ulong-combinatorial-cube-near-1e19"),
         ClaimCase(claim: Subjects.PrimeCombinatorialHighASquare, id: "exhaustive.prime-selection-ulong-combinatorial-a-square-high"),
         ClaimCase(claim: Subjects.PrimeWordDecisionDispatch, id: "prime-field.word-decision-dispatch"),
+        ClaimCase(claim: Subjects.TrialDivisionRungsMatchRemainders, id: "prime-field.trial-division-rungs-vs-remainder"),
         ClaimCase(claim: Subjects.PrimeWideSieveIntegerWindows, id: "prime-exploration.wide-sieve-vs-integer-windows"),
         ClaimCase(claim: Subjects.PrimeWideSieveFinalWindow, id: "deep.prime-exploration-wide-final-window"),
         ClaimCase(claim: Subjects.PrimeWideSieveNativeCounts, id: "deep.prime-exploration-wide-native-counts"),

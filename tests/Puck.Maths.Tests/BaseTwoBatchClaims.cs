@@ -3,17 +3,17 @@ using System.Numerics;
 namespace Puck.Maths.Tests;
 
 internal static partial class Subjects {
-    // The bounds the batch dispatches on: 2^32, ScaledResidueRing64's lazy and centered ceilings, and 2^63, above which
-    // every value seeds by a shift.
+    // The bounds the batch dispatches on, 2^32 and ScaledResidueRing64's lazy and signed ceilings, the last also the
+    // bound above which every value seeds by a shift, and 2^62, inside the signed region.
     private static readonly ulong[] BaseTwoBatchBoundaries = [
-        (1UL << 32), ScaledResidueRing64.LazyModulusCeiling, ScaledResidueRing64.CenteredModulusCeiling, (1UL << 63),
+        (1UL << 32), ScaledResidueRing64.LazyModulusCeiling, (1UL << 62), ScaledResidueRing64.SignedModulusCeiling,
     ];
     // The arithmetic regions a batch's largest value selects, as [low, high) bands of odd values, the last closed at
     // the top of the carrier.
     private static readonly (ulong Low, ulong High)[] BaseTwoBatchRegions = [
         (3UL, (1UL << 32)), ((1UL << 32), (1UL << 58)), ((1UL << 58), ScaledResidueRing64.LazyModulusCeiling),
-        (ScaledResidueRing64.LazyModulusCeiling, (1UL << 61)), ((1UL << 61), ScaledResidueRing64.CenteredModulusCeiling),
-        (ScaledResidueRing64.CenteredModulusCeiling, (1UL << 63)), ((1UL << 63), ulong.MaxValue),
+        (ScaledResidueRing64.LazyModulusCeiling, (1UL << 61)), ((1UL << 61), (1UL << 62)),
+        ((1UL << 62), ScaledResidueRing64.SignedModulusCeiling), (ScaledResidueRing64.SignedModulusCeiling, ulong.MaxValue),
     ];
 
     /// <summary>Compares the batched base-two round with plain modular exponentiation at the Default tier's operands.</summary>
@@ -107,10 +107,9 @@ internal static partial class Subjects {
 
             if (Check(first: Draw(region: region), fourth: Draw(region: region), second: Draw(region: region), third: Draw(region: region)) is { } failure) { return failure; }
         }
-        // Just above the centered ceiling, where a batch left centered too far doubles its accumulators past the signed
-        // word.
+        // Just above the signed ceiling, where a batch left signed too far carries its accumulators past the signed word.
         for (var count = 0; (count < (full ? 60_000 : 6_000)); ++count) {
-            var region = (ScaledResidueRing64.CenteredModulusCeiling, (ScaledResidueRing64.CenteredModulusCeiling + (ScaledResidueRing64.CenteredModulusCeiling >>> 1)));
+            var region = (ScaledResidueRing64.SignedModulusCeiling, (ScaledResidueRing64.SignedModulusCeiling + (ScaledResidueRing64.SignedModulusCeiling >>> 1)));
 
             if (Check(first: Draw(region: region), fourth: Draw(region: region), second: Draw(region: region), third: Draw(region: region)) is { } failure) { return failure; }
         }
@@ -157,16 +156,16 @@ internal static partial class Subjects {
         // Strong base-two pseudoprimes: (6k + 1)(12k + 1)(18k + 1) with all three factors prime is composite by
         // construction, and the oracle says which pass. Those above 2^63 are each decided beside three of their kind,
         // where the batch seeds by a shift, and beside values below 2^63 and below 2^32, where it seeds by a product;
-        // those in [2^60, 2^62), where the batch is centered, beside three of their kind, beside values below the lazy
-        // ceiling and beside values above 2^62, which take the batch exact.
+        // those in [2^60, 2^62), where the batch is signed, beside three of their kind, beside values below the lazy
+        // ceiling and beside values above 2^61, 2^62 and the signed ceiling, the last of which take the batch exact.
         var pseudoprimes = new List<ulong>();
-        var centeredPseudoprimes = new List<ulong>();
+        var bandPseudoprimes = new List<ulong>();
 
-        if (BaseTwoPseudoprimes(band: centeredPseudoprimes, full: false, high: pseudoprimes, low: new List<ulong>()) is { } construction) { return construction; }
-        for (var i = 0; (i < centeredPseudoprimes.Count); ++i) {
-            var pseudoprime = centeredPseudoprimes[i];
+        if (BaseTwoPseudoprimes(band: bandPseudoprimes, full: false, high: pseudoprimes, low: new List<ulong>()) is { } construction) { return construction; }
+        for (var i = 0; (i < bandPseudoprimes.Count); ++i) {
+            var pseudoprime = bandPseudoprimes[i];
 
-            if (CheckRotations(first: pseudoprime, fourth: centeredPseudoprimes[((i + 3) % centeredPseudoprimes.Count)], second: centeredPseudoprimes[((i + 1) % centeredPseudoprimes.Count)], third: centeredPseudoprimes[((i + 2) % centeredPseudoprimes.Count)]) is { } same) { return same; }
+            if (CheckRotations(first: pseudoprime, fourth: bandPseudoprimes[((i + 3) % bandPseudoprimes.Count)], second: bandPseudoprimes[((i + 1) % bandPseudoprimes.Count)], third: bandPseudoprimes[((i + 2) % bandPseudoprimes.Count)]) is { } same) { return same; }
             if (CheckRotations(first: pseudoprime, fourth: Draw(region: BaseTwoBatchRegions[3]), second: Draw(region: BaseTwoBatchRegions[2]), third: Draw(region: BaseTwoBatchRegions[0])) is { } lower) { return lower; }
             if (CheckRotations(first: pseudoprime, fourth: Draw(region: BaseTwoBatchRegions[4]), second: Draw(region: BaseTwoBatchRegions[5]), third: Draw(region: BaseTwoBatchRegions[6])) is { } upper) { return upper; }
         }

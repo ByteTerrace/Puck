@@ -18935,6 +18935,62 @@
     },
     {
       "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasNarrowTrialFactor128(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasNarrowTrialFactor256(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasNarrowTrialFactor512(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasNarrowTrialFactorScalar(System.UInt32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasTrialFactor128(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasTrialFactor256(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasTrialFactor512(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.HasTrialFactorScalar(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.witness-set-boundary-factors-exactly"
       ],
       "Id": "Puck.Maths.PrimeKernels.LeastWitnessFailure",
@@ -18970,6 +19026,20 @@
         "prime-selection.kernel-shells-refuse-violations"
       ],
       "Id": "Puck.Maths.PrimeKernels.SelfridgeSymbol(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.TrialDivisionCeiling",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.trial-division-rungs-vs-remainder"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.TrialDivisionPrimeCount",
       "State": "covered"
     },
     {
@@ -23524,25 +23594,9 @@
     },
     {
       "CoveredBy": [
-        "prime-field.centered-reduction-interval-vs-big-integer",
-        "prime-field.unreduced-chains-vs-exact-decision"
-      ],
-      "Id": "Puck.Maths.ScaledResidueRing64.CanonicalCentered(System.Int64,System.UInt64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "prime-field.centered-reduction-interval-vs-big-integer"
+        "prime-field.signed-reduction-interval-vs-big-integer"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Center(System.UInt64,System.UInt64)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "prime-field.centered-reduction-interval-vs-big-integer",
-        "prime-field.unreduced-chains-vs-exact-decision"
-      ],
-      "Id": "Puck.Maths.ScaledResidueRing64.CenteredModulusCeiling",
       "State": "covered"
     },
     {
@@ -23652,23 +23706,38 @@
     },
     {
       "CoveredBy": [
-        "prime-field.centered-reduction-interval-vs-big-integer"
+        "prime-field.signed-reduction-interval-vs-big-integer"
       ],
-      "Id": "Puck.Maths.ScaledResidueRing64.ReduceCentered(System.Int64,System.Int64,System.Int64,System.UInt64,System.UInt64)",
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceBorrowedSquare(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "prime-field.centered-reduction-interval-vs-big-integer"
+        "prime-field.signed-reduction-interval-vs-big-integer"
       ],
-      "Id": "Puck.Maths.ScaledResidueRing64.ReduceCenteredSquare(System.Int64,System.Int32,System.Int64,System.UInt64,System.UInt64)",
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceSigned(System.Int64,System.Int64,System.Int64,System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "prime-field.montgomery-reduction-vs-big-integer"
+        "prime-field.signed-reduction-interval-vs-big-integer"
       ],
-      "Id": "Puck.Maths.ScaledResidueRing64.ReduceNarrow(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceSignedSquare(System.Int64,System.Int32,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.signed-reduction-interval-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceSignedSquareSubtract(System.Int64,System.Int64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.signed-reduction-interval-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.SignedModulusCeiling",
       "State": "covered"
     },
     {

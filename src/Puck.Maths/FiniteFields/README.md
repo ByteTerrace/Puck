@@ -726,11 +726,6 @@ form returns the same bits as any other exact reduction. The high halves come
 from BMI2's flag-free `MULX` where the processor has it and from
 `Math.BigMul` otherwise; both return the same bits.
 
-A narrow sibling, `ReduceNarrow`, serves moduli below `2³²` with the same
-`2⁶⁴` radix: residues live in `[1, n]`, with `n` standing for zero, two of them
-multiply within one word, and the reduction `n − hi(m·n)` needs no correction
-step at all. The `uint` primality kernel's base-two round runs on it.
-
 The prime kernels' chains carry unreduced representatives between products and
 fold only where a residue is compared. A **lazy** chain lifts the subtractive
 quotient by the modulus, `hi(a·b) + n − hi(m·n)`, which lies in `(0, 2n)`
@@ -740,34 +735,44 @@ result lands below `2n`, so a chain may add two results with no fold and stay
 below `4n`; the prime kernels' interleaved base-two batches do, doubling each
 square by a shift of both high halves, and need no comparison between their
 products. `Canonical` folds a value below `4n` back to the residue wherever one
-is compared, and `Fold` a value below `2n`. The strong Lucas test's trace ladder
-subtracts a constant `c` from every product and lifts the quotient by `2n − c`
-instead of `n`, so its terms stay below `4n` with no fold at all up to its own
-ceiling, `2⁶¹`: two operands below `4n` give a quotient below `16n² / 2⁶⁴`, at
-most `2n` there, and the lift keeps the result below `4n` again.
+is compared, and `Fold` a value below `2n`.
 
-A **centered** chain carries signed representatives as two's-complement words
-and reduces by centered REDC, `ReduceCentered` and `ReduceCenteredSquare`. For
-a signed product `T`, the factor `q = lo(T)·n⁻¹` is read as a signed word, in
-`[−2⁶³, 2⁶³)`, and `M(T) = (T − q·n) / 2⁶⁴` is the exact difference of the two
-products' signed high words. Below `CenteredModulusCeiling`, `2⁶²`, the largest
-bound with `4n` at most `2⁶⁴`, two operands within `2n` of zero multiply to
-below `4n²`, which is below `2⁶⁴·n`, so `T / 2⁶⁴` lies within `n` of zero and
-`q·n / 2⁶⁴` within `n / 2`; less a constant centered into
-`[−(n − 1) / 2, (n − 1) / 2]` by `Center`, the result lies within `2n` of zero
-again. A base-two step doubles the whole 128-bit square before the reduction,
-`M(2ᵇ·x²)`, and an accumulator within `n` of zero stays in `(−n / 2, n)`. No
-step folds at all, and `CanonicalCentered` lifts a representative by `2n` into
-`(0, 4n)` and folds it once it is compared. No signed widening multiply runs,
-because `Math.BigMul`'s signed form and the `Int128` product hand their low word
-back through memory: each signed high word is the unsigned `MultiplyHigh`
-corrected by sign masks, `hi(a·b) − [a < 0]·b − [b < 0]·a`, and that of `q·n`
-by `[q < 0]·n`. Dropping the last correction keeps every result congruent and
-only moves it out of its interval, so
-`prime-field.centered-reduction-interval-vs-big-integer` checks every result's
-interval as well as its congruence, at the extremes of each bound. The word
-decision's single base-two round, the batches between `2⁶⁰` and `2⁶²` and the
-trace ladder between `2⁶¹` and `2⁶²` run centered.
+A **signed** chain carries representatives within the modulus of zero as
+two's-complement words and reads every correction factor `q = lo(T)·n⁻¹`
+unsigned, so `(T − q·n) / 2⁶⁴` is the exact difference of `T`'s signed high
+word and the unsigned high word of `q·n`, which lies in `[0, n)`. Below
+`SignedModulusCeiling`, `2⁶³`, the largest bound with `2n` at most `2⁶⁴`:
+
+- `ReduceSignedSquare` squares an operand within `n` of zero, doubled or not.
+  The square is below `2n²`, which is below `2⁶⁴·n`, so its high word lies in
+  `[0, n)` and the reduced square in `(−n, n)`, the bound it started under. No
+  product is formed from the doubled operand: the square's low word shifted is
+  `lo(x²)` times the inverse shifted, a shift the exponent bit alone decides,
+  so a square-and-double step's critical path is two truncated multiplies, one
+  high multiply and one subtraction.
+- `ReduceSigned` multiplies two operands within `n` of zero and subtracts a
+  constant centered into `[−(n − 1) / 2, (n − 1) / 2]` by `Center`. The
+  product's signed high word lies within about `n / 2` of zero, so less the
+  constant it lies in `[−n, n)`; one fold by its sign, which runs while the
+  correction's multiplies do, lands it in `[0, n)`, and the result lies in
+  `(−n, n)` again. `ReduceSignedSquareSubtract` is its square.
+
+No step folds after its reduction, and the residue is the representative plus
+the modulus under its sign. No signed widening multiply runs, because
+`Math.BigMul`'s signed form and the `Int128` product hand their low word back
+through memory: each signed high word is the unsigned `MultiplyHigh` corrected
+by sign masks, `hi(a·b) − [a < 0]·b − [b < 0]·a`. Above `2⁶³` no signed word
+holds a representative within the modulus of zero, so `ReduceBorrowedSquare`
+carries one as a word and a borrow mask, `x = w − 2⁶⁴·b`: the square's high word
+is that of `w²` less `2w` under the mask, and the reduced square borrows exactly
+when it is negative, a borrow read only off the next square's critical path.
+Dropping a correction keeps a result congruent and only moves it out of its
+interval, so `prime-field.signed-reduction-interval-vs-big-integer` checks
+every result's interval as well as its congruence, at the extremes of each
+bound. The word decision's single base-two round and the strong Lucas trace
+ladder run signed below `2⁶³`, the batches between `2⁶⁰` and `2⁶³`; above
+`2⁶³` the single round squares with a borrow, and the ladder and the batches
+run exact.
 
 The representative an unreduced chain carries is not unique, so a value is
 folded before it is read as a residue, and the decision read either way is the
@@ -804,14 +809,19 @@ same round because the two powers are inverses. That lets each chain start at
 one reduction by `2ᵐ` of the reduced radix or of one, `(x + c·n) / 2ᵐ` with
 `c = −x·n⁻¹ mod 2ᵐ`, already below `n`, so every chain walks seven bits fewer for
 two multiplies. Below `2⁶⁰` a chain fuses its doubling into the lazy reduction
-as a shift of both high halves, `(hi(p²) + n)·2ᵇ − hi(m·n)·2ᵇ`, and below `2⁶²`
-into the centered reduction as a doubling of the whole square, rather than
-adding a masked copy of the square. The word decision's single round walks the
-centered way everywhere below `2⁶²`, one chain alone, since below `2⁶⁰` the
-centered step measures no slower than the lazy one: it trades six of the
+as a shift of both high halves, `(hi(p²) + n)·2ᵇ − hi(m·n)·2ᵇ`, and below `2⁶³`
+into the signed reduction as a shift of the inverse, rather than adding a
+masked copy of the square. The word decision's single round walks the signed
+way everywhere below `2⁶³`, one chain alone, since below `2⁶⁰` the signed step
+measures no slower than the lazy one: it trades six of the
 least-significant-bit-first walk's squarings and every one of its products for
-the seed's two multiplies, and its step has no branch on an exponent bit, where
-that walk's branch mispredicts about half the time.
+the seed's two multiplies, and its step has no branch on an exponent bit. Above
+`2⁶³` a doubling fused into the reduction would carry the square's high word
+past the carrier, so the single round walks least significant bit first: its
+squares carry a borrow instead of folding, and its products fall on the set
+bits, a chain beside the squares. The branch on each bit reads the exponent
+alone and resolves ahead of the chain, so its mispredicts cost less than a
+product on every bit.
 
 **Why oddness alone.** The ring requires only an odd modulus greater than one,
 and nothing in it presumes the modulus prime. That is exactly what admits it as
@@ -830,14 +840,14 @@ follows.
 
 `PrimeExtensions.IsPrime(ulong)` is the exact decision for every 64-bit unsigned value. It
 runs the exact `uint` decision for narrow inputs and Baillie–PSW with
-Selfridge Method A for larger inputs, after rejecting factors two, three and
-five. The latter combines a base-two strong probable-prime round with a strong
+Selfridge Method A for larger inputs, after rejecting even values and, by trial
+division, multiples of the odd primes through 727. The latter combines a base-two strong probable-prime round with a strong
 Lucas test. Published exhaustive computations establish that no composite below
 `2⁶⁴` passes both, which covers the entire carrier and this field's `2⁶²` ceiling.
 Each multiplication chain runs in `ScaledResidueRing64`'s kernels, with no
 hardware division inside the chain. Both rounds share one setup—the modulus's
 inverse and the reduced radix—and the base-two round starts from two, `one + one`
-in Montgomery form, or below `2⁶²` from the seed `2⁻ᵃ` reduced from that one, so
+in Montgomery form, or below `2⁶³` from the seed `2⁻ᵃ` reduced from that one, so
 it encodes nothing. Below `2⁶³` that setup still divides
 once, so this is not a claim that the whole decision uses no division.
 
@@ -899,11 +909,9 @@ strength but in the independence of its failures from a Fermat round's.
   walked most-significant-bit first, one square and one cross product per bit
   for every `Q`, `Q = −1` at `D = 5` included. That is logarithmic in the value,
   where the recurrence's own definition would be linear. A set bit squares
-  `C_(k+1)` and a clear one `C_k`; from `2⁶¹`, where the ladder runs centered
-  and then exact, it picks that term by a mask on a bit of the index's Gray
-  code rather than by a branch, which mispredicts on about half the bits. Below
-  `2⁶¹` the lazy step is short enough that the mask's latency costs as much as
-  the mispredicts or more, so it branches.
+  `C_(k+1)` and a clear one `C_k`; the ladder, signed below `2⁶³` and exact
+  above, picks that term by a mask on a bit of the index's Gray code rather
+  than by a branch, which mispredicts on about half the bits.
 - **Two traces at half the index decide, on composite values too.** `U_d`
   vanishes exactly when `z^d = 1`, and `V_d` exactly when `z^d = −1`. Modulo a
   composite value the single trace `C_d` cannot tell `z^d` apart from other

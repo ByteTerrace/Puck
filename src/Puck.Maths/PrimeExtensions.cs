@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics;
 
 namespace Puck.Maths;
 
@@ -15,7 +14,7 @@ namespace Puck.Maths;
 /// The unsigned sixty-four-bit combinatorial counter also uses integer division for its leaf quotients.
 /// </remarks>
 public static partial class PrimeExtensions {
-    /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² that survive the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>
+    /// <summary>Gets the sorted base-2 strong pseudoprimes below 2³² coprime to 105, a superset of those that survive the trial division in <see cref="IsPrime(uint)"/>.</summary>
     /// <remarks>
     /// Enumerated in-house by sweeping every odd value in <c>[121, 2³²)</c> coprime to <c>105</c> against a sieve:
     /// these 2,256 composites are exactly the values that pass a single base-2 strong-probable-prime round, so
@@ -306,41 +305,14 @@ public static partial class PrimeExtensions {
         4251904273U, 4255695013U, 4271267333U, 4275011401U, 4277526901U, 4278305651U, 4282867213U, 4294901761U,
     };
 
+    /// <summary>The exclusive bound below which <see cref="IsPrime(uint)"/> reads an odd value's primality from the base-prime bitmap.</summary>
+    private const uint NarrowTableLimit = 65_536U;
+    /// <summary>The exclusive bound below which a value with no odd prime factor through <see cref="PrimeKernels.TrialDivisionCeiling"/> is prime: <c>733^2</c>, the square of the next prime.</summary>
+    private const uint NarrowTrialDivisionLimit = (733U * 733U);
+
     /// <summary>Gets the 65,536-bit occupancy filter over <see cref="StrongPseudoprimesBase2"/> fingerprints; a clear bit proves non-membership without a search.</summary>
     private static readonly ulong[] StrongPseudoprimeFilter = CreateStrongPseudoprimeFilter();
-    /// <summary>Gets the modular inverses of the odd primes through fifty-nine, split across two vectors and consumed by the trial-division ladder in <see cref="IsPrime(uint)"/>.</summary>
-    /// <remarks>Derived from <see cref="PrimeKernels.SmallFactorPrimes"/> rather than transcribed, so no lane can fall out of step with the prime it stands for.</remarks>
-    private static readonly Vector256<uint> LadderDivisorInversesLow = CreateLadderDivisorInverses(offset: 0);
-    /// <inheritdoc cref="LadderDivisorInversesLow"/>
-    private static readonly Vector256<uint> LadderDivisorInversesHigh = CreateLadderDivisorInverses(offset: 8);
-    /// <summary>Gets the per-lane divisibility ceilings paired with <see cref="LadderDivisorInversesLow"/>: a value is divisible by the lane's prime exactly when its inverse-product does not exceed the ceiling.</summary>
-    /// <remarks>Derived from <see cref="PrimeKernels.SmallFactorPrimes"/> rather than transcribed, so no lane can fall out of step with the prime it stands for.</remarks>
-    private static readonly Vector256<uint> LadderQuotientCeilingsLow = CreateLadderQuotientCeilings(offset: 0);
-    /// <inheritdoc cref="LadderQuotientCeilingsLow"/>
-    private static readonly Vector256<uint> LadderQuotientCeilingsHigh = CreateLadderQuotientCeilings(offset: 8);
 
-    /// <summary>Builds one half of the trial-division ladder's inverse table from <see cref="PrimeKernels.SmallFactorPrimes"/>.</summary>
-    /// <param name="offset">The index of the first small factor the vector covers.</param>
-    /// <returns>The inverse modulo 2³² of each of the eight small factors starting at <paramref name="offset"/>.</returns>
-    private static Vector256<uint> CreateLadderDivisorInverses(int offset) {
-        Span<uint> lanes = stackalloc uint[Vector256<uint>.Count];
-        var primes = PrimeKernels.SmallFactorPrimes;
-
-        for (var i = 0; (i < lanes.Length); ++i) { lanes[i] = ((uint)primes[(offset + i)]).ModularInverse(); }
-
-        return Vector256.Create<uint>(values: lanes);
-    }
-    /// <summary>Builds one half of the trial-division ladder's ceiling table from <see cref="PrimeKernels.SmallFactorPrimes"/>.</summary>
-    /// <param name="offset">The index of the first small factor the vector covers.</param>
-    /// <returns>The divisibility ceiling of each of the eight small factors starting at <paramref name="offset"/>.</returns>
-    private static Vector256<uint> CreateLadderQuotientCeilings(int offset) {
-        Span<uint> lanes = stackalloc uint[Vector256<uint>.Count];
-        var primes = PrimeKernels.SmallFactorPrimes;
-
-        for (var i = 0; (i < lanes.Length); ++i) { lanes[i] = (uint.MaxValue / ((uint)primes[(offset + i)])); }
-
-        return Vector256.Create<uint>(values: lanes);
-    }
     /// <summary>Builds <see cref="StrongPseudoprimeFilter"/> by fingerprinting every entry of <see cref="StrongPseudoprimesBase2"/>.</summary>
     /// <returns>The occupancy bitmap consulted by <see cref="IsPrime(uint)"/> before it falls back to a binary search.</returns>
     private static ulong[] CreateStrongPseudoprimeFilter() {
@@ -367,64 +339,6 @@ public static partial class PrimeExtensions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint Fingerprint(uint value) =>
         ((value * 0x9E3779B1U) >> 16);
-    /// <summary>Runs the base-two strong-probable-prime round for an odd modulus below <c>2^32</c>.</summary>
-    /// <param name="modulus">The odd modulus, above three and below <c>2^32</c>, widened.</param>
-    /// <returns>Whether the modulus is a strong probable prime to base two.</returns>
-    /// <remarks>
-    /// The round runs in Montgomery form with the full radix <c>2^64</c>, reduced lazily by
-    /// <see cref="ScaledResidueRing64.ReduceNarrow(ulong, ulong, ulong, ulong)"/>: every residue stays in
-    /// <c>[1, modulus]</c>, two such factors multiply inside one word, and no product spends a correction step. Two is
-    /// <c>one + one</c> folded once, and the power <c>2^d</c> of <c>modulus - 1 = d * 2^s</c> runs least significant bit
-    /// first from two, since the lowest bit of the odd <c>d</c> is set.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool PassesNarrowBaseTwo(ulong modulus) {
-        var inverse = modulus.ModularInverse();
-        var one = ((ulong.MaxValue % modulus) + 1UL);
-        var negativeOne = (modulus - one);
-        var two = (one + one);
-        var oddPart = (modulus - 1UL);
-        var shift = BitOperations.TrailingZeroCount(value: oddPart);
-
-        two -= modulus & unchecked((0UL - (two > modulus).As<ulong>()));
-        oddPart >>>= shift;
-
-        var power = two;
-        var result = two;
-
-        while (0UL != (oddPart >>>= 1)) {
-            power = ScaledResidueRing64.ReduceNarrow(
-                inverse: inverse,
-                left: power,
-                modulus: modulus,
-                right: power
-            );
-
-            if (0UL != (oddPart & 1UL)) {
-                result = ScaledResidueRing64.ReduceNarrow(
-                    inverse: inverse,
-                    left: power,
-                    modulus: modulus,
-                    right: result
-                );
-            }
-        }
-
-        if ((one == result) || (negativeOne == result)) { return true; }
-
-        while (0 != --shift) {
-            result = ScaledResidueRing64.ReduceNarrow(
-                inverse: inverse,
-                left: result,
-                modulus: modulus,
-                right: result
-            );
-
-            if (negativeOne == result) { return true; }
-        }
-
-        return false;
-    }
     /// <summary>Subtracts <paramref name="subtrahend"/> from every element of <paramref name="values"/> in place.</summary>
     /// <param name="subtrahend">The amount removed from each element.</param>
     /// <param name="values">The elements to adjust.</param>
@@ -613,54 +527,22 @@ public static partial class PrimeExtensions {
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
-    /// Small factors are settled by reciprocal-multiplication trial division against the odd primes through fifty-
-    /// nine — two vector comparisons when 256-bit hardware is available, a scalar ladder through thirty-seven
-    /// otherwise — after which every survivor below the square of the next untested prime is itself prime. Larger
-    /// values are decided by a single base-2 strong-probable-prime round corrected by
-    /// <see cref="StrongPseudoprimesBase2"/>, the complete list of composites that fool the round, making the answer
-    /// exact over the whole 32-bit range. The round runs in lazily reduced Montgomery form with a 64-bit radix, so the
-    /// inner loop performs no hardware division and no correction step, and the correction consults <see cref="StrongPseudoprimeFilter"/> first, so the binary search almost
-    /// never runs.
+    /// An odd value below 65,536 is one bit of the odd-prime bitmap over the shared base-prime table. Above it, the
+    /// narrow trial division <see cref="PrimeKernels.HasNarrowTrialFactor512(uint)"/> settles every multiple of the
+    /// odd primes through 727, after which every survivor below <c>733^2</c> is itself prime. Larger values are
+    /// decided by a single base-2 strong-probable-prime round corrected by <see cref="StrongPseudoprimesBase2"/>, the
+    /// complete list of composites that fool the round, making the answer exact over the whole 32-bit range. The round
+    /// is the word decision's own signed seeded walk, <see cref="PrimeKernels.PassesBaseTwoRound(ulong)"/>'s, so it
+    /// performs no hardware division in its chain and branches on no exponent bit, and the correction consults
+    /// <see cref="StrongPseudoprimeFilter"/> first, so the binary search almost never runs.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static bool IsPrime(this uint value) {
-        if (0U == (value & 01U)) { return (02U == value); }
-        if (Vector256.IsHardwareAccelerated) {
-            var broadcast = Vector256.Create(value: value);
-            var divisible = Vector256.LessThanOrEqual(
-                left: (broadcast * LadderDivisorInversesLow),
-                right: LadderQuotientCeilingsLow
-            ) |
-                Vector256.LessThanOrEqual(
-                left: (broadcast * LadderDivisorInversesHigh),
-                right: LadderQuotientCeilingsHigh
-            );
-
-            if (Vector256<uint>.Zero != divisible) {
-                // A multiple of a ladder prime is prime only as that prime, so a value above the last one is settled
-                // without a search.
-                return (
-                    (value <= PrimeKernels.SmallFactorPrimes[^1]) &&
-                    PrimeKernels.SmallFactorPrimes.Contains(value: ((ulong)value))
-                );
-            }
-            if (3721U > value) { return (1U < value); }
-        } else {
-            if (0U == (value % 03U)) { return (03U == value); }
-            if (0U == (value % 05U)) { return (05U == value); }
-            if (0U == (value % 07U)) { return (07U == value); }
-            if (0U == (value % 11U)) { return (11U == value); }
-            if (0U == (value % 13U)) { return (13U == value); }
-            if (0U == (value % 17U)) { return (17U == value); }
-            if (0U == (value % 19U)) { return (19U == value); }
-            if (0U == (value % 23U)) { return (23U == value); }
-            if (0U == (value % 29U)) { return (29U == value); }
-            if (0U == (value % 31U)) { return (31U == value); }
-            if (0U == (value % 37U)) { return (37U == value); }
-            if (1681U > value) { return (1U < value); }
-        }
-
-        if (!PassesNarrowBaseTwo(modulus: value)) { return false; }
+        if (0U == (value & 1U)) { return (2U == value); }
+        if (NarrowTableLimit > value) { return PrimeKernels.IsOddTablePrime(value: value); }
+        if (PrimeKernels.HasNarrowTrialFactorCore(value: value)) { return false; }
+        if (NarrowTrialDivisionLimit > value) { return true; }
+        if (!PrimeKernels.PassesBaseTwoCore(inverse: ((ulong)value).ModularInverse(), one: ScaledResidueRing64.RadixResidue(modulus: value), value: value)) { return false; }
 
         var fingerprint = Fingerprint(value: value);
 

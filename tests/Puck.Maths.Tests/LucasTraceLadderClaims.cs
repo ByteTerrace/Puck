@@ -8,11 +8,10 @@ internal static partial class Subjects {
     private static readonly ulong[] LucasSingleTraceComposites = [
         27_869UL, 348_611UL, 518_851UL, 852_389UL, 902_339UL, 1_247_159UL, 1_291_289UL, 1_789_199UL, 1_940_951UL,
     ];
-    // The arithmetic boundaries around the ladder, and the carrier's own: 2^32, 2^58, ScaledResidueRing64's centered
-    // ceiling 2^62, 2^63, and the trace ladder's lazy ceiling 2^61, the largest n with 8n at most 2^64, written here
-    // from that definition because the subject's constant is internal.
+    // The boundaries around the ladder, and the carrier's own: 2^32, 2^58, 2^61, 2^62 and ScaledResidueRing64's signed
+    // ceiling 2^63, where the ladder leaves signed arithmetic for exact arithmetic.
     private static readonly ulong[] LucasTraceBoundaries = [
-        (1UL << 32), (1UL << 58), ((ulong)((BigInteger.One << 64) / 8)), (1UL << 62), (1UL << 63),
+        (1UL << 32), (1UL << 58), (1UL << 61), (1UL << 62), ScaledResidueRing64.SignedModulusCeiling,
     ];
 
     /// <summary>Compares the strong Lucas test with the U and V recurrence oracle at the Default tier's operands.</summary>
@@ -62,7 +61,7 @@ internal static partial class Subjects {
         // Strong Lucas pseudoprimes, accepted composites, must have appeared: 5459 and 5777 lead them.
         if (acceptedComposites < 2) { return $"the band held {acceptedComposites} accepted composites, so the accepting path at a composite went unexercised"; }
 
-        // Drawn odd words in each arithmetic region: below 2^58, up to the trace ladder's lazy ceiling, up to 2^62, and above.
+        // Drawn odd words in each band: below 2^58, up to 2^61, up to 2^62, and above.
         var draws = (full ? 40_000 : 4_000);
         var traceCeiling = LucasTraceBoundaries[2];
 
@@ -78,24 +77,23 @@ internal static partial class Subjects {
                 if (Check(value: value) is { } failure) { return failure; }
             }
         }
-        // Just above the lazy ceiling, where a ladder left lazy too far carries traces past its operand bound: a
-        // ceiling raised to 3·2^60 rejects about one prime in 170 of this band, so the band holds enough primes to
-        // see it.
+        // A long run of draws in [2^61, 3·2^60), which holds enough primes for an accepting path that loses a fold to
+        // show.
         for (var count = 0; (count < (full ? 120_000 : 24_000)); ++count) {
             if (Check(value: (traceCeiling + (NextWord() % (traceCeiling >> 1))) | 1UL) is { } failure) { return failure; }
         }
-        // Just above the centered ceiling, where a ladder left centered too far carries traces past the signed word.
+        // Just above the signed ceiling, where a ladder left signed too far carries traces past the signed word.
         for (var count = 0; (count < (full ? 120_000 : 24_000)); ++count) {
-            if (Check(value: (ScaledResidueRing64.CenteredModulusCeiling + (NextWord() % (ScaledResidueRing64.CenteredModulusCeiling >> 1))) | 1UL) is { } failure) { return failure; }
+            if (Check(value: (ScaledResidueRing64.SignedModulusCeiling + (NextWord() % (ScaledResidueRing64.SignedModulusCeiling >> 1))) | 1UL) is { } failure) { return failure; }
         }
         // The strong base-two pseudoprimes of every region, which only this test rejects, and composites shaped against
-        // the centered region: prime powers, Wieferich powers and products of primes either side of 2^30 and 2^31.
+        // the band [2^60, 2^62): prime powers, Wieferich powers and products of primes either side of 2^30 and 2^31.
         var low = new List<ulong>();
-        var centeredPseudoprimes = new List<ulong>();
+        var bandPseudoprimes = new List<ulong>();
         var high = new List<ulong>();
 
-        if (BaseTwoPseudoprimes(band: centeredPseudoprimes, full: false, high: high, low: low) is { } construction) { return construction; }
-        foreach (var value in low.Concat(second: centeredPseudoprimes).Concat(second: high).Concat(second: BandShapedComposites(full: full))) {
+        if (BaseTwoPseudoprimes(band: bandPseudoprimes, full: false, high: high, low: low) is { } construction) { return construction; }
+        foreach (var value in low.Concat(second: bandPseudoprimes).Concat(second: high).Concat(second: BandShapedComposites(full: full))) {
             if (Check(value: value) is { } failure) { return failure; }
         }
 
@@ -186,7 +184,7 @@ internal static partial class Subjects {
             for (var exponent = 2; (exponent <= 64); ++exponent) {
                 if (Check(q: q, value: (ulong.MaxValue >> (64 - exponent))) is { } failure) { return failure; }
             }
-            // Values in the centered region sharing an odd prime with the parameter, where it is not a unit.
+            // Values in [2^61, 2^62) sharing an odd prime with the parameter, where it is not a unit.
             var shared = (((ulong)long.Abs(value: q)) >>> BitOperations.TrailingZeroCount(value: Math.Max(val1: long.Abs(value: q), val2: 1L)));
 
             if (1UL < shared) {

@@ -4,12 +4,12 @@ namespace Puck.Maths.Tests;
 
 internal static partial class Subjects {
     // The arithmetic regions the single round dispatches on, as [low, high) bands of odd values, the last closed at the top
-    // of the carrier: the centered seeded walk below the centered ceiling, split at 2^32, 2^58, the lazy ceiling and
-    // 2^61, and the exact least-significant-bit-first walk from there.
+    // of the carrier: the signed seeded walk below the signed ceiling, split at 2^32, 2^58, the lazy ceiling, 2^61 and
+    // 2^62, and the least-significant-bit-first walk with borrowed squares from there.
     private static readonly (ulong Low, ulong High)[] BaseTwoRoundRegions = [
         (3UL, (1UL << 32)), ((1UL << 32), (1UL << 58)), ((1UL << 58), ScaledResidueRing64.LazyModulusCeiling),
-        (ScaledResidueRing64.LazyModulusCeiling, (1UL << 61)), ((1UL << 61), ScaledResidueRing64.CenteredModulusCeiling),
-        (ScaledResidueRing64.CenteredModulusCeiling, (1UL << 63)), ((1UL << 63), ulong.MaxValue),
+        (ScaledResidueRing64.LazyModulusCeiling, (1UL << 61)), ((1UL << 61), (1UL << 62)),
+        ((1UL << 62), ScaledResidueRing64.SignedModulusCeiling), (ScaledResidueRing64.SignedModulusCeiling, ulong.MaxValue),
     ];
 
     /// <summary>Compares the single base-two round with plain modular exponentiation at the Default tier's operands.</summary>
@@ -60,10 +60,10 @@ internal static partial class Subjects {
             }
             if ((passes - before) < 100) { return $"only {(passes - before)} values in [{region.Low}, {region.High}) passed, so the accepting finish went unexercised there"; }
         }
-        // Just above the centered ceiling, where a seeded walk left centered too far doubles its accumulator past the
-        // signed word.
+        // Just above the signed ceiling, where a seeded walk left signed too far carries its accumulator past the signed
+        // word.
         for (var count = 0; (count < (full ? 240_000 : 24_000)); ++count) {
-            if (Check(value: Draw(region: (ScaledResidueRing64.CenteredModulusCeiling, (ScaledResidueRing64.CenteredModulusCeiling + (ScaledResidueRing64.CenteredModulusCeiling >>> 1))))) is { } failure) { return failure; }
+            if (Check(value: Draw(region: (ScaledResidueRing64.SignedModulusCeiling, (ScaledResidueRing64.SignedModulusCeiling + (ScaledResidueRing64.SignedModulusCeiling >>> 1))))) is { } failure) { return failure; }
         }
 
         // Constructed values d 2^s + 1. Every odd part below 2^10, so the seeded walk takes zero to three steps from every
@@ -91,7 +91,7 @@ internal static partial class Subjects {
 
         // Strong base-two pseudoprimes (6k + 1)(12k + 1)(18k + 1) with all three factors prime, composite by construction,
         // which the oracle alone decides: those above 2^63, the thirty-six led by 9275096661522257161, those in
-        // [2^60, 2^62), where the walk is centered, and those below 2^60.
+        // [2^60, 2^62), inside the signed region, and those below 2^60.
         var high = new List<ulong>();
         var band = new List<ulong>();
         var low = new List<ulong>();
@@ -109,7 +109,7 @@ internal static partial class Subjects {
         // The odd neighbours of every dispatch boundary on both sides, and the top of the carrier.
         var reach = (full ? 4_096UL : 256UL);
 
-        foreach (var boundary in ((ulong[])[(1UL << 32), (1UL << 58), ScaledResidueRing64.LazyModulusCeiling, (1UL << 61), ScaledResidueRing64.CenteredModulusCeiling, (1UL << 63)])) {
+        foreach (var boundary in ((ulong[])[(1UL << 32), (1UL << 58), ScaledResidueRing64.LazyModulusCeiling, (1UL << 61), (1UL << 62), ScaledResidueRing64.SignedModulusCeiling])) {
             for (var offset = 1UL; (offset < reach); offset += 2UL) {
                 if ((Check(value: (boundary - offset) | 1UL) ?? Check(value: (boundary + offset) | 1UL)) is { } failure) { return failure; }
             }
@@ -133,7 +133,7 @@ internal static partial class Subjects {
                 var inside = ((into == low)
                     ? (product < ScaledResidueRing64.LazyModulusCeiling)
                     : ((into == band)
-                        ? ((product >= ScaledResidueRing64.LazyModulusCeiling) && (product < ScaledResidueRing64.CenteredModulusCeiling))
+                        ? ((product >= ScaledResidueRing64.LazyModulusCeiling) && (product < (1UL << 62)))
                         : ((product > (UInt128.One << 63)) && (product <= ulong.MaxValue))));
 
                 if (!inside) { continue; }
@@ -149,7 +149,7 @@ internal static partial class Subjects {
 
         return null;
     }
-    /// <summary>Lists composites shaped against the centered region <c>[2^60, 2^62)</c>: prime powers inside it, the powers of the Wieferich primes the carrier holds, and products of primes either side of <c>2^30</c> and <c>2^31</c>.</summary>
+    /// <summary>Lists composites shaped against the band <c>[2^60, 2^62)</c>: prime powers inside it, the powers of the Wieferich primes the carrier holds, and products of primes either side of <c>2^30</c> and <c>2^31</c>.</summary>
     /// <param name="full">Whether to reach the Deep tier's wider prime set.</param>
     /// <returns>The composites.</returns>
     private static List<ulong> BandShapedComposites(bool full) {
@@ -160,7 +160,7 @@ internal static partial class Subjects {
             var prime = ((ulong)smallPrimes[index]);
 
             for (var power = (prime * prime); (power <= (ulong.MaxValue / prime)); power *= prime) {
-                if ((power >= (ScaledResidueRing64.LazyModulusCeiling / prime)) && (power < (ScaledResidueRing64.CenteredModulusCeiling / prime))) { values.Add(item: (power * prime)); }
+                if ((power >= (ScaledResidueRing64.LazyModulusCeiling / prime)) && (power < ((1UL << 62) / prime))) { values.Add(item: (power * prime)); }
             }
         }
         // 1093^2 and 3511^2 are base-two Fermat pseudoprimes; their powers carry the same factor.

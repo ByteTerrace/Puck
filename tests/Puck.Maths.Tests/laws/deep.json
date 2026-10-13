@@ -2598,7 +2598,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "IsStrongLucasProbablePrime and PassesStrongLucasRound at every odd value below 2^23, 40,000 draws per arithmetic region, 120,000 draws in [2^61, 3*2^60) and 120,000 in [2^62, 3*2^61), the Default case's pseudoprimes and the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, the odd neighbours within 8,192 of every boundary and the top 4,096 odd values of the carrier, the products of the sixty-four largest primes below 2^32, every Q from -40 through 40 over every odd value below 6,000, 48 draws per region and 48 values in [2^61, 2^62) sharing an odd prime with Q, and 512 drawn wide parameters",
+        "Subject": "IsStrongLucasProbablePrime and PassesStrongLucasRound at every odd value below 2^23, 40,000 draws per arithmetic region, 120,000 draws in [2^61, 3*2^60) and 120,000 in [2^63, 3*2^62), the Default case's pseudoprimes and the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, the odd neighbours within 8,192 of every boundary and the top 4,096 odd values of the carrier, the products of the sixty-four largest primes below 2^32, every Q from -40 through 40 over every odd value below 6,000, 48 draws per region and 48 values in [2^61, 2^62) sharing an odd prime with Q, and 512 drawn wide parameters",
         "Against": "Oracles.StrongLucasSelfridgeRecurrence and Oracles.StrongLucasRecurrence. MIRROR of prime-field.lucas-trace-ladder-vs-recurrence at strictly stronger operands",
         "Shared": "",
         "Citation": "",
@@ -2632,7 +2632,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "PrimeKernels.PassesBaseTwoBatch at every odd value below 2^21 and every odd value below 2^16 beside three values above 2^63, 12,000 drawn batches per region and 24,000 across regions, 240,000 batches in [2^60, 2^61) and 60,000 just above the centered ceiling, constructed odd parts of twenty-three common lengths from 1 through 63 at eleven bit lengths, the pseudoprimes of the Default case, the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, and the odd neighbours within 4,096 of every boundary and the top 4,096 odd values of the carrier",
+        "Subject": "PrimeKernels.PassesBaseTwoBatch at every odd value below 2^21 and every odd value below 2^16 beside three values above 2^63, 12,000 drawn batches per region and 24,000 across regions, 240,000 batches in [2^60, 2^61) and 60,000 just above the signed ceiling, constructed odd parts of twenty-three common lengths from 1 through 63 at eleven bit lengths, the pseudoprimes of the Default case, the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, and the odd neighbours within 4,096 of every boundary and the top 4,096 odd values of the carrier",
         "Against": "Oracles.StrongBaseTwoAcceptanceRound, forward and inverted. MIRROR of prime-field.base-two-batch-vs-modular-power at strictly stronger operands",
         "Shared": "",
         "Citation": "",
@@ -2662,7 +2662,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "PrimeKernels.PassesBaseTwoRound at every odd value below 2^21, 48,000 drawn values per region, 240,000 just above the centered ceiling, the constructed values of the Default case, the strong base-two pseudoprimes (6k + 1)(12k + 1)(18k + 1) for k below 96,000, those in [2^60, 2^62) and the thirty-six above 2^63, the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, and the odd neighbours within 4,096 of every boundary and the top 4,096 odd values of the carrier",
+        "Subject": "PrimeKernels.PassesBaseTwoRound at every odd value below 2^21, 48,000 drawn values per region, 240,000 just above the signed ceiling, the constructed values of the Default case, the strong base-two pseudoprimes (6k + 1)(12k + 1)(18k + 1) for k below 96,000, those in [2^60, 2^62) and the thirty-six above 2^63, the band-shaped composites with prime powers of primes below 2,000 and sixty-four primes either side of 2^30 and 2^31, and the odd neighbours within 4,096 of every boundary and the top 4,096 odd values of the carrier",
         "Against": "Oracles.StrongBaseTwoAcceptanceRound, forward and inverted. MIRROR of prime-field.base-two-round-vs-modular-power at strictly stronger operands",
         "Shared": "",
         "Citation": "",
