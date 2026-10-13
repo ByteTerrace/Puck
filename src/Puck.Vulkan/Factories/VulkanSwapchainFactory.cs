@@ -236,6 +236,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
             imageExtentHeight: height,
             imageExtentWidth: width,
             output: output,
+            presentMode: presentMode,
             swapchainApi: m_swapchainApi,
             swapchainHandle: swapchainHandle
         );

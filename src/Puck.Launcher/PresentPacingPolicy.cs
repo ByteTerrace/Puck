@@ -1,4 +1,5 @@
 using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Launcher;
 
@@ -19,7 +20,10 @@ public enum PresentPacingBasis {
 /// <summary>A pure, inspectable present-rate policy result.</summary>
 /// <param name="TargetHertz">The effective target, or zero when unbounded.</param>
 /// <param name="Basis">The fact that selected the target.</param>
-public readonly record struct PresentPacingDecision(double TargetHertz, PresentPacingBasis Basis) {
+/// <param name="RefreshesPerPresent">The display refreshes each present waits for when the swap chain paces the host, or
+/// zero when the host paces by its own timer: a variable-refresh display, or an explicit target that no whole number
+/// of refreshes of a known signal reaches.</param>
+public readonly record struct PresentPacingDecision(double TargetHertz, PresentPacingBasis Basis, uint RefreshesPerPresent) {
     /// <summary>Converts the target into stopwatch ticks, or zero for an unbounded decision.</summary>
     /// <param name="frequency">The positive stopwatch frequency.</param>
     /// <returns>The target period in stopwatch ticks.</returns>
@@ -56,6 +60,24 @@ public static class PresentPacingPolicy {
     /// range; unknown/unsupported VRR never receives invented headroom or a fabricated floor.
     /// </summary>
     public const double VariableRefreshCeilingGuardHertz = 3.0;
+    /// <summary>The largest relative difference between an explicit target and the rate a whole number of signal refreshes
+    /// presents at for the swap chain to pace that target.</summary>
+    public const double SwapChainRateTolerance = 0.01;
+
+    // The whole number of signal refreshes per present that reaches an explicit target, or zero when none does.
+    private static uint RefreshesReaching(double signalHertz, double targetHertz) {
+        var refreshes = Math.Round(a: (signalHertz / targetHertz));
+
+        if (
+            (refreshes < 1.0) ||
+            (refreshes > ISwapChainPacing.MaxRefreshesPerPresent) ||
+            (Math.Abs(value: ((signalHertz / refreshes) - targetHertz)) > (targetHertz * SwapChainRateTolerance))
+        ) {
+            return 0U;
+        }
+
+        return ((uint)refreshes);
+    }
 
     private static double? ResolveVariableRefreshCeiling(DisplayTimingSnapshot timing) {
         if (!timing.Signal.IsKnown) {
@@ -96,15 +118,25 @@ public static class PresentPacingPolicy {
         }
 
         if (requestedHertz > 0.0) {
-            return new PresentPacingDecision(
-                // An explicit fixed cadence is bounded by the active display cadence, not by the monitor's adaptive interval.
-                TargetHertz: (timing.Signal.IsKnown
+            // An explicit fixed cadence is bounded by the active display cadence, not by the monitor's adaptive interval.
+            var targetHertz = (timing.Signal.IsKnown
                 ? Math.Min(
-                        val1: requestedHertz,
-                        val2: timing.Signal.Hertz
+                    val1: requestedHertz,
+                    val2: timing.Signal.Hertz
+                )
+                : requestedHertz
+            );
+
+            return new PresentPacingDecision(
+                Basis: PresentPacingBasis.ExplicitTarget,
+                RefreshesPerPresent: (timing.Signal.IsKnown
+                    ? RefreshesReaching(
+                        signalHertz: timing.Signal.Hertz,
+                        targetHertz: targetHertz
                     )
-                : requestedHertz),
-                Basis: PresentPacingBasis.ExplicitTarget
+                    : 0U
+                ),
+                TargetHertz: targetHertz
             );
         }
 
@@ -121,19 +153,24 @@ public static class PresentPacingPolicy {
                     val1: range.MinimumHertz,
                     val2: (variableRefreshCeiling - VariableRefreshCeilingGuardHertz)
                 ),
-                Basis: PresentPacingBasis.VariableRefreshRange
+                Basis: PresentPacingBasis.VariableRefreshRange,
+                // A variable-refresh display shows a frame when it arrives, so the timer's period is the cadence.
+                RefreshesPerPresent: 0U
             );
         }
 
         if (timing.Signal.IsKnown) {
             return new PresentPacingDecision(
                 TargetHertz: timing.Signal.Hertz,
-                Basis: PresentPacingBasis.SignalTiming
+                Basis: PresentPacingBasis.SignalTiming,
+                RefreshesPerPresent: 1U
             );
         }
 
         return new PresentPacingDecision(
             Basis: PresentPacingBasis.Unbounded,
+            // The display's vertical blank still paces a swap chain whose rate the host cannot read.
+            RefreshesPerPresent: 1U,
             TargetHertz: 0.0
         );
     }

@@ -162,9 +162,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             );
         }
     }
-    // The pacer's period in stopwatch ticks, and the presented rate it targets in whole frames a second (zero when
-    // unbounded), which the frame context carries to the render graph's rate sources.
-    private (long Period, int Hertz) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+    // The timer's period in stopwatch ticks, the presented rate the pacing targets in whole frames a second (zero when
+    // unbounded), which the frame context carries to the render graph's rate sources, and the display refreshes each
+    // present waits for when the swap chain paces the loop (zero when the timer does).
+    private (long Period, int Hertz, uint Refreshes) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
             timing: displayTiming
@@ -172,7 +173,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
         if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
             m_logger.LogInformation(
-                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}).",
+                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}); swap chain refreshes per present {Refreshes} (0 paces by timer).",
                 (displayTiming.Signal.IsKnown
                 ? $"{displayTiming.Signal.Hertz:0.###} Hz"
                 : "unknown"),
@@ -184,13 +185,15 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 : "unknown"),
                 displayTiming.VariableRefresh.Source,
                 decision.TargetHertz,
-                decision.Basis
+                decision.Basis,
+                decision.RefreshesPerPresent
             );
         }
 
         return (
             decision.ToPeriodTicks(frequency: frequency),
-            ((int)Math.Round(a: decision.TargetHertz))
+            ((int)Math.Round(a: decision.TargetHertz)),
+            decision.RefreshesPerPresent
         );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
@@ -285,11 +288,20 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // measured present interval — proof the closed loop is live and what the real display cadence is. Off
                 // by default so a shipped run isn't noisy.
                 var logPresentTiming = m_options.LogPresentTiming;
+                // Swap-chain pacing: a presenter whose swap chain presents on vertical blank paces the loop itself. After
+                // each present the loop waits until the swap chain's queue has room, which the display makes on a
+                // vertical blank, so each iteration starts on one and its interval is present to present, with no timer
+                // whose wake-up can land late. The
+                // timer below paces only an iteration the swap chain does not: a variable-refresh display, an explicit
+                // target no whole number of refreshes reaches, a tearing or mailbox present mode, a frame with nothing
+                // presented.
+                var swapPacing = (m_presenter as ISwapChainPacing);
                 // Genlock (latency phase-align): when an external frame producer (a live camera) publishes arrival
                 // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
                 // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
                 // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher;
-                // LauncherOptions.GenlockEnabled disables it.
+                // LauncherOptions.GenlockEnabled disables it. It biases the timer's deadline only: a swap-chain-paced
+                // iteration starts on the vertical blank, which nothing can move.
                 var genlock = new GenlockPhaseAligner(
                     clock: m_externalClocks.PacerClock,
                     enabled: m_options.GenlockEnabled,
@@ -304,7 +316,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
 
-                var (renderPeriod, displayHertz) = ResolveRenderPeriod(
+                var (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
                     displayTiming: displayTiming,
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
@@ -369,7 +381,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
                         displayTiming = DisplayTimingSnapshot.Unknown;
-                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -387,7 +399,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         --displayTimingRetryAttemptsRemaining;
                         displayTiming = requeriedTiming;
-                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -406,7 +418,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // only — the fixed-step sim is untouched.
                     if (m_presentPacing.Version != presentPacingVersion) {
                         presentPacingVersion = m_presentPacing.Version;
-                        (renderPeriod, displayHertz) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -637,49 +649,58 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         break;
                     }
 
-                    if (renderPeriod > 0L) {
+                    // The closed loop stays observed, not authoritative: when the presenter confirms a new present, the
+                    // measured display interval (delta between confirmed presents) is reported, but the confirmation
+                    // timestamp moves no deadline (see the presentTiming remarks above). When no present-timing
+                    // capability is present this block is a no-op.
+                    if (presentTiming is not null) {
+                        var sample = presentTiming.LastPresentTiming;
+
+                        if (
+                            sample.IsAvailable &&
+                            (sample.PresentCount != lastObservedPresentCount)
+                        ) {
+                            lastObservedPresentCount = sample.PresentCount;
+
+                            // Diagnostic: the measured display-present interval between confirmed presents — throttled
+                            // so it isn't noisy, and only when opted in. This is the at-a-glance "closed loop is live".
+                            if (
+                                logPresentTiming &&
+                                (previousPresentTimestamp > 0L) &&
+                                (0 == (++presentSampleCounter % 120)) &&
+                                m_logger.IsEnabled(logLevel: LogLevel.Information)
+                            ) {
+                                var intervalMilliseconds = ((((double)(sample.PresentTimestampTicks - previousPresentTimestamp)) * 1000.0) / frequency);
+
+                                if (intervalMilliseconds > 0.0) {
+                                    m_logger.LogInformation(
+                                        "Closed-loop present timing live: measured interval {Interval:0.00} ms ({Hertz:0.#} Hz).",
+                                        intervalMilliseconds,
+                                        (1000.0 / intervalMilliseconds)
+                                    );
+                                }
+                            }
+
+                            previousPresentTimestamp = sample.PresentTimestampTicks;
+                        }
+                    }
+
+                    if (
+                        (swapPacing is not null) &&
+                        swapPacing.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent)
+                    ) {
+                        // The swap chain paced this iteration: the next one starts on a vertical blank. The timer's grid
+                        // restarts here, so an iteration the timer paces later waits one period from the last frame shown
+                        // rather than from a stale slot.
+                        nextRenderDeadline = m_time.GetTimestamp();
+                        m_timeline.Mark(phase: HostFramePhase.Wait);
+                    } else if (renderPeriod > 0L) {
                         // Grid-anchored pacing. The render deadline advances by exactly renderPeriod from the previous
                         // deadline — an absolute present-slot grid — not from when produce/present finished this frame.
                         // That lets this frame's produce + GPU work overlap the wait for the next slot: the wait is
                         // only the slack between the fixed grid point and however long produce ran, so the
                         // loop-to-loop interval is the slot itself (renderPeriod), not produce + slot.
                         //
-                        // The closed loop stays observed, not authoritative: when the presenter confirms a new
-                        // present, the measured display interval (delta between confirmed presents) is reported, but
-                        // the confirmation timestamp does not move the deadline (see the presentTiming remarks
-                        // above). When no present-timing capability is present this whole block is a no-op.
-                        if (presentTiming is not null) {
-                            var sample = presentTiming.LastPresentTiming;
-
-                            if (
-                                sample.IsAvailable &&
-                                (sample.PresentCount != lastObservedPresentCount)
-                            ) {
-                                lastObservedPresentCount = sample.PresentCount;
-
-                                // Diagnostic: the measured display-present interval between confirmed presents — throttled
-                                // so it isn't noisy, and only when opted in. This is the at-a-glance "closed loop is live".
-                                if (
-                                    logPresentTiming &&
-                                    (previousPresentTimestamp > 0L) &&
-                                    (0 == (++presentSampleCounter % 120)) &&
-                                    m_logger.IsEnabled(logLevel: LogLevel.Information)
-                                ) {
-                                    var intervalMilliseconds = ((((double)(sample.PresentTimestampTicks - previousPresentTimestamp)) * 1000.0) / frequency);
-
-                                    if (intervalMilliseconds > 0.0) {
-                                        m_logger.LogInformation(
-                                            "Closed-loop present timing live: measured interval {Interval:0.00} ms ({Hertz:0.#} Hz).",
-                                            intervalMilliseconds,
-                                            (1000.0 / intervalMilliseconds)
-                                        );
-                                    }
-                                }
-
-                                previousPresentTimestamp = sample.PresentTimestampTicks;
-                            }
-                        }
-
                         // Advance to the next grid slot. GENLOCK biases the slot toward the latest external arrival (see
                         // GenlockPhaseAligner) when one publishes; a no-op with no publisher or a stale feed.
                         nextRenderDeadline = genlock.Apply(
@@ -755,9 +776,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         }
     }
 
-    // The pump sleeps through most of each slot and must wake on its deadline: at normal priority the pacer's wait
-    // returned up to 5.7 ms late, which alone pushed a 2 ms frame past its 60 Hz slot; at the highest it wakes within
-    // about a millisecond (host.frames reports the lateness).
+    // The pump sleeps through most of each slot and must wake on its deadline or its swap chain's signal: at normal
+    // priority the timer's wait returned up to 5.7 ms late, which alone pushed a 2 ms frame past its 60 Hz slot; at the
+    // highest it wakes within about a millisecond (host.frames reports the lateness).
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => LauncherHostLoop.RunPump(
         name: "Puck.Launcher Window Pump",
         priority: ThreadPriority.Highest,

@@ -45,10 +45,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // presented with the matching Present flag. Both are UINT bitmasks in the DXGI headers.
     private const uint DxgiSwapChainFlagAllowTearing = 0x00000800; // DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
     private const uint DxgiPresentAllowTearing = 0x00000200;       // DXGI_PRESENT_ALLOW_TEARING
-    // Closed-loop present timing for tearing modes: GetFrameStatistics has no vblank sync-point when presenting at sync
-    // interval 0 (Immediate/Adaptive), so those modes drive a FRAME_LATENCY_WAITABLE_OBJECT swap chain and phase-lock to
-    // the waitable instead — the DXGI analogue of Vulkan's vkWaitForPresentKHR.
+    // Every swap chain is a FRAME_LATENCY_WAITABLE_OBJECT swap chain at a maximum frame latency of two: the waitable is
+    // signaled once at most one presented frame is still queued, which on a sync-interval present is the vertical blank
+    // that shows the frame before it. One queued frame lets a frame's CPU work overlap the previous frame's GPU work, so
+    // a frame needs each stage, not their sum, to fit a refresh. A Vsync host paces off the waitable (TryWaitForFrame); in
+    // every other mode BeginFrame waits on it, which bounds the queue, and the tearing modes timestamp it
+    // (GetFrameStatistics has no vblank sync point at sync interval 0).
     private const uint DxgiSwapChainFlagFrameLatencyWaitableObject = 0x00000040; // DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+    private const uint MaximumFrameLatency = 2;
     private const uint FrameLatencyWaitTimeoutMilliseconds = 100; // bound so a stalled/occluded present pipeline can never hang the pump
     // The name the encode's pool and block are admitted and named under.
     private const string EncodeOwner = "display-encode";
@@ -66,7 +70,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly GpuPixelFormat m_preferredFormat;
     private readonly DisplayColorSpace m_requestedColorSpace;
     private readonly PresentMode m_presentMode;
-    private readonly uint m_syncInterval;
+    // Vsync presents at the refreshes the host's pacing selects (1 to ISwapChainPacing.MaxRefreshesPerPresent), every
+    // other mode at sync interval 0.
+    private uint m_syncInterval;
 
     private readonly nint[] m_backBuffers = new nint[FrameCount];
     // One command allocator/list per swap-chain buffer (indexed by IDXGISwapChain3::GetCurrentBackBufferIndex,
@@ -110,16 +116,19 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private nint m_swapChain;
     private uint m_width;
     // Closed-loop present timing. Vsync/Mailbox read GetFrameStatistics after each present (a TRUE display-scanout
-    // timestamp). Immediate/Adaptive instead wait on the frame-latency waitable at the top of each frame (a present-
-    // pipeline signal — the prior present being retired — timestamped with Stopwatch, the same QPC clock as SyncQPCTime).
-    // Either way the pacer consumes only the inter-sample delta, so the two timestamp meanings phase-lock identically.
+    // timestamp). Immediate/Adaptive instead timestamp the frame-latency waitable's signal (a present-pipeline signal —
+    // the prior present being retired — timestamped with Stopwatch, the same QPC clock as SyncQPCTime). Either way the
+    // pacer consumes only the inter-sample delta, so the two timestamp meanings phase-lock identically.
     // m_presentTimingAvailable = false signals "no sample" (disjoint stats, or a waitable timeout) → open-loop fallback.
     // All on the single pump thread that presents.
     private uint m_lastPresentCount;
     private long m_lastPresentQpcTicks;
     private bool m_presentTimingAvailable;
-    // The frame-latency waitable HANDLE for Immediate/Adaptive; null (the default) for Vsync/Mailbox and before creation.
+    // The swap chain's frame-latency waitable HANDLE; null before creation.
     private HANDLE m_frameLatencyWaitable;
+    // Whether a wait on the waitable has returned since the last present: the waitable is a semaphore counting the frames
+    // the queue accepts, so each present takes exactly one wait, whichever of TryWaitForFrame and BeginFrame makes it.
+    private bool m_frameAccepted;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceCompositor"/> class.</summary>
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
@@ -146,11 +155,46 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_presentMode = presentationOptions.PresentMode;
         m_preferredFormat = presentationOptions.SurfaceFormat;
         m_requestedColorSpace = presentationOptions.ColorSpace;
-        // Vsync presents with sync interval 1, the other modes with 0.
         m_syncInterval = ((PresentMode.Vsync == m_presentMode)
             ? 1u
             : 0u
         );
+    }
+
+    /// <summary>Selects the display refreshes each following Vsync present waits for, then blocks until the swap chain's
+    /// frame-latency waitable accepts another frame: until at most one presented frame is still queued, or
+    /// 100 milliseconds have passed.</summary>
+    /// <param name="refreshesPerPresent">The refreshes each present waits for, at most
+    /// <see cref="ISwapChainPacing.MaxRefreshesPerPresent"/>; zero asks for no pacing.</param>
+    /// <returns><see langword="true"/> when the waitable paced this iteration; <see langword="false"/> when no pacing was
+    /// asked for, no swap chain exists, the present mode is not <see cref="PresentMode.Vsync"/>, a wait already returned
+    /// since the last present, or the bound passed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="refreshesPerPresent"/> is above
+    /// <see cref="ISwapChainPacing.MaxRefreshesPerPresent"/>.</exception>
+    public bool TryWaitForFrame(uint refreshesPerPresent) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: ISwapChainPacing.MaxRefreshesPerPresent,
+            value: refreshesPerPresent
+        );
+
+        if (PresentMode.Vsync != m_presentMode) {
+            return false;
+        }
+
+        m_syncInterval = Math.Max(
+            val1: 1u,
+            val2: refreshesPerPresent
+        );
+
+        if (
+            (0u == refreshesPerPresent) ||
+            (0 == m_swapChain) ||
+            m_frameAccepted
+        ) {
+            return false;
+        }
+
+        return WaitForFrameAccepted();
     }
 
     /// <summary>Gets what the swap chain presents, its format and color space, or <see langword="null"/> while no swap
@@ -232,11 +276,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        // Tearing modes: wait on the frame-latency waitable at the TOP of the frame (the canonical placement) for the
-        // PRIOR present to retire, and timestamp it as the present-confirmation sample — mirroring Vulkan's wait on the
-        // prior present id. The wait overlaps the frame's own work, so it paces to the display without doubling the
-        // host pacer's deadline wait. A no-op for Vsync/Mailbox (which use GetFrameStatistics after present instead).
-        CaptureFrameLatencyTiming();
+        // A host that paced off the swap chain already waited on the waitable after its last present; otherwise wait here,
+        // at the top of the frame, for the queue to accept the frame.
+        if (!m_frameAccepted) {
+            _ = WaitForFrameAccepted();
+        }
 
         WaitForFrameSlot();
 
@@ -396,6 +440,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             Flags: ((DXGI_PRESENT)m_presentFlags),
             SyncInterval: m_syncInterval
         ).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
+        m_frameAccepted = false;
         CapturePresentTiming(swapChain: swapChain);
 
         // Arm this slot's fence value AFTER the queue submit so BeginFrame's next WaitForFrameSlot on this same
@@ -484,9 +529,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // so ALL failure is caught and treated as "no timing this frame" — present timing is render-side only and must never
     // throw out of the present path.
     private void CapturePresentTiming(IDXGISwapChain3* swapChain) {
-        // Tearing modes capture timing from the frame-latency waitable in BeginFrame, not here — GetFrameStatistics has
-        // no vblank sync-point at sync interval 0 and would just report a stale/zero SyncQPCTime.
-        if (!m_frameLatencyWaitable.IsNull) {
+        // Tearing modes capture timing from the frame-latency waitable instead — GetFrameStatistics has no vblank
+        // sync-point at sync interval 0 and would just report a stale/zero SyncQPCTime.
+        if (TimesFromWaitable) {
             return;
         }
 
@@ -507,17 +552,18 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             m_presentTimingAvailable = false;
         }
     }
-    // Tearing modes (Immediate/Adaptive): wait (bounded) on the frame-latency waitable for the prior present to retire,
-    // and publish the wait-return instant as the present-confirmation sample. The timestamp is a CPU-side proxy (a
-    // pipeline signal, not a display scanout time) — exactly like Vulkan's vkWaitForPresentKHR return — and the pacer
-    // uses only the inter-sample delta, so the constant offset cancels. A timeout (stalled/occluded pipeline) reports no
-    // sample, so the pacer falls back to open-loop. Called at the top of each frame; a no-op when there is no waitable.
-    // FIRST frame only: a waitable swap chain starts signaled (its initial latency credit), so the first wait returns
-    // before any present — that one sample is not a retired present, but the pacer's priming discards it (it anchors only
-    // from the second observed sample), and consumers read m_lastPresentCount as a delta, so it is harmless.
-    private void CaptureFrameLatencyTiming() {
+    // The tearing modes timestamp the waitable's signal: GetFrameStatistics has no vblank sync point at sync interval 0.
+    private bool TimesFromWaitable => (PresentMode.Immediate == m_presentMode) || (PresentMode.Adaptive == m_presentMode);
+
+    // Waits (bounded) on the frame-latency waitable for the queue to accept a frame, and reports whether it was
+    // signaled. The tearing modes publish the wait-return instant as the present-confirmation sample: a CPU-side proxy
+    // (a pipeline signal, not a display scanout time), like Vulkan's vkWaitForPresentKHR return, and the pacer uses only
+    // the inter-sample delta, so the constant offset cancels. A timeout (stalled/occluded pipeline) reports no sample.
+    // A waitable swap chain starts signaled (its initial latency credit), so the first wait returns before any present;
+    // consumers read m_lastPresentCount as a delta, so that one sample is harmless.
+    private bool WaitForFrameAccepted() {
         if (m_frameLatencyWaitable.IsNull) {
-            return;
+            return false;
         }
 
         var wait = PInvoke.WaitForSingleObject(
@@ -527,17 +573,21 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         // WAIT_OBJECT_0 == 0: the waitable was signaled (a present retired). Compared numerically to avoid taking a
         // dependency on the WAIT_EVENT enum's namespace, which this project does not surface from its CsWin32 reference.
-        if (((uint)wait) == 0u) {
-            m_lastPresentQpcTicks = Stopwatch.GetTimestamp();
+        m_frameAccepted = (((uint)wait) == 0u);
 
-            unchecked {
-                ++m_lastPresentCount;
+        if (TimesFromWaitable) {
+            if (m_frameAccepted) {
+                m_lastPresentQpcTicks = Stopwatch.GetTimestamp();
+
+                unchecked {
+                    ++m_lastPresentCount;
+                }
             }
 
-            m_presentTimingAvailable = true;
-        } else {
-            m_presentTimingAvailable = false;
+            m_presentTimingAvailable = m_frameAccepted;
         }
+
+        return m_frameAccepted;
     }
 
     /// <inheritdoc/>
@@ -620,8 +670,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // Recompute the present/swap-chain flags from scratch — the compositor is a singleton reused across
         // Deactivate(Dispose)->Initialize cycles, and the flags below are OR-accumulated, so resetting here keeps a
         // re-activation from inheriting stale bits if the flag inputs ever vary per activation.
-        m_swapChainFlags = 0;
+        m_swapChainFlags = DxgiSwapChainFlagFrameLatencyWaitableObject;
         m_presentFlags = 0;
+        m_frameAccepted = false;
 
         void* factory;
 
@@ -634,20 +685,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var dxgiFactory = ((IDXGIFactory4*)factory);
 
         try {
-            var tearingMode = ((PresentMode.Immediate == m_presentMode) || (PresentMode.Adaptive == m_presentMode));
-
-            // The tearing modes drive a frame-latency-waitable swap chain so the host pacer can close the loop on the
-            // present pipeline (GetFrameStatistics is dead at sync interval 0). Independent of tearing support, so set it
-            // for both Immediate and Adaptive. Vsync/Mailbox leave it off and use GetFrameStatistics.
-            if (tearingMode) {
-                m_swapChainFlags |= DxgiSwapChainFlagFrameLatencyWaitableObject;
-            }
-
             // Immediate and Adaptive present need an ALLOW_TEARING swap chain (carried into Present too) AND a
             // display that supports tearing; detect once so Vsync/Mailbox are unaffected and the tearing modes degrade
             // to no-vsync when unsupported. Vsync/Mailbox leave both flags zero.
             if (
-                tearingMode &&
+                TimesFromWaitable &&
                 SupportsTearing(factory: dxgiFactory)
             ) {
                 m_swapChainFlags |= DxgiSwapChainFlagAllowTearing;
@@ -698,18 +740,16 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                     .ThrowIfFailed(operation: "IDXGISwapChain1::QueryInterface(IDXGISwapChain3)");
                 m_swapChain = ((nint)sc3);
 
-                // Frame-latency-waitable swap chain (tearing modes only): cap the queue at one frame and grab the
-                // waitable the pacer phase-locks to. Closing any prior handle keeps a re-created swap chain leak-free.
-                if ((m_swapChainFlags & DxgiSwapChainFlagFrameLatencyWaitableObject) != 0) {
-                    if (!m_frameLatencyWaitable.IsNull) {
-                        _ = PInvoke.CloseHandle(hObject: m_frameLatencyWaitable);
-                        m_frameLatencyWaitable = default;
-                    }
-
-                    // CsWin32 generates this as a friendly void overload that throws on a failing HRESULT.
-                    sc3->SetMaximumFrameLatency(MaxLatency: 1);
-                    m_frameLatencyWaitable = sc3->GetFrameLatencyWaitableObject();
+                // Cap the queue and take the waitable the host paces off. Closing any prior handle keeps a
+                // re-created swap chain leak-free.
+                if (!m_frameLatencyWaitable.IsNull) {
+                    _ = PInvoke.CloseHandle(hObject: m_frameLatencyWaitable);
+                    m_frameLatencyWaitable = default;
                 }
+
+                // CsWin32 generates this as a friendly void overload that throws on a failing HRESULT.
+                sc3->SetMaximumFrameLatency(MaxLatency: MaximumFrameLatency);
+                m_frameLatencyWaitable = sc3->GetFrameLatencyWaitableObject();
             } finally {
                 _ = ((IUnknown*)sc1)->Release();
             }

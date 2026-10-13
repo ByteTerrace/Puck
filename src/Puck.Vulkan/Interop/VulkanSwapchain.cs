@@ -22,6 +22,9 @@ public sealed class VulkanSwapchain : IDisposable {
     /// <summary>Gets what the swapchain presents: its images' format and the color space they are encoded in, chosen
     /// by <see cref="Factories.VulkanSwapchainFactory.SelectOutput"/>.</summary>
     public DisplayOutput Output { get; }
+    /// <summary>Gets the <c>VkPresentModeKHR</c> the swapchain presents with, one of <see cref="VulkanPresentMode"/>'s
+    /// values.</summary>
+    public uint PresentMode { get; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSwapchain"/> class, taking ownership of an existing native swapchain handle.</summary>
     /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> handle to own.</param>
@@ -29,6 +32,7 @@ public sealed class VulkanSwapchain : IDisposable {
     /// <param name="output">The format and color space of the swapchain images.</param>
     /// <param name="imageExtentWidth">The width, in pixels, of the swapchain images.</param>
     /// <param name="imageExtentHeight">The height, in pixels, of the swapchain images.</param>
+    /// <param name="presentMode">The <c>VkPresentModeKHR</c> the swapchain was created with.</param>
     /// <param name="swapchainApi">The API used to destroy the swapchain on disposal.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="swapchainApi"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="swapchainHandle"/> is zero.</exception>
@@ -38,6 +42,7 @@ public sealed class VulkanSwapchain : IDisposable {
         DisplayOutput output,
         uint imageExtentWidth,
         uint imageExtentHeight,
+        uint presentMode,
         IVulkanSwapchainApi swapchainApi
     ) {
         ArgumentNullException.ThrowIfNull(argument: swapchainApi);
@@ -55,6 +60,7 @@ public sealed class VulkanSwapchain : IDisposable {
         Output = output;
         ImageExtentWidth = imageExtentWidth;
         ImageExtentHeight = imageExtentHeight;
+        PresentMode = presentMode;
         m_swapchainApi = swapchainApi;
     }
 

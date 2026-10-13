@@ -30,4 +30,13 @@ public interface IVulkanFramePresenter {
     /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the timestamp the present was observed at.</param>
     /// <returns><see langword="true"/> when a usable sample exists; <see langword="false"/> when present timing is unsupported or not yet observed.</returns>
     bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks);
+    /// <summary>Blocks, through <c>vkWaitForPresentKHR</c>, until at most one present to <paramref name="swapchain"/>
+    /// still waits for the display: until the present before the last is visible, or a bound a stalled display cannot
+    /// exceed has passed.</summary>
+    /// <param name="logicalDevice">The logical device the swapchain belongs to.</param>
+    /// <param name="swapchain">The swapchain presented to.</param>
+    /// <returns><see langword="true"/> when that present is visible; <see langword="false"/> when present wait is
+    /// unsupported, fewer than two presents reached the swapchain, nothing was presented since the last wait, or the
+    /// wait did not succeed.</returns>
+    bool TryWaitForPresentQueue(VulkanLogicalDevice logicalDevice, VulkanSwapchain swapchain);
 }

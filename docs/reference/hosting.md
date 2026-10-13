@@ -193,9 +193,44 @@ The fields most often confused in `FrameContext` have distinct meanings:
 
 | Host | Time | Rule |
 |---|---|---|
-| Windowed | The wall clock, paced to the display | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
+| Windowed | The wall clock, paced by the swap chain | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
 | Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
 | Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes, and steps the next tick only once the root reports that frame rendered. Every tick has exactly one rendered frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
+
+The windowed host paces off its swap chain, never a timer, whenever the swap
+chain presents on vertical blank (`host.presentMode: Vsync`). After each
+present the loop waits until the swap chain's queue has room
+(`ISwapChainPacing.TryWaitForFrame`), which the display makes on a vertical
+blank, so each iteration starts on one and an interval `host.frames` reads is
+present to present, aligned to vertical blank. Both backends keep one
+presented frame queued behind the display, so a frame's CPU work overlaps the
+previous frame's GPU work and each stage, not their sum, must fit a refresh:
+Direct3D 12 waits on the swap chain's frame-latency waitable object at a
+maximum frame latency of two, and Vulkan waits through `VK_KHR_present_wait`
+on a FIFO swapchain until the present before the last is visible. Neither
+spins.
+
+The rate follows the display. Automatic pacing (`host.targetHertz: 0`)
+presents on every refresh of whatever signal the display runs, and a signal
+the host cannot read is still paced by its vertical blank. An explicit target
+paces off the swap chain when a whole number of refreshes, at most four,
+reaches it within one percent (30 Hz on a 60 Hz display presents every second
+refresh). Direct3D 12 sets that number as its sync interval; Vulkan's FIFO has
+none, so Vulkan paces off the swap chain only at one refresh a present. The
+timer paces everything else: a verified variable-refresh range, whose display
+shows a frame when it arrives, so the timer's period is the cadence; an
+explicit target no whole number of refreshes reaches; a tearing or mailbox
+present mode; a device without present wait; and an iteration that presented
+nothing. Genlock biases only the timer's deadline. The display log line names
+the choice (`swap chain refreshes per present`, 0 for the timer).
+
+The simulation's fixed tick is unchanged by this. The pump still hands
+`FixedStepPump.Advance` the wall interval each iteration sampled and runs
+every whole step it covers, so a 30 Hz simulation steps on alternate 60 Hz
+frames whichever pacer set the interval. The pacer moves when a tick runs,
+never what it computes: a tick's state is a function of the state before it
+and its `CommandSnapshot`. The offscreen host keeps one tick per produced
+frame and a headless authority its waitable-timer grid; neither presents.
 
 Offscreen, a slow frame (the first render, a rebuild, a hitch) delays the next
 tick rather than bursting several ticks into one iteration. A frame the root

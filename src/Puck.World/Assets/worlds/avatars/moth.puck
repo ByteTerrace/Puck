@@ -925,10 +925,10 @@ host {
   fullscreen: false
   height: 900
   journalDepth: 2000
-  presentMode: Immediate
+  presentMode: Vsync
   presentation: Windowed
   surfaceFormat: r8g8b8a8
-  targetHertz: 60
+  targetHertz: 0
   width: 1280
 }
 

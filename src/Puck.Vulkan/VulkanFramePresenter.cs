@@ -28,6 +28,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
     private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
     private ulong m_priorPresentId;          // the id queued last frame; 0 = none yet
     private ulong m_priorPriorPresentId;     // the id queued TWO frames back, waited on this frame (the frame-ring mirror); 0 = none yet
+    private ulong m_lastWaitedPresentId;     // the id TryWaitForPresentQueue last waited for; 0 = none yet
     private nint m_priorSwapchainHandle;     // present ids are per-swapchain, so the counter resets when this changes
 
     private static bool IsFrameUnavailable(VkResult result) {
@@ -224,6 +225,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             m_presentWaitResolvedForDevice = device;
             m_priorPresentId = 0UL;
             m_priorPriorPresentId = 0UL;
+            m_lastWaitedPresentId = 0UL;
             m_nextPresentId = 1UL;
         }
 
@@ -231,6 +233,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             m_priorSwapchainHandle = swapchain.Handle;
             m_priorPresentId = 0UL;
             m_priorPriorPresentId = 0UL;
+            m_lastWaitedPresentId = 0UL;
             m_nextPresentId = 1UL;
         }
 
@@ -266,6 +269,35 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         }
 
         return VulkanFramePresentationOutcome.Presented(imageIndex: imageIndex);
+    }
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException"><paramref name="logicalDevice"/> or <paramref name="swapchain"/> is <see langword="null"/>.</exception>
+    public bool TryWaitForPresentQueue(VulkanLogicalDevice logicalDevice, VulkanSwapchain swapchain) {
+        ArgumentNullException.ThrowIfNull(logicalDevice);
+        ArgumentNullException.ThrowIfNull(swapchain);
+
+        // The present before the last: one frame stays queued behind the display, so the next frame's CPU work overlaps
+        // the GPU work of the frame just presented.
+        var presentId = m_priorPriorPresentId;
+
+        if (
+            (m_presentWaitSupported != true) ||
+            !ReferenceEquals(objA: logicalDevice.Commands, objB: m_presentWaitResolvedForDevice) ||
+            (swapchain.Handle != m_priorSwapchainHandle) ||
+            (presentId == 0UL) ||
+            (presentId == m_lastWaitedPresentId)
+        ) {
+            return false;
+        }
+
+        m_lastWaitedPresentId = presentId;
+
+        return (m_framePresentationApi.WaitForPresent(
+            device: logicalDevice.Commands,
+            presentId: presentId,
+            swapchainHandle: swapchain.Handle,
+            timeoutNanoseconds: PresentWaitTimeoutNanoseconds
+        ) == VkResult.Success);
     }
     /// <inheritdoc/>
     public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) {

@@ -12,7 +12,7 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen display encode), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, ISwapChainPacing, IDeviceLostRecoverable {
     private readonly SurfaceCompositor m_compositor;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanRenderer m_renderer;
@@ -93,6 +93,23 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
     /// <inheritdoc/>
     public void Present(Surface surface) {
         m_compositor.Blit(surface: surface);
+    }
+    /// <inheritdoc/>
+    /// <remarks>Waits through <c>VK_KHR_present_wait</c> on a FIFO swapchain until the present before the last is
+    /// visible, so one frame stays queued behind the display. FIFO presents on every vertical blank and has no sync
+    /// interval, so only one refresh per present paces.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="refreshesPerPresent"/> is above
+    /// <see cref="ISwapChainPacing.MaxRefreshesPerPresent"/>.</exception>
+    public bool TryWaitForFrame(uint refreshesPerPresent) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: ISwapChainPacing.MaxRefreshesPerPresent,
+            value: refreshesPerPresent
+        );
+
+        return (
+            (1U == refreshesPerPresent) &&
+            m_renderer.TryWaitForPresentQueue()
+        );
     }
     /// <inheritdoc/>
     public Surface ReadSurface(Surface surface) {

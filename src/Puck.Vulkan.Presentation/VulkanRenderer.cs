@@ -438,6 +438,18 @@ public sealed class VulkanRenderer(
             presentCount: out presentCount,
             presentTimestampTicks: out presentTimestampTicks
         );
+    /// <summary>Blocks until at most one present still waits for the display, when the swapchain presents FIFO and the
+    /// device supports <c>VK_KHR_present_wait</c>: the wait the host paces off.</summary>
+    /// <returns><see langword="true"/> when the present before the last is visible; <see langword="false"/> when no
+    /// swapchain exists, it does not present FIFO, present wait is unsupported, fewer than two presents reached it,
+    /// nothing was presented since the last wait, or the bounded wait did not succeed.</returns>
+    public bool TryWaitForPresentQueue() =>
+        (m_device is not null) &&
+        (m_swapchain is { PresentMode: VulkanPresentMode.Fifo }) &&
+        framePresenter.TryWaitForPresentQueue(
+            logicalDevice: m_device,
+            swapchain: m_swapchain
+        );
     /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
     /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
     /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined

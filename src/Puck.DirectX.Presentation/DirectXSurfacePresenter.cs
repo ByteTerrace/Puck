@@ -17,7 +17,7 @@ namespace Puck.DirectX.Presentation;
 /// one draw. The compositor's multi-draw overload exists for that case and nothing drives it.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
+public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, ISwapChainPacing, IDeviceLostRecoverable {
     private readonly DirectXSurfaceCompositor m_compositor;
     private readonly DirectXDeviceContext m_deviceContext;
     private readonly GpuPassPipelineCache m_pipelines;
@@ -91,6 +91,10 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
             surface: surface
         );
     }
+    /// <inheritdoc/>
+    /// <remarks>Waits on the swap chain's frame-latency waitable object, at a maximum frame latency of two, so one presented frame stays queued; only a
+    /// <see cref="PresentMode.Vsync"/> swap chain paces, at a sync interval of <paramref name="refreshesPerPresent"/>.</remarks>
+    public bool TryWaitForFrame(uint refreshesPerPresent) => m_compositor.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent);
     /// <inheritdoc/>
     public Surface ReadSurface(Surface surface) {
         if (
