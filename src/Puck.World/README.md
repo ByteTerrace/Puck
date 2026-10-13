@@ -223,7 +223,7 @@ refuses combining it with other arguments. Invalid options exit with a diagnosti
 | Exit code | Meaning |
 |---|---|
 | 0 | The run ended normally. |
-| 1 | The boot was refused by its options, world document, or configuration. |
+| 1 | The boot was refused by its options, world document, or configuration, or it asked for Vulkan from a build that carries no SPIR-V (a Windows build of one project). |
 | 2 | This host cannot run the boot: the selected graphics backend has no usable device, the operating system does not offer it (Direct3D 12 off Windows), or the QUIC listen endpoint cannot be bound (the address is in use, the operating system refused it, or QUIC is not offered here). Stderr carries one `[world.host: unsupported: <resource> unavailable: <reason>]` line, such as `vulkan device unavailable: …` or `quic listener 127.0.0.1:7777 unavailable: …`. |
 | other | A host pump or service failed; the exception and its stack trace go to stderr. |
 
