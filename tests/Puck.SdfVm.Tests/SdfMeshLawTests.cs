@@ -25,10 +25,10 @@ public sealed class SdfMeshLawTests {
         var words = new uint[layout.Words];
 
         SdfMeshRegion.Write(draws, meshes, layout, words);
-        Assert.Equal(actual: SdfMeshRegion.DrawWords, expected: 41);
+        Assert.Equal(actual: SdfMeshRegion.DrawWords, expected: 42);
         Assert.Equal(0u, words[20]);
-        Assert.Equal(0x30000010u, words[(41 + 20)]);
-        Assert.Equal(0u, words[(41 + 16)]);
+        Assert.Equal(0x30000010u, words[(SdfMeshRegion.DrawWords + 20)]);
+        Assert.Equal(0u, words[(SdfMeshRegion.DrawWords + 16)]);
     }
     [Fact]
     public void AMeshCarriesEachAttributeWhole() {

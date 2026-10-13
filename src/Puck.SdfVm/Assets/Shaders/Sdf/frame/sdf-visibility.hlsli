@@ -116,9 +116,16 @@ bool sdfVisibilityHit(SdfVisibility visibility) {
     return (sdfVisibilityKind(visibility.identity) != SDF_VISIBILITY_KIND_BACKGROUND);
 }
 // The winning shape's transform slot can differ from its instance's conservative bound slot.
+// On the baked-mesh path a mesh hit's L row carries its draw's frame slot in its second word, which the mesh path's
+// surface pass writes (surface/sdf-mesh-path.hlsli).
 int sdfVisibilityFrameSlot(uint record, SdfVisibility visibility) {
-    return (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_SDF)
-        ? asint(sdfVisibilityRecordBuffer[record + SdfVisibilityRowL]) : SDF_TRANSFORM_SLOT_NONE;
+    uint kind = sdfVisibilityKind(visibility.identity);
+
+    if (kind == SDF_VISIBILITY_KIND_SDF) {
+        return asint(sdfVisibilityRecordBuffer[record + SdfVisibilityRowL]);
+    }
+    return (((kind == SDF_VISIBILITY_KIND_MESH) && (passGroup.renderPath != 0u))
+        ? asint(sdfVisibilityRecordBuffer[record + SdfVisibilityRowL + 1u]) : SDF_TRANSFORM_SLOT_NONE);
 }
 float4 sdfFrameLanes(int frameSlot) {
 #ifdef SDF_DYNAMIC_TRANSFORMS

@@ -63,6 +63,9 @@ public enum SdfKernel {
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice. Full instruction set.</summary>
     MeshBake,
+    /// <summary>The baked-mesh path's shading: the views pass with its field reads compiled out, so it carries no
+    /// interpreter.</summary>
+    ViewsMesh,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
 }

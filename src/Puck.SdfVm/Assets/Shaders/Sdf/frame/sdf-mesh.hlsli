@@ -1,14 +1,16 @@
-// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one forty-one-word
+// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one forty-two-word
 // record a draw (its row-vector object-to-world matrix row by row, its material, the word its first index sits at, its
 // index count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at,
 // its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, and its impostor: the bounding sphere,
-// the view grid and the impostor atlas rectangle, frame/sdf-mesh-impostor.hlsli), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
+// the view grid and the impostor atlas rectangle, frame/sdf-mesh-impostor.hlsli, and the dynamic-transform slot whose frame its mesh
+// is stored in, or -1), then the vertices, eight words each (position, normal, texture coordinate), then the triangle materials, then the
 // indices. KEEP IN SYNC with SdfMeshRegion.Write. The includer's interface declares the region, sdfMeshRegion: sdf-world
 // and sdf-mesh both do.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 
-static const uint SdfMeshDrawWords = 41u;
+static const uint SdfMeshDrawWords = 42u;
+static const uint SdfMeshFrameSlotWord = 41u;
 static const uint SdfMeshMaterialWord = 16u;
 static const uint SdfMeshIndexWord = 17u;
 static const uint SdfMeshIndexCountWord = 18u;

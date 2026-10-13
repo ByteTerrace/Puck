@@ -28,7 +28,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: MeshShadowParametersOffset, value: cascades.PenumbraSlope);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + sizeof(float)), value: SdfMeshShadowCascades.ConstantBias);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + (2 * sizeof(float))), value: SdfMeshShadowCascades.NormalOffsetTexels);
-        WriteSingle(block: block, offset: (MeshShadowParametersOffset + (3 * sizeof(float))), value: 0f);
+        WriteSingle(block: block, offset: (MeshShadowParametersOffset + (3 * sizeof(float))), value: cascades.SecondPenumbraSlope);
 
         for (var index = 0; (index < SdfWorldPackage.MeshShadowCascadeCount); index++) {
             var camera = cascades[index];
@@ -82,7 +82,8 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + 32), value: ((uint)lattice.Dims.X));
             WriteUInt32(block: block, offset: (row + 36), value: ((uint)lattice.Dims.Y));
             WriteUInt32(block: block, offset: (row + 40), value: ((uint)lattice.Dims.Z));
-            WriteFlag(block: block, offset: (row + 44), value: lattice.Gradients);
+            // The lattice's mode: two samples the point table, one a grid with gradients, zero a grid without.
+            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? (lattice.Gradients ? 1u : 0u) : 2u));
             first += ((uint)lattice.Samples);
         }
     }

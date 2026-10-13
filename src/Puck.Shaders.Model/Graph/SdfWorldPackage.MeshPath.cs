@@ -8,14 +8,15 @@ public static partial class SdfWorldPackage {
     /// (<c>uint</c>).</summary>
     public const string RenderPath = "renderPath";
     /// <summary>The pass-block value holding the shadow cascades' orthographic light cameras, four rows each: position and
-    /// half height, right and aspect, up and near distance, forward and far distance (<c>float4[8]</c>).</summary>
+    /// half height, right and aspect, up and near distance, forward and far distance (<c>float4[12]</c>): the key light's
+    /// near and far cascades, then the second shadow slot's.</summary>
     public const string MeshShadowCascades = "meshShadowCascades";
-    /// <summary>The pass-block value holding the cascades the mesh path rendered this frame, zero when its key light casts
+    /// <summary>The pass-block value holding the key light's cascades the mesh path rendered this frame, zero when it casts
     /// no shadow (<c>uint</c>).</summary>
     public const string MeshShadowCount = "meshShadowCount";
-    /// <summary>The pass-block value holding the shadow's world-space penumbra scale and the receiver's depth bias, in
-    /// world units: x the light's angular size as a tangent, y the constant bias, z the normal offset per texel
-    /// (<c>float4</c>).</summary>
+    /// <summary>The pass-block value holding the shadows' penumbra slopes and the receiver's depth bias, in world units: x
+    /// the key light's penumbra slope, y the constant bias, z the normal offset per texel, w the second shadow slot's
+    /// penumbra slope, zero when that slot casts no shadow (<c>float4</c>).</summary>
     public const string MeshShadowParameters = "meshShadowParameters";
     /// <summary>The pass-block value holding the lattices one bake dispatch samples, <see cref="MeshBakeLatticeRows"/> rows
     /// each: the first sample's world position and, as bits, the lattice's first sample in the dispatch; the spacing along
@@ -43,8 +44,14 @@ public static partial class SdfWorldPackage {
     /// <summary>The most samples one bake dispatch writes: a lattice of <see cref="MeshBakeMaxSamplesPerAxis"/> samples a
     /// side.</summary>
     public const int MeshBakeMaxSamples = ((MeshBakeMaxSamplesPerAxis * MeshBakeMaxSamplesPerAxis) * MeshBakeMaxSamplesPerAxis);
-    /// <summary>The shadow cascades the mesh path renders.</summary>
-    public const int MeshShadowCascadeCount = 2;
+    /// <summary>The mesh bake's point table, a World-group table of one float4 a point: the surface points a points lattice
+    /// samples the field's material at.</summary>
+    public const string MeshBakePoints = "sdfMeshBakePoints";
+    /// <summary>The second shadow slot's cascade target, sampled by the mesh path's surface pass.</summary>
+    public const string MeshShadowSecond = "meshShadowSecond";
+    /// <summary>The shadow cascades the mesh path renders: the key light's near and far cascades, then the second shadow
+    /// slot's one.</summary>
+    public const int MeshShadowCascadeCount = 3;
     /// <summary>The rows one cascade's light camera takes in <see cref="MeshShadowCascades"/>.</summary>
     public const int MeshShadowCascadeRows = 4;
     /// <summary>The texels along each side of one shadow cascade's target.</summary>
@@ -68,6 +75,12 @@ public static partial class SdfWorldPackage {
         public const string ShadowFarTarget = "shadowFarTarget";
         /// <summary>The far cascade's depth attachment.</summary>
         public const string ShadowFarDepth = "shadowFarDepth";
+        /// <summary>The second shadow slot's cascade raster pass.</summary>
+        public const string ShadowSecond = "shadow-second";
+        /// <summary>The second slot's cascade target.</summary>
+        public const string ShadowSecondTarget = "shadowSecondTarget";
+        /// <summary>The second slot's cascade depth attachment.</summary>
+        public const string ShadowSecondDepth = "shadowSecondDepth";
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> MeshPathFragments = [];
@@ -95,11 +108,13 @@ public static partial class SdfWorldPackage {
             if (pass.Name == Parts.Mesh) {
                 passes.Add(item: ShadowPass(name: MeshParts.ShadowNear, target: MeshParts.ShadowNearTarget, depth: MeshParts.ShadowNearDepth));
                 passes.Add(item: ShadowPass(name: MeshParts.ShadowFar, target: MeshParts.ShadowFarTarget, depth: MeshParts.ShadowFarDepth));
+                passes.Add(item: ShadowPass(name: MeshParts.ShadowSecond, target: MeshParts.ShadowSecondTarget, depth: MeshParts.ShadowSecondDepth));
             }
             if (pass.Name == Parts.Primary) {
                 passes.Add(item: pass with {
-                    Inputs = [.. pass.Inputs, new ResourceReference(Name: MeshParts.ShadowNearTarget), new ResourceReference(Name: MeshParts.ShadowFarTarget), new ResourceReference(Name: MeshParts.BakeSamples)],
-                    InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+                    Inputs = [.. pass.Inputs, new ResourceReference(Name: MeshParts.ShadowNearTarget), new ResourceReference(Name: MeshParts.ShadowFarTarget),
+                        new ResourceReference(Name: MeshParts.ShadowSecondTarget), new ResourceReference(Name: MeshParts.BakeSamples)],
+                    InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
                 });
             } else {
                 passes.Add(item: pass);
@@ -124,6 +139,7 @@ public static partial class SdfWorldPackage {
                 ),
                 .. ShadowResources(target: MeshParts.ShadowNearTarget, depth: MeshParts.ShadowNearDepth, extent: extent),
                 .. ShadowResources(target: MeshParts.ShadowFarTarget, depth: MeshParts.ShadowFarDepth, extent: extent),
+                .. ShadowResources(target: MeshParts.ShadowSecondTarget, depth: MeshParts.ShadowSecondDepth, extent: extent),
             ],
         };
     }

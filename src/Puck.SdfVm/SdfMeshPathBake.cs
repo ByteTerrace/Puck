@@ -17,6 +17,9 @@ namespace Puck.SdfVm;
 public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (int X, int Y, int Z) Dims, int Selector, bool Gradients) {
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
+    /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid; empty for a grid
+    /// lattice.</summary>
+    public ReadOnlyMemory<Vector4> Points { get; init; }
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -25,6 +28,27 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Tickets) {
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => Lattices.Sum(selector: static lattice => lattice.Samples);
+    /// <summary>Gets or sets whether a bake pass recorded the batch; a batch no pass recorded returns to its groups when
+    /// the next frame takes one.</summary>
+    public bool Recorded { get; set; }
+    /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
+    /// dispatch.</summary>
+    /// <param name="table">The table, at least <see cref="Samples"/> entries.</param>
+    /// <returns>Whether the batch holds a points lattice.</returns>
+    public bool WritePoints(Span<Vector4> table) {
+        var first = 0;
+        var any = false;
+
+        foreach (var lattice in Lattices) {
+            if (!lattice.Points.IsEmpty) {
+                lattice.Points.Span.CopyTo(destination: table[first..]);
+                any = true;
+            }
+            first += lattice.Samples;
+        }
+
+        return any;
+    }
 }
 /// <summary>
 /// The baked-mesh path's bake of one residency's program: a mesh per bake group, sampled from the program on the GPU and
@@ -122,7 +146,7 @@ public sealed class SdfMeshPathBake {
                         ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
 
-                    m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { IsDynamic = group.Dynamic });
+                    m_draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), IsDynamic = group.Dynamic });
                 }
                 m_frameDraws = frame.MeshDraws;
                 m_frameDrawsRevision = frame.MeshDrawsRevision;
@@ -144,6 +168,12 @@ public sealed class SdfMeshPathBake {
         lock (m_gate) {
             if (m_frameTaken != frame) {
                 m_frameTaken = frame;
+                // A batch no bake pass recorded, as while the view's graph rebuilds onto the mesh path, answers nothing.
+                if (m_frameBatch is { Recorded: false } unrecorded) {
+                    foreach (var ticket in unrecorded.Tickets) {
+                        if (ticket is Group stale) { stale.InFlight = false; }
+                    }
+                }
                 m_frameBatch = null;
 
                 var lattices = new List<SdfMeshBakeRequest>();
@@ -176,6 +206,21 @@ public sealed class SdfMeshPathBake {
 
     private long m_frameTaken = -1;
     private SdfMeshBakeBatch? m_frameBatch;
+    private Vector4[] m_pointTable = [];
+
+    /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and writes its points
+    /// into the tables' point table, which the bake kernel reads.</summary>
+    /// <param name="frame">The package frame.</param>
+    /// <param name="tables">The residency's tables.</param>
+    public void Stage(long frame, SdfWorldTables tables) {
+        ArgumentNullException.ThrowIfNull(argument: tables);
+
+        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
+        if (m_pointTable.Length < batch.Samples) { m_pointTable = new Vector4[SdfWorldPackage.MeshBakeMaxSamples]; }
+        if (batch.WritePoints(table: m_pointTable)) {
+            tables.WriteMeshBakePoints(points: m_pointTable.AsSpan(length: batch.Samples, start: 0));
+        }
+    }
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
     /// each group dispatches its lattice again.</summary>
     /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took, or <see langword="null"/>.</param>
@@ -224,6 +269,14 @@ public sealed class SdfMeshPathBake {
                 gradients[((3 * index) + 1)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]);
                 gradients[((3 * index) + 2)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[16..]);
             }
+        }
+
+        if (!request.Points.IsEmpty) {
+            lock (m_gate) {
+                group.InFlight = false;
+                if (m_groups.Contains(item: group)) { AnswerPoints(group: group, materials: materials, request: in request); }
+            }
+            return;
         }
 
         // The interpreter's walk can answer with a shape outside the group where it shares compiled parts with another
@@ -471,12 +524,13 @@ public sealed class SdfMeshPathBake {
             ? Lattice(group: group, longest: FinalSamples, minimum: FinalMinimum, gradients: true)
             : Lattice(group: group, longest: CoarseSamples, minimum: RefineMinimum, gradients: false));
     }
-    // Contours a group's final lattice into its mesh, in the group's slot frame when it is dynamic.
+    // Contours a group's final lattice, then queues the points its material is sampled at: four a quad, the centers of
+    // its quarters, each a little outside the surface along the normal, as a field hit lies (MaterialPoints).
     private void Contour(Group group, SdfMeshBakeRequest request, float[] values, float[] gradients, int[] materials) {
-        SdfMesh? mesh = null;
+        SdfContour? contour = null;
 
         try {
-            var contour = new SdfSampledLattice(
+            contour = new SdfSampledLattice(
                 cell: request.Cell,
                 gradients: gradients,
                 materials: materials,
@@ -485,9 +539,54 @@ public sealed class SdfMeshPathBake {
                 samplesY: request.Dims.Y,
                 samplesZ: request.Dims.Z,
                 values: values
-            ).Contour();
+            ).Contour(owns: ((group.Materials.Count > 0) ? group.Materials.Contains : null));
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
+        }
 
-            mesh = MeshOf(contour: contour, dynamic: group.Dynamic, orientation: group.BakeOrientation, position: group.BakePosition);        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+        lock (m_gate) {
+            group.Contouring = false;
+            if ((contour is null) || (contour.QuadCount == 0)) {
+                group.Done = true;
+                group.Mesh = null;
+                Finish();
+                return;
+            }
+            group.Contour = contour;
+            group.Points = MaterialPoints(contour: contour);
+            group.PointMaterials = new int[group.Points.Length];
+            group.PointsAnswered = 0;
+            group.Next = PointChunk(group: group);
+        }
+    }
+    // The next chunk of a group's material points, at most a dispatch's samples.
+    private static SdfMeshBakeRequest PointChunk(Group group) {
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: SdfWorldPackage.MeshBakeMaxSamples);
+
+        return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
+            Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
+        };
+    }
+    // Answers a chunk of a group's material points; once every point is answered, meshes the group on the thread pool.
+    private void AnswerPoints(Group group, in SdfMeshBakeRequest request, int[] materials) {
+        materials.AsSpan(length: request.Samples, start: 0).CopyTo(destination: group.PointMaterials.AsSpan(start: group.PointsAnswered));
+        group.PointsAnswered += request.Samples;
+        if (group.PointsAnswered < group.Points!.Length) {
+            group.Next = PointChunk(group: group);
+            return;
+        }
+
+        group.Next = null;
+        group.Contouring = true;
+        _ = Task.Run(action: () => Build(group: group));
+    }
+    // Builds a group's mesh from its contour and its points' materials.
+    private void Build(Group group) {
+        SdfMesh? mesh = null;
+
+        try {
+            mesh = MeshOf(contour: group.Contour!, dynamic: group.Dynamic, materials: group.PointMaterials, orientation: group.BakeOrientation, owns: group.Materials, position: group.BakePosition);
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
 
@@ -495,6 +594,9 @@ public sealed class SdfMeshPathBake {
             group.Contouring = false;
             group.Done = true;
             group.Mesh = mesh;
+            group.Contour = null;
+            group.Points = null;
+            group.PointMaterials = [];
             Finish();
         }
     }
@@ -516,45 +618,113 @@ public sealed class SdfMeshPathBake {
         return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}";
     }
 
-    // A contour as a mesh: two triangles a quad, each quad's material on both, positions and normals carried into the slot's
-    // frame at bake time for a dynamic group.
-    private static SdfMesh? MeshOf(SdfContour contour, bool dynamic, Quaternion orientation, Vector3 position) {
+    // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
+    private const float MaterialPointLift = 0.0005f;
+    // The bilinear coordinates of a quad's quarter centers, in the order MeshOf reads their materials: a quad's corners
+    // (a, b, c, d) sit at (0, 0), (1, 0), (1, 1) and (0, 1).
+    private static readonly Vector2[] Quarters = [new(x: 0.25f, y: 0.25f), new(x: 0.75f, y: 0.25f), new(x: 0.75f, y: 0.75f), new(x: 0.25f, y: 0.75f)];
+
+    private static Vector3 VertexOf(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    private static Vector3 Bilinear(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 at) =>
+        Vector3.Lerp(value1: Vector3.Lerp(value1: a, value2: b, amount: at.X), value2: Vector3.Lerp(value1: d, value2: c, amount: at.X), amount: at.Y);
+    // Four points a quad, at its quarters' centers, lifted along the interpolated normal, in world space at bake time.
+    private static Vector4[] MaterialPoints(SdfContour contour) {
+        var points = new Vector4[(4 * contour.QuadCount)];
+
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var corners = contour.Quads.AsSpan(length: 4, start: (4 * quad));
+
+            for (var quarter = 0; (quarter < 4); quarter++) {
+                var at = Quarters[quarter];
+                var position = Bilinear(a: VertexOf(values: contour.Positions, vertex: corners[0]), b: VertexOf(values: contour.Positions, vertex: corners[1]), c: VertexOf(values: contour.Positions, vertex: corners[2]), d: VertexOf(values: contour.Positions, vertex: corners[3]), at: at);
+                var normal = Bilinear(a: VertexOf(values: contour.Normals, vertex: corners[0]), b: VertexOf(values: contour.Normals, vertex: corners[1]), c: VertexOf(values: contour.Normals, vertex: corners[2]), d: VertexOf(values: contour.Normals, vertex: corners[3]), at: at);
+                var length = normal.Length();
+
+                points[((4 * quad) + quarter)] = new Vector4(value: (position + ((length > 0f) ? (normal * (MaterialPointLift / length)) : Vector3.Zero)), w: 1f);
+            }
+        }
+
+        return points;
+    }
+
+    // A contour as a mesh, positions and normals carried into the slot's frame at bake time for a dynamic group. A quad
+    // whose quarters all report one material stays one quad of that material; any other splits into its four quarters,
+    // each its own material, so a material boundary is resolved at half a cell. A quarter whose material the group owns
+    // no shape of takes its quad's contour material.
+    private static SdfMesh? MeshOf(SdfContour contour, bool dynamic, int[] materials, HashSet<int> owns, Quaternion orientation, Vector3 position) {
         if (contour.QuadCount == 0) { return null; }
 
         var inverse = Quaternion.Inverse(value: orientation);
-        var positions = new Vector3[contour.VertexCount];
-        var normals = new Vector3[contour.VertexCount];
+        var positions = new List<Vector3>(capacity: contour.VertexCount);
+        var normals = new List<Vector3>(capacity: contour.VertexCount);
+        var indices = new List<uint>(capacity: (6 * contour.QuadCount));
+        var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
 
-        for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            var point = new Vector3(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
-            var normal = new Vector3(x: contour.Normals[(3 * vertex)], y: contour.Normals[((3 * vertex) + 1)], z: contour.Normals[((3 * vertex) + 2)]);
+        uint Add(Vector3 point, Vector3 normal) {
+            positions.Add(item: (dynamic ? Vector3.Transform(value: (point - position), rotation: inverse) : point));
+            normals.Add(item: (dynamic ? Vector3.Transform(value: normal, rotation: inverse) : normal));
 
-            positions[vertex] = (dynamic ? Vector3.Transform(value: (point - position), rotation: inverse) : point);
-            normals[vertex] = (dynamic ? Vector3.Transform(value: normal, rotation: inverse) : normal);
+            return (uint)(positions.Count - 1);
+        }
+        void Quad(uint a, uint b, uint c, uint d, int material) {
+            indices.Add(item: a); indices.Add(item: b); indices.Add(item: c);
+            indices.Add(item: a); indices.Add(item: c); indices.Add(item: d);
+            triangleMaterials.Add(item: (uint)Math.Max(val1: 0, val2: material));
+            triangleMaterials.Add(item: (uint)Math.Max(val1: 0, val2: material));
         }
 
-        var indices = new uint[(6 * contour.QuadCount)];
-        var triangleMaterials = new uint[(2 * contour.QuadCount)];
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            _ = Add(normal: VertexOf(values: contour.Normals, vertex: vertex), point: VertexOf(values: contour.Positions, vertex: vertex));
+        }
+
+        Span<int> quarter = stackalloc int[4];
 
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
-            var a = (uint)contour.Quads[(4 * quad)];
-            var b = (uint)contour.Quads[((4 * quad) + 1)];
-            var c = (uint)contour.Quads[((4 * quad) + 2)];
-            var d = (uint)contour.Quads[((4 * quad) + 3)];
-            var material = (uint)Math.Max(val1: 0, val2: contour.QuadMaterials[quad]);
+            var corners = contour.Quads.AsSpan(length: 4, start: (4 * quad));
+            var own = contour.QuadMaterials[quad];
 
-            indices[(6 * quad)] = a;
-            indices[((6 * quad) + 1)] = b;
-            indices[((6 * quad) + 2)] = c;
-            indices[((6 * quad) + 3)] = a;
-            indices[((6 * quad) + 4)] = c;
-            indices[((6 * quad) + 5)] = d;
-            triangleMaterials[(2 * quad)] = material;
-            triangleMaterials[((2 * quad) + 1)] = material;
+            for (var index = 0; (index < 4); index++) {
+                var material = materials[((4 * quad) + index)];
+
+                quarter[index] = (((owns.Count == 0) || owns.Contains(item: material)) ? material : own);
+            }
+
+            if ((quarter[0] == quarter[1]) && (quarter[0] == quarter[2]) && (quarter[0] == quarter[3])) {
+                Quad(a: (uint)corners[0], b: (uint)corners[1], c: (uint)corners[2], d: (uint)corners[3], material: quarter[0]);
+                continue;
+            }
+
+            var p0 = VertexOf(values: contour.Positions, vertex: corners[0]);
+            var p1 = VertexOf(values: contour.Positions, vertex: corners[1]);
+            var p2 = VertexOf(values: contour.Positions, vertex: corners[2]);
+            var p3 = VertexOf(values: contour.Positions, vertex: corners[3]);
+            var n0 = VertexOf(values: contour.Normals, vertex: corners[0]);
+            var n1 = VertexOf(values: contour.Normals, vertex: corners[1]);
+            var n2 = VertexOf(values: contour.Normals, vertex: corners[2]);
+            var n3 = VertexOf(values: contour.Normals, vertex: corners[3]);
+
+            uint At(Vector2 at) {
+                var normal = Bilinear(a: n0, b: n1, c: n2, d: n3, at: at);
+                var length = normal.Length();
+
+                return Add(normal: ((length > 0f) ? (normal / length) : normal), point: Bilinear(a: p0, b: p1, c: p2, d: p3, at: at));
+            }
+
+            var ab = At(at: new Vector2(x: 0.5f, y: 0f));
+            var bc = At(at: new Vector2(x: 1f, y: 0.5f));
+            var cd = At(at: new Vector2(x: 0.5f, y: 1f));
+            var da = At(at: new Vector2(x: 0f, y: 0.5f));
+            var center = At(at: new Vector2(x: 0.5f, y: 0.5f));
+
+            Quad(a: (uint)corners[0], b: ab, c: center, d: da, material: quarter[0]);
+            Quad(a: ab, b: (uint)corners[1], c: bc, d: center, material: quarter[1]);
+            Quad(a: center, b: bc, c: (uint)corners[2], d: cd, material: quarter[2]);
+            Quad(a: da, b: center, c: cd, d: (uint)corners[3], material: quarter[3]);
         }
 
-        return new SdfMesh(indices: indices, normals: normals, positions: positions, triangleMaterials: triangleMaterials);
+        return new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: triangleMaterials.ToArray());
     }
+
 
     // One bake group: the instances it selects, the frame its mesh is stored in, its box, and where its bake stands.
     private sealed class Group(int selector, bool dynamic) {
@@ -574,6 +744,11 @@ public sealed class SdfMeshPathBake {
         public bool Contouring { get; set; }
         public bool Done { get; set; }
         public SdfMesh? Mesh { get; set; }
+        // The final lattice's contour, the points its material is sampled at, and their answers so far.
+        public SdfContour? Contour { get; set; }
+        public Vector4[]? Points { get; set; }
+        public int[] PointMaterials { get; set; } = [];
+        public int PointsAnswered { get; set; }
         public Vector3 DrawnPosition { get; set; }
         public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
     }

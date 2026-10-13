@@ -132,7 +132,7 @@ public sealed class SdfMeshImpostorLawTests {
 
         SdfMeshRegion.Write(destination: words, draws: draws, impostors: atlas, layout: layout, meshes: meshes);
 
-        Assert.Equal(actual: SdfMeshRegion.DrawWords, expected: 41);
+        Assert.Equal(actual: SdfMeshRegion.DrawWords, expected: 42);
 
         var first = words.AsSpan(length: SdfMeshRegion.DrawWords, start: 0);
         var second = words.AsSpan(length: SdfMeshRegion.DrawWords, start: SdfMeshRegion.DrawWords);

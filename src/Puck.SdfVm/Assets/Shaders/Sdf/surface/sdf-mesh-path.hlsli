@@ -108,18 +108,19 @@ SdfMeshCascade sdfMeshCascadeAt(uint cascade) {
 // The light-space depth of the nearest caster at a cascade texel; past the far plane where the cascade drew nothing.
 float sdfMeshShadowDepth(uint cascade, int2 texel, float far) {
     int2 clamped = clamp(texel, int2(0, 0), int2(SDF_MESH_SHADOW_RESOLUTION - 1, SDF_MESH_SHADOW_RESOLUTION - 1));
-    float4 value = ((cascade == 0u) ? meshShadowNear.Load(int3(clamped, 0)) : meshShadowFar.Load(int3(clamped, 0)));
+    float4 value = ((cascade == 0u) ? meshShadowNear.Load(int3(clamped, 0))
+        : ((cascade == 1u) ? meshShadowFar.Load(int3(clamped, 0)) : meshShadowSecond.Load(int3(clamped, 0))));
     return ((value.y >= 1.0) ? value.x : far);
 }
-// The key light's visibility at a surface point from the first cascade that holds it: a blocker search sizes the
-// penumbra from the light's angular size and the gap to the average blocker, and a percentage-closer filter of that
-// width answers.
-float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal) {
+// A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
+// search sizes the penumbra from the light's penumbra slope and the gap to the average blocker, and a percentage-closer
+// filter of that width answers.
+float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, uint end, float slope) {
     float noise = (sdfMeshNoise(p.pixel) * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
 
     [loop]
-    for (uint cascade = 0u; (cascade < passGroup.meshShadowCount); cascade++) {
+    for (uint cascade = first; (cascade < end); cascade++) {
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         float texelWorld = ((2.0 * c.halfHeight) / float(SDF_MESH_SHADOW_RESOLUTION));
         float3 biased = (surfacePoint + (normal * (parameters.z * texelWorld)));
@@ -153,7 +154,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal) {
 
         blockerDepth /= blockers;
 
-        float penumbra = (((receiver - blockerDepth) * parameters.x) / texelWorld);
+        float penumbra = (((receiver - blockerDepth) * slope) / texelWorld);
         float filterTexels = clamp(penumbra, 1.0, SdfMeshShadowMaxTexels);
         float lit = 0.0;
 
@@ -193,6 +194,9 @@ void sdfMeshPathStage(SdfPixel p) {
     sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u);
     sdfStoreVisibilityCoverage(record, coverage);
     sdfStoreVisibilityMeshTriangle(record, (hit ? meshHit.triangleIndex : 0u));
+    // The draw's frame slot, which views places a material's layers in and reads lanes from (sdfVisibilityFrameSlot).
+    sdfVisibilityStoreWord(record + SdfVisibilityRowL + 1u,
+        (hit ? sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SdfMeshFrameSlotWord] : asuint(SDF_TRANSFORM_SLOT_NONE)));
     // The ambient and shadow passes' query tallies: no query reads the field here.
     sdfVisibilityStoreWord(record + SDF_VISIBILITY_AMBIENT_QUERIES_WORD, 0u);
     sdfVisibilityStoreWord(record + SDF_VISIBILITY_SHADOW_QUERIES_WORD, 0u);
@@ -200,6 +204,7 @@ void sdfMeshPathStage(SdfPixel p) {
     float3 normal = float3(0.0, 0.0, 0.0);
     float ambient = 1.0;
     float shadow = 1.0;
+    float second = 1.0;
 
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
@@ -211,9 +216,16 @@ void sdfMeshPathStage(SdfPixel p) {
         if (!worldSoftShadowsDisabled() && (passGroup.meshShadowCount > 0u)) {
             // The cascades look along the key light; a surface facing away from it is in its own shadow, which the
             // light's cosine already darkens, so only a lit side queries them.
+            float4 parameters = passGroup.meshShadowParameters;
             float3 key = -sdfMeshCascadeAt(0u).forward;
-            shadow = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal) : 1.0);
-        }    }
+            shadow = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
+            // The second shadow slot's light, from its one cascade.
+            if (parameters.w > 0.0) {
+                float3 fill = -sdfMeshCascadeAt(2u).forward;
+                second = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 2u, 3u, parameters.w) : 1.0);
+            }
+        }
+    }
 
     SdfVisibilityNormal geometric;
     geometric.normal = normal;
@@ -225,7 +237,7 @@ void sdfMeshPathStage(SdfPixel p) {
     surface.flags = 0u;
     sdfStoreVisibilityNormal(record, geometric);
     sdfStoreVisibilitySurface(record, surface);
-    sdfStoreVisibilityShadows(record, float4(shadow, 1.0, 1.0, 1.0));
+    sdfStoreVisibilityShadows(record, float4(shadow, second, 1.0, 1.0));
 }
 
 #endif

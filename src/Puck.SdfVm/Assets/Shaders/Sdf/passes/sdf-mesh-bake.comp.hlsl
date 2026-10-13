@@ -46,7 +46,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint y = ((local / dims.x) % dims.y);
         uint z = (local / (dims.x * dims.y));
         float3 cell = row1.xyz;
-        float3 position = (row0.xyz + (float3(x, y, z) * cell));
+        // A points lattice (dims.w two) samples the point table's entry at the sample's place in the dispatch, a surface
+        // point of a contoured mesh whose material the bake reads; a grid lattice samples its grid.
+        bool points = (dims.w == 2u);
+        float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * cell)));
         float spacing = (0.125 * min(cell.x, min(cell.y, cell.z)));
         uint maskBase = worldInstanceMaskBase(lattice);
         // The segments no instance owns form a group of their own (the selector SdfMeshPathBake.WorldSelector, whose
@@ -55,7 +58,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // A mesh carries the detail shapes (painted features, rivets) the views pass re-resolves at a field hit, since no
         // field read resolves them for a mesh pixel.
         sdfDetailShadingActive = true;
-        uint taps = ((dims.w != 0u) ? 5u : 1u);
+        uint taps = ((dims.w == 1u) ? 5u : 1u);
         float value = 0.0;
         int material = 0;
         float3 gradient = float3(0.0, 0.0, 0.0);

@@ -11,8 +11,12 @@ internal sealed class SdfSurface {
     public required double[] Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
     public required int[] Quads { get; init; }
-    // Per quad, the lattice corner at the inside end of the sign-changing edge the quad crosses.
+    // Per quad, the lattice corner at the outside end of the sign-changing edge the quad crosses: the field there is
+    // nearest the surface the edge crosses, so its winning shape is that surface's, where the inside end of a shell thinner
+    // than a cell can lie in the shape beneath.
     public required int[] QuadCorners { get; init; }
+    // Per quad, the corner at the inside end of the same edge.
+    public required int[] QuadInsideCorners { get; init; }
     public int VertexCount => (Positions.Length / 3);
 }
 /// <summary>The sampled lattice a surface is contoured from (<see cref="SdfDualContouring"/>): cells along each axis, each
@@ -131,13 +135,14 @@ internal static class SdfDualContouring {
             }
         }
 
-        var (quads, quadCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
+        var (quads, quadCorners, quadInsideCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
         return new SdfSurface {
             CellSize = grid.CellSize,
             Normals = [.. normals],
             Positions = [.. positions],
             QuadCorners = quadCorners,
+            QuadInsideCorners = quadInsideCorners,
             Quads = quads,
         };
     }
@@ -354,10 +359,11 @@ internal static class SdfDualContouring {
     // edge along axis a are visited counter-clockwise about +a, which faces +a; the quad is reversed when the edge runs
     // from outside to inside, so every quad faces out of the surface. Each cell lends the vertex of the patch the edge
     // belongs to.
-    private static (int[] Quads, int[] QuadCorners) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
+    private static (int[] Quads, int[] QuadCorners, int[] QuadInsideCorners) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
         Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         var quads = new List<int>();
         var quadCorners = new List<int>();
+        var quadInsideCorners = new List<int>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -416,12 +422,13 @@ internal static class SdfDualContouring {
                             quads.Add(item: ring[(first ? corner : (3 - corner))]);
                         }
 
-                        quadCorners.Add(item: (first ? firstCorner : secondCorner));
+                        quadCorners.Add(item: (first ? secondCorner : firstCorner));
+                        quadInsideCorners.Add(item: (first ? firstCorner : secondCorner));
                     }
                 }
             }
         }
 
-        return ([.. quads], [.. quadCorners]);
+        return ([.. quads], [.. quadCorners], [.. quadInsideCorners]);
     }
 }

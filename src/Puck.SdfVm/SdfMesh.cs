@@ -158,6 +158,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <summary>Gets whether the draw belongs to a moving body or animated placement. Its Default indirect policy
     /// receives at Medium and casts and receives at High, unless the frame overrides that body default.</summary>
     public bool IsDynamic { get; init; }
+    /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
+    /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
+    /// a field hit of a shape riding the slot.</summary>
+    public int? FrameSlot { get; init; }
     /// <summary>Gets whether this draw is a bake of geometry the same frame also carries in its SDF at the same pose.
     /// Only that emitting seam can certify the conservative field sweep; an independent triangle mesh cannot acquire
     /// this certificate from its bounds or identity. The light camera falls back when any draw is uncertified.</summary>
@@ -217,14 +221,14 @@ public static class SdfMeshCard {
 /// start at <c>vertexWord + (8 * index)</c>. A vertex without a normal or texture coordinate holds zeros there, and
 /// the flags say which a mesh has. A mesh whose textures the mesh atlases hold (<see cref="SdfMeshAtlas"/>) carries
 /// <see cref="TexturesFlag"/>, and its vertices' texture coordinates are written moved into the atlases, so a reader
-/// samples them as they stand. The record is forty-one whole words, so it has no padding a structured-buffer reader
+/// samples them as they stand. Word 41 is the dynamic-transform slot whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. The record is forty-two whole words, so it has no padding a structured-buffer reader
 /// could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
     /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh, its normal matrix and its
     /// impostor.</summary>
-    public const int DrawWords = 41;
+    public const int DrawWords = 42;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -382,6 +386,7 @@ public static class SdfMeshRegion {
                 impostor: impostor,
                 record: record[31..]
             );
+            record[41] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
         }
 
         foreach (var (mesh, placement) in meshes) {

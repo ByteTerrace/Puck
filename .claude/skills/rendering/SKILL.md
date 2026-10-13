@@ -190,8 +190,14 @@ owns the explanation.
   writes a light slice so the mesh stages take their orthographic form, with the
   view cameras' handedness; `surface/sdf-mesh-path.hlsli` mirrors that
   projection.
-- **Views reads a mesh pixel's K row only on the mesh path** (`renderPath`), and
-  probes no field for it there.
+- **Materials are point-sampled, not taken from the lattice.** Each final quad's
+  quarters are sampled through `sdfMeshBakePoints` (a staged World table the
+  residency writes before the upload) and a disagreeing quad splits; the draw
+  record's word 41 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
+  sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
+- **Views reads a mesh pixel's K row and frame slot only on the mesh path**
+  (`renderPath`), whose views kernel (`sdf-world-views-mesh`,
+  `SDF_VIEWS_MESH_ONLY`) compiles the field reads out.
 
 ## Performance and cost
 

@@ -103,6 +103,7 @@ public sealed class SdfKernelSet {
         SdfKernel.MeshSurface => "sdf-world-mesh-surface",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
+        SdfKernel.ViewsMesh => "sdf-world-views-mesh",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };

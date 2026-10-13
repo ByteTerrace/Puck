@@ -733,12 +733,22 @@ and the parts that run change their kernels:
   of at most 65 samples a side, no finer than 1.5 cm, with gradients. The
   samples are read back and contoured on the thread pool by
   `SdfSampledLattice`, the prototype baker's dual contouring
-  (`SdfDualContouring`) over a lattice whose spacing may differ per axis, each
-  quad taking the material of its edge's inside sample. A sample whose material
-  no shape of the group carries reads as outside, since the walk can answer with
-  a shape of another instance where compiled parts are shared. A dynamic
+  (`SdfDualContouring`) over a lattice whose spacing may differ per axis. A
+  sample whose material no shape of the group carries reads as outside, since
+  the walk can answer with a shape of another instance where compiled parts are
+  shared. The material is then sampled where a field hit would read it: the
+  bake writes four points a quad, its quarters' centres lifted half a
+  millimetre off the surface, into the tables' point table
+  (`SdfWorldTables.WriteMeshBakePoints`, World member `sdfMeshBakePoints`) ahead
+  of the frame's upload, and `sdf-mesh-bake` samples them as a points lattice.
+  A quad whose quarters agree keeps one material; any other splits into its
+  quarters, so a material boundary, a painted iris or pupil included, resolves
+  at half a cell even where its shape is thinner than the mesh. A dynamic
   group's mesh is stored in its slot's frame at bake time and drawn at the
-  slot's live transform; a static group's is in world space. The bake keeps a
+  slot's live transform, and its draw names that slot (`SdfMeshDraw.FrameSlot`,
+  the draw record's word 41), which the surface pass writes into the L row so
+  views places material layers in the body's frame and reads its lanes; a
+  static group's mesh is in world space. The bake keeps a
   group whose instructions a program rebuild left unchanged, so only an edited
   group bakes again, and it reports its groups, dispatches, samples, triangles,
   vertices and wall time on stderr when it finishes.
@@ -749,6 +759,8 @@ and the parts that run change their kernels:
   `shadow-near` and `shadow-far` passes draw every mesh draw from their camera
   through the mesh pass's own pipeline, whose stages take their orthographic
   form under a light slice, into 2048-texel targets of the mesh target's format.
+  The second shadow slot's light, when one holds it, gets one cascade over the
+  first 40 metres, drawn by `shadow-second` and written into K's second slot.
 - **The surface pass.** Primary records `sdf-world-mesh-surface`, which calls
   no field query and writes each pixel's whole visibility record from the mesh
   target: the V, C and L rows primary writes for a mesh pixel, the N and S rows
@@ -758,15 +770,14 @@ and the parts that run change their kernels:
   percentage-closer soft shadow from the first cascade holding the point: a
   blocker search sizes the penumbra from the light's penumbra slope and the gap
   to the blockers, and a filter of that width answers.
-- **Views and after.** Views shades the records as it shades any mesh pixel;
-  the pass block's `renderPath` lets it read a mesh pixel's K row and stops it
-  probing the field for a mesh pixel's material. The resolve, the sky and the
-  composite are the interpreter path's.
+- **Views and after.** Views records `sdf-world-views-mesh`, the views kernel
+  with its field reads compiled out (`SDF_VIEWS_MESH_ONLY`), so it carries no
+  interpreter; it shades the records as it shades any mesh pixel, and the pass
+  block's `renderPath` lets it read a mesh pixel's K row and frame slot. The
+  resolve, the sky and the composite are the interpreter path's.
 
-Only the key light casts a shadow on this path: a second shadow slot reads as
-lit. The cascade targets carry the mesh target's four floats a texel, which
-reuses the mesh pipeline at 16 bytes a texel more than a depth-only pipeline
-needs.
+The cascade targets carry the mesh target's four floats a texel, which reuses
+the mesh pipeline at 16 bytes a texel more than a depth-only pipeline needs.
 
 ## Frames in flight
 

@@ -53,6 +53,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     ];
     private static readonly uint MeshShadowNearBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNear);
     private static readonly uint MeshShadowFarBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFar);
+    private static readonly uint MeshShadowSecondBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecond);
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
     private static readonly uint IncomingVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.IncomingVisibility);
@@ -260,8 +261,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, or one of the mesh
     // path's shadow cascades, which draw from the cascade's light camera.
-    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.MeshParts.ShadowNear or SdfWorldPackage.MeshParts.ShadowFar);
-    private bool IsShadowCascade => (m_part is SdfWorldPackage.MeshParts.ShadowNear or SdfWorldPackage.MeshParts.ShadowFar);
+    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh || IsShadowCascade);
+    private bool IsShadowCascade => (m_part is SdfWorldPackage.MeshParts.ShadowNear or SdfWorldPackage.MeshParts.ShadowFar or SdfWorldPackage.MeshParts.ShadowSecond);
 
     public void Dispose() {
         if (m_disposed) {
@@ -361,12 +362,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 return ((m_view.View != 0) || !m_view.Residency.MeshPathBake.TryTakeForFrame(batch: out _, frame: m_view.Residency.PackageFrame));
             }
             case SdfWorldPackage.MeshParts.ShadowNear:
-            case SdfWorldPackage.MeshParts.ShadowFar: {
+            case SdfWorldPackage.MeshParts.ShadowFar:
+            case SdfWorldPackage.MeshParts.ShadowSecond: {
                 Follow();
                 m_owner.Begin(residency: m_view.Residency);
                 var tables = m_view.Residency.Submit(context: in context);
+                var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                return ((tables.MeshDrawCount == 0) || (SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View).Count == 0));
+                return ((tables.MeshDrawCount == 0) || (cascades.Count == 0) ||
+                    ((m_part == SdfWorldPackage.MeshParts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
             }
             default:
                 return null;
@@ -383,7 +387,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private string SignaturePart => m_part switch {
         SdfWorldPackage.Parts.Receiver => SdfWorldPackage.Parts.Views,
         SdfWorldPackage.Parts.Primary when m_meshPath => SdfWorldPackage.Parts.Shadow,
-        SdfWorldPackage.MeshParts.ShadowNear or SdfWorldPackage.MeshParts.ShadowFar => SdfWorldPackage.Parts.Shadow,
+        SdfWorldPackage.MeshParts.ShadowNear or SdfWorldPackage.MeshParts.ShadowFar or SdfWorldPackage.MeshParts.ShadowSecond => SdfWorldPackage.Parts.Shadow,
         _ => m_part,
     };
 
@@ -536,7 +540,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
             if (IsShadowCascade) {
-                SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: cascades[((m_part == SdfWorldPackage.MeshParts.ShadowNear) ? 0 : 1)]);
+                SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: cascades[m_part switch {
+                    SdfWorldPackage.MeshParts.ShadowNear => 0,
+                    SdfWorldPackage.MeshParts.ShadowFar => 1,
+                    _ => 2,
+                }]);
             }
             if (m_part is SdfWorldPackage.Parts.Mask or SdfWorldPackage.MeshParts.Bake) {
                 if (!residency.MeshPathBake.TryTakeForFrame(batch: out var batch, frame: residency.PackageFrame)) {
@@ -555,6 +563,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     }
                     target.Record = true;
                     target.Batch = batch;
+                    batch.Recorded = true;
                     target.Version = recording.Outputs[0].Version;
                 }
             }
@@ -670,6 +679,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Mask when m_meshPath => tables.Pipeline(kernel: SdfKernel.MeshBakeMask),
             SdfWorldPackage.MeshParts.Bake => tables.Pipeline(kernel: SdfKernel.MeshBake),
             SdfWorldPackage.Parts.Primary when m_meshPath => tables.Pipeline(kernel: SdfKernel.MeshSurface),
+            SdfWorldPackage.Parts.Views when m_meshPath => tables.Pipeline(kernel: SdfKernel.ViewsMesh),
             SdfWorldPackage.Parts.Mask => tables.Pipeline(kernel: SdfKernel.InstanceCull),
             SdfWorldPackage.Parts.Beam => tables.Pipeline(kernel: SdfKernel.Beam),
             SdfWorldPackage.Parts.Tape => tables.Pipeline(kernel: SdfKernel.Tape),
@@ -982,6 +992,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var incomingWritten = tables.IncomingStorageFiller.ImageViewHandle;
         var shadowNear = tables.SampledFiller.ImageViewHandle;
         var shadowFar = tables.SampledFiller.ImageViewHandle;
+        var shadowSecond = tables.SampledFiller.ImageViewHandle;
 
         foreach (var member in ScratchMembers) {
             tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
@@ -1008,6 +1019,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 shadowNear = bound.Image.ImageViewHandle;
             } else if (name == SdfWorldPackage.MeshParts.ShadowFarTarget) {
                 shadowFar = bound.Image.ImageViewHandle;
+            } else if (name == SdfWorldPackage.MeshParts.ShadowSecondTarget) {
+                shadowSecond = bound.Image.ImageViewHandle;
             }
         }
         for (var port = 0; (port < m_outputs.Length); port++) {
@@ -1044,6 +1057,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             descriptorSetHandle: set, imageViewHandle: incomingWritten);
         bindings.WriteSampledImage(arrayElement: 0, binding: MeshShadowNearBinding, descriptorSetHandle: set, imageViewHandle: shadowNear);
         bindings.WriteSampledImage(arrayElement: 0, binding: MeshShadowFarBinding, descriptorSetHandle: set, imageViewHandle: shadowFar);
+        bindings.WriteSampledImage(arrayElement: 0, binding: MeshShadowSecondBinding, descriptorSetHandle: set, imageViewHandle: shadowSecond);
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
         m_shadowPorts[slot] = shadowPorts;

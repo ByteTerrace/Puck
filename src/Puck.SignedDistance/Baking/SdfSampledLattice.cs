@@ -4,7 +4,7 @@ namespace Puck.SignedDistance.Baking;
 
 /// <summary>A contoured surface in world space: a vertex per surface patch of each crossed cell, with its normal, and a
 /// quad per sign-changing lattice edge, wound counter-clockwise seen from outside, with the material the field reported at
-/// the edge's inside end.</summary>
+/// the edge's outside end, whose nearest shape is the one the edge crosses.</summary>
 /// <param name="Positions">Three floats per vertex.</param>
 /// <param name="Normals">Three floats per vertex: the unit outward normal.</param>
 /// <param name="Quads">Four vertex indices per quad.</param>
@@ -75,13 +75,18 @@ public sealed class SdfSampledLattice {
     }
 
     /// <summary>Extracts the lattice's surface.</summary>
+    /// <param name="owns">Whether a material belongs to the surface being contoured, or <see langword="null"/> when every
+    /// material does: a quad whose outside sample reports a material the surface does not own takes its inside
+    /// sample's.</param>
     /// <returns>The surface; empty when no lattice edge changes sign.</returns>
-    public SdfContour Contour() {
+    public SdfContour Contour(Func<int, bool>? owns = null) {
         var surface = SdfDualContouring.Extract(grid: new Lattice(owner: this));
         var materials = new int[surface.QuadCount];
 
         for (var quad = 0; (quad < materials.Length); quad++) {
-            materials[quad] = m_materials[surface.QuadCorners[quad]];
+            var outside = m_materials[surface.QuadCorners[quad]];
+
+            materials[quad] = (((owns is null) || owns(arg: outside)) ? outside : m_materials[surface.QuadInsideCorners[quad]]);
         }
 
         return new SdfContour(

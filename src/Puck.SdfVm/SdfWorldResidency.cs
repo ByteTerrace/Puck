@@ -513,6 +513,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
             LiveVolumes = frame.Volumes.Count;
         }
 
+        // The mesh path's bake takes its batch before the upload, which carries the batch's surface points.
+        if ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
+            MeshPathBake.Stage(frame: PackageFrame, tables: tables);
+        }
+
         tables.UpdateTablesSignature();
         // The views render once the policy's shadow kernel and a usable views kernel are built; the residency is ready then.
         m_pipelineWaiting = tables.FrameWaiting(program: null);

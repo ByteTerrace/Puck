@@ -65,6 +65,8 @@ SdfViewsFieldReads sdfViewsFieldReads(SdfPixel p, SdfSurfaceSample s, bool shade
     reads.frameSlot = s.frameSlot;
     reads.blendWeight = s.blendWeight;
     reads.blendOther = s.blendOther;
+    // The mesh path's variant reads no field: a mesh pixel's material shades from its record alone.
+#ifndef SDF_VIEWS_MESH_ONLY
     uint phase = ((shaded && !s.mesh && !sdfProgramLayout.noDetailShapes) ? DetailPhase : ProbePhase);
     bool probesPlanned = false;
     uint slot = 0u;
@@ -155,6 +157,7 @@ SdfViewsFieldReads sdfViewsFieldReads(SdfPixel p, SdfSurfaceSample s, bool shade
             sdfOvershootTake(march, hit.distance);
         }
     }
+#endif
 
     return reads;
 }

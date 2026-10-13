@@ -16,10 +16,10 @@ namespace Puck.SdfVm;
 /// <param name="Far">The farthest depth along <paramref name="Forward"/> the target holds, in world units.</param>
 public readonly record struct SdfMeshShadowCamera(Vector3 Position, Vector3 Right, Vector3 Up, Vector3 Forward, float HalfHeight, float Near, float Far);
 /// <summary>
-/// The baked-mesh path's shadow cascades for one view: <see cref="SdfWorldPackage.MeshShadowCascadeCount"/> orthographic
-/// cameras along the key light (the light in the frame's first shadow slot), each enclosing a slice of the view's frustum
-/// that starts at its eye: the near cascade the first <see cref="NearSplit"/> metres, the far cascade up to
-/// <see cref="FarSplit"/> metres or the frame's far distance. Each cascade is a bounding sphere of its slice, so its
+/// The baked-mesh path's shadow cascades for one view: two orthographic cameras along the key light (the light in the
+/// frame's first shadow slot), each enclosing a slice of the view's frustum that starts at its eye, the near cascade the
+/// first <see cref="NearSplit"/> metres and the far cascade up to <see cref="FarSplit"/> metres or the frame's far
+/// distance, and one along the second shadow slot's light over the first <see cref="SecondSplit"/> metres. Each cascade is a bounding sphere of its slice, so its
 /// extent does not change as the camera turns, and its plane's center snaps to a whole texel, so a still light's shadow
 /// does not crawl as the camera moves. The fit is a pure function of the camera, the light and the far distance, so every
 /// pass of a frame that fits it agrees.
@@ -36,26 +36,39 @@ public readonly struct SdfMeshShadowCascades {
     /// <summary>The receiver's offset along its normal, in cascade texels.</summary>
     public const float NormalOffsetTexels = 1.5f;
 
+    /// <summary>The depth, in metres from the eye, the second shadow slot's one cascade covers.</summary>
+    public const float SecondSplit = 40f;
+
     private readonly SdfMeshShadowCamera m_near;
     private readonly SdfMeshShadowCamera m_far;
+    private readonly SdfMeshShadowCamera m_second;
 
-    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, int count, float penumbraSlope) {
+    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, SdfMeshShadowCamera second, int count, float penumbraSlope, float secondSlope) {
         m_near = near;
         m_far = far;
+        m_second = second;
         Count = count;
         PenumbraSlope = penumbraSlope;
+        SecondPenumbraSlope = secondSlope;
     }
 
-    /// <summary>Gets the cascades the frame renders: zero when its key light casts no shadow.</summary>
+    /// <summary>Gets the key light's cascades the frame renders: zero when it casts no shadow.</summary>
     public int Count { get; }
     /// <summary>Gets the key light's penumbra slope: the penumbra's width per metre between a blocker and its
     /// receiver.</summary>
     public float PenumbraSlope { get; }
+    /// <summary>Gets the second shadow slot's penumbra slope, zero when that slot holds no directional light, so its
+    /// cascade (index 2) renders nothing.</summary>
+    public float SecondPenumbraSlope { get; }
 
     /// <summary>Gets one cascade's camera.</summary>
-    /// <param name="index">The cascade, zero the near one.</param>
+    /// <param name="index">The cascade: zero the key light's near one, one its far one, two the second slot's.</param>
     /// <returns>The camera.</returns>
-    public SdfMeshShadowCamera this[int index] => ((index == 0) ? m_near : m_far);
+    public SdfMeshShadowCamera this[int index] => index switch {
+        0 => m_near,
+        1 => m_far,
+        _ => m_second,
+    };
 
     /// <summary>Fits the cascades of a view of a frame.</summary>
     /// <param name="frame">The frame.</param>
@@ -78,12 +91,19 @@ public readonly struct SdfMeshShadowCascades {
         var forward = -SdfLights.UnitDirection(direction: light.Direction);
         var camera = snapshot.Camera;
         var far = MathF.Min(FarSplit, frame.FarDistance);
+        var secondSlot = ((lights.ShadowSlots.SlotCount > 1) ? lights.ShadowSlots[1] : -1);
+        var hasSecond = ((secondSlot >= 0) && (secondSlot < lights.Count) && (lights[secondSlot].Kind == SdfLightKind.Directional));
+        var second = (hasSecond
+            ? Cascade(camera: camera, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far))
+            : default);
 
         return new SdfMeshShadowCascades(
-            count: SdfWorldPackage.MeshShadowCascadeCount,
+            count: 2,
             far: Cascade(camera: camera, forward: forward, depth: far),
             near: Cascade(camera: camera, forward: forward, depth: MathF.Min(NearSplit, far)),
-            penumbraSlope: MathF.Max(light.Param, 1.0e-3f)
+            penumbraSlope: MathF.Max(light.Param, 1.0e-3f),
+            second: second,
+            secondSlope: (hasSecond ? MathF.Max(lights[secondSlot].Param, 1.0e-3f) : 0f)
         );
     }
 

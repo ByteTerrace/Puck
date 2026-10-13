@@ -396,6 +396,7 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Float, name: BrickPool),
         Table(element: ShaderValueType.Float4, name: Volumes),
         Table(element: ShaderValueType.Uint, name: MeshRegion),
+        Table(element: ShaderValueType.Float4, name: MeshBakePoints),
         WorldImage(name: GlyphAtlas),
         ShaderInterfaceMember.Sampler(
             group: ShaderInterfaceGroup.World,
@@ -462,6 +463,7 @@ public static partial class SdfWorldPackage {
         ),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNear, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFar, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecond, type: ShaderValueType.Float4),
         Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
         ShaderWorkCounters.BufferMember,
         .. Tables,
