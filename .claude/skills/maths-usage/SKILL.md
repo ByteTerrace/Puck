@@ -81,7 +81,13 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   a borrow mask: 80 instructions a step against 53, 7% slower), a branchless
   result chain in the borrowed base-two walk (14% slower than branching on the
   bit, whose mispredicts resolve ahead of the chain), and the borrowed walk
-  below 2^63 (48% slower than the signed seeded one).
+  below 2^63 (48% slower than the signed seeded one); and, for the exact
+  ladder's selects, a plain ternary inside the loop (the JIT branches it: 63%
+  slower), the ladder fully unrolled behind a computed entry so that every
+  select if-converts (all 252 are conditional moves, but 924 stack accesses
+  leave it only 3% faster than the masks), and the non-inlined select on both
+  of a reduction's subtractions (270 to 297 ns against 247 ns for the final one
+  alone; it moves with code layout).
 - Signed Montgomery reduction is the arithmetic of the single base-two round,
   the Lucas ladder and the base-two batch below 2^63 (the batch from 2^60);
   `ScaledResidueRing64`'s `ReduceSigned`, `ReduceSignedSquareSubtract` and
@@ -100,6 +106,18 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   measured remaining gap for primes there (about 30% behind machine-prime's
   second strong round). Composites there are at parity, and random words
   about 9% behind, the primes' share.
+- RyuJIT if-converts a select only outside loops (its pass refuses a block
+  that is hot or reachable from itself), so a ternary inlined into a ladder's
+  loop becomes a branch, never a conditional move. The one way to a CMOV on a
+  loop's critical path is a call: `ScaledResidueRing64.SubtractBySelect` is a
+  `NoInlining` leaf that compiles to `cmp`, `cmovb`, `ret`, and the exact
+  ladder's `ExactArithmetic.ReduceSubtract` ends in it, on its final subtraction
+  only: 16% off the isolated ladder, and 2 to 5% off `IsPrime` on primes at
+  2^63 (the call spills three values around the loop, and the gain moves with
+  the host process's code placement), nothing below 2^63. `Subtract` stays the
+  inlined mask for everything else. Re-run the select
+  probe (see [open items](../../../docs/plans/open-items.md)) on each new .NET
+  major, and when in-loop if-conversion lands, before changing this.
 - `IsPrime(ulong)` trial-divides by the 128 odd primes through 727 before
   Baillie–PSW, a depth derived from the round's cost and the vector's (see
   `PrimeKernels.TrialDivisionPrimeCount`); it stays one table with the

@@ -50,9 +50,11 @@ internal static partial class Subjects {
             // above 2^63 the untruncated sum leaves the carrier, which is where a fold read off the sum alone would err.
             var sum = ScaledResidueRing64.Add(left: left, modulus: modulus, right: right);
             var difference = ScaledResidueRing64.Subtract(left: left, modulus: modulus, right: right);
+            var selected = ScaledResidueRing64.SubtractBySelect(left: left, modulus: modulus, right: right);
 
             if (((BigInteger)sum) != ((((BigInteger)left) + right) % modulus)) { return $"Add({left}, {right}) modulo {modulus} = {sum}, not the reduced sum"; }
             if (((BigInteger)difference) != (((((BigInteger)left) - right) + modulus) % modulus)) { return $"Subtract({left}, {right}) modulo {modulus} = {difference}, not the reduced difference"; }
+            if (((BigInteger)selected) != (((((BigInteger)left) - right) + modulus) % modulus)) { return $"SubtractBySelect({left}, {right}) modulo {modulus} = {selected}, not the reduced difference"; }
 
             // One arbitrary word against a reduced operand is inside the admissible range as well: Encode's case.
             var word = NextWord();

@@ -588,7 +588,14 @@ step. The JIT turns a select inside a loop into a branch rather than a
 conditional move, and a data-dependent branch on the chain mispredicts about
 half the time, so the exact chains above 2^63 keep their masks, whose
 compare-and-mask fold costs about four cycles more than a conditional move on
-each product.
+each product. The one exception is the last subtraction of the exact ladder's
+reduction: `ScaledResidueRing64.SubtractBySelect` is a non-inlined leaf, which
+the JIT compiles to a compare and a conditional move, and a call is the one
+boundary that keeps the select out of the loop's branch conversion. It takes 16%
+off the isolated ladder and 2 to 5% off `IsPrime` on primes at 2^63, and costs
+three spills around the loop; the same call on the first subtraction as well
+measured slower and moved with code layout. Unrolling the ladder so that every
+select converts gained 3% and moved 924 values through the stack, and a ternary in the loop lost 63%.
 
 ## Constellations
 

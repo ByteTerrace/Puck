@@ -462,4 +462,25 @@ public readonly struct ScaledResidueRing64 {
 
         return (difference + (modulus & borrow));
     }
+    /// <summary>Subtracts one residue from another modulo an odd modulus, with the fold a conditional move that stays one.</summary>
+    /// <param name="left">The reduced minuend.</param>
+    /// <param name="right">The reduced subtrahend.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <returns>The reduced difference, equal to <see cref="Subtract(ulong, ulong, ulong)"/>.</returns>
+    /// <remarks>
+    /// RyuJIT if-converts a select only outside loops, so inlined into a loop body the ternary becomes a branch and
+    /// <see cref="Subtract(ulong, ulong, ulong)"/> is written as a mask (<c>setb</c>, <c>movzx</c>, <c>neg</c>,
+    /// <c>and</c>, <c>add</c>), which costs the chain about four cycles over a conditional move. A call is the one
+    /// boundary the JIT does not cross, so this leaf, never inlined, compiles to <c>cmp</c>, <c>cmovb</c>, <c>ret</c>:
+    /// the call keeps the select a conditional move on a loop's critical path. It earns its call only on the last
+    /// subtraction of a chain, whose result nothing else waits behind; on both subtractions of a reduction the
+    /// measured gain turned layout-sensitive. <see cref="Subtract(ulong, ulong, ulong)"/> stays the inlined mask for
+    /// everything else.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static ulong SubtractBySelect(ulong left, ulong right, ulong modulus) {
+        var difference = (left - right);
+
+        return ((left < right) ? (difference + modulus) : difference);
+    }
 }

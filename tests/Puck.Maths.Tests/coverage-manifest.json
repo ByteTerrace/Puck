@@ -23760,6 +23760,13 @@
     },
     {
       "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.SubtractBySelect(System.UInt64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "dynamics.create-constants-vs-oracle"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.Branch",

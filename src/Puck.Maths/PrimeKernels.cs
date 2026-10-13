@@ -1461,7 +1461,9 @@ public static partial class PrimeKernels {
         /// the constant, folded, and then less the correction, folded, is the reduced result, and the first fold runs
         /// while the correction's multiply does. The factor is formed first, in the source as well, so that its
         /// truncated multiplies, the critical path, issue ahead of the high multiply, as
-        /// <see cref="ScaledResidueRing64.ReduceSignedSquareSubtract(long, long, ulong, ulong)"/>'s do.
+        /// <see cref="ScaledResidueRing64.ReduceSignedSquareSubtract(long, long, ulong, ulong)"/>'s do. The second fold
+        /// is <see cref="ScaledResidueRing64.SubtractBySelect(ulong, ulong, ulong)"/>, a call, so that it is a conditional
+        /// move on the ladder's critical path; the first stays the inlined mask, off it.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong ReduceSubtract(ulong left, ulong right, ulong subtrahend, ulong modulus, ulong inverse) {
@@ -1472,7 +1474,7 @@ public static partial class PrimeKernels {
                 right: subtrahend
             );
 
-            return ScaledResidueRing64.Subtract(
+            return ScaledResidueRing64.SubtractBySelect(
                 left: high,
                 modulus: modulus,
                 right: ScaledResidueRing64.MultiplyHigh(left: factor, right: modulus)
