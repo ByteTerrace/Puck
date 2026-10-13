@@ -199,12 +199,14 @@ public static class SdfMeshCard {
     );
 }
 /// <summary>
-/// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldTables.MeshRegionLayout"/>),
-/// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
-/// (<see cref="DrawWords"/> words), then each distinct <see cref="SdfMesh"/> once, however many draws share it, as its
-/// vertices (<see cref="VertexWords"/> words each: position, normal and texture coordinate), then those meshes' triangle
-/// materials (one word each, for a mesh that has them), then their indices (one word each), meshes in the order their
-/// first draw names them.
+/// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
+/// backend reads the same word offsets: first one record a draw (<see cref="DrawWords"/> words), then each distinct
+/// <see cref="SdfMesh"/> once, however many draws share it, as its vertices (<see cref="VertexWords"/> words each:
+/// position, normal and texture coordinate), its triangle materials (one word each, for a mesh that has them) and its
+/// indices (one word each). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
+/// materials, then all indices, in the order their first draw names them; a residency's tables place each mesh whole
+/// past a reserve of draw records, where it stays while its draws do (<see cref="SdfMeshRegionArena"/>). A record names
+/// its mesh's words either way.
 /// <para>
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
 /// material, then its mesh: the word its first index sits at, its index count, the word its first vertex sits at, its
@@ -291,15 +293,15 @@ public static class SdfMeshRegion {
         for (var draw = 0; (draw < draws.Count); draw++) {
             var mesh = draws[draw].Mesh;
 
-            if (!Enum.IsDefined(value: draws[draw].Indirect)) { throw new ArgumentException(message: "A mesh draw's indirect policy must be Default, Cast, Receive or Off.", paramName: nameof(draws)); }
+            RequireIndirect(draw: draws[draw]);
 
             if (meshes.TryAdd(
                 key: mesh,
                 value: new SdfMeshRegionMesh(
-                    BaseVertex: vertices,
-                    FirstIndex: indices,
-                    FirstMaterial: materials,
-                    IndexCount: mesh.Indices.Length
+                    IndexCount: mesh.Indices.Length,
+                    IndexWord: indices,
+                    MaterialWord: materials,
+                    VertexWord: vertices
                 )
             )) {
                 vertices = checked((vertices + mesh.Positions.Length));
@@ -310,12 +312,40 @@ public static class SdfMeshRegion {
 
         _ = checked(((((draws.Count * DrawWords) + (vertices * VertexWords)) + materials) + indices));
 
-        return new SdfMeshRegionLayout(
+        var layout = new SdfMeshRegionLayout(
             DrawCount: draws.Count,
             IndexCount: indices,
             MaterialCount: materials,
             VertexCount: vertices
         );
+
+        // The first pass counted each mesh's place within its section; a placement names absolute words.
+        foreach (var mesh in meshes.Keys.ToArray()) {
+            var counted = meshes[mesh];
+
+            meshes[mesh] = new SdfMeshRegionMesh(
+                IndexCount: counted.IndexCount,
+                IndexWord: (layout.IndexWordOffset + counted.IndexWord),
+                MaterialWord: (layout.MaterialWordOffset + counted.MaterialWord),
+                VertexWord: (layout.VertexWordOffset + (counted.VertexWord * VertexWords))
+            );
+        }
+
+        return layout;
+    }
+    /// <summary>The words one mesh takes when its vertices, triangle materials and indices lie together, as a mesh
+    /// region arena places it (<see cref="SdfMeshRegionArena"/>).</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns>Its words.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static int WordsOf(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(mesh);
+
+        return checked((((mesh.Positions.Length * VertexWords) + mesh.TriangleMaterials.Length) + mesh.Indices.Length));
+    }
+    // Refuses a draw whose indirect policy names no member.
+    internal static void RequireIndirect(SdfMeshDraw draw) {
+        if (!Enum.IsDefined(value: draw.Indirect)) { throw new ArgumentException(message: "A mesh draw's indirect policy must be Default, Cast, Receive or Off.", paramName: "draws"); }
     }
     /// <summary>Writes a list of draws into the region's words as <paramref name="layout"/> places them.</summary>
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
@@ -333,13 +363,13 @@ public static class SdfMeshRegion {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
     public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
+        RequireDestination(destination: destination, layout: layout);
         WriteDraws(
             atlas: atlas,
             destination: destination,
             draws: draws,
             impostors: impostors,
             indirectInstancesComposable: indirectInstancesComposable,
-            layout: layout,
             meshes: meshes
         );
         WriteMeshes(
@@ -349,24 +379,26 @@ public static class SdfMeshRegion {
             meshes: meshes
         );
     }
-    /// <summary>Writes only the draw records of a list of draws, the region's first
-    /// <see cref="SdfMeshRegionLayout.VertexWordOffset"/> words, as <see cref="Write"/> writes them. A list whose draws
-    /// move while the meshes they name and those meshes' placements stand rewrites only these words.</summary>
-    /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
-    /// <param name="meshes">The placements <see cref="Plan"/> wrote for the same draws.</param>
-    /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
-    /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them.</param>
+    /// <summary>Writes only the draw records of a list of draws, the region's first <see cref="DrawWords"/> words a draw,
+    /// as <see cref="Write"/> writes them. A list whose draws move while the meshes they name and those meshes'
+    /// placements stand rewrites only these words.</summary>
+    /// <param name="draws">The draws.</param>
+    /// <param name="meshes">The placements of every mesh the draws name.</param>
+    /// <param name="destination">The draw records' words; at least <see cref="DrawWords"/> a draw.</param>
     /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>.</param>
     /// <param name="impostors">The impostor atlases the frame binds, or <see langword="null"/>.</param>
     /// <param name="indirectInstancesComposable">Whether the retained field permits independent instance
     /// participation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the records.</exception>
+    /// <exception cref="KeyNotFoundException">A draw names a mesh <paramref name="meshes"/> does not place.</exception>
+    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
-        RequireDestination(destination: destination, layout: layout);
+        if (destination.Length < (draws.Count * DrawWords)) {
+            throw new ArgumentException(message: $"{draws.Count} draw records need {draws.Count * DrawWords} words; the destination holds {destination.Length}.", paramName: nameof(destination));
+        }
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var (mesh, matrix, material, _) = draws[draw];
@@ -396,12 +428,12 @@ public static class SdfMeshRegion {
             record[14] = BitConverter.SingleToUInt32Bits(value: matrix.M43);
             record[15] = BitConverter.SingleToUInt32Bits(value: matrix.M44);
             record[16] = unchecked((uint)material);
-            record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
+            record[17] = ((uint)placement.IndexWord);
             record[18] = ((uint)placement.IndexCount);
-            record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
+            record[19] = ((uint)placement.VertexWord);
             record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag)
                 | (draws[draw].IsDynamic ? DynamicFlag : 0u) | (((uint)draws[draw].EffectiveIndirectParticipation(instancesComposable: indirectInstancesComposable)) << SdfProgram.IndirectInstanceShift);
-            record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
+            record[21] = ((uint)placement.MaterialWord);
             WriteNormalMatrix(
                 matrix: matrix,
                 record: record[22..]
@@ -428,37 +460,55 @@ public static class SdfMeshRegion {
         RequireDestination(destination: destination, layout: layout);
 
         foreach (var (mesh, placement) in meshes) {
-            var positions = mesh.Positions.Span;
-            var normals = mesh.Normals.Span;
-            var uvs = mesh.Uvs.Span;
-            var vertexWords = destination[(layout.VertexWordOffset + (placement.BaseVertex * VertexWords))..];
-            var atlasPlacement = (Textured(atlas: atlas, mesh: mesh)
-                ? atlas!.Placement(textures: mesh.Textures!)
-                : new Vector4(w: 0f, x: 1f, y: 1f, z: 0f));
-            var uvScale = new Vector2(x: atlasPlacement.X, y: atlasPlacement.Y);
-            var uvOffset = new Vector2(x: atlasPlacement.Z, y: atlasPlacement.W);
-
-            for (var vertex = 0; (vertex < positions.Length); vertex++) {
-                var words = vertexWords.Slice(
-                    length: VertexWords,
-                    start: (vertex * VertexWords)
-                );
-                var normal = (normals.IsEmpty ? Vector3.Zero : normals[vertex]);
-                var uv = (uvs.IsEmpty ? Vector2.Zero : ((uvs[vertex] * uvScale) + uvOffset));
-
-                words[0] = BitConverter.SingleToUInt32Bits(value: positions[vertex].X);
-                words[1] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Y);
-                words[2] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Z);
-                words[3] = BitConverter.SingleToUInt32Bits(value: normal.X);
-                words[4] = BitConverter.SingleToUInt32Bits(value: normal.Y);
-                words[5] = BitConverter.SingleToUInt32Bits(value: normal.Z);
-                words[6] = BitConverter.SingleToUInt32Bits(value: uv.X);
-                words[7] = BitConverter.SingleToUInt32Bits(value: uv.Y);
-            }
-
-            mesh.TriangleMaterials.Span.CopyTo(destination: destination[(layout.MaterialWordOffset + placement.FirstMaterial)..]);
-            mesh.Indices.Span.CopyTo(destination: destination[(layout.IndexWordOffset + placement.FirstIndex)..]);
+            WriteMesh(
+                atlas: atlas,
+                destination: destination,
+                mesh: mesh,
+                placement: placement
+            );
         }
+    }
+    /// <summary>Writes one mesh's vertices, triangle materials and indices at the words its placement names.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <param name="placement">Where the mesh's sections lie, in words from the start of
+    /// <paramref name="destination"/>.</param>
+    /// <param name="destination">The words the placement counts from.</param>
+    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>: a mesh whose textures they hold
+    /// has its texture coordinates moved into them.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static void WriteMesh(SdfMesh mesh, SdfMeshRegionMesh placement, Span<uint> destination, SdfMeshAtlas? atlas = null) {
+        ArgumentNullException.ThrowIfNull(mesh);
+
+        var positions = mesh.Positions.Span;
+        var normals = mesh.Normals.Span;
+        var uvs = mesh.Uvs.Span;
+        var vertexWords = destination[placement.VertexWord..];
+        var atlasPlacement = (Textured(atlas: atlas, mesh: mesh)
+            ? atlas!.Placement(textures: mesh.Textures!)
+            : new Vector4(w: 0f, x: 1f, y: 1f, z: 0f));
+        var uvScale = new Vector2(x: atlasPlacement.X, y: atlasPlacement.Y);
+        var uvOffset = new Vector2(x: atlasPlacement.Z, y: atlasPlacement.W);
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            var words = vertexWords.Slice(
+                length: VertexWords,
+                start: (vertex * VertexWords)
+            );
+            var normal = (normals.IsEmpty ? Vector3.Zero : normals[vertex]);
+            var uv = (uvs.IsEmpty ? Vector2.Zero : ((uvs[vertex] * uvScale) + uvOffset));
+
+            words[0] = BitConverter.SingleToUInt32Bits(value: positions[vertex].X);
+            words[1] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Y);
+            words[2] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Z);
+            words[3] = BitConverter.SingleToUInt32Bits(value: normal.X);
+            words[4] = BitConverter.SingleToUInt32Bits(value: normal.Y);
+            words[5] = BitConverter.SingleToUInt32Bits(value: normal.Z);
+            words[6] = BitConverter.SingleToUInt32Bits(value: uv.X);
+            words[7] = BitConverter.SingleToUInt32Bits(value: uv.Y);
+        }
+
+        mesh.TriangleMaterials.Span.CopyTo(destination: destination[placement.MaterialWord..]);
+        mesh.Indices.Span.CopyTo(destination: destination[placement.IndexWord..]);
     }
 
     private static void RequireDestination(Span<uint> destination, SdfMeshRegionLayout layout) {
@@ -517,12 +567,13 @@ public static class SdfMeshRegion {
         record[8] = BitConverter.SingleToUInt32Bits(value: normal.M33);
     }
 }
-/// <summary>Where one distinct mesh sits in the mesh region, in the units a draw's record names it by.</summary>
-/// <param name="BaseVertex">The mesh's first vertex within the vertex section.</param>
-/// <param name="FirstIndex">The mesh's first index within the index section.</param>
-/// <param name="FirstMaterial">The mesh's first triangle material within the triangle-material section.</param>
+/// <summary>Where one distinct mesh sits in the mesh region, in the words a draw's record names it by, counted from the
+/// region's start.</summary>
+/// <param name="VertexWord">The word the mesh's first vertex starts at.</param>
+/// <param name="MaterialWord">The word the mesh's first triangle material sits at.</param>
+/// <param name="IndexWord">The word the mesh's first index sits at.</param>
 /// <param name="IndexCount">The mesh's index count.</param>
-public readonly record struct SdfMeshRegionMesh(int BaseVertex, int FirstIndex, int FirstMaterial, int IndexCount);
+public readonly record struct SdfMeshRegionMesh(int VertexWord, int MaterialWord, int IndexWord, int IndexCount);
 /// <summary>The sections of one mesh region (<see cref="SdfMeshRegion"/>), in words from the region's start.</summary>
 /// <param name="DrawCount">The draw records, from word zero.</param>
 /// <param name="VertexCount">The vertices, <see cref="SdfMeshRegion.VertexWords"/> words each, from

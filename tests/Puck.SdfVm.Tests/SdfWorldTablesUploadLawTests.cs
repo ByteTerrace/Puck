@@ -645,21 +645,24 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             new(Identity: "triangle", Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
             new(Identity: "quad", Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
         ];
-        var layout = new SdfMeshRegionLayout(
-            DrawCount: 3,
-            IndexCount: 9,
-            MaterialCount: 1,
-            VertexCount: 7
-        );
         var expected = new List<uint>();
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
         // its normal matrix (the inverse transpose of its upper 3x3), its ten impostor words, zeros for a draw with none, and
-        // its frame slot, -1 for a mesh stored in world space. The
-        // vertices start past the three records (word 126), the triangle materials past the seven vertices (word 182), and
-        // the indices past the one triangle material (word 183).
-        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags) {
+        // its frame slot, -1 for a mesh stored in world space. The arena starts past the reserved draw records, and each
+        // mesh lies whole there in the order the list first names it: the quad's four vertices and six indices, then the
+        // triangle's three vertices, its one triangle material and its three indices.
+        var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRegion.DrawWords);
+        var quadVertices = ((uint)arena);
+        var quadIndices = (quadVertices + 32u);
+        var triangleVertices = (quadIndices + 6u);
+        var triangleMaterials = (triangleVertices + 24u);
+        var triangleIndices = (triangleMaterials + 1u);
+        var words = ((int)(triangleIndices + 3u));
+        var bytes = (((ulong)words) * sizeof(uint));
+
+        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
                 matrix.M21, matrix.M22, matrix.M23, matrix.M24,
@@ -668,7 +671,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 182u]);
+            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, materialWord]);
             Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
 
             var normal = Matrix4x4.Transpose(matrix: inverse);
@@ -688,13 +691,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
         }
 
-        Record(flags: 0u, indexCount: 6, indexWord: 183, material: 4, matrix: moved, vertexWord: 126);
-        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 189, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 158);
-        Record(flags: 0u, indexCount: 6, indexWord: 183, material: 6, matrix: Matrix4x4.Identity, vertexWord: 126);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices);
+        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices);
+        expected.AddRange(collection: new uint[(arena - expected.Count)]);
         Vertices(mesh: quad);
+        expected.AddRange(collection: quad.Indices.ToArray());
         Vertices(mesh: triangle);
         expected.Add(item: 2u);
-        expected.AddRange(collection: quad.Indices.ToArray().Concat(second: triangle.Indices.ToArray()));
+        expected.AddRange(collection: triangle.Indices.ToArray());
 
         rig.Warm();
         rig.Render(time: 0f);
@@ -706,12 +711,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             time: 0f
         );
 
-        Assert.Equal(expected: layout, actual: rig.Engine.MeshRegionLayout);
-        Assert.Equal(expected: layout.Bytes, actual: SdfMeshRegion.BytesOf(draws: draws));
-        Assert.Equal(expected: layout.Bytes, actual: rig.Engine.MeshRegionBytes);
+        // The region holds twice the words the list needs, so meshes that land later fit without growing it.
+        Assert.Equal(expected: words, actual: rig.Engine.MeshRegionWords);
+        Assert.Equal(expected: (2UL * bytes), actual: rig.Engine.MeshRegionBytes);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
-            actual: rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes)
+            actual: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes)[..((int)bytes)]
         );
 
         // The same list again repacks nothing, and a list moving one draw owes the one word its translation changed.
@@ -729,7 +734,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         Assert.Equal(expected: (((stillBytes + HeaderBytes) + RunEntryBytes) + sizeof(uint)), actual: rig.Gpu.HostBytes());
 
-        var shiftedWords = rig.Gpu.DeviceLocal(sizeBytes: layout.Bytes);
+        var shiftedWords = rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes)[..((int)bytes)];
 
         Assert.Equal(
             expected: BitConverter.SingleToUInt32Bits(value: 7f),
@@ -743,6 +748,31 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
             actual: shiftedWords
         );
+
+        // A list that adds a mesh moves no mesh already placed: it owes at most its new draw record's and the new mesh's
+        // words, in two runs.
+        var landed = new SdfMesh(
+            indices: new uint[] { 0, 1, 2 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 2f, z: 0f), new(x: 2f, y: 0f, z: 0f) }
+        );
+
+        rig.Render(
+            meshDraws: [.. shifted, new(Identity: "landed", Material: 7, Mesh: landed, ObjectToWorld: Matrix4x4.Identity)],
+            time: 0f
+        );
+        Assert.InRange(
+            actual: rig.Gpu.HostBytes(),
+            high: (((stillBytes + HeaderBytes) + (2 * RunEntryBytes)) + ((SdfMeshRegion.DrawWords + SdfMeshRegion.WordsOf(mesh: landed)) * sizeof(uint))),
+            low: (stillBytes + HeaderBytes)
+        );
+
+        var landedWords = rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes);
+
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray()[(arena * sizeof(uint))..],
+            actual: landedWords[(arena * sizeof(uint))..((int)bytes)]
+        );
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 2f), actual: BitConverter.ToUInt32(startIndex: ((words + SdfMeshRegion.VertexWords + 1) * sizeof(uint)), value: landedWords));
     }
 
     // One 64×64 view looking at the origin, at the given time, carrying the given transforms.
@@ -848,7 +878,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             meshDraws: one,
             time: 0f
         );
-        Assert.Equal(expected: SdfMeshRegion.BytesOf(draws: one), actual: rig.Engine.MeshRegionBytes);
+        Assert.True(condition: (rig.Engine.MeshRegionBytes >= SdfMeshRegion.BytesOf(draws: one)));
 
         rig.Render(
             meshDraws: many,

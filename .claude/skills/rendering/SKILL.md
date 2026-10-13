@@ -198,13 +198,23 @@ owns the explanation.
 - **Views reads a mesh pixel's K row and frame slot only on the mesh path**
   (`renderPath`), whose views kernel (`sdf-world-views-mesh`,
   `SDF_VIEWS_MESH_ONLY`) compiles the field reads out.
-- **Moving draws repack only their records.** `StageMeshRegion`
-  (`SdfWorldTables.MeshRegion.cs`) writes the vertices, triangle materials and
-  indices only when the meshes a draw list names, their placements or the mesh
-  atlases change, and otherwise the draw records alone
-  (`SdfMeshRegion.WriteDraws`). Repacking the whole million-triangle region for
-  moved matrices cost the debug world 11 ms of frame thread a frame. A new
-  per-draw field belongs in the record, never in the mesh section.
+- **Meshes keep their words; draws repack only their records.** The tables
+  place each mesh whole in an arena past a reserve of draw records
+  (`SdfMeshRegionArena`), where it stays while a draw names it, so
+  `StageMeshRegion` (`SdfWorldTables.MeshRegion.cs`) writes the draw records
+  (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
+  layout that moves placed meshes when one lands (sections by attribute) made
+  every landing rewrite the whole million-triangle region, 45 to 120 ms frames
+  on the debug world. A placement names absolute words
+  (`SdfMeshRegionMesh`); a new per-draw field belongs in the record, never in a
+  mesh's words.
+- **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
+  field evaluations a frame's bake dispatch makes (a gradient sample counts
+  five); every lattice is chunked to fit it (final lattices in slabs, material
+  and gradient points in chunks). Gradients are measured only at the corners of
+  cells whose corners disagree in sign, the samples `SdfDualContouring` reads a
+  normal at; a cell's normal reads its own eight corners, so no other sample
+  needs one.
 
 ## Performance and cost
 
