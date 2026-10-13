@@ -241,8 +241,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 ## Seeing a change
 
 - Build: `dotnet build src/Puck.SdfVm -c Release` runs DXC (needs `dxc` on
-  `PATH`). A Windows build of one project builds DXIL only; run Vulkan from a
-  solution build or with `-p:PuckShaderSpirvEnabled=true`. Shader outputs come
+  `PATH`). A Windows build of one project builds DXIL only, and a World run of
+  it refuses `--backend vulkan`; run Vulkan from a solution build or with
+  `-p:PuckShaderSpirvEnabled=true`. A build of one suite under `tests/` builds
+  SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
   from the per-user shader cache; never copy bytecode between trees.
 - Run it and look: `dotnet run --project src/Puck.World -c Release --
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about

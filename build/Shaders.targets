@@ -92,7 +92,8 @@
              (ContinuousIntegrationBuild), and in a solution build (the gate, the suites, qualification). An ordinary
              development build of one project on Windows (`dotnet build src/Puck.World`) builds DXIL alone, because
              Direct3D 12 is the development backend and the heaviest kernels' SPIR-V would otherwise compile beside their
-             DXIL after every kernel edit; -p:PuckShaderSpirvEnabled=true builds it there too. -->
+             DXIL after every kernel edit; -p:PuckShaderSpirvEnabled=true builds it there too, and tests/Directory.Build.rsp
+             passes it to a build of one suite, since the suites reflect and edit SPIR-V. -->
         <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == '' and ('$(_PuckShaderHostBuildsDxil)' != 'true' or '$(ContinuousIntegrationBuild)' == 'true' or ('$(SolutionPath)' != '' and '$(SolutionPath)' != '*Undefined*'))">true</PuckShaderSpirvEnabled>
         <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">false</PuckShaderSpirvEnabled>
         <!-- The build-only host that runs the shader build; every shader project references it with

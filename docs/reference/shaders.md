@@ -133,10 +133,15 @@ the reload's bytecode rather than compiling it again.
 
 Which targets a build plans follows what will run it. DXIL is built on Windows
 alone. SPIR-V is built off Windows, in CI (`ContinuousIntegrationBuild`) and in
-a solution build (the gate, the suites, qualification); a Windows build of one
-project, the development loop's `dotnet build src/Puck.World`, plans DXIL alone,
-since Direct3D 12 is the development backend, and removes the SPIR-V an earlier
-build left in its output. `-p:PuckShaderSpirvEnabled=true` builds SPIR-V there.
+a solution build (the gate, the suites, qualification), and in a build of one
+suite under `tests/` (`dotnet test --project tests/<suite>`), whose
+`tests/Directory.Build.rsp` passes `-p:PuckShaderSpirvEnabled=true` to it and
+every project it references, since the suites reflect and edit SPIR-V. A Windows
+build of one other project, the development loop's `dotnet build src/Puck.World`,
+plans DXIL alone, since Direct3D 12 is the development backend, and removes the
+SPIR-V an earlier build left in its output. `-p:PuckShaderSpirvEnabled=true`
+builds SPIR-V there; without it, `--backend vulkan` refuses the boot (exit 1)
+before it reads a stage.
 A project's shader build runs only when a file its last successful run read (each
 stage source and every include its closures reached, listed in a
 `shader-build.<hash>.inputs` record under the project's intermediate directory,

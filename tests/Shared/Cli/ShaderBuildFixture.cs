@@ -57,8 +57,10 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
 
         WriteCompiler(mode: dxc);
         // The output items are evaluated by the import, so the compiler, the backends and the fixture's own cache are
-        // selected before it.
+        // selected before it. The SDK sets an intermediate directory the import writes its build record under; this
+        // project imports no SDK, so it names the SDK's.
         project.AddFirst(content: new XElement("PropertyGroup",
+            new XElement(content: "obj/", name: "IntermediateOutputPath"),
             new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"),
             new XElement(content: "true", name: "PuckShaderSpirvEnabled"),
             new XElement("DxcCommand", CompilerPath),

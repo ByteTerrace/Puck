@@ -16,7 +16,7 @@ public sealed class SdfPassBindingLawTests {
     // twelve cascade rows, shadow parameters and 48 bake-lattice rows, 16-aligned.
     private const uint PassBlockBytes = 3024;
 
-    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds];
+    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.ViewsMesh];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
         (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.Receiver, SdfKernel.ReceiverComparison, SdfKernel.IndirectShade, .. ViewsKernels]),

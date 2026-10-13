@@ -263,7 +263,8 @@ dotnet run --project src/Puck.World -c Release --no-restore
 ```
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
-(`-- --backend vulkan`) needs `-p:PuckShaderSpirvEnabled=true` or a solution
+(`-- --backend vulkan`), which such a build refuses at boot, needs
+`-p:PuckShaderSpirvEnabled=true` or a solution
 build ([shader freshness](../reference/shaders.md#freshness)). Restore again
 (drop `--no-restore`) after changing a package or project reference.
 
@@ -657,7 +658,8 @@ Model 6.6. Do not raise that floor without evidence for every supported GPU.
 DXC compiles the same HLSL sources to SPIR-V and, on Windows, DXIL during the
 build ([freshness](../reference/shaders.md#freshness)); a Windows build of one
 project, the development loop, skips SPIR-V unless
-`-p:PuckShaderSpirvEnabled=true` asks for it. `dxc`
+`-p:PuckShaderSpirvEnabled=true` asks for it, which `tests/Directory.Build.rsp`
+does for a build of one suite. `dxc`
 must be on `PATH` for these built-in kernels, and live pipeline sources compile
 with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
 describes. The build compiles through the runtime's `ShaderCompiler` into the

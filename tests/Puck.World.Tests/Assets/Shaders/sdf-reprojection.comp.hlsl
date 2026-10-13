@@ -6,7 +6,8 @@
 [[vk::binding(4, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t4, space3);
 [[vk::binding(5, 3)]] StructuredBuffer<float4> motionCases : register(t5, space3);
 [[vk::binding(6, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> motionResults : register(u6, space3);
-struct MotionPass { float4 previousView[6]; };
+// The interpreter path (renderPath 0): a mesh hit carries no frame slot of its own.
+struct MotionPass { float4 previousView[6]; uint renderPath; };
 static MotionPass passGroup;
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-reprojection.hlsli"
 

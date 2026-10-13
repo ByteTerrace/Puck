@@ -383,6 +383,17 @@ if (hostSettings.BackendUnsatisfiable) {
 
     return LauncherHostRun.UnsupportedExitCode;
 }
+// A Windows build of one project ships Direct3D 12 bytecode alone (build/Shaders.targets), so a Vulkan host whose build
+// carries no SPIR-V refuses before it composes anything that reads a stage.
+if (
+    !hostSettings.Headless &&
+    !hostSettings.HostsOnDirectX &&
+    !File.Exists(path: Path.Combine(path1: Puck.SdfVm.SdfKernelSet.DefaultDirectory, path2: $"{Puck.SdfVm.SdfMeshRasterPass.ShaderStem}.frag.spv"))
+) {
+    Console.Error.WriteLine(value: "[world.host: refused: this build carries no Vulkan SPIR-V; a Windows build of one project ships Direct3D 12 bytecode alone. Build with -p:PuckShaderSpirvEnabled=true (or build the solution) to run on Vulkan.]");
+
+    return 1;
+}
 if (hostSettings.BackendDowngraded) {
     Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }

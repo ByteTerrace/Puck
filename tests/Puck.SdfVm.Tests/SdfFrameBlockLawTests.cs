@@ -40,14 +40,17 @@ public sealed class SdfFrameBlockLawTests {
         Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesScreens = 16u;");
     }
 
-    // The values the writer leaves as their zero default on every frame: the extent, which the node writes, and the view
-    // base, since each instance renders its one view at row zero.
+    // The values the writer leaves as their zero default on every frame: the extent, which the node writes, the view
+    // base, since each instance renders its one view at row zero, and the mesh path's values, which the pass recorder
+    // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
         SdfWorldPackage.LightSlice, SdfWorldPackage.LightMapCount, SdfWorldPackage.LightMaps, SdfWorldPackage.LightSweepRadius,
         SdfWorldPackage.IndirectAllocation, SdfWorldPackage.IndirectCertificateRevision, SdfWorldPackage.IndirectEpoch,
         SdfWorldPackage.IndirectFrame, SdfWorldPackage.IndirectNearEnabled, SdfWorldPackage.IndirectPickPixel,
         SdfWorldPackage.IndirectPreviousPublication, SdfWorldPackage.IndirectReadGeneration, SdfWorldPackage.IndirectReadPublication,
-        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers];
+        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers, SdfWorldPackage.RenderPath,
+        SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters,
+        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.

@@ -1,0 +1,5 @@
+# MSBuild reads this file for every build whose entry project lies under tests/ (`dotnet build` or `dotnet test` of one
+# suite), and passes its switches as global properties to that project and every project it references. The suites read
+# and edit SPIR-V (binding reflection, reload refusals), so a suite's build plans SPIR-V on Windows too, as a solution
+# build does (build/Shaders.targets).
+-p:PuckShaderSpirvEnabled=true

@@ -22,7 +22,8 @@ public sealed class SdfKernelSetLawTests {
         "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
         "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission",
         "sdf-indirect-classify", "sdf-indirect-trace", "sdf-indirect-shade", "sdf-light-primary", "sdf-light-depth",
-        "sdf-world-receiver", "sdf-world-receiver-comparison",
+        "sdf-world-receiver", "sdf-world-receiver-comparison", "sdf-world-mesh-surface", "sdf-mesh-bake-mask", "sdf-mesh-bake",
+        "sdf-world-views-mesh",
     ];
 
     private static WorkCounterSet Work() =>
