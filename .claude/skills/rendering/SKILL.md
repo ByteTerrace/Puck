@@ -205,6 +205,20 @@ owns the explanation.
   (`SdfMeshRegion.WriteDraws`). Repacking the whole million-triangle region for
   moved matrices cost the debug world 11 ms of frame thread a frame. A new
   per-draw field belongs in the record, never in the mesh section.
+- **Indirect light is the irradiance volume, never the cache.** A residency
+  whose first view takes the path (`SdfWorldResidency.UsesMeshPath`) keeps
+  `IndirectTier` at Off, and the World composes no cache instance for it
+  (`WorldViewGraphHost.Indirect.cs`); `RequestedIndirectTier` drives
+  `SdfMeshIrradiance`, staged before the upload into the staged World table
+  `sdfMeshIrradiance` and described by the pass-block values
+  `meshIrradianceVolume` and `meshIrradianceLow`. The probe layout, key,
+  toroidal slot, normal bias and probe weights are a sync pair between
+  `SdfMeshIrradiance` (its CPU feedback read included) and
+  `shade/sdf-mesh-irradiance.hlsli`, which only the mesh views kernel compiles.
+  The trace reads static mesh draws through `SdfMeshIrradianceScene`; never
+  route it through the field interpreter. The
+  [handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
+  owns the technique and its limits.
 
 ## Performance and cost
 

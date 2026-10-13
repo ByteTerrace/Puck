@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/3115bec911775deb55f786ed7f752f074aaf555828e5bfe40dbc3a9c54050dd4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/4b97b5ef7e862fdf46ae0f96e5e04c88941af53db8b0730a61fb20f3dd732f65). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -118,28 +118,29 @@ struct SdfSkyFrame {
 [[vk::binding(10, 1)]] StructuredBuffer<float4> sdfVolumes : register(t10, space1);
 [[vk::binding(11, 1)]] StructuredBuffer<uint> sdfMeshRegion : register(t11, space1);
 [[vk::binding(12, 1)]] StructuredBuffer<float4> sdfMeshBakePoints : register(t12, space1);
-[[vk::binding(13, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t13, space1);
-[[vk::binding(14, 1)]] SamplerState samplers[2] : register(s14, space1);
-[[vk::binding(16, 1)]] Texture2D<float4> sdfMeshAlbedo : register(t16, space1);
-[[vk::binding(17, 1)]] Texture2D<float4> sdfMeshNormals : register(t17, space1);
-[[vk::binding(18, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t18, space1);
-[[vk::binding(19, 1)]] Texture2D<float4> sdfMeshMaterials : register(t19, space1);
-[[vk::binding(20, 1)]] Texture2D<float4> sdfMeshEmission : register(t20, space1);
-[[vk::binding(21, 1)]] Texture2D<float4> sdfImpostorAlbedo : register(t21, space1);
-[[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorNormals : register(t22, space1);
-[[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorDepth : register(t23, space1);
-[[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t24, space1);
-[[vk::binding(25, 1)]] Texture2D<float4> sdfImpostorEmission : register(t25, space1);
-[[vk::binding(26, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b : register(t26, space1);
+[[vk::binding(13, 1)]] StructuredBuffer<uint> sdfMeshIrradiance : register(t13, space1);
+[[vk::binding(14, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t14, space1);
+[[vk::binding(15, 1)]] SamplerState samplers[2] : register(s15, space1);
+[[vk::binding(17, 1)]] Texture2D<float4> sdfMeshAlbedo : register(t17, space1);
+[[vk::binding(18, 1)]] Texture2D<float4> sdfMeshNormals : register(t18, space1);
+[[vk::binding(19, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t19, space1);
+[[vk::binding(20, 1)]] Texture2D<float4> sdfMeshMaterials : register(t20, space1);
+[[vk::binding(21, 1)]] Texture2D<float4> sdfMeshEmission : register(t21, space1);
+[[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorAlbedo : register(t22, space1);
+[[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorNormals : register(t23, space1);
+[[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorDepth : register(t24, space1);
+[[vk::binding(25, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t25, space1);
+[[vk::binding(26, 1)]] Texture2D<float4> sdfImpostorEmission : register(t26, space1);
+[[vk::binding(27, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b : register(t27, space1);
 #define sdfLights sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b
-[[vk::binding(27, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t27, space1);
+[[vk::binding(28, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t28, space1);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
-[[vk::binding(28, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t28, space1);
+[[vk::binding(29, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t29, space1);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
-[[vk::binding(29, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t29, space1);
-[[vk::binding(30, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t30, space1);
+[[vk::binding(30, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t30, space1);
+[[vk::binding(31, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t31, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
-[[vk::binding(31, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t31, space1);
+[[vk::binding(32, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t32, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfSkyPass {
@@ -211,51 +212,53 @@ struct SdfSkyPass {
     [[vk::offset(2468)]] uint _pad2468;
     [[vk::offset(2472)]] uint _pad2472;
     [[vk::offset(2476)]] uint _pad2476;
-    [[vk::offset(2480)]] float4 meshShadowCascades[12];
-    [[vk::offset(2672)]] uint meshShadowCount;
-    [[vk::offset(2676)]] uint _pad2676;
-    [[vk::offset(2680)]] uint _pad2680;
-    [[vk::offset(2684)]] uint _pad2684;
-    [[vk::offset(2688)]] float4 meshShadowParameters;
-    [[vk::offset(2704)]] float nearDistance;
+    [[vk::offset(2480)]] int4 meshIrradianceLow;
+    [[vk::offset(2496)]] uint4 meshIrradianceVolume;
+    [[vk::offset(2512)]] float4 meshShadowCascades[12];
+    [[vk::offset(2704)]] uint meshShadowCount;
     [[vk::offset(2708)]] uint _pad2708;
     [[vk::offset(2712)]] uint _pad2712;
     [[vk::offset(2716)]] uint _pad2716;
-    [[vk::offset(2720)]] float4 previousView[6];
-    [[vk::offset(2816)]] uint renderPath;
-    [[vk::offset(2820)]] uint resolvedSurface;
-    [[vk::offset(2824)]] uint screenCount;
-    [[vk::offset(2828)]] uint shadowAmortize;
-    [[vk::offset(2832)]] float shadowDistanceScale;
-    [[vk::offset(2836)]] uint shadowFadeCount;
-    [[vk::offset(2840)]] uint shadowLightReject;
-    [[vk::offset(2844)]] uint shadowOwnershipReject;
-    [[vk::offset(2848)]] uint shadowSlotCount;
-    [[vk::offset(2852)]] uint _pad2852;
-    [[vk::offset(2856)]] uint _pad2856;
-    [[vk::offset(2860)]] uint _pad2860;
-    [[vk::offset(2864)]] int4 shadowSlots;
-    [[vk::offset(2880)]] uint2 skyFieldExtent;
+    [[vk::offset(2720)]] float4 meshShadowParameters;
+    [[vk::offset(2736)]] float nearDistance;
+    [[vk::offset(2740)]] uint _pad2740;
+    [[vk::offset(2744)]] uint _pad2744;
+    [[vk::offset(2748)]] uint _pad2748;
+    [[vk::offset(2752)]] float4 previousView[6];
+    [[vk::offset(2848)]] uint renderPath;
+    [[vk::offset(2852)]] uint resolvedSurface;
+    [[vk::offset(2856)]] uint screenCount;
+    [[vk::offset(2860)]] uint shadowAmortize;
+    [[vk::offset(2864)]] float shadowDistanceScale;
+    [[vk::offset(2868)]] uint shadowFadeCount;
+    [[vk::offset(2872)]] uint shadowLightReject;
+    [[vk::offset(2876)]] uint shadowOwnershipReject;
+    [[vk::offset(2880)]] uint shadowSlotCount;
+    [[vk::offset(2884)]] uint _pad2884;
     [[vk::offset(2888)]] uint _pad2888;
     [[vk::offset(2892)]] uint _pad2892;
-    [[vk::offset(2896)]] float4 skyViews[40];
-    [[vk::offset(3536)]] float tanHalfFieldOfView;
-    [[vk::offset(3540)]] uint temporal;
-    [[vk::offset(3544)]] uint2 tileGrid;
-    [[vk::offset(3552)]] uint viewBase;
-    [[vk::offset(3556)]] uint _pad3556;
-    [[vk::offset(3560)]] uint _pad3560;
-    [[vk::offset(3564)]] uint _pad3564;
-    [[vk::offset(3568)]] float3 viewForward;
-    [[vk::offset(3580)]] uint _pad3580;
-    [[vk::offset(3584)]] float3 viewPosition;
+    [[vk::offset(2896)]] int4 shadowSlots;
+    [[vk::offset(2912)]] uint2 skyFieldExtent;
+    [[vk::offset(2920)]] uint _pad2920;
+    [[vk::offset(2924)]] uint _pad2924;
+    [[vk::offset(2928)]] float4 skyViews[40];
+    [[vk::offset(3568)]] float tanHalfFieldOfView;
+    [[vk::offset(3572)]] uint temporal;
+    [[vk::offset(3576)]] uint2 tileGrid;
+    [[vk::offset(3584)]] uint viewBase;
+    [[vk::offset(3588)]] uint _pad3588;
+    [[vk::offset(3592)]] uint _pad3592;
     [[vk::offset(3596)]] uint _pad3596;
-    [[vk::offset(3600)]] float3 viewRight;
+    [[vk::offset(3600)]] float3 viewForward;
     [[vk::offset(3612)]] uint _pad3612;
-    [[vk::offset(3616)]] float3 viewUp;
-    [[vk::offset(3628)]] uint viewportCount;
-    [[vk::offset(3632)]] uint workCounterRow;
-    [[vk::offset(3636)]] uint workCounterRowDetail;
+    [[vk::offset(3616)]] float3 viewPosition;
+    [[vk::offset(3628)]] uint _pad3628;
+    [[vk::offset(3632)]] float3 viewRight;
+    [[vk::offset(3644)]] uint _pad3644;
+    [[vk::offset(3648)]] float3 viewUp;
+    [[vk::offset(3660)]] uint viewportCount;
+    [[vk::offset(3664)]] uint workCounterRow;
+    [[vk::offset(3668)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa70CA0752 : register(b0, space3);
 #define passGroup passGroupIsa70CA0752

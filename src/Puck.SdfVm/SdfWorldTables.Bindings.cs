@@ -76,6 +76,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_meshBakePointRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshBakePoints, set: set);
+        WriteWorldBuffer(buffer: m_meshIrradianceRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldPackage.BrickPool, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 

@@ -779,6 +779,12 @@ and the parts that run change their kernels:
   interpreter; it shades the records as it shades any mesh pixel, and the pass
   block's `renderPath` lets it read a mesh pixel's K row and frame slot. The
   resolve, the sky and the composite are the interpreter path's.
+- **Indirect light.** The indirect cache walks the field, so the mesh path runs
+  none: a residency whose first view takes the path keeps its cache tier at Off
+  (`SdfWorldResidency.IndirectTier`), and the World composes no cache instance
+  for it. Its views read the irradiance volume instead
+  ([the mesh path's irradiance volume](lighting-and-shading.md#the-mesh-paths-irradiance-volume)),
+  at the tier `world.indirect` and the quality preset ask for.
 
 The cascade targets carry the mesh target's four floats a texel, which reuses
 the mesh pipeline at 16 bytes a texel more than a depth-only pipeline needs.

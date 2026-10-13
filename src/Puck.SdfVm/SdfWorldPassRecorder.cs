@@ -534,6 +534,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         SdfFrameBlock.WriteRenderPath(block: recording.PassBlock, mesh: m_meshPath);
+        SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: (m_meshPath ? residency.MeshIrradianceParameters : default));
 
         if (m_meshPath) {
             var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);

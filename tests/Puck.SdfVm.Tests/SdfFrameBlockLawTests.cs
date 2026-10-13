@@ -47,7 +47,10 @@ public sealed class SdfFrameBlockLawTests {
         SdfWorldPackage.IndirectAllocation, SdfWorldPackage.IndirectCertificateRevision, SdfWorldPackage.IndirectEpoch,
         SdfWorldPackage.IndirectFrame, SdfWorldPackage.IndirectNearEnabled, SdfWorldPackage.IndirectPickPixel,
         SdfWorldPackage.IndirectPreviousPublication, SdfWorldPackage.IndirectReadGeneration, SdfWorldPackage.IndirectReadPublication,
-        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers];
+        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers,
+        // The mesh path's values, which its recorder writes after the view's writer.
+        SdfWorldPackage.RenderPath, SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters,
+        SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.

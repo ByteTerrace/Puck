@@ -18,8 +18,12 @@ public sealed partial class SdfWorldResidency {
     public IWorkCounterSource IndirectWork => m_indirectWork;
     /// <summary>Gets or sets the host lever applied to this residency, including nested views.</summary>
     public SdfIndirectTier? IndirectTierOverride { get; set; }
-    /// <summary>Gets the effective cache tier: Off while the frame's field is refused (<see cref="IndirectRefusal"/>).</summary>
-    public SdfIndirectTier IndirectTier => ((m_indirectRefusal is null) ? (IndirectTierOverride ?? (m_frame?.IndirectTier ?? SdfIndirectTier.Off)) : SdfIndirectTier.Off);
+    /// <summary>Gets the effective cache tier: Off while the frame's field is refused (<see cref="IndirectRefusal"/>), and
+    /// Off on the baked-mesh path, whose views read the irradiance volume (<see cref="MeshIrradiance"/>) at
+    /// <see cref="RequestedIndirectTier"/> instead.</summary>
+    public SdfIndirectTier IndirectTier => (((m_indirectRefusal is null) && !TakesMeshPath(frame: m_frame)) ? RequestedIndirectTier : SdfIndirectTier.Off);
+    /// <summary>Gets the tier the host lever or the frame asks for, before refusal and the render path.</summary>
+    public SdfIndirectTier RequestedIndirectTier => (IndirectTierOverride ?? (m_frame?.IndirectTier ?? SdfIndirectTier.Off));
     /// <summary>Gets why the requested tier cannot run against the current field, or null. A single field query or an
     /// indivisible unit of indirect work that exceeds one submission's cost cap retires the cache: the program renders
     /// without indirect lighting and nothing waits for an indirect solve. Every other over-budget item is split into

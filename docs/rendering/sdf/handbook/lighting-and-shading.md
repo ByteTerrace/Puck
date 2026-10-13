@@ -835,6 +835,57 @@ qualify the comparison methods, standing receiver work, Near images, sealed
 rooms or portal transport. The rendering plan names those remaining checks
 and the separate floor-device qualification.
 
+## The mesh path's irradiance volume
+
+The [baked-mesh path](frame-rendering.md#the-baked-mesh-path) walks no field in
+the frame, so it cannot run the cache above. Its indirect light is an
+irradiance volume baked on the CPU from the meshes the frame already draws
+(`SdfMeshIrradiance`, one per residency), because worlds are mostly static and
+their evaluation belongs at edit time rather than in the frame.
+
+- **Probes.** A probe sits at the centre of a world cell: 1 m apart in a
+  48×16×48 volume at High (128 rays a probe, two bounces), 2 m apart in a
+  32×12×32 volume at Medium (96 rays, one bounce). The volume follows the first
+  view's camera and is toroidal: a cell's probe lives in the slot its
+  coordinates name modulo the volume's size, keyed by the cell, so a camera move
+  rewrites only the slots of the cells it brings in, and views reject a slot
+  holding another cell's probe.
+- **The trace.** `SdfMeshIrradianceScene` gathers every static mesh draw (not
+  dynamic, not an impostor card) into a bounding volume hierarchy on the thread
+  pool, once the mesh bake has settled. Probes trace on the pool, nearest the
+  camera first, every probe's first sweep before any second. A probe stores two
+  ambient cubes, one value per axis direction: the share of cosine-weighted sky
+  its rays reach, and the cosine-weighted mean radiance the static geometry
+  sends it. A hit's radiance follows the cache's hit shading: each directional
+  light under a traced shadow ray, scaled by its `bounce`, its emission, and,
+  from the second sweep, the light it reflects from the probes about it, its
+  sky included, which is the cache's Feedback source. The sources mask and
+  gains of `render.indirect.sources` apply as they do to the cache. A probe
+  whose rays mostly meet back faces lies inside geometry and is never read.
+- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`, compiled only into
+  the mesh path's views kernel) read the eight probes about the shaded point,
+  pushed 0.35 of a cell along its normal, weighted trilinearly and by how far
+  each lies in front of the surface. The sky term is the live sky's irradiance
+  over π under the volume's sky visibility, the unit the cache's bank holds, so
+  the sky can change without a retrace; the reflected term adds as stored. The
+  sum replaces the harmonic sky ambient and the authored fill exactly as the
+  cache's answer does, under the same `apply` intensity, tint and contact.
+  Across the volume's last cell the light fades to the open sky.
+- **What an edit costs.** Probes are cached by cell, so a static world traces
+  each cell once per lighting, and a camera returning to a place reads its
+  cached probes at once. A change of the static draws rebuilds the scene and
+  retraces every probe; a change of a directional light, the gains, the
+  sources or the bounces retraces them over the same scene. Old probes keep
+  drawing until new ones land. On the debug world the scene is 7 draws and
+  about 25,000 triangles, built in about 0.02 s, and the High volume's three
+  sweeps (36,864 probes, 14.2 million rays) take about 5 s on four threads of
+  the i5-8400.
+- **Limits.** Moving bodies receive the volume's light and cast none into it.
+  Point lights and screens contribute no bounced light. The sky's bounced share
+  is captured when a generation of probes traces, so drifting clouds change
+  only the direct sky term. Leaks are held back by the back-face weight and the
+  inside-geometry test alone; there is no per-probe visibility.
+
 ## Ambient occlusion: three taps into the ambient fill
 
 Puck's AO is the classic normal-ladder technique: from the hit, step fixed

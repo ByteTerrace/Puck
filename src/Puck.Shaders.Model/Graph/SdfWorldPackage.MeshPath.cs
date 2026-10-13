@@ -47,6 +47,14 @@ public static partial class SdfWorldPackage {
     /// <summary>The mesh bake's point table, a World-group table of one float4 a point: the surface points a points lattice
     /// samples the field's material at.</summary>
     public const string MeshBakePoints = "sdfMeshBakePoints";
+    /// <summary>The mesh path's irradiance volume, a World-group table of uints: per probe slot its cell key and its sky
+    /// visibility and radiance ambient cubes as halves (<c>SdfMeshIrradiance</c> in <c>Puck.SdfVm</c>).</summary>
+    public const string MeshIrradiance = "sdfMeshIrradiance";
+    /// <summary>The pass-block value describing the irradiance volume views read: x whether views read it, y the probe
+    /// spacing in metres as bits, z the probes along each axis packed ten bits each, x lowest (<c>uint4</c>).</summary>
+    public const string MeshIrradianceVolume = "meshIrradianceVolume";
+    /// <summary>The pass-block value holding the irradiance volume's first cell (<c>int4</c>, w unused).</summary>
+    public const string MeshIrradianceLow = "meshIrradianceLow";
     /// <summary>The second shadow slot's cascade target, sampled by the mesh path's surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
     /// <summary>The shadow cascades the mesh path renders: the key light's near and far cascades, then the second shadow

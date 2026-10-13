@@ -9,6 +9,8 @@ public sealed partial class WorldViewGraphHost {
     private readonly Dictionary<string, SdfWorldResidency> m_indirectResidencies = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, SdfWorldResidency?> m_indirectViews = new(comparer: StringComparer.Ordinal);
 
+    private readonly HashSet<SdfWorldResidency> m_indirectMeshPaths = new(comparer: ReferenceEqualityComparer.Instance);
+
     private SdfIndirectTier m_lastIndirectTier;
 
     /// <summary>The indirect package recorder sharing this host's view resolution.</summary>
@@ -26,6 +28,7 @@ public sealed partial class WorldViewGraphHost {
         }
         m_indirectResidencies.Clear();
         m_indirectViews.Clear();
+        m_indirectMeshPaths.Clear();
         m_lastIndirectTier = SdfIndirectTier.Off;
     }
     private bool IndirectChanged() {
@@ -35,6 +38,7 @@ public sealed partial class WorldViewGraphHost {
         if ((tier == SdfIndirectTier.Off) || (Pickers is null)) { return false; }
         foreach (var pair in m_indirectViews) {
             if (!ReferenceEquals(objA: pair.Value, objB: Pickers.ViewOf(instance: pair.Key)?.Residency)) { return true; }
+            if ((pair.Value is { } residency) && (residency.UsesMeshPath != m_indirectMeshPaths.Contains(item: residency))) { return true; }
         }
         return false;
     }
@@ -45,6 +49,7 @@ public sealed partial class WorldViewGraphHost {
         var cacheByView = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         m_indirectViews.Clear();
+        m_indirectMeshPaths.Clear();
         foreach (var instance in set.Instances) {
             if (instance.ExternalPackage != RenderGraphPackageCatalog.SdfWorld) { continue; }
             var resolved = Pickers.ViewOf(instance: instance.Name)?.Residency;
@@ -53,6 +58,11 @@ public sealed partial class WorldViewGraphHost {
             if (resolved is not { } residency) { continue; }
             residency.IndirectTierOverride = tier;
             if (tier == SdfIndirectTier.Off) { continue; }
+            // A residency on the baked-mesh path lights its views from its irradiance volume and runs no cache.
+            if (residency.UsesMeshPath) {
+                _ = m_indirectMeshPaths.Add(item: residency);
+                continue;
+            }
             var cache = residency.IndirectInstanceName;
 
             cacheByView.Add(key: instance.Name, value: cache);

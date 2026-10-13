@@ -88,6 +88,25 @@ public static partial class SdfFrameBlock {
         }
     }
 
+    /// <summary>Writes the irradiance volume the mesh path's views pass reads (<see cref="SdfMeshIrradiance"/>); a disabled
+    /// volume writes zeros, and views then light as without indirect light.</summary>
+    /// <param name="block">The pass block <see cref="Write"/> filled.</param>
+    /// <param name="volume">The volume's parameters.</param>
+    public static void WriteMeshIrradiance(Span<byte> block, in SdfMeshIrradianceParameters volume) {
+        var offset = Offset(member: SdfWorldPackage.MeshIrradianceVolume);
+        var low = Offset(member: SdfWorldPackage.MeshIrradianceLow);
+        var dims = (volume.Enabled ? (((uint)volume.Dims.X) | (((uint)volume.Dims.Y) << 10) | (((uint)volume.Dims.Z) << 20)) : 0u);
+
+        WriteUInt32(block: block, offset: offset, value: (volume.Enabled ? 1u : 0u));
+        WriteSingle(block: block, offset: (offset + sizeof(uint)), value: (volume.Enabled ? volume.Spacing : 0f));
+        WriteUInt32(block: block, offset: (offset + (2 * sizeof(uint))), value: dims);
+        WriteUInt32(block: block, offset: (offset + (3 * sizeof(uint))), value: 0u);
+        WriteUInt32(block: block, offset: low, value: unchecked((uint)volume.Low.X));
+        WriteUInt32(block: block, offset: (low + sizeof(uint)), value: unchecked((uint)volume.Low.Y));
+        WriteUInt32(block: block, offset: (low + (2 * sizeof(uint))), value: unchecked((uint)volume.Low.Z));
+        WriteUInt32(block: block, offset: (low + (3 * sizeof(uint))), value: 0u);
+    }
+
     private static void WriteRow(Span<byte> block, int offset, Vector3 value, float w) {
         WriteVector3(block: block, offset: offset, value: value);
         WriteSingle(block: block, offset: (offset + (3 * sizeof(float))), value: w);

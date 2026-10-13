@@ -376,6 +376,8 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshBakeBatch * MeshBakeLatticeRows), name: MeshBakeLattices, type: ShaderValueType.Float4),
         Value(name: MeshBakeCount, type: ShaderValueType.Uint),
+        Value(name: MeshIrradianceVolume, type: ShaderValueType.Uint4),
+        Value(name: MeshIrradianceLow, type: ShaderValueType.Int4),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];
@@ -397,6 +399,7 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Float4, name: Volumes),
         Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Float4, name: MeshBakePoints),
+        Table(element: ShaderValueType.Uint, name: MeshIrradiance),
         WorldImage(name: GlyphAtlas),
         ShaderInterfaceMember.Sampler(
             group: ShaderInterfaceGroup.World,

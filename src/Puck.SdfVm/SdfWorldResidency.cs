@@ -516,6 +516,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The mesh path's bake takes its batch before the upload, which carries the batch's surface points.
         if ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
             MeshPathBake.Stage(frame: PackageFrame, tables: tables);
+            MeshIrradianceParameters = MeshIrradiance.Stage(frame: meshFrame, tables: tables, tier: RequestedIndirectTier, bakePending: MeshPathBake.Pending);
+        } else {
+            MeshIrradianceParameters = default;
         }
 
         tables.UpdateTablesSignature();
@@ -542,7 +545,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool IsUnchanged(in FrameContext context, int view) {
         if (
             !Prepare(context: in context) ||
-            ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh) && MeshPathBake.Pending) ||
+            ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh) && (MeshPathBake.Pending || MeshIrradiance.Settling)) ||
             (m_frame is not { } frame) ||
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||
@@ -699,6 +702,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the baked-mesh path's bake of the residency's program, which draws while its first view takes that
     /// path.</summary>
     public SdfMeshPathBake MeshPathBake { get; } = new();
+    /// <summary>Gets the baked-mesh path's indirect lighting, the irradiance volume its views read while the first view
+    /// takes that path and asks for indirect light.</summary>
+    public SdfMeshIrradiance MeshIrradiance { get; } = new();
+    /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled off the mesh path or with
+    /// indirect light off.</summary>
+    public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
+    /// <summary>Gets whether the latest captured frame's first view takes the baked-mesh path, where no view walks the field
+    /// and the irradiance volume (<see cref="MeshIrradiance"/>) stands in for the indirect cache, which would.</summary>
+    public bool UsesMeshPath => TakesMeshPath(frame: m_frame);
+    private static bool TakesMeshPath(SdfFrame? frame) => (frame is { Views.Count: > 0 } && (frame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh));
 
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
