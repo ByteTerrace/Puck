@@ -928,7 +928,7 @@ host {
   presentMode: Vsync
   presentation: Windowed
   surfaceFormat: r8g8b8a8
-  targetHertz: 0
+  targetHertz: 60
   width: 1280
 }
 
