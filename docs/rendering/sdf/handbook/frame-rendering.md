@@ -728,10 +728,14 @@ and the parts that run change their kernels:
   words, and the bake pass runs `sdf-mesh-bake`, which samples up to sixteen
   lattices a frame through the frame's own interpreter, one call site, with only
   the group's instances in the walk (`sdfMapOmitWorldSegments` drops the
-  unowned segments from it). A group refines from a coarse lattice over its
-  bounding sphere to the box its surface can cross, then samples a final lattice
-  of at most 65 samples a side, no finer than 1.5 cm, with gradients. The
-  samples are read back and contoured on the thread pool by
+  unowned segments from it). A frame's lattices stay within its share of field
+  evaluations (`SdfMeshPathBake.FrameTaps`, a gradient sample counting five), so
+  a frame that bakes keeps its budget. A group refines from a coarse lattice
+  over its bounding sphere to the box its surface can cross, then samples a
+  final lattice of at most 65 samples a side, no finer than 1.5 cm, in slabs of
+  whole planes, values alone; it then measures gradients only at the corners of
+  the cells whose corners disagree in sign, the only samples the contour reads
+  one at. The samples are read back and contoured on the thread pool by
   `SdfSampledLattice`, the prototype baker's dual contouring
   (`SdfDualContouring`) over a lattice whose spacing may differ per axis. A
   sample whose material no shape of the group carries reads as outside, since
@@ -748,11 +752,13 @@ and the parts that run change their kernels:
   slot's live transform, and its draw names that slot (`SdfMeshDraw.FrameSlot`,
   the draw record's word 41), which the surface pass writes into the L row so
   views places material layers in the body's frame and reads its lanes; a
-  static group's mesh is in world space. A frame whose bodies moved draws the
-  same meshes at new matrices, so the mesh region repacks only its draw records
-  (`SdfMeshRegion.WriteDraws`); the vertices, triangle materials and indices are
-  written again only when the meshes the draws name, their places in the region
-  or the mesh atlases change, as when a group's mesh lands. The bake keeps a
+  static group's mesh is in world space. The tables keep each mesh at the words
+  it was first placed at (`SdfMeshRegionArena`: a reserve of draw records, then
+  each mesh whole), so a frame whose bodies moved packs only its draw records
+  (`SdfMeshRegion.WriteDraws`), and a frame where a group's mesh lands writes the
+  records and that mesh alone. Every mesh is written again only when the arena
+  outgrows its draw reserve or packs out its holes, the mesh atlases change, or
+  the region grows, to twice its need. The bake keeps a
   group whose instructions a program rebuild left unchanged, so only an edited
   group bakes again, and it reports its groups, dispatches, samples, triangles,
   vertices and wall time on stderr when it finishes.
