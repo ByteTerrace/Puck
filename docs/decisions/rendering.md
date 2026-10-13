@@ -26,11 +26,13 @@ Worlds are mostly static and sculpted in the editor, so evaluation belongs at
 edit time, as in the shipped SDF engines that hold 60 FPS on weaker hardware.
 SDF programs remain the authored representation, and the interpreter remains the
 evaluator for baking, CPU queries and the editor. The frame reads what a bake
-produced. Two bake targets are measured against each other on the debug world:
-a sparse distance volume marched by texture reads, and baked meshes rasterized
-with shadow maps. One passes when its whole frame holds 16.7 ms worst-case on
-the RTX 2060 at `high`, 1280×900. If both pass, the owner chooses by look.
-Interpreter tuning stops; the specialization plan is withdrawn.
+produced: baked meshes, rasterized with shadow maps. Two bake targets were
+built and measured on the debug world. The baked-mesh path drew it in about
+9 ms of GPU time with the geometry intact. A sparse distance volume marched by
+texture reads took about 10.6 ms, but lost the scene's materials and broke the
+avatar's composite. The frame-rate bar is still read on a quiet machine:
+the whole frame holds 16.7 ms worst-case on the RTX 2060 at `high`,
+1280×900. Interpreter tuning stops; the specialization plan is withdrawn.
 
 ## The pipeline foundation
 
