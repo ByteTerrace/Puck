@@ -84,7 +84,8 @@ SdfViewsFieldReads sdfViewsFieldReads(SdfPixel p, SdfSurfaceSample s, bool shade
             if (!probesPlanned) {
                 // The probes the shading material asks for, decided once the detail re-resolve has its material.
                 probesPlanned = true;
-                if (shaded) {
+                // The mesh path reads no field in the frame: a mesh pixel's material shades without its probes.
+                if (shaded && !(s.mesh && (passGroup.renderPath != 0u))) {
                     SdfMaterialData probed = sdfMaterialLoad(reads.material);
                     reads.weatheringCurvature = ((probed.weathering.x > 0.0) && !curvatureShading);
                     reads.softens = !(probed.soften <= 0.0);

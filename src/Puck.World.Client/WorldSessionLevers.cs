@@ -55,6 +55,9 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
+    /// <summary>The render path of the world's own views (<c>world.render-path</c>), the <see cref="Puck.SdfVm.SdfRenderPath"/>
+    /// value in its first argument.</summary>
+    public const string RenderPath = "render-path";
     /// <summary>Secondary shadow history reuse (<c>world.shadow-amortize</c>).</summary>
     public const string ShadowAmortize = "shadow-amortize";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
@@ -143,6 +146,7 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
+        sink.Register(name: RenderPath, setter: lever => settings.RenderPath = ((Puck.SdfVm.SdfRenderPath)((int)lever.A)));
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
                 Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");

@@ -116,6 +116,10 @@ public readonly record struct SdfViewQuality {
     /// <summary>Gets whether secondary stable shadow slots reuse valid history between quarter-grid marches.
     /// Requires temporal reconstruction; slot zero and handoffs always march.</summary>
     public bool ShadowAmortize { get; init; }
+    /// <summary>Gets how the view turns its program into pixels: the interpreter, which marches the program per pixel,
+    /// or the baked-mesh path, which rasterizes the meshes its residency baked from the program
+    /// (<see cref="SdfMeshPathBake"/>). The path chooses the view's fragment, as <see cref="Temporal"/> does.</summary>
+    public SdfRenderPath RenderPath { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
     /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
@@ -138,7 +142,17 @@ public readonly record struct SdfViewQuality {
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
         Temporal = (Temporal && other.Temporal),
         ShadowAmortize = (ShadowAmortize && other.ShadowAmortize),
+        RenderPath = RenderPath,
     };
+}
+/// <summary>How a view turns its residency's program into pixels.</summary>
+public enum SdfRenderPath {
+    /// <summary>The interpreter marches the program per pixel: primary, surface, ambient occlusion and soft shadows each
+    /// walk the field.</summary>
+    Interpreter = 0,
+    /// <summary>The baked-mesh path rasterizes the meshes the residency baked from the program, shadows them with
+    /// rasterized cascades and occludes them in screen space; no pass of the frame walks the field.</summary>
+    Mesh = 1,
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
 /// <param name="Program">The SDF program to render.</param>

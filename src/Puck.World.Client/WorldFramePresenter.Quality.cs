@@ -35,5 +35,6 @@ public sealed partial class WorldFramePresenter {
         }),
         Temporal = m_settings.Temporal,
         ShadowAmortize = m_settings.ShadowAmortize,
+        RenderPath = m_settings.RenderPath,
     };
 }

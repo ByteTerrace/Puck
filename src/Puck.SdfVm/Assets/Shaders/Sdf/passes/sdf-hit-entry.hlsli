@@ -35,6 +35,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfShadowStage(p);
 #elif defined(SDF_RECEIVER_PASS)
     sdfReceiverStage(p);
+#elif defined(SDF_MESH_SURFACE_PASS)
+    sdfMeshPathStage(p);
 #else
     float coverage;
     float reactivity;

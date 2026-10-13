@@ -704,6 +704,70 @@ checks flat colors and saturated edges. Disabling `sharpen` at full strength
 returns the source codes, making the sharpened-edge claims fail. Both canaries
 require a GPU and run in the merge selection on Vulkan and Direct3D 12.
 
+## The baked-mesh path
+
+A view whose quality names the baked-mesh path (`SdfViewQuality.RenderPath`,
+the `world.render-path mesh` session lever in `Puck.World`) renders without
+walking the field in the frame. It runs its interpreter fragment's mesh-path
+form (`SdfWorldPackage.MeshPathFragmentOf`), which adds a bake pass and two
+shadow-cascade raster passes and keeps everything else:
+
+```text
+   upload → mask → bake → cull-args → shadow-near → shadow-far → mesh → primary → views → resolve → sky → composite
+```
+
+On this path the beam, tape, surface, ambient, shadow and receiver passes skip,
+and the parts that run change their kernels:
+
+- **The bake.** `SdfMeshPathBake`, one per residency, bakes the residency's
+  program into meshes while a bake is pending, and the mask and bake passes run
+  only then. A group is the instances one rigid frame moves: every active
+  instance riding one dynamic-transform slot, or one static instance; the
+  segments no instance owns form one more group. The mask pass runs
+  `sdf-mesh-bake-mask`, which writes each group's selection into a tile's mask
+  words, and the bake pass runs `sdf-mesh-bake`, which samples up to sixteen
+  lattices a frame through the frame's own interpreter, one call site, with only
+  the group's instances in the walk (`sdfMapOmitWorldSegments` drops the
+  unowned segments from it). A group refines from a coarse lattice over its
+  bounding sphere to the box its surface can cross, then samples a final lattice
+  of at most 65 samples a side, no finer than 1.5 cm, with gradients. The
+  samples are read back and contoured on the thread pool by
+  `SdfSampledLattice`, the prototype baker's dual contouring
+  (`SdfDualContouring`) over a lattice whose spacing may differ per axis, each
+  quad taking the material of its edge's inside sample. A sample whose material
+  no shape of the group carries reads as outside, since the walk can answer with
+  a shape of another instance where compiled parts are shared. A dynamic
+  group's mesh is stored in its slot's frame at bake time and drawn at the
+  slot's live transform; a static group's is in world space. The bake keeps a
+  group whose instructions a program rebuild left unchanged, so only an edited
+  group bakes again, and it reports its groups, dispatches, samples, triangles,
+  vertices and wall time on stderr when it finishes.
+- **The shadow cascades.** `SdfMeshShadowCascades` fits two orthographic
+  cameras along the key light (the frame's first shadow slot): the near one
+  around the view frustum's first 16 metres, the far one to 120 metres or the
+  far distance, each a bounding sphere of its slice snapped to whole texels. The
+  `shadow-near` and `shadow-far` passes draw every mesh draw from their camera
+  through the mesh pass's own pipeline, whose stages take their orthographic
+  form under a light slice, into 2048-texel targets of the mesh target's format.
+- **The surface pass.** Primary records `sdf-world-mesh-surface`, which calls
+  no field query and writes each pixel's whole visibility record from the mesh
+  target: the V, C and L rows primary writes for a mesh pixel, the N and S rows
+  surface writes, a screen-space ambient occlusion (twelve normal-oriented
+  hemisphere samples against the mesh target's ray distances) into S, and the
+  key light's visibility into K's first slot. The visibility is a
+  percentage-closer soft shadow from the first cascade holding the point: a
+  blocker search sizes the penumbra from the light's penumbra slope and the gap
+  to the blockers, and a filter of that width answers.
+- **Views and after.** Views shades the records as it shades any mesh pixel;
+  the pass block's `renderPath` lets it read a mesh pixel's K row and stops it
+  probing the field for a mesh pixel's material. The resolve, the sky and the
+  composite are the interpreter path's.
+
+Only the key light casts a shadow on this path: a second shadow slot reads as
+lit. The cascade targets carry the mesh target's four floats a texel, which
+reuses the mesh pipeline at 16 bytes a texel more than a depth-only pipeline
+needs.
+
 ## Frames in flight
 
 The host keeps producing frames while the GPU finishes earlier ones. Each

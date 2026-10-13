@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Baking;
 /// evaluated only when a sign-changing edge needs its value. Every coordinate is fixed point, so the lattice and every
 /// value read on it are the same on every machine.
 /// </summary>
-internal sealed class SdfBakeGrid {
+internal sealed class SdfBakeGrid : ISdfContourLattice {
     // The cells along each side of a culling block. A larger block proves less often; a smaller one pays more centers.
     private const int BlockCells = 4;
 
@@ -80,13 +80,39 @@ internal sealed class SdfBakeGrid {
     /// <summary>Returns whether a corner lies inside the surface, where the field is negative.</summary>
     public bool Inside(int corner) =>
         ((m_state[corner] & StateInside) != 0);
-    /// <summary>Returns a corner's field value, evaluating it on first use.</summary>
-    public long Value(int corner, int x, int y, int z) {
+    /// <summary>Returns a corner's field value in raw fixed-point units, evaluating it on first use.</summary>
+    public double Value(int corner, int x, int y, int z) {
         if ((m_state[corner] & StateEvaluated) == 0) {
             Evaluate(corner: corner, x: x, y: y, z: z);
         }
 
         return m_values[corner];
+    }
+    /// <inheritdoc/>
+    public int CellsX => Cells;
+    /// <inheritdoc/>
+    public int CellsY => Cells;
+    /// <inheritdoc/>
+    public int CellsZ => Cells;
+    /// <inheritdoc/>
+    public (double X, double Y, double Z)? CellExtent => null;
+    /// <summary>Returns the field's unit gradient at a world point by central differences a quarter cell wide.</summary>
+    public bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz) {
+        var epsilon = FixedQ4816.FromRawBits(value: Math.Max(
+            val1: 1L,
+            val2: (m_cell / 4L)
+        ));
+        var point = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
+
+        if (!m_field.TryNormal(epsilon: epsilon, normal: out var normal, point: point)) {
+            (nx, ny, nz) = (0.0, 0.0, 0.0);
+
+            return false;
+        }
+
+        (nx, ny, nz) = (((double)normal.X), ((double)normal.Y), ((double)normal.Z));
+
+        return true;
     }
     /// <summary>Returns the world-space position of a point in lattice coordinates.</summary>
     public (double X, double Y, double Z) World(double x, double y, double z) {

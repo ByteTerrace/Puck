@@ -1992,7 +1992,7 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.indirect`, `world.upscale-sharpness`, `world.sky-quality`, `world.sky-field-scale`,
+`world.temporal`, `world.render-path`, `world.indirect`, `world.upscale-sharpness`, `world.sky-quality`, `world.sky-field-scale`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.sky-layer`, `world.fps`. `world.quality low|medium|high` applies the

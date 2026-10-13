@@ -3,6 +3,8 @@
 #define FIELD_SDF_MAP_HLSLI
 // Only the primary whole-part traversal sets this. Other query paths keep the complete field.
 static bool sdfPrimaryOmitParts = false;
+// Only the mesh bake sets this, sampling one instance group's field without the segments no instance owns.
+static bool sdfMapOmitWorldSegments = false;
 #ifdef SDF_PRIMARY_PASS
 // The directory segments the primary traversal meets analytically (sdfAnalyticBox), which its partless march omits with
 // the parts. SDF_SEGMENT_NONE marks an empty slot.
@@ -173,7 +175,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #endif
 
     if (hasInstances) {
-        worldCount = SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset));
+        worldCount = (sdfMapOmitWorldSegments ? 0u : SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset)));
         worldNext = ((0u < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS).x : SDF_SEGMENT_NONE);
         sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
     }

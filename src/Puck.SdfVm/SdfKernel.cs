@@ -56,6 +56,13 @@ public enum SdfKernel {
     ScreenEmission,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,
+    /// <summary>The baked-mesh path's surface pass in place of primary, surface, ambient and shadow: the visibility record
+    /// from the mesh target, screen-space occlusion and the shadow cascades, with no field query.</summary>
+    MeshSurface,
+    /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
+    MeshBakeMask,
+    /// <summary>The mesh bake's field sampler over one group's lattice. Full instruction set.</summary>
+    MeshBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
 }

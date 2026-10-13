@@ -100,6 +100,9 @@ public sealed class SdfKernelSet {
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
         SdfKernel.BrickBake => "sdf-brick-bake",
+        SdfKernel.MeshSurface => "sdf-world-mesh-surface",
+        SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
+        SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };

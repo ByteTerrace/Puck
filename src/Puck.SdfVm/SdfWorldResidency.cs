@@ -537,6 +537,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool IsUnchanged(in FrameContext context, int view) {
         if (
             !Prepare(context: in context) ||
+            ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh) && MeshPathBake.Pending) ||
             (m_frame is not { } frame) ||
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||
@@ -690,6 +691,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_deviceContext = null;
     }
 
+    /// <summary>Gets the baked-mesh path's bake of the residency's program, which draws while its first view takes that
+    /// path.</summary>
+    public SdfMeshPathBake MeshPathBake { get; } = new();
+
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
@@ -751,6 +756,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
             deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
+
+        // A residency whose first view takes the baked-mesh path draws its program's baked meshes in every view.
+        if ((frame.Views.Count > 0) && (frame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
+            frame = MeshPathBake.Dress(frame: frame);
+        }
 
         m_frame = frame;
         m_pendingFrame = null;

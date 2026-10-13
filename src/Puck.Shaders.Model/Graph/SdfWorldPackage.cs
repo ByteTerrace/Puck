@@ -370,6 +370,12 @@ public static partial class SdfWorldPackage {
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
+        Value(name: RenderPath, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
+        Value(name: MeshShadowCount, type: ShaderValueType.Uint),
+        Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshBakeBatch * MeshBakeLatticeRows), name: MeshBakeLattices, type: ShaderValueType.Float4),
+        Value(name: MeshBakeCount, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];
@@ -454,6 +460,9 @@ public static partial class SdfWorldPackage {
             name: MeshVisibility,
             type: ShaderValueType.Float4
         ),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNear, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFar, type: ShaderValueType.Float4),
+        Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
         ShaderWorkCounters.BufferMember,
         .. Tables,
         .. IncomingMembers,

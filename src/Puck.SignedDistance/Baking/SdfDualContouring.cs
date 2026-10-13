@@ -1,5 +1,3 @@
-using Puck.Maths;
-
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
@@ -13,7 +11,25 @@ internal sealed class SdfSurface {
     public required double[] Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
     public required int[] Quads { get; init; }
+    // Per quad, the lattice corner at the inside end of the sign-changing edge the quad crosses.
+    public required int[] QuadCorners { get; init; }
     public int VertexCount => (Positions.Length / 3);
+}
+/// <summary>The sampled lattice a surface is contoured from (<see cref="SdfDualContouring"/>): cells along each axis, each
+/// corner's sign and value, and the field's normal at any point inside it. Values need only a consistent scale, since a
+/// crossing is the ratio of two of them.</summary>
+internal interface ISdfContourLattice {
+    int CellsX { get; }
+    int CellsY { get; }
+    int CellsZ { get; }
+    double CellSize { get; }
+    int Corner(int x, int y, int z);
+    bool Inside(int corner);
+    double Value(int corner, int x, int y, int z);
+    (double X, double Y, double Z) World(double x, double y, double z);
+    bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz);
+    // Each axis's cell size when they differ, or null for a cubic lattice, whose normals need no rescaling.
+    (double X, double Y, double Z)? CellExtent { get; }
 }
 /// <summary>
 /// Extracts a <see cref="SdfSurface"/> by manifold dual contouring: a vertex per surface patch of a cell, and one quad
@@ -52,23 +68,21 @@ internal static class SdfDualContouring {
         }
     }
 
-    public static SdfSurface Extract(SdfBakeField field, SdfBakeGrid grid) {
-        var cells = grid.Cells;
-        var cellCount = ((cells * cells) * cells);
+    public static SdfSurface Extract<TLattice>(TLattice grid) where TLattice : ISdfContourLattice {
+        var cellsX = grid.CellsX;
+        var cellsY = grid.CellsY;
+        var cellsZ = grid.CellsZ;
+        var cellCount = ((cellsX * cellsY) * cellsZ);
         var vertexOfPatch = new int[(cellCount * MaximumPatches)];
         var maskOfCell = new byte[cellCount];
         var positions = new List<double>();
         var normals = new List<double>();
-        var epsilon = FixedQ4816.FromRawBits(value: Math.Max(
-            val1: 1L,
-            val2: (grid.CellSizeFixed.Value / 4L)
-        ));
 
         Array.Fill(array: vertexOfPatch, value: -1);
 
-        for (var z = 0; (z < cells); z++) {
-            for (var y = 0; (y < cells); y++) {
-                for (var x = 0; (x < cells); x++) {
+        for (var z = 0; (z < cellsZ); z++) {
+            for (var y = 0; (y < cellsY); y++) {
+                for (var x = 0; (x < cellsX); x++) {
                     var mask = 0;
 
                     for (var offset = 0; (offset < 8); offset++) {
@@ -84,7 +98,7 @@ internal static class SdfDualContouring {
                         continue;
                     }
 
-                    var cell = (x + (cells * (y + (cells * z))));
+                    var cell = (x + (cellsX * (y + (cellsY * z))));
                     var patchOfEdge = PatchOfEdge[mask];
 
                     maskOfCell[cell] = ((byte)mask);
@@ -98,35 +112,33 @@ internal static class SdfDualContouring {
                             }
                         }
 
-                        var (px, py, pz) = Place(edges: edges, epsilon: epsilon, field: field, grid: grid, x: x, y: y, z: z);
+                        var (px, py, pz) = Place(edges: edges, grid: grid, x: x, y: y, z: z);
                         var (wx, wy, wz) = grid.World(x: (x + px), y: (y + py), z: (z + pz));
-                        var point = new FixedVector3(
-                            X: FixedQ4816.FromDouble(value: wx),
-                            Y: FixedQ4816.FromDouble(value: wy),
-                            Z: FixedQ4816.FromDouble(value: wz)
-                        );
 
-                        if (!field.TryNormal(epsilon: epsilon, normal: out var normal, point: point)) {
-                            normal = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+                        if (!grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: wx, y: wy, z: wz)) {
+                            (nx, ny, nz) = (0.0, 1.0, 0.0);
                         }
 
                         vertexOfPatch[((cell * MaximumPatches) + patch)] = (positions.Count / 3);
                         positions.Add(item: wx);
                         positions.Add(item: wy);
                         positions.Add(item: wz);
-                        normals.Add(item: ((double)normal.X));
-                        normals.Add(item: ((double)normal.Y));
-                        normals.Add(item: ((double)normal.Z));
+                        normals.Add(item: nx);
+                        normals.Add(item: ny);
+                        normals.Add(item: nz);
                     }
                 }
             }
         }
 
+        var (quads, quadCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
+
         return new SdfSurface {
             CellSize = grid.CellSize,
             Normals = [.. normals],
             Positions = [.. positions],
-            Quads = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch),
+            QuadCorners = quadCorners,
+            Quads = quads,
         };
     }
 
@@ -232,7 +244,7 @@ internal static class SdfDualContouring {
         return (patchOfEdge, patches);
     }
     // The crossing on a sign-changing edge, as a fraction of the edge from its first corner.
-    private static double Crossing(SdfBakeGrid grid, int x, int y, int z, int a, int b) {
+    private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b) where TLattice : ISdfContourLattice {
         var (ax, ay, az) = Offset(corner: a);
         var (bx, by, bz) = Offset(corner: b);
         var va = ((double)grid.Value(corner: grid.Corner(x: (x + ax), y: (y + ay), z: (z + az)), x: (x + ax), y: (y + ay), z: (z + az)));
@@ -243,7 +255,7 @@ internal static class SdfDualContouring {
             ? 0.5
             : Math.Clamp(max: 1.0, min: 0.0, value: (va / denominator)));
     }
-    private static (double X, double Y, double Z) Mean(SdfBakeGrid grid, int edges, int x, int y, int z) {
+    private static (double X, double Y, double Z) Mean<TLattice>(TLattice grid, int edges, int x, int y, int z) where TLattice : ISdfContourLattice {
         double sx = 0.0, sy = 0.0, sz = 0.0;
         var count = 0;
 
@@ -269,7 +281,7 @@ internal static class SdfDualContouring {
     // The vertex of the patch whose cube edges are `edges` (one bit an edge), in cell-local coordinates: the least-squares
     // point of the crossings' tangent planes, solved by Cramer's rule over the 3x3 normal equations with the mean-point
     // bias on the diagonal.
-    private static (double X, double Y, double Z) Place(SdfBakeField field, SdfBakeGrid grid, int edges, int x, int y, int z, FixedQ4816 epsilon) {
+    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z) where TLattice : ISdfContourLattice {
         var mean = Mean(edges: edges, grid: grid, x: x, y: y, z: z);
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
 
@@ -289,17 +301,23 @@ internal static class SdfDualContouring {
 
             var (wx, wy, wz) = grid.World(x: (x + px), y: (y + py), z: (z + pz));
 
-            if (!field.TryNormal(
-                epsilon: epsilon,
-                normal: out var normal,
-                point: new FixedVector3(X: FixedQ4816.FromDouble(value: wx), Y: FixedQ4816.FromDouble(value: wy), Z: FixedQ4816.FromDouble(value: wz))
-            )) {
+            if (!grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: wx, y: wy, z: wz)) {
                 continue;
             }
 
-            var nx = ((double)normal.X);
-            var ny = ((double)normal.Y);
-            var nz = ((double)normal.Z);
+            // The tangent planes are solved in cell coordinates: a world normal there is scaled by each axis's cell size.
+            if (grid.CellExtent is var (ex, ey, ez)) {
+                (nx, ny, nz) = ((nx * ex), (ny * ey), (nz * ez));
+
+                var length = Math.Sqrt(d: (((nx * nx) + (ny * ny)) + (nz * nz)));
+
+                if (length <= 0.0) {
+                    continue;
+                }
+
+                (nx, ny, nz) = ((nx / length), (ny / length), (nz / length));
+            }
+
             var d = (((nx * px) + (ny * py)) + (nz * pz));
 
             a00 += (nx * nx); a01 += (nx * ny); a02 += (nx * nz);
@@ -336,9 +354,10 @@ internal static class SdfDualContouring {
     // edge along axis a are visited counter-clockwise about +a, which faces +a; the quad is reversed when the edge runs
     // from outside to inside, so every quad faces out of the surface. Each cell lends the vertex of the patch the edge
     // belongs to.
-    private static int[] Connect(SdfBakeGrid grid, byte[] maskOfCell, int[] vertexOfPatch) {
-        var cells = grid.Cells;
+    private static (int[] Quads, int[] QuadCorners) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
+        Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         var quads = new List<int>();
+        var quadCorners = new List<int>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -347,25 +366,27 @@ internal static class SdfDualContouring {
             var u = ((axis + 1) % 3);
             var v = ((axis + 2) % 3);
 
-            for (var k = 0; (k <= cells); k++) {
-                for (var j = 0; (j <= cells); j++) {
-                    for (var i = 0; (i < cells); i++) {
+            for (var k = 0; (k <= cells[v]); k++) {
+                for (var j = 0; (j <= cells[u]); j++) {
+                    for (var i = 0; (i < cells[axis]); i++) {
                         at[axis] = i;
                         at[u] = j;
                         at[v] = k;
 
                         if (
-                            (j < 1) || (j >= cells) ||
-                            (k < 1) || (k >= cells)
+                            (j < 1) || (j >= cells[u]) ||
+                            (k < 1) || (k >= cells[v])
                         ) {
                             continue;
                         }
 
-                        var first = grid.Inside(corner: grid.Corner(x: at[0], y: at[1], z: at[2]));
+                        var firstCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+                        var first = grid.Inside(corner: firstCorner);
 
                         at[axis] = (i + 1);
 
-                        var second = grid.Inside(corner: grid.Corner(x: at[0], y: at[1], z: at[2]));
+                        var secondCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+                        var second = grid.Inside(corner: secondCorner);
 
                         if (first == second) {
                             continue;
@@ -380,7 +401,7 @@ internal static class SdfDualContouring {
                             cell[u] = (j - (((corner == 0) || (corner == 3)) ? 1 : 0));
                             cell[v] = (k - ((corner < 2) ? 1 : 0));
 
-                            var index = (cell[0] + (cells * (cell[1] + (cells * cell[2]))));
+                            var index = (cell[0] + (cells[0] * (cell[1] + (cells[1] * cell[2]))));
                             var patch = PatchOfEdge[maskOfCell[index]][EdgeIndex(axis: axis, u: (j - cell[u]), v: (k - cell[v]))];
 
                             ring[corner] = ((patch < 0) ? -1 : vertexOfPatch[((index * MaximumPatches) + patch)]);
@@ -394,11 +415,13 @@ internal static class SdfDualContouring {
                         for (var corner = 0; (corner < 4); corner++) {
                             quads.Add(item: ring[(first ? corner : (3 - corner))]);
                         }
+
+                        quadCorners.Add(item: (first ? firstCorner : secondCorner));
                     }
                 }
             }
         }
 
-        return [.. quads];
+        return ([.. quads], [.. quadCorners]);
     }
 }

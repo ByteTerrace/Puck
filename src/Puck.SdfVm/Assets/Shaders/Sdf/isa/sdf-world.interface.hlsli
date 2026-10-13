@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/e070a6238a61beffb1e53cf32631cb8f14b5661d9850e5b1fdcf9d4ae739420d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/49d8ef2b4d6a2a8e1f2ebb81357659e8355dd5e6836937604b01b2512bf0b146). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -211,39 +211,50 @@ struct SdfWorldPass {
     [[vk::offset(384)]] float4 lightMaps[84];
     [[vk::offset(1728)]] uint lightSlice;
     [[vk::offset(1732)]] float lightSweepRadius;
-    [[vk::offset(1736)]] uint meshDraws;
-    [[vk::offset(1740)]] float nearDistance;
-    [[vk::offset(1744)]] uint preserveIndirectReceivers;
-    [[vk::offset(1748)]] uint _pad1748;
-    [[vk::offset(1752)]] uint _pad1752;
-    [[vk::offset(1756)]] uint _pad1756;
-    [[vk::offset(1760)]] float4 previousView[6];
-    [[vk::offset(1856)]] uint screenCount;
-    [[vk::offset(1860)]] uint shadowAmortize;
-    [[vk::offset(1864)]] float shadowDistanceScale;
-    [[vk::offset(1868)]] uint shadowFadeCount;
-    [[vk::offset(1872)]] uint shadowLightReject;
-    [[vk::offset(1876)]] uint shadowOwnershipReject;
-    [[vk::offset(1880)]] uint shadowSlotCount;
-    [[vk::offset(1884)]] uint _pad1884;
-    [[vk::offset(1888)]] int4 shadowSlots;
-    [[vk::offset(1904)]] float tanHalfFieldOfView;
-    [[vk::offset(1908)]] uint temporal;
-    [[vk::offset(1912)]] uint2 tileGrid;
-    [[vk::offset(1920)]] uint viewBase;
-    [[vk::offset(1924)]] uint _pad1924;
-    [[vk::offset(1928)]] uint _pad1928;
-    [[vk::offset(1932)]] uint _pad1932;
-    [[vk::offset(1936)]] float3 viewForward;
-    [[vk::offset(1948)]] uint _pad1948;
-    [[vk::offset(1952)]] float3 viewPosition;
-    [[vk::offset(1964)]] uint _pad1964;
-    [[vk::offset(1968)]] float3 viewRight;
-    [[vk::offset(1980)]] uint _pad1980;
-    [[vk::offset(1984)]] float3 viewUp;
-    [[vk::offset(1996)]] uint viewportCount;
-    [[vk::offset(2000)]] uint workCounterRow;
-    [[vk::offset(2004)]] uint workCounterRowDetail;
+    [[vk::offset(1736)]] uint meshBakeCount;
+    [[vk::offset(1740)]] uint _pad1740;
+    [[vk::offset(1744)]] float4 meshBakeLattices[48];
+    [[vk::offset(2512)]] uint meshDraws;
+    [[vk::offset(2516)]] uint _pad2516;
+    [[vk::offset(2520)]] uint _pad2520;
+    [[vk::offset(2524)]] uint _pad2524;
+    [[vk::offset(2528)]] float4 meshShadowCascades[8];
+    [[vk::offset(2656)]] uint meshShadowCount;
+    [[vk::offset(2660)]] uint _pad2660;
+    [[vk::offset(2664)]] uint _pad2664;
+    [[vk::offset(2668)]] uint _pad2668;
+    [[vk::offset(2672)]] float4 meshShadowParameters;
+    [[vk::offset(2688)]] float nearDistance;
+    [[vk::offset(2692)]] uint preserveIndirectReceivers;
+    [[vk::offset(2696)]] uint _pad2696;
+    [[vk::offset(2700)]] uint _pad2700;
+    [[vk::offset(2704)]] float4 previousView[6];
+    [[vk::offset(2800)]] uint renderPath;
+    [[vk::offset(2804)]] uint screenCount;
+    [[vk::offset(2808)]] uint shadowAmortize;
+    [[vk::offset(2812)]] float shadowDistanceScale;
+    [[vk::offset(2816)]] uint shadowFadeCount;
+    [[vk::offset(2820)]] uint shadowLightReject;
+    [[vk::offset(2824)]] uint shadowOwnershipReject;
+    [[vk::offset(2828)]] uint shadowSlotCount;
+    [[vk::offset(2832)]] int4 shadowSlots;
+    [[vk::offset(2848)]] float tanHalfFieldOfView;
+    [[vk::offset(2852)]] uint temporal;
+    [[vk::offset(2856)]] uint2 tileGrid;
+    [[vk::offset(2864)]] uint viewBase;
+    [[vk::offset(2868)]] uint _pad2868;
+    [[vk::offset(2872)]] uint _pad2872;
+    [[vk::offset(2876)]] uint _pad2876;
+    [[vk::offset(2880)]] float3 viewForward;
+    [[vk::offset(2892)]] uint _pad2892;
+    [[vk::offset(2896)]] float3 viewPosition;
+    [[vk::offset(2908)]] uint _pad2908;
+    [[vk::offset(2912)]] float3 viewRight;
+    [[vk::offset(2924)]] uint _pad2924;
+    [[vk::offset(2928)]] float3 viewUp;
+    [[vk::offset(2940)]] uint viewportCount;
+    [[vk::offset(2944)]] uint workCounterRow;
+    [[vk::offset(2948)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa70CA0752 : register(b0, space3);
 #define passGroup passGroupIsa70CA0752
@@ -273,11 +284,14 @@ struct SdfWorldPass {
 [[vk::binding(24, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u24, space3);
 [[vk::binding(25, 3)]] Texture2D<float4> screenSources[32] : register(t25, space3);
 [[vk::binding(57, 3)]] Texture2D<float4> meshVisibility : register(t57, space3);
-[[vk::binding(58, 3)]] RWStructuredBuffer<uint> workCounters : register(u58, space3);
-[[vk::binding(59, 3)]] Texture2D<float2> incomingVisibility : register(t59, space3);
-[[vk::binding(60, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u60, space3);
-[[vk::binding(61, 3)]] StructuredBuffer<uint4> indirectAnswer : register(t61, space3);
-[[vk::binding(62, 3)]] RWStructuredBuffer<uint4> indirectAnswerRW : register(u62, space3);
+[[vk::binding(58, 3)]] Texture2D<float4> meshShadowNear : register(t58, space3);
+[[vk::binding(59, 3)]] Texture2D<float4> meshShadowFar : register(t59, space3);
+[[vk::binding(60, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u60, space3);
+[[vk::binding(61, 3)]] RWStructuredBuffer<uint> workCounters : register(u61, space3);
+[[vk::binding(62, 3)]] Texture2D<float2> incomingVisibility : register(t62, space3);
+[[vk::binding(63, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u63, space3);
+[[vk::binding(64, 3)]] StructuredBuffer<uint4> indirectAnswer : register(t64, space3);
+[[vk::binding(65, 3)]] RWStructuredBuffer<uint4> indirectAnswerRW : register(u65, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

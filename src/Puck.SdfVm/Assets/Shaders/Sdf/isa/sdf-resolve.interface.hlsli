@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/0bbca058114d219aab63647e1f2f76a9ddc937246c41f19efcd4363ebda59df7). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/0872d9dddb1604393040c11dfc16535c6259ef50c9cda8084f6129397061d6c5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -203,35 +203,50 @@ struct SdfResolvePass {
     [[vk::offset(336)]] float4 lightMaps[84];
     [[vk::offset(1680)]] uint lightSlice;
     [[vk::offset(1684)]] float lightSweepRadius;
-    [[vk::offset(1688)]] uint meshDraws;
-    [[vk::offset(1692)]] float nearDistance;
-    [[vk::offset(1696)]] float4 previousView[6];
-    [[vk::offset(1792)]] uint screenCount;
-    [[vk::offset(1796)]] uint shadowAmortize;
-    [[vk::offset(1800)]] float shadowDistanceScale;
-    [[vk::offset(1804)]] uint shadowFadeCount;
-    [[vk::offset(1808)]] uint shadowLightReject;
-    [[vk::offset(1812)]] uint shadowOwnershipReject;
-    [[vk::offset(1816)]] uint shadowSlotCount;
-    [[vk::offset(1820)]] uint _pad1820;
-    [[vk::offset(1824)]] int4 shadowSlots;
-    [[vk::offset(1840)]] float tanHalfFieldOfView;
-    [[vk::offset(1844)]] uint temporal;
-    [[vk::offset(1848)]] uint2 tileGrid;
-    [[vk::offset(1856)]] float upscaleSharpness;
-    [[vk::offset(1860)]] uint viewBase;
-    [[vk::offset(1864)]] uint _pad1864;
-    [[vk::offset(1868)]] uint _pad1868;
-    [[vk::offset(1872)]] float3 viewForward;
-    [[vk::offset(1884)]] uint _pad1884;
-    [[vk::offset(1888)]] float3 viewPosition;
-    [[vk::offset(1900)]] uint _pad1900;
-    [[vk::offset(1904)]] float3 viewRight;
-    [[vk::offset(1916)]] uint _pad1916;
-    [[vk::offset(1920)]] float3 viewUp;
-    [[vk::offset(1932)]] uint viewportCount;
-    [[vk::offset(1936)]] uint workCounterRow;
-    [[vk::offset(1940)]] uint workCounterRowDetail;
+    [[vk::offset(1688)]] uint meshBakeCount;
+    [[vk::offset(1692)]] uint _pad1692;
+    [[vk::offset(1696)]] float4 meshBakeLattices[48];
+    [[vk::offset(2464)]] uint meshDraws;
+    [[vk::offset(2468)]] uint _pad2468;
+    [[vk::offset(2472)]] uint _pad2472;
+    [[vk::offset(2476)]] uint _pad2476;
+    [[vk::offset(2480)]] float4 meshShadowCascades[8];
+    [[vk::offset(2608)]] uint meshShadowCount;
+    [[vk::offset(2612)]] uint _pad2612;
+    [[vk::offset(2616)]] uint _pad2616;
+    [[vk::offset(2620)]] uint _pad2620;
+    [[vk::offset(2624)]] float4 meshShadowParameters;
+    [[vk::offset(2640)]] float nearDistance;
+    [[vk::offset(2644)]] uint _pad2644;
+    [[vk::offset(2648)]] uint _pad2648;
+    [[vk::offset(2652)]] uint _pad2652;
+    [[vk::offset(2656)]] float4 previousView[6];
+    [[vk::offset(2752)]] uint renderPath;
+    [[vk::offset(2756)]] uint screenCount;
+    [[vk::offset(2760)]] uint shadowAmortize;
+    [[vk::offset(2764)]] float shadowDistanceScale;
+    [[vk::offset(2768)]] uint shadowFadeCount;
+    [[vk::offset(2772)]] uint shadowLightReject;
+    [[vk::offset(2776)]] uint shadowOwnershipReject;
+    [[vk::offset(2780)]] uint shadowSlotCount;
+    [[vk::offset(2784)]] int4 shadowSlots;
+    [[vk::offset(2800)]] float tanHalfFieldOfView;
+    [[vk::offset(2804)]] uint temporal;
+    [[vk::offset(2808)]] uint2 tileGrid;
+    [[vk::offset(2816)]] float upscaleSharpness;
+    [[vk::offset(2820)]] uint viewBase;
+    [[vk::offset(2824)]] uint _pad2824;
+    [[vk::offset(2828)]] uint _pad2828;
+    [[vk::offset(2832)]] float3 viewForward;
+    [[vk::offset(2844)]] uint _pad2844;
+    [[vk::offset(2848)]] float3 viewPosition;
+    [[vk::offset(2860)]] uint _pad2860;
+    [[vk::offset(2864)]] float3 viewRight;
+    [[vk::offset(2876)]] uint _pad2876;
+    [[vk::offset(2880)]] float3 viewUp;
+    [[vk::offset(2892)]] uint viewportCount;
+    [[vk::offset(2896)]] uint workCounterRow;
+    [[vk::offset(2900)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa70CA0752 : register(b0, space3);
 #define passGroup passGroupIsa70CA0752

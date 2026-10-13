@@ -53,12 +53,20 @@ public sealed partial class SdfWorldPasses {
         public bool RequestsTemporal => ((View is not { LightView: true }) && Snapshot.Quality.Temporal);
         public int CurrentShadowFadeCapacity => ((View is { LightView: true }) ? 0 : (View?.Residency.Frame?.Lights.ShadowSlots.FadeCapacity ?? 0));
         public int RenderedShadowFadeCapacity { get; set; } = -1;
-        public RenderGraphPackageFragment Fragment => SdfWorldPackage.FragmentFor(reconstructs: Snapshot.Reconstructs, temporal: RequestsTemporal, fadeCapacity: CurrentShadowFadeCapacity);
+        // Whether the resolved view takes the baked-mesh path, which chooses its fragment as temporal reconstruction does.
+        public bool RequestsMesh => ((View is not { LightView: true }) && (Snapshot.Quality.RenderPath == SdfRenderPath.Mesh));
+        public RenderGraphPackageFragment Fragment {
+            get {
+                var fragment = SdfWorldPackage.FragmentFor(reconstructs: Snapshot.Reconstructs, temporal: RequestsTemporal, fadeCapacity: CurrentShadowFadeCapacity);
 
-        // Two low bits distinguish temporal reconstruction and whether the policy allows fades, which allocates the
-        // incoming image; every nonzero capacity plans the same fragment. Render ceilings are fractions from zero through
-        // one, whose binary exponents share the high bits shifted out here.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsTemporal ? 1L : 0L) | ((CurrentShadowFadeCapacity > 0) ? 2L : 0L);
+                return (RequestsMesh ? SdfWorldPackage.MeshPathFragmentOf(source: fragment) : fragment);
+            }
+        }
+
+        // Three low bits distinguish temporal reconstruction, whether the policy allows fades, which allocates the
+        // incoming image, and the baked-mesh path; every nonzero capacity plans the same fragment. Render ceilings are
+        // fractions from zero through one, whose binary exponents share the high bits shifted out here.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 3) | (RequestsTemporal ? 1L : 0L) | ((CurrentShadowFadeCapacity > 0) ? 2L : 0L) | (RequestsMesh ? 4L : 0L);
         double IShaderPipelineRenderExtent.Grid => CurrentScale;
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => ((View is { LightView: true }) ? (SdfIndirectLightLayout.Resolution, SdfIndirectLightLayout.Resolution) : Pixels(width: width, height: height, scale: Ceiling));

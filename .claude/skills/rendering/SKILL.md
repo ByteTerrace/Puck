@@ -170,6 +170,29 @@ drifted.
   `BakeSamplingDeviceLawTests` samples; an encoder change that moves bytes
   updates them in the same change.
 
+## The baked-mesh path
+
+`world.render-path mesh` (`SdfViewQuality.RenderPath`) renders a residency's
+views from meshes its program is baked into, with no field walk in the frame;
+[frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-baked-mesh-path)
+owns the explanation.
+
+- **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
+  the prototype baker's `SdfDualContouring` over `ISdfContourLattice`; never
+  write a second mesher. The cubic `SdfBakeGrid` keeps its bytes
+  (`SdfBakerLawTests`).
+- **The bake samples through the frame's interpreter**, in the mesh path
+  fragment's `mask` and `bake` parts, only while `SdfMeshPathBake.Pending`.
+  `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
+  their own group. The pass block's lattice rows are a sync pair with
+  `SdfFrameBlock.WriteMeshBake`.
+- **Cascades draw through the mesh pipeline**: `SdfFrameBlock.WriteShadowCamera`
+  writes a light slice so the mesh stages take their orthographic form, with the
+  view cameras' handedness; `surface/sdf-mesh-path.hlsli` mirrors that
+  projection.
+- **Views reads a mesh pixel's K row only on the mesh path** (`renderPath`), and
+  probes no field for it there.
+
 ## Performance and cost
 
 Judge cost by counted work, code and disassembly; a wall-clock or GPU-timestamp

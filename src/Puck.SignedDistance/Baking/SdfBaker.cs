@@ -75,7 +75,7 @@ public static class SdfBaker {
             field: field,
             reach: FixedQ4816.FromDouble(value: reach)
         );
-        var surface = SdfDualContouring.Extract(field: field, grid: grid);
+        var surface = SdfDualContouring.Extract(grid: grid);
         var meshEvaluations = field.Evaluations;
 
         var (mesh, textures) = SdfSurfaceTextures.Bake(field: field, materials: materials, surface: surface);

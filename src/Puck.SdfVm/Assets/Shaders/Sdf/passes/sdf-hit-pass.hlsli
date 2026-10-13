@@ -11,7 +11,7 @@
 #define SDF_DYNAMIC_TRANSFORMS
 #ifndef SDF_PRIMARY_PASS
 #define SDF_PRIMARY_READ
-#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS) && !defined(SDF_RECEIVER_PASS)
+#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS) && !defined(SDF_RECEIVER_PASS) && !defined(SDF_MESH_SURFACE_PASS)
 #define SDF_VIEWS_PASS
 #endif
 #endif

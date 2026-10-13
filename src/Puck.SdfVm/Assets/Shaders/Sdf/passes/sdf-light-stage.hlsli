@@ -57,7 +57,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
 
-        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled() && !s.mesh) {
+        // The interpreter's shadow pass marches no mesh pixel; the mesh path's surface pass writes every pixel's K row.
+        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled() && (!s.mesh || (passGroup.renderPath != 0u))) {
             shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
 #if SDF_SHADOW_FADE_SLOTS > 0
             if (passGroup.shadowFadeCount > 0u) {

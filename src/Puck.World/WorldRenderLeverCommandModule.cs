@@ -96,6 +96,11 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         return string.Create(CultureInfo.InvariantCulture,
             $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} budget={controller.StepBudget} signal={signal.ToString().ToLowerInvariant()}]");
     }
+    // The world.render-path argument a path is spelled with.
+    private static string RenderPathName(Puck.SdfVm.SdfRenderPath path) => path switch {
+        Puck.SdfVm.SdfRenderPath.Mesh => "mesh",
+        _ => "interpreter",
+    };
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
         $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
@@ -815,6 +820,28 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     a: (on ? 1.0 : 0.0),
                     formatEcho: () => new CommandResult(Output: TemporalEcho(settings: settings))
                 );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.render-path",
+            description: "Chooses how the world's own views turn its program into pixels, live: world.render-path [interpreter|mesh] — no argument echoes the current path. interpreter marches the program per pixel; mesh bakes each rigid group of the program to a mesh on the GPU (once per program, a lattice a frame), then rasterizes the meshes with rasterized shadow cascades and screen-space occlusion, and no pass of the frame walks the field. A change rebuilds each view's graph beside the installed one; the bake reports its counts and time on stderr when it finishes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.render-path: {RenderPathName(path: settings.RenderPath)}]");
+
+                if (args.Count == 0) { return Echo(); }
+
+                Puck.SdfVm.SdfRenderPath? path = args[0] switch {
+                    "interpreter" => Puck.SdfVm.SdfRenderPath.Interpreter,
+                    "mesh" => Puck.SdfVm.SdfRenderPath.Mesh,
+                    _ => null,
+                };
+
+                if (path is not { } chosen) {
+                    return CommandResult.Error(output: $"[world.render-path: unknown path '{args[0]}' — interpreter|mesh]");
+                }
+
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.RenderPath, a: ((int)chosen), formatEcho: Echo);
             }
         );
         yield return CommandDefinition.WithWireArgs(
