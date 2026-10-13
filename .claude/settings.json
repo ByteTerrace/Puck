@@ -1,5 +1,8 @@
 {
   "autoMemoryEnabled": false,
+  "enabledMcpjsonServers": [
+    "puck"
+  ],
   "enabledPlugins": {
     "codex@openai-codex": true
   },
@@ -49,5 +52,6 @@
         "matcher": "compact"
       }
     ]
-  }
+  },
+  "outputStyle": "Concise"
 }
