@@ -6,12 +6,19 @@ namespace Puck.SdfVm;
 // The mesh region: the frame's mesh draws (SdfFrame.MeshDraws) laid out by SdfMeshRegion in one GpuRegion, created like
 // every other table (SdfWorldTables.Regions.cs) and copied with them in the upload. A frame whose draw list is the one
 // last packed, at the revision and program composability last packed, repacks nothing; any other is packed into the
-// host copy and owes only the words that changed. The region is created with the tables, one draw record long so every
+// host copy and owes only the words that changed. A list that names the meshes the region holds, at the same places and
+// with the same atlases, repacks only its draw records, so bodies that move every frame never rewrite their meshes'
+// vertices and indices. The region is created with the tables, one draw record long so every
 // set that binds it binds a buffer, and grows, once the device is idle, like program capacity; a frame without draws
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material. A textured mesh's
 // texture coordinates are written moved into the mesh atlases the same draw list packs (SdfWorldTables.MeshAtlas.cs).
 public sealed partial class SdfWorldTables {
-    private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacements = new(comparer: ReferenceEqualityComparer.Instance);
+    // The placements the region holds, and the scratch the next list plans into; the two swap after each plan.
+    private Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacements = new(comparer: ReferenceEqualityComparer.Instance);
+    private Dictionary<SdfMesh, SdfMeshRegionMesh> m_meshPlacementsNext = new(comparer: ReferenceEqualityComparer.Instance);
+    // The region and atlases the mesh section was last written into and for.
+    private GpuRegion? m_meshSectionRegion;
+    private SdfMeshAtlas? m_meshSectionAtlas;
 
     // The draw list last packed, the words it packed into and their layout.
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
@@ -60,8 +67,18 @@ public sealed partial class SdfWorldTables {
             var impostors = StageImpostorAtlas(draws: draws);
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
-                meshes: m_meshPlacements
+                meshes: m_meshPlacementsNext
             );
+            // The meshes stand when the region already holds them where this list places them, with the same atlases'
+            // texture coordinates: only the draw records, whose matrices follow the bodies, are packed again.
+            var meshesStand = (
+                ReferenceEquals(objA: m_meshSectionRegion, objB: m_meshRegion) &&
+                ReferenceEquals(objA: m_meshSectionAtlas, objB: atlas) &&
+                (layout == m_meshLayout) &&
+                SamePlacements(left: m_meshPlacementsNext, right: m_meshPlacements)
+            );
+
+            (m_meshPlacements, m_meshPlacementsNext) = (m_meshPlacementsNext, m_meshPlacements);
 
             if (layout.Words > m_meshWords.Length) {
                 m_meshWords = new uint[layout.Words];
@@ -73,7 +90,7 @@ public sealed partial class SdfWorldTables {
             );
 
             if (layout.Words > 0) {
-                SdfMeshRegion.Write(
+                SdfMeshRegion.WriteDraws(
                     atlas: atlas,
                     destination: words,
                     draws: draws,
@@ -82,6 +99,14 @@ public sealed partial class SdfWorldTables {
                     layout: layout,
                     meshes: m_meshPlacements
                 );
+                if (!meshesStand) {
+                    SdfMeshRegion.WriteMeshes(
+                        atlas: atlas,
+                        destination: words,
+                        layout: layout,
+                        meshes: m_meshPlacements
+                    );
+                }
             }
 
             StageMeshMotion(
@@ -92,9 +117,11 @@ public sealed partial class SdfWorldTables {
             if (layout.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: layout.Bytes);
                 _ = m_meshRegion.Write(
-                    bytes: MemoryMarshal.AsBytes(span: words),
+                    bytes: MemoryMarshal.AsBytes(span: (meshesStand ? words[..layout.VertexWordOffset] : words)),
                     offset: 0
                 );
+                m_meshSectionRegion = m_meshRegion;
+                m_meshSectionAtlas = atlas;
             }
 
             m_meshDraws = draws;
@@ -106,6 +133,17 @@ public sealed partial class SdfWorldTables {
 
         m_meshDrawCount = ((uint)draws.Count);
         StageIndirectMeshes(draws: draws);
+    }
+    private static bool SamePlacements(Dictionary<SdfMesh, SdfMeshRegionMesh> left, Dictionary<SdfMesh, SdfMeshRegionMesh> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+        foreach (var (mesh, placement) in left) {
+            if (!right.TryGetValue(key: mesh, value: out var other) || (other != placement)) {
+                return false;
+            }
+        }
+        return true;
     }
     // Replaces the region with one grown by half again (or to the need, if larger), once the device is idle, since every
     // view's mesh pass reads it. The replacement starts owing every word, so the next write sends the whole packed list,

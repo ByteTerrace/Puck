@@ -29,8 +29,9 @@ public enum WorldBakeState : byte {
 /// simulation state, and a prototype keeps drawing through its field until its bake is ready.
 /// <para>A presentation that draws bakes asks <see cref="TryGetDraw"/> for a ready prototype's baked mesh and impostor,
 /// decoded once per bake; the first time a bake is handed out it counts under <see cref="Drawn"/>, the counted switch from
-/// the field to the bake. <see cref="Revision"/> moves whenever a bake lands or the definition changes, so a presentation
-/// rebuilds what it draws.</para>
+/// the field to the bake. <see cref="Revision"/> moves whenever a bake lands or a new definition names another bake for a
+/// prototype, so a presentation rebuilds what it draws; a definition that names the same bakes, as a value-only state
+/// delivery does, moves nothing.</para>
 /// <para>The schedule counts its work under <see cref="SourceName"/>. Every kind is
 /// <see cref="WorkClass.Pacing"/>, because what the cache already holds decides it.</para>
 /// </summary>
@@ -47,7 +48,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private readonly HashSet<ContentPin> m_failed = [];
     private readonly HashSet<ContentPin> m_counted = [];
     private readonly HashSet<ContentPin> m_current = [];
-    private readonly Dictionary<string, ContentPin> m_prototypes = new(comparer: StringComparer.Ordinal);
+    // Each prototype's bake key under the definition last reconciled to, and under the one before it.
+    private Dictionary<string, ContentPin> m_prototypes = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, ContentPin> m_previousPrototypes = new(comparer: StringComparer.Ordinal);
     // Each held bake's draw, decoded the first time it is asked for (null for a refusal or a bake without triangles), and
     // the bakes handed out for drawing, each counted once.
     private readonly Dictionary<ContentPin, WorldBakedDraw?> m_meshes = [];
@@ -143,8 +146,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         );
     }
 
-    /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
-    /// reconciled to changed.</summary>
+    /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands, or the definition it
+    /// reconciled to names another bake for a prototype or changes whether the world ships its bakes.</summary>
     public long Revision => m_revision;
 
     /// <summary>Takes a finished bake, reconciles to <paramref name="definition"/> when it changed, and starts the next
@@ -367,7 +370,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     }
     private void Reconcile(WorldDefinition definition) {
         m_definition = definition;
-        m_revision++;
+        (m_prototypes, m_previousPrototypes) = (m_previousPrototypes, m_prototypes);
         m_prototypes.Clear();
         m_current.Clear();
 
@@ -415,7 +418,26 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
         }
 
         _ = m_queue.RemoveAll(match: request => !m_current.Contains(item: request.Key.Pin));
-        m_ships = ((named > 0) && (shipped == named));
+
+        var ships = ((named > 0) && (shipped == named));
+
+        // A definition that names every prototype's bake as the last one did, as a value-only state delivery does, hands
+        // out what it handed out before, so a presentation has nothing to rebuild.
+        if (!SamePrototypes() || (ships != m_ships)) {
+            m_revision++;
+        }
+        m_ships = ships;
+    }
+    private bool SamePrototypes() {
+        if (m_prototypes.Count != m_previousPrototypes.Count) {
+            return false;
+        }
+        foreach (var (prototype, key) in m_prototypes) {
+            if (!m_previousPrototypes.TryGetValue(key: prototype, value: out var previous) || (previous != key)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

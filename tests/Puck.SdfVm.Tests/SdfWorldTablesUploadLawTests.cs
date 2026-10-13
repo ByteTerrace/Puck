@@ -655,9 +655,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
-        // its normal matrix (the inverse transpose of its upper 3x3) and its ten impostor words, zeros for a draw with none. The
-        // vertices start past the three records (word 123), the triangle materials past the seven vertices (word 179), and
-        // the indices past the one triangle material (word 180).
+        // its normal matrix (the inverse transpose of its upper 3x3), its ten impostor words, zeros for a draw with none, and
+        // its frame slot, -1 for a mesh stored in world space. The
+        // vertices start past the three records (word 126), the triangle materials past the seven vertices (word 182), and
+        // the indices past the one triangle material (word 183).
         void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
@@ -667,13 +668,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 179u]);
+            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 182u]);
             Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
 
             var normal = Matrix4x4.Transpose(matrix: inverse);
 
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.AddRange(collection: new uint[10]);
+            expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
         }
         // A vertex: its position, its normal and its texture coordinate, zeros for an attribute its mesh lacks.
         void Vertices(SdfMesh mesh) {
@@ -686,9 +688,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
         }
 
-        Record(flags: 0u, indexCount: 6, indexWord: 180, material: 4, matrix: moved, vertexWord: 123);
-        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 186, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 155);
-        Record(flags: 0u, indexCount: 6, indexWord: 180, material: 6, matrix: Matrix4x4.Identity, vertexWord: 123);
+        Record(flags: 0u, indexCount: 6, indexWord: 183, material: 4, matrix: moved, vertexWord: 126);
+        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 189, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 158);
+        Record(flags: 0u, indexCount: 6, indexWord: 183, material: 6, matrix: Matrix4x4.Identity, vertexWord: 126);
         Vertices(mesh: quad);
         Vertices(mesh: triangle);
         expected.Add(item: 2u);
@@ -732,6 +734,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(
             expected: BitConverter.SingleToUInt32Bits(value: 7f),
             actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRegion.DrawWords) + 14) * sizeof(uint))), value: shiftedWords)
+        );
+
+        // A list that moves draws over the meshes the region holds repacks only the draw records, and the meshes it kept
+        // are the ones a whole repack writes.
+        expected[((2 * SdfMeshRegion.DrawWords) + 14)] = BitConverter.SingleToUInt32Bits(value: 7f);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
+            actual: shiftedWords
         );
     }
 

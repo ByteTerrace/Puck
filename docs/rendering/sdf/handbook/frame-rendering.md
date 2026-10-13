@@ -748,7 +748,11 @@ and the parts that run change their kernels:
   slot's live transform, and its draw names that slot (`SdfMeshDraw.FrameSlot`,
   the draw record's word 41), which the surface pass writes into the L row so
   views places material layers in the body's frame and reads its lanes; a
-  static group's mesh is in world space. The bake keeps a
+  static group's mesh is in world space. A frame whose bodies moved draws the
+  same meshes at new matrices, so the mesh region repacks only its draw records
+  (`SdfMeshRegion.WriteDraws`); the vertices, triangle materials and indices are
+  written again only when the meshes the draws name, their places in the region
+  or the mesh atlases change, as when a group's mesh lands. The bake keeps a
   group whose instructions a program rebuild left unchanged, so only an edited
   group bakes again, and it reports its groups, dispatches, samples, triangles,
   vertices and wall time on stderr when it finishes.

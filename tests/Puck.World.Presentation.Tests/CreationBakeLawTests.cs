@@ -472,9 +472,15 @@ public sealed class CreationBakeLawTests {
 
         schedule.Pump(definition: boot.Admission.Definition);
         Assert.True(condition: settings.DrawsBakes(schedule: schedule));
+
+        var revision = schedule.Revision;
+
+        // A definition naming the same bakes, as a value-only state delivery does, hands out nothing new.
         schedule.Pump(definition: (boot.Admission.Definition with { DocumentDirectory = directory.PathOf(name: "copy") }));
         Assert.True(condition: schedule.Ships);
+        Assert.Equal(expected: revision, actual: schedule.Revision);
         schedule.Pump(definition: Definition());
+        Assert.NotEqual(expected: revision, actual: schedule.Revision);
         Assert.True(condition: schedule.IsSettled);
         Assert.False(condition: schedule.Ships);
         Assert.False(condition: settings.DrawsBakes(schedule: schedule));

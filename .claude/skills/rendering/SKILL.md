@@ -198,6 +198,13 @@ owns the explanation.
 - **Views reads a mesh pixel's K row and frame slot only on the mesh path**
   (`renderPath`), whose views kernel (`sdf-world-views-mesh`,
   `SDF_VIEWS_MESH_ONLY`) compiles the field reads out.
+- **Moving draws repack only their records.** `StageMeshRegion`
+  (`SdfWorldTables.MeshRegion.cs`) writes the vertices, triangle materials and
+  indices only when the meshes a draw list names, their placements or the mesh
+  atlases change, and otherwise the draw records alone
+  (`SdfMeshRegion.WriteDraws`). Repacking the whole million-triangle region for
+  moved matrices cost the debug world 11 ms of frame thread a frame. A new
+  per-draw field belongs in the record, never in the mesh section.
 
 ## Performance and cost
 
@@ -216,7 +223,10 @@ Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.debug-view depth`. Compare the whole frame, not one pass. `puck counters`
 boots a workload on both backends and `puck counters compare <before> <after>`
 holds two reports to each other; a deterministic count must agree on both
-backends. `world.debug-view` lists the diagnostic images.
+backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
+`host.frames` on the windowed host gives the worst iteration split into its
+phases (simulate, begin, produce, present, wait) with its collections and the
+pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 ## Seeing a change
 

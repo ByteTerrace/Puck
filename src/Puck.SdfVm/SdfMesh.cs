@@ -333,15 +333,40 @@ public static class SdfMeshRegion {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
     public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
+        WriteDraws(
+            atlas: atlas,
+            destination: destination,
+            draws: draws,
+            impostors: impostors,
+            indirectInstancesComposable: indirectInstancesComposable,
+            layout: layout,
+            meshes: meshes
+        );
+        WriteMeshes(
+            atlas: atlas,
+            destination: destination,
+            layout: layout,
+            meshes: meshes
+        );
+    }
+    /// <summary>Writes only the draw records of a list of draws, the region's first
+    /// <see cref="SdfMeshRegionLayout.VertexWordOffset"/> words, as <see cref="Write"/> writes them. A list whose draws
+    /// move while the meshes they name and those meshes' placements stand rewrites only these words.</summary>
+    /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
+    /// <param name="meshes">The placements <see cref="Plan"/> wrote for the same draws.</param>
+    /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
+    /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them.</param>
+    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>.</param>
+    /// <param name="impostors">The impostor atlases the frame binds, or <see langword="null"/>.</param>
+    /// <param name="indirectInstancesComposable">Whether the retained field permits independent instance
+    /// participation.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
+    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null, bool indirectInstancesComposable = true) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
-
-        if (destination.Length < layout.Words) {
-            throw new ArgumentException(
-                message: $"The mesh region needs {layout.Words} words; the destination holds {destination.Length}.",
-                paramName: nameof(destination)
-            );
-        }
+        RequireDestination(destination: destination, layout: layout);
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var (mesh, matrix, material, _) = draws[draw];
@@ -388,6 +413,19 @@ public static class SdfMeshRegion {
             );
             record[41] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
         }
+    }
+    /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
+    /// writes them.</summary>
+    /// <param name="meshes">The placements <see cref="Plan"/> wrote.</param>
+    /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
+    /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them.</param>
+    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>: a mesh whose textures they hold
+    /// has its texture coordinates moved into them.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="meshes"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
+    public static void WriteMeshes(Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null) {
+        ArgumentNullException.ThrowIfNull(meshes);
+        RequireDestination(destination: destination, layout: layout);
 
         foreach (var (mesh, placement) in meshes) {
             var positions = mesh.Positions.Span;
@@ -423,6 +461,14 @@ public static class SdfMeshRegion {
         }
     }
 
+    private static void RequireDestination(Span<uint> destination, SdfMeshRegionLayout layout) {
+        if (destination.Length < layout.Words) {
+            throw new ArgumentException(
+                message: $"The mesh region needs {layout.Words} words; the destination holds {destination.Length}.",
+                paramName: nameof(destination)
+            );
+        }
+    }
     // A draw's impostor words: the sphere, the view grid and the atlas rectangle, or zeros.
     private static void WriteImpostor(SdfMeshImpostor? impostor, SdfMeshAtlas? atlas, Span<uint> record) {
         record[..10].Clear();
