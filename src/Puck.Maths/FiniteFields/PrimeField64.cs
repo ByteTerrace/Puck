@@ -184,7 +184,8 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// throughout this finite carrier, on the published exhaustive-computation basis below; this does not assert
     /// exactness over arbitrary-width integers. The base-two round runs first, so most composites avoid the Lucas ladder.
     /// Both rounds share one Montgomery setup — the modulus's inverse and the reduced radix — and the base-two round
-    /// takes two as <c>one + one</c> in Montgomery form, so neither round encodes an operand.
+    /// starts from two, <c>one + one</c> in Montgomery form, or below <c>2^60</c> from a seed <c>2^-a</c> reduced from
+    /// that one, so neither round encodes an operand.
     /// </para>
     /// <para>
     /// Baillie, Fiori and Wagstaff, <see href="https://www.cs.uleth.ca/~fiori/Docs/bfw-accepted.pdf">Strengthening the
@@ -231,19 +232,23 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// </para>
     /// <para>
     /// With <c>value + 1 = d * 2^s</c> and <c>d</c> odd, the test accepts when <c>U_d</c> vanishes modulo the value, or
-    /// when <c>V_(d * 2^r)</c> does for some <c>r</c> below <c>s</c>. The ladder walks <c>d</c> most-significant-bit
-    /// first carrying only <c>V_k</c> and <c>V_(k+1)</c> — <c>V_2k = V_k^2 - 2Q^k</c>,
-    /// <c>V_(2k+1) = V_k V_(k+1) - P Q^k</c> and <c>V_(2k+2) = V_(k+1)^2 - 2Q^(k+1)</c> — with <c>Q^k</c> and
-    /// <c>Q^(k+1)</c> carried alongside, or read off the index's parity when <c>D = 5</c> makes <c>Q = -1</c>. The
-    /// <c>U</c> test follows from <c>D * U_k = 2V_(k+1) - P * V_k</c>: a symbol of <c>-1</c> makes <c>D</c> a unit
-    /// modulo the value, so <c>U_d</c> vanishes exactly when <c>2V_(d+1) = V_d</c>. The predicate is unchanged from the
-    /// U/V formulation, and so is the published verification of the composition below.
+    /// when <c>V_(d * 2^r)</c> does for some <c>r</c> below <c>s</c>. With <c>d = 2h + 1</c>, the ladder walks
+    /// <c>h</c> most-significant-bit first over the traces <c>C_k = z^k + z^-k</c> of the norm-one ratio
+    /// <c>z = a / b</c> of the roots of <c>x^2 - x + Q</c>: <c>C_1 = t = Q^-1 - 2</c>, <c>C_2k = C_k^2 - 2</c> and
+    /// <c>C_(2k+1) = C_k C_(k+1) - t</c>, one square and one cross product per bit and no power of <c>Q</c>, for every
+    /// <c>Q</c> the search selects. A symbol of <c>-1</c> makes <c>D</c> a unit modulo the value, so the trace pair
+    /// decides the predicate exactly, on composite values as well as primes: <c>U_d</c> vanishes exactly when
+    /// <c>C_h = C_(h+1)</c>, <c>V_d</c> exactly when <c>C_h = -C_(h+1)</c>, and each later <c>V_(d * 2^r)</c> exactly
+    /// when <c>C_(d * 2^(r-1))</c> does, starting from <c>C_d = C_h C_(h+1) - t</c>.
+    /// The predicate is unchanged from the U/V formulation, and so is the published verification of the composition
+    /// below. <see cref="PrimeKernels.PassesStrongLucasRound(ulong, long)"/> runs the same ladder at a given <c>Q</c>.
     /// </para>
     /// <para>
-    /// The whole ladder runs in Montgomery form over <see cref="ScaledResidueRing64"/>'s kernels. Additions and
-    /// subtractions are linear in the representation, products are REDC, and zero represents zero — so the acceptance
-    /// tests read exactly as they would on ordinary residues, and the ladder spends no hardware division from the first
-    /// term to the last.
+    /// The whole ladder runs in Montgomery form over <see cref="ScaledResidueRing64"/>'s kernels. Subtractions are
+    /// linear in the representation, products are REDC, and zero represents zero — so the acceptance tests read exactly
+    /// as they would on ordinary residues, and the ladder spends no hardware division from the first term to the last.
+    /// <c>Q^-1</c> enters the ring as an exact quotient of the reduced radix lifted by a small multiple of the value,
+    /// whose digit costs two remainders by the odd part of <c>Q</c> and none at <c>D = 5</c>.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]

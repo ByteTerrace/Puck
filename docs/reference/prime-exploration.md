@@ -274,8 +274,28 @@ for exactly as long as a step lasts and a fifth would wait on it. At the top of
 the carrier one survivor in six is prime, so a width of three decides 2.0
 batches per selected prime, four 1.6 and five 1.4. A batch walks in the widest
 of the arithmetics the [primality](#primality) section describes that its
-largest modulus admits: lazily below 2^58, folded lazily below 2^62, exactly
-above.
+largest modulus admits: lazily below 2^60, centered below 2^62, exactly
+above. Below 2^60 a centered batch measures about thirty per cent slower than
+the lazy one, which keeps that region.
+
+Each chain raises two to the negated odd part `-d` of `n - 1 = d·2^s` rather
+than to `d`. The two powers are inverses, and so are their squares, so one is
+one, minus one, or squares to minus one exactly where the other does: the strong
+round decides the same at the same squaring, on composites too. The negation is
+what lets a seed absorb the exponent's leading bits. With `k` steps and
+`a = ceil(d / 2^k)`, `-d = -a·2^k + e`, where `e` is the low `k` bits of the
+word `0 - d`, so a chain starts at `2^-a` and walks those bits with the same
+square-and-double step. Every chain walks the longest odd part's bit length less
+seven; the prefix `a` is then at most 128, and the Montgomery form of `2^-a`
+is one reduction by `2^m`, `m` at most 64, of the reduced radix or of one: two
+multiplies per chain, where the seven steps it saves are twenty-eight Montgomery
+squares a batch. Above 2^63 six bits would seed with a
+shift alone, `2^(64 - a)` being already reduced there; the seventh bit's step and
+the product cost the same, so one seed serves every batch.
+`PrimeKernels.PassesBaseTwoBatch` is the batch's checked shell, and
+`prime-field.base-two-batch-vs-modular-power` compares it with plain modular
+exponentiation, the thirty-six strong base-two pseudoprimes
+`(6k + 1)(12k + 1)(18k + 1)` above 2^63 included.
 The filter depth stays at 163: with interleaved rounds the modelled request
 cost is flat from 163 to 331 and rises beyond, and the depth never changes the
 selected prime, the draws or the final state.
@@ -472,29 +492,58 @@ first.
 
 Each multiplication chain uses `ScaledResidueRing64`'s REDC, with no division
 inside the chain. Baillie–PSW derives the modulus's inverse and reduced radix
-once and shares them between its two rounds. The base-two round takes two as
-`one + one` in Montgomery form, and the strong Lucas test walks a V-only ladder,
-reading `U_d = 0` off `2V_(d+1) = V_d`. The `uint` kernel's base-two round uses
-a 64-bit radix with lazy reduction. The arbitrary-width `BigIntegerFunctions`
-twelve-base threshold is separate.
+once and shares them between its two rounds. Below 2^62 the base-two round is
+one centered chain of the selection batch's walk, described under
+[a random prime](#a-random-prime): it raises two to `-d` from a seed
+`2^-a` over the low bits of `0 - d`, most significant bit first, and doubles the
+whole square before each centered reduction, `M(2^b·x²)`, so no step branches on
+an exponent bit and none folds. Below 2^60 the lazy step of the batch is
+admissible too, and the centered one measures no slower there, so the single
+round is centered throughout. From 2^62 it takes two as `one + one` in
+Montgomery form and walks `d` least significant bit first in exact arithmetic.
+`PrimeKernels.PassesBaseTwoRound` is its checked shell, and
+`prime-field.base-two-round-vs-modular-power` compares it with plain modular
+exponentiation. The strong Lucas test walks one norm-one
+trace ladder for every Selfridge `Q`: the traces `C_k` of `z = a / b`, the ratio
+of the roots of `x² − x + Q`, cost one square and one cross product per bit and
+carry no power of `Q`, and with `d = 2h + 1` the pair `(C_h, C_(h+1))` decides
+`U_d = 0` and `V_d = 0` exactly, on composite values too. From 2^61, where the
+ladder runs centered and then exact, it selects the term to square by a mask on
+a bit of the index's Gray code instead of branching on the index bit, which
+mispredicts about half the time; below 2^61 the shorter lazy step keeps the
+branch, which there costs no more than the select's latency. The `uint` kernel's
+base-two round uses a 64-bit radix with lazy reduction. The arbitrary-width
+`BigIntegerFunctions` twelve-base threshold is separate.
 
-Below `ScaledResidueRing64.LazyModulusCeiling`, 2^58, every chain of the word
-decision carries residues lazily: a product comes back below twice the modulus
-through `ReduceLazy`, a sum is a plain sum, a difference is lifted by four times
-the modulus, and nothing is folded until a residue is compared, where
-`Canonical` recovers it. Every operand a chain multiplies stays below eight
-times the modulus, which is what the ceiling guarantees keeps the lifted
-quotient below twice the modulus. Below `FoldedLazyModulusCeiling`, 2^62, the
-same chains fold each sum and difference once, by twice the modulus, so every
-operand stays below twice the modulus and the product bound holds up to that
-ceiling; the product's own fold is still gone. The decision is the exact
-chain's decision at every value, pinned by
-`prime-field.lazy-chains-vs-exact-decision`; what changes is the chain's step,
-which drops the compare-and-mask fold after every product, and below 2^58 after
-every doubling too, so a step there is the three multiplies of a REDC and one
-subtraction. The JIT turns a select inside a loop into a branch rather than a
+Below `ScaledResidueRing64.LazyModulusCeiling`, 2^60, the interleaved
+base-two chains of random selection carry residues lazily: a REDC lifted by the
+modulus comes back below twice the modulus, a doubling is a shift of the
+reduction's two high halves, and nothing is folded until a residue is compared,
+where `Canonical` recovers it.
+Every operand a chain multiplies stays below four times the modulus, and the
+ceiling is what keeps the lifted quotient of two such operands below twice the
+modulus, so the next doubling stays below four times it. Below
+`CenteredModulusCeiling`, 2^62, the batches and the single round carry signed,
+centered representatives instead: centered REDC, `ReduceCentered` and
+`ReduceCenteredSquare`, reads the correction factor `q = lo(T)·n⁻¹` as a signed
+word, so `(T − q·n) / 2^64` is the exact difference of signed high words, and
+with the doubling applied to the whole square an accumulator within the modulus
+of zero stays in `(−n/2, n)` with no fold at all. The strong Lucas trace ladder
+subtracts `t` or two from every product inside the reduction. Below its own lazy
+ceiling, 2^61, it lifts the quotient by twice the modulus less the constant, so
+its traces stay below four times the modulus with no fold, two such operands
+still giving a quotient below twice the modulus; from 2^61 to 2^62 it runs
+centered, its constants centered into `[−(n−1)/2, (n−1)/2]` and its traces within
+twice the modulus of zero with no fold. The centered ladder is admissible below
+2^61 as well, but its step is longer than the lazy one's there. The decision is
+the exact chain's decision at every value, pinned by
+`prime-field.unreduced-chains-vs-exact-decision`,
+`prime-field.centered-reduction-interval-vs-big-integer` and
+`prime-field.lucas-trace-ladder-vs-recurrence`; what changes is the chain's
+step, which drops the compare-and-mask fold after every product and every
+doubling. The JIT turns a select inside a loop into a branch rather than a
 conditional move, and a data-dependent branch on the chain mispredicts about
-half the time, so the exact chains above both ceilings keep their masks.
+half the time, so the exact chains above 2^62 keep their masks.
 
 ## Constellations
 

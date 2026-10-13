@@ -65,8 +65,30 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
 - Measured dead ends, not to re-propose: a cutoff z above y, VPOPCNTQ from
   C#, fusing the semiprime stream into the hard-leaf sweep, per-pair rework of
   the medium-prime sieve entry, walk-to-next-prime selection (it weights each
-  prime by its preceding gap), window-sieve uniform selection, and the
-  Õ(√N) or analytic counting methods below 2^64.
+  prime by its preceding gap), window-sieve uniform selection, the
+  Õ(√N) or analytic counting methods below 2^64, a masked (branchless) step
+  for the lazy Lucas trace ladder below 2^61 (selection 1% slower; the
+  centered and exact ladders select), moving the lazy ladder's trace
+  subtrahend out of RDX (its loop is 2% slower with any other order; the
+  masked ladder does move it), the centered Lucas ladder below 2^61 (17%
+  slower than the lazy one), the centered batch below 2^60 (30% slower than
+  the lazy one), a signed widening multiply (`Math.BigMul(long, long)`,
+  `Int128`) in a centered reduction (its low word goes through memory), and
+  the centered cross product formed factor first (the Lucas ladder about 14%
+  slower).
+- Centered (signed) Montgomery reduction is the base-two batch's arithmetic
+  between 2^60 and 2^62, the Lucas ladder's between 2^61 and 2^62, and the
+  single base-two round's below 2^62; `ScaledResidueRing64`'s
+  `ReduceCentered` and `ReduceCenteredSquare` carry its interval proofs, and
+  `prime-field.centered-reduction-interval-vs-big-integer` checks each result's
+  interval as well as its congruence, since a dropped correction of a negative
+  factor stays congruent. Its square forms the factor before the high word and
+  measures faster that way in every chain even where the JIT then gives the
+  factor a stack slot; reading stack traffic alone would choose wrongly.
+- llvm-mca models no branch mispredicts, and its znver4 model rates a single
+  chain's shift-fused lazy step at 18 cycles against 14 for the masked one, where Zen 4 counters and timing favor the shift; it also
+  models no memory renaming, so it misjudges a loop's in-loop spill (one
+  centered loop reads 4 cycles). Weigh both against counters.
 
 ## Branded members
 

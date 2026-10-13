@@ -731,22 +731,49 @@ A narrow sibling, `ReduceNarrow`, serves moduli below `2³²` with the same
 multiply within one word, and the reduction `n − hi(m·n)` needs no correction
 step at all. The `uint` primality kernel's base-two round runs on it.
 
-A lazy sibling, `ReduceLazy`, serves chains whose operands multiply to a
-product below `2⁶⁴·n`. It lifts the subtractive quotient by the modulus,
-`hi(a·b) + n − hi(m·n)`, which then lies in `(0, 2n)`. Below
-`LazyModulusCeiling`, `2⁵⁸`, two operands below `8n` satisfy the bound, and a
-chain that keeps every operand below `8n` — the prime kernels' base-two rounds,
-interleaved batches and Lucas ladders do, with sums left unfolded and
-differences lifted by `4n` — needs no comparison between its products;
-`Canonical` folds a value below `8n` back to the residue wherever one is
-compared. Below `FoldedLazyModulusCeiling`, `2⁶²`, two operands below `2n`
-satisfy it, and the same chains fold each sum and difference once by `2n`, so
-only the product's fold is gone; `Fold` folds a value below `2n`. The
-representative a lazy chain carries is not unique, so a value is folded before
-it is read as a residue, and the decision read either way is the same decision.
-Masks rather than conditionals serve the exact kernels because the JIT turns a
-select inside a loop into a branch, and a data-dependent branch on a
-multiplication chain mispredicts about half the time.
+The prime kernels' chains carry unreduced representatives between products and
+fold only where a residue is compared. A **lazy** chain lifts the subtractive
+quotient by the modulus, `hi(a·b) + n − hi(m·n)`, which lies in `(0, 2n)`
+whenever the product is below `2⁶⁴·n`. Below `LazyModulusCeiling`, `2⁶⁰`, two
+operands below `4n` satisfy that, since `16n` is then at most `2⁶⁴`, and their
+result lands below `2n`, so a chain may add two results with no fold and stay
+below `4n`; the prime kernels' interleaved base-two batches do, doubling each
+square by a shift of both high halves, and need no comparison between their
+products. `Canonical` folds a value below `4n` back to the residue wherever one
+is compared, and `Fold` a value below `2n`. The strong Lucas test's trace ladder
+subtracts a constant `c` from every product and lifts the quotient by `2n − c`
+instead of `n`, so its terms stay below `4n` with no fold at all up to its own
+ceiling, `2⁶¹`: two operands below `4n` give a quotient below `16n² / 2⁶⁴`, at
+most `2n` there, and the lift keeps the result below `4n` again.
+
+A **centered** chain carries signed representatives as two's-complement words
+and reduces by centered REDC, `ReduceCentered` and `ReduceCenteredSquare`. For
+a signed product `T`, the factor `q = lo(T)·n⁻¹` is read as a signed word, in
+`[−2⁶³, 2⁶³)`, and `M(T) = (T − q·n) / 2⁶⁴` is the exact difference of the two
+products' signed high words. Below `CenteredModulusCeiling`, `2⁶²`, the largest
+bound with `4n` at most `2⁶⁴`, two operands within `2n` of zero multiply to
+below `4n²`, which is below `2⁶⁴·n`, so `T / 2⁶⁴` lies within `n` of zero and
+`q·n / 2⁶⁴` within `n / 2`; less a constant centered into
+`[−(n − 1) / 2, (n − 1) / 2]` by `Center`, the result lies within `2n` of zero
+again. A base-two step doubles the whole 128-bit square before the reduction,
+`M(2ᵇ·x²)`, and an accumulator within `n` of zero stays in `(−n / 2, n)`. No
+step folds at all, and `CanonicalCentered` lifts a representative by `2n` into
+`(0, 4n)` and folds it once it is compared. No signed widening multiply runs,
+because `Math.BigMul`'s signed form and the `Int128` product hand their low word
+back through memory: each signed high word is the unsigned `MultiplyHigh`
+corrected by sign masks, `hi(a·b) − [a < 0]·b − [b < 0]·a`, and that of `q·n`
+by `[q < 0]·n`. Dropping the last correction keeps every result congruent and
+only moves it out of its interval, so
+`prime-field.centered-reduction-interval-vs-big-integer` checks every result's
+interval as well as its congruence, at the extremes of each bound. The word
+decision's single base-two round, the batches between `2⁶⁰` and `2⁶²` and the
+trace ladder between `2⁶¹` and `2⁶²` run centered.
+
+The representative an unreduced chain carries is not unique, so a value is
+folded before it is read as a residue, and the decision read either way is the
+same decision. Masks rather than conditionals serve the exact kernels because
+the JIT turns a select inside a loop into a branch, and a data-dependent branch
+on a multiplication chain mispredicts about half the time.
 
 **Branchless-mask discipline.** Every conditional fold is a mask rather than a
 branch, and each one is stated against the case where the untruncated value no
@@ -769,7 +796,22 @@ is the critical path. It is recorded as a measurement rather than re-derived
 from first principles. The squared power is the left factor of both products,
 the operand `MULX` reads implicitly, which keeps the squaring chain in one
 register. The base-two primality round goes further: it starts its accumulator
-at two rather than at one, spending no product on the identity.
+at two rather than at one, spending no product on the identity. The interleaved
+batch that decides random selection's survivors walks most significant bit
+first instead, and raises two to the negated odd part `−d`, which accepts at the
+same round because the two powers are inverses. That lets each chain start at
+`2⁻ᵃ` for the exponent's leading seven bits: its Montgomery form `2⁶⁴·2⁻ᵃ` is
+one reduction by `2ᵐ` of the reduced radix or of one, `(x + c·n) / 2ᵐ` with
+`c = −x·n⁻¹ mod 2ᵐ`, already below `n`, so every chain walks seven bits fewer for
+two multiplies. Below `2⁶⁰` a chain fuses its doubling into the lazy reduction
+as a shift of both high halves, `(hi(p²) + n)·2ᵇ − hi(m·n)·2ᵇ`, and below `2⁶²`
+into the centered reduction as a doubling of the whole square, rather than
+adding a masked copy of the square. The word decision's single round walks the
+centered way everywhere below `2⁶²`, one chain alone, since below `2⁶⁰` the
+centered step measures no slower than the lazy one: it trades six of the
+least-significant-bit-first walk's squarings and every one of its products for
+the seed's two multiplies, and its step has no branch on an exponent bit, where
+that walk's branch mispredicts about half the time.
 
 **Why oddness alone.** The ring requires only an odd modulus greater than one,
 and nothing in it presumes the modulus prime. That is exactly what admits it as
@@ -794,8 +836,9 @@ Lucas test. Published exhaustive computations establish that no composite below
 `2⁶⁴` passes both, which covers the entire carrier and this field's `2⁶²` ceiling.
 Each multiplication chain runs in `ScaledResidueRing64`'s kernels, with no
 hardware division inside the chain. Both rounds share one setup—the modulus's
-inverse and the reduced radix—and the base-two round takes two as `one + one`
-in Montgomery form, so it encodes nothing. Below `2⁶³` that setup still divides
+inverse and the reduced radix—and the base-two round starts from two, `one + one`
+in Montgomery form, or below `2⁶²` from the seed `2⁻ᵃ` reduced from that one, so
+it encodes nothing. Below `2⁶³` that setup still divides
 once, so this is not a claim that the whole decision uses no division.
 
 The individual halves are also available. A **probable-prime** test can prove a
@@ -848,20 +891,50 @@ strength but in the independence of its failures from a Fermat round's.
   conditioned on a non-zero magnitude residue.
 - **The ladder.** With `value + 1 = d · 2^s` and `d` odd, the test accepts when
   `U_d` vanishes modulo the value, or when `V_(d·2^r)` does for some `r` below
-  `s`. The ladder carries only the pair `V_k`, `V_(k+1)`: `V_2k = V_k² − 2·Q^k`,
-  `V_(2k+1) = V_k·V_(k+1) − P·Q^k` and `V_(2k+2) = V_(k+1)² − 2·Q^(k+1)`, walked
-  most-significant-bit first over `d`, with `Q^k` and `Q^(k+1)` carried
-  alongside—or, when `D = 5` makes `Q = −1`, read off the index's parity. That
-  is logarithmic in the value, where the recurrence's own definition would be
-  linear. `U_d` is read through `D·U_k = 2·V_(k+1) − P·V_k`: a symbol of `−1`
-  makes `D` a unit modulo the value, so `U_d` vanishes exactly when
-  `2·V_(d+1) = V_d`. The predicate is the strong Lucas test's own.
-- **One ring, first term to last.** The ladder's additions and subtractions are
-  linear in the representation and so apply to Montgomery-form elements
-  unchanged, its products are REDC, and zero represents zero—so the acceptance
-  tests read exactly as they would on ordinary residues, and the ladder spends
-  no hardware division. `Q` enters the ring by doubling and adding the
-  Montgomery one, with no encoding product. The order `value + 1` is split as
+  `s`. The two Lucas sequences come from the roots `a` and `b = 1 − a` of
+  `x² − x + Q`: `U_k = (a^k − b^k) / (a − b)` and `V_k = a^k + b^k`. The ladder
+  works with their ratio `z = a / b` instead. Its conjugate is `1 / z`, so `z`
+  has norm one, and its traces `C_k = z^k + z^−k` need no power of `Q`:
+  `C_1 = t = Q⁻¹ − 2`, `C_2k = C_k² − 2` and `C_(2k+1) = C_k·C_(k+1) − t`,
+  walked most-significant-bit first, one square and one cross product per bit
+  for every `Q`, `Q = −1` at `D = 5` included. That is logarithmic in the value,
+  where the recurrence's own definition would be linear. A set bit squares
+  `C_(k+1)` and a clear one `C_k`; from `2⁶¹`, where the ladder runs centered
+  and then exact, it picks that term by a mask on a bit of the index's Gray
+  code rather than by a branch, which mispredicts on about half the bits. Below
+  `2⁶¹` the lazy step is short enough that the mask's latency costs as much as
+  the mispredicts or more, so it branches.
+- **Two traces at half the index decide, on composite values too.** `U_d`
+  vanishes exactly when `z^d = 1`, and `V_d` exactly when `z^d = −1`. Modulo a
+  composite value the single trace `C_d` cannot tell `z^d` apart from other
+  elements with the same trace, but a pair can. Writing `d = 2h + 1`, the
+  ladder stops at `(C_h, C_(h+1))`, and for `e = 1` or `−1`,
+  `C_(h+1) − e·C_h = z^(−h−1)·(z − e)·(z^d − e)`. The first two factors are
+  units: `z` has norm one, `z − 1` has norm `−D / Q` and `z + 1` has norm
+  `1 / Q`, units whenever the symbol is `−1` and `Q` is a unit. So `U_d`
+  vanishes exactly when `C_h = C_(h+1)` and `V_d` exactly when
+  `C_h = −C_(h+1)`. Only when both fail and `s` is two or more does the ladder
+  spend one more product on `C_d = C_h·C_(h+1) − t`, and since
+  `C_k = V_2k / Q^k`, each later `V_(d·2^r)` vanishes exactly when
+  `C_(d·2^(r−1))` does. A `Q` that shares a prime `p` with the value makes the
+  recurrence constant modulo `p`, so no term can vanish and the test rejects;
+  the ladder rejects such a `Q` outright. The predicate is the strong Lucas
+  test's own, at every odd value. `PrimeKernels.PassesStrongLucasRound` runs the
+  ladder at a `Q` its caller names, which is how the laws reach the non-unit
+  parameters the search never selects.
+- **One ring, first term to last.** The ladder's subtractions are linear in the
+  representation and so apply to Montgomery-form elements unchanged, its
+  products are REDC, and zero represents zero—so the acceptance tests read
+  exactly as they would on ordinary residues, and the ladder spends no hardware
+  division. Each constant, `t` or two, is subtracted inside the product's
+  reduction, from the high half that is ready before the reduction's critical
+  multiply, so it adds nothing to a step's critical path. `Q⁻¹` enters the ring
+  without an encoding product: with `u = 2⁶⁴ mod value` and `q` the odd part of
+  `|Q|`, a small digit `k` makes `u + k·value` divisible by `q`, the exact
+  quotient is the Montgomery form of `q⁻¹`, and each factor of two in `|Q|`
+  halves it. The digit costs two remainders by `q`, and none when `q` is one, as
+  at `D = 5`; it is tabulated for every odd part Selfridge's tabulated
+  discriminants reach and derived beyond them. The order `value + 1` is split as
   `d = ((value >> 1) >> (s − 1)) + 1`, which stays inside the carrier at its own
   maximum, where `value + 1` wraps to zero and `s` is 64.
 

@@ -18302,10 +18302,10 @@
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
         "prime-field.is-prime-vs-witness-oracle",
-        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.montgomery-chains-exhaustive",
         "prime-field.narrow-primality-bands",
         "prime-field.pseudoprime-populations",
+        "prime-field.unreduced-chains-vs-exact-decision",
         "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExtensions.IsPrime(System.UInt32)",
@@ -18323,10 +18323,10 @@
         "prime-field.create-and-refusals",
         "prime-field.is-prime-vs-sieve-and-witness-ladder",
         "prime-field.is-prime-vs-witness-oracle",
-        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.montgomery-chains-exhaustive",
         "prime-field.narrow-primality-bands",
         "prime-field.pseudoprime-populations",
+        "prime-field.unreduced-chains-vs-exact-decision",
         "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeExtensions.IsPrime(System.UInt64)",
@@ -18479,8 +18479,8 @@
         "deep.prime-field-baillie-and-populations",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
-        "prime-field.lazy-chains-vs-exact-decision",
         "prime-field.pseudoprime-populations",
+        "prime-field.unreduced-chains-vs-exact-decision",
         "prime-field.word-decision-dispatch"
       ],
       "Id": "Puck.Maths.PrimeField64.IsBaillieProbablePrime(System.UInt64)",
@@ -18489,13 +18489,15 @@
     {
       "CoveredBy": [
         "deep.prime-field-baillie-and-populations",
+        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
         "deep.prime-field-lucas-vs-companion-matrix",
         "prime-field.baillie-composition",
         "prime-field.baillie-psw-exhaustive",
-        "prime-field.lazy-chains-vs-exact-decision",
+        "prime-field.lucas-trace-ladder-vs-recurrence",
         "prime-field.lucas-vs-companion-matrix",
         "prime-field.pseudoprime-populations",
-        "prime-field.selfridge-symbols-vs-reciprocity"
+        "prime-field.selfridge-symbols-vs-reciprocity",
+        "prime-field.unreduced-chains-vs-exact-decision"
       ],
       "Id": "Puck.Maths.PrimeField64.IsStrongLucasProbablePrime(System.UInt64)",
       "State": "covered"
@@ -18917,6 +18919,14 @@
     },
     {
       "CoveredBy": [
+        "deep.prime-field-base-two-batch-vs-modular-power",
+        "prime-field.base-two-batch-vs-modular-power"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.BaseTwoBatchWidth",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-selection.kernel-shells-refuse-violations",
         "prime-selection.table-ranks-vs-sieve"
       ],
@@ -18928,6 +18938,30 @@
         "core.witness-set-boundary-factors-exactly"
       ],
       "Id": "Puck.Maths.PrimeKernels.LeastWitnessFailure",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-field-base-two-batch-vs-modular-power",
+        "prime-field.base-two-batch-vs-modular-power"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.PassesBaseTwoBatch(System.ReadOnlySpan<System.UInt64>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-field-base-two-round-vs-modular-power",
+        "prime-field.base-two-round-vs-modular-power"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.PassesBaseTwoRound(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
+        "prime-field.lucas-trace-ladder-vs-recurrence"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.PassesStrongLucasRound(System.UInt64,System.Int64)",
       "State": "covered"
     },
     {
@@ -23482,10 +23516,33 @@
     },
     {
       "CoveredBy": [
-        "prime-field.lazy-chains-vs-exact-decision",
-        "prime-field.montgomery-reduction-vs-big-integer"
+        "prime-field.montgomery-reduction-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Canonical(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.centered-reduction-interval-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.CanonicalCentered(System.Int64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.centered-reduction-interval-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.Center(System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.centered-reduction-interval-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.CenteredModulusCeiling",
       "State": "covered"
     },
     {
@@ -23505,24 +23562,16 @@
     },
     {
       "CoveredBy": [
-        "prime-field.lazy-chains-vs-exact-decision",
-        "prime-field.montgomery-reduction-vs-big-integer"
+        "prime-field.montgomery-reduction-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.Fold(System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {
       "CoveredBy": [
-        "prime-field.lazy-chains-vs-exact-decision",
-        "prime-field.montgomery-reduction-vs-big-integer"
-      ],
-      "Id": "Puck.Maths.ScaledResidueRing64.FoldedLazyModulusCeiling",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "prime-field.lazy-chains-vs-exact-decision",
-        "prime-field.montgomery-reduction-vs-big-integer"
+        "prime-field.montgomery-reduction-vs-big-integer",
+        "prime-field.unreduced-chains-vs-exact-decision"
       ],
       "Id": "Puck.Maths.ScaledResidueRing64.LazyModulusCeiling",
       "State": "covered"
@@ -23603,10 +23652,16 @@
     },
     {
       "CoveredBy": [
-        "prime-field.lazy-chains-vs-exact-decision",
-        "prime-field.montgomery-reduction-vs-big-integer"
+        "prime-field.centered-reduction-interval-vs-big-integer"
       ],
-      "Id": "Puck.Maths.ScaledResidueRing64.ReduceLazy(System.UInt64,System.UInt64,System.UInt64,System.UInt64)",
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceCentered(System.Int64,System.Int64,System.Int64,System.UInt64,System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.centered-reduction-interval-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.ReduceCenteredSquare(System.Int64,System.Int32,System.Int64,System.UInt64,System.UInt64)",
       "State": "covered"
     },
     {

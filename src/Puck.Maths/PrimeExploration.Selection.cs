@@ -272,7 +272,7 @@ public static partial class PrimeExploration {
             }
 
             var passes = ((PrimeKernels.BaseTwoBatchWidth == count)
-                ? PrimeKernels.PassesBaseTwoBatch(values: pending)
+                ? PrimeKernels.PassesBaseTwoBatchCore(values: pending)
                 : -1);
 
             for (var i = 0; (i < count); ++i) {
