@@ -44,6 +44,9 @@ Build `src/Puck.Cli` in Release in your worktree, copy
 the worktree root. Never run the globally installed `puck`: it lags the head.
 Refresh the copy after a change the CLI reaches. A generator or ledger verb run
 without `--check` rewrites the file it owns; `--check` only reports drift.
+Restore a fresh worktree once (`dotnet restore Puck.slnx -nodeReuse:false`)
+before its first build with `--no-restore` or `puck references`: both fail
+on an unrestored tree.
 
 ## Build before you test
 

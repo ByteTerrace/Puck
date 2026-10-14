@@ -65,8 +65,76 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
 - Measured dead ends, not to re-propose: a cutoff z above y, VPOPCNTQ from
   C#, fusing the semiprime stream into the hard-leaf sweep, per-pair rework of
   the medium-prime sieve entry, walk-to-next-prime selection (it weights each
-  prime by its preceding gap), window-sieve uniform selection, and the
-  Õ(√N) or analytic counting methods below 2^64.
+  prime by its preceding gap), window-sieve uniform selection, the
+  Õ(√N) or analytic counting methods below 2^64, a branching trace ladder at
+  any size (the signed masked ladder is 3 to 6% faster than the lazy branching
+  one it replaced below 2^61), the signed batch below 2^60 (selection 7 to 18%
+  slower than the lazy one), a signed widening multiply (`Math.BigMul(long,
+  long)`, `Int128`) in a signed reduction (its low word goes through memory),
+  the signed product's high word formed as the high multiply less its
+  corrections (the JIT homes it in RDX and spills it; form it as the negated
+  corrections plus the high multiply), the signed square formed high word first
+  (spill-free, but the ladder is 8% slower: its critical multiplies must issue
+  first), a vector selection filter (40 to 128 primes: within noise on AVX-512,
+  5 to 18% slower per selected prime on AVX2, where most candidates leave at the
+  first divisor), and above 2^63 a borrowed trace ladder (every trace a word and
+  a borrow mask: 80 instructions a step against 53, 7% slower), a branchless
+  result chain in the borrowed base-two walk (14% slower than branching on the
+  bit, whose mispredicts resolve ahead of the chain), and the borrowed walk
+  below 2^63 (48% slower than the signed seeded one); and, for the exact
+  ladder's selects, a plain ternary inside the loop (the JIT branches it: 63%
+  slower), the ladder fully unrolled behind a computed entry so that every
+  select if-converts (all 252 are conditional moves, but 924 stack accesses
+  leave it only 3% faster than the masks), and the non-inlined select on both
+  of a reduction's subtractions (270 to 297 ns against 247 ns for the final one
+  alone; it moves with code layout).
+- Signed Montgomery reduction is the arithmetic of the single base-two round,
+  the Lucas ladder and the base-two batch below 2^63 (the batch from 2^60);
+  `ScaledResidueRing64`'s `ReduceSigned`, `ReduceSignedSquareSubtract` and
+  `ReduceSignedSquare` carry its interval proofs, and above 2^63
+  `ReduceBorrowedSquare` carries the single round's squares as a word and a
+  borrow mask. `prime-field.signed-reduction-interval-vs-big-integer` checks
+  each result's interval as well as its congruence, since a dropped correction
+  stays congruent. Every factor is read unsigned; the doubling shifts the
+  inverse, not the operand. The squares and the cross product form the factor
+  before the high word, and measure faster that way even where the JIT then
+  gives the factor a stack slot; reading stack traffic alone would choose
+  wrongly.
+- Above 2^63 the ladder and the batch fold after every product, and the JIT's
+  compare-and-mask fold (`setb`, `movzx`, `neg`, `and`, `add`) sits on the
+  critical path where a conditional move would cost one cycle; that is the
+  measured remaining gap for primes there (about 30% behind machine-prime's
+  second strong round). Composites there are at parity, and random words
+  about 9% behind, the primes' share.
+- RyuJIT if-converts a select only outside loops (its pass refuses a block
+  that is hot or reachable from itself), so a ternary inlined into a ladder's
+  loop becomes a branch, never a conditional move. The one way to a CMOV on a
+  loop's critical path is a call: `ScaledResidueRing64.SubtractBySelect` is a
+  `NoInlining` leaf that compiles to `cmp`, `cmovb`, `ret`, and the exact
+  ladder's `ExactArithmetic.ReduceSubtract` ends in it, on its final subtraction
+  only: 16% off the isolated ladder, and 2 to 5% off `IsPrime` on primes at
+  2^63 (the call spills three values around the loop, and the gain moves with
+  the host process's code placement), nothing below 2^63. `Subtract` stays the
+  inlined mask for everything else. Re-run the select
+  probe (see [open items](../../../docs/plans/open-items.md)) on each new .NET
+  major, and when in-loop if-conversion lands, before changing this.
+- `IsPrime(ulong)` trial-divides by the 128 odd primes through 727 before
+  Baillie–PSW, a depth derived from the round's cost and the vector's (see
+  `PrimeKernels.TrialDivisionPrimeCount`); it stays one table with the
+  selection filter and factorization. The vector rungs fold the word onto a
+  32-bit value per prime (balanced 16-bit digits times the residues of 2^16i,
+  VPMADDWD, plus an offset) and run the narrow 32-bit inverse test: 8 to 19%
+  faster than three-VPMULUDQ 64-bit products on AVX2 and no slower than
+  VPMULLQ on AVX-512. `IsPrime(uint)` reads the odd-prime
+  bitmap below 65536, tests the same primes with 32-bit inverses (a narrow
+  table beside the wide one: 64-bit products on AVX2 cost three multiplies for
+  four lanes, and the narrow path measured slower with them) and runs the word
+  decision's signed seeded round before its pseudoprime table; the branching
+  narrow round it replaced mispredicted on about half its bits.
+- llvm-mca models no branch mispredicts, and its znver4 model rates a single
+  chain's shift-fused lazy step at 18 cycles against 14 for the masked one, where Zen 4 counters and timing favor the shift; it also
+  models no memory renaming, so it misjudges a loop's in-loop spill (one
+  centered loop read 4 cycles). Weigh both against counters.
 
 ## Verify
 

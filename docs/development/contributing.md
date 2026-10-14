@@ -56,12 +56,13 @@ macOS, and nothing here is verified there.
   `puck --version` and `puck mcp` warn on stderr when the two differ, so
   reinstall after pulling.
 - **Claude Code.** The project's settings are shared and versioned:
-  `.claude/settings.json` turns auto memory off, enables the Codex plugin and
-  names its marketplace, and registers the hooks, and `.claude/launch.json`
+  `.claude/settings.json` turns auto memory off, selects the Concise output
+  style, enables the `puck` server from `.mcp.json` and the Codex plugin, names
+  the plugin's marketplace, and registers the hooks, and `.claude/launch.json`
   holds the preview configurations. Trust the folder when Claude Code asks,
-  because the marketplace entry loads only in a trusted project. Personal
-  overrides go in `.claude/settings.local.json`, which `.gitignore` keeps
-  untracked. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  because the marketplace entry loads only in a trusted project. Settings are
+  repository-wide: keep no per-machine settings file, and put a setting every
+  machine should share in `.claude/settings.json`. There is no `CLAUDE.md`, on purpose: Claude Code reads
   [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
   ([documentation policy](#documentation-policy)).
 - **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
@@ -80,8 +81,8 @@ macOS, and nothing here is verified there.
 - **A checkout older than the versioned Claude Code files.**
   `.claude/settings.json`, `.claude/launch.json` and `.claude/hooks/` were once
   ignored, so a checkout from then may hold untracked copies, and `git pull`
-  refuses to overwrite them. Move them aside, pull, and fold anything personal
-  from the old copies into `.claude/settings.local.json`.
+  refuses to overwrite them. Move them aside, pull, fold anything worth sharing
+  from the old copies into `.claude/settings.json`, and delete the rest.
 
 ## Find code and references
 

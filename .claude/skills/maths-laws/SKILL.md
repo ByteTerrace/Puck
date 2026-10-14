@@ -36,6 +36,10 @@ documentation, and this skill with them when guidance disagrees.
    in a worktree of your own and watch it go red, or run
    `puck laws prove <law> --fix <commit>` (`--file-list` for an uncommitted
    fix). Never hand-revert files in a shared tree.
+   Most Maths laws are rows of one theory, which `puck laws prove` cannot
+   select one at a time; prove such a row with an exact one-line mutation in
+   a scratch worktree, failing at the intended assertion, and name the
+   mutation in the commit.
 
 ## Run a tier
 

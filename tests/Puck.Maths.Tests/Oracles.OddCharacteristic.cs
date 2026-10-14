@@ -191,14 +191,15 @@ internal static partial class Oracles {
     /// <remarks>
     /// <para>
     /// Independent of <see cref="PrimeField64.IsStrongLucasProbablePrime(ulong)"/> in three deliberate ways. The
-    /// subject walks a <c>V</c>-only ladder most-significant-bit first inside a Montgomery ring and reads <c>U_d</c>
-    /// off <c>2·V_(d+1) = P·V_d</c>; this multiplies two-by-two matrices in plain residues, carries no <c>V</c>
-    /// recurrence of its own at all — it derives <c>V_d</c> from two consecutive <c>U</c> terms through
-    /// <c>V_n = 2·U_(n+1) − P·U_n</c> — and reads <c>U_d</c> directly. Its Selfridge search carries the
-    /// discriminant's sign EXPLICITLY, where the subject reads the sign off <c>magnitude &amp; 3</c>, and takes its
-    /// symbol from <see cref="JacobiSymbolReciprocity(BigInteger, BigInteger)"/> of the signed discriminant over the
-    /// value rather than from any shipped Jacobi or reciprocity step. A wrong cross term, a <c>Q</c> power one index
-    /// off, or a <c>U</c> test not equivalent to <c>U_d = 0</c> shows here and nowhere else.
+    /// subject walks the norm-one trace ladder of <c>z = a / b</c> most-significant-bit first inside a Montgomery
+    /// ring and reads <c>U_d = 0</c> and <c>V_d = 0</c> off the trace pair <c>(C_h, C_(h+1))</c> at half the index; this multiplies
+    /// two-by-two matrices in plain residues, carries no <c>V</c> recurrence and no trace at all — it derives
+    /// <c>V_d</c> from two consecutive <c>U</c> terms through <c>V_n = 2·U_(n+1) − P·U_n</c> — and reads <c>U_d</c>
+    /// directly. Its Selfridge search carries the discriminant's sign EXPLICITLY, where the subject reads the sign off
+    /// <c>magnitude &amp; 3</c>, and takes its symbol from <see cref="JacobiSymbolReciprocity(BigInteger, BigInteger)"/>
+    /// of the signed discriminant over the value rather than from any shipped Jacobi or reciprocity step. A wrong cross
+    /// term, a wrong reciprocal of <c>Q</c>, or an acceptance test not equivalent to <c>U_d = 0</c> or <c>V_d = 0</c>
+    /// shows here.
     /// </para>
     /// <para>
     /// It is <c>O(log n)</c>, so a law standing on it reaches the whole carrier rather than the small band an
@@ -277,6 +278,202 @@ internal static partial class Oracles {
         }
 
         return false;
+    }
+    /// <summary>The strong Lucas probable-prime test with Selfridge's Method A parameters, from the <c>U</c> and
+    /// <c>V</c> doubling recurrence in fixed-width plain residues.</summary>
+    /// <param name="value">The candidate.</param>
+    /// <returns><see langword="true"/> when the candidate is a strong Lucas probable prime.</returns>
+    /// <remarks>The Selfridge search of <see cref="StrongLucasSelfridge(ulong)"/>, its sign carried explicitly and its
+    /// symbol from <see cref="JacobiSymbolWord(long, ulong)"/>, followed by <see cref="StrongLucasRecurrence(ulong, long)"/>
+    /// on the parameter it selects. Fixed width, so a law can afford it at every odd value of a contiguous band.</remarks>
+    public static bool StrongLucasSelfridgeRecurrence(ulong value) {
+        if (2UL > value) { return false; }
+        if (2UL == value) { return true; }
+        if (0UL == (value & 1UL)) { return false; }
+        if (PerfectSquareByBisection(value: value)) { return false; }
+
+        var discriminant = 5L;
+        var step = 0;
+
+        while (true) {
+            var symbol = JacobiSymbolWord(
+                denominator: value,
+                numerator: discriminant
+            );
+
+            if (-1 == symbol) { break; }
+            if (
+                (0 == symbol) &&
+                (0UL != (((ulong)long.Abs(value: discriminant)) % value))
+            ) { return false; }
+
+            ++step;
+
+            var magnitude = (long.Abs(value: discriminant) + 2L);
+
+            discriminant = ((1 == (step & 1))
+                ? -magnitude
+                : magnitude
+            );
+        }
+
+        return StrongLucasRecurrence(
+            q: ((1L - discriminant) / 4L),
+            value: value
+        );
+    }
+    /// <summary>The strong Lucas probable-prime predicate of <c>P = 1</c> and a given <c>Q</c>, from the <c>U</c> and
+    /// <c>V</c> doubling recurrence in fixed-width plain residues.</summary>
+    /// <param name="value">The odd candidate, at least three.</param>
+    /// <param name="q">The parameter <c>Q</c>, of magnitude below <c>2^61</c>; any value, units or not.</param>
+    /// <returns><see langword="true"/> when <c>U_d</c> or some <c>V_(d·2^r)</c> with <c>r</c> below <c>s</c> vanishes,
+    /// where <c>value + 1 = d·2^s</c> with <c>d</c> odd.</returns>
+    /// <remarks>
+    /// <para>
+    /// The textbook ladder over the bits of <c>d</c>, most significant first: <c>U_2k = U_k·V_k</c>,
+    /// <c>V_2k = V_k² − 2·Q^k</c>, and on a set bit <c>U_(2k+1) = (P·U_2k + V_2k) / 2</c> and
+    /// <c>V_(2k+1) = (D·U_2k + P·V_2k) / 2</c> with <c>D = 1 − 4Q</c>, each halving lifting an odd residue by the
+    /// modulus. It carries <c>U</c>, <c>V</c> and <c>Q^k</c> and reads <c>U_d</c> and <c>V_d</c> directly; the tail
+    /// doubles <c>V</c> as <c>V_2k = V_k² − 2·Q^k</c>. Every product is a <see cref="UInt128"/> remainder.
+    /// </para>
+    /// <para>
+    /// Independent of the subject's norm-one trace ladder: no Montgomery form, no reciprocal of <c>Q</c>, no traces and
+    /// no two-trace acceptance; the recurrence is the sequences' own definition at every <c>Q</c>, so it needs neither
+    /// <c>Q</c> nor <c>D</c> to be a unit. Independent of <see cref="StrongLucasSelfridge(ulong)"/>'s companion-matrix
+    /// powers as well.
+    /// </para>
+    /// </remarks>
+    public static bool StrongLucasRecurrence(ulong value, long q) {
+        ulong Residue(long signed) => ((0L <= signed)
+            ? (((ulong)signed) % value)
+            : ((value - (((ulong)(-signed)) % value)) % value));
+        ulong Multiply(ulong left, ulong right) => ((ulong)((((UInt128)left) * right) % value));
+        ulong Plus(ulong left, ulong right) => ((ulong)((((UInt128)left) + right) % value));
+        ulong Minus(ulong left, ulong right) => ((ulong)(((((UInt128)left) + value) - right) % value));
+        ulong Half(ulong residue) => ((0UL == (residue & 1UL))
+            ? (residue >> 1)
+            : ((ulong)((((UInt128)residue) + value) >> 1)));
+
+        var parameter = Residue(signed: q);
+        var discriminant = Residue(signed: (1L - (4L * q)));
+        var order = (((UInt128)value) + 1);
+        var twoExponent = 0;
+
+        while (UInt128.Zero == (order & 1)) {
+            order >>= 1;
+            ++twoExponent;
+        }
+
+        var odd = ((ulong)order);
+        var u = (1UL % value);
+        var v = (1UL % value);
+        var power = parameter;
+
+        for (var bit = (63 - ulong.LeadingZeroCount(value: odd)); (0UL < bit); --bit) {
+            // Index k to 2k.
+            u = Multiply(left: u, right: v);
+            v = Minus(left: Multiply(left: v, right: v), right: Plus(left: power, right: power));
+            power = Multiply(left: power, right: power);
+
+            if (0UL != ((odd >> ((int)(bit - 1UL))) & 1UL)) {
+                // Index 2k to 2k + 1, with P = 1.
+                (u, v) = (Half(residue: Plus(left: u, right: v)), Half(residue: Plus(left: Multiply(left: discriminant, right: u), right: v)));
+                power = Multiply(left: power, right: parameter);
+            }
+        }
+
+        if ((0UL == u) || (0UL == v)) { return true; }
+
+        for (var round = 1; (round < twoExponent); ++round) {
+            v = Minus(left: Multiply(left: v, right: v), right: Plus(left: power, right: power));
+            power = Multiply(left: power, right: power);
+
+            if (0UL == v) { return true; }
+        }
+
+        return false;
+    }
+    /// <summary>The round at which the strong base-two test accepts an odd value, from plain modular exponentiation in
+    /// fixed-width plain residues, raising two or its inverse.</summary>
+    /// <param name="value">The odd candidate, at least three.</param>
+    /// <param name="inverted">Whether to raise <c>2^-1 = (value + 1) / 2</c> instead of two.</param>
+    /// <returns>Zero when the power to the odd part <c>d</c> of <c>value - 1 = d·2^s</c> is one; <c>r + 1</c> when its
+    /// <c>2^r</c>-th power is minus one for the least such <c>r</c> below <c>s</c>; minus one when the test rejects.</returns>
+    /// <remarks>Square-and-multiply least significant bit first over <c>d</c>, every product a <see cref="UInt128"/>
+    /// remainder: no Montgomery form, no seed, no negated exponent and no lazy carry, where the subject raises two to
+    /// <c>-d</c> in Montgomery form from a seed of <c>2^-a</c>. Raising the inverse base is the oracle's own check that
+    /// the two powers accept at the same round.</remarks>
+    public static int StrongBaseTwoAcceptanceRound(ulong value, bool inverted) {
+        ulong Multiply(ulong left, ulong right) => ((ulong)((((UInt128)left) * right) % value));
+
+        var oddPart = (value - 1UL);
+        var twoExponent = 0;
+
+        while (0UL == (oddPart & 1UL)) {
+            oddPart >>= 1;
+            ++twoExponent;
+        }
+
+        var square = (inverted ? ((ulong)((((UInt128)value) + 1) >> 1)) : (2UL % value));
+        var power = (1UL % value);
+
+        for (var exponent = oddPart; (0UL != exponent); exponent >>= 1) {
+            if (0UL != (exponent & 1UL)) { power = Multiply(left: power, right: square); }
+
+            square = Multiply(left: square, right: square);
+        }
+
+        if (1UL == power) { return 0; }
+
+        for (var round = 0; (round < twoExponent); ++round) {
+            if ((value - 1UL) == power) { return (round + 1); }
+
+            power = Multiply(left: power, right: power);
+        }
+
+        return -1;
+    }
+    /// <summary>The Jacobi symbol of a signed word over an odd positive word, by the binary quadratic-reciprocity
+    /// descent.</summary>
+    /// <param name="numerator">The upper argument, of either sign; it is normalized into the denominator's range
+    /// first.</param>
+    /// <param name="denominator">The lower argument, which must be odd and positive.</param>
+    /// <returns><c>0</c> when the two share a factor, <c>1</c> when the numerator is a residue, <c>-1</c>
+    /// otherwise.</returns>
+    /// <remarks><see cref="JacobiSymbolReciprocity(BigInteger, BigInteger)"/>'s descent at word width, its residue tests
+    /// spelled the same literal way, so the strong Lucas recurrence oracle can afford a symbol at every odd value of a
+    /// contiguous band. Calls no Puck.Maths member.</remarks>
+    public static int JacobiSymbolWord(long numerator, ulong denominator) {
+        var lower = denominator;
+        var upper = ((0L <= numerator)
+            ? (((ulong)numerator) % lower)
+            : ((lower - (((ulong)(-numerator)) % lower)) % lower));
+        var sign = 1;
+
+        while (0UL != upper) {
+            while (0UL == (upper & 1UL)) {
+                upper >>= 1;
+
+                var residue = (lower % 8UL);
+
+                if (
+                    (3UL == residue) ||
+                    (5UL == residue)
+                ) { sign = -sign; }
+            }
+
+            if (
+                (3UL == (upper % 4UL)) &&
+                (3UL == (lower % 4UL))
+            ) { sign = -sign; }
+
+            (lower, upper) = (upper, (lower % upper));
+        }
+
+        return ((1UL == lower)
+            ? sign
+            : 0
+        );
     }
     /// <summary>The reference modular inverse, by the EXTENDED EUCLIDEAN algorithm.</summary>
     /// <param name="value">The value to invert; must be coprime to <paramref name="modulus"/>.</param>

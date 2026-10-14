@@ -266,8 +266,12 @@ internal static partial class LawRegistry {
             id: "prime-field.montgomery-reduction-vs-big-integer"
         ),
         ClaimCase(
-            claim: Subjects.LazyChainsMatchExactDecision,
-            id: "prime-field.lazy-chains-vs-exact-decision"
+            claim: Subjects.SignedReductionMatchesBigInteger,
+            id: "prime-field.signed-reduction-interval-vs-big-integer"
+        ),
+        ClaimCase(
+            claim: Subjects.UnreducedChainsMatchExactDecision,
+            id: "prime-field.unreduced-chains-vs-exact-decision"
         ),
         ClaimCase(
             claim: Subjects.SelfridgeSymbolsMatchReciprocity,
@@ -284,6 +288,18 @@ internal static partial class LawRegistry {
             domain: PrimeFieldLucas,
             id: "prime-field.lucas-vs-companion-matrix",
             width: 1
+        ),
+        ClaimCase(
+            claim: Subjects.LucasTraceLadderMatchesRecurrence,
+            id: "prime-field.lucas-trace-ladder-vs-recurrence"
+        ),
+        ClaimCase(
+            claim: Subjects.BaseTwoBatchMatchesModularPower,
+            id: "prime-field.base-two-batch-vs-modular-power"
+        ),
+        ClaimCase(
+            claim: Subjects.BaseTwoRoundMatchesModularPower,
+            id: "prime-field.base-two-round-vs-modular-power"
         ),
         Case(
             id: "prime-field.baillie-composition",
@@ -904,6 +920,18 @@ internal static partial class LawRegistry {
             domain: PrimeFieldLucas,
             id: "deep.prime-field-lucas-vs-companion-matrix",
             width: 1
+        ),
+        ClaimCase(
+            claim: Subjects.LucasTraceLadderMatchesRecurrenceDeep,
+            id: "deep.prime-field-lucas-trace-ladder-vs-recurrence"
+        ),
+        ClaimCase(
+            claim: Subjects.BaseTwoBatchMatchesModularPowerDeep,
+            id: "deep.prime-field-base-two-batch-vs-modular-power"
+        ),
+        ClaimCase(
+            claim: Subjects.BaseTwoRoundMatchesModularPowerDeep,
+            id: "deep.prime-field-base-two-round-vs-modular-power"
         ),
         Case(
             id: "deep.prime-field-baillie-and-populations",

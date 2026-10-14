@@ -80,6 +80,7 @@ public static class NumberTheoryFunctions {
 
         return ((ulong)shifted);
     }
+
     /// <summary>Inverts a residue modulo an odd modulus by Pornin's binary extended GCD, the halving steps batched into
     /// update factors applied once per round.</summary>
     /// <param name="value">The residue to invert, below <paramref name="modulus"/>.</param>
@@ -94,7 +95,7 @@ public static class NumberTheoryFunctions {
     /// <c>(u, v)</c> by the same combinations divided by <c>2^31</c>. Every step lowers the two operands' summed bit
     /// length by at least one until the first reaches zero, so <c>2·64 − 1 = 127</c> steps finish the descent; five
     /// rounds of 31 steps run 155, a fixed count whatever the operands.</remarks>
-    private static bool TryInvertOdd(ulong value, ulong modulus, out ulong inverse) {
+    internal static bool TryInvertOdd(ulong value, ulong modulus, out ulong inverse) {
         var negatedInverse = (0UL - modulus.ModularInverse());
         var a = value;
         var b = modulus;

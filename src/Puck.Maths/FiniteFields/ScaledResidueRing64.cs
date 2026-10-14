@@ -31,12 +31,26 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public readonly struct ScaledResidueRing64 {
-    /// <summary>The exclusive bound on a modulus whose chains may carry residues lazily, below eight times the modulus, between products reduced by <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>.</summary>
-    /// <remarks><c>2^58</c>: the lifted REDC of a product of two operands below <c>8n</c> is below <c>64 n^2 / 2^64 + n</c>, which is below <c>2n</c> exactly when <c>64n</c> is below <c>2^64</c>.</remarks>
-    public const ulong LazyModulusCeiling = (1UL << 58);
-    /// <summary>The exclusive bound on a modulus whose chains may carry residues below twice the modulus between products reduced by <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>, folding each sum and difference once by twice the modulus.</summary>
-    /// <remarks><c>2^62</c>: the lifted REDC of a product of two operands below <c>2n</c> is below <c>4 n^2 / 2^64 + n</c>, which is below <c>2n</c> exactly when <c>4n</c> is below <c>2^64</c>; that is also what keeps a sum of two such operands inside the carrier.</remarks>
-    public const ulong FoldedLazyModulusCeiling = (1UL << 62);
+    /// <summary>The exclusive bound on a modulus whose chains may carry residues lazily, below four times the modulus, between REDCs lifted by the modulus, adding two such results with no fold.</summary>
+    /// <remarks>
+    /// <c>2^60</c>. The subtractive quotient <c>hi(a b) - hi(m n)</c> of <see cref="Reduce(ulong, ulong, ulong, ulong)"/>
+    /// lies in <c>(-n, a b / 2^64)</c>, so lifted by the modulus it lies in <c>(0, a b / 2^64 + n)</c>. Two operands
+    /// below <c>4n</c> keep that below <c>16 n^2 / 2^64 + n</c>, which is at most <c>2n</c> exactly when <c>16n</c> is
+    /// at most <c>2^64</c>, so the sum of two such results is below <c>4n</c> again. The prime kernels' lazy chains
+    /// carry their residues that way below this bound, and <see cref="Canonical(ulong, ulong)"/> recovers the residue
+    /// wherever one is compared.
+    /// </remarks>
+    public const ulong LazyModulusCeiling = (1UL << 60);
+    /// <summary>The exclusive bound on a modulus whose chains may carry signed representatives within the modulus of zero between products reduced by <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>, <see cref="ReduceSignedSquareSubtract(long, long, ulong, ulong)"/> and <see cref="ReduceSignedSquare(long, int, ulong, ulong)"/>, with no fold after any reduction.</summary>
+    /// <remarks>
+    /// <c>2^63</c>, the largest bound with <c>2n</c> at most <c>2^64</c>. An operand within <c>n</c> of zero squares and
+    /// doubles to below <c>2 n^2</c>, which is then below <c>2^64 n</c>, so the square over the radix lies in
+    /// <c>[0, n)</c>; two such operands multiply to within <c>n^2</c> of zero, so the product over the radix lies within
+    /// <c>n / 2</c> of zero; and an unsigned correction factor keeps each reduced value within <c>n</c> of zero again.
+    /// Every representative is then below <c>2^63</c> in magnitude, so a signed word holds it, and the residue is the
+    /// representative plus the modulus under its sign.
+    /// </remarks>
+    public const ulong SignedModulusCeiling = (1UL << 63);
 
     /// <summary>Creates the ring over an odd modulus.</summary>
     /// <param name="modulus">The modulus, which must be odd and greater than one. The precondition is not enforced.</param>
@@ -109,30 +123,32 @@ public readonly struct ScaledResidueRing64 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong Fold(ulong value, ulong modulus) =>
         (value - (modulus & unchecked((0UL - (value >= modulus).As<ulong>()))));
-    /// <summary>Reduces a lazily carried residue below eight times an odd modulus into <c>[0, modulus)</c>.</summary>
-    /// <param name="value">The value, below <c>8 * modulus</c>, so the modulus is below <see cref="LazyModulusCeiling"/>.</param>
-    /// <param name="modulus">The odd modulus, below <see cref="LazyModulusCeiling"/>.</param>
+    /// <summary>Reduces a lazily carried residue below four times an odd modulus into <c>[0, modulus)</c>.</summary>
+    /// <param name="value">The value, below <c>4 * modulus</c>.</param>
+    /// <param name="modulus">The odd modulus, below <c>2^62</c>, so that four times it fits the carrier.</param>
     /// <returns>The residue of <paramref name="value"/> in <c>[0, modulus)</c>.</returns>
     /// <remarks>
-    /// Three folds, by four times, twice and once the modulus, each a mask: a value below <c>8n</c> is below <c>4n</c>
-    /// after the first, below <c>2n</c> after the second and below <c>n</c> after the third. The widest operand the
-    /// lazy chains of <see cref="PrimeKernels"/> carry is below <c>8n</c>, which is what fixes the count.
+    /// Two folds, by twice and once the modulus, each a mask: a value below <c>4n</c> is below <c>2n</c> after the
+    /// first and below <c>n</c> after the second. The widest operand the lazy chains of <see cref="PrimeKernels"/>
+    /// carry is below <c>4n</c>, which is what fixes the count.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Canonical(ulong value, ulong modulus) {
-        var twice = (modulus << 1);
-
-        return Fold(
+    public static ulong Canonical(ulong value, ulong modulus) =>
+        Fold(
             modulus: modulus,
             value: Fold(
-                modulus: twice,
-                value: Fold(
-                    modulus: (twice << 1),
-                    value: value
-                )
+                modulus: (modulus << 1),
+                value: value
             )
         );
-    }
+    /// <summary>Moves a reduced residue to its representative of least magnitude, in <c>[-(modulus - 1) / 2, (modulus - 1) / 2]</c>.</summary>
+    /// <param name="value">The reduced residue, in <c>[0, modulus)</c>.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <returns><paramref name="value"/> less the modulus when it is past half the modulus; otherwise <paramref name="value"/>.</returns>
+    /// <remarks>A constant a signed chain subtracts inside <see cref="ReduceSigned(long, long, long, ulong, ulong)"/> takes this form, which is what holds the chain's bound. The fold is a mask, as <see cref="Fold(ulong, ulong)"/>'s is.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Center(ulong value, ulong modulus) =>
+        unchecked(((long)(value - (modulus & (0UL - (value > (modulus >>> 1)).As<ulong>())))));
     /// <summary>Recovers the ordinary residue a Montgomery-form element stands for.</summary>
     /// <param name="value">The reduced Montgomery-form element.</param>
     /// <returns>The residue in <c>[0, Modulus)</c>.</returns>
@@ -226,8 +242,9 @@ public readonly struct ScaledResidueRing64 {
     /// into a branch rather than a conditional move. The low half of the product is a separate truncated multiply
     /// rather than the second output of the widening one: <see cref="Math.BigMul(ulong, ulong, out ulong)"/> and the
     /// <see cref="UInt128"/> product both hand that half back through memory, and it heads the chain's critical path.
-    /// Chains over a modulus below <see cref="LazyModulusCeiling"/> run <see cref="ReduceLazy(ulong, ulong, ulong, ulong)"/>
-    /// instead, which has no correction at all.
+    /// The prime kernels' chains below <see cref="SignedModulusCeiling"/> carry unreduced representatives instead, a
+    /// REDC lifted by the modulus below <see cref="LazyModulusCeiling"/> or a signed one,
+    /// <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>, and have no correction at all.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -245,65 +262,138 @@ public readonly struct ScaledResidueRing64 {
 
         return ((high - correction) + (modulus & borrow));
     }
-    /// <summary>Multiplies two lazily carried residues whose product is below <c>2^64</c> times the modulus and reduces it by REDC lifted by the modulus, to a value below twice the modulus.</summary>
-    /// <param name="left">The first factor: below <c>8 * modulus</c> for a modulus below <see cref="LazyModulusCeiling"/>, below <c>2 * modulus</c> for one below <see cref="FoldedLazyModulusCeiling"/>.</param>
-    /// <param name="right">The second factor, under the same bound as <paramref name="left"/>.</param>
-    /// <param name="modulus">The odd modulus, below <see cref="FoldedLazyModulusCeiling"/>.</param>
+    /// <summary>Multiplies two signed representatives within an odd modulus below <c>2^63</c> of zero, reduces the product by REDC and subtracts a centered constant inside the reduction.</summary>
+    /// <param name="left">The first factor, in <c>(-modulus, modulus)</c>.</param>
+    /// <param name="right">The second factor, in <c>(-modulus, modulus)</c>.</param>
+    /// <param name="subtrahend">The constant, in <c>[-(modulus - 1) / 2, (modulus - 1) / 2]</c>, as <see cref="Center(ulong, ulong)"/> returns it.</param>
+    /// <param name="modulus">The odd modulus, below <see cref="SignedModulusCeiling"/>.</param>
     /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>, <see cref="ModulusInverse"/>.</param>
-    /// <returns>A value below <c>2 * modulus</c> congruent to <c>left * right / 2^64</c> modulo <paramref name="modulus"/>.</returns>
+    /// <returns>A value congruent to <c>left * right / 2^64 - subtrahend</c> modulo <paramref name="modulus"/>, in <c>(-modulus, modulus)</c>.</returns>
     /// <remarks>
     /// <para>
-    /// The subtractive quotient of <see cref="Reduce(ulong, ulong, ulong, ulong)"/>, <c>hi(left * right) - hi(m * modulus)</c>,
-    /// lies in <c>(-modulus, left * right / 2^64)</c>, so adding the modulus lands it in <c>(0, 2 * modulus)</c>
-    /// whenever the product is below <c>2^64 * modulus</c>. Two operands below <c>8 * modulus</c> satisfy that below
-    /// <see cref="LazyModulusCeiling"/>, where <c>64 * modulus</c> is below <c>2^64</c>; two below <c>2 * modulus</c>
-    /// satisfy it below <see cref="FoldedLazyModulusCeiling"/>. A chain that keeps its operands under the bound its
-    /// modulus allows needs no comparison between its products, and <see cref="Canonical(ulong, ulong)"/> or
-    /// <see cref="Fold(ulong, ulong)"/> recovers the unique residue wherever one is compared. The modulus is added to
-    /// the product's high half, which is ready before the critical multiply, so the chain's step is the three
-    /// multiplies and one subtraction. The high half is formed and lifted before the factor, in that order in the
-    /// source as well: the JIT allocates in source order, and this order keeps the interleaved four-chain walk of
-    /// <see cref="PrimeKernels"/> free of stack traffic, where forming the factor first sends it through the stack on
-    /// the critical path.
+    /// For the signed product <c>T</c> the factor <c>q = lo(T) n^-1</c> is read unsigned, so <c>q n</c> agrees with
+    /// <c>T</c> in its low word and <c>(T - q n) / 2^64</c> is the exact difference of <c>T</c>'s signed high word and
+    /// the unsigned high word of <c>q n</c>, which lies in <c>[0, n)</c>. Two operands within <c>n</c> of zero multiply
+    /// to below <c>n^2</c> in magnitude, which is below <c>2^63 n</c> under the ceiling, so the signed high word lies in
+    /// <c>[-(n + 1) / 2, (n - 1) / 2]</c> and, less the centered constant, in <c>[-n, n)</c>. One fold by the sign
+    /// lands that in <c>[0, n)</c>, and the difference with the correction then lies in <c>(-n, n)</c>: the bound the
+    /// operands started under, so a chain of these products needs no other fold.
     /// </para>
     /// <para>
-    /// The result is not unique: a chain that reads a value back as a residue must fold it first, and the values two
-    /// chains carry differ even when the residues they stand for agree. The folded result equals
-    /// <see cref="Reduce(ulong, ulong, ulong, ulong)"/>'s, so a decision read from either form is the same decision.
+    /// The fold runs on the high word, which is ready while the factor's two truncated multiplies and the correction's
+    /// high multiply, the critical path, are still running, so the step's critical path is the reduction's own. The
+    /// signed high word is the unsigned one less each factor under the other's sign mask, modulo <c>2^64</c>: the word of
+    /// a negative factor is the factor plus <c>2^64</c>. No signed widening multiply runs, since
+    /// <see cref="Math.BigMul(long, long, out long)"/> and the <see cref="Int128"/> product hand their low word back
+    /// through memory; the low word is a separate truncated multiply. The constant and the correction terms are
+    /// gathered and negated before the high multiply is added, which keeps the high word out of the register
+    /// <c>MULX</c> reads implicitly, so the trace ladder gives it no stack slot.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong ReduceLazy(ulong left, ulong right, ulong modulus, ulong inverse) {
-        var lifted = (MultiplyHigh(
-            left: left,
-            right: right
-        ) + modulus);
-        var factor = unchecked(((left * right) * inverse));
+    public static long ReduceSigned(long left, long right, long subtrahend, ulong modulus, ulong inverse) {
+        var first = unchecked(((ulong)left));
+        var second = unchecked(((ulong)right));
+        var factor = unchecked(((first * second) * inverse));
+        var high = unchecked(((0UL - (((SignMask(value: first) & second) + (SignMask(value: second) & first)) + ((ulong)subtrahend))) + MultiplyHigh(left: first, right: second)));
 
-        return (lifted - MultiplyHigh(
-            left: factor,
-            right: modulus
-        ));
+        high = unchecked((high + (SignMask(value: high) & modulus)));
+
+        return unchecked(((long)(high - MultiplyHigh(left: factor, right: modulus))));
     }
-    /// <summary>Multiplies two Montgomery-form residues of a modulus below <c>2^32</c> and reduces the product lazily, by REDC with the full radix <c>2^64</c>.</summary>
-    /// <param name="left">The first factor, in <c>[1, modulus]</c>.</param>
-    /// <param name="right">The second factor, in <c>[1, modulus]</c>.</param>
-    /// <param name="modulus">The odd modulus, below <c>2^32</c>.</param>
-    /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>.</param>
-    /// <returns>The product <c>left * right / 2^64</c> modulo <paramref name="modulus"/>, in <c>[1, modulus]</c>, where <paramref name="modulus"/> itself stands for zero.</returns>
+    /// <summary>Squares a signed representative within an odd modulus below <c>2^63</c> of zero, reduces the square by REDC and subtracts a centered constant inside the reduction: <see cref="ReduceSigned(long, long, long, ulong, ulong)"/> of a value with itself.</summary>
+    /// <param name="value">The representative, in <c>(-modulus, modulus)</c>.</param>
+    /// <param name="subtrahend">The constant, in <c>[-(modulus - 1) / 2, (modulus - 1) / 2]</c>, as <see cref="Center(ulong, ulong)"/> returns it.</param>
+    /// <param name="modulus">The odd modulus, below <see cref="SignedModulusCeiling"/>.</param>
+    /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>, <see cref="ModulusInverse"/>.</param>
+    /// <returns>A value congruent to <c>value^2 / 2^64 - subtrahend</c> modulo <paramref name="modulus"/>, in <c>(-modulus, modulus)</c>.</returns>
     /// <remarks>
-    /// Both factors are at most the modulus, so their product fits the low word and the high word is zero. The factor
-    /// <c>m = product * inverse</c> then makes <c>m * modulus</c> agree with the product in its low word, so the product
-    /// is <c>-floor(m * modulus / 2^64)</c> times the radix modulo the modulus, and that high half is below the
-    /// modulus: <c>modulus - high</c> is the residue in <c>[1, modulus]</c>, with no correction step. Every residue
-    /// class has exactly one representative in that range, so equality tests against representatives in it are exact.
+    /// The interval proof is <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>'s, with the square's high word
+    /// in <c>[0, n / 2)</c>. The factor is formed before the high word, in that order in the source as well: the JIT
+    /// emits in source order and the core issues the oldest ready instruction first, so the factor's two truncated
+    /// multiplies, the critical path, run ahead of the high multiply off it. Beside the cross product in the trace
+    /// ladder the JIT gives the factor a stack slot, and this order still measures faster than the high word first,
+    /// which keeps every term in a register.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong ReduceNarrow(ulong left, ulong right, ulong modulus, ulong inverse) =>
-        (modulus - MultiplyHigh(
-            left: unchecked(((left * right) * inverse)),
-            right: modulus
-        ));
+    public static long ReduceSignedSquareSubtract(long value, long subtrahend, ulong modulus, ulong inverse) {
+        var word = unchecked(((ulong)value));
+        var factor = unchecked(((word * word) * inverse));
+        var high = unchecked(((0UL - ((SignMask(value: word) & (word << 1)) + ((ulong)subtrahend))) + MultiplyHigh(left: word, right: word)));
+
+        high = unchecked((high + (SignMask(value: high) & modulus)));
+
+        return unchecked(((long)(high - MultiplyHigh(left: modulus, right: factor))));
+    }
+    /// <summary>Squares a signed representative within an odd modulus below <c>2^63</c> of zero, doubled or not, and reduces the square by REDC with no fold.</summary>
+    /// <param name="value">The representative, in <c>(-modulus, modulus)</c>.</param>
+    /// <param name="doubling">One to double the square before the reduction, zero to keep it.</param>
+    /// <param name="modulus">The odd modulus, below <see cref="SignedModulusCeiling"/>.</param>
+    /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>, <see cref="ModulusInverse"/>.</param>
+    /// <returns><c>(2^doubling * value^2 - q * modulus) / 2^64</c> for the factor <c>q</c> that makes the division exact, congruent to <c>2^doubling * value^2 / 2^64</c> modulo <paramref name="modulus"/>, in <c>(-modulus, modulus)</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// The square <c>T = 2^b x^2</c> is never negative and, for <c>|x| &lt; n</c>, below <c>2 n^2</c>, which is below
+    /// <c>2^64 n</c> when <c>n</c> is below <c>2^63</c>; so its high word lies in <c>[0, n)</c>. The factor
+    /// <c>q = lo(T) n^-1</c> is read unsigned, so the high word of <c>q n</c> lies in <c>[0, n)</c> as well, the two
+    /// products agree in their low words, and <c>(T - q n) / 2^64</c> is the exact difference of their high words, in
+    /// <c>(-n, n)</c>: the bound the operand started under, so a square-and-double chain from a reduced seed needs no
+    /// fold at all. Every representative is below <c>2^63</c> in magnitude, so a signed word holds it.
+    /// </para>
+    /// <para>
+    /// No product is formed from the doubled operand. The low word of <c>T</c> is that of <c>x^2</c> shifted, so the
+    /// factor is <c>lo(x^2)</c> times the inverse shifted, a shift that depends on the bit alone and leaves the
+    /// chain's critical path two truncated multiplies, one high multiply and one subtraction. The high word of
+    /// <c>x^2</c> is the unsigned one less <c>2x</c> for a negative <c>x</c>, since the word of a negative <c>x</c> is
+    /// <c>x + 2^64</c>, and the doubling shifts the carry of the low word into it.
+    /// </para>
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long ReduceSignedSquare(long value, int doubling, ulong modulus, ulong inverse) {
+        var word = unchecked(((ulong)value));
+        var low = unchecked((word * word));
+        var factor = unchecked((low * (inverse << doubling)));
+        var high = unchecked((MultiplyHigh(left: word, right: word) - (SignMask(value: word) & (word << 1))));
+
+        return unchecked(((long)(((high << doubling) | ((low >>> 63) & ((ulong)doubling))) - MultiplyHigh(left: factor, right: modulus))));
+    }
+    /// <summary>Squares a representative within an odd modulus of zero carried as a word and a borrow mask, and reduces the square by REDC with no fold.</summary>
+    /// <param name="value">The word: the representative itself when <paramref name="borrow"/> is zero, the representative plus <c>2^64</c> when it is all ones.</param>
+    /// <param name="borrow">The borrow mask, zero or all ones.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>, <see cref="ModulusInverse"/>.</param>
+    /// <returns>The reduced square <c>(x^2 - q * modulus) / 2^64</c>, congruent to <c>x^2 / 2^64</c> modulo <paramref name="modulus"/> and in <c>(-modulus, modulus)</c>, carried the same way: its word and its borrow mask.</returns>
+    /// <remarks>
+    /// <para>
+    /// The 65-bit form of <see cref="ReduceSignedSquare(long, int, ulong, ulong)"/> for a modulus at any size: the
+    /// representative <c>x = w - 2^64 b</c> of a word <c>w</c> and a borrow bit <c>b</c> lies in <c>(-n, n)</c>, which no
+    /// single word holds once <c>n</c> passes <c>2^63</c>. The square is below <c>n^2</c>, so its high word lies in
+    /// <c>[0, n)</c>; <c>w^2</c> exceeds it by <c>2^65 x + 2^128</c> when <c>b</c> is set, so the square's low word is
+    /// that of <c>w^2</c> and its high word that of <c>w^2</c> less <c>2w</c>, modulo <c>2^64</c>. With the factor read
+    /// unsigned the high word of <c>q n</c> lies in <c>[0, n)</c> too, so the reduced square, the difference of the two
+    /// high words, lies in <c>(-n, n)</c> and borrows exactly when the first is below the second.
+    /// </para>
+    /// <para>
+    /// The borrow is the only fold, and nothing waits on it: the next square reads it only to correct its high word,
+    /// off the chain's critical path, which is two truncated multiplies, one high multiply and one subtraction. The
+    /// residue is the word plus the modulus under the borrow mask, in <c>[0, n)</c>.
+    /// </para>
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (ulong Value, ulong Borrow) ReduceBorrowedSquare(ulong value, ulong borrow, ulong modulus, ulong inverse) {
+        var factor = unchecked(((value * value) * inverse));
+        var high = unchecked((MultiplyHigh(left: value, right: value) - (borrow & (value << 1))));
+        var correction = MultiplyHigh(left: factor, right: modulus);
+
+        return (unchecked((high - correction)), unchecked((0UL - (high < correction).As<ulong>())));
+    }
+
+    /// <summary>Returns all ones for a word whose sign bit is set, and zero otherwise.</summary>
+    /// <param name="value">The word, read as a two's-complement integer.</param>
+    /// <returns><c>2^64 - 1</c> when <paramref name="value"/> is negative read signed; otherwise zero.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong SignMask(ulong value) => unchecked(((ulong)(((long)value) >> 63)));
+
     /// <summary>Raises a ring element to a power.</summary>
     /// <param name="exponent">The exponent; zero yields <see cref="One"/> for every <paramref name="value"/>.</param>
     /// <param name="value">The reduced Montgomery-form base.</param>
@@ -371,5 +461,26 @@ public readonly struct ScaledResidueRing64 {
         var borrow = unchecked((0UL - (left < right).As<ulong>()));
 
         return (difference + (modulus & borrow));
+    }
+    /// <summary>Subtracts one residue from another modulo an odd modulus, with the fold a conditional move that stays one.</summary>
+    /// <param name="left">The reduced minuend.</param>
+    /// <param name="right">The reduced subtrahend.</param>
+    /// <param name="modulus">The odd modulus.</param>
+    /// <returns>The reduced difference, equal to <see cref="Subtract(ulong, ulong, ulong)"/>.</returns>
+    /// <remarks>
+    /// RyuJIT if-converts a select only outside loops, so inlined into a loop body the ternary becomes a branch and
+    /// <see cref="Subtract(ulong, ulong, ulong)"/> is written as a mask (<c>setb</c>, <c>movzx</c>, <c>neg</c>,
+    /// <c>and</c>, <c>add</c>), which costs the chain about four cycles over a conditional move. A call is the one
+    /// boundary the JIT does not cross, so this leaf, never inlined, compiles to <c>cmp</c>, <c>cmovb</c>, <c>ret</c>:
+    /// the call keeps the select a conditional move on a loop's critical path. It earns its call only on the last
+    /// subtraction of a chain, whose result nothing else waits behind; on both subtractions of a reduction the
+    /// measured gain turned layout-sensitive. <see cref="Subtract(ulong, ulong, ulong)"/> stays the inlined mask for
+    /// everything else.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static ulong SubtractBySelect(ulong left, ulong right, ulong modulus) {
+        var difference = (left - right);
+
+        return ((left < right) ? (difference + modulus) : difference);
     }
 }

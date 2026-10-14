@@ -17,5 +17,50 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "prime-field.trial-division-rungs-vs-remainder",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasTrialFactor512" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasTrialFactor256" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasTrialFactor128" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasTrialFactorScalar" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasNarrowTrialFactor512" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasNarrowTrialFactor256" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasNarrowTrialFactor128" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "HasNarrowTrialFactorScalar" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "TrialDivisionPrimeCount" },
+      { "Type": "Puck.Maths.PrimeKernels", "Name": "TrialDivisionCeiling" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Each trial-division rung, PrimeKernels.HasTrialFactor512, HasTrialFactor256, HasTrialFactor128 and HasTrialFactorScalar, which the word decision runs ahead of Baillie-PSW above 2^32, and, at every value below 2^32, each narrow rung, HasNarrowTrialFactor512, HasNarrowTrialFactor256, HasNarrowTrialFactor128 and HasNarrowTrialFactorScalar, which IsPrime(uint) runs above 65,535: at every value below 2^16; for each of the 128 tested odd primes p, p itself, p^2, the largest multiple of p the carrier holds, its neighbours and the multiple below it, p times each of the twelve primes past the table, and sixteen drawn multiples; the products of two and of three primes past the table, which no tested prime divides; the 256 words whose 16-bit digits are each 0, 2^15 - 1, 2^15 or 2^16 - 1, where the folding rungs' balanced digit sums reach furthest from zero, and each tested prime's multiples either side of every one of them; 40,000 drawn words; the top 1,024 values of each carrier; for each tested prime, the largest multiple below 2^32, its neighbours, the multiple below it and a drawn 32-bit multiple; and 40,000 drawn 32-bit words. TrialDivisionPrimeCount and TrialDivisionCeiling are pinned as the count of odd primes through the ceiling",
+        "Against": "Remainders: whether value % p is zero for some p of an odd-prime list the law builds by its own trial division, sharing no inverse, ceiling, table or vector with the subject. Both sides EXACT, so condition (B) drops out",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeExtensions.IsPrime above 2^32 on products whose least prime factor is 3, 5, 7, the table's last two primes 719 and 727, or the first three primes past it, 733, 739 and 743, each times the first prime above 2^24, above 2^40 and below the largest cofactor the carrier holds: those through 727 stop at trial division, those past it reach Baillie-PSW, and the cofactors themselves are prime",
+        "Against": "Oracles.ExactPrimality, ordinary trial division and twenty BigInteger strong rounds, which never calls the production decision, chooses each cofactor and confirms each product composite",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: a rung its host does not accelerate runs in software, so every host runs every rung; the wide rungs fold the word onto 32-bit values with AVX-512BW, AVX2 and SSE4.1 multiply-add-adjacent instructions only where the host has them and multiply by 64-bit inverses otherwise, so a run exercises the form its processor selects; the change ran this law natively and with DOTNET_EnableAVX512=0, DOTNET_EnableAVX2=0 and DOTNET_EnableHWIntrinsic=0",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]
