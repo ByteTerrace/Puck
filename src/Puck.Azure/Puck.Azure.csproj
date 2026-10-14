@@ -23,5 +23,11 @@
         <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
         <PackageReference Include="Azure.Storage.Blobs" Version="[12.*,13.0)" />
         <PackageReference Include="Microsoft.Extensions.Azure" Version="[1.*,2.0)" />
+        <!-- The data-protection packages resolve System.Security.Cryptography.Xml and .Pkcs at their lowest
+             10.0.x in every consumer outside the ASP.NET Core shared framework, and those versions carry
+             advisories restore refuses (NU1903). The floor flows to those consumers from here; this project
+             takes both from the framework, so it waives the prune notice (NU1510). -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="[10.0.13,11.0)" NoWarn="NU1510" />
+        <PackageReference Include="System.Security.Cryptography.Xml" Version="[10.0.13,11.0)" NoWarn="NU1510" />
     </ItemGroup>
 </Project>

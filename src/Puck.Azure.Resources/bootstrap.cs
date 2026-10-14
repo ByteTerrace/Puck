@@ -11,9 +11,9 @@
 #:package Microsoft.VisualStudio.Services.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.ServiceEndpoints.WebApi@20.256.2
 #:package System.CommandLine@2.0.12
-#:package System.Configuration.ConfigurationManager@10.0.12
-#:package System.Drawing.Common@10.0.12
-#:package System.Security.Cryptography.Xml@10.0.12
+#:package System.Configuration.ConfigurationManager@10.0.13
+#:package System.Drawing.Common@10.0.13
+#:package System.Security.Cryptography.Xml@10.0.13
 /* PowerShell
     dotnet ./bootstrap.cs `
         --application-name '<application-name>' `

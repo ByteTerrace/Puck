@@ -452,21 +452,13 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "KG8t5RHczdgB3IWvRndpI0nE1DSo7ikDYSDbITxfgRFyIvnYiKzuPjaZOsPnwFQ1aOGUl9sEulJul9wlHLEUoA=="
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "4.5.0",
         "contentHash": "wLBKzFnDCxP12VL9ANydSYhk59fC4cvOr9ypYQLPnAj48NQIhqnjdD2yhP8yEKyBJEjERWS9DisKL7rX5eU25Q=="
-      },
-      "System.Security.Cryptography.Xml": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "Mz6Y+s+uMQKj1H2BUF0OhlmaOQkLgSG34/IrUaBDirYBQ6bgwcFvO/XtXWcoDlBLFoFB0uKqDNhybHOd+fQK1A==",
-        "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.10"
-        }
       },
       "xunit.analyzers": {
         "type": "Transitive",
@@ -544,7 +536,8 @@
           "Azure.Identity": "[1.*, 2.0.0)",
           "Azure.Monitor.OpenTelemetry.Exporter": "[1.*, 2.0.0)",
           "Azure.Storage.Blobs": "[12.*, 13.0.0)",
-          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
+          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, 11.0.0)"
         }
       }
     }

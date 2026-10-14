@@ -14,8 +14,8 @@
       "Microsoft.AspNetCore.Authentication.JwtBearer": {
         "type": "Direct",
         "requested": "[10.*, 11.0.0)",
-        "resolved": "10.0.12",
-        "contentHash": "DeE+Bq2OqB3FikFkZk+7gFBeLOQhkSolejLrbi+a9zpfvXtW1Ff6Nd6DIvHXIm+pc4aM4+52vDy3jnuau0qoUQ==",
+        "resolved": "10.0.13",
+        "contentHash": "cEPhQWsaUKymSdQ+NB2rF4GnWtjofAcRrzr2aGPzbjSFyeDtIlBzrbX1Qeh/OAHjvdwBe05SbsukoSbz27AD6g==",
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.19.2"
         }
@@ -32,8 +32,8 @@
       "Microsoft.Graph": {
         "type": "Direct",
         "requested": "[6.*, 7.0.0)",
-        "resolved": "6.7.0",
-        "contentHash": "TyW7c/4W1uHwqDoQ4HPb/fL6A16CUqM206djAcCSLlYNX3pi7mcLjrIgD0T5VETJp7eQ/LeEU/Yfy1W5239G9A==",
+        "resolved": "6.8.0",
+        "contentHash": "CBU0bRVkiYy8TLiGmGbIUTENCfPnXF+59FCZKCOATS+uN4RmoH350/2chiZheaWUWk22v7rOoWZaJWW4Qtbn7Q==",
         "dependencies": {
           "Microsoft.Graph.Core": "4.0.1"
         }
@@ -154,13 +154,13 @@
       },
       "Azure.Core": {
         "type": "Transitive",
-        "resolved": "1.62.0",
-        "contentHash": "C0ijs91ZW2uhF/VwGLXeayb+RwTWhDxKnrsmqPWg5HkYtPQ93mzaydyMCjAzE0AG5yHc1bpaPc+NPlZUgz3w8g==",
+        "resolved": "1.63.0",
+        "contentHash": "5egODg5yWcRV0kkAv22jQL7YmsfupX7intDYbxZMu8giASSQVfG5+mwC+BdJOWvhFT1Y+9KzuvbUGqAVEBzsfw==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "10.0.10",
-          "Microsoft.Identity.Client": "4.84.2",
-          "Microsoft.Identity.Client.Extensions.Msal": "4.84.2",
-          "System.ClientModel": "1.15.0",
+          "Microsoft.Identity.Client": "4.90.0",
+          "Microsoft.Identity.Client.Extensions.Msal": "4.90.0",
+          "System.ClientModel": "1.16.0",
           "System.Memory.Data": "10.0.10"
         }
       },
@@ -217,10 +217,10 @@
       },
       "Azure.Monitor.OpenTelemetry.Exporter": {
         "type": "Transitive",
-        "resolved": "1.9.0",
-        "contentHash": "gXe64QuF30HQkuo1B+FqsekN9coca1vcFKDWCgioo39Hb5Yc0lMS6g8OAa7rGBIssQBoaQQAxIM6Dn4pJbXz+g==",
+        "resolved": "1.10.0",
+        "contentHash": "39Vc71fy1KYqU70j3sbGOqUU6wT5/eKskEuoW8R+H+J+srIyCewN6ooMTj+6lU4yFpJ0x5da2jx1GK9h48g6iw==",
         "dependencies": {
-          "Azure.Core": "1.62.0",
+          "Azure.Core": "1.63.0",
           "OpenTelemetry.Extensions.Hosting": "1.18.0",
           "OpenTelemetry.PersistentStorage.FileSystem": "1.1.1"
         }
@@ -243,8 +243,8 @@
       },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "12.30.0",
-        "contentHash": "pf6tqkzNANU5Fvfibse3fVRNWJol4jb9iA/wjHu1EHEpWpFHasHaiVNc11fncvOwnphzm4xaZwXzrg34yAI2hw==",
+        "resolved": "12.30.1",
+        "contentHash": "ywPqtDHLH5MY0Cp/wfLQgqhHOuJmD+bYVJawjXudtaQr9aJB+9orhk8oE6hHPy5s8H5bzq2q/mDkESf8w1rzBg==",
         "dependencies": {
           "Apache.Arrow": "22.1.0",
           "Azure.Core": "1.60.0",
@@ -353,18 +353,18 @@
       },
       "Microsoft.Identity.Client": {
         "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "Va9FjmABSgj/lcUfHH0pBNQkmS7SNyepz2ERV7Yynp6QgEYpFdSqR6Vzy1WWipN8GS5pBHuXoZbqaDWuARCrHQ==",
+        "resolved": "4.90.0",
+        "contentHash": "oc5A0jmu083T3OW1JVYMrM1rekIL8SkBRB/byMMQjFuYlRZsMh3wDeCwwrz9sGI6XlP5BIqO7XWgjPpF3reF5A==",
         "dependencies": {
           "Microsoft.IdentityModel.Abstractions": "8.14.0"
         }
       },
       "Microsoft.Identity.Client.Extensions.Msal": {
         "type": "Transitive",
-        "resolved": "4.84.2",
-        "contentHash": "+D98LaU3dOu/Nzs6kgbBJapMvH7iwYcAeC99XwSkpmEadsPv6rozecOl9P6m4A3RfpOuPt9e6J6TwwUUp3+M4w==",
+        "resolved": "4.90.0",
+        "contentHash": "/L7b+fNF+ITSw3SPlbgE7ax2MqVg/a60kHsDooKUbjYDdX88COTTwE20qRPT84fykehBTSmP7LSxh6b5hwIEOw==",
         "dependencies": {
-          "Microsoft.Identity.Client": "4.84.2",
+          "Microsoft.Identity.Client": "4.90.0",
           "System.Security.Cryptography.ProtectedData": "4.5.0"
         }
       },
@@ -685,10 +685,10 @@
       },
       "System.ClientModel": {
         "type": "Transitive",
-        "resolved": "1.15.0",
-        "contentHash": "y6zQLInrpX+oGL1gXM04DrUSu1O1esWxt4rD/zrujTnzIFChn/noD1OiVVpTrU8ZvglwqO2Uw038svUR3SiAOg==",
+        "resolved": "1.16.0",
+        "contentHash": "vLljZON+8lXDUtsPP8uwsPvsBSQaUHhh8NvB+D9TQsXu5n622RLtuLyZAcyIFc98b8ixrwD0AhzUQhtg2NwJnQ==",
         "dependencies": {
-          "System.Memory.Data": "10.0.9"
+          "System.Memory.Data": "10.0.10"
         }
       },
       "System.Composition": {
@@ -758,6 +758,11 @@
         "resolved": "10.0.10",
         "contentHash": "roR+5AeOpflUxJQlqSfsZs/Bvi1uw4KBuTkIgF1e8l0RdalG4AUn84+sjJLclEfOV85gAjc8+Pp540qjDE5UIg=="
       },
+      "System.Security.Cryptography.Pkcs": {
+        "type": "Transitive",
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
+      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "4.5.0",
@@ -774,7 +779,8 @@
           "Azure.Identity": "[1.*, 2.0.0)",
           "Azure.Monitor.OpenTelemetry.Exporter": "[1.*, 2.0.0)",
           "Azure.Storage.Blobs": "[12.*, 13.0.0)",
-          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
+          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, 11.0.0)"
         }
       },
       "puck.storage": {

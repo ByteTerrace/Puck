@@ -146,8 +146,8 @@ public sealed class HostLoadLawTests {
     }
     [Fact]
     public void AReuseNodeIsAnMsbuildNodeStartedForReuse() {
-        Assert.True(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.401\MSBuild.dll"" /nodemode:1 /nodeReuse:true", name: "dotnet"));
-        Assert.False(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.401\MSBuild.dll"" /nodemode:1 /nodeReuse:false", name: "dotnet"));
+        Assert.True(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.402\MSBuild.dll"" /nodemode:1 /nodeReuse:true", name: "dotnet"));
+        Assert.False(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.402\MSBuild.dll"" /nodemode:1 /nodeReuse:false", name: "dotnet"));
         Assert.False(condition: HostProcesses.IsReuseNode(commandLine: "pwsh -c dotnet build -nodeReuse:true", name: "pwsh"));
     }
     [InlineData("dotnet", "dotnet tool.dll --text nodeReuse:true")]
