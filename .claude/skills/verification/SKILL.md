@@ -69,6 +69,9 @@ and `puck docs citations` when required below, under the GPU rules.
 - Refresh the copy after a change under `src/Puck.Cli` or any project it
   references, before the gate that judges that change.
 - Name the CLI that produced each result in your report.
+- Restore a fresh worktree once (`dotnet restore Puck.slnx -nodeReuse:false`)
+  before its first gate or `puck references`: the gate's build passes
+  `--no-restore`, and both fail on an unrestored tree.
 
 ## Build before you test
 

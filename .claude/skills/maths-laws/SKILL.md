@@ -37,6 +37,10 @@ documentation, and this skill with them when guidance disagrees.
    A law that lands with a fix is proven against that fix with
    `puck laws prove <law> --fix <commit>`, or `--file-list` for an
    uncommitted fix; it never hand-reverts files in a shared tree.
+   Most Maths laws are rows of one theory, which `puck laws prove` cannot
+   select one at a time; prove such a row with an exact one-line mutation in
+   a scratch worktree, failing at the intended assertion, and name the
+   mutation in the commit.
 
 ## Run a tier
 
