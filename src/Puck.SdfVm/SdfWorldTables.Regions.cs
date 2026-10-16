@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-// The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
+// The host-written tables: program words, dynamic transforms, screen surfaces, screen mappings,
 // volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
 // shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
@@ -18,16 +18,15 @@ public sealed partial class SdfWorldTables {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
     // The brick staging's index in the reserved copy pool, past the per-frame regions.
     private const int BrickStagingRegionIndex = RegionCount;
-    private const int DecalRegionIndex = 5;
+    private const int DecalRegionIndex = 4;
     private const int DynamicTransformRegionIndex = 1;
-    private const int InstanceGridRegionIndex = 2;
-    private const int MeshRegionIndex = 7;
+    private const int MeshRegionIndex = 6;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 14;
-    private const int ScreenMappingRegionIndex = 6;
-    private const int ScreenSurfaceRegionIndex = 3;
-    private const int VolumeRegionIndex = 4;
+    private const int RegionCount = 13;
+    private const int ScreenMappingRegionIndex = 5;
+    private const int ScreenSurfaceRegionIndex = 2;
+    private const int VolumeRegionIndex = 3;
 
     private readonly GpuRegion m_dynamicTransformRegion;
     private readonly GpuRegion m_screenSurfaceRegion;
@@ -41,9 +40,8 @@ public sealed partial class SdfWorldTables {
     // The upload's owed copies, recorded through the tables' counted recorder into the upload's command buffer.
     private readonly GpuRegionCopyRecording m_regionCopies;
 
-    // Replaced when UploadProgram grows the program or instance capacity.
+    // Replaced when UploadProgram grows the program capacity.
     private GpuRegion m_programRegion;
-    private GpuRegion m_instanceGridRegion;
     // Whether the dynamic-transform region has been packed whole once: its first frame packs every slot.
     private bool m_dynamicTransformsPacked;
     // One more when packed transform contents or the active row count changes. Replacing a source collection with
@@ -57,8 +55,6 @@ public sealed partial class SdfWorldTables {
     private SdfMovedTransforms? m_movedTransformsSource;
     private long m_movedTransformsSerial;
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
-    // A per-frame grid rebuild owed whether or not a transform moved: set by UploadProgram for a moving-instance program.
-    private bool m_instanceGridRebuildOwed;
 
     // The regions the copy pool serves: the per-frame regions, and the brick staging with a brick pool.
     private static int CopyRegionCount(bool brickPool) =>
@@ -163,7 +159,6 @@ public sealed partial class SdfWorldTables {
     private GpuRegion? RegionAt(int index) => index switch {
         ProgramRegionIndex => m_programRegion,
         DynamicTransformRegionIndex => m_dynamicTransformRegion,
-        InstanceGridRegionIndex => m_instanceGridRegion,
         ScreenSurfaceRegionIndex => m_screenSurfaceRegion,
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
@@ -180,7 +175,6 @@ public sealed partial class SdfWorldTables {
     private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
         ProgramRegionIndex => "program",
         DynamicTransformRegionIndex => "dynamic-transforms",
-        InstanceGridRegionIndex => "instance-grid",
         ScreenSurfaceRegionIndex => "screen-surfaces",
         VolumeRegionIndex => "volumes",
         DecalRegionIndex => "decals",
@@ -211,12 +205,6 @@ public sealed partial class SdfWorldTables {
             slotCount: FrameRingSize
         ));
     }
-    // Writes a freshly built instance grid into its region, which owes only the words that differ.
-    private void StageInstanceGrid(ReadOnlySpan<uint> words) =>
-        _ = m_instanceGridRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: words),
-            offset: 0
-        );
     // Writes the program's words into the program region, which owes only the words that differ from the last program.
     private void WriteProgramWords(SdfProgram program) =>
         _ = m_programRegion.Write(

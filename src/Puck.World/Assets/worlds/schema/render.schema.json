@@ -15,11 +15,6 @@
       "default": "Off",
       "title": "ShadowTier"
     },
-    "shadowCrowdRadius": {
-      "description": "The boot soft-shadow crowd radius (world units).",
-      "type": "number",
-      "default": 0
-    },
     "ambientOcclusion": {
       "description": "Whether ambient occlusion boots on.",
       "type": "boolean",
@@ -37,11 +32,6 @@
     },
     "temporal": {
       "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
-      "type": "boolean",
-      "default": false
-    },
-    "shadowAmortize": {
-      "description": "Whether secondary shadows boot reusing valid K history (world.shadow-amortize).",
       "type": "boolean",
       "default": false
     },
@@ -364,7 +354,7 @@
       "title": "WorldTonemap"
     },
     "farDistance": {
-      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+      "description": "The far distance in world units: the depth at which every view\u0027s geometry ends \u2014 the mesh raster\u0027s far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine\u0027s pinned 40. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
       "type": [
         "number",
         "null"

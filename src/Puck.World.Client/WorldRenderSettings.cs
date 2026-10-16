@@ -3,27 +3,6 @@ using Puck.SignedDistance;
 
 namespace Puck.World;
 
-/// <summary>The soft-shadow candidate-mask policy. <see cref="Auto"/> keeps exact gathers for small sessions and uses
-/// the camera-tile approximation at the declared fleet tiers; the other values are live profiling/authoring overrides.</summary>
-public enum ShadowMaskMode {
-    Auto,
-    ExactGather,
-    CameraTile,
-}
-/// <summary>The soft-shadow march quality policy. Auto keeps the exact engine path for small sessions and selects the
-/// bounded-cost approximation at fleet scale; the other values are live profiling/authoring overrides.</summary>
-public enum ShadowMarchMode {
-    Auto,
-    Exact,
-    Fast,
-}
-/// <summary>The ambient-occlusion sampling policy. Auto keeps the quality ladder for small sessions and selects the
-/// calibrated one-sample contact approximation at fleet scale; the other values are live profiling overrides.</summary>
-public enum AmbientOcclusionMode {
-    Auto,
-    Exact,
-    Fast,
-}
 /// <summary>
 /// The world's live render settings — the engine-wide levers (shadows, ambient occlusion, render scale) mutated by
 /// console verbs in real time and read by <c>WorldFramePresenter</c> every captured frame. Session state, not
@@ -34,22 +13,14 @@ public sealed partial class WorldRenderSettings {
     public Client.WorldSkyAudition SkyLayers { get; } = new();
 
     private bool m_ambientOcclusion;
-    private AmbientOcclusionMode m_ambientOcclusionQuality;
-    private volatile int m_bakes;
     private bool m_cadenceGate;
     private bool m_dynamicResolution;
-    private bool m_farBound;
     private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
     private int m_revision;
-    private float m_shadowCrowdRadius;
-    private ShadowMarchMode m_shadowMarch;
-    private ShadowMaskMode m_shadowMask;
-    private float m_shadowReach;
+    private bool m_shadows;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
-    private Puck.SdfVm.SdfRenderPath m_renderPath = Puck.SdfVm.SdfRenderPath.Mesh;
-    private bool m_shadowAmortize;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
 
@@ -61,40 +32,24 @@ public sealed partial class WorldRenderSettings {
     public WorldRenderSettings(WorldRenderDefaults defaults) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
-        ShadowReach = ShadowTiers.Scale(tier: defaults.Shadows);
+        Shadows = (defaults.Shadows != ShadowTier.Off);
         ShadowSlots = Client.WorldShadowSettings.From(render: defaults);
-        ShadowCrowdRadius = defaults.ShadowCrowdRadius;
-        ShadowMask = ShadowMaskMode.Auto;
-        ShadowMarch = ShadowMarchMode.Auto;
-        AmbientOcclusionQuality = AmbientOcclusionMode.Auto;
         AmbientOcclusion = defaults.AmbientOcclusion;
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
-        ShadowAmortize = defaults.ShadowAmortize;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         DynamicResolution = defaults.DynamicResolution;
-        FarBound = true;
         CadenceGate = true;
-
     }
 
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
     /// world); the <c>world.ao</c> verb toggles it live (it rides each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
     public bool AmbientOcclusion { get => m_ambientOcclusion; set { m_ambientOcclusion = value; m_revision++; } }
-    /// <summary>The live ambient-occlusion sampling policy. Auto selects the one-sample contact approximation at 16 or
-    /// more simulated stand-ins; exact and fast are explicit visual/performance A/B overrides.</summary>
-    public AmbientOcclusionMode AmbientOcclusionQuality { get => m_ambientOcclusionQuality; set { m_ambientOcclusionQuality = value; m_revision++; } }
-    /// <summary>Whether the per-tile far-field bound is active (default <see langword="true"/>). Set
-    /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to the far
-    /// distance (<c>render.farDistance</c>) exactly — a pure performance isolator (output-identical when on), so it is session state, never
-    /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
-    /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
-    public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
-    /// <summary>The indirect-light tier, which sizes the mesh path's irradiance volume. It boots from <c>render.indirect.tier</c>,
+    /// <summary>The indirect-light tier, which sizes the irradiance volume. It boots from <c>render.indirect.tier</c>,
     /// Medium when absent, and follows the live session lever or quality preset thereafter.</summary>
     public SdfIndirectTier IndirectTier {
         get => m_indirectTier;
@@ -104,28 +59,6 @@ public sealed partial class WorldRenderSettings {
             m_revision++;
         }
     }
-    /// <summary>Whether a prototype whose bake is ready draws its baked mesh, textured, in place of its field
-    /// (<c>world.bakes on|off</c>), or <see langword="null"/>, the default, for the world's own answer: its bakes draw
-    /// when the loaded world carries them (a released or compiled tree's <c>BAKE</c> chunk, whose pack holds every bake
-    /// before the first frame) and its fields draw otherwise, so no capture depends on a bake made on the device
-    /// (<see cref="DrawsBakes"/>). Presentation only: the field still answers contact, casts shadows and occludes, so
-    /// simulation state is the same either way. Session state, never durable config; a change rebuilds the static
-    /// scene.</summary>
-    public bool? Bakes {
-        get => m_bakes switch { 1 => true, 2 => false, _ => null };
-        set { m_bakes = value switch { true => 1, false => 2, null => 0 }; m_revision++; }
-    }
-
-    /// <summary>Returns whether the presentation draws its ready bakes: never on the baked-mesh path
-    /// (<see cref="RenderPath"/>), whose frame bakes every static placement from its field at a finer, adaptive
-    /// resolution than a prototype bake's fixed grid; otherwise as <see cref="Bakes"/> says when it is set, and
-    /// otherwise when the schedule's last reconcile found the loaded world's pack supplied every bake
-    /// (<see cref="Client.WorldBakeSchedule.Ships"/>).</summary>
-    /// <param name="schedule">The presentation's bake schedule, or <see langword="null"/> when it has none.</param>
-    /// <returns><see langword="true"/> when ready bakes draw.</returns>
-    public bool DrawsBakes(Client.WorldBakeSchedule? schedule) =>
-        ((RenderPath != Puck.SdfVm.SdfRenderPath.Mesh) && (Bakes ?? (schedule?.Ships ?? false)));
-
     /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
     /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
@@ -151,38 +84,17 @@ public sealed partial class WorldRenderSettings {
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
     public int Revision => unchecked((m_revision + SkyLayers.Revision));
-    /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
-    /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
-    /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the
-    /// per-instance <see cref="Puck.SignedDistance.DynamicTransform.CastsSoftShadow"/> lane <c>WorldSceneEmitter</c> computes
-    /// per frame, so no rebuild). 0 = only the local seats cast; a value ≥ the world's diameter = everyone casts. Bounding
-    /// who casts is how the population scales, since soft shadows dominate the GPU cost.</summary>
-    public float ShadowCrowdRadius { get => m_shadowCrowdRadius; set { m_shadowCrowdRadius = value; m_revision++; } }
-    /// <summary>The live soft-shadow march policy. Auto selects the bounded-cost path at 16 or more simulated stand-ins;
-    /// exact and fast are explicit A/B overrides.</summary>
-    public ShadowMarchMode ShadowMarch { get => m_shadowMarch; set { m_shadowMarch = value; m_revision++; } }
-    /// <summary>The live shadow candidate-mask policy. Auto selects the camera-tile approximation at 16 or more
-    /// simulated stand-ins; exact and camera-tile are explicit A/B overrides.</summary>
-    public ShadowMaskMode ShadowMask { get => m_shadowMask; set { m_shadowMask = value; m_revision++; } }
     /// <summary>The live shadow-slot policy, set by the world's quality row and persisted by save.</summary>
     public Client.WorldShadowSettings ShadowSlots { get => m_shadowSlots; set { m_shadowSlots = value; m_revision++; } }
-    /// <summary>The engine-wide soft-shadow reach fraction from 0 (off) through 1 (full reach). Named tiers are facades
-    /// over this continuous value. The <c>world.shadows</c> verb moves it live through each view's
-    /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> and <see cref="Puck.SdfVm.SdfViewQuality.ShadowDistanceScale"/>
-    /// lanes, so no rebuild.</summary>
-    public float ShadowReach { get => m_shadowReach; set { m_shadowReach = value; m_revision++; } }
+    /// <summary>Whether the shadow cascades render: boots on unless the definition's shadow tier is
+    /// <see cref="ShadowTier.Off"/>, and the <c>world.shadows</c> verb moves it live through each view's
+    /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> lane, so no rebuild.</summary>
+    public bool Shadows { get => m_shadows; set { m_shadows = value; m_revision++; } }
     /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
     /// and resolves them over its history into its output, at native or reduced render scale, through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
-    /// <summary>How the world's own views turn the program into pixels (<c>world.render-path</c>), through each view's
-    /// <see cref="Puck.SdfVm.SdfViewQuality.RenderPath"/> lane: the baked-mesh path by default, or the interpreter. A
-    /// change rebuilds each view's graph beside the installed one. A session lever only: no document saves it.</summary>
-    public Puck.SdfVm.SdfRenderPath RenderPath { get => m_renderPath; set { m_renderPath = value; m_revision++; } }
-    /// <summary>Whether secondary stable shadow slots reuse valid history when reconstruction is on. The
-    /// <c>world.shadow-amortize</c> session lever changes it without rebuilding the graph.</summary>
-    public bool ShadowAmortize { get => m_shadowAmortize; set { m_shadowAmortize = value; m_revision++; } }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
     /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>

@@ -2,8 +2,8 @@
 
 Sphere tracing is safe only when each step is bounded by the field's rate of
 change. Puck computes a program-wide conservative `stepScale` from the authored
-instruction stream and applies it in `map()`, and in every other marcher that
-walks the same stream.
+instruction stream and applies it in `mapCore`, which the bake samples through,
+and in every CPU marcher that walks the same stream.
 
 ## Marching contract
 
@@ -14,59 +14,8 @@ Host-side analysis and HLSL evaluation must agree on every instruction's
 effect.
 
 Consumers must distinguish scaled field distance from world-space length.
-Hit thresholds, AO probes, shadow steps, and bound comparisons must apply the
-conversion documented by the shader contract.
-
-## Tile-pruning certificates
-
-The tape pass encloses each candidate over balls covering a screen tile's
-depth interval. A centre sample `d` and a radius `r` give an interval around
-`d` with reach `L × r`, where `L` bounds the complete world-space candidate.
-Scaling changes both the sample coordinates and the returned distance;
-`distanceScale` alone is therefore insufficient. Domain warps need their own
-bounded contribution to `L`.
-
-The host derives candidate certificates with Puck.Maths' outward interval
-rules. Each certificate also bounds the existing GPU evaluator's float error
-on its admitted coordinate domain. The GPU expands for the errors of both
-the centre evaluation and the eventual ray sample, and rounds the interval
-outward. It does not introduce another shape evaluator. A missing model, an
-unbounded interval, an unsupported operation or a sample outside the admitted
-domain leaves the candidate live.
-
-A dynamic rigid pose transforms the ball before applying the candidate's
-local certificate. Its packed quaternion's polynomial supplies the operator
-norm, including nonunit quaternions, and the pose's float arithmetic contributes
-another outward error margin. Being a rigid-pose instruction alone is not a
-proof that its packed coefficients form an exact isometry.
-
-For superellipsoid exponents between two and three, the existing evaluator
-clamps its power approximation to a certified norm band. With `q = abs(p)/r`,
-the exact norm lies between `(1 − (7/25) × (e − 2)) × length(q)` and
-`length(q)`. Write its lower factor as `alpha`, its gap as `g = 1 − alpha`,
-the distance-scaled minimum radius as `R`, and the arithmetic error as `E`.
-The measured centre value bounds the norm itself, giving the certified reach
-`L × r + (g / alpha) × (abs(d) + R) + 2 × E / alpha`. This includes the whole
-possible norm band without charging a distant world-space origin as shape
-error. It assumes no accuracy bound for the hardware power intrinsic.
-Exponent two keeps its Euclidean norm; other unsupported exponents remain live.
-
-A separated pair of intervals can prove one side of a hard blend irrelevant.
-A smooth blend requires additional separation by its radius, including the
-float arithmetic margin needed to prove its weight saturates. Equal-value
-ties retain the full walk's decision. Each slab has a separate instruction
-mask: a losing shape can be omitted while the segment's point and field
-operations still execute. A segment is omitted only when its point-state and
-field effects permit omission. Material queries also retain ordinary bound
-tests: a bound-skipped smooth loser leaves an earlier seam intact, while an
-evaluated smooth loser clears it. Queries select a containing ball before reading
-its masks, and use them only with the camera mask and the same detail
-selection. Secondary queries and root queries that omit independently marched
-parts retain their complete expressions. Compiled parts
-consume the decisions through their original placement instruction indices;
-pruning never discards a child field because another part beats it. The required result is the full
-walk's distance bit for bit at every sampled point, preserving its march
-steps as well as the visible surface.
+Hit thresholds and bound comparisons must apply the conversion documented by
+the shader contract.
 
 ## Composition bounds
 
@@ -227,8 +176,8 @@ unbounded lattice intersected with a box is as bounded as the box, a box minus a
 lattice keeps the box's bound, and a lattice with a box unioned in is unbounded.
 Outside a scope every intersection, field op and fold with no edge reads the one
 global accumulator, so a flat instance holding one is unmaskable. A bound has two guarantees, and a reader takes the one it needs. It contains the instance's
-surface and the influence of its blends, so a ray that misses it misses the instance: the beam
-cull, the grid binning, the shadow and ambient gathers and the part compiler read it so, and the
+surface and the influence of its blends, so a sample outside it cannot read the instance's surface:
+the walk's bound skip, the bake's mask, the CPU cull and the part compiler read it so, and the
 halo carries a scope's soft compose out to its radius times the scope's factor `L`. And,
 where it certifies one, the instance's field outside it is at least the distance to the bound
 times `SdfProgram.InstanceDistanceGain`: at most the inverse of
@@ -236,14 +185,7 @@ times `SdfProgram.InstanceDistanceGain`: at most the inverse of
 parent sees it, and less for a gauge or a non-uniform scale, whose fields grow more slowly than
 distance (a smooth union's sag widens the bound until the gain absorbs it). Whole-instance
 rejection and the group-mask word summaries read that guarantee; an instance certifying no
-gain is never rejected whole by it. The shadow and ambient-occlusion walks read the first
-guarantee instead wherever `SdfProgram.InstanceBoundsSecondaryField` holds: there an instance
-reads as `max(field, distance to the bound)`, which never exceeds the true distance because the
-bound contains the solid those walks see, and keeps every surface and interior because the
-floor is negative inside the bound. That needs the root-union certificate, so the floor feeds no
-later operation on the global accumulator, and an instance whose dropped operands (an optional
-intersection, xor or morph) or lane erosion could widen its solid past the bound keeps its own
-field ([the ruling](../../../decisions/rendering.md#the-pipeline-foundation)). The directory's running-minimum skip never reads an instance
+gain is never rejected whole by it. The directory's running-minimum skip never reads an instance
 bound for a scope: a segment holding a push or pop is always evaluated, and the CPU evaluator
 culls only an instance that is a pure union with no scope.
 
@@ -262,44 +204,10 @@ past each packed bound and holds it at least the distance to that bound.
 
 A log-sphere fold changes its field across spheres: each shell holds the
 prototype at its own scale, and the shell boundaries are spheres about the
-fold's local origin. When every operation before the fold on its chain is a
-translation, a rotation or a uniform scale, `SdfProgram` writes the origin into
-the fold's instruction and the boundaries are spheres in world space too. When
-a warp sits before the fold, the boundaries are bent, and the march knows only
-the distance to them. A field value measured on one side of such a wall says
-nothing about the other, so `map()` publishes the walls around each sample: the
-nearest log-sphere shell whose boundaries are world spheres, and the distance
-to every other log-sphere wall. No wall has a floor.
-
-The fine marches (primary, soft shadows and the overshoot view) step through
-one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
-
-- A step that stays inside every wall's distance is unchanged, so a sample far
-  from every wall pays one comparison.
-- A step that would leave a shell with sphere walls stops where the ray meets
-  the wall. When the sample's own side is clear that far, the march crosses:
-  it lands just past the wall, by at most the march's own acceptance distance,
-  and samples the other side there before it steps again. Geometry on the far
-  side within that sliver is within the acceptance distance of the landing
-  sample, so the landing accepts it. When the near side is not clear to the
-  wall, the step is that clearance, which stays inside the shell.
-- A wall known only by its distance is passed by at most the acceptance
-  distance, which makes the same no-skip argument. Near such a wall a march
-  advances at least that distance a step, so a grazing ray spends more steps
-  there than at a sphere wall.
-- A crossing is one step of the march's budget. A line meets a sphere at most
-  twice, every sample of a ray reads the same two intersections, and a crossing
-  lands strictly past its own, so a march crosses each shell wall at most
-  twice, in and out: two for each shell boundary the ray meets.
-
-The beam's cone keeps every log-sphere wall in its clearance and stops its
-proof at them. A ball proof, such as a reprojected march seed, reads
-`sdfMapBallClearance`, which stops at the nearest wall. Soft shadows still
-stride through an occluder thinner than their minimum stride on either side,
-but never across a wall. The rule is exact up to the float rounding of the
-wall test itself: a grazing ray whose landing rounds back onto the side it left
-crosses again from there, a tolerance further on.
-`SdfLogSphereMarchDeviceLawTests` holds the marches on the device.
+fold's local origin. A field value measured on one side of such a wall says
+nothing about the other. No marcher crosses those walls: the frame samples the
+field on the bake's lattices, where a wall is a sign change the contour splits,
+and the CPU evaluator refuses the fold.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not
@@ -345,13 +253,13 @@ Two further consequences of scoping the analysis:
   non-uniformly scaled sphere) is the superellipsoid's exact exponent-2 gauge
   `(|p/r| - 1)·min(r)`, whatever its eccentricity.
 - **Continuous relief.** `Displace` and `NoiseDisplace` evaluate their basis
-  at every distance in both the scalar and gradient interpreters. Replacing
-  relief with `-|amplitude|` outside a band gives a lower value, but the jump
-  at the band's edge is not a continuous field. Footprint-based hits can
-  land there, and nearby normal and curvature samples then produce visible
-  rings and speckles. A future acceleration must keep a conservative step
-  bound separate from the field used for hits, materials and derivatives.
+  at every distance in the interpreter. Replacing relief with `-|amplitude|`
+  outside a band gives a lower value, but the jump at the band's edge is not a
+  continuous field: the bake's lattice can sample it there, and the contour
+  and its gradients then produce visible rings and speckles. A future
+  acceleration must keep a conservative step bound separate from the field
+  the bake samples.
 
 Visual plausibility is not evidence of a safe distance estimate. Validate new
-field operations with grazing rays, fold boundaries, thin geometry, and a
-strict/reference march comparison.
+field operations with grazing samples, fold boundaries, thin geometry, and the
+CPU evaluator's results where it accepts the program.

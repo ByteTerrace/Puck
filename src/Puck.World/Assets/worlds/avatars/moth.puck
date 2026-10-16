@@ -4530,7 +4530,6 @@ render {
     ]
   }
   renderScale: 1
-  shadowCrowdRadius: 0
   shadowLights: 1
   shadows: High
   sky {

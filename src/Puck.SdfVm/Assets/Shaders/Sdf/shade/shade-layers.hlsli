@@ -1,20 +1,6 @@
 // Generic shading layers. Coordinates arrive in the winning instance frame.
 #ifndef SDF_SHADE_LAYERS_HLSLI
 #define SDF_SHADE_LAYERS_HLSLI
-// Blends `normal` toward the wide-stencil guide by `soften`, in place: the gradient the soften taps of sdfProbeField
-// measured (SdfSoftenProbeEpsilon, the same tetrahedron at a much larger epsilon, so fine surface detail such as pores,
-// panel seams and wear noise washes out of it, giving a per-part 'guide' normal without a guide shape). soften <= 0 skips
-// it, and the caller then asked for no soften taps, matching applyWeathering's zero-ceiling skip.
-void applySoften(inout float3 normal, float3 softenSum, float soften) {
-    if (soften <= 0.0) {
-        return;
-    }
-
-    sdfWorkSteps += 4u;
-    normal = normalize(lerp(normal, sdfSafeNormalize(softenSum), saturate(soften)));
-}
-
-
 // Refract into the authored local plane, then sample its radial ramp. No view-facing frame is synthesized.
 void applyInset(float3 position, float3 normal, float3 ray, inout SdfMaterialData material) {
     uint count = (uint)material.paintControls.y;

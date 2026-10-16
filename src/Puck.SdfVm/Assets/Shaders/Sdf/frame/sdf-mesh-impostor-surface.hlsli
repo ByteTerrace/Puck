@@ -1,4 +1,4 @@
-// What the hit passes read of an impostor card's pixel: the surface the camera's ray meets in the impostor's views
+// What the views pass reads of an impostor card's pixel: the surface the camera's ray meets in the impostor's views
 // (frame/sdf-mesh-impostor.hlsli), at the ray parameter the mesh pass wrote, as the albedo, the world normal and the light
 // the three nearest views show there, each weighted by its view's weight and by the coverage its texel holds, so a view that
 // shows nothing at the point does not dim or bend it. The world kernels' interface declares the impostor atlases

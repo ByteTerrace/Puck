@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 [Collection(AllocationCollection.Name)]
 public sealed class WorldInspectorLawTests {
     [Fact]
-    public void FormatterNamesCapturedPlacementMaterialAndPixelCostWithoutSteadyAllocation() {
+    public void FormatterNamesCapturedPlacementAndMaterialWithoutSteadyAllocation() {
         var maps = new WorldPickMapBuilder();
 
         maps.Instances(first: 0, end: 1, target: new WorldPickTarget(BodyIndex: null, Placement: "crate") { Prototype = "cube" });
@@ -20,7 +20,6 @@ public sealed class WorldInspectorLawTests {
         var camera = new CameraSnapshot(Position: Vector3.Zero, Right: Vector3.UnitX, Up: Vector3.UnitY, Forward: -Vector3.UnitZ, TanHalfFieldOfView: 1, AspectRatio: 1);
         var hit = new SdfPickResult(Request: 1, X: 1, Y: 1, Width: 4, Height: 4, Identity: 0x40000001, Distance: 4, Material: 7,
             Program: new SdfProgramBuilder().Build(), MeshRevision: 0, Map: maps.Snapshot(pool: [])) {
-            Flags = 23U | (107U << 8),
             Normal = Vector3.UnitZ,
             Sample = new SdfReprojectionView(Camera: camera, Jitter: Vector2.Zero, Width: 4, Height: 4),
         };
@@ -34,11 +33,6 @@ public sealed class WorldInspectorLawTests {
                 ResolvedRenderScale = 0.25f,
                 Quality = new SdfViewQuality {
                     DisableAmbientOcclusion = true,
-                    DisableFarBound = true,
-                    ShadowDistanceScale = 0.25f,
-                    UseCameraTileShadowMask = true,
-                    UseFastAmbientOcclusion = true,
-                    UseFastSoftShadowMarch = true,
                 },
             },
         };
@@ -50,11 +44,8 @@ public sealed class WorldInspectorLawTests {
 
         Assert.Contains(actualString: result, expectedSubstring: "placement=crate");
         Assert.Contains(actualString: result, expectedSubstring: "material=cube.palette[0] index=7");
-        Assert.Contains(actualString: result, expectedSubstring: "steps=23 queries=107");
         Assert.Contains(actualString: result, expectedSubstring: "reload=source.puck:3: invalid row");
-        Assert.Contains(actualString: result, expectedSubstring: "render-scale=0.25 debug=0 shadows=0.25 ao=False");
-        Assert.Contains(actualString: result, expectedSubstring: "fast-shadow=True tile-mask=True fast-ao=True");
-        Assert.Contains(actualString: result, expectedSubstring: "far-bound=False");
+        Assert.Contains(actualString: result, expectedSubstring: "render-scale=0.25 debug=0 shadows=True ao=False");
         for (var index = 0; (index < 100); index++) { text.Format(snapshot: in snapshot); text.Finish(); }
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
             for (var index = 0; (index < 100); index++) { text.Format(snapshot: in snapshot); text.Finish(); }

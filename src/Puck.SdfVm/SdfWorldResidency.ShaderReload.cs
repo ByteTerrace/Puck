@@ -137,7 +137,7 @@ public sealed partial class SdfWorldResidency {
     }
     // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
     private string BytecodeExtension() =>
-        (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Beam].Span)
+        (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Surface].Span)
             ? ".dxil"
             : ".spv"
         );

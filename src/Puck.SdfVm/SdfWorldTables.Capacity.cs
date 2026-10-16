@@ -15,8 +15,8 @@ public sealed partial class SdfWorldTables {
         val1: m_programWordCapacity,
         val2: m_programWordReserve
     );
-    /// <summary>Gets the program instances the tables are provisioned for, which a view's per-tile masks and part bounds
-    /// are counted by; it grows with a larger program's upload.</summary>
+    /// <summary>Gets the program instances the tables are provisioned for, which the bake's instance masks are counted
+    /// by; it grows with a larger program's upload.</summary>
     public int InstanceCapacity => m_instanceCapacity;
 
     /// <summary>Refuses, by name and before anything is allocated, tables whose descriptor pools
@@ -83,9 +83,9 @@ public sealed partial class SdfWorldTables {
         return sizes;
     }
 
-    // Called only by UploadProgram. Grows the program region, or the instance-grid region, after the device is idle, since
-    // every view's submission reads them; a new region starts owing every word, so the program write and grid stage that
-    // follow send it whole. A new region writes the copy sets reserved for its table, so growth takes no descriptor range.
+    // Called only by UploadProgram. Grows the program region after the device is idle, since every view's submission
+    // reads it, and the instance capacity the bake's masks are sized by; a new region starts owing every word, so the
+    // program write that follows sends it whole. A new region writes the copy sets reserved for its table, so growth takes no descriptor range.
     // No per-frame allocations.
     private void EnsureProgramCapacity(SdfProgram program) {
         if ((program.Words.Length <= m_programWordCapacity) && (program.Instances.Count <= m_instanceCapacity)) {
@@ -96,16 +96,12 @@ public sealed partial class SdfWorldTables {
         var instances = GrowCapacity(m_instanceCapacity, program.Instances.Count, SdfProgramBuilder.MaxInstances);
         var growProgram = (words != m_programWordCapacity);
         var growInstances = (instances != m_instanceCapacity);
-        var gridWords = SdfInstanceGrid.WordCapacity(maxInstances: instances);
 
         m_deviceContext.TryWaitIdle();
 
         using var scope = new GpuCreationScope();
         // Create the entire replacement before releasing an old region.
         var programRegion = (growProgram ? scope.Own(created: CreateRegion(byteCount: checked((words * sizeof(uint))), region: ProgramRegionIndex)) : m_programRegion);
-        var gridRegion = (growInstances ? scope.Own(created: CreateRegion(byteCount: checked((gridWords * sizeof(uint))), region: InstanceGridRegionIndex)) : m_instanceGridRegion);
-        var inputScratch = (growInstances ? new SdfInstanceGridInput[instances] : m_instanceGridInputScratch);
-        var workspace = (growInstances ? new SdfInstanceGrid.Workspace(maxInstances: instances) : m_instanceGridWorkspace);
 
         scope.Complete();
 
@@ -113,16 +109,8 @@ public sealed partial class SdfWorldTables {
             m_programRegion.Dispose();
             m_programRegion = programRegion;
         }
-        if (growInstances) {
-            m_instanceGridRegion.Dispose();
-            m_instanceGridRegion = gridRegion;
-        }
-
-        m_instanceGridInputScratch = inputScratch;
-        m_instanceGridWorkspace = workspace;
         m_programWordCapacity = words;
         m_instanceCapacity = instances;
-        m_instanceGridWordCapacity = gridWords;
         m_bindingRevision++;
     }
     private static int GrowCapacity(int current, int required, int ceiling) {

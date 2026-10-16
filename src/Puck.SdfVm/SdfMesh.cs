@@ -165,7 +165,7 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// every view records.</summary>
     public SdfMeshLod? Lod { get; init; }
     /// <summary>Gets the impostor a card draw shows: the draw's mesh is then the card (<see cref="SdfMeshCard.Mesh"/>),
-    /// which the mesh pass places in front of the impostor's sphere facing each view, and the hit passes find the surface
+    /// which the mesh pass places in front of the impostor's sphere facing each view, and the views pass finds the surface
     /// behind each of its pixels in the impostor's views. Null for a mesh draw.</summary>
     public SdfMeshImpostor? Impostor { get; init; }
 }

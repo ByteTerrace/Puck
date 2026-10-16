@@ -278,12 +278,12 @@ world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
 
 Each kernel installs as soon as its DXIL compiles, quickest first, and prints
 `[shaders.reload: request=N installed pipelines=K kernels=…]`. A kernel
-recompiles only when a file in its include closure changed, and each hit
+recompiles only when a file in its include closure changed, and each pixel
 kernel's closure is its own stage: an edit to `passes/sdf-light-stage.hlsli`
-recompiles the views kernels and nothing else, and every other
-kernel is a cache hit. An edit to a module every kernel reads (the
-interpreter under `field/`, or `passes/sdf-world.hlsli`'s modules) recompiles
-them all, and the slowest kernel's DXIL then decides when the
+recompiles the views kernel and nothing else, and every other
+kernel is a cache hit. An edit to a module every kernel reads
+(`passes/sdf-world.hlsli`'s modules) recompiles them all, and an edit to the
+interpreter under `field/` recompiles the bake, and the slowest kernel's DXIL then decides when the
 request settles. The reload writes into the build's shader cache, so the next
 build publishes those kernels without compiling them. A change to a C# struct,
 buffer layout or binding needs the C# loop instead.
@@ -302,12 +302,8 @@ the CPU at the stated load:
 | | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
 | | of which the build after the edit | 12.7–15.3 s (12–65% load) |
 | | of which boot to `world.wait ready` | 10.2–12.2 s |
-| HLSL, edit in `passes/sdf-light-stage.hlsli` | reload to the first views kernel installed | 11.1 s (37% load), 22.6 s (100% load) |
-| | to every views variant installed | 25.2 s (37% load) |
-
 A `Puck.World.Client` edit (one project, no world compile) and a light-stage
-reload's settling (the three views kernels) have no reading on the current
-code yet. The last boot reading was about 4 s of process start before the
+reload of the views kernel have no reading on the current code yet. The last boot reading was about 4 s of process start before the
 document loads, 2.5 s of the render-capacity probe, and 4 to 5 s of window,
 device, pipelines and first frames. The probe is measured from its emission
 (`SdfProgramBuilder.MeasureCapacity`) and packs no program, so it allocates no

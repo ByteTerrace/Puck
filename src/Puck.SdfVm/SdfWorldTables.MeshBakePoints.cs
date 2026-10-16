@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 // through the World set (sdfMeshBakePoints). It is staged, so it lives in device-local memory, and a frame that samples no
 // points writes nothing to it.
 public sealed partial class SdfWorldTables {
-    private const int MeshBakePointRegionIndex = 12;
+    private const int MeshBakePointRegionIndex = 11;
     private const int MeshBakePointBytes = (SdfWorldPackage.MeshBakeMaxSamples * 16);
 
     private readonly GpuRegion m_meshBakePointRegion;

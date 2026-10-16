@@ -22,67 +22,13 @@ SdfHit sdfIsaErrorHit() {
 
 #include "sdf-quaternion.hlsli"
 
-// THE FOLD WALLS of the last map sample: the boundaries across which a fold's field changes lattice. A folded field
-// measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true distance past a cell boundary (the
-// neighbor cell's geometry may be closer — the containment ≠ nearest-copy class the Repeat/CellJitter crease verdict
-// documents); within its own cell it is exact, so a march TERMINATES on the raw value and STEPS with
-// sdfMarchAdvance, which never lets a step carry a value across a wall. Unbounded, this is exactly the Droste
-// tile-shatter: the beam's cone proof trusted an overestimating value and classified tiles straight through shell
-// geometry. A wallpaper fold has no wall: a program folds only through a group whose fold is continuous, which never
-// reads past the nearest copy (SdfWallpaperFold.IsContinuous). A log-sphere fold's walls are spheres:
-// - THE FOLD SHELL. A log-sphere fold whose chain is a similarity has world-sphere shells about sdfMapFoldCenter; the
-//   one whose wall lies nearest the sample publishes its shell's radii (sdfMapFoldInner, sdfMapFoldOuter) and the gap
-//   to the nearer (sdfMapFoldGap), in world units.
-// - THE BALL WALLS. Every other log-sphere shell wall, where the chain warps the shells or another fold's wall lies
-//   nearer: sdfMapStepBound is the distance to the nearest, in the same Lipschitz-clamped units as the returned field,
-//   which bound world travel even when a non-conformal warp sits upstream. A march crosses these by its acceptance
-//   distance rather than exactly.
-// SDF_STEP_BOUND_NONE means no such wall. A ball proof reads sdfMapBallClearance. Written by mapCore on EVERY call
-// (per-thread mutable statics); a consumer reads them immediately after the map call they pair with.
-#define SDF_STEP_BOUND_NONE 1.0e30
-static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
-static float sdfMapFoldGap = SDF_STEP_BOUND_NONE;
-static float3 sdfMapFoldCenter = float3(0.0, 0.0, 0.0);
-static float sdfMapFoldInner = 0.0;
-static float sdfMapFoldOuter = SDF_STEP_BOUND_NONE;
-
-// The MATERIAL BLEND CHANNEL (material-blend-at-seams). A smooth blend blends the two operands' DISTANCE smoothly, but
-// result.material is an integer that can only carry ONE winner — so the material snaps as a HARD cut at the geometric
-// seam even though the surface eased across it. The continuous material weight rides HERE instead, a separate per-thread
-// channel captured at the winning smooth blend the SAME way sdfMapStepBound rides the fold state (and blendShapeDual
-// carries the gradient alongside the distance). At every SMOOTH compose mapCore records the OTHER (losing) operand's
-// material and the SYMMETRIC seam weight min(h, 1-h) in [0, 0.5] (0 at/beyond the band, 0.5 at the seam centre) — h is
-// the SAME clamped smooth-blend factor blendShapeDual uses (KEEP IN SYNC). A HARD compose that flips the winner resets
-// the weight to 0 (a hard material cut); a HARD compose the incumbent keeps leaves an earlier smooth seam's weight
-// intact (the far shape never touched the incumbent's appearance). The light stage (passes/sdf-light-stage.hlsli)
-// captures these at the accept-sample march call and lerps the winner's albedo toward `other` by the weight — HIT-ONLY,
-// one lerp per lit pixel, never a per-step map eval. Both ids are POST-parityMaterialDelta (a wallpaper-recoloured seam
-// blends its recoloured albedos), so the mixed colour stays inside the same relaxed material-flip parity family the
-// hard winner-flip already lived in. Weight 0 (the reset default, every hard/far seam) leaves the albedo the exact table
-// lookup — byte-identical shading for any pixel with no smooth material seam within a blend radius of the hit.
+// The MATERIAL BLEND CHANNEL. A smooth blend blends the two operands' DISTANCE smoothly, but result.material is an
+// integer that can only carry ONE winner, so at every SMOOTH compose mapCore records the OTHER (losing) operand's material
+// and the SYMMETRIC seam weight min(h, 1-h) in [0, 0.5] (0 at/beyond the band, 0.5 at the seam centre) in this
+// per-thread channel. A HARD compose that flips the winner resets the weight to 0; a HARD compose the incumbent keeps
+// leaves an earlier smooth seam's weight intact. Both ids are POST-parityMaterialDelta.
 static float sdfMaterialBlendWeight = 0.0;
 static int sdfMaterialBlendOther = 0;
-
-// mapCore/mapGradCore's march-vs-shade mode: false (every march sample — the beam cone, the fine march, shadow, AO,
-// including their rigid-leaf fast paths) skips a
-// SDF_SHAPE_DETAIL_FLAG shape entirely, so it never appears in the marched hit, the collider, or the step bound.
-// The light stage and sdfResolveSurface flip it true for exactly the lifetime of hit-only material/normal re-evaluation
-// at the already-found surface point, so a detail shape's local perturbation and material win only there. False
-// everywhere else, so an unauthored program renders byte-identical.
-static bool sdfDetailShadingActive = false;
-
-// mapCore/mapGradCore's secondary-ray exclusion mode: false (the primary/beam/fine march, the normal probes, and the
-// hit-only shade/detail re-evaluations) carries a SDF_SHAPE_NO_SECONDARY_FLAG shape like any ordinary shape. true
-// (the light stage's shadow calls and sdfResolveAmbient's AO calls, only for their duration) skips
-// it — the study's secondaryScene posture: a shape marked secondary=false still shades and collides, it just casts
-// no shadow and contributes no AO. False everywhere else, so an unauthored program renders byte-identical.
-static bool sdfSecondaryMarchActive = false;
-
-// Shared by scalar/gradient, rigid/generic walks. Flags control participation in the field, not the primitive id.
-bool sdfShapeEnabled(uint packedShapeType) {
-    return (((packedShapeType & SDF_SHAPE_DETAIL_FLAG) == 0u) || sdfDetailShadingActive)
-        && (((packedShapeType & SDF_SHAPE_NO_SECONDARY_FLAG) == 0u) || !sdfSecondaryMarchActive);
-}
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would

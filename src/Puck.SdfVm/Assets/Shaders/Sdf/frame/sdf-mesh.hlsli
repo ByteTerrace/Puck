@@ -1,4 +1,4 @@
-// The mesh pass's and the hit passes' reads of the mesh region, SdfMeshRegion's raw word layout: one forty-two-word
+// The mesh pass's and the surface and views passes' reads of the mesh region, SdfMeshRegion's raw word layout: one forty-two-word
 // record a draw (its row-vector object-to-world matrix row by row, its material, the word its first index sits at, its
 // index count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at,
 // its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, and its impostor: the bounding sphere,
@@ -143,13 +143,6 @@ float3 sdfMeshFaceCamera(float3 normal, float3 face, float3 rayDirection) {
 
     return ((along > 0.0) ? normalize(normal - (rayDirection * (along + 1.0e-3))) : normal);
 }
-// The face of a draw's triangle in world space, wound as its indices name it.
-float3 sdfMeshFace(uint record, uint triangleIndex) {
-    uint first = (3u * triangleIndex);
-    float3 a = sdfMeshWorldPosition(record, first);
-
-    return cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a));
-}
 // The surface normal of a draw's triangle at a world point on it, seen along `rayDirection`: the vertex normals
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise, facing the
 // camera (sdfMeshFaceCamera).
@@ -175,7 +168,7 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
 }
 
 // What the mesh pass's vertex stage hands its fragment stage: the clip position, the world position the fragment
-// measures the ray parameter to, and the triangle, which the hit passes resolve the surface of.
+// measures the ray parameter to, and the triangle, which the surface pass resolves the surface of.
 struct MeshVertex {
     float4 position : SV_Position;
     float3 world : WORLD;

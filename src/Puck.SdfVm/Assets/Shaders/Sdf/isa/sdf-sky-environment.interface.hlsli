@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/b8eda9abe93a79b994acd544546f2391714312dc6bf25d6bac9426f4700d0898). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/a45e98ef2201e57a07e601b5d0492528a023adf16bd985f70cd4bcabf46bbd22). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -94,8 +94,8 @@ struct SdfSkyEnvironmentPass {
     [[vk::offset(16)]] uint workCounterRow;
     [[vk::offset(20)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa9BD3B105 : register(b0, space3);
-#define passGroup passGroupIsa9BD3B105
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsaAA4902F8 : register(b0, space3);
+#define passGroup passGroupIsaAA4902F8
 [[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t1, space3);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t2, space3);
@@ -111,21 +111,17 @@ struct SdfSkyEnvironmentPass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels,
-// followed by shape evaluations and shape gradients, as a
+// sky texture loads, shape evaluations and shape gradients, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 28u;
+static const uint PuckWorkRowWords = 14u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
 static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
-static const uint PuckWorkShadowWord = 10u;
-static const uint PuckWorkShadowSlots = 6u;
-static const uint PuckWorkShadowPixelsWord = 22u;
-static const uint PuckWorkShapesWord = 24u;
-static const uint PuckWorkGradientsWord = 26u;
+static const uint PuckWorkShapesWord = 10u;
+static const uint PuckWorkGradientsWord = 12u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -174,21 +170,6 @@ void puckCountShapes(uint shapes, uint gradients) {
         puckAddWork(row + PuckWorkShapesWord, waveShapes);
         puckAddWork(row + PuckWorkGradientsWord, waveGradients);
     }
-}
-// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
-// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
-void puckCountShadow(uint slot, uint steps) {
-    if (slot < PuckWorkShadowSlots) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
-    }
-}
-// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
-// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
-void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-    puckAddWork(row + PuckWorkStepsWord, steps);
-    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

@@ -30,10 +30,10 @@ public sealed partial class SdfPassPlanLawTests {
         var plan = ResolvedPlan;
 
         Assert.Equal(expected: ResolvedOrder, actual: plan.Pipeline.Passes.Select(selector: static pass => pass.Package!.Part));
-        var counts = new ShaderPipelineStorageCounts(Height: 60, Width: 80) { RenderHeight = 30, RenderWidth = 40, SegmentTapeWords = 33, Viewports = 1 };
+        var counts = new ShaderPipelineStorageCounts(Height: 60, Width: 80) { RenderHeight = 30, RenderWidth = 40, Viewports = 1 };
         var visibility = plan.Pipeline.Storages.Single(predicate: static storage => (storage.Name == "sdf$visibility"));
 
-        Assert.Equal(expected: ((40UL * 30) * 64), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
+        Assert.Equal(expected: ((40UL * 30) * SdfWorldPackage.VisibilityRecordByteLength), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
         var output = plan.Pipeline.Storages.Single(predicate: static storage => storage.Versions.Contains(value: SdfWorldPackage.Color));
         var lit = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Lit);
         var transport = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Transport);
@@ -46,7 +46,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Name == SdfWorldPackage.CurrentColor));
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Name == SdfWorldPackage.UpscaleSharpness));
         Assert.DoesNotContain(collection: SdfWorldPackage.Values, filter: static member => (member.Name == SdfWorldPackage.UpscaleSharpness));
-        // Reconstruction reads the render-grid color through the visibility records and the dispatch box, and writes the
+        // Reconstruction reads the render-grid color through the visibility records, and writes the
         // lit image and the surface transport at the output extent; the composite alone writes the output.
         Assert.Equal(expected: new[] { lit.Index, transport.Index }.Order(), actual: resolve.Accesses.Where(predicate: static access => access.Use.Access.HasFlag(flag: GpuAccess.ShaderWrite)).Select(selector: static access => access.Storage).Distinct().Order());
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == current.Index) && !access.Use.Writes));
@@ -61,10 +61,11 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.DoesNotContain(collection: sky.Accesses, filter: access => (access.Storage == lit.Index));
         Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: plan.Pipeline.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Composite)).Extent);
         Assert.Equal(expected: [SdfWorldPackage.Parts.Composite], actual: plan.Pipeline.Passes.Where(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == output.Index) && access.Use.Writes))).Select(selector: static pass => pass.Package!.Part));
-        // What the resolve and the composite write is at the output extent; everything else at the render ceiling.
+        // What the resolve and the composite write is at the output extent; the shadow cascades keep their own absolute
+        // extent; everything else is at the render ceiling.
         string[] outputExtent = [SdfWorldPackage.Color, SdfWorldPackage.Parts.Lit];
 
-        Assert.All(collection: plan.Pipeline.Storages.Where(predicate: static storage => (storage.Declaration.Dimensions is not null)),
+        Assert.All(collection: plan.Pipeline.Storages.Where(predicate: static storage => (storage.Declaration.Dimensions is { Mode: not ShaderPipelineDimensionMode.Absolute })),
             action: storage => Assert.Equal(
                 expected: (outputExtent.Any(predicate: version => (storage.Versions.Contains(value: version) || storage.Versions.Contains(value: $"{Sdf}${version}"))) ? ShaderPipelineDimensions.Relative() : ShaderPipelineDimensions.Render()),
                 actual: storage.Declaration.Dimensions
@@ -79,7 +80,7 @@ public sealed partial class SdfPassPlanLawTests {
     // and half scale that is 70,502,400 bytes more.
     [Fact]
     public void AReducedViewAddsOnlyItsOutputExtentPassesOverTheNativeGraphAtItsCeiling() {
-        var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, SegmentTapeWords = 36, Tiles = 8160, Viewports = 1 };
+        var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, Viewports = 1 };
         var reduced = render with { Height = 1080, RenderHeight = 540, RenderWidth = 960, Width = 1920 };
         const ulong Output = ((1920UL * 1080) * 8);
         const ulong RenderColor = ((960UL * 540) * 8);

@@ -7,12 +7,12 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>The sky's detail rows (<see cref="SdfSkyDetails"/>) and the packed row address agree with the counted sky kernel
-/// sites, and the shadow pass counts its slots as kinds of its own row. The field runs own the first rows and the
+/// sites. The field runs own the first rows and the
 /// composite's atmosphere the next. Each layer label takes the next row the first time it is
 /// packed and keeps it throughout the composition's lifetime.</summary>
 public sealed class SdfWorkDetailLawTests {
     [Fact]
-    public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
+    public void SkyRowLabelsAndPassBlockReachTheirKernelIndices() {
         var details = new SdfSkyDetails();
 
         // The runs' rows, then the composite's atmosphere row, which the composite counts each atmosphere kind it evaluates
@@ -49,7 +49,6 @@ public sealed class SdfWorkDetailLawTests {
         Assert.Equal(expected: 37u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
         Assert.DoesNotContain(expectedSubstring: "sdfCountSky", actualString: Source(path: "passes/sdf-world-views.comp.hlsl"));
         Assert.DoesNotContain(expectedSubstring: "puckCountDetail", actualString: Source(path: "passes/sdf-world-views.comp.hlsl"));
-        Assert.Contains(expectedSubstring: "puckCountShadow(shadowSlot, (sdfWorkSteps - before));", actualString: Source(path: "surface/sdf-shadow.hlsli"));
     }
     // Every kind counts its own evaluation in its layer's row, each hash at the operation that performs it, and the field
     // runs' texture loads in their runs' rows: the base in the lowest run's, the upper images in their runs'.

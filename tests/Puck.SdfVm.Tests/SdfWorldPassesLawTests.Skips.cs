@@ -1,3 +1,5 @@
+using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -7,12 +9,12 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-// The shading levers decide which stages a view's frame runs: the ambient part runs exactly when ambient occlusion is on,
-// and the shadow part exactly when soft shadows are on and the environment has shadow slots. A part the lever turns off
-// records nothing, so its pass line binds no pipeline.
+// A view's frame runs the raster parts only when they draw: the mesh part a frame with a mesh draw, and a shadow cascade
+// a frame with a draw whose shadows are on and whose first stable slot holds a directional light, the second cascade
+// only for a second such slot. A part that skips records nothing, so its pass line binds no pipeline.
 public sealed partial class SdfWorldPassesLawTests {
-    // Whether each of the ambient and shadow parts bound its pipeline in a view's latest completed frame.
-    private static (bool Ambient, bool Shadow) StagesOf(SdfFrame frame) {
+    // Whether the mesh part and the near and second cascades bound their pipelines in a view's latest completed frame.
+    private static (bool Mesh, bool Near, bool Second) StagesOf(SdfFrame frame) {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(
@@ -68,13 +70,6 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
             }
         }
-        // The shadow pass reports its decision rows, into which it counts each secondary pixel (P18-13).
-        var shadowPass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}");
-
-        foreach (var label in SdfShadowDecisions.Labels) {
-            Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: shadowPass), collection: sample.Details.ToArray());
-        }
-
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
         bool Ran(string part) {
@@ -93,10 +88,12 @@ public sealed partial class SdfWorldPassesLawTests {
             return true;
         }
 
-        return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
+        return (Ran(part: SdfWorldPackage.Parts.Mesh), Ran(part: SdfWorldPackage.Parts.ShadowNear), Ran(part: SdfWorldPackage.Parts.ShadowSecond));
     }
-    // The host-visible bytes each part of a view's latest completed frame wrote, by part.
+    // The host-visible bytes each part of a view's latest completed frame wrote, by part, over frames whose camera moves
+    // along x each frame, so every pass block carries one run that changes every frame.
     private static Dictionary<string, long> HostBytesOf(SdfFrame frame) {
+        var current = frame;
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(
@@ -106,7 +103,7 @@ public sealed partial class SdfWorldPassesLawTests {
             pipelines: pipelines,
             residency: new SdfWorldResidency(
                 brickPoolVoxelCapacity: 0,
-                frameSource: new FixedFrameSource(frame: frame),
+                frameSource: new CapturingFrameSource(capture: () => current),
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
                 name: SdfTestView.Instance,
@@ -132,7 +129,13 @@ public sealed partial class SdfWorldPassesLawTests {
             reason: () => view.NotReadyReason,
             wait: view.Residency.WaitPipelineBuilds
         );
-        for (var frameIndex = 0; (frameIndex < 3); frameIndex++) {
+        for (var frameIndex = 1; (frameIndex <= 3); frameIndex++) {
+            current = frame with {
+                Views = [frame.Views[0] with {
+                    Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: (frameIndex * 0.125f), y: 0f, z: -5f),
+                        target: Vector3.Zero, viewportHeight: Extent, viewportWidth: Extent),
+                }],
+            };
             _ = view.Produce(context: in context);
         }
 
@@ -153,44 +156,39 @@ public sealed partial class SdfWorldPassesLawTests {
 
     // A pass block's words that change every frame form one run each; the run list is bounded (GpuRegion.HostRunCapacity),
     // and a past-the-bound range merges neighbours across the words between them, re-sending them. The work counter row
-    // and the first detail row sit side by side in the block, so a hit pass writing its row adds no run and no
-    // coalescing: its bytes are the mask pass's plus the row word, and the detail word for views.
+    // and the first detail row sit side by side in the block, so the views pass writing its detail row adds no run and no
+    // coalescing: over frames that move only the camera, its bytes are the surface pass's, the camera's run alone.
     [Fact]
-    public void ADetailRowBesideTheCounterRowAddsNoRunToAHitPassesBlock() {
-        var bytes = HostBytesOf(frame: Frame());
-        var mask = bytes["sdf.world$mask"];
+    public void ADetailRowBesideTheCounterRowAddsNoRunToAPassBlock() {
+        var bytes = HostBytesOf(frame: (Frame() with { EnableCadenceGate = false }));
 
-        foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
-            Assert.Equal(expected: (mask + ((part == SdfWorldPackage.Parts.Views) ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
-        }
+        Assert.True(condition: (bytes["sdf.world$surface"] > 0L));
+        Assert.Equal(expected: bytes["sdf.world$surface"], actual: bytes["sdf.world$views"]);
     }
     [Fact]
-    public void ZeroStableSlotsSkipShadowsEvenWithShadowCastingLights() {
-        var frame = Frame();
+    public void ZeroStableSlotsSkipTheCascadesEvenWithShadowCastingLights() {
+        var frame = DrawnFrame();
 
         frame.Lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
-        Assert.Equal(expected: (true, false), actual: StagesOf(frame: frame));
+        Assert.Equal(expected: (true, false, false), actual: StagesOf(frame: frame));
     }
     [Fact]
-    public void TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn() {
-        var frame = Frame();
+    public void TheRasterPartsRunExactlyWhenTheyDraw() {
+        var frame = DrawnFrame();
 
-        Assert.Equal(
-            actual: StagesOf(frame: frame),
-            expected: (true, true)
-        );
-        Assert.Equal(
-            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } })] })),
-            expected: (false, true)
-        );
+        Assert.Equal(actual: StagesOf(frame: Frame()), expected: (false, false, false));
+        Assert.Equal(actual: StagesOf(frame: frame), expected: (true, true, false));
         Assert.Equal(
             actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } })] })),
-            expected: (true, false)
+            expected: (true, false, false)
         );
         // Soft shadows on, but no light casts them.
-        Assert.Equal(
-            actual: StagesOf(frame: (frame with { Lights = new SdfLights() })),
-            expected: (true, false)
-        );
+        Assert.Equal(actual: StagesOf(frame: (frame with { Lights = new SdfLights() })), expected: (true, false, false));
     }
+
+    // The fixture's frame with one triangle drawn.
+    private static SdfFrame DrawnFrame() => Frame() with {
+        MeshDraws = [new SdfMeshDraw(Identity: "triangle", Material: 0, ObjectToWorld: System.Numerics.Matrix4x4.Identity,
+            Mesh: new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new System.Numerics.Vector3[] { System.Numerics.Vector3.Zero, System.Numerics.Vector3.UnitX, System.Numerics.Vector3.UnitY }))],
+    };
 }

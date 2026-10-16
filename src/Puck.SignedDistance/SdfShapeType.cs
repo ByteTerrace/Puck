@@ -63,8 +63,7 @@ public enum SdfShapeType : uint {
     // 1/radiusY, 1/radiusZ [host-baked, KEEP IN SYNC with sdfSuperellipsoid]). e = 2 is the ellipsoid
     // (the scaled L2 gauge (|p/r| - 1) * min(r), exactly 1-Lipschitz like every admitted exponent), and this id is the
     // ISA's ONE ellipsoid: every builder, creation, and debug path emits it at e == 2, which both evaluators take on a
-    // pow-free fast path. KEEP IN SYNC with SdfViewsKernelVariants, which classifies an e == 2 instance as the fold
-    // tier and every other exponent as heavy.
+    // pow-free fast path.
     Superellipsoid = 17,
     // ConvexPolygon: a member of the 2D-primitive family (revolve/extrude lift, family-wide smooth/lift-mode/
     // cap-chamfer/edge-rounding lanes), but its 2D profile is a validated convex vertex list too large to fit inline

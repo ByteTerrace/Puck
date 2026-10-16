@@ -117,8 +117,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         ) {
             InstanceMaskWords = 1,
             Instances = 1,
-            SegmentTapeWords = 36,
-            Tiles = ((((width + 15U) / 16U) * ((height + 15U) / 16U))),
             Viewports = 1,
         };
         public IShaderPipelineStorageCounter? CounterOf(string instance) => this;

@@ -9,20 +9,16 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
-    // One shadow kernel and one kernel per views variant serve every fade capacity. A recorder planned without the
-    // incoming image writes a zero fade count, so a live handoff the old graph cannot hold marches and reads nothing; a
-    // recorder planned with it passes the live count through.
-    [InlineData(SdfWorldPackage.Parts.Shadow, 0, 0u)]
-    [InlineData(SdfWorldPackage.Parts.Views, 0, 0u)]
-    [InlineData(SdfWorldPackage.Parts.Shadow, 1, 1u)]
-    [InlineData(SdfWorldPackage.Parts.Views, 1, 1u)]
-    [Theory]
-    public async Task ARecorderReadsTheLiveFadeCountOnlyWhenItsPlanHoldsTheIncomingImageAsync(string part, int plannedCapacity, uint expectedFadeCount) {
+    // The views kernel serves every fade capacity: its recorder writes the live frame's fade count whatever capacity the
+    // graph was planned at, and the kernel lights each outgoing handoff from its slot's cascade.
+    [Fact]
+    public async Task TheViewsRecorderWritesTheLiveFadeCountAsync() {
+        const string Part = SdfWorldPackage.Parts.Views;
         var gpu = new UploadModelGpu();
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
         var lights = SdfLights.Default();
 
-        lights.ShadowSlots.Configure(fadeCapacity: plannedCapacity, slots: 1);
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
         lights.ShadowSlots.SetSlot(light: 0, slot: 0);
         using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
             residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
@@ -36,10 +32,9 @@ public sealed partial class SdfWorldPassesLawTests {
             wait: view.Residency.WaitPipelineBuilds);
         var fragment = view.Passes.FragmentOf(instance: SdfTestView.Instance)!;
 
-        Assert.Equal(expected: (plannedCapacity > 0), actual: fragment.Resources.Any(predicate: static resource => (resource.Name == SdfWorldPackage.IncomingVisibility)));
-        var pass = fragment.Passes.Single(predicate: pass => (pass.Name == part));
+        var pass = fragment.Passes.Single(predicate: pass => (pass.Name == Part));
         var context = new RenderGraphPackageRecorderContext(Device: gpu, Services: gpu.Services,
-            Instance: SdfTestView.Instance, Pass: $"sdf.world${part}", Part: part, Package: RenderGraphPackageCatalog.SdfWorld,
+            Instance: SdfTestView.Instance, Pass: $"sdf.world${Part}", Part: Part, Package: RenderGraphPackageCatalog.SdfWorld,
             Pipelines: pipelines.Pipelines, HostsOnDirectX: false, InFlightFrames: 1, Width: Extent, Height: Extent,
             Parameters: SdfWorldInterfaces.WorldParameters,
             Inputs: Declarations(ports: pass.Inputs), Outputs: Declarations(ports: pass.Outputs));
@@ -59,7 +54,7 @@ public sealed partial class SdfWorldPassesLawTests {
             using var recorder = view.Passes.Create(context: context, built: built, groups: new RenderGraphPackageGroups(
                 DescriptorPool: pool, FrameBlocks: [block], OutputImages: [], PassBlocks: [block], Regions: []));
             using var counters = new GpuKernelCounters(buffers: gpu.Services.BufferFactory, slots: 1, rows: 1,
-                owner: "shadow-planning-law", part: "counters");
+                owner: "shadow-fades-law", part: "counters");
             using var commands = gpu.Services.CommandPoolFactory.Create(name: default);
             var passBlock = new byte[SdfFrameBlock.SizeBytes];
             var recording = new RenderGraphPackageRecording(CommandBuffer: commands.CommandBufferHandle, Recorder: gpu.Services.Recorder,
@@ -67,10 +62,10 @@ public sealed partial class SdfWorldPassesLawTests {
                 PassBlock: passBlock, Leases: new LeaseRetireList(), Context: frame, MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
 
             Assert.Equal(expected: RenderGraphPackageOutcome.Drew, actual: recorder.Record(recording: in recording));
-            Assert.Equal(expected: SdfKernelSet.StemOf(kernel: ((part == SdfWorldPackage.Parts.Shadow) ? SdfKernel.Shadow : SdfKernel.ViewsCore)), actual: gpu.BoundPipelineName);
+            Assert.Equal(expected: SdfKernelSet.StemOf(kernel: SdfKernel.Views), actual: gpu.BoundPipelineName);
             var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.ShadowFadeCount));
 
-            Assert.Equal(expected: expectedFadeCount, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: passBlock.AsSpan(start: offset)));
+            Assert.Equal(expected: 1u, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: passBlock.AsSpan(start: offset)));
         } finally {
             gpu.Services.Bindings.DestroyPool(poolHandle: pool);
         }

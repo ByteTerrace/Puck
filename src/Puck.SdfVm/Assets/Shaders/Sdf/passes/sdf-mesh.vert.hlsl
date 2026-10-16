@@ -1,10 +1,10 @@
 // The mesh pass's vertex stage. One draw call a mesh draw, non-indexed over the draw's index count, pulls its triangles
 // from the mesh region (sdf-mesh.hlsli): the pushed index names the view and the draw, and a vertex id's triangle is
-// its three consecutive indices, which each vertex hands on flat so the hit passes resolve that triangle's surface. The
+// its three consecutive indices, which each vertex hands on flat so the surface pass resolves that triangle's surface. The
 // projection is ViewProjection's, read from the view in the pass block: reversed-Z with an infinite far plane and the
 // view's surface near distance n as the near plane, clip = (sx (x - ox w), sy (y - oy w), n, w) for a point at
 // camera-space right x, up y and forward distance w, with the lens row's frustum offset (ox, oy). The render
-// pass's area is the view's render extent, so clip space covers exactly the pixels whose centers the SDF march casts
+// pass's area is the view's render extent, so clip space covers exactly the pixels whose centers the view's rays pass
 // through.
 // A draw that is an impostor card (SdfMeshImpostorFlag) pulls no triangle of a mesh: its four corners (the signs of its
 // card mesh's positions) are placed on the plane perpendicular to the view's forward axis that touches the near side of
@@ -49,7 +49,7 @@ MeshVertex VSMain(uint vertexId : SV_VertexID) {
         w
     );
     if (sdfLightCamera()) {
-        // Finite reversed-Z orthographic projection, matching the parallel primary rays and their local depth.
+        // Finite reversed-Z orthographic projection along the light, the cascade's parallel rays and their local depth.
         output.position = float4(scaleX * dot(relative, view.right.xyz), scaleY * dot(relative, view.up.xyz),
             (worldFarDistance(view) - w) / (worldFarDistance(view) - worldSurfaceNearDistance(view)), 1.0);
     }

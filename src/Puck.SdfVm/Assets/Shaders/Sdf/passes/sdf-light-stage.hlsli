@@ -1,11 +1,11 @@
 // The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
-// nothing on a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light
-// interface (sdf-light.hlsli), each slotted light under its own shadow, applies the editor grid, and
-// reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. It also
-// reports the pixel's reactivity for a temporal view's resolve: one for a screen, whose content changes on its own, and
-// for emission, which the material model cannot tell animated from steady, the share of the color the material and atlas
-// texel that actually shaded the pixel emit. The sky, the distance fog and the volumes are the composite's, after this
-// stage; the debug views follow it.
+// nothing on a miss. It samples a bound screen, loads the material (a textured mesh's texel or an impostor's surface
+// standing in for its albedo and emission), lights the surface through the one light interface (sdf-light.hlsli), each
+// slotted light under its own shadow, adds the irradiance volume's indirect light, applies the editor grid, and reports
+// the pixel's coverage: one for a hit, zero on a miss. It also reports the pixel's reactivity for a temporal view's
+// resolve: one for a screen, whose content changes on its own, and for emission, which the material model cannot tell
+// animated from steady, the share of the color the material and atlas texel that actually shaded the pixel emit. The sky,
+// the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
 #define PASSES_SDF_LIGHT_STAGE_HLSLI
 #include "../shade/sdf-environment.hlsli"
@@ -13,14 +13,40 @@
 #include "../shade/sdf-light.hlsli"
 #include "../shade/sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
-#ifdef SDF_VIEWS_MESH_ONLY
 #include "../shade/sdf-mesh-irradiance.hlsli"
-#endif
+
+// An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
+static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
+static const float ScreenGlassBase = 0.85;
+static const float ScreenGlassSunTint = 0.15;
+
+// A shaded mesh pixel's surface: a textured mesh's atlas texel, whose material the pixel shades with, or an impostor
+// card's views.
+struct SdfLightMesh {
+    bool textured;
+    bool impostor;
+    SdfMeshTexel texel;
+    SdfImpostorSurface impostorSurface;
+};
+
+SdfLightMesh sdfLightMeshAt(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, inout int material) {
+    SdfLightMesh mesh = (SdfLightMesh)0;
+
+    if (sdfMeshIsImpostor(s.meshDraw)) {
+        mesh.impostor = true;
+        mesh.impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, p.pixelFootprint);
+    } else if (sdfMeshTextured(s.meshDraw)) {
+        mesh.textured = true;
+        mesh.texel = sdfMeshTexelAt(s.meshDraw, s.meshTriangle, surfacePoint, (p.pixelFootprint * s.t));
+        material = sdfMeshTexelMaterial(s.meshDraw, mesh.texel);
+    }
+
+    return mesh;
+}
 
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit's surface point, whether the
-// view shades finally, a shaded mesh pixel's surface (sdfLightMeshAt) and the stage's field reads (sdfViewsFieldReads),
-// so the views kernel's one field call site serves the detail re-resolve and the probes.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, SdfLightMesh mesh, SdfViewsFieldReads reads, out float coverage, out float reactivity) {
+// view shades finally, and a shaded mesh pixel's surface (sdfLightMeshAt) with the material it shades with.
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, SdfLightMesh mesh, int material, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
     float3 emission = float3(0.0, 0.0, 0.0);
 
@@ -32,16 +58,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
     coverage = 1.0;
 
     float3 normal = s.normal;
-    float curvature = s.curvature;
-    int material = s.material;
-    float4 hitLanes = s.lanes;
-    int hitFrameSlot = s.frameSlot;
-    float materialBlendWeight = s.blendWeight;
-    int materialBlendOther = s.blendOther;
     bool sampledScreen = false;
     reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
-
-    sdfEvalCount += s.surfaceQueries;
 
 #ifdef SDF_SCREEN_SOURCES
     if (useFinalShading) {
@@ -53,22 +71,15 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // Neutral defaults also cover skipped shadow passes. The incoming image is read only during active handoffs.
+        // The surface pass writes every pixel's K row; with shadows off every light goes unshadowed.
         float4 shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
-        float2 incoming = float2(1.0, 1.0);
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
 
-        // The interpreter's shadow pass marches no mesh pixel; the mesh path's surface pass writes every pixel's K row.
-        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled() && (!s.mesh || (passGroup.renderPath != 0u))) {
+        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()) {
             shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
-#if SDF_SHADOW_FADE_SLOTS > 0
-            if (passGroup.shadowFadeCount > 0u) {
-                incoming = incomingVisibility.Load(int3(p.pixel, 0));
-            }
-#endif
         }
-        sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, incoming, 1.0);
+        sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, 1.0);
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
@@ -76,30 +87,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // screenIndex and never indexes the material table.
             color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
         } else {
-            // The detail re-resolve, ahead of the occlusion and the lights, since the material's wrap, soften and eye
-            // lanes need the resolved material: one more hit-only field evaluation with the detail shapes included, so a
-            // rivet or seam's own material wins its footprint (sdfViewsFieldReads). When the host proves there are no
-            // detail shapes, the record's attributes and seam stand. A mesh pixel's surface is its triangle's, never the
-            // field's: a textured mesh reads its texel's material, albedo and emission from the atlases (sdfLightMeshAt).
+            // A mesh pixel's surface is its triangle's: a textured mesh reads its texel's material, albedo and emission
+            // from the atlases, and an impostor its views' (sdfLightMeshAt).
             bool meshTextured = mesh.textured;
             bool meshImpostor = mesh.impostor;
             SdfMeshTexel meshTexel = mesh.texel;
             SdfImpostorSurface impostorSurface = mesh.impostorSurface;
-
-            material = reads.material;
-            hitLanes = reads.lanes;
-            hitFrameSlot = reads.frameSlot;
-            materialBlendWeight = reads.blendWeight;
-            materialBlendOther = reads.blendOther;
-
-            // The material blend at a seam: the smooth blend eases the distance across it, but the material is one integer
-            // winner, so the winner's albedo cross-fades toward the losing operand by the clamped seam weight (0 at and
-            // beyond the blend band, up to 0.5 at its centre), continuous through the winner's flip.
             SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
-
-            if (materialBlendWeight > 0.0) {
-                shadeMaterial.albedo = lerp(shadeMaterial.albedo, sdfMaterialAlbedo(materialBlendOther), materialBlendWeight);
-            }
 
             // A textured mesh's texel carries its albedo and the light it emits; the emission joins the shade in place of
             // the material's albedo times its emissive strength, which the bake already multiplied.
@@ -118,44 +112,18 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
             float3 layerRay = p.rayDirection;
-#ifdef SDF_DYNAMIC_TRANSFORMS
-            if (hitFrameSlot != SDF_TRANSFORM_SLOT_NONE) {
-                float3 frameOrigin = sdfDynamicTransforms[3u * (uint)hitFrameSlot].xyz;
-                float4 frameRotation = sdfDynamicTransforms[3u * (uint)hitFrameSlot + 1u];
+            if (s.frameSlot != SDF_TRANSFORM_SLOT_NONE) {
+                float3 frameOrigin = sdfDynamicTransforms[3u * (uint)s.frameSlot].xyz;
+                float4 frameRotation = sdfDynamicTransforms[3u * (uint)s.frameSlot + 1u];
                 layerPoint = rotatePointByInverseQuaternion(surfacePoint - frameOrigin, frameRotation);
                 layerNormal = rotatePointByInverseQuaternion(normal, frameRotation);
                 layerRay = rotatePointByInverseQuaternion(p.rayDirection, frameRotation);
             }
-#endif
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
+            applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
 
-            // The weathering's curvature (when the surface stage did not measure it) and the soften's wide-stencil
-            // gradient come from the probes the stage's field reads took for this material.
-            SdfFieldProbes probes = reads.probes;
-
-            if (reads.weatheringCurvature) {
-                float center = s.terminalRadius;
-
-                sdfEvalCount += 4.0;
-                sdfWorkSteps += 4u;
-
-                if (reads.centerTap) {
-                    center = probes.center;
-                    sdfEvalCount += 1.0;
-                    sdfWorkSteps += 1u;
-                }
-
-                curvature = sdfProbeCurvature(probes, center);
-            }
-
-            applyWeathering(layerPoint, layerNormal, normal.y, curvature, p.pixelFootprint * s.t, hitLanes, shadeMaterial);
-
-            // The shading-normal soften (SdfMaterial.Soften) widens the lit normal toward a wide-stencil field gradient;
-            // occlusion and the normal debug view keep the geometric normal.
-            applySoften(normal, probes.softenSum, shadeMaterial.soften);
-
-            // The ambient stage's occlusion, into the ambient fill and unslotted directionals. A
-            // wrapped (skin-like) material relaxes it toward 1; wrap = 0 leaves it as it is.
+            // The surface pass's occlusion, into the ambient fill and unslotted directionals. A wrapped (skin-like)
+            // material relaxes it toward 1; wrap = 0 leaves it as it is.
             float ambientOcclusion = s.ambient;
             ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
 
@@ -169,16 +137,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
-            shadeSurface.incomingVisibility = incoming;
 
-            // The mesh path's irradiance volume is the indirect light. Its enabled sky source replaces the unoccluded
+            // The irradiance volume is the indirect light. Its enabled sky source replaces the unoccluded
             // harmonic ambient; disabling that source retains the authored ambient look. Reflections, direct lights and
             // atmosphere remain independent.
-#ifdef SDF_VIEWS_MESH_ONLY
             bool meshIndirect = sdfMeshIrradianceEnabled();
-#else
-            bool meshIndirect = false;
-#endif
             bool indirectSky = (meshIndirect && ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u));
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
             float3 rim = float3(0.0, 0.0, 0.0);
@@ -204,14 +167,12 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
-#ifdef SDF_VIEWS_MESH_ONLY
             if (meshIndirect) {
                 color += sdfMeshIndirect(surfacePoint, normal) * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
                     * ((1.0 - shadeMaterial.metal) * shadeMaterial.receive * passGroup.indirectApply.w
                         * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             }
-#endif
             // Authored fill is the indirect-off look. It never adds a second approximation while the volume is on.
             if (!meshIndirect) {
                 color += ((shadeMaterial.albedo * shadeMaterial.fill) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
@@ -235,50 +196,20 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
             color = selfEmission + (color - selfEmission) * attenuation;
-            // Use the material and atlas texel that actually shaded this pixel, after detail re-resolution and layers.
+            // Use the material and atlas texel that actually shaded this pixel, after its layers.
             emission = selfEmission;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline).
             if (curvatureShading) {
-                color = applyCurvatureShading(color, curvature);
+                color = applyCurvatureShading(color, s.curvature);
             }
         }
     }
 
     if (useFinalShading) {
         // The editor grid tints the lit color before the composite's distance fog, so a far grid still recedes. It reads
-        // the geometric normal, which the soften above never widens.
+        // the geometric normal.
         color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
-
-        // The silhouette's sky coverage, from this frame's primary records. The residual ratio stays in the clamped units
-        // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge stays wholly covered, and a mesh
-        // pixel's residual is zero.
-        float residual = saturate(s.terminalRadius / s.threshold);
-        float grazing = (1.0 - saturate(-dot(normal, p.rayDirection)));
-        float edgeWeight = (residual * grazing);
-        bool adjacentSky = false;
-        if (edgeWeight > DisplayCode) {
-            uint2 renderDims = worldViewDims(p.view);
-            const int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
-            [unroll] for (uint i = 0u; i < 4u; i++) {
-                int2 neighbor = int2(p.pixel) + offsets[i];
-                if (all(neighbor >= 0) && all(neighbor < int2(renderDims))) {
-                    // A neighbour outside the dispatch box has no record from this frame, and the beam proved its tile
-                    // empty, so it is sky; inside the box its record is current, empty tiles included.
-                    if (!worldVisibilityCurrent(uint2(neighbor))) {
-                        adjacentSky = true;
-                    } else {
-                        SdfVisibility adjacent = sdfLoadVisibility(worldVisibilityRecord(uint2(neighbor), p.viewIndex));
-                        // Exhaustion proves neither sky nor geometry, so it counts as unknown.
-                        adjacentSky = adjacentSky || (!sdfVisibilityHit(adjacent) && sdfVisibilitySteps(adjacent) < (uint)MaxSteps);
-                    }
-                }
-            }
-        }
-        // The sky's share of an edge beside sky is what the hit does not cover: the composite blends the full sky there.
-        if (adjacentSky) {
-            coverage = (1.0 - edgeWeight);
-        }
     }
 
     static const float3 Luma = float3(0.2126, 0.7152, 0.0722);

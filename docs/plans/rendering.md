@@ -49,7 +49,7 @@ beside the package that owns it. The open parts are:
   (the Direct3D 12 cells included), the driver-removal exercise, and the peak
   device-local thresholds the published-package readings set.
 - **P6:** the representation experiments remain open. P6-GI's field-traced
-  radiance cache is deleted; indirect light is the baked-mesh path's CPU-traced
+  radiance cache is deleted; indirect light is the CPU-traced
   irradiance volume, whose open work the P6-GI section lists.
 - **P10:** all nine steps have landed; the parity stations at the floor tier on
   floor hardware have not run.
@@ -59,6 +59,14 @@ beside the package that owns it. The open parts are:
   Windows click and focus return is the one remaining item.
 - **P14:** all fifteen steps have landed; the residency, routed-world and
   device-recording follow-ups in [open items](open-items.md) remain.
+- **Retired with the per-pixel interpreter:** every view renders the meshes its
+  residency bakes the program into
+  ([decision](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs)),
+  so the interpreter's frame passes, kernels and levers are deleted, and with
+  them every step that only shaped the per-pixel march: P14-14's per-tile
+  instruction tapes, P14-15's winner-only gradients, P15-7's march seeding,
+  P18-13's amortized secondary shadows and the incoming shadow image of P18-7's
+  handoffs. Their text below records what they delivered; nothing of them runs.
 - **P15:** P15-1 to P15-7 have landed or been decided; P15-8 and the recorded
   Steam Deck run are open.
 - **P16:** the display transform, the HDR swapchain selection, paper white and
@@ -1506,16 +1514,12 @@ pipeline budget all read. `ImagePixelFormat` stays apart: it is the code an
 uploaded source's region header carries for its conversion kernel, including
 the palette-indexed and NV12 host layouts no GPU image is created in.
 
-A ready bake's mesh draws textured in place of its static placements' fields: the
-field is kept camera-hidden, the switch counted as `sdf.bakes.drawn`, its five
-textures sampled from the mesh atlases with the albedo decoded from sRGB in the
-shader (held by `CreationBakeLawTests`, `SdfMeshAtlasLawTests`,
-`MeshTextureDeviceLawTests` and the `sdf-bake-switch` canary). Bakes draw by default
-when the loaded world's `BAKE` chunk supplies every bake from its pack (a released
-or compiled tree, the parity world); a source boot draws fields unless `world.bakes
-on`, and a live bake then switches when ready, which is the authoring path. Under
-the default rule, captures do not depend on local baking. `world.bakes off` forces
-fields. The parity world ships its bakes: `puck parity` compiles its tree with the
+No view draws a prototype bake: every view renders the residency's own baked
+meshes, and the bake-drawing path and its `world.bakes` lever are deleted. The
+engine keeps drawing a textured mesh or an impostor card when a frame's draw
+carries one, sampling the mesh atlases with the albedo decoded from sRGB in the
+shader (held by `SdfMeshAtlasLawTests` and `MeshTextureDeviceLawTests`), and no
+emitter produces such a draw. The parity world ships its bakes: `puck parity` compiles its tree with the
 World artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
 every bake from the pack, and refuses a leg that resolved a bake on the device.
 
@@ -2286,15 +2290,15 @@ open doorway that lights a dark room. The reasoning behind the technique, and
 the alternatives it was chosen over, are in
 [the decisions register](../decisions/rendering.md#global-illumination).
 
-**Where it stands.** Indirect light is the baked-mesh path's irradiance volume,
-traced on the CPU against the static mesh draws and read by the mesh views
+**Where it stands.** Indirect light is the irradiance volume,
+traced on the CPU against the static mesh draws and read by the views
 kernel ([the mesh path's irradiance volume](../rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)).
 `render.indirect` authors its tier, source gains, bounce depth and receiver-only
 application ([indirect light controls](../rendering/sdf/handbook/lighting-and-shading.md#indirect-light-controls)).
 The field-traced radiance cache that preceded it (G1 to G10: the CPU model, the
 per-residency transport, depth-only light views, the finite lighting solve,
 receiver certificates, the near field and the screen and cone comparison
-methods) is deleted. The interpreter path draws no indirect light.
+methods) is deleted.
 
 **Open:**
 
@@ -2305,8 +2309,7 @@ methods) is deleted. The interpreter path draws no indirect light.
 - The sky's bounced share is captured when a generation of probes traces, so
   drifting clouds change only the direct sky term.
 - The volume's sky term reads the residency's physical sky coefficients, which
-  the environment producer renders while the first view takes the mesh path
-  with the sky source on.
+  the environment producer renders while the sky source is on.
 - The trace's cost on the floor device's CPU, and the frame-time verdict on a
   quiet machine.
 
@@ -5423,8 +5426,7 @@ in a bake pack, and a compiled world's chunk names the keys it needs from it, so
 a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
 that has not been compiled, the CPU baker runs in the background on the thread
 pool (`WorldBakeSchedule`), never on the frame thread or the GPU. It bakes only
-the prototypes that changed, stores the results locally, and keeps drawing the
-SDF path until each bake is ready. Baking is data processing in the shipped
+the prototypes that changed and stores the results locally. Baking is data processing in the shipped
 baker, so it needs no toolchain on the device.
 
 Bakes are presentation only: contact and queries keep reading the SDF field.
@@ -5434,9 +5436,8 @@ are chosen by measured cost.
 
 **Qualification state.** The existing CPU and device sampling evidence remains
 applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
-two visits to the handover band, settled draw-count observations, and a paused
-authoritative-hash comparison around `world.bakes`. Those World observations
-still require both backends. The creation-bake outcome pins are checked after
+two visits to the handover band and settled draw-count observations, which no
+longer have a producer to observe. The creation-bake outcome pins are checked after
 the final bake derivation fingerprint is current; a successful shader build alone
 does not establish those bytes.
 
@@ -7051,9 +7052,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       also hold. These checks do not establish scrub/run/rate image equivalence
       or named and repeated layer audition images; those image probes remain
       open, as do parity and counted ceiling recordings from completed work.
-13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
-    image qualification holds on both backends. The receiver-only shader
-    mutation, counted-quarter comparison and floor-device ceilings remain open.
+13. **P18-13, temporal amortization of secondary shadows.** Retired with the
+    per-pixel interpreter: the frame's shadows are cascades, and the step's
+    history, levers and kernels are deleted. What it delivered:
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
       reprojects the rest from a history of the K row. A receiver's identity
@@ -7479,8 +7480,8 @@ amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
 
-**Global illumination.** P6-GI's irradiance volume rides the baked-mesh path;
-its open work follows that path's own sequence.
+**Global illumination.** P6-GI's irradiance volume reads the baked meshes;
+its open work follows the baked frame's own sequence.
 
 ## Deferred to the end
 

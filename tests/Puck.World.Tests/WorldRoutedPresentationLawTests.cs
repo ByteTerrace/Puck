@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -241,7 +242,9 @@ public sealed partial class WorldRoutedPresentationLawTests {
         // A world with no screen, since a program declaring one renders every frame and never stands.
         using var north = Endpoint(definition: (AwayDocument() with { PlacementRowsRaw = [], ScreensRaw = [] }), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
-        var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true });
+        // The program holds no shape, so the residency has nothing to bake and its view may stand from its first frame; a
+        // bake still pending renders every frame, which only the passes' own frames advance.
+        var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true, Program = new SdfProgramBuilder().Build() });
         var gpu = new FakeGpuDevice();
         var context = new FrameContext(
             AccumulatorTicks: 0UL,
@@ -288,12 +291,10 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
         var emitter = new WorldSceneEmitter(
-            anchor: new WorldPerceptionAnchor(),
             animator: new WorldStampPool(),
             audio: new SilentAudio(),
             client: client,
             continuum: new WorldContinuum(adjacencies: new NoNeighbours(), client: client, routes: routes),
-            settings: new WorldRenderSettings(defaults: home.Render),
             text: new WorldTextCatalog(source: new(Definition: home, SourcePath: "unused.world.json"))
         );
         var dresser = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null, mirror: new WorldSessionMirror(placeholder: home));
@@ -438,7 +439,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         var frame = Capture(source: scene.FrameSource);
 
-        Assert.True(condition: frame.DynamicTransforms[0].CastsSoftShadow);
         var destination = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: north.Mirror

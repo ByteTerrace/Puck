@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 
 /// <summary>The values a pass block takes from the tables that packed its frame (<see cref="SdfWorldTables.PassValues"/>).</summary>
 /// <param name="ScreenCount">One past the highest screen whose source is bound, or zero when none is.</param>
-/// <param name="InstanceMaskWordCount">The live program's per-tile instance-mask width.</param>
+/// <param name="InstanceMaskWordCount">The live program's instance-mask width, which a bake lattice's mask uses.</param>
 /// <param name="MeshDraws">The frame's mesh draws.</param>
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
 public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode);
@@ -29,21 +29,12 @@ public static partial class SdfFrameBlock {
     private static readonly int CurvatureInkHigh = Offset(member: SdfWorldPackage.CurvatureInkHigh);
     private static readonly int CurvatureInkLow = Offset(member: SdfWorldPackage.CurvatureInkLow);
     private static readonly int CurvatureRim = Offset(member: SdfWorldPackage.CurvatureRim);
-    private static readonly int CameraTileShadowMask = Offset(member: SdfWorldPackage.CameraTileShadowMask);
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
-    private static readonly int DebugSliceAxis = Offset(member: SdfWorldPackage.DebugSliceAxis);
-    private static readonly int DebugSliceOffset = Offset(member: SdfWorldPackage.DebugSliceOffset);
     private static readonly int DisableAmbientOcclusion = Offset(member: SdfWorldPackage.DisableAmbientOcclusion);
-    private static readonly int DisableFarBound = Offset(member: SdfWorldPackage.DisableFarBound);
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
     private static readonly int DisableScreenLights = Offset(member: SdfWorldPackage.DisableScreenLights);
-    private static readonly int DisableShadowCull = Offset(member: SdfWorldPackage.DisableShadowCull);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
-    private static readonly int EnableShadowProxy = Offset(member: SdfWorldPackage.EnableShadowProxy);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
-    private static readonly int FastAmbientOcclusion = Offset(member: SdfWorldPackage.FastAmbientOcclusion);
-    private static readonly int FastSoftShadowMarch = Offset(member: SdfWorldPackage.FastSoftShadowMarch);
-    private static readonly int FiniteDifferenceNormals = Offset(member: SdfWorldPackage.FiniteDifferenceNormals);
     private static readonly int FrustumOffset = Offset(member: SdfWorldPackage.FrustumOffset);
     private static readonly int GridFlags = Offset(member: SdfWorldPackage.GridFlags);
     private static readonly int GridLineWidth = Offset(member: SdfWorldPackage.GridLineWidth);
@@ -59,21 +50,16 @@ public static partial class SdfFrameBlock {
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
-    private static readonly int ShadowAmortize = Offset(member: SdfWorldPackage.ShadowAmortize);
-    private static readonly int ShadowOwnershipReject = Offset(member: SdfWorldPackage.ShadowOwnershipReject);
-    private static readonly int ShadowLightReject = Offset(member: SdfWorldPackage.ShadowLightReject);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
-    private static readonly int ShadowDistanceScale = Offset(member: SdfWorldPackage.ShadowDistanceScale);
     private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
     private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
     private static readonly int ShadowFadeCount = Offset(member: SdfWorldPackage.ShadowFadeCount);
     private static readonly int TanHalfFieldOfView = Offset(member: SdfWorldPackage.TanHalfFieldOfView);
-    private static readonly int TileGrid = Offset(member: SdfWorldPackage.TileGrid);
     private static readonly int ViewBase = Offset(member: SdfWorldPackage.ViewBase);
     private static readonly int ViewForward = Offset(member: SdfWorldPackage.ViewForward);
     private static readonly int ViewPosition = Offset(member: SdfWorldPackage.ViewPosition);
@@ -96,20 +82,6 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
         WriteUInt32(block: block, offset: Temporal, value: (temporal ? 1u : 0u));
-    }
-    /// <summary>Writes a zero active fade count, for a pass whose graph allocates no incoming visibility image: the one
-    /// shadow and views kernels read their fade count from the block, and a filler stands at the image.</summary>
-    /// <param name="block">The pass block <see cref="Write"/> filled.</param>
-    public static void WriteWithoutFades(Span<byte> block) => WriteUInt32(block: block, offset: ShadowFadeCount, value: 0u);
-    /// <summary>Writes the shadow history policy and the two frame-uniform rejection masks.</summary>
-    /// <param name="block">The common pass block.</param>
-    /// <param name="enabled">Whether temporal secondary shadows are enabled.</param>
-    /// <param name="ownership">Slots rejected by ownership.</param>
-    /// <param name="lightMotion">Slots rejected by light motion.</param>
-    public static void WriteShadowHistory(Span<byte> block, bool enabled, uint ownership, uint lightMotion) {
-        WriteFlag(block: block, offset: ShadowAmortize, value: enabled);
-        WriteUInt32(block: block, offset: ShadowOwnershipReject, value: ownership);
-        WriteUInt32(block: block, offset: ShadowLightReject, value: lightMotion);
     }
     /// <summary>Writes the preceding render's camera, lens and jitter for visibility reprojection: position and
     /// validity, right and tangent, up and aspect, forward, the render extent and the jitter in render pixels, then the
@@ -148,8 +120,7 @@ public static partial class SdfFrameBlock {
     public static void WriteWorkCounterDetailRow(Span<byte> block, uint row) =>
         WriteUInt32(block: block, offset: WorkCounterDetailRow, value: row);
     /// <summary>Returns the forward distance of the plane a perspective view's surfaces are rendered from: the larger of
-    /// <see cref="CameraSnapshot.Near"/> and <see cref="SdfWorldPackage.MinimumNear"/>. The kernels start every
-    /// surface march where its ray crosses this plane and the mesh pass clips there
+    /// <see cref="CameraSnapshot.Near"/> and <see cref="SdfWorldPackage.MinimumNear"/>. The mesh pass clips there
     /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which
     /// the bounded volumes start from, and perspective kernels apply this floor themselves. The scoped orthographic
     /// light camera uses its finite projection's positive near plane directly.</summary>
@@ -160,7 +131,7 @@ public static partial class SdfFrameBlock {
             x: camera.Near,
             y: SdfWorldPackage.MinimumNear
         );
-    /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
+    /// <summary>Writes a view's values into a pass block: its render extent, the frame's bound screens,
     /// instance-mask width and mesh draws the tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
     /// light count and shadow slots (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
@@ -176,7 +147,6 @@ public static partial class SdfFrameBlock {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
-        WriteShadowHistory(block: block, enabled: false, lightMotion: 0, ownership: 0);
         WritePreviousView(block: block, valid: false, view: default);
         WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightCamera), value: 0u);
 
@@ -186,8 +156,6 @@ public static partial class SdfFrameBlock {
 
         WriteUInt32(block: block, offset: ImageExtent, value: width);
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: height);
-        WriteUInt32(block: block, offset: TileGrid, value: ((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize));
-        WriteUInt32(block: block, offset: (TileGrid + sizeof(uint)), value: ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize));
         WriteUInt32(block: block, offset: ViewportCount, value: 1u);
         WriteUInt32(block: block, offset: ViewBase, value: 0u);
         WriteUInt32(block: block, offset: ScreenCount, value: tables.ScreenCount);
@@ -220,8 +188,6 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: CurvatureInkLow, value: curvature.InkLow);
         WriteSingle(block: block, offset: CurvatureInkHigh, value: curvature.InkHigh);
         WriteVector3(block: block, offset: CurvatureInkColor, value: curvature.InkColor);
-        WriteSingle(block: block, offset: DebugSliceAxis, value: frame.DebugSliceAxis);
-        WriteSingle(block: block, offset: DebugSliceOffset, value: frame.DebugSliceOffset);
         var grid = snapshot.Grid;
 
         WriteUInt32(block: block, offset: GridFlags, value: ((uint)grid.Flags));
@@ -240,18 +206,9 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: (GridWorldFrame + sizeof(float)), value: grid.WorldFrame.Y);
         WriteSingle(block: block, offset: (GridWorldFrame + (2 * sizeof(float))), value: grid.WorldFrame.Z);
         WriteSingle(block: block, offset: (GridWorldFrame + (3 * sizeof(float))), value: grid.WorldFrame.W);
-        WriteFlag(block: block, offset: FiniteDifferenceNormals, value: frame.UseFiniteDifferenceNormals);
-        WriteFlag(block: block, offset: DisableShadowCull, value: frame.DisableShadowCull);
         WriteFlag(block: block, offset: DisableSoftShadows, value: quality.DisableSoftShadows);
-        WriteFlag(block: block, offset: ShadowAmortize, value: quality.ShadowAmortize);
         WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
-        WriteSingle(block: block, offset: ShadowDistanceScale, value: quality.ShadowDistanceScale);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
-        WriteFlag(block: block, offset: EnableShadowProxy, value: frame.EnableShadowProxy);
-        WriteFlag(block: block, offset: CameraTileShadowMask, value: quality.UseCameraTileShadowMask);
-        WriteFlag(block: block, offset: FastSoftShadowMarch, value: quality.UseFastSoftShadowMarch);
-        WriteFlag(block: block, offset: FastAmbientOcclusion, value: quality.UseFastAmbientOcclusion);
-        WriteFlag(block: block, offset: DisableFarBound, value: quality.DisableFarBound);
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
     }
 

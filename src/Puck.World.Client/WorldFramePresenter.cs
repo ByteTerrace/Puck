@@ -1827,13 +1827,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
         // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
         m_emitter = new WorldSceneEmitter(
-            anchor: anchor,
             animator: animator,
             audio: audio,
-            bakes: bakes,
             client: client,
             continuum: continuum,
-            settings: settings,
             text: text
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(

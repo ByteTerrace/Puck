@@ -9,10 +9,10 @@ namespace Puck.SdfVm;
 // region and upload whole records. The World set binds each generated record table, and a kernel references only
 // the tables its pass reads.
 public sealed partial class SdfWorldTables {
-    private const int LightRegionIndex = 8;
-    private const int SkyRegionIndex = 9;
-    private const int SkyLayerRegionIndex = 10;
-    private const int ShadowHandoffRegionIndex = 11;
+    private const int LightRegionIndex = 7;
+    private const int SkyRegionIndex = 8;
+    private const int SkyLayerRegionIndex = 9;
+    private const int ShadowHandoffRegionIndex = 10;
 
     private readonly SdfLight[] m_lightRecords = new SdfLight[SdfLights.MaxLights];
     private readonly SdfSkyBlock[] m_skyRecord = new SdfSkyBlock[1];
@@ -31,7 +31,6 @@ public sealed partial class SdfWorldTables {
     private readonly GpuRegion m_shadowHandoffRegion;
 
     private int m_shadowHandoffCount;
-    private int m_shadowFadeCapacity;
 
     /// <summary>Gets the detail rows the sky, composite and environment passes count the sky's runs and layers in, in row
     /// order.</summary>
@@ -43,7 +42,6 @@ public sealed partial class SdfWorldTables {
     // Packs a frame's lights and sky and retains its active controls until the counted upload.
     private void PackLightsAndSky(SdfFrame frame) {
         m_shadowHandoffCount = frame.Lights.ShadowSlots.FadeCount;
-        m_shadowFadeCapacity = frame.Lights.ShadowSlots.FadeCapacity;
         frame.Lights.ShadowSlots.Handoffs.CopyTo(destination: m_shadowHandoffs);
         frame.Lights.Pack(records: m_lightRecords);
         frame.Sky.Pack(
@@ -57,9 +55,8 @@ public sealed partial class SdfWorldTables {
         _ = m_lightRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_lightRecords.AsSpan()), offset: 0);
         _ = m_skyRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyRecord.AsSpan()), offset: 0);
         _ = m_skyLayerRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyLayerRecords.AsSpan()), offset: 0);
-        // The mesh path's irradiance volume lights by the physical environment when its sky source is on.
-        PrepareSkyEnvironment(physical: ((frame.Views is { Count: > 0 } views) && (views[0].Quality.RenderPath == SdfRenderPath.Mesh) &&
-            (frame.IndirectTier != SdfIndirectTier.Off) && ((frame.IndirectSources & SdfIndirectSources.Sky) != 0)));
+        // The irradiance volume lights by the physical environment when its sky source is on.
+        PrepareSkyEnvironment(physical: ((frame.IndirectTier != SdfIndirectTier.Off) && ((frame.IndirectSources & SdfIndirectSources.Sky) != 0)));
     }
     // Writes the generated record buffers and the shared sky environment map into a ring slot's World set.
     private void WriteLightAndSkySet(nint set, int slot) {

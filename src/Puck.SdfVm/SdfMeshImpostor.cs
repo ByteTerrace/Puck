@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// the mesh atlases' packing (<see cref="SdfMeshAtlas"/>): albedo (sRGB-encoded BC7, coverage in alpha), the octahedral
 /// normal pair (BC5), the hit's depth across the sphere (BC4), each texel's material (R8, never blended) and emitted light
 /// (BC6H). A draw carrying one rasterizes a
-/// card in place of its mesh (<see cref="SdfMeshDraw.Impostor"/>), and the mesh pass and the hit passes find the surface
+/// card in place of its mesh (<see cref="SdfMeshDraw.Impostor"/>), and the mesh pass and the views pass find the surface
 /// the card shows by marching the camera's ray through the three nearest views' depth.
 /// </summary>
 public sealed record SdfMeshImpostor : SdfTextureSet {

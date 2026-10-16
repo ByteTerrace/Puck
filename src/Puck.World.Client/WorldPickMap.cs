@@ -11,8 +11,6 @@ public sealed record WorldPickTarget(string? Placement, int? BodyIndex) {
     public string? Prototype { get; init; }
     /// <summary>Gets the transform slots reserved by this live stamp registration, or zero for a static placement.</summary>
     public int StampPoolSlots { get; init; }
-    /// <summary>Gets whether this captured placement emission actually drew its baked mesh.</summary>
-    public bool DrawsBake { get; init; }
 }
 /// <summary>Builds the host lookup alongside program emission and publishes immutable snapshots for delayed GPU
 /// picks. Several SDF ordinals can name one placement, and meshes use their own draw ordinal table.</summary>

@@ -12,17 +12,17 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void CadenceOwnerNameAloneRunsShadowAndItsConsumers(bool temporal) {
+    public void CadenceOwnerNameAloneRunsTheSurfaceAndItsConsumers(bool temporal) {
         var lights = SdfLights.Default();
 
         lights.ShadowSlots.SetOwner(owner: "original", slot: 0);
-        using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal, amortize: true, lights: lights);
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal, lights: lights);
 
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         rig.Lights.ShadowSlots.SetOwner(owner: "replacement", slot: 0);
         rig.Produce();
-        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views,
+        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views,
             .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite]),
             actual: Executed(work: CadenceWork(rig: rig)));
         Assert.Empty(collection: rig.StateConflicts);
@@ -96,13 +96,11 @@ public sealed partial class SdfWorldPassesLawTests {
             case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
             case "shadow-direction":
                 frame.Lights.Set(index: 0, light: frame.Lights[0] with { Direction = new Vector3(x: 0.8f, y: 0.2f, z: 0.1f) });
-                executed = [SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
                 break;
             case "camera":
                 frame = frame with { Views = [frame.Views[0] with { Camera = CameraSnapshot.LookAt(position: new Vector3(x: 1f, y: 0f, z: -5f), target: Vector3.Zero, fieldOfViewRadians: 1f, viewportWidth: Extent, viewportHeight: Extent) }] };
-                executed = [SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape, SdfWorldPackage.Parts.CullArgs,
-                    SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient,
-                    SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
                 break;
         }
         rig.SourceFrame = frame with { };
@@ -174,9 +172,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 2, actual: Executed(work: CadenceWork(rig: rig)).Length);
         rig.SourceFrame = rig.SourceFrame with { EnableCadenceGate = false };
         rig.Produce();
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape,
-            SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface,
-            SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views,
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views,
             SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
     }
     [Fact]
@@ -190,13 +186,12 @@ public sealed partial class SdfWorldPassesLawTests {
         }
     }
     [Fact]
-    public void CadenceAtTheFloorLeavesMarchAndShadowStandingOnDrift() {
+    public void CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift() {
         using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
 
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape,
-            SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface,
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
             SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);

@@ -4,17 +4,15 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
-    // A pick copies V through L.x, an inspector V through N, and either one the frame's dispatch box after them.
-    private const int PickRecordBytes = 32;
-    private const int SurfaceRecordBytes = 48;
-    private const int BoxBytes = 16;
+    // A pick copies a record's first four words, an inspector its first six, through its normal.
+    private const int PickRecordBytes = 16;
+    private const int SurfaceRecordBytes = 24;
 
     [Fact]
     public void PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion() {
@@ -30,26 +28,22 @@ public sealed partial class SdfWorldPassesLawTests {
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = 0;
-        var boxes = 0;
         var reads = 0;
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * 64));
+                Assert.Equal(actual: offset, expected: (((24UL * 32) + 8) * SdfWorldPackage.VisibilityRecordByteLength));
                 copies++;
-            } else if ((bytes == BoxBytes) && (offset == 0)) {
-                boxes++;
             }
         };
         gpu.OnReadback = bytes => {
-            if (bytes == (PickRecordBytes + BoxBytes)) {
+            if (bytes == PickRecordBytes) {
                 reads++;
             }
         };
         gpu.WriteReadback = (_, bytes) => {
-            if (bytes.Length == (PickRecordBytes + BoxBytes)) {
-                BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[12..], value: (0x123456U << 8) | 173U);
-                WriteBox(box: WholeBox, bytes: bytes);
+            if (bytes.Length == PickRecordBytes) {
+                BinaryPrimitives.WriteInt32LittleEndian(destination: bytes[8..], value: 173);
             }
         };
         _ = view.Produce(context: in context);
@@ -63,7 +57,7 @@ public sealed partial class SdfWorldPassesLawTests {
         // A pending coordinate has not captured identity yet; the next frame may publish a new program before it records.
         current = Frame();
         _ = view.Produce(context: in context);
-        Assert.Equal(actual: (copies, boxes), expected: (1, 1));
+        Assert.Equal(actual: copies, expected: 1);
         var fence = Assert.IsType<FakeGpuDevice.Fence>(@object: gpu.LastSubmittedFence);
 
         _ = view.Produce(context: in context);
@@ -73,8 +67,7 @@ public sealed partial class SdfWorldPassesLawTests {
         _ = view.Produce(context: in context);
         Assert.Equal(expected: request, actual: picker.Result!.Value.Request);
         Assert.Same(expected: current.Program, actual: picker.Result.Value.Program);
-        Assert.Equal(expected: 173U, actual: picker.Result.Value.Steps);
-        Assert.Equal(expected: 0x123456U, actual: picker.Result.Value.Queries);
+        Assert.Equal(expected: 173, actual: picker.Result.Value.Material);
         Assert.Equal(actual: reads, expected: 1);
         Assert.Equal(actual: copies, expected: 1);
         // The pointer does not move, but a new rendered camera/pose frame must refresh the completed hover.
@@ -114,12 +107,10 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (_, bytes) => { if (bytes is PickRecordBytes or SurfaceRecordBytes) { copies.Add(item: bytes); } };
         gpu.WriteReadback = (_, bytes) => {
-            if (bytes.Length != (SurfaceRecordBytes + BoxBytes)) { return; }
+            if (bytes.Length != SurfaceRecordBytes) { return; }
             BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: 4);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: 1));
-            BinaryPrimitives.WriteInt32LittleEndian(destination: bytes[28..], value: SdfProgram.NoDynamicTransformSlot);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[44..], value: 32767);
-            WriteBox(box: WholeBox, bytes: bytes);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 1));
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[20..], value: 32767);
         };
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
 
@@ -141,7 +132,6 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(actual: copies, expected: new ulong[] { SurfaceRecordBytes });
         Assert.Equal(expected: captured, actual: result.Sample!.Value.Camera);
         Assert.Equal(expected: Vector3.UnitX, actual: result.Normal);
-        Assert.Null(@object: result.TransformSlot);
         var tangent = captured.TanHalfFieldOfView;
         var direction = Vector3.Normalize(value: ((captured.Forward + ((tangent / 32) * captured.Right)) - ((tangent / 32) * captured.Up)));
 
@@ -188,12 +178,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         gpu.OnBufferCopy = (offset, bytes) => {
             if (bytes == PickRecordBytes) {
-                var pixel = (offset / 64UL);
+                var pixel = (offset / SdfWorldPackage.VisibilityRecordByteLength);
 
                 copied.Add(item: (((uint)(pixel % Extent)), ((uint)(pixel / Extent))));
             }
         };
-        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         for (var idle = 0; (idle < 4); idle++) {
             _ = view.Produce(context: in context);
         }
@@ -247,7 +236,6 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var node = view.Runtime.Node(instance: 0);
         var installed = node.Plan;
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
@@ -282,7 +270,6 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         var first = picker.Request(x: 0.25f, y: 0.75f);
 
@@ -302,8 +289,6 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: second, actual: picker.Result?.Request);
     }
 
-    private static readonly uint[] WholeBox = [0, 0, (Extent / 8), (Extent / 8)];
-
     private static FrameContext ContextOf(IGpuDeviceContext gpu) {
         if (gpu is FakeGpuDevice { WriteReadback: null } fake) {
             // The common sphere fixture has a receiver. Zero-reader laws provide their own completed census.
@@ -316,11 +301,5 @@ public sealed partial class SdfWorldPassesLawTests {
         return new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
             StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-    }
-    // The dispatch box a readback carries after its record.
-    private static void WriteBox(Span<byte> bytes, ReadOnlySpan<uint> box) {
-        for (var word = 0; (word < box.Length); word++) {
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[((bytes.Length - BoxBytes) + (word * sizeof(uint)))..], value: box[word]);
-        }
     }
 }

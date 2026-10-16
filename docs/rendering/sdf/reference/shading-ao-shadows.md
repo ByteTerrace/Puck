@@ -1,44 +1,16 @@
 # Shading, ambient occlusion, and shadows
 
-World shading runs after the marcher accepts a hit. The field, analytic normal,
-material state, and configured lights feed a shared shader path on both GPU
-backends.
+World shading runs on each pixel's visibility record, which the surface pass
+writes from the rasterized mesh target. The record's normal, material, frame
+slot, occlusion and shadow visibilities and the configured lights feed one
+shader path on both GPU backends; no shading pass queries the field.
 
-## Hit acceptance
+## Coverage
 
-A primary ray's hit threshold is its pixel footprint at the sample depth. A
-sample inside that threshold is not accepted at once: the ray refines with
-plain steps until the field falls below a quarter of the threshold, or until an
-eight-step refinement budget is spent. A ray passing within a pixel of a thin
-feature therefore shades whatever lies behind it, rather than the feature,
-whichever depths its samples land at. Step phase varies with each 16-pixel
-tile's march start and instance mask, so an edge decided by phase would break
-thin lines into tile-periodic dashes. Features narrower than a pixel are point-sampled; author lines at least about
-two pixels wide at their intended framing. A ray that passes a silhouette and
-reaches sky is still accepted at its closest approach, which feeds the coverage
-filter below.
-
-To check a change to hit acceptance, yaw the camera slightly over thin raised
-lines and count edge transitions. Edges on 16-pixel tile columns
-(`x % 16 == 0`) should be about 1/16 of all edges, the share any one column in
-sixteen would get; a larger share means step phase is deciding edges.
-
-## Silhouette coverage and filtering
-
-The deferred views pass softens grazing silhouette hits only when a cardinal
-neighbor sees sky. It reads the completed primary pass at the current view's
-render resolution; an empty tile uses the beam's current-frame proof because
-its primary records may be stale outside the indirect dispatch. An exhausted
-neighbor ray provides no visibility proof and cannot enable the blend.
-
-The weight uses the terminal field residual divided by the hit threshold,
-both in clamped field units, and the normal's grazing angle. A small field
-rise behind a surface is insufficient evidence of sky: it also occurs between
-grass and the ground, where sky blending creates pale outlines. This filter
-adds no field query. Geometry-to-geometry edges remain unfiltered, and the
-monolithic reference omits the filter because it has no completed neighbor
-records. Check silhouettes, ground-backed grass, changing cameras, multiple
-views and reduced render scales when changing this path.
+A rasterized pixel is wholly a hit or wholly sky, so the lit image carries no
+partial silhouette coverage and the views pass adds no edge filter. Temporal
+reconstruction antialiases silhouettes over a view's history
+([antialiasing and filtering](antialiasing-and-filtering.md)).
 
 ## Sky lighting
 
@@ -52,68 +24,37 @@ describes projection, refresh thresholds and counted work.
 
 ## Ambient occlusion
 
-The default ambient path samples three points along the hit normal. Each probe
-uses the same scaled-distance contract as the marcher and reads bounded
-instances no nearer than their influence spheres, as the shadow march does
-(see [Shadows](#shadows)). The result modulates ambient contribution only; it
-does not darken direct light a second time.
-
-Cone AO and bent normals are optional quality candidates. They require a clear
-budget, stable behavior on thin geometry, and evidence that the additional
-field evaluations improve the target scenes.
+The surface pass estimates occlusion in screen space (`sdfMeshAmbient` in
+`passes/sdf-surface-stage.hlsli`): twelve normal-oriented hemisphere samples,
+within 0.75 metres or a quarter of the hit's distance, whichever is smaller,
+each occluding when the surface the camera sees through its pixel lies in front
+of it by no more than that radius. The disk rotates with each temporal sample so
+the resolve averages its rotations. The result modulates ambient contribution
+only; it does not darken direct light a second time. Occluders off screen or
+behind a nearer surface do not occlude.
 
 ## Shadows
 
-Soft shadows march toward each light in the allocator's stable slots and each
-active incoming handoff, estimating penumbra from that light's angular radius
-and the occluder distance. Up to four stable visibilities occupy the existing
-K word as 8-bit lanes. A directional outside the slots shades unshadowed, scaled
-by ambient occlusion. During a handoff, the outgoing light's own occlusion
-deficit fades to zero while the
-incoming light's grows from zero; each keeps its radiance. The
-[P18-7 contract](../../../plans/rendering.md#p18--sky-and-atmosphere) bounds the
-marches by K + F and provisions incoming visibility storage by policy.
-An 8×8 workgroup grid gather limits the candidate instance
-set for the shadow ray; each pixel then consumes the shared mask. The gather
-also summarizes each mask word's instance bounds as one sphere, so a
-sample far from a body rejects those instances together. The shadow and
-ambient-occlusion marches read each bounded instance as the larger of its field
-and the distance to its influence sphere
-([the ruling](../../../decisions/rendering.md#the-pipeline-foundation)), so it
-is rejected once that distance reaches the running minimum, whatever rate its
-field grows at. The floor is continuous and keeps every surface and interior,
-and it lifts an underestimating gauge, scale, warp or field op toward the true
-distance away from the body, which lightens that body's penumbra. An instance
-the walks cannot bound (an optional intersection, xor or morph, a lane erosion)
-is rejected only where the gap to its bound, times its certified distance gain,
-reaches the running minimum, and one with no certified gain remains an
-individual candidate, as do oversized bounds. Each sample asks the field
-only up to the clearance at which neither the stride, hit decision nor penumbra estimate
-can change, so candidates beyond it are rejected before they are evaluated;
-the visibility is the full field's. Every bound the walk rejects by also lowers a
-published lower bound of the field, and the running minimum starts at the clearance a
-stride to the reach would need, so each sample also reports a proven clearance at no
-extra evaluation. Past the step ceiling the stride takes every step that clearance
-proves can neither hit nor lower the estimate: a point `s` further on reads at least
-`c - s`, so `k (c - s) / (t + s)` stays at or above the visibility. Shadow rays
-through open space then grow their stride geometrically instead of at the ceiling's
-pace; the samples' positions move, the estimate's proof does not.
-Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
-conservative sampled-region behavior as primary rays. The minimum stride steps
-through an occluder thinner than itself, but a stride that reaches a fold wall
-(a log-sphere shell boundary) lands just past it, within the occlusion threshold, and samples the other side before
-striding on.
+The first two stable shadow slots' directional lights cast shadows from the
+mesh draws through their cascades
+([the shadow cascades](../handbook/frame-rendering.md#the-shadow-cascades)).
+The surface pass answers each with a percentage-closer soft shadow from the
+first cascade holding the point: a twelve-tap blocker search sizes the penumbra
+from the light's penumbra slope and the gap to the blockers, and a sixteen-tap
+filter of that width, at most fourteen texels, answers. The visibilities occupy
+the K word's 8-bit lanes. A directional outside those slots shades unshadowed,
+scaled by ambient occlusion. During a handoff the outgoing light's own
+occlusion deficit fades to zero by the handoff's weight, keeping its radiance,
+and the incoming light lights unshadowed until it holds the slot.
 
-Light culling must never exclude a light that can affect the pixel. Oversized
-cells cost work; undersized influence bounds create visible discontinuities.
+A cascade's texel bounds the shadow's resolution, and its normal offset
+(`SdfMeshShadowCascades.NormalOffsetTexels`) bounds its acne; a body thinner
+than a texel can miss its own shadow.
 
 ## Curvature and stylization
 
-Curvature shading requires additional derivative information beyond the
-default analytic normal. Treat it as a selectable presentation feature, not as
-part of field correctness. Validate it against silhouettes, smooth blends,
-small primitives, and moving cameras.
-
-Keep diagnostic controls explicit: normal source, AO contribution, shadow
-visibility, light-cell occupancy, and march termination should be inspectable
-without changing simulation state.
+Curvature shading reads the record's curvature, which the surface pass writes
+as zero: the mesh carries no curvature, so authored cavity, rim and ink
+shading draw nothing. Keep diagnostic controls explicit: normal source, AO
+contribution and shadow visibility should be inspectable without changing
+simulation state.

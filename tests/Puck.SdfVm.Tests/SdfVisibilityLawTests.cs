@@ -8,8 +8,8 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the visibility record's shared words have one statement, <see cref="SdfVisibility"/>, which a
 /// pick decodes with and the kernels read through their generated spellings. A dynamic-transform slot fits every lane
-/// that carries it, so a table's last slot survives the instruction's float lane and the record's L.x exactly, and a
-/// slot past them is refused by name. A record is current exactly inside its frame's dispatch box.
+/// that carries it, so a table's last slot survives the instruction's float lane exactly, and a slot past it is refused
+/// by name.
 /// </summary>
 public sealed partial class SdfVisibilityLawTests {
     private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
@@ -25,11 +25,7 @@ public sealed partial class SdfVisibilityLawTests {
         Assert.NotEqual(actual: ((float)last), expected: ((float)(last - 1)));
         // The kernels index a slot's rows at three times the slot plus two in 32 bits.
         Assert.True(condition: (((3UL * ((ulong)last)) + 2UL) <= uint.MaxValue));
-        // The record's L.x lane holds it too, and its sentinel is no slot.
-        Assert.True(condition: (((long)last) < (1L << SdfVisibility.TransformSlotLaneBits)));
-        Assert.Equal(expected: last, actual: SdfVisibility.TransformSlotOf(word: ((uint)last)));
         Assert.True(condition: (SdfProgram.NoDynamicTransformSlot < 0));
-        Assert.Null(@object: SdfVisibility.TransformSlotOf(word: unchecked((uint)SdfProgram.NoDynamicTransformSlot)));
 
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -43,8 +39,6 @@ public sealed partial class SdfVisibilityLawTests {
 
         Assert.Equal(expected: "slot", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().TransformDynamic(slot: past)).ParamName);
         Assert.Equal(expected: "slot", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().BeginInstanceDynamic(boundOffset: Vector3.Zero, boundRadius: 1f, slot: past)).ParamName);
-        Assert.Contains(expectedSubstring: "transform-slot lane", actualString: Assert.Throws<InvalidDataException>(testCode: () => SdfVisibility.TransformSlotOf(word: ((uint)past))).Message);
-        Assert.Throws<InvalidDataException>(testCode: () => SdfVisibility.TransformSlotOf(word: 0x80000000U));
     }
     [Fact]
     public void AnIdentityRoundTripsThroughItsSharedFields() {
@@ -57,25 +51,6 @@ public sealed partial class SdfVisibilityLawTests {
             }
         }
         Assert.Equal(expected: 0U, actual: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Background, source: 0));
-    }
-    [Fact]
-    public void ARecordIsCurrentExactlyInsideItsDispatchBox() {
-        // Groups one to three across and two to four down: pixels [8, 24) by [16, 32).
-        uint[] box = [1, 2, 3, 4];
-
-        for (var y = 0U; (y < 40U); y++) {
-            for (var x = 0U; (x < 40U); x++) {
-                Assert.Equal(
-                    actual: SdfVisibility.IsCurrent(box: box, x: x, y: y),
-                    expected: ((x >= 8U) && (x < 24U) && (y >= 16U) && (y < 32U))
-                );
-            }
-        }
-        // The empty box of a frame with no surviving tile makes nothing current.
-        Assert.False(condition: SdfVisibility.IsCurrent(box: [0, 0, 0, 0], x: 0, y: 0));
-        // The kernels read the rule the host evaluates, generated from the same table.
-        Assert.Contains(actualString: SdfIsaHlsl.Generate(), expectedSubstring: $" {SdfVisibility.CurrencyHlsl}\n");
-        Assert.Contains(actualString: CodeOf(path: "frame/sdf-frame.hlsli"), expectedSubstring: "SDF_VISIBILITY_CURRENT(pixel, cullBounds)");
     }
     [Fact]
     public void TheKernelsUnpackATransformSlotWordAsTheProgramPacksIt() {
@@ -100,14 +75,6 @@ public sealed partial class SdfVisibilityLawTests {
                 expected: SdfProgram.UnpackTransformSlot(word: word)
             );
         }
-    }
-    [Fact]
-    public void ACardPublishesItsTexelMaterialBeforePickingAndLightingReadTheRecord() {
-        var primary = CodeOf(path: "march/sdf-primary.hlsli");
-        // The card's entry must reach primary's winning material before it is stored, not be a private correction
-        // in the lighting pass. Picking copies that same V row. Deleting the card branch breaks this contract.
-        Assert.Matches(actualString: primary, expectedRegexPattern: @"(?s)if\s*\(sdfMeshIsImpostor\(meshHit\.draw\)\)\s*\{\s*material\s*\+=\s*sdfImpostorSurfaceAt\([^;]+\)\.material\s*;\s*\}.*visibility\.material\s*=\s*material\s*;.*sdfStoreVisibility\(");
-        Assert.DoesNotContain(expectedSubstring: "impostorSurface.material", actualString: CodeOf(path: "passes/sdf-light-stage.hlsli"));
     }
     [Fact]
     public void AMeshCardSwitchIsAnIdentityChangeThatTheResolvesHistoryRejects() {

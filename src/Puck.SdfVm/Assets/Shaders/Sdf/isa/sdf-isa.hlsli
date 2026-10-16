@@ -31,14 +31,6 @@
 #define SDF_OP_LANE_ERODE        25u
 #define SDF_OP_CELL_DISPLACE     26u
 
-// Puck.SdfVm.SdfShadowDecision.
-#define SDF_SHADOW_DECISION_INTERLEAVED     0u
-#define SDF_SHADOW_DECISION_OWNERSHIP       1u
-#define SDF_SHADOW_DECISION_LIGHT_MOTION    2u
-#define SDF_SHADOW_DECISION_OCCLUDER_MOTION 3u
-#define SDF_SHADOW_DECISION_RECEIVER        4u
-#define SDF_SHADOW_DECISION_REPROJECTED     5u
-
 // Puck.SignedDistance.SdfIndirectSources.
 #define SDF_INDIRECT_SOURCES_NONE     0u
 #define SDF_INDIRECT_SOURCES_DIRECT   1u
@@ -47,7 +39,6 @@
 #define SDF_INDIRECT_SOURCES_SKY      8u
 #define SDF_INDIRECT_SOURCES_SCREENS  16u
 #define SDF_INDIRECT_SOURCES_ALL      31u
-#define SDF_SHADOW_HISTORY_WORDS      5u
 
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
@@ -160,8 +151,6 @@
 #define SDF_PART_DISTANCE_GAIN_MASK      0x00003FFFu
 #define SDF_PART_DISTANCE_GAIN_UNIT      6.103888E-05
 #define SDF_PART_BOUNDED_SECONDARY       0x40000000u
-#define SDF_TAPE_SLAB_COUNT              8u
-#define SDF_TAPE_HEADER_WORDS            33u
 #define SDF_TAPE_CERTIFIED               0x00000001u
 #define SDF_TAPE_OMISSIBLE               0x00000002u
 #define SDF_TAPE_DYNAMIC_FRAME           0x00000004u
@@ -254,18 +243,15 @@
 #define SDF_VISIBILITY_KIND_SDF        1u
 #define SDF_VISIBILITY_KIND_MESH       2u
 
-// The visibility record's identity fields, transform-slot lane and currency box (SdfVisibility).
-#define SDF_VISIBILITY_KIND_SHIFT             30u
-#define SDF_VISIBILITY_SOURCE_MASK            0x3FFFFFFFu
-#define SDF_TRANSFORM_SLOT_NONE               -1
-#define SDF_VISIBILITY_BOX_EDGE               8u
-#define SDF_VISIBILITY_AMBIENT_QUERIES_WORD   9u
-#define SDF_VISIBILITY_SHADOW_QUERIES_WORD    10u
-#define SDF_VISIBILITY_CURRENT(pixel, bounds) (((pixel).x >= ((bounds)[0] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y >= ((bounds)[1] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).x < ((bounds)[2] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y < ((bounds)[3] * SDF_VISIBILITY_BOX_EDGE)))
-#define SDF_SHADOW_BITS                       8u
-#define SDF_SHADOW_MASK                       0x000000FFu
-#define SDF_SHADOW_SLOTS                      4u
-#define SDF_SHADOW_FADE_CAPACITY              2u
+// The visibility record's identity fields, frame-slot lane and the record passes' workgroup edge (SdfVisibility).
+#define SDF_VISIBILITY_KIND_SHIFT  30u
+#define SDF_VISIBILITY_SOURCE_MASK 0x3FFFFFFFu
+#define SDF_TRANSFORM_SLOT_NONE    -1
+#define SDF_VISIBILITY_GROUP_EDGE  8u
+#define SDF_SHADOW_BITS            8u
+#define SDF_SHADOW_MASK            0x000000FFu
+#define SDF_SHADOW_SLOTS           4u
+#define SDF_SHADOW_FADE_CAPACITY   2u
 
 // The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
 #define SDF_TRANSFORM_SLOT_STATIC_WORD  0u

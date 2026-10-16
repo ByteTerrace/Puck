@@ -118,11 +118,11 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var rig = new EnvironmentRig();
 
         rig.Render();
-        Assert.Equal(expected: 0, actual: rig.Reload(kernels: SdfTestPipelines.Kernels(beam: 1)));
+        Assert.Equal(expected: 0, actual: rig.Reload(kernels: SdfTestPipelines.Kernels(mask: 1)));
         rig.Render();
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
 
-        Assert.Equal(expected: 1, actual: rig.Reload(kernels: SdfTestPipelines.Kernels(beam: 2)));
+        Assert.Equal(expected: 1, actual: rig.Reload(kernels: SdfTestPipelines.Kernels(mask: 2)));
         rig.Render();
         rig.Render();
         Assert.Equal(expected: 2L, actual: rig.Engine.SkyEnvironmentRenders);

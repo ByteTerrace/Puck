@@ -82,7 +82,7 @@ public static partial class WorldSessionLevers {
         ? (host with { TargetHertz = pacing.TargetHertz })
         : host
     );
-    // Shadow reach folds to its tier; scalar ceilings survive without quantization.
+    // The shadow switch keeps the authored tier while it agrees with it; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
             (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f)) {
@@ -94,17 +94,15 @@ public static partial class WorldSessionLevers {
         var captured = (render with {
             Indirect = (((render.Indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) == settings.IndirectTier)
                 ? render.Indirect : (render.Indirect ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier }),
-            Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
+            Shadows = ((settings.Shadows == (render.Shadows != ShadowTier.Off)) ? render.Shadows : (settings.Shadows ? ShadowTier.High : ShadowTier.Off)),
             ShadowLights = settings.ShadowSlots.Slots,
             ShadowFadeSlots = settings.ShadowSlots.FadeSlots,
             ShadowFadeTicks = ((uint)settings.ShadowSlots.FadeTicks),
             ShadowOverflow = settings.ShadowSlots.Overflow,
-            ShadowCrowdRadius = settings.ShadowCrowdRadius,
             AmbientOcclusion = settings.AmbientOcclusion,
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
-            ShadowAmortize = settings.ShadowAmortize,
             SkyQuality = settings.SkyQuality,
             SkyFieldScale = settings.SkyFieldScale,
             DynamicResolution = settings.DynamicResolution,

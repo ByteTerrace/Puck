@@ -1923,11 +1923,7 @@ compiled world holds only for the engine build that derived it), copying every
 other file of the tree beside it, and each leg boots that copy, whose `BAKE`
 chunk holds every bake from its bake pack. Each leg ends by reading
 `world.counters sdf.bakes` and fails when it resolved a bake on the device
-(`sdf.bakes.scheduled` above zero), so no capture depends on a local bake, or,
-with bakes on, drew none. The static creations draw their bakes, as a world
-that carries its `BAKE` chunk does by default; with `--bakes off` they draw
-through their fields, and `puck parity compare` of an on run against an off
-run holds every capture's state hash, since bakes are presentation only.
+(`sdf.bakes.scheduled` above zero), so no leg depends on a local bake.
 The offscreen host steps one tick per produced frame, so every captured tick is
 a frame of its own and its frame reprojects from the frame of the tick before
 ([host pacing](hosting.md#host-pacing)). It never steps past an armed
@@ -2045,14 +2041,10 @@ build included, after thirty.
 
 `--world` and `--script` select another authored `.puck` or JSON workload and its console
 script. Both paths are recorded in the report.
-The [Nexus and courtyard workloads](../../tests/Puck.Counters/README.md) inherit
-the real overworld hub and Moth courtyard. They use `counters.script.txt`, the
-same fixed camera, and the floor preset's 1440×810 render grid inside a
-1920×1080 output, with temporal reconstruction and dynamic resolution off.
-They measure per-tile pruning and winner-gradient work without changing scene
-geometry.
-The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
-`tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
+The [seated-avatar workload](../../tests/Puck.Counters/README.md),
+`avatar.world.json` with `avatar.script.txt`, is the debug world as played.
+The quarantined `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
+`experimental/tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
 requires. The cycle also carries a lighting-only panel, counting its projection
@@ -2084,7 +2076,7 @@ per-backend-deterministic. A node's submission and revision identities are not
 kinds; the collector records them as `pacing`.
 
 An explicit null detail identifies a pass total or work outside named rows.
-Sky layers and shadow slots have labels within their pass, alongside its
+Sky layers and runs have labels within their pass, alongside its
 `plain` remainder; all detail rows sum to that pass's totals. Skipped and
 standing passes retain their labels with no counts. Comparisons include those
 labels. Detail identities and frame-slot buffer
@@ -2109,12 +2101,11 @@ different sources, a note on standard error says so.
 
 ### Judging a change by counted work
 
-The SDF view counts field queries as march steps (`gpu.march.steps`), primitive
-distance evaluations (`gpu.shapes.evaluated`), primitive gradient evaluations
-(`gpu.shapes.gradients`) and texels written (`gpu.texels.written`). Shape
-evaluations include the tape pass, winner selection and primitive
-finite-difference taps, so reducing gradient work cannot hide its selection
-cost. To judge a change, collect a report on the same device before and after
+The SDF view counts the bake's field evaluations as march steps
+(`gpu.march.steps`), primitive distance evaluations (`gpu.shapes.evaluated`)
+and primitive gradient evaluations (`gpu.shapes.gradients`), and every pass's
+texels written (`gpu.texels.written`); a settled frame bakes nothing, so its
+counts are the raster passes' and the shading passes' texels. To judge a change, collect a report on the same device before and after
 it and compare the two with `puck counters compare`; each moved count is named
 with its backend, class, kind, pass, detail and node. Nothing records counts in
 the repository.

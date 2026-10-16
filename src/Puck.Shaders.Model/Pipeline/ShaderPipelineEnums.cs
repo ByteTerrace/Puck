@@ -101,11 +101,9 @@ public enum ShaderPipelineCountBasis : byte {
     ProgramWords = 3,
     /// <summary>Per viewport the host renders into one frame.</summary>
     Viewports = 4,
-    /// <summary>Per tile of one viewport, at the host's tile size.</summary>
-    Tiles = 5,
     /// <summary>Per dynamic transform the host provisions.</summary>
     DynamicTransforms = 6,
-    /// <summary>Per word of one tile's instance mask, which the host derives from its instances.</summary>
+    /// <summary>Per word of one instance mask, which the host derives from its instances.</summary>
     InstanceMaskWords = 7,
     /// <summary>Per word of the instance grid, which the host derives from its instances.</summary>
     InstanceGridWords = 8,
@@ -113,6 +111,4 @@ public enum ShaderPipelineCountBasis : byte {
     BrickPoolVoxels = 9,
     /// <summary>Per pixel of the package's allocated render extent.</summary>
     RenderExtent = 10,
-    /// <summary>Per word of one tile's certified segment tape and its slab workspace.</summary>
-    SegmentTapeWords = 11,
 }

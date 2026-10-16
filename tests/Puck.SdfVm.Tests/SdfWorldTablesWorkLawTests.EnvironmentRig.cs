@@ -59,8 +59,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             using var scratch = new TemporaryDirectory(prefix: "puck-environment-reload-");
             var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: scratch.RootPath)).FullName;
 
-            File.WriteAllBytes(path: Path.Combine(path1: passes, path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Beam)}.comp.spv"),
-                bytes: kernels[SdfKernel.Beam].ToArray());
+            File.WriteAllBytes(path: Path.Combine(path1: passes, path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.MeshBakeMask)}.comp.spv"),
+                bytes: kernels[SdfKernel.MeshBakeMask].ToArray());
             Assert.True(condition: m_view.Residency.RequestShaderReload(
                 compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: "cache")), tree: scratch.RootPath));
             TestLiveness.Until(step: () => {

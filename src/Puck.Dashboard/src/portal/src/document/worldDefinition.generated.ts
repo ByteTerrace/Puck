@@ -8790,10 +8790,6 @@ export type WorldQualityPreset = {
    */
   temporal?: boolean;
   /**
-   * Whether secondary shadows reuse valid K history (world.shadow-amortize).
-   */
-  shadowAmortize?: boolean;
-  /**
    * Whether the preset moves each view's render extent with the load (world.render-scale auto).
    */
   dynamicResolution?: boolean;
@@ -9009,10 +9005,6 @@ export type WorldRenderDefaults = {
    */
   shadows?: ShadowTier;
   /**
-   * The boot soft-shadow crowd radius (world units).
-   */
-  shadowCrowdRadius?: number;
-  /**
    * Whether ambient occlusion boots on.
    */
   ambientOcclusion?: boolean;
@@ -9028,10 +9020,6 @@ export type WorldRenderDefaults = {
    * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
    */
   temporal?: boolean;
-  /**
-   * Whether secondary shadows boot reusing valid K history (world.shadow-amortize).
-   */
-  shadowAmortize?: boolean;
   /**
    * Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.
    */
@@ -9069,7 +9057,7 @@ export type WorldRenderDefaults = {
    */
   tonemap?: WorldTonemap | null;
   /**
-   * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
+   * The far distance in world units: the depth at which every view's geometry ends — the mesh raster's far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine's pinned 40. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
   /**

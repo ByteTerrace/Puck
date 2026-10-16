@@ -51,11 +51,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // member.
     private const ulong DummyBufferBytes = (sizeof(uint) * 4);
 
-    /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
-    /// march/sdf-march-constants.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
-    /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
-    /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
-    public const int PrimaryMarchSteps = 128;
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
     /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
     public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;
@@ -93,28 +88,23 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // The device's region-copy pipeline, leased from the pass-pipeline cache's GpuRegionCopyPass, which every staged
     // region records its copy with; the tables never own it.
     private readonly IGpuComputePipeline m_regionCopyPipeline;
-    // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and the beam + views
-    // kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound, since both kernels
-    // compile the sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
+    // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and the mesh bake samples.
+    // Always allocated (a 1-float filler when the pool is disabled), always bound, since the mesh bake compiles the
+    // sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
     private readonly IGpuBuffer m_brickPoolBuffer;
     private readonly bool m_brickPoolEnabled;
     private readonly int m_brickPoolVoxelCapacity;
     private readonly IGpuBindings m_bindings;
     private readonly IGpuDeviceContext m_deviceContext;
     // What a pass binds at a member whose storage it does not touch: a tiny buffer, a 1x1 storage image resting General,
-    // and a 1x1 sampled image resting shader-readable, which also stands for an unset glyph atlas; and a 1x1 storage
-    // image of the incoming handoff format resting General, which a graph without the incoming image binds there.
+    // and a 1x1 sampled image resting shader-readable, which also stands for an unset glyph atlas.
     private readonly IGpuBuffer m_dummyBuffer;
     private readonly IGpuImage m_storageFiller;
     private readonly IGpuImage m_sampledFiller;
-    private readonly IGpuImage m_incomingStorageFiller;
     private readonly int m_dynamicTransformCapacity;
     private readonly GpuDeviceServices m_gpu;
 
     private int m_instanceCapacity;
-    private SdfInstanceGridInput[] m_instanceGridInputScratch;
-    private int m_instanceGridWordCapacity;
-    private SdfInstanceGrid.Workspace m_instanceGridWorkspace;
 
     // The tables' descriptor pool: the World sets and the bake sets.
     private readonly nint m_pool;
@@ -148,11 +138,9 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // Decal revision covers SetScreenDecal/ClearScreenDecal calls that actually change the stored bytes.
     private ulong m_programRevision;
     private ulong m_programGeometryRevision;
-    private bool m_rebuildInstanceGridPerFrame;
     private int m_requiredDynamicTransformCapacity;
     // The uploads submitted, which selects each upload's ring slot.
     private ulong m_uploads;
-    private SdfViewsKernelVariant m_viewsVariant;
 
     private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];
     // One per-upload fence per ring slot: an upload waits the previous upload's fence before it rewrites its slot.
@@ -261,9 +249,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             val1: options.Program.Instances.Count,
             val2: options.InstanceCapacity
         );
-        m_instanceGridInputScratch = new SdfInstanceGridInput[m_instanceCapacity];
-        m_instanceGridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: m_instanceCapacity);
-        m_instanceGridWordCapacity = SdfInstanceGrid.WordCapacity(maxInstances: m_instanceCapacity);
         m_brickPoolVoxelCapacity = Math.Max(
             val1: 0,
             val2: options.BrickPoolVoxelCapacity
@@ -302,14 +287,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         ));
-        // A storage binding declares its format, so the incoming image's member needs a filler of its own format.
-        m_incomingStorageFiller = scope.Own(created: gpu.ImageFactory.Create(
-            name: NameOf(part: "incoming-storage-filler"),
-            format: SdfWorldPackage.IncomingVisibilityFormat,
-            height: 1,
-            usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
-            width: 1
-        ));
         m_dummyBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "unused-member"),
             sizeBytes: DummyBufferBytes,
@@ -332,10 +309,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_dynamicTransformRegion = scope.Own(created: CreateRegion(
             byteCount: checked((m_dynamicTransformCapacity * DynamicTransformByteLength)),
             region: DynamicTransformRegionIndex
-        ));
-        m_instanceGridRegion = scope.Own(created: CreateRegion(
-            byteCount: checked((m_instanceGridWordCapacity * sizeof(uint))),
-            region: InstanceGridRegionIndex
         ));
         m_screenSurfaceRegion = scope.Own(created: CreateRegion(
             byteCount: (MaxScreenSurfaces * ScreenSurfaceByteLength),
@@ -375,7 +348,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             name: NameOf(part: "previous-mesh-transforms"), sizeBytes: MeshMatrixBytes, usage: GpuBufferUsage.Storage));
 
         // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the bake kernel can write it
-        // as a UAV (an upload heap forbids UAVs on Direct3D 12) and the beam/views sample it as an SRV. Frozen at the
+        // as a UAV (an upload heap forbids UAVs on Direct3D 12) and the mesh bake samples it as an SRV. Frozen at the
         // constructed capacity. When the pool is disabled (capacity 0) a single-float filler keeps the always-present
         // sdfBrickPool binding valid — the kernels compile the binding unconditionally, and sdfSampledRegion detects the
         // filler by its element count and renders SampledRegion programs via the conservative uncarved-hull fallback
@@ -423,7 +396,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             release: m_bindings.DestroyPool
         );
 
-        var worldGroups = pipelines.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles;
+        var worldGroups = pipelines.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles;
 
         // The World set per ring slot, which every view's compute passes bind, written the first time one is bound
         // (WorldSet).
@@ -603,7 +576,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_bindings.DestroyPool(poolHandle: m_pool);
 
         m_dummyBuffer.Dispose();
-        m_incomingStorageFiller.Dispose();
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();

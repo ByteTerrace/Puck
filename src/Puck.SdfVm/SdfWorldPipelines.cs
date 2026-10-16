@@ -43,8 +43,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     public SdfKernelSet Kernels => m_kernels;
 
     /// <summary>Takes a lease on the up-front pipelines, each an entry of the pass-pipeline cache, joining the entries
-    /// other holders lease and starting the rest building on the thread pool. One shadow kernel and the three views
-    /// variants serve every shadow fade capacity, so no policy asks for another pipeline. Safe on any thread.</summary>
+    /// other holders lease and starting the rest building on the thread pool. Safe on any thread.</summary>
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device the pipelines are created on.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
@@ -104,8 +103,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return [.. SdfWorldTables.PipelineLayouts.Leased.OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
     }
-    /// <summary>Describes how far the set's builds have come as a clause: <c>building (9 of 11 pipelines
-    /// created; waiting on sdf-world-surface, sdf-world-views)</c>, naming the pipelines not yet built in
+    /// <summary>Describes how far the set's builds have come as a clause: <c>building (8 of 10 pipelines
+    /// created; waiting on sdf-mesh-bake, sdf-world-views)</c>, naming the pipelines not yet built in
     /// <see cref="SdfKernel"/> order, and then any refused (<see cref="IsBuilt"/>): <c>refused sdf-world-views</c>.</summary>
     /// <returns>The clause.</returns>
     public string Describe() {
@@ -166,14 +165,13 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
-    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views variants, of which a
-    /// residency's views need only the one its program selects or a fuller one (<see cref="IsBuilt"/>), so a program that
-    /// selects a stripped variant never waits for the full ISA's translation. Polls every pipeline, the views variants
-    /// included; a views variant whose creation failed is refused (<see cref="IsBuilt"/>) rather than thrown, since the
-    /// tables are built without it.</summary>
-    /// <returns><see langword="true"/> once every pipeline but the views variants is ready.</returns>
+    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views kernel's, which the
+    /// frame waits for itself (<see cref="IsBuilt"/>). Polls every pipeline, the views kernel's included; a views
+    /// pipeline whose creation failed is refused (<see cref="IsBuilt"/>) rather than thrown, since the tables are built
+    /// without it.</summary>
+    /// <returns><see langword="true"/> once every pipeline but the views kernel's is ready.</returns>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
-    /// <exception cref="AggregateException">A pipeline's creation failed, other than a views variant's, named as
+    /// <exception cref="AggregateException">A pipeline's creation failed, other than the views kernel's, named as
     /// <see cref="Poll"/> names it.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
     public bool PollRequired() {
@@ -369,11 +367,9 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
     }
-    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipeline).
-    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds));
     // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
-    // slots are a set's, in kernel order. Without viewsRequired, a views variant still building
-    // or refused leaves the set ready: the frame waits for those itself (SdfWorldTables.FrameWaiting).
+    // slots are a set's, in kernel order. Without viewsRequired, the views kernel still building or refused leaves the
+    // set ready: the frame waits for it itself (SdfWorldTables.FrameWaiting).
     internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
         var ready = true;
         List<(string Name, Exception Failure)>? failures = null;
@@ -384,7 +380,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             // A kernel the tables do without is refused as IsBuilt refuses it, never thrown.
-            if (!viewsRequired && IsViews(kernel: ((SdfKernel)index))) {
+            if (!viewsRequired && (((SdfKernel)index) == SdfKernel.Views)) {
                 _ = slot.PollRefusing();
 
                 continue;

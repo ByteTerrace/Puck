@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Maps Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, prototype bakes and texture codecs, Puck.Shaders packages, pipelines and the frame-graph runtime, and how world render data reaches SdfFrame. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; a bake; GPU cost, capacity or world.budget; cross-backend parity or captures. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage."
+description: "Maps Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, prototype bakes and texture codecs, Puck.Shaders packages, pipelines and the frame-graph runtime, and how world render data reaches SdfFrame. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, the baked-mesh frame or hot reload; a bake; GPU cost, capacity or world.budget; cross-backend parity or captures. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage."
 ---
 
 # Rendering
@@ -23,7 +23,7 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, its `Bounds`, `Cull` and `Certificates` partials, `BakedWorldQuery`) | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakedTexture`); codecs in `src/Puck.Assets/Textures`; `CreationBaker` in `src/Puck.World.Authoring`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter: `mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`, the part walk in `sdf-parts.hlsli`), `march/`, `surface/`, `shade/`, `sky/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [kernels](references/kernels.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch and the stage modules under `passes/` | [kernels](references/kernels.md) |
 | Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
@@ -36,20 +36,21 @@ Find the existing mechanism before adding one: `puck references`,
 
 ## Which dispatch owns the code
 
-A view is a chain of separate dispatches; the hit passes share one entry point
-(`passes/sdf-hit-entry.hlsli`) and each compiles its own stage through a pass
-macro: `mask` → `beam` → `tape` →
-`cull-args` → `mesh` (graphics) → `primary` (`sdfPrimaryStage`) → `surface`
-(normals and curvature, `sdfResolveSurface`) → `ambient` (AO) → `shadow` → `views`
-(materials and lighting) → `resolve` (reduced or temporal views) → `sky` →
-`composite`. The
-table in [kernels](references/kernels.md#the-frame) says what each writes.
+A view is a chain of separate dispatches: `mask` → `bake` (only while the
+residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
+`mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
+the cascades) → `mesh` (graphics) → `surface` (each pixel's visibility record
+from the mesh target: normal, screen-space AO, the cascades' soft shadows into
+K; `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
+`resolve` (reduced or temporal views) → `sky` → `composite`. The surface and
+views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
+`passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
+[kernels](references/kernels.md#the-frame) says what each writes.
 
-- **AO is its own dispatch.** It lives in `surface/sdf-occlusion.hlsli`
-  (`calcAO`), called from the ambient pass's `sdfResolveAmbient` in
-  `surface/sdf-surface.hlsli`. The views stage only reads the occlusion the
-  ambient pass wrote into the visibility record, so an AO edit inside the views
-  code changes nothing.
+- **AO is the surface pass's.** It lives in `passes/sdf-surface-stage.hlsli`
+  (`sdfMeshAmbient`), and views only reads the occlusion the surface pass wrote
+  into the visibility record, so an AO edit inside the views code changes
+  nothing.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
@@ -58,19 +59,18 @@ table in [kernels](references/kernels.md#the-frame) says what each writes.
 
 ## Editing kernels
 
-- **One `map*` call site per kernel.** Every call site is a full inlined copy
-  of the interpreter: a new one costs register pressure, compile time and a
-  driver translation on every cold boot. Reuse the kernel's existing site
-  through a rolled loop (`[loop]`): surface probes share `sdfProbeField`, AO
-  shares `calcAO`'s loop, the views stage reads the field through
-  `sdfViewsFieldReads`. Never add `[noinline]`: a real SPIR-V call loses
-  the device on NVIDIA's Vulkan driver.
-- **Keep each hit kernel's include closure its own.** A hit kernel includes the
-  common head (`passes/sdf-hit-pass.hlsli`), only its own stage module, then the
-  entry; a stage module includes what it reads beyond `passes/sdf-world.hlsli`
-  itself. The shader cache keys, and a reload recompiles, by include closure, so
-  routing a stage module through the aggregator or another wrapper makes an edit
-  to it recompile every hit kernel.
+- **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
+  the only GPU kernel that walks the field, and it does so through one rolled
+  loop; every call site is a full inlined copy of the interpreter, costing
+  register pressure, compile time and a driver translation on every cold boot.
+  Never add `[noinline]`: a real SPIR-V call loses the device on NVIDIA's
+  Vulkan driver.
+- **Keep each pixel kernel's include closure its own.** A pixel kernel includes
+  the common head (`passes/sdf-pixel-pass.hlsli`), only its own stage module,
+  then the entry; a stage module includes what it reads beyond
+  `passes/sdf-world.hlsli` itself. The shader cache keys, and a reload
+  recompiles, by include closure, so routing a stage module through another
+  wrapper makes an edit to it recompile both kernels.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:
@@ -103,19 +103,14 @@ instructions. A real new instruction touches every partner in one change:
    instruction a call in `SdfEncodingProbe` that passes every field it packs
    (`SdfEncodingProbeLawTests` refuses one that is missing). Regenerating also
    rewrites `SdfIsaFingerprint.cs`.
-4. **Every GPU call site.** `mapCore` and its hit-only twin `mapGradCore`
-   (rigid-leaf fast paths included) and the compiled part walk in
-   `sdf-parts.hlsli`; a blend also needs `blendShape`, `blendShapeDual` and the
-   material-winner rules in `sdfComposeCandidate`.
-5. **Kernel variant tiers.** If the case is stripped under `SDF_STRIP_HEAVY` or
-   `SDF_STRIP_ALL_EXOTIC`, `SdfViewsKernelVariants` must send a program using it
-   to a fuller views variant. Parity on one program does not reach a stripped
-   variant.
-6. **CPU interpreter.** `SdfFieldEvaluator` interprets it or refuses it by name.
+4. **Every GPU call site.** `mapCore` (rigid-leaf fast paths included) and the
+   compiled part walk in `sdf-parts.hlsli`; a blend also needs `blendShape` and
+   the material-winner rules in `sdfComposeCandidate`.
+5. **CPU interpreter.** `SdfFieldEvaluator` interprets it or refuses it by name.
    Its blend switch falls through to union, so a missing arm silently turns a
    new blend into a union in contact and queries. Add its bounds rule
    (`SdfFieldEvaluator.Bounds.cs`) and cull rule (`SdfFieldEvaluator.Cull.cs`).
-7. **Document surface.** Carry the parameters through `CreationCanonicalizer`
+6. **Document surface.** Carry the parameters through `CreationCanonicalizer`
    and the stamp emitters or refuse the value there, then `puck schema`.
 
 When two lanes both add an instruction, the merge conflicts in generated files
@@ -133,9 +128,9 @@ drifted.
 - **A subtraction is exact only where its subject is nearest.** Inside a carved
   void the contact field reads phantom surfaces; extend the carve past every
   point a body can reach, or build the void from union geometry.
-- **An instance bound is an influence sphere** tested per tile and per sample.
-  It must cover the primitive's reach, its field ops and its blend halo, or
-  geometry clips at tile edges.
+- **An instance bound is an influence sphere** tested per sample. It must cover
+  the primitive's reach, its field ops and its blend halo, or the bake clips the
+  geometry at the sphere.
 - **A field scope is a real per-sample cost.** Scoped segments skip the segment
   early-out and rigid planning. Never wrap one primitive in a scope for its
   Lipschitz factor; make the primitive 1-Lipschitz. Scope clamps
@@ -171,26 +166,26 @@ drifted.
 
 ## The baked-mesh path
 
-The world's own views take the mesh path by default (`SdfViewQuality.RenderPath`; `world.render-path interpreter` returns them), which renders a residency's
-views from meshes its program is baked into, with no field walk in the frame;
-[frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-baked-mesh-path)
+Every view renders a residency's program from meshes the program is baked into,
+with no field walk in the frame;
+[frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)
 owns the explanation.
 
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   the prototype baker's `SdfDualContouring` over `ISdfContourLattice`; never
   write a second mesher. The cubic `SdfBakeGrid` keeps its bytes
   (`SdfBakerLawTests`).
-- **The bake samples through the frame's interpreter**, in the mesh path
-  fragment's `mask` and `bake` parts, only while `SdfMeshPathBake.Pending`.
+- **The bake samples through the interpreter**, in the fragment's `mask` and
+  `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
   their own group. The pass block's lattice rows are a sync pair with
   `SdfFrameBlock.WriteMeshBake`.
 - **Cascades draw through the mesh pipeline**: `SdfFrameBlock.WriteShadowCamera`
   writes the `lightCamera` flag so the mesh stages take their orthographic form, with the
-  view cameras' handedness; `surface/sdf-mesh-path.hlsli` mirrors that
+  view cameras' handedness; `passes/sdf-surface-stage.hlsli` mirrors that
   projection.
-- **A dynamic group bakes in its slot's frame.** Its box, lattices and points
-  are slot-local, and `sdf-mesh-bake` carries every sample through the slot's
+- **A dynamic group bakes in its slot's frame.** Its box, lattices and points are
+  slot-local, and `sdf-mesh-bake` carries every sample through the slot's
   transform of the dispatching frame (a non-negative selector names the slot):
   a box fixed in world space at the bake's start misses a body that moves
   while it bakes. The contour is the mesh, already in that frame.
@@ -199,9 +194,6 @@ owns the explanation.
   residency writes before the upload) and a disagreeing quad splits; the draw
   record's word 41 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
   sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
-- **Views reads a mesh pixel's K row and frame slot only on the mesh path**
-  (`renderPath`), whose views kernel (`sdf-world-views-mesh`,
-  `SDF_VIEWS_MESH_ONLY`) compiles the field reads out.
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
   (`SdfMeshRegionArena`), where it stays while a draw names it, so
@@ -219,18 +211,20 @@ owns the explanation.
   cells whose corners disagree in sign, the samples `SdfDualContouring` reads a
   normal at; a cell's normal reads its own eight corners, so no other sample
   needs one.
+- **Shadow handoffs are pass values.** The outgoing light fades from its slot's
+  cascade by the handoff's weight; the incoming light lights unshadowed until
+  it holds the slot. No handoff plans or allocates anything.
 - **Indirect light is the irradiance volume.** `SdfWorldResidency.IndirectTier`
-  (the host lever, else the frame's tier) drives `SdfMeshIrradiance` while the
-  first view takes the mesh path, staged before the upload into the staged World table
-  `sdfMeshIrradiance` and described by the pass-block values
-  `meshIrradianceVolume` and `meshIrradianceLow`. The probe layout, key,
-  toroidal slot, normal bias and probe weights are a sync pair between
-  `SdfMeshIrradiance` (its CPU feedback read included) and
-  `shade/sdf-mesh-irradiance.hlsli`, which only the mesh views kernel compiles.
-  The trace reads static mesh draws through `SdfMeshIrradianceScene`; never
-  route it through the field interpreter. The
+  (the host lever, else the frame's tier) drives `SdfMeshIrradiance`, staged
+  before the upload into the staged World table `sdfMeshIrradiance` and
+  described by the pass-block values `meshIrradianceVolume` and
+  `meshIrradianceLow`. The probe layout, key, toroidal slot, normal bias and
+  probe weights are a sync pair between `SdfMeshIrradiance` (its CPU feedback
+  read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
+  kernel compiles. The trace reads static mesh draws through
+  `SdfMeshIrradianceScene`; never route it through the field interpreter. The
   [handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
-  owns the technique and its limits. The interpreter path draws no indirect light.
+  owns the technique and its limits.
 
 ## Performance and cost
 
@@ -239,13 +233,12 @@ reading is evidence beside the counts of the same run, never the verdict alone.
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
-world.counters gpu     # per-pass counted work: dispatches, march steps, texels, uploads
+world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
 world.budget           # program words, instances, scopes, segments, chains
 ```
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
-`world.ao-quality`, `world.shadow-mask`, `world.shadow-march`,
-`world.render-scale`, `world.far-field`) and isolate the march with
+`world.indirect`, `world.render-scale`) and isolate the raster with
 `world.debug-view depth`. Compare the whole frame, not one pass. `puck counters`
 boots a workload on both backends and `puck counters compare <before> <after>`
 holds two reports to each other; a deterministic count must agree on both
@@ -276,7 +269,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 | File | Read it for |
 |---|---|
-| [references/kernels.md](references/kernels.md) | The shader build, hot reload, the frame's passes, the visibility record, views variants, bindings, diagnostics |
+| [references/kernels.md](references/kernels.md) | The shader build, hot reload, the frame's passes, the visibility record, bindings, diagnostics |
 | [references/sync-pairs.md](references/sync-pairs.md) | Every C#↔HLSL coupling and which side is generated |
 | [references/runtime-contracts.md](references/runtime-contracts.md) | The render-graph runtime's invariants, before changing `RenderGraphRuntime`, a recorder, a capture path or pacing |
 

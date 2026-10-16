@@ -176,23 +176,12 @@ surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
 keyed by the creation's pin (the prototype row's hash), the bake code fingerprint, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
-contact, queries and simulation keep reading the field. A presentation draws
-its bakes by default when the loaded world's `BAKE` chunk supplies every bake
-from its pack before the first frame. A source boot draws fields, even when
-this machine's cache or another world's pack holds the same bake keys.
-`world.bakes off` forces fields; `world.bakes on` draws ready bakes, including
-ones made locally. The default therefore keeps captures independent of local
-baking. While bakes draw, an untinted static
-placement whose prototype's bake is ready draws the baked mesh through the mesh
-pass, textured from the bake's five surface textures, or, in a view where the
-placement is small on screen, as the bake's impostor card
-([the impostor](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)),
-and keeps its field as
-camera-hidden instances that still cast shadows and occlude; a creation with
-text or noise relief keeps drawing through its field. The engine is not ready
-until the bake schedule has reconciled and, while the presentation draws its
-bakes, settled, so a capture or a `world.wait ready` never lands between a
-placement's field and its bake.
+contact, queries and simulation keep reading the field. No view draws a
+creation bake: every view renders the residency's own meshes, which the engine
+bakes from the frame's program on the GPU
+([the bake](../rendering/sdf/handbook/frame-rendering.md#the-bake)). Creation
+bakes are compiled, packed and held as described below, and a presentation
+still resolves the ones its cache lacks.
 
 A build output ships each bake once. `puck compile --tree` writes one bake pack,
 `bakes.puckbake`, at the root of its output: a chunk container
@@ -220,10 +209,8 @@ key whenever the delivered definition changes and queues each one the cache
 lacks. It resolves the queue one key at a time on the thread pool: a key an
 earlier run kept in the per-user `bakes` cache is read back, and any
 other is baked and kept there, so editing one prototype bakes that prototype
-alone. A prototype draws through its field until its bake is ready. The
-`sdf.bakes` work source counts the keys the cache held, the keys scheduled, the
-bakes made, the refusals, the held bakes that cannot be decoded, the field
-evaluations spent, and the bakes a presentation switched to from their field;
+alone. The `sdf.bakes` work source counts the keys the cache held, the keys
+scheduled, the bakes made, the refusals and the field evaluations spent;
 every kind is pacing-class, because what the cache already holds decides it.
 
 ## World relationships

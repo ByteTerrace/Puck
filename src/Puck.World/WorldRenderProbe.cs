@@ -3,7 +3,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.Shaders;
-using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -17,10 +16,7 @@ namespace Puck.World;
 /// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables, the graph's
 /// root has a completed output rendered over it, and every instance that has rendered has a frame completed on the GPU
 /// (<see cref="RenderGraphRuntime.FirstFramesCompleted"/>), so a GPU readback asked for after readiness waits on no
-/// cold device's first frames, not before the render factory has composed either, and once
-/// the bake schedule has reconciled, so whether the presentation draws its bakes is known, and, while it draws them
-/// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
-/// between a placement's field and its bake.
+/// cold device's first frames, not before the render factory has composed either.
 /// </summary>
 public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
@@ -58,15 +54,12 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
     );
     /// <inheritdoc/>
     /// <remarks>The world's residency's reason while it builds, then the render graph's while its root has not rendered
-    /// over a completed world output or a rendered instance's first frame is still in flight on the GPU, then the bake
-    /// schedule's while a bake the presentation would draw is still baking, then the frame readiness owes once they all
-    /// hold.</remarks>
+    /// over a completed world output or a rendered instance's first frame is still in flight on the GPU, then the frame
+    /// readiness owes once they all hold.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (root.Runtime.InFlightReason ?? (BakesSettled
-            ? (IsReady
-                ? null
-                : "the root has produced no frame since every readiness condition held")
-            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))))
+        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (root.Runtime.InFlightReason ?? (IsReady
+            ? null
+            : "the root has produced no frame since every readiness condition held"))))
         : "the renderer has not been composed: no frame has been produced"
     );
 
@@ -74,18 +67,11 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
 
     private bool ConditionsHold => (
         (Residency?.IsReady ?? false) &&
-        (Root?.Runtime is { UnservedCaptureReason: null, FirstFramesCompleted: true }) &&
-        BakesSettled
+        (Root?.Runtime is { UnservedCaptureReason: null, FirstFramesCompleted: true })
     );
 
-    /// <summary>The presentation's bake schedule, or <see langword="null"/> until the render factory has run.</summary>
-    public WorldBakeSchedule? Bakes { get; set; }
-    /// <summary>The presentation's render settings, whose <see cref="WorldRenderSettings.DrawsBakes"/> says whether it
-    /// draws its bakes, or <see langword="null"/> until the render factory has run.</summary>
+    /// <summary>The presentation's render settings, or <see langword="null"/> until the render factory has run.</summary>
     public WorldRenderSettings? Settings { get; set; }
-
-    // A schedule must reconcile before readiness can decide whether it draws bakes, and settle while it draws them.
-    private bool BakesSettled => ((Settings is not { } settings) || (Bakes is not { } bakes) || bakes.IsReadyForDrawing(bakes: settings.Bakes));
 
     /// <summary>The render graph's root, the render host every captured and presented frame comes from, or
     /// <see langword="null"/> until the render factory has run. <c>world.screenshot</c> arms captures on it, so the

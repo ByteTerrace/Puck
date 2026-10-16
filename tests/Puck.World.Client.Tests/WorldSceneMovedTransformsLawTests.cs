@@ -167,7 +167,6 @@ public sealed class WorldSceneMovedTransformsLawTests {
                 seatRouter: routes
             );
             Emitter = new WorldSceneEmitter(
-                anchor: new WorldPerceptionAnchor(),
                 animator: new WorldStampPool(),
                 audio: new SilentAudio(),
                 client: Client,
@@ -176,7 +175,6 @@ public sealed class WorldSceneMovedTransformsLawTests {
                     routes,
                     new NoNeighbours()
                 ),
-                settings: new WorldRenderSettings(defaults: definition.Render),
                 text: new WorldTextCatalog(source: new(
                     Definition: definition,
                     SourcePath: "unused.world.json"

@@ -10,9 +10,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Visibility reprojection agrees with ViewProjection for camera motion, an articulated rigid slot and a
-/// nonuniformly scaled mesh. Source identity deliberately differs from the rigid slot. Invalid history, background,
-/// and a point behind the prior camera are refused. Both hardware backends read the shipped shader module.</summary>
+/// <summary>Visibility reprojection agrees with ViewProjection for camera motion over a still mesh and for a nonuniformly
+/// scaled mesh that moves. Invalid history, background, and a point behind the prior camera are refused. Both hardware
+/// backends read the shipped shader module.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
 public sealed class SdfReprojectionDeviceLawTests {
@@ -27,33 +27,31 @@ public sealed class SdfReprojectionDeviceLawTests {
         Near = 0.02f,
     };
     private static readonly Vector2 Jitter = new(x: 0.25f, y: -0.125f);
-    private static readonly Quaternion CurrentRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 0.6f);
-    private static readonly Quaternion PreviousRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitZ, angle: -0.3f);
-    private static readonly Vector3 CurrentPosition = new(x: 0.75f, y: -0.25f, z: 0.5f);
-    private static readonly Vector3 PreviousPosition = new(x: -0.25f, y: 0.5f, z: 0f);
     private static readonly Matrix4x4 CurrentMesh = ((Matrix4x4.CreateScale(xScale: 2f, yScale: 0.5f, zScale: 1f) *
         Matrix4x4.CreateRotationY(radians: 0.4f)) * Matrix4x4.CreateTranslation(xPosition: 0.5f, yPosition: 0.25f, zPosition: 1f));
     private static readonly Matrix4x4 PreviousMesh = ((Matrix4x4.CreateScale(xScale: 1.25f, yScale: 0.75f, zScale: 1f) *
         Matrix4x4.CreateRotationZ(radians: -0.2f)) * Matrix4x4.CreateTranslation(xPosition: -0.5f, yPosition: 0.5f, zPosition: 0f));
+    // A draw that does not move, in front of the cameras, and one behind the prior camera.
+    private static readonly Matrix4x4 StillMesh = Matrix4x4.CreateTranslation(xPosition: 0.5f, yPosition: 0.25f, zPosition: 1f);
+    private static readonly Matrix4x4 BehindMesh = Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: 0f, zPosition: -10f);
     private static readonly SdfMesh Mesh = new(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },
         indices: new uint[] { 0, 1, 2 });
 
-    private readonly record struct MotionCase(Vector3 Current, Vector3 Previous, uint Identity, int Slot, bool History, bool Valid);
+    private readonly record struct MotionCase(Vector3 Current, Vector3 Previous, uint Identity, bool History, bool Valid);
 
     private static MotionCase[] Cases() {
-        var rigid = new Vector3(x: 0.125f, y: 0.375f, z: 0.25f);
-        var mesh = new Vector3(x: 0.3f, y: 0.5f, z: 0f);
+        var point = new Vector3(x: 0.3f, y: 0.5f, z: 0f);
+        var still = Vector3.Transform(matrix: StillMesh, position: point);
+        var behind = Vector3.Transform(matrix: BehindMesh, position: point);
+        uint Draw(int draw) => (SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)draw)));
 
         return [
-            new(Current: Vector3.One, Previous: Vector3.One, Identity: (1u << 30), Slot: -1, History: true, Valid: true),
-            new(Current: (Vector3.Transform(rotation: CurrentRotation, value: rigid) + CurrentPosition),
-                Previous: (Vector3.Transform(rotation: PreviousRotation, value: rigid) + PreviousPosition),
-                Identity: (1u << 30) | 10u, Slot: 1, History: true, Valid: true),
-            new(Current: Vector3.Transform(matrix: CurrentMesh, position: mesh), Previous: Vector3.Transform(matrix: PreviousMesh, position: mesh),
-                Identity: (2u << 30), Slot: 0, History: true, Valid: true),
-            new(Current: Vector3.One, Previous: Vector3.One, Identity: (1u << 30), Slot: -1, History: false, Valid: false),
-            new(Current: Vector3.One, Previous: Vector3.One, Identity: 0, Slot: -1, History: true, Valid: false),
-            new(Current: new Vector3(x: 0f, y: 0f, z: -10f), Previous: default, Identity: (1u << 30), Slot: -1, History: true, Valid: false),
+            new(Current: still, Previous: still, Identity: Draw(draw: 1), History: true, Valid: true),
+            new(Current: Vector3.Transform(matrix: CurrentMesh, position: point), Previous: Vector3.Transform(matrix: PreviousMesh, position: point),
+                Identity: Draw(draw: 0), History: true, Valid: true),
+            new(Current: still, Previous: still, Identity: Draw(draw: 1), History: false, Valid: false),
+            new(Current: still, Previous: still, Identity: 0, History: true, Valid: false),
+            new(Current: behind, Previous: behind, Identity: Draw(draw: 2), History: true, Valid: false),
         ];
     }
 
@@ -94,45 +92,46 @@ public sealed class SdfReprojectionDeviceLawTests {
         }
     }
     private static Vector4[] Run(GpuDeviceServices services, string extension, MotionCase[] cases) {
-        SdfMeshDraw[] draws = [new(Identity: "mesh", Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh)];
+        SdfMeshDraw[] draws = [
+            new(Identity: "moving", Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh),
+            new(Identity: "still", Material: 0, Mesh: Mesh, ObjectToWorld: StillMesh),
+            new(Identity: "behind", Material: 0, Mesh: Mesh, ObjectToWorld: BehindMesh),
+        ];
         var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
         var meshWords = new uint[meshLayout.Words];
 
         SdfMeshRegion.Write(draws: draws, meshes: meshes, layout: meshLayout, destination: meshWords);
-        var records = new uint[(cases.Length * 16)];
+        var recordWords = ((int)(SdfWorldPackage.VisibilityRecordByteLength / sizeof(uint)));
+        var records = new uint[(cases.Length * recordWords)];
         var probes = new Vector4[(cases.Length * 7)];
         var block = new byte[SdfFrameBlock.SizeBytes];
 
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
 
-            records[((index * 16) + 1)] = item.Identity;
-            records[((index * 16) + 7)] = unchecked((uint)item.Slot);
+            // Every mesh has the one triangle, triangle 0.
+            records[((index * recordWords) + 1)] = item.Identity;
             probes[(index * 7)] = new Vector4(value: item.Current, w: 0f);
             SdfFrameBlock.WritePreviousView(block: block, view: new SdfReprojectionView(Camera: Camera, Height: Height, Jitter: Jitter, Width: Width), valid: item.History);
             var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.PreviousView));
 
             MemoryMarshal.Cast<byte, Vector4>(span: block.AsSpan(length: 96, start: offset)).CopyTo(destination: probes.AsSpan(length: 6, start: ((index * 7) + 1)));
         }
-        Vector4[] CurrentTransforms(Vector3 position, Quaternion rotation) => [
-            new(w: 0f, x: 50f, y: 50f, z: 50f), new(w: 1f, x: 0f, y: 0f, z: 0f), Vector4.Zero,
-            new(value: position, w: 0f), new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z), Vector4.Zero,
-        ];
-        var previousMatrices = new[] { PreviousMesh };
+        // No draw carries a frame slot, so the dynamic transforms are never read; the binding needs one row.
+        var previousMatrices = new[] { PreviousMesh, StillMesh, BehindMesh };
         byte[][] contents = [
             MemoryMarshal.AsBytes(span: meshWords.AsSpan()).ToArray(),
-            MemoryMarshal.AsBytes(span: CurrentTransforms(position: CurrentPosition, rotation: CurrentRotation).AsSpan()).ToArray(),
-            MemoryMarshal.AsBytes(span: CurrentTransforms(position: PreviousPosition, rotation: PreviousRotation).AsSpan()).ToArray(),
+            MemoryMarshal.AsBytes(span: new Vector4[3].AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: previousMatrices.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: records.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: probes.AsSpan()).ToArray(),
         ];
         var description = new GpuComputePipelineDescription(Bindings: [], Name: Kernel, PushConstantBinding: null,
             Layout: new GpuPipelineLayoutDescription(groups: [new GpuGroupLayoutDescription(ordinal: 3,
-                bindings: [.. Enumerable.Range(count: 6, start: 0).Select(selector: index =>
+                bindings: [.. Enumerable.Range(count: 5, start: 0).Select(selector: index =>
                     new GpuGroupBinding(binding: ((uint)index), kind: GpuBindingKind.ReadOnlyBuffer)),
-                    new GpuGroupBinding(binding: 6, kind: GpuBindingKind.StorageImage)])], pushesIndex: false, stages: GpuShaderStage.Compute));
+                    new GpuGroupBinding(binding: 5, kind: GpuBindingKind.StorageImage)])], pushesIndex: false, stages: GpuShaderStage.Compute));
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
@@ -152,9 +151,9 @@ public sealed class SdfReprojectionDeviceLawTests {
                 buffers.Add(item: buffer);
                 buffer.Write<byte>(data: contents[index]);
                 services.Bindings.WriteBuffer(binding: ((uint)index), bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
-                    descriptorSetHandle: set, elementStride: ((index is 0 or 4) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
+                    descriptorSetHandle: set, elementStride: ((index is 0 or 3) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
             }
-            services.Bindings.WriteStorageImage(arrayElement: 0, binding: 6, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
+            services.Bindings.WriteStorageImage(arrayElement: 0, binding: 5, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 

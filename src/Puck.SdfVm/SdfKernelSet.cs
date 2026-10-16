@@ -73,30 +73,19 @@ public sealed class SdfKernelSet {
     /// <summary>Returns the file stem a kernel's bytecode ships under, completed by the backend's extension: the one
     /// spelling of each kernel's name, which its pipeline carries too.</summary>
     /// <param name="kernel">The kernel.</param>
-    /// <returns>The stem, such as <c>sdf-world-primary</c>.</returns>
+    /// <returns>The stem, such as <c>sdf-world-surface</c>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
-        SdfKernel.Beam => "sdf-beam",
-        SdfKernel.Tape => "sdf-tape",
-        SdfKernel.InstanceCull => "sdf-instance-cull",
-        SdfKernel.CullArgs => "sdf-cull-args",
-        SdfKernel.Primary => "sdf-world-primary",
+        SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
+        SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.Surface => "sdf-world-surface",
-        SdfKernel.Ambient => "sdf-world-ambient",
-        SdfKernel.Shadow => "sdf-world-shadow",
         SdfKernel.Views => "sdf-world-views",
-        SdfKernel.ViewsCore => "sdf-world-views-core",
-        SdfKernel.ViewsFolds => "sdf-world-views-folds",
         SdfKernel.Sky => "sdf-sky-runs",
         SdfKernel.Composite => "sdf-composite",
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
         SdfKernel.BrickBake => "sdf-brick-bake",
-        SdfKernel.MeshSurface => "sdf-world-mesh-surface",
-        SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
-        SdfKernel.MeshBake => "sdf-mesh-bake",
-        SdfKernel.ViewsMesh => "sdf-world-views-mesh",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };

@@ -268,10 +268,8 @@ public sealed partial class WorldRenderEnvelopeLawTests {
 
         return (client, new WorldSceneEmitter(
             client,
-            new(defaults: definition.Render),
             new(),
             new SilentAudio(),
-            new(),
             new(
                 client,
                 routes,

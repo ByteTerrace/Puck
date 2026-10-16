@@ -299,7 +299,6 @@ public sealed class PrototypeMeshLawTests {
                 seatRouter: routes
             );
             m_emitter = new WorldSceneEmitter(
-                anchor: new WorldPerceptionAnchor(),
                 animator: new WorldStampPool(),
                 audio: new SilentAudio(),
                 client: m_client,
@@ -308,7 +307,6 @@ public sealed class PrototypeMeshLawTests {
                     routes,
                     new NoNeighbours()
                 ),
-                settings: new WorldRenderSettings(defaults: definition.Render),
                 text: new WorldTextCatalog(source: new(
                     Definition: definition,
                     SourcePath: "unused.world.json"

@@ -145,7 +145,7 @@ number of shapes whose exact cores need runtime trig or texture sampling
 (star and regular-polygon's `atan2`, the ellipse's cubic solve, the
 glyph shape's texture sample, and a sampled brick, whose pool is an engine
 resource the evaluator cannot reach), and a non-uniform `Scale`, because the
-renderer's minimum-axis correction is a march bound, not physical distance.
+interpreter's minimum-axis correction is a march bound, not physical distance.
 Everything else—resets, translates,
 rotations (a baked quaternion needs no runtime sin/cos), uniform scales, repeats,
 symmetry planes, elongation, onion/dilate, scoped field push/pop, and the

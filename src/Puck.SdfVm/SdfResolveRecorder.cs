@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 
 // Reconstruction uses the residency's optional reloadable pipeline: native views allocate none of its GPU resources.
 // The pass binds the residency's World set, whose tables sdfReprojection reads, and its pass group: the render-grid
-// color, the visibility records and the dispatch box it reads the grid through, the lit image and the surface transport it
+// color, the visibility records it reads the grid through, the lit image and the surface transport it
 // writes, and, in the temporal fragment, the reactivity and the history of the preceding frame and of this one. A spatial
 // resolve binds the tables' fillers at the temporal members. The sky and the composite follow it, so it leaves the render
 // to the composite to complete.
@@ -20,7 +20,6 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     // The resolve's buffer inputs after the render-grid color in either mode, by the member each binds at, in port order.
     private static readonly string[] Inputs = [
         SdfWorldPackage.VisibilityRecords,
-        SdfWorldPackage.CullBounds,
     ];
     // The temporal fragment's resolve inputs after those, by the member each binds at, in port order.
     private static readonly string[] TemporalInputs = [
@@ -123,7 +122,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
         var history = (m_temporal
-            ? (recording.Inputs[4].Image.ImageViewHandle, recording.Inputs[5].Buffer!.BufferHandle,
+            ? (recording.Inputs[(Inputs.Length + 2)].Image.ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
                 recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle)
             : default);
 

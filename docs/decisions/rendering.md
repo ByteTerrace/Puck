@@ -12,8 +12,9 @@ Their observable guarantees are preserved, not every current API shape.
 
 ## The frame does not interpret SDF programs
 
-The runtime renderer stops evaluating SDF bytecode per pixel per frame. The
-interpreter's ceiling is measured. With the interpreter compiled away
+The frame does not evaluate SDF bytecode per pixel: every view rasterizes the
+meshes the residency bakes the program into, and the interpreter's frame
+passes, kernels and levers are deleted. The interpreter's ceiling was measured. With the interpreter compiled away
 entirely, the upper bound of per-world specialization,
 the avatar-free debug workload still spent 8.6 ms in primary and 54 ms in shadow
 on the RTX 2060 against a 16.7 ms frame. On the debug world at `high`, cutting
@@ -33,6 +34,10 @@ texture reads took about 10.6 ms, but lost the scene's materials and broke the
 avatar's composite. The frame-rate bar is still read on a quiet machine:
 the whole frame holds 16.7 ms worst-case on the RTX 2060 at `high`,
 1280×900. Interpreter tuning stops; the specialization plan is withdrawn.
+Curvature shading, the field's partial silhouette coverage and per-pixel
+material blending at smooth seams do not survive the bake: the mesh carries no
+curvature, a rasterized pixel is covered or not, and the bake point-samples a
+quad's winning material.
 
 ## The pipeline foundation
 
@@ -174,30 +179,6 @@ unified-memory devices included.
 "everything is an SDF" with "all environments are SDFs"; meshes, continuous
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
-
-**The shadow and ambient walks read a body no nearer than its influence
-sphere.** In the soft-shadow and ambient-occlusion marches, and only there, an
-instance reads as the larger of its field and the distance to its packed
-influence sphere, `max(field, |p - c| - r)`
-(`SdfProgram.InstanceBoundsSecondaryField`). A gauge, a non-uniform scale, a
-warp or a field op underestimates distance away from its surface, so a walk
-that reads the field alone evaluates such an instance until the gap to its
-sphere, divided by the rate its field certifies, reaches the running minimum,
-and always when it certifies none; on the debug world's Moth that costs most of
-a second of shadow work a frame. Read through the floor, every instance is
-rejected whole once the gap reaches the running minimum. The maximum is continuous, so it draws no contour
-rings, and it is sound: the sphere holds the solid those walks see, so outside
-it the gap is at most the true distance, and inside it the floor is negative and
-every surface and interior keeps its sign. The march never steps past a surface,
-and `SdfShadowQuery.Ceiling` still caps each query. What changes is the
-far-field estimate the penumbra reads: near an underestimating body it rises
-toward the true distance, so an avatar's soft shadow is lighter at its edges.
-That penumbra is accepted. Primary rays, surface normals and the debug views
-read the field itself. An instance is bounded only under the
-root-union certificate, which keeps its floor out of any later operation on the
-shared accumulator, and never when an operand those walks drop (an optional
-intersection, xor or morph) or a lane erosion can widen its solid past the
-sphere; such an instance keeps its own field and its certified gain.
 
 **P6's five representation experiments are in the programme's scope.** They
 are a per-placement choice between the field, a bake and a mesh, decided by
@@ -635,54 +616,11 @@ and frame values alone.
 
 **Temporal reconstruction is Puck's own complete implementation.** The Steam
 Deck floor needs render scale to be cheap without looking cheap, and SDF
-marching is the dominant cost. A vendor upscaler first was rejected. It is a
+shading is the dominant per-pixel cost. A vendor upscaler first was rejected. It is a
 closed or platform-specific dependency, and it knows nothing about SDF
 surfaces, nested sources, or screens showing live content, which all need their
 own motion and reactive masks. The package produces the inputs vendor upscalers
 expect, so one could still be added later as an alternative pass.
-
-**March seeding is not pursued.** Seeding primary's march from the previous
-frame's depth, behind a one-evaluation ball test that proves the skipped segment
-empty, measured as a loss on the floor tier: primary's march steps rose about 8%
-on the still and panning legs. An accepted seed saved under one step on average,
-0.81 on the still leg, because the beam already starts primary near the surface
-and the march still converges from the candidate, while every tested seed costs
-its evaluation. Gating the test on the march's own first step only approached
-break-even. Performance is a feature and the engine keeps no mechanism that
-costs more than it saves, so there is no off-by-default seeding to maintain.
-Seeding returns only with a proof that also covers the convergence after the
-candidate (rendering plan P15-7). One backend difference appeared only on the
-seeded path: at the strictest gate, Direct3D 12 read 2,595 more primary steps
-than Vulkan on the still leg and 5,428 fewer on the panning leg, with surface
-steps moving slightly, while every other configuration agreed within three
-steps. It is unexplained and goes with the seeded path unless it appears
-elsewhere.
-
-**HDR output starts as a minimal forcing function.** One display transform, one
-HDR swapchain path on Windows, paper white for UI, and one HDR source are enough
-to force a working space and color-space declarations on every source. The
-working space is display-referred, not scene-linear: float values on the sRGB
-curve, one at SDR white, with headroom above it. The stylized shading already
-produces display-referred values, so a display-referred space keeps SDR output
-exact and lets the HUD and the letterbox compose at SDR white untonemapped. The
-display encode alone maps the space to an output, showing one at the
-paper-white level, and every source converts into it relative to that level,
-so an HDR source shows at its own luminance. Calibration and Linux HDR wait
-until something needs them.
-
-**Assets derived from SDFs come from one baker whose cache is filled in two
-ways.** Shipping bakes only inside compiled worlds would leave live authoring
-with nothing to show until a rebuild. Baking only on the device would cost
-every player load time and battery and make quality depend on their hardware.
-One content-addressed baker serves both: compiled worlds ship a filled cache,
-and a miss bakes the changed prototypes in the background while the SDF path
-keeps drawing. Bakes are presentation only, and contact keeps reading the field.
-
-**Capture and camera producers target Windows first, with a contract ready for
-Linux.** The import interface uses what Vulkan external memory and external
-semaphores define, which is also what PipeWire DMA-BUF and V4L2 need. Adding a
-Linux producer should never mean changing the contract.
-
 
 ## Global illumination
 
@@ -690,8 +628,7 @@ These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination),
 the global illumination slices of P6.
 
 **Indirect light is an irradiance volume traced on the CPU against the baked
-meshes.** The baked-mesh path, the world views' default, walks no field in the
-frame, and worlds are mostly static, so their bounce lighting belongs at edit
+meshes.** The frame walks no field, and worlds are mostly static, so their bounce lighting belongs at edit
 time rather than in the frame. One volume of probes per residency follows the
 first view's camera; the thread pool traces it against a bounding volume
 hierarchy of the static mesh draws, and views read the eight probes about a
@@ -703,14 +640,14 @@ owns its layout, costs and limits.
 **It is presentation and bounds no leak by proof.** The volume holds back light
 through walls with its back-face weight and inside-geometry test alone; there
 is no per-probe visibility. Moving bodies receive its light and cast none into
-it. The interpreter path draws no indirect light.
+it.
 
 **Considered, and set aside.**
 
 - **A world-space radiance cache traced through the field.** Its probes and
   receivers proved every launch and every sealed boundary through the
   interpreter, so each ray paid the whole field walk on the GPU, and it needs
-  the field in the frame, which the baked-mesh path does not run. It was
+  the field in the frame, which the frame does not walk. It was
   replaced by the volume; its design is in the repository's history.
 - **Screen-space indirect light over a probe fallback.** It is per view and
   view-dependent, so split screen, mirrors and portal windows multiply it and

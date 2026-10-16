@@ -47,21 +47,17 @@ struct PlacePass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels,
-// followed by shape evaluations and shape gradients, as a
+// sky texture loads, shape evaluations and shape gradients, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 28u;
+static const uint PuckWorkRowWords = 14u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
 static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
-static const uint PuckWorkShadowWord = 10u;
-static const uint PuckWorkShadowSlots = 6u;
-static const uint PuckWorkShadowPixelsWord = 22u;
-static const uint PuckWorkShapesWord = 24u;
-static const uint PuckWorkGradientsWord = 26u;
+static const uint PuckWorkShapesWord = 10u;
+static const uint PuckWorkGradientsWord = 12u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -110,21 +106,6 @@ void puckCountShapes(uint shapes, uint gradients) {
         puckAddWork(row + PuckWorkShapesWord, waveShapes);
         puckAddWork(row + PuckWorkGradientsWord, waveGradients);
     }
-}
-// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
-// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
-void puckCountShadow(uint slot, uint steps) {
-    if (slot < PuckWorkShadowSlots) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
-    }
-}
-// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
-// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
-void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-    puckAddWork(row + PuckWorkStepsWord, steps);
-    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

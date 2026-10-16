@@ -606,7 +606,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 var address = neighbour.EntityAddress(index: entity);
 
                 if (!m_motionOwners.Wake(
-                    castsSoftShadow: true,
                     deltaSeconds: 1f,
                     discontinuity: (
                     !m_motionSeeded[motionIndex] ||
@@ -639,7 +638,6 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     deltaSeconds: 1f,
                     moved: WorldTransformOwners.PackBody(
                     avatar: entity,
-                    castsSoftShadow: true,
                     catalogBase: bandBase,
                     gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]),
                     moved: moved,

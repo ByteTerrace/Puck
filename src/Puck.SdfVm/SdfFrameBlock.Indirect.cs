@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public static partial class SdfFrameBlock {
-    // The indirect sources, the sky's gain and the receiver-only application the mesh path's views pass reads beside the
+    // The indirect sources, the sky's gain and the receiver-only application the views pass reads beside the
     // irradiance volume.
     private static void WriteIndirectControls(Span<byte> block, SdfFrame frame) {
         var gains = frame.IndirectGains;

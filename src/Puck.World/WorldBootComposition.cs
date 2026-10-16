@@ -347,8 +347,8 @@ public static class WorldBootComposition {
 
         // The frame-rate witness (a plain 2-second rolling window over presentation-fed deltas — no device
         // dependency to construct) and the live render settings (console-mutated in real time). Both core because
-        // world.hud's live binding resolver (world.fps/world.tick) and world.shadow-mask/.ao-quality/.shadow-march's
-        // auto-tier thresholds read them regardless of boot shape; presentation is the only thing that ever FEEDS
+        // world.hud's live binding resolver (world.fps/world.tick) reads them
+        // regardless of boot shape; presentation is the only thing that ever FEEDS
         // FrameRateMonitor real samples, so world.fps reads "no frames sampled yet" headless (there is no world.fps
         // verb headless anyway — it lives on the presentation-only WorldCommandModule).
         services.AddSingleton<FrameRateMonitor>();

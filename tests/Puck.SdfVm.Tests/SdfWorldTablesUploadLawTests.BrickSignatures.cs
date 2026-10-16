@@ -18,7 +18,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         rig.Warm();
         rig.Engine.UpdateTablesSignature();
-        ulong Signature() => (wholeView ? rig.Engine.ViewSignature(frame: frame, view: 0) : rig.Engine.PassSignature(frame: frame, part: SdfWorldPackage.Parts.Primary, view: 0));
+        ulong Signature() => (wholeView ? rig.Engine.ViewSignature(frame: frame, view: 0) : rig.Engine.PassSignature(frame: frame, part: SdfWorldPackage.Parts.Surface, view: 0));
         void Stands() {
             var signature = Signature();
 

@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 // High tier's volume, written by the residency before the frame's upload and read by the views pass through the World set
 // (sdfMeshIrradiance). It is staged, so it lives in device-local memory, and a frame no probe landed in writes nothing.
 public sealed partial class SdfWorldTables {
-    private const int MeshIrradianceRegionIndex = 13;
+    private const int MeshIrradianceRegionIndex = 12;
     private const int MeshIrradianceBytes = ((SdfMeshIrradiance.MaxProbes * SdfMeshIrradiance.ProbeWords) * sizeof(uint));
 
     private readonly GpuRegion m_meshIrradianceRegion;

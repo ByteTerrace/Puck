@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/9d7d328847597ef690a058b6ba54db09f346544e8019f673b4ffbc7b59db7c9b). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/bd7e00eed594b89c9dd96886a47efbfe4784496730320283527fc1a2e0eeff6b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -6,9 +6,9 @@
 struct SdfMeshPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float aspectRatio;
-    [[vk::offset(12)]] uint cameraTileShadowMask;
-    [[vk::offset(16)]] float curvatureCavity;
-    [[vk::offset(20)]] float curvatureInk;
+    [[vk::offset(12)]] float curvatureCavity;
+    [[vk::offset(16)]] float curvatureInk;
+    [[vk::offset(20)]] uint _pad20;
     [[vk::offset(24)]] uint _pad24;
     [[vk::offset(28)]] uint _pad28;
     [[vk::offset(32)]] float3 curvatureInkColor;
@@ -16,96 +16,81 @@ struct SdfMeshPass {
     [[vk::offset(48)]] float curvatureInkLow;
     [[vk::offset(52)]] float curvatureRim;
     [[vk::offset(56)]] uint debugMode;
-    [[vk::offset(60)]] float debugSliceAxis;
-    [[vk::offset(64)]] float debugSliceOffset;
-    [[vk::offset(68)]] uint disableAmbientOcclusion;
-    [[vk::offset(72)]] uint disableFarBound;
-    [[vk::offset(76)]] uint disableScreenLights;
-    [[vk::offset(80)]] uint disableShadowCull;
-    [[vk::offset(84)]] uint disableSoftShadows;
-    [[vk::offset(88)]] uint enableShadowProxy;
-    [[vk::offset(92)]] float farDistance;
-    [[vk::offset(96)]] uint fastAmbientOcclusion;
-    [[vk::offset(100)]] uint fastSoftShadowMarch;
-    [[vk::offset(104)]] uint finiteDifferenceNormals;
+    [[vk::offset(60)]] uint disableAmbientOcclusion;
+    [[vk::offset(64)]] uint disableScreenLights;
+    [[vk::offset(68)]] uint disableSoftShadows;
+    [[vk::offset(72)]] float farDistance;
+    [[vk::offset(76)]] uint _pad76;
+    [[vk::offset(80)]] float2 frustumOffset;
+    [[vk::offset(88)]] uint geometryOnly;
+    [[vk::offset(92)]] uint gridFlags;
+    [[vk::offset(96)]] float gridLineWidth;
+    [[vk::offset(100)]] uint _pad100;
+    [[vk::offset(104)]] uint _pad104;
     [[vk::offset(108)]] uint _pad108;
-    [[vk::offset(112)]] float2 frustumOffset;
-    [[vk::offset(120)]] uint geometryOnly;
-    [[vk::offset(124)]] uint gridFlags;
-    [[vk::offset(128)]] float gridLineWidth;
-    [[vk::offset(132)]] uint _pad132;
-    [[vk::offset(136)]] uint _pad136;
-    [[vk::offset(140)]] uint _pad140;
-    [[vk::offset(144)]] float4 gridObjectFrame;
-    [[vk::offset(160)]] float3 gridObjectOrigin;
-    [[vk::offset(172)]] float gridObjectPatchRadius;
-    [[vk::offset(176)]] float3 gridObjectPitch;
-    [[vk::offset(188)]] float gridPlaneY;
-    [[vk::offset(192)]] float4 gridWorldFrame;
-    [[vk::offset(208)]] float3 gridWorldOrigin;
+    [[vk::offset(112)]] float4 gridObjectFrame;
+    [[vk::offset(128)]] float3 gridObjectOrigin;
+    [[vk::offset(140)]] float gridObjectPatchRadius;
+    [[vk::offset(144)]] float3 gridObjectPitch;
+    [[vk::offset(156)]] float gridPlaneY;
+    [[vk::offset(160)]] float4 gridWorldFrame;
+    [[vk::offset(176)]] float3 gridWorldOrigin;
+    [[vk::offset(188)]] uint _pad188;
+    [[vk::offset(192)]] float3 gridWorldPitch;
+    [[vk::offset(204)]] uint historyFrames;
+    [[vk::offset(208)]] uint2 imageExtent;
+    [[vk::offset(216)]] uint _pad216;
     [[vk::offset(220)]] uint _pad220;
-    [[vk::offset(224)]] float3 gridWorldPitch;
-    [[vk::offset(236)]] uint historyFrames;
-    [[vk::offset(240)]] uint2 imageExtent;
+    [[vk::offset(224)]] float4 indirectApply;
+    [[vk::offset(240)]] float indirectContact;
+    [[vk::offset(244)]] uint _pad244;
     [[vk::offset(248)]] uint _pad248;
     [[vk::offset(252)]] uint _pad252;
-    [[vk::offset(256)]] float4 indirectApply;
-    [[vk::offset(272)]] float indirectContact;
-    [[vk::offset(276)]] uint _pad276;
-    [[vk::offset(280)]] uint _pad280;
-    [[vk::offset(284)]] uint _pad284;
-    [[vk::offset(288)]] float4 indirectSourceGains;
-    [[vk::offset(304)]] uint indirectSources;
-    [[vk::offset(308)]] uint instanceMaskWordCount;
-    [[vk::offset(312)]] float2 jitter;
-    [[vk::offset(320)]] uint lightCamera;
-    [[vk::offset(324)]] uint lightCount;
-    [[vk::offset(328)]] uint meshBakeCount;
-    [[vk::offset(332)]] uint _pad332;
-    [[vk::offset(336)]] float4 meshBakeLattices[48];
-    [[vk::offset(1104)]] uint meshDraws;
-    [[vk::offset(1108)]] uint _pad1108;
-    [[vk::offset(1112)]] uint _pad1112;
-    [[vk::offset(1116)]] uint _pad1116;
-    [[vk::offset(1120)]] int4 meshIrradianceLow;
-    [[vk::offset(1136)]] uint4 meshIrradianceVolume;
-    [[vk::offset(1152)]] float4 meshShadowCascades[12];
-    [[vk::offset(1344)]] uint meshShadowCount;
+    [[vk::offset(256)]] float4 indirectSourceGains;
+    [[vk::offset(272)]] uint indirectSources;
+    [[vk::offset(276)]] uint instanceMaskWordCount;
+    [[vk::offset(280)]] float2 jitter;
+    [[vk::offset(288)]] uint lightCamera;
+    [[vk::offset(292)]] uint lightCount;
+    [[vk::offset(296)]] uint meshBakeCount;
+    [[vk::offset(300)]] uint _pad300;
+    [[vk::offset(304)]] float4 meshBakeLattices[48];
+    [[vk::offset(1072)]] uint meshDraws;
+    [[vk::offset(1076)]] uint _pad1076;
+    [[vk::offset(1080)]] uint _pad1080;
+    [[vk::offset(1084)]] uint _pad1084;
+    [[vk::offset(1088)]] int4 meshIrradianceLow;
+    [[vk::offset(1104)]] uint4 meshIrradianceVolume;
+    [[vk::offset(1120)]] float4 meshShadowCascades[12];
+    [[vk::offset(1312)]] uint meshShadowCount;
+    [[vk::offset(1316)]] uint _pad1316;
+    [[vk::offset(1320)]] uint _pad1320;
+    [[vk::offset(1324)]] uint _pad1324;
+    [[vk::offset(1328)]] float4 meshShadowParameters;
+    [[vk::offset(1344)]] float nearDistance;
     [[vk::offset(1348)]] uint _pad1348;
     [[vk::offset(1352)]] uint _pad1352;
     [[vk::offset(1356)]] uint _pad1356;
-    [[vk::offset(1360)]] float4 meshShadowParameters;
-    [[vk::offset(1376)]] float nearDistance;
-    [[vk::offset(1380)]] uint _pad1380;
-    [[vk::offset(1384)]] uint _pad1384;
-    [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float4 previousView[6];
-    [[vk::offset(1488)]] uint renderPath;
-    [[vk::offset(1492)]] uint screenCount;
-    [[vk::offset(1496)]] uint shadowAmortize;
-    [[vk::offset(1500)]] float shadowDistanceScale;
-    [[vk::offset(1504)]] uint shadowFadeCount;
-    [[vk::offset(1508)]] uint shadowLightReject;
-    [[vk::offset(1512)]] uint shadowOwnershipReject;
-    [[vk::offset(1516)]] uint shadowSlotCount;
-    [[vk::offset(1520)]] int4 shadowSlots;
-    [[vk::offset(1536)]] float tanHalfFieldOfView;
-    [[vk::offset(1540)]] uint temporal;
-    [[vk::offset(1544)]] uint2 tileGrid;
-    [[vk::offset(1552)]] uint viewBase;
-    [[vk::offset(1556)]] uint _pad1556;
-    [[vk::offset(1560)]] uint _pad1560;
-    [[vk::offset(1564)]] uint _pad1564;
-    [[vk::offset(1568)]] float3 viewForward;
-    [[vk::offset(1580)]] uint _pad1580;
-    [[vk::offset(1584)]] float3 viewPosition;
-    [[vk::offset(1596)]] uint _pad1596;
-    [[vk::offset(1600)]] float3 viewRight;
-    [[vk::offset(1612)]] uint _pad1612;
-    [[vk::offset(1616)]] float3 viewUp;
-    [[vk::offset(1628)]] uint viewportCount;
-    [[vk::offset(1632)]] uint workCounterRow;
-    [[vk::offset(1636)]] uint workCounterRowDetail;
+    [[vk::offset(1360)]] float4 previousView[6];
+    [[vk::offset(1456)]] uint screenCount;
+    [[vk::offset(1460)]] uint shadowFadeCount;
+    [[vk::offset(1464)]] uint shadowSlotCount;
+    [[vk::offset(1468)]] uint _pad1468;
+    [[vk::offset(1472)]] int4 shadowSlots;
+    [[vk::offset(1488)]] float tanHalfFieldOfView;
+    [[vk::offset(1492)]] uint temporal;
+    [[vk::offset(1496)]] uint viewBase;
+    [[vk::offset(1500)]] uint _pad1500;
+    [[vk::offset(1504)]] float3 viewForward;
+    [[vk::offset(1516)]] uint _pad1516;
+    [[vk::offset(1520)]] float3 viewPosition;
+    [[vk::offset(1532)]] uint _pad1532;
+    [[vk::offset(1536)]] float3 viewRight;
+    [[vk::offset(1548)]] uint _pad1548;
+    [[vk::offset(1552)]] float3 viewUp;
+    [[vk::offset(1564)]] uint viewportCount;
+    [[vk::offset(1568)]] uint workCounterRow;
+    [[vk::offset(1572)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);
@@ -120,21 +105,17 @@ struct SdfMeshPushedIndex {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels,
-// followed by shape evaluations and shape gradients, as a
+// sky texture loads, shape evaluations and shape gradients, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 28u;
+static const uint PuckWorkRowWords = 14u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
 static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
-static const uint PuckWorkShadowWord = 10u;
-static const uint PuckWorkShadowSlots = 6u;
-static const uint PuckWorkShadowPixelsWord = 22u;
-static const uint PuckWorkShapesWord = 24u;
-static const uint PuckWorkGradientsWord = 26u;
+static const uint PuckWorkShapesWord = 10u;
+static const uint PuckWorkGradientsWord = 12u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -183,21 +164,6 @@ void puckCountShapes(uint shapes, uint gradients) {
         puckAddWork(row + PuckWorkShapesWord, waveShapes);
         puckAddWork(row + PuckWorkGradientsWord, waveGradients);
     }
-}
-// Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
-// reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
-void puckCountShadow(uint slot, uint steps) {
-    if (slot < PuckWorkShadowSlots) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), steps);
-    }
-}
-// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
-// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
-void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-    uint row = ((passGroup.workCounterRowDetail == 0u ? passGroup.workCounterRow : passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-    puckAddWork(row + PuckWorkStepsWord, steps);
-    puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

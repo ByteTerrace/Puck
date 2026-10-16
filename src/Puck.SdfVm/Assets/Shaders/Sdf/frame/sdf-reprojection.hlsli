@@ -1,6 +1,6 @@
-// A visible point's position in the preceding rendered view, reconstructed from the visibility record. The SDF
-// record names the exact winning shape slot; a mesh record names its draw and triangle. Previous rigid transforms
-// and compact mesh matrices belong to the residency's last consumed frame, copied by SdfWorldTables.Motion.cs.
+// A visible point's position in the preceding rendered view, reconstructed from the visibility record: a mesh record
+// names its draw and triangle. The previous compact mesh matrices belong to the residency's last consumed frame, copied
+// by SdfWorldTables.Motion.cs.
 #ifndef SDF_REPROJECTION_HLSLI
 #define SDF_REPROJECTION_HLSLI
 #include "sdf-mesh.hlsli"
@@ -8,48 +8,39 @@
 #include "../field/sdf-quaternion.hlsli"
 
 static const float SdfHistoryDepthTolerance = 0.05;
-// Both temporal color and the K history validate the same receiver with the same relative depth tolerance.
+// Temporal color validates its receiver by identity and a relative depth tolerance.
 bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previousT, float historyT) {
     return ((identity == previousIdentity) &&
         (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
 }
 
-// Returns the point carried by the same rigid shape or mesh triangle in the preceding consumed frame.
+// Returns the point carried by the same mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
     previousPoint = currentPoint;
     if (!sdfVisibilityHit(visibility)) {
         return false;
     }
-    if (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_MESH) {
-        uint draw = sdfVisibilitySource(visibility.identity);
-        uint mesh = sdfMeshRecord(draw);
-        uint first = (3u * sdfVisibilityMeshTriangle(record));
-        float3 weights;
-        float3 local;
-        // An impostor card's point is the surface its views show, off the card's plane, so its object-space point is the
-        // draw's inverse matrix of the point itself; any other mesh point lies on its triangle.
-        if (sdfMeshIsImpostor(draw)) {
-            local = sdfMeshObjectFromWorld(mesh, (currentPoint - sdfMeshRow(mesh, 3u)));
-        } else {
-            if (!sdfMeshBarycentric(sdfMeshWorldPosition(mesh, first), sdfMeshWorldPosition(mesh, first + 1u),
-                sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
-                return false;
-            }
-            local = ((weights.x * sdfMeshObjectPosition(mesh, first)) +
-                (weights.y * sdfMeshObjectPosition(mesh, first + 1u)) + (weights.z * sdfMeshObjectPosition(mesh, first + 2u)));
+    uint draw = sdfVisibilitySource(visibility.identity);
+    uint mesh = sdfMeshRecord(draw);
+    uint first = (3u * sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord]);
+    float3 weights;
+    float3 local;
+    // An impostor card's point is the surface its views show, off the card's plane, so its object-space point is the
+    // draw's inverse matrix of the point itself; any other mesh point lies on its triangle.
+    if (sdfMeshIsImpostor(draw)) {
+        local = sdfMeshObjectFromWorld(mesh, (currentPoint - sdfMeshRow(mesh, 3u)));
+    } else {
+        if (!sdfMeshBarycentric(sdfMeshWorldPosition(mesh, first), sdfMeshWorldPosition(mesh, first + 1u),
+            sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
+            return false;
         }
-        uint previousMatrix = (4u * draw);
-        previousPoint = ((local.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
-            (local.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
-            (local.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz);
-        return true;
+        local = ((weights.x * sdfMeshObjectPosition(mesh, first)) +
+            (weights.y * sdfMeshObjectPosition(mesh, first + 1u)) + (weights.z * sdfMeshObjectPosition(mesh, first + 2u)));
     }
-    int slot = sdfVisibilityFrameSlot(record, visibility);
-    if (slot != SDF_TRANSFORM_SLOT_NONE) {
-        uint row = (3u * (uint)slot);
-        float3 local = rotatePointByInverseQuaternion(currentPoint - sdfDynamicTransforms[row].xyz, sdfDynamicTransforms[row + 1u]);
-        previousPoint = (rotatePointByQuaternion(local, sdfPreviousDynamicTransforms[row + 1u]) + sdfPreviousDynamicTransforms[row].xyz);
-    }
+    uint previousMatrix = (4u * draw);
+    previousPoint = ((local.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
+        (local.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
+        (local.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz);
     return true;
 }
 // A view's camera rows, as SdfFrameBlock.WritePreviousView lays them: position and validity, right and tan(fov / 2),

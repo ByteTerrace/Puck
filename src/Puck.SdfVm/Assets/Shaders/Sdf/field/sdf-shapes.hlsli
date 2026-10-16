@@ -35,7 +35,6 @@ float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
 
     return ((length(p * inverseRadii) - 1.0) * minRadius);
 }
-#ifndef SDF_STRIP_HEAVY
 float sdfSuperellipsoidNormFactor(float exponent) {
     return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
 }
@@ -44,8 +43,8 @@ bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponen
         || approximate < sdfSuperellipsoidNormFactor(exponent) * norm || approximate > norm;
 }
 // For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
-// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. The tape certificate charges
-// the complete band width plus endpoint arithmetic error, without assuming an error bound for pow.
+// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. Clamping to that band keeps the field a
+// conservative distance without assuming an error bound for pow.
 float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
     if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
     return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
@@ -83,7 +82,6 @@ float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float expon
     }
     return (norm - 1.0) * minRadius;
 }
-#endif
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
     float2 q = float2(length(p.xz), p.y);
@@ -358,8 +356,8 @@ float2 sdfGlyphUnpackUv(float packed) {
     return (float2((bits & 0xFFFFu), (bits >> 16u)) * (1.0 / 65535.0));
 }
 // The extruded-quad FALLBACK: the glyph cell as a plain box, exact and 1-Lipschitz. Every kernel WITHOUT the atlas
-// bound (the beam cull) evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is
-// strictly inside its cell, so the cull never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
+// bound evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is strictly inside
+// its cell, so a bound skip never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
 float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
     float2 b = (abs(p.xy) - float2(data1.y, data1.z));
     float dQuad = (length(max(b, 0.0)) + min(max(b.x, b.y), 0.0));
@@ -372,7 +370,7 @@ float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
 // Alpha holds single-channel boundary-distance samples from `puck font-atlas` or a compatible imported atlas.
 // RGB median is coverage-only: channel conflicts need not define a conservative march field.
 // Edge-clamped; SampleLevel(…, 0) because
-// implicit-derivative filtering is undefined inside the march's non-uniform control flow.
+// implicit-derivative filtering is undefined in a compute kernel's non-uniform control flow.
 float sdfGlyphTexelAlpha(int2 texel, int2 dims) {
     int2 clamped = clamp(texel, int2(0, 0), (dims - int2(1, 1)));
     float2 uv = ((float2(clamped) + 0.5) / float2(dims));
@@ -456,7 +454,7 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 
 // === SDF_SHAPE_SAMPLED_REGION: a baked carve-union field sampled O(1) =================================================
 // The settled-carve UNION distance field (min_i(|p-c_i|-r_i)), baked once into a cubic-voxel brick and composed as ONE
-// ordinary Subtraction-blend instance so the marches stop paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
+// ordinary Subtraction-blend instance so a sample stops paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
 // (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
 // at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
 // unchanged zero set. Manual trilinear interpolation uses eight explicit loads and ordered, noncontracting arithmetic,
@@ -552,8 +550,8 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #else
     // The pool is NOT bound: the conservative UNION-HULL fallback. A Subtraction compose of SDF_FAR_DISTANCE never bites
     // (max(acc, -1e9) == acc), so the region renders as its uncarved hull — solid, never a hole (the Glyph quad-fallback
-    // precedent). The instance-cull and diagnostic kernels take this path (only the world-views/core-ops/beam
-    // kernels bind the pool), and a program with no SampledRegion never reaches this arm at all.
+    // precedent). A kernel that does not bind the pool (a probe) takes this path; the bake binds it, and a program with
+    // no SampledRegion never reaches this arm at all.
     return SDF_FAR_DISTANCE;
 #endif
 }
@@ -703,34 +701,22 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // A ScreenSlab IS a box; only its material sentinel distinguishes it (see SDF_SCREEN_MATERIAL).
         case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: result = sdfBox(p, data0.xyz, data0.w); break;
-#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_TORUS:       result = sdfTorus(p, data0.x, data0.y); break;
-#endif
         // The plane normal is normalized HOST-SIDE (SdfProgramBuilder.Plane) — the biggest per-eval saving of all:
         // the plane is in nearly every scene, and a per-sample normalize would run for EVERY map() sample.
         case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
-#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
         case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
-        // The fold tier admits a superellipsoid only at e == 2 (SdfViewsKernelVariants), so the stripped build
-        // compiles just the ellipsoid's pow-free gauge; the full build dispatches on the exponent.
-#ifdef SDF_STRIP_HEAVY
-        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfEllipsoidGauge(p, data0.xyz, data1.yzw); break;
-#else
+        // e == 2 takes the ellipsoid's pow-free gauge; any other exponent the general power path.
         case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
-#endif
-#endif
-        // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders. Keeping these two inexpensive
-        // primitives in CoreOps avoids promoting an otherwise rigid humanoid program to the register-heavy full ISA.
+        // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders.
         case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w, data1.y); break;
         // data0.xy arrive inset by the edge-rounding radius data1.w; subtracting it offsets the rims back out.
         case SDF_SHAPE_CYLINDER:    result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;
         // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.
-        // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim. RoundedRectangle is a
-        // CORE shape (the room's cabinetry is built from it); the rest of the family is exotic.
+        // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim.
         case SDF_SHAPE_ROUNDED_RECTANGLE:    result = sdfRoundedRect(p, data0, data1); break;
         case SDF_SHAPE_CHAMFERED_RECTANGLE:  result = sdfChamferedRect(p, data0, data1); break;
-#ifndef SDF_STRIP_HEAVY
         case SDF_SHAPE_REGULAR_POLYGON:
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
@@ -738,10 +724,8 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
         case SDF_SHAPE_PATH: result = sdfPathSolid(p, data0, data1); break;
         case SDF_SHAPE_SWEEP:           result = sdfSweep(p, data0, data1); break;
-#endif
-        // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative
-        // extruded quad — so the beam cull sees a solid cell box (never a hole), and only the lit render
-        // resolves the true lettering.
+        // A glyph is the atlas-sampled letter where the atlas is bound (the bake), else the conservative extruded quad,
+        // a solid cell box (never a hole).
         case SDF_SHAPE_GLYPH:
 #ifdef SDF_GLYPH_ATLAS
             result = sdfGlyph(p, data0, data1);
@@ -749,11 +733,9 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
             result = sdfGlyphQuad(p, data0, data1);
 #endif
             break;
-        // A sampled brick where the pool is bound (the world-views + beam kernels), else the conservative union-hull
-        // fallback — so a kernel without the pool sees SDF_FAR_DISTANCE and the
-        // Subtraction compose leaves the accumulator untouched (uncarved hull, never a hole). NOT stripped under
-        // SDF_CORE_OPS: the core-ops views variant binds the pool and must evaluate bricks. sdfSampledRegion self-guards
-        // on SDF_SAMPLED_REGIONS, so this case is a plain call in both the full and core-ops variants.
+        // A sampled brick where the pool is bound (the bake), else the conservative union-hull fallback — so a kernel
+        // without the pool sees SDF_FAR_DISTANCE and the Subtraction compose leaves the accumulator untouched (uncarved
+        // hull, never a hole). sdfSampledRegion self-guards on SDF_SAMPLED_REGIONS, so this case is a plain call.
         case SDF_SHAPE_SAMPLED_REGION:  result = sdfSampledRegion(p, data0, data1); break;
     }
 

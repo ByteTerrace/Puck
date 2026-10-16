@@ -19,8 +19,7 @@ namespace Puck.SdfVm;
 /// same frame values, copied by declared member offsets as the resolve's are.</para>
 /// <para><see cref="EnvironmentParameters"/> serves the residency's shared environment producer: its map dispatch reads
 /// acquired panorama images, and its reduction publishes the coefficients after the map's graph dependency.</para>
-/// <para><see cref="World"/> serves the native per-view dispatches: mask, beam, cull-args, primary, surface, ambient,
-/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
+/// <para><see cref="World"/> serves the native per-view dispatches: the bake's mask and sampler, surface and views. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
 /// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
 /// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
 /// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
@@ -48,10 +47,11 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
-    /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the shadow
-    /// and views passes.</summary>
+    /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the views
+    /// pass.</summary>
     public const string Lights = "sdfLights";
-    /// <summary>The active shadow handoffs, one generated 16-byte record per incoming march.</summary>
+    /// <summary>The active shadow handoffs, one generated 16-byte record per fade, which the views pass fades each
+    /// outgoing light's shadow by.</summary>
     public const string ShadowHandoffs = "sdfShadowHandoffs";
     /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and composite passes and by the
     /// environment map's kernel (<see cref="EnvironmentParameters"/>).</summary>

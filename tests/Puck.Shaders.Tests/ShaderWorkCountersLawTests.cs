@@ -11,18 +11,6 @@ namespace Puck.Shaders.Tests;
 /// engine's compute passes and mesh pass, and the placement pass.
 /// </summary>
 public sealed class ShaderWorkCountersLawTests {
-    [Fact]
-    public void ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence() {
-        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
-        var start = generated.IndexOf(comparisonType: StringComparison.Ordinal, value: "void puckCountShadow(");
-        var end = generated.IndexOf(comparisonType: StringComparison.Ordinal, startIndex: start, value: "void puckCountShadowDecision(");
-        var shadow = generated[start..end];
-
-        Assert.DoesNotContain(actualString: shadow, expectedSubstring: "Wave");
-        Assert.Contains(actualString: shadow, expectedSubstring: "if (slot < PuckWorkShadowSlots)");
-        Assert.Contains(actualString: shadow, expectedSubstring: "PuckWorkShadowWord + (slot * 2u)), steps);");
-    }
-
     private static ShaderInterface Interface(params ShaderInterfaceMember[] members) => new(
         members: [
             ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "gain", type: ShaderValueType.Float),
@@ -43,22 +31,18 @@ public sealed class ShaderWorkCountersLawTests {
         // One spelling counts the sky: the named rows' evaluations argument, never a pass-level function of its own.
         Assert.DoesNotContain(actualString: generated, expectedSubstring: "puckCountSky");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {");
-        Assert.Contains(actualString: generated, expectedSubstring: "void puckCountShadow(uint slot, uint steps) {");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountShapes(uint shapes, uint gradients) {");
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkShapesWord = 24u;");
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkGradientsWord = 26u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkShapesWord = 10u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkGradientsWord = 12u;");
         Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork(row + PuckWorkShapesWord, waveShapes);");
         Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork(row + PuckWorkGradientsWord, waveGradients);");
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkShadowWord = 10u;");
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkShadowSlots = 6u;");
-        Assert.Contains(actualString: generated, expectedSubstring: "PuckWorkShadowWord + (slot * 2u)");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {");
         Assert.Contains(actualString: generated, expectedSubstring: "bool counting = !IsHelperLane();");
         Assert.Contains(actualString: generated, expectedSubstring: $"RWStructuredBuffer<uint> {ShaderWorkCounters.Buffer}");
         Assert.Contains(actualString: generated, expectedSubstring: $"uint {ShaderWorkCounters.Row};");
         Assert.Equal(
             actual: GpuWork.KernelKinds.ToArray(),
-            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, .. GpuWork.ShadowSteps, GpuWork.ShadowPixels, GpuWork.ShapesEvaluated, GpuWork.ShapeGradients]
+            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, GpuWork.ShapesEvaluated, GpuWork.ShapeGradients]
         );
     }
     [Fact]
@@ -71,7 +55,6 @@ public sealed class ShaderWorkCountersLawTests {
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWork(uint steps, uint texels) {\n}");
             Assert.DoesNotContain(actualString: generated, expectedSubstring: "puckCountSky");
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {\n}");
-            Assert.Contains(actualString: generated, expectedSubstring: "void puckCountShadow(uint slot, uint steps) {\n}");
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountShapes(uint shapes, uint gradients) {\n}");
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {\n}");
             Assert.DoesNotContain(actualString: generated, expectedSubstring: "puckAddWork");
@@ -91,7 +74,7 @@ public sealed class ShaderWorkCountersLawTests {
     public void NamedRowsUseEveryKernelColumnAndTheSameAtomicCarryAsPlainRows() {
         var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
 
-        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 28u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 14u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
         Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);");

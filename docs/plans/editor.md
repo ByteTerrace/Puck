@@ -61,24 +61,17 @@ gauges.
 
 Several pieces exist with nothing using them:
 
-- `world.debug-view` selects one of thirteen modes (`off`, `depth`, `normals`,
-  `raydir`, `material-id`, `iteration-count`, `termination`, `slice`, `mask`,
-  `overshoot`, `evals`, `visibility`, `motion`). It is unbindable and sets the
-  mode on the main world residency only: its camera views show it, but a
-  session screen's residency and a routed scene's never do. The slice mode is
-  locked to the camera through the origin: `SdfFrame.DebugSliceAxis` and
-  `DebugSliceOffset` reach the pass block, and nothing sets them.
-- Four shading levers reach the pass block with no producer:
-  `DisableShadowCull`, `DisableScreenLights`, `EnableShadowProxy` and
-  `UseFiniteDifferenceNormals`.
-- `src/Puck.SdfVm/Debug` (`SdfDebugMode`, `SdfDebugScene`, `SdfDebugRenderer`,
-  `SdfDebugController`, `SdfOrbitInput`, `SdfGalleryScene`, `SdfDriftMonolith`)
-  renders a takeover scene no host constructs.
+- `world.debug-view` selects one of eight modes (`off`, `depth`, `normals`,
+  `raydir`, `material-id`, `visibility`, `motion`, `sky-cost`). It is
+  unbindable and sets the mode on the main world residency only: its camera
+  views show it, but a session screen's residency and a routed scene's never do.
+- One shading lever reaches the pass block with no producer:
+  `DisableScreenLights`.
 - The GPU carve bake (`SdfWorldTables.RequestBrickBake`, the `sdf.bricks`
-  pass) is driven only by `SdfCarveBakePlanner`, which only `SdfDebugScene`
-  constructs, and the planner draws its analytic carves through
-  `SdfDebugRenderer.EmitCarve`. The brick pool itself is live: height fields
-  upload their bricks into it (`WorldFieldEmitter`).
+  pass) has no producer: the debug scene that drove it, and its carve planner,
+  are deleted with the per-pixel interpreter. The brick pool itself is live:
+  height fields upload their bricks into it (`WorldFieldEmitter`), and the bake
+  samples them.
 
 The inspector (E5) is in place. `world.inspect on|off` is bindable and draws a
 panel on the `Editor` overlay channel (`InspectorWriter`); `world.inspect` alone
@@ -371,7 +364,7 @@ names a placement id they had to look up.
 **Touches:** `Puck.Overlays` (`OverlayFrameBuilder`, the overlay kernel and its
 generated interface, `OverlayChannels`, `OverlayChannelLeases`),
 `Puck.SignedDistance` (`SdfFieldEvaluator`), `Puck.SdfVm` (the visibility
-record, `mapCore`/`mapGradCore` winner payload, the primary and views stages,
+record, the surface and views stages,
 the instance table, the readback), `Puck.World.Client` (the stamper's
 registration, the ordinal-to-placement table, the selection, the cursor feed),
 `src/Puck.World` (the editor command module).
@@ -468,8 +461,8 @@ fixture placements (red leg: one hit measures nothing).
 
 ### E4 — Debug views everywhere
 
-**Problem:** the debug views exist, but a builder must type them, they show
-only in the main world residency, and the slice cannot be moved.
+**Problem:** the debug views exist, but a builder must type them, and they show
+only in the main world residency.
 
 **Delivers:**
 
@@ -480,22 +473,17 @@ only in the main world residency, and the slice cannot be moved.
    camera views already show it) and every session and routed residency the
    screen binder creates (`WorldScreenBinder.Views.cs`, `WorldScreenBinder.Routed.cs`),
    including one created after the switch.
-3. **A movable slice.** `world.debug-view slice x|y|z|camera [<offset>]` sets
-   `SdfFrame.DebugSliceAxis` and `DebugSliceOffset`, with a bindable offset step.
-4. **The four shading levers.** `world.shadow-cull`, `world.screen-lights`,
-   `world.shadow-proxy` and `world.normals analytic|finite-difference`, in
+3. **The screen-lights lever.** `world.screen-lights`, in
    `WorldRenderLeverCommandModule` beside `world.shadows` and `world.ao`,
    bindable and echoed.
-5. **Views for lighting questions.** New modes `lighting` (shading over white
+4. **Views for lighting questions.** New modes `lighting` (shading over white
    albedo), `albedo` (unlit color), `shadow` (the key light's visibility, the
-   record's K row) and `ao` (the occlusion half of the S row). The mode names in
+   record's K word) and `ao` (the record's occlusion). The mode names in
    `DebugViewModes` and the kernel's count and switch
-   (`frame/sdf-levers.hlsli`, `debug/sdf-debug-views.hlsli`) move together.
-6. **A slice that shows a broken field.** The slice view marks a sample whose
-   distance is NaN or infinite, and a gradient-magnitude mode shows where the
-   field departs from a distance (its gradient's length away from one).
-7. **A slice of the selection.** Once E2 selects a placement, the slice can
-   show that placement's field alone.
+   (`frame/sdf-debug-modes.hlsli`, `debug/sdf-debug-views.hlsli`) move together.
+
+The frame walks no field, so a field slice or a field-health view needs a
+kernel of its own over the program, which this package does not add.
 
 Debug views and shading levers are session levers: `world.save` never folds
 them into the document.
@@ -508,19 +496,16 @@ them into the document.
 **Check:** a sync law holding `DebugViewModes.Names` to the kernel's mode
 count; `WorldDebugViewResidencyLawTests` (the mode reaches every residency the
 binder holds and one it creates later; red leg: the main residency alone, as
-today); presenter laws that the slice and the four levers reach the frame.
+today); a presenter law that the screen-lights lever reaches the frame.
 Canary `debug-views`: a screen showing a camera view changes to the `normals`
 colors when the mode is on. The rendering plan's capability rows for debug views and shading levers already
 hold frame-to-pass-block and pass-scheduling checks
 (`SdfFrameBlockLawTests.EachShadingLeverWritesItsOwnMemberAlone`,
 `SdfWorldResidencyReportLawTests.TheDebugViewModeReachesEveryPassBlockWhenSetBeforeTheTablesOrAfter`);
 this package adds the producers' side, a World setting reaching the frame, and
-the canary. The NaN marker
-and the gradient-magnitude mode join the mode-count sync law; a law over a
-program with a NaN-producing primitive holds the marker on that sample, and
-the selected-placement slice holds every other placement's field out.
+the canary.
 
-**Depends on:** nothing; the selected-placement slice (7) follows E2.
+**Depends on:** nothing.
 
 ### E5 — The inspector
 
@@ -849,49 +834,32 @@ unrelated heading and tail. The laws fail when the source rewrite is bypassed.
 
 ### E12 — The shape gallery as a world
 
-**Problem:** the engine's shape-inspection tools (one subject under the
+**Problem:** the engine has no shape-inspection tool (one subject under the
 microscope, every primitive side by side, the scoped and flat field-op
-contrast) live in a takeover scene no host constructs and that bypasses the
-document.
+contrast). The takeover scene that held one bypassed the document, rendered
+through the deleted per-pixel interpreter, and is deleted; it is prior art in
+git history (`src/Puck.SdfVm/Debug`).
 
 **Delivers:** a shipped tool world, `sdf-gallery.puck`, beside the other tool
 worlds in `src/Puck.World/Assets/worlds/tools/`, with a companion `.md` as
 `shader-compare.puck` has. It is browsed with build mode, selection, the debug
 views, the editor camera and `world.explain`, and `world.isolate on|off` stamps
 only the selection, in presentation, in place of the takeover's single subject.
-Once the parity below holds, `src/Puck.SdfVm/Debug` is deleted in the same
-change, with the comments in `SdfCameraRig` that cite it, and the carve drawing
-`SdfCarveBakePlanner` borrows from `SdfDebugRenderer.EmitCarve` moves into the
-planner, which [E13](#e13--carving-and-the-brick-bake) keeps.
+Each exhibit the deleted takeover offered becomes a gallery row: every shape and
+lift, the domain ops, each blend family as a pair, the scoped and flat contrast,
+a dense carve cluster for E13, and its tour's exhibits, each with an authored
+camera and its plaque as a text screen or HUD panel, stepped through
+`view.override camera`.
 
-**Completion condition: parity with what `Puck.SdfVm.Debug` offers.** The
-directory may be deleted only when each of these has a replacement a builder
-can use in a running World:
-
-| `Puck.SdfVm.Debug` offers | Replacement |
-|---|---|
-| Shape browsing: every `SdfDebugShapeKind`, parameter overrides, and the 2D family's revolve and extrude lift (`SetShape`, `SetLift`) | One gallery creation per shape and lift, selected and isolated; parameters edited live with `world.row.step` |
-| Op browsing: the point and field op stack (`PushOp`, `PopOp`, `ClearOps`), blend choice with its smoothing (`SetBlend`), the scoped and flat accumulator contrast (`SetScope`) and the floor toggle (`SetFloor`) | Gallery rows for each domain op, each blend family as a pair and the scoped and flat contrast as two creations; ops and blends changed live through row edits on the isolated creation |
-| The slice at an axis and offset (`SetSlicePlane`) | E4's `world.debug-view slice x\|y\|z [<offset>]` |
-| Analytic or finite-difference normals, the shadow cull and the grid cull (`SetFiniteDifferenceNormals`, `SetShadowCull`, `SetGridCull`) | E4's shading levers; the grid cull is either a lever there or shown to have no remaining consumer |
-| Carving: add, pop, clear, the pad carve chord, the meteor shower and the brick bake (`AddCarve`, `PopCarve`, `ClearCarves`, `StartMeteors`, `AdvanceBricks`) | E13's carve brush, `world.carve erase`, undo, and the bake over the world's brick pool; the meteor shower as a gallery row that authors a dense carve cluster |
-| The orbit camera, pan, zoom and pose (`SdfDebugController`, `SdfOrbitInput`, `PoseCamera`) | E8's editor camera |
-| The gallery tour: each `SdfGalleryExhibit` (`LiarSpiral`, `DrosteTunnel`, `CellJitterCreases`, `NotchHorizon`, `SmoothChain`, `WallpaperP4M`, `CarveCeiling`, `LogSphereRunDoc`, `DriftMonolith`) with its framing pose and plaque | One gallery area per exhibit with an authored camera, its plaque as a text screen or HUD panel, and a bindable next and previous exhibit through `view.override camera` |
-
-**Touches:** `Puck.SdfVm` (the deletion, `SdfCarveBakePlanner`),
-`src/Puck.World/Assets/worlds/tools`, `Puck.World.Client` (the isolate filter),
+**Touches:** `src/Puck.World/Assets/worlds/tools`, `Puck.World.Client` (the isolate filter),
 the rendering handbook pages that describe the debug scene.
 
-**Check:** the parity table, each row demonstrated in the gallery world, with
-the evidence recorded in the commit that deletes the directory. The eclipse
-check: `puck references` finds no caller of `Puck.SdfVm.Debug` outside the
-deleted directory. The gallery source passes `ShippedSourceLintLawTests`; an
+**Check:** each row demonstrated in the gallery world. The gallery source passes `ShippedSourceLintLawTests`; an
 isolate law holds that the frame emits only the selection's instances (red leg:
 an empty selection emits the whole world, not nothing); the gallery boots and
 captures each exhibit offscreen.
 
-**Depends on:** E1, E2, E4, E8 and E13, since every row of the parity table
-must be usable before the old scene is deleted.
+**Depends on:** E1, E2, E4, E8 and E13.
 
 ### E13 — Carving and the brick bake
 
@@ -905,9 +873,9 @@ existing vocabulary first. `world.carve [<radius>]` carves at the pointer's hit
 `world.carve erase` removes the dabs under the pointer; a stroke is one batch.
 The static solid field includes the carves, so collision follows them, and
 each carve extends past every point a body can reach (the phantom-surface
-caution in the rendering skill). Presentation hands the carves to
-`SdfCarveBakePlanner`, which settles, bakes, swaps and invalidates bins against
-the world residency's brick pool as
+caution in the rendering skill). Presentation settles, bakes, swaps and
+invalidates the carves' bins against the world residency's brick pool (a
+planner of its own; the deleted debug scene's is prior art in git history) as
 [the handbook](../rendering/sdf/handbook/bricks-and-baking.md#settle-bake-swap-and-invalidate)
 describes. `world.budget` prices carves and bricks, `world.cost` names a
 placement's carves, and `world.carves` echoes the carve count and the baked and
@@ -915,7 +883,7 @@ analytic bins.
 
 **Touches:** `Puck.World.Schema`, `Puck.World.Server` (the static field),
 `Puck.World.Client` (`WorldFramePresenter`, the planner's host),
-`Puck.SdfVm` (`SdfCarveBakePlanner`, `SdfWorldTables.BrickBake.cs`).
+`Puck.SdfVm` (`SdfWorldTables.BrickBake.cs`).
 
 **Check:** a collision law that a point inside a carve reads outside the solid
 field; planner laws over the fake device (a bin with enough settled carves

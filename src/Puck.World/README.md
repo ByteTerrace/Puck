@@ -864,16 +864,15 @@ Facts a script needs:
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
   `world.wait` are the explicit waits. `world.wait bakes <seconds>` holds until
-  the presentation's creation bakes are settled (none queued or baking), so a
-  script that reads a drawn bake waits on the bake. `world.wait ready <seconds>` waits for
+  the presentation's creation bakes are settled (none queued or baking).
+  `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
   and its first frame captured), the render graph's root has rendered over
   a completed view, the GPU has completed a frame of every instance that has
   rendered and the root has produced one more frame, so a pick or counted pass
   read after it waits on no cold device and a few ticks after it are a few
-  frames (offscreen, every tick is a frame of its own), and the bake schedule has reconciled and, while the
-  presentation draws its bakes, settled, or
+  frames (offscreen, every tick is a frame of its own), or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
   cache can hold the first frame back for many ticks. `world.wait captures
@@ -1977,9 +1976,8 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.render-path`, `world.indirect`, `world.upscale-sharpness`, `world.sky-quality`, `world.sky-field-scale`,
-`world.target`, `world.shadow-mask`,
-`world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
+`world.temporal`, `world.indirect`, `world.upscale-sharpness`, `world.sky-quality`, `world.sky-field-scale`,
+`world.target`, `world.view-refresh`,
 `world.debug-view`, `world.sky-layer`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
@@ -2011,13 +2009,14 @@ resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
-`world.indirect off|medium|high` selects the indirect-light tier the baked-mesh
-path's irradiance volume traces at. It boots at `render.indirect.tier`, Medium
+`world.shadows on|off` turns the views' cascade shadows on or off; the world's
+`render.shadows` tier boots it, any tier but `Off` meaning on.
+`world.indirect off|medium|high` selects the indirect-light tier the
+irradiance volume traces at. It boots at `render.indirect.tier`, Medium
 when absent; an explicit `off` disables it. The shared quality presets select
 Off at Low, Medium at Medium and High at High, and a preset can author an
 `indirect` override. `world.save` folds the live tier back into its authored
-home. The interpreter path (`world.render-path interpreter`) draws no indirect
-light at any tier.
+home.
 `world.render-scale [view]` echoes the selected view's ceiling, saved quality
 floor, grid, budget and signal. With no target it echoes the primary view;
 ceiling and floor changes write the defaults that named rows inherit, while
@@ -2089,8 +2088,7 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked, refused and switched to drawing, the held bakes that could not be decoded (`undecodable`, each named
-once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
+baked and refused, and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
 mesh draws (`near`) and impostor cards (`far`) of baked placements the views
 recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
@@ -2134,9 +2132,9 @@ Dynamic transforms and the per-frame grid are separate buffers and are excluded.
 The dump follows the current `SdfProgram` layout; it is a diagnostic snapshot,
 not a loadable or durable asset format.
 
-`render.farDistance` is the depth every camera march ends at (default 40 when
+`render.farDistance` is the depth every view's geometry ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
-below—geometry beyond it is never marched, so an infinite ground plane shows
+below—geometry beyond it is never drawn, so an infinite ground plane shows
 a horizon curve there unless the `render.atmosphere` fog absorbs it first.
 
 The lighting, sky, atmosphere and environment sections are re-read on every definition
@@ -2205,15 +2203,13 @@ structural revision, backward delivery or policy change installs without fades.
 Names still selected keep the slots they held; new names take freed slots in
 rank order. Reusing a light-table index for a different name is a crossing.
 
-The frame carries the full K selection and active handoffs, at most K + F
-march slots. Each selected light casts its own shadow with its own angular
-radius; directionals outside the slots shade unshadowed. During a handoff,
-the outgoing light's shadow deficit fades out and the incoming light's fades
-in, each retaining its radiance. `world.counters gpu` reports each slot's
-march steps separately. Incoming visibility storage is provisioned by F:
-absent at 0, one byte per pixel at 1 and two bytes per pixel at 2. Starting a
-handoff allocates no texture. The [P18-7 contract](../../docs/plans/rendering.md#p18--sky-and-atmosphere)
-owns the packed visibilities, counted controls and K + F bound.
+The frame carries the full K selection and active handoffs. The first two
+stable slots' directional lights cast cascade shadows
+([the shadow cascades](../../docs/rendering/sdf/handbook/frame-rendering.md#the-shadow-cascades));
+directionals outside them shade unshadowed. During a handoff, the outgoing
+light's shadow deficit fades out with its weight, and the incoming light lights
+unshadowed until it takes the slot, each retaining its radiance. A handoff
+allocates nothing.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick
@@ -2322,13 +2318,9 @@ recovered]`.
 
 ## Engine boundaries worth knowing
 
-- `SdfProgramBuilder.MaxInstances = 65536`: per-tile mask width scales with
-  DECLARED instances, which is why this project emits active avatars only and
-  probes capacity floors at construction.
-- The exact soft-shadow gather scans the live program's instance range, up to
-  the 65536-instance ceiling. Empty stamp capacity emits no live instances.
-  Camera-tile masking is a separate approximation selected by the quality
-  policy or `world.shadow-mask camera-tile`.
+- `SdfProgramBuilder.MaxInstances = 65536`: the bake's instance mask width
+  scales with DECLARED instances, which is why this project emits active
+  avatars only and probes capacity floors at construction.
 - Every camera a screen, a HUD frame or a probe export shows is a view instance
   the render graph renders at its refresh: do not show a rendered view per
   population entry.

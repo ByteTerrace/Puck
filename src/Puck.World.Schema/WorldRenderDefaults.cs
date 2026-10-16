@@ -73,7 +73,6 @@ public static class WorldApplicationDefaults {
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The scalar render-scale ceiling the preset selects.</param>
 /// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
-/// <param name="ShadowAmortize">Whether secondary shadows reuse valid K history (<c>world.shadow-amortize</c>).</param>
 /// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
 /// (<c>world.render-scale auto</c>).</param>
 /// <param name="RenderScaleFloor">The per-view floor tier the preset selects (Quarter by default).</param>
@@ -90,7 +89,6 @@ public readonly record struct WorldQualityPreset(
     bool AmbientOcclusion,
     float RenderScale,
     bool Temporal = false,
-    bool ShadowAmortize = false,
     bool DynamicResolution = false,
     int ShadowLights = 0,
     int ShadowFadeSlots = 0,
@@ -103,16 +101,14 @@ public readonly record struct WorldQualityPreset(
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
-/// scale, the crowd radius), the graphics-menu defaults a server-pulled world would carry.</summary>
+/// scale), the graphics-menu defaults a server-pulled world would carry.</summary>
 /// <param name="Shadows">The boot soft-shadow tier.</param>
-/// <param name="ShadowCrowdRadius">The boot soft-shadow crowd radius (world units).</param>
 /// <param name="AmbientOcclusion">Whether ambient occlusion boots on.</param>
 /// <param name="RenderScale">The scalar boot render-scale ceiling in [0.125, 1].</param>
 /// <param name="UpscaleSharpness">The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
 /// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
-/// <param name="ShadowAmortize">Whether secondary shadows boot reusing valid K history (<c>world.shadow-amortize</c>).</param>
 /// <param name="DynamicResolution">Whether views boot adapting their grids (<c>world.render-scale auto</c>).
 /// Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while
 /// adaptation is enabled, since a native view reconstructs nothing.</param>
@@ -132,13 +128,12 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
 /// it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is
 /// <see cref="WorldTonemap.None"/> — the stylized shaded color, unchanged.</param>
-/// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
-/// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
-/// ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon
-/// curve at this depth unless the atmosphere absorbs it (<c>render.atmosphere</c>). Optional; absent
-/// resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must
-/// lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition revision
-/// (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
+/// <param name="FarDistance">The far distance in world units: the depth at which every view's geometry ends — the
+/// mesh raster's far plane, the reach of the bake and the indirect volume, and the depth the fog and depth ramps are
+/// measured against. Geometry beyond it is never drawn, so an infinite plane ends on a visible horizon curve at this
+/// depth unless the atmosphere absorbs it (<c>render.atmosphere</c>). Optional; absent resolves to the engine's pinned
+/// 40. Must lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition
+/// revision (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
 /// costs.</param>
 /// <param name="ShadowLights">The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.</param>
 /// <param name="ShadowFadeSlots">The boot number of additional shadow handoff slots, from 0 through 2.</param>
@@ -150,12 +145,10 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
-    float ShadowCrowdRadius = 0f,
     bool AmbientOcclusion = false,
     float RenderScale = 1f,
     float UpscaleSharpness = 0f,
     bool Temporal = false,
-    bool ShadowAmortize = false,
     bool DynamicResolution = false,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
@@ -174,17 +167,15 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
     float SkyFieldScale = 1f
 ) {
-    /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
-    /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
-    /// (2^13 · 2^-23 = 0.00098) still resolves that epsilon, so every sample along the whole ray can still land within
-    /// it. Past this the accept floor is unrepresentable and the cone proofs would rest on rounding.</summary>
+    /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
+    /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view
+    /// still places a surface to within one.</summary>
     public const float MaxFarDistance = 8192f;
-    /// <summary>The smallest <see cref="FarDistance"/> the validator admits: one world unit. The beam's cone march
-    /// starts at 0.02 units and the fine march accepts a hit within a 0.001-unit floor, so a far plane under one unit
-    /// leaves no marchable depth a camera could frame a body in.</summary>
+    /// <summary>The smallest <see cref="FarDistance"/> the validator admits: one world unit, below which no camera could
+    /// frame a body.</summary>
     public const float MinFarDistance = 1f;
 
-    /// <summary>Gets the absent defaults — shadows off, no crowd radius, no ambient occlusion, native scale,
+    /// <summary>Gets the absent defaults — shadows off, no ambient occlusion, native scale,
     /// Medium indirect light, no authored presets and the engine's pinned far distance. A world
     /// authors its boot levers and its preset table in its own <c>render</c> section, or inherits them from its
     /// basis or an import; the shipped worlds share one preset table, <c>Assets/worlds/quality.puck</c>.</summary>

@@ -225,12 +225,6 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: (0L, 0L), actual: (later.Read(kind: WorldBakeSchedule.Baked), later.Read(kind: WorldBakeSchedule.Refused)));
         Assert.Equal(expected: 3L, actual: later.Read(kind: WorldBakeSchedule.Held));
         Assert.Equal(expected: WorldBakeState.Ready, actual: later.StateOf(prototypeId: "block"));
-
-        // Bakes this machine made and kept are never the world's own: reconciled again with every bake now held from the
-        // cache, the world still ships none, so its fields draw by default on this machine as on a clean one.
-        later.Pump(definition: Definition());
-        Assert.True(condition: later.HasReconciled);
-        Assert.False(condition: later.Ships);
     }
     /// <summary>A disposed schedule writes nothing more under its store's directory, so the directory's owner may delete
     /// it: the bake it was running stops at its next field evaluation, and disposal returns once it has. Red leg: a
@@ -262,78 +256,6 @@ public sealed class CreationBakeLawTests {
         ? [.. Directory.EnumerateFileSystemEntries(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Order(comparer: StringComparer.Ordinal)]
         : []);
 
-    /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
-    /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
-    /// the baked mesh and its impostor's card, with its instance camera-hidden so its field still casts shadows and
-    /// occludes. A creation whose
-    /// bake is refused keeps its field, and a later rebuild counts no second switch.</summary>
-    [Fact]
-    public void AReadyBakeDrawsInPlaceOfItsFieldAndTheSwitchIsCounted() {
-        static WorldPlacement Placed(string prototypeId, float x) => new(
-            Id: $"{prototypeId}-placed",
-            Position: new Puck.Assets.Documents.DocumentVector3(value: new System.Numerics.Vector3(x: x, y: 0f, z: 0f)),
-            PrototypeId: prototypeId,
-            Scale: 1f,
-            YawDegrees: 0f
-        );
-
-        var definition = (Definition() with { PlacementRowsRaw = [Placed(prototypeId: "block", x: 0f), Placed(prototypeId: "glint", x: 4f)] });
-        using var schedule = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore());
-
-        (List<Puck.SdfVm.SdfMeshDraw> Draws, Puck.SignedDistance.SdfProgram Program) Emit() {
-            var draws = new List<Puck.SdfVm.SdfMeshDraw>();
-            var builder = new Puck.SignedDistance.SdfProgramBuilder();
-
-            WorldPlacementStamper.EmitStatic(
-                bakedFor: prototypeId => (schedule.TryGetDraw(draw: out var baked, prototypeId: prototypeId) ? baked : null),
-                builder: builder,
-                creations: definition.Creations,
-                definition: definition,
-                meshDraws: draws,
-                placements: definition.Placements
-            );
-
-            return (draws, builder.Build());
-        }
-
-        schedule.Pump(definition: definition);
-
-        var pending = Emit();
-
-        Assert.Empty(collection: pending.Draws);
-        Assert.DoesNotContain(collection: pending.Program.Instances, filter: static instance => instance.CameraHidden);
-
-        Drain(definition: definition, schedule: schedule);
-
-        var ready = Emit();
-        // A ready bake draws two representations of the one placement: its mesh, recorded while it is large on screen, and
-        // its impostor's card, recorded once it is small (the view chooses: SdfMeshLodSelector). Both are bounded by the
-        // impostor's sphere, and the switch is the impostor's view edge.
-        Assert.Equal(expected: 2, actual: ready.Draws.Count);
-
-        var draw = ready.Draws[0];
-        var card = ready.Draws[1];
-
-        Assert.False(condition: draw.Lod!.Value.Far);
-        Assert.Null(@object: draw.Impostor);
-        Assert.True(condition: card.Lod!.Value.Far);
-        Assert.NotNull(@object: card.Impostor);
-        Assert.Same(expected: Puck.SdfVm.SdfMeshCard.Mesh, actual: card.Mesh);
-        Assert.Equal(expected: (card.Impostor!.Center, card.Impostor.Radius, ((float)card.Impostor.ViewTexels)), actual: (draw.Lod!.Value.Center, draw.Lod!.Value.Radius, draw.Lod!.Value.SwitchPixels));
-        Assert.Equal(expected: draw.Material, actual: card.Material);
-        Assert.Equal(expected: draw.ObjectToWorld, actual: card.ObjectToWorld);
-
-        Assert.True(condition: (draw.Mesh.TriangleCount > 0));
-        // The baked mesh draws its vertex normals and each triangle's palette entry: the block's palette has one.
-        Assert.Equal(expected: draw.Mesh.Positions.Length, actual: draw.Mesh.Normals.Length);
-        Assert.Equal(expected: draw.Mesh.TriangleCount, actual: draw.Mesh.TriangleMaterials.Length);
-        Assert.All(collection: draw.Mesh.TriangleMaterials.ToArray(), action: static material => Assert.Equal(actual: material, expected: 0u));
-        Assert.Contains(collection: ready.Program.Instances, filter: static instance => instance.CameraHidden);
-        Assert.Contains(collection: ready.Program.Instances, filter: static instance => !instance.CameraHidden);
-        Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
-        _ = Emit();
-        Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
-    }
     [Fact]
     public void EditingOnePrototypeRebakesOnlyThatPrototype() {
         var definition = Definition();
@@ -376,121 +298,19 @@ public sealed class CreationBakeLawTests {
 
         schedule.Pump(definition: boot.Admission.Definition);
         Assert.False(condition: schedule.IsBusy);
-        Assert.True(condition: schedule.Ships);
         Assert.Equal(expected: (3L, 0L, 0L, 0L), actual: Counts(schedule: schedule));
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "pip"));
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
     }
-    /// <summary>A bake held under a key that this baker cannot read, such as one a build before the impostor carried its
-    /// material plane kept (a plane in the wrong place, or bytes cut short), never silently suppresses cards: the
-    /// prototype draws through its field, the refusal is counted under <c>sdf.bakes.undecodable</c> once and named on the
-    /// error stream, and no exception reaches the frame thread. The bake's key carries the baker's version, which is how
-    /// such bytes stop matching once the baker moves.</summary>
-    [Fact]
-    public void AHeldBakeThisBakerCannotDecodeDrawsTheFieldAndIsCountedByName() {
-        var definition = Definition();
-        var request = WorldBakeStore.RequestsOf(definition: definition, quality: WorldBakeChunk.Quality).Single(predicate: static request => (request.PrototypeId == "block"));
-        var fresh = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _);
-
-        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: fresh, refusal: out _));
-
-        // A bake as an older build wrote it: the impostor's slot after the depth holds the emission texture, not the material
-        // plane this baker expects there.
-        byte[][] held = [
-            CreationBakeCodec.Encode(bake: (bake! with { Impostor = (bake.Impostor with { Material = bake.Impostor.Emission }) })),
-            fresh[..^9],
-        ];
-
-        foreach (var bytes in held) {
-            var store = new WorldBakeStore();
-
-            Assert.True(condition: store.Keep(key: request.Key.Pin, outcome: bytes));
-
-            using var schedule = new WorldBakeSchedule(store: store);
-
-            schedule.Pump(definition: definition);
-
-            var asked = schedule.TryGetDraw(draw: out var draw, prototypeId: "block");
-
-            Assert.False(condition: asked);
-            Assert.Null(@object: draw);
-            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
-            // Asked again, it is the same refusal and is counted once.
-            Assert.False(condition: schedule.TryGetDraw(draw: out _, prototypeId: "block"));
-            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
-            Assert.Equal(expected: 0L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
-        }
-
-        // The red leg: a held bake this baker wrote draws, with its impostor.
-        var healthy = new WorldBakeStore();
-
-        Assert.True(condition: healthy.Keep(key: request.Key.Pin, outcome: fresh));
-
-        using var good = new WorldBakeSchedule(store: healthy);
-
-        good.Pump(definition: definition);
-        Assert.True(condition: good.TryGetDraw(draw: out var shown, prototypeId: "block"));
-        Assert.NotNull(@object: shown!.Impostor);
-        Assert.Equal(expected: 0L, actual: good.Read(kind: WorldBakeSchedule.Undecodable));
-    }
     [Fact]
     public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {
         using var schedule = new WorldBakeSchedule(store: new WorldBakeStore());
-        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderPath = Puck.SdfVm.SdfRenderPath.Interpreter };
 
-        foreach (var lever in new bool?[] { null, true, false }) {
-            settings.Bakes = lever;
-            Assert.Equal(expected: lever, actual: settings.Bakes);
-            Assert.False(condition: schedule.IsReadyForDrawing(bakes: settings.Bakes));
-        }
-
+        Assert.False(condition: schedule.HasReconciled);
+        Assert.False(condition: schedule.IsSettled);
         schedule.Pump(definition: new WorldDefinition());
         Assert.True(condition: schedule.HasReconciled);
         Assert.True(condition: schedule.IsSettled);
-        Assert.False(condition: schedule.Ships);
-
-        foreach (var lever in new bool?[] { null, true, false }) {
-            settings.Bakes = lever;
-            Assert.True(condition: schedule.IsReadyForDrawing(bakes: settings.Bakes));
-            Assert.Equal(expected: (lever ?? false), actual: settings.DrawsBakes(schedule: schedule));
-        }
-
-        // The baked-mesh path bakes static placements in its own frame and draws no prototype bake, whatever the lever.
-        settings.RenderPath = Puck.SdfVm.SdfRenderPath.Mesh;
-        foreach (var lever in new bool?[] { null, true, false }) {
-            settings.Bakes = lever;
-            Assert.False(condition: settings.DrawsBakes(schedule: schedule));
-        }
-    }
-    [Fact]
-    public void APackLoadedForOneWorldDoesNotShipASourceWorldWithTheSameKeys() {
-        using var directory = new TemporaryDirectory();
-        var path = WriteWorld(directory: directory);
-
-        _ = CompileWithPack(path: path);
-
-        var store = new WorldBakeStore();
-        var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
-        using var schedule = new WorldBakeSchedule(store: store);
-        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderPath = Puck.SdfVm.SdfRenderPath.Interpreter };
-
-        schedule.Pump(definition: boot.Admission.Definition);
-        Assert.True(condition: settings.DrawsBakes(schedule: schedule));
-
-        var revision = schedule.Revision;
-
-        // A definition naming the same bakes, as a value-only state delivery does, hands out nothing new.
-        schedule.Pump(definition: (boot.Admission.Definition with { DocumentDirectory = directory.PathOf(name: "copy") }));
-        Assert.True(condition: schedule.Ships);
-        Assert.Equal(expected: revision, actual: schedule.Revision);
-        schedule.Pump(definition: Definition());
-        Assert.NotEqual(expected: revision, actual: schedule.Revision);
-        Assert.True(condition: schedule.IsSettled);
-        Assert.False(condition: schedule.Ships);
-        Assert.False(condition: settings.DrawsBakes(schedule: schedule));
-        Assert.Equal(expected: 0L, actual: schedule.Read(kind: WorldBakeSchedule.Scheduled));
-        settings.Bakes = true;
-        Assert.True(condition: settings.DrawsBakes(schedule: schedule));
     }
     [Fact]
     public void AKeyThePackLacksIsBakedInTheBackground() {
@@ -508,7 +328,6 @@ public sealed class CreationBakeLawTests {
         using var schedule = new WorldBakeSchedule(store: store);
 
         schedule.Pump(definition: boot.Admission.Definition);
-        Assert.False(condition: schedule.Ships);
         Assert.Equal(expected: WorldBakeState.Pending, actual: schedule.StateOf(prototypeId: "block"));
         Drain(definition: boot.Admission.Definition, schedule: schedule);
         Assert.Equal(expected: (2L, 1L, 1L, 0L), actual: Counts(schedule: schedule));

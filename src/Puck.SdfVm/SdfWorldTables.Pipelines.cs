@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -20,70 +19,13 @@ public sealed partial class SdfWorldTables {
     internal IGpuPipeline ImpostorPipeline => m_impostorPipeline;
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
     internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
-    // The views pass's pipeline: the variant UploadProgram selected for the live program (full ISA, core ops or folds;
-    // SdfViewsKernelVariant), or, while that one builds, a fuller variant that is built, since a fuller variant renders
-    // every program a stripped one does. All are of one layout, so a pass's set binds against whichever it is, and each
-    // serves every shadow fade capacity.
-    internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: (BuiltViews(variant: m_viewsVariant) ?? ViewsKernelOf(variant: m_viewsVariant)));
-
-    // The views kernel a program waits on: null when the variant it selects (SdfViewsKernelVariants.Select), or a fuller
-    // one, is built, so its views can render it; otherwise the narrowest of those still building or, when every one was
-    // refused (PipelineRefusal), the selected variant's kernel. A null program asks for the live program's variant.
-    internal SdfKernel? ViewsWaiting(SdfProgram? program) {
-        var variant = ((program is null)
-            ? m_viewsVariant
-            : SdfViewsKernelVariants.Select(program: program).Variant);
-
-        if (BuiltViews(variant: variant) is not null) {
-            return null;
-        }
-
-        foreach (var kernel in ViewsKernelsOf(variant: variant)) {
-            if (m_pipelines.RefusalOf(kernel: kernel) is null) {
-                return kernel;
-            }
-        }
-
-        return ViewsKernelOf(variant: variant);
-    }
-    // A frame waits for the shadow pipeline as well as one usable shading variant; one shadow kernel serves every fade
-    // capacity, so a policy change waits for no pipeline.
-    internal SdfKernel? FrameWaiting(SdfProgram? program) {
-        if (!m_pipelines.IsBuilt(kernel: SdfKernel.Shadow)) { return SdfKernel.Shadow; }
-        return ViewsWaiting(program: program);
-    }
+    // A frame waits for the views kernel, the one pipeline the tables are built without (SdfWorldPipelines.PollRequired):
+    // null once it is built, the kernel otherwise, refused (PipelineRefusal) or still building.
+    internal SdfKernel? FrameWaiting() =>
+        (m_pipelines.IsBuilt(kernel: SdfKernel.Views) ? null : SdfKernel.Views);
 
     // Why a frame's kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
     internal Exception? PipelineRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
-
-    // The first built views kernel that renders a program selecting the variant: the variant's own, then each fuller one.
-    // A refused kernel is not built, so a fuller one that is renders the program. Every views slot is polled, even
-    // one this program cannot use: a device loss in its background build must reach recovery while another is refused.
-    private SdfKernel? BuiltViews(SdfViewsKernelVariant variant) {
-        SdfKernel? built = null;
-        var candidates = ViewsKernelsOf(variant: variant);
-
-        foreach (var kernel in ViewsForCore) {
-            var ready = m_pipelines.IsBuilt(kernel: kernel);
-
-            if (ready && (built is null) && (Array.IndexOf(array: candidates, value: kernel) >= 0)) {
-                built = kernel;
-            }
-        }
-
-        return built;
-    }
-    private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => ViewsKernelsOf(variant: variant)[0];
-    // The views kernels that render a program selecting the variant, narrowest first.
-    private static SdfKernel[] ViewsKernelsOf(SdfViewsKernelVariant variant) => variant switch {
-        SdfViewsKernelVariant.CoreOps => ViewsForCore,
-        SdfViewsKernelVariant.Folds => ViewsForFolds,
-        _ => ViewsForFull,
-    };
-
-    private static readonly SdfKernel[] ViewsForCore = [SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.Views];
-    private static readonly SdfKernel[] ViewsForFolds = [SdfKernel.ViewsFolds, SdfKernel.Views];
-    private static readonly SdfKernel[] ViewsForFull = [SdfKernel.Views];
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
@@ -91,10 +33,9 @@ public sealed partial class SdfWorldTables {
     // Resolve joins the same reloadable slot table only when a view needs it.
     internal SdfWorldPipelines Pipelines => m_pipelines;
 
-    // Whether a view's passes built against these tables can follow the other tables: the beam covers the compute
-    // layout every per-view pass shares at every fade capacity, mesh its graphics layout and render pass, and an
-    // acquired resolve requires a ready resolve with compatible groups in the destination. Whether the policy allows
-    // fades decides whether the graph allocates the incoming image, so a change of it requires replanning.
+    // Whether a view's passes built against these tables can follow the other tables: the surface kernel covers the
+    // compute layout every per-view pass shares, mesh its graphics layout and render pass, and an acquired resolve
+    // requires a ready resolve with compatible groups in the destination.
     internal bool SharesLayoutsWith(SdfWorldTables other) =>
         (
             ReferenceEquals(
@@ -102,8 +43,7 @@ public sealed partial class SdfWorldTables {
                 objB: other
             ) ||
             (
-                Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
-                ((m_shadowFadeCapacity > 0) == (other.m_shadowFadeCapacity > 0)) &&
+                Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
                 m_impostorPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_impostorPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
@@ -169,7 +109,7 @@ public sealed partial class SdfWorldTables {
         internal static readonly GpuPipelineLayoutDescription Environment = SdfWorldInterfaces.EnvironmentParameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
-        // Resolve joins on demand through BuildResolve; BuildOrder filters the rest by reachable fade capacity.
+        // Resolve joins on demand through BuildResolve; every other kernel is leased up front.
         internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not SdfKernel.Resolve))];
 
         private static PipelineSpec Spec(SdfKernel kernel) =>

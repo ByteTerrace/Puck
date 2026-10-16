@@ -1,14 +1,15 @@
-// The SDF field probe: evaluates the shipped interpreter (field/sdf-vm.hlsli) over the program the host packed into
-// sdfWords, at each case's point, and writes what map() returns into one texel of the results. SdfFieldDeviceLawTests
-// packs each program with SdfProgram, binds it at the world interface's sdfWords, and dispatches the probe once per
-// program, pushing the program's first case and its case count. The probe's own two resources sit in the Pass group
-// at bindings the world interface leaves free; the pushed index is Direct3D 12's root constant at b0, space 4.
+// The SDF field probe: evaluates the shipped interpreter (field/sdf-vm.hlsli, the mapCore the bake samples through) over
+// the program the host packed into sdfWords, at each case's point, and writes what mapCore returns into one texel of the
+// results. SdfFieldDeviceLawTests packs each program with SdfProgram, binds it at the world interface's sdfWords, and
+// dispatches the probe once per program, pushing the program's first case and its case count. The probe's own two
+// resources sit in the Pass group at bindings the world interface leaves free; the pushed index is Direct3D 12's root
+// constant at b0, space 4.
 
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
 
 // Each case: the point, and the index of the results texel it writes (as bits).
 [[vk::binding(60, 3)]] StructuredBuffer<float4> fieldCases : register(t60, space3);
-// Each result: the distance map() returns, the material's bits, and the program's step scale; the results image is
+// Each result: the distance mapCore returns, the material's bits, and the program's step scale; the results image is
 // FieldResultsWidth texels wide.
 [[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> fieldResults : register(u61, space3);
 
@@ -34,7 +35,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     sdfProgramLayout = sdfLoadProgramLayout();
 
-    SdfHit hit = map(probe.xyz);
+    SdfHit hit = mapCore(probe.xyz, SDF_INSTANCE_MASK_ALL, true);
 
     fieldResults[uint2((slot % FieldResultsWidth), (slot / FieldResultsWidth))] = float4(hit.distance, asfloat(hit.material), sdfProgramLayout.stepScale, 0.0);
 }

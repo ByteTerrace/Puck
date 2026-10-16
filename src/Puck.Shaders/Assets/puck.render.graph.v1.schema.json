@@ -152,13 +152,11 @@
                       "Instances",
                       "ProgramWords",
                       "Viewports",
-                      "Tiles",
                       "DynamicTransforms",
                       "InstanceMaskWords",
                       "InstanceGridWords",
                       "BrickPoolVoxels",
-                      "RenderExtent",
-                      "SegmentTapeWords"
+                      "RenderExtent"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }

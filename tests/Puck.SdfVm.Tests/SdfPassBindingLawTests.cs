@@ -7,19 +7,19 @@ namespace Puck.SdfVm.Tests;
 /// The counted cost of an <c>sdf.world</c> pass's constant data, held to the generated interface: every pass block is
 /// the world interface's pass block, which holds the view and frame values and no light or sky table, and each kernel
 /// the build deploys binds the lights table and the sky's block and tables only when its pass reads them (the lights
-/// the shadow, views and indirect shading passes, the sky block and layers their evaluating passes, the coefficients
+/// views, the sky block and layers their evaluating passes, the coefficients
 /// views alone, and the environment map its radiance readers), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
     // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
-    // the curvature shading, temporal history, indirect controls, the light-camera flag, and the mesh path's render path,
-    // twelve cascade rows, shadow parameters, 48 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 1648;
+    // the curvature shading, temporal history, indirect controls, the light-camera flag, twelve cascade rows, shadow
+    // parameters, 48 bake-lattice rows and the irradiance volume, 16-aligned.
+    private const uint PassBlockBytes = 1584;
 
-    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.ViewsMesh];
+    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, ViewsKernels),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),

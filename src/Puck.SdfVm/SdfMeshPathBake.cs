@@ -35,10 +35,31 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 /// <param name="Tickets">The group each lattice answers.</param>
 public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Tickets) {
     /// <summary>Gets the samples the dispatch writes.</summary>
-    public int Samples => Lattices.Sum(selector: static lattice => lattice.Samples);
+    public int Samples {
+        get {
+            var samples = 0;
+
+            foreach (var lattice in Lattices) {
+                samples += lattice.Samples;
+            }
+
+            return samples;
+        }
+    }
     /// <summary>Gets or sets whether a bake pass recorded the batch; a batch no pass recorded returns to its groups when
     /// the next frame takes one.</summary>
     public bool Recorded { get; set; }
+    private string? m_instance;
+
+    /// <summary>Claims the batch for a view instance's mask and bake passes: the first instance to ask claims it, so a
+    /// frame of several views of one residency dispatches its batch once.</summary>
+    /// <param name="instance">The asking view instance.</param>
+    /// <returns><see langword="true"/> when the batch is the instance's to dispatch.</returns>
+    public bool Claim(string instance) =>
+        string.Equals(a: (Interlocked.CompareExchange(comparand: null, location1: ref m_instance, value: instance) ?? instance), b: instance, comparisonType: StringComparison.Ordinal);
+    /// <summary>Gets or sets whether the batch's samples were answered, which answers it once however many readbacks
+    /// arrive.</summary>
+    public bool Answered { get; set; }
     /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
     /// dispatch.</summary>
     /// <param name="table">The table, at least <see cref="Samples"/> entries.</param>
@@ -60,7 +81,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 }
 /// <summary>
 /// The baked-mesh path's bake of one residency's program: a mesh per bake group, sampled from the program on the GPU and
-/// contoured on the CPU, drawn in the frame's mesh draws while a view of the residency takes the mesh path.
+/// contoured on the CPU, drawn in the frame's mesh draws by every view of the residency.
 /// <para>A group is the instances one rigid frame moves: every active instance riding one dynamic-transform slot, or one
 /// static instance. Each group's field is sampled through the frame's own interpreter (<c>sdf-mesh-bake.comp.hlsl</c>)
 /// with only its instances in the walk's mask, lattices round robin across the groups within a frame's share of field
@@ -153,6 +174,9 @@ public sealed class SdfMeshPathBake {
                 }
             }
 
+            if (!moved && (finished == m_drawnMeshes) && ReferenceEquals(objA: frame, objB: m_dressedSource) && (m_dressed is { } dressed)) {
+                return dressed;
+            }
             if (moved || (finished != m_drawnMeshes)) {
                 m_draws.Clear();
                 m_draws.AddRange(collection: frame.MeshDraws);
@@ -170,9 +194,20 @@ public sealed class SdfMeshPathBake {
                 m_revision++;
             }
 
-            return frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision };
+            m_dressedSource = frame;
+            m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision });
+
+            return m_dressed;
         }
     }
+
+    // The frame Dress last dressed and what it returned, which a still frame source capturing the same frame takes again
+    // without a new frame.
+    private SdfFrame? m_dressedSource;
+    private SdfFrame? m_dressed;
+    // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
+    private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
+    private readonly List<object> m_takenTickets = [];
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
     /// owes one and has none in flight, round robin across the groups, up to a batch, and every later call of the same
     /// frame answers the same, so the frame's mask and bake passes agree.</summary>
@@ -184,7 +219,7 @@ public sealed class SdfMeshPathBake {
         lock (m_gate) {
             if (m_frameTaken != frame) {
                 m_frameTaken = frame;
-                // A batch no bake pass recorded, as while the view's graph rebuilds onto the mesh path, answers nothing.
+                // A batch no bake pass recorded, as while the view's graph rebuilds, answers nothing.
                 if (m_frameBatch is { Recorded: false } unrecorded) {
                     foreach (var ticket in unrecorded.Tickets) {
                         if (ticket is Group stale) { stale.InFlight = false; }
@@ -192,8 +227,11 @@ public sealed class SdfMeshPathBake {
                 }
                 m_frameBatch = null;
 
-                var lattices = new List<SdfMeshBakeRequest>();
-                var tickets = new List<object>();
+                var lattices = m_takenLattices;
+                var tickets = m_takenTickets;
+
+                lattices.Clear();
+                tickets.Clear();
                 var samples = 0;
                 var taps = 0;
                 var start = m_cursor;
@@ -260,6 +298,11 @@ public sealed class SdfMeshPathBake {
     /// lattices back to back.</param>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
         ArgumentNullException.ThrowIfNull(argument: batch);
+
+        lock (m_gate) {
+            if (batch.Answered) { return; }
+            batch.Answered = true;
+        }
 
         var offset = 0;
 
@@ -452,7 +495,11 @@ public sealed class SdfMeshPathBake {
             m_clock.Restart();
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
         }
-        m_drawnMeshes = -1;
+        // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
+        // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
+        if ((rebaked > 0) || (previous.Count != m_groups.Count)) {
+            m_drawnMeshes = -1;
+        }
     }
     // A key of the shapes the program's segments outside every instance hold, or null when none holds a shape.
     private static int? WorldInstructions(SdfProgram program) {

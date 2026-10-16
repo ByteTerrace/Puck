@@ -62,9 +62,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 /// <param name="Producer">The instance whose completed output supplies the image, or null while the layer draws its fallback.</param>
 public readonly record struct SdfSkyViewBinding(string Layer, SdfSkyView Parameters, string? Producer);
 /// <summary>The quality levers one view renders with: each trades a shading term's cost against its fidelity. The
-/// default is full quality, every term on at full reach with its exact path, and no temporal reconstruction. The pass
-/// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature
-/// folds it, so a change renders the view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
+/// default is full quality, every term on, and no temporal reconstruction. The pass block carries each shading lever
+/// under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature folds it, so a change renders the
+/// view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
 public readonly record struct SdfViewQuality {
     /// <summary>The sky field's grid fraction: one or one half; zero selects the full default.
     /// It changes neither the scene render grid nor retained field allocation capacity.</summary>
@@ -79,76 +79,29 @@ public readonly record struct SdfViewQuality {
     /// <summary>Publishes only geometry, with premultiplied color and its coverage in alpha, for a far sky layer.
     /// The composite omits background sky and air on uncovered rays. Restrictions retain the consumer's output form.</summary>
     public bool GeometryOnly { get; init; }
-    /// <summary>Gets whether the view skips ambient occlusion: occlusion reads 1, so creases read brighter, and the
-    /// ambient pass does not run. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
+    /// <summary>Gets whether the view skips ambient occlusion: the surface pass writes an occlusion of one, so creases
+    /// read brighter. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
     public bool DisableAmbientOcclusion { get; init; }
-    /// <summary>Gets whether the view pushes the beam-published per-tile far bound out of reach, so the fine march runs
-    /// to <see cref="SdfFrame.FarDistance"/>. With the bound active a tile whose cone provably cannot produce a
-    /// footprint-accepted hit exits early, output-identical to a full march. The pass block carries it as
-    /// <c>disableFarBound</c>.</summary>
-    public bool DisableFarBound { get; init; }
-    /// <summary>Gets whether the view skips the soft-shadow sun march: the sun goes unshadowed and the shadow pass does not
-    /// run. The pass block carries it as <c>disableSoftShadows</c>.</summary>
+    /// <summary>Gets whether the view skips shadows: the shadow cascades do not render and every light goes unshadowed.
+    /// The pass block carries it as <c>disableSoftShadows</c>.</summary>
     public bool DisableSoftShadows { get; init; }
-    /// <summary>Gets the scale on the soft-shadow reach, shared by the <c>sdfShadowGather</c> cull cone and the march
-    /// ceiling (one length, or the cull set would be unsound for the ray). 0 means the full 1.0 reach. The pass block
-    /// carries it as <c>shadowDistanceScale</c>.</summary>
-    public float ShadowDistanceScale { get; init; }
-    /// <summary>Gets whether soft-shadow rays use the camera-tile instance mask instead of the per-pixel shadow-grid
-    /// gather. It can omit an occluder outside the camera tile whose shadow reaches into it. The pass block carries it
-    /// as <c>cameraTileShadowMask</c>.</summary>
-    public bool UseCameraTileShadowMask { get; init; }
-    /// <summary>Gets whether the view uses the one-sample contact ambient occlusion instead of the three-rung ladder.
-    /// The pass block carries it as <c>fastAmbientOcclusion</c>.</summary>
-    public bool UseFastAmbientOcclusion { get; init; }
-    /// <summary>Gets whether the view uses the bounded-cost soft-shadow marcher: fewer samples, wider open-space advances
-    /// and a sub-visible darkness early-out, instead of the exact 48-step path. The pass block carries it as
-    /// <c>fastSoftShadowMarch</c>.</summary>
-    public bool UseFastSoftShadowMarch { get; init; }
     /// <summary>Gets whether the view asks for temporal reconstruction: it runs the temporal fragment
     /// (<c>SdfWorldPackage.TemporalFragment</c>), jitters its samples and resolves them over its history into its
     /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
     /// barriers. The default asks for none.</summary>
     public bool Temporal { get; init; }
-    /// <summary>Gets whether secondary stable shadow slots reuse valid history between quarter-grid marches.
-    /// Requires temporal reconstruction; slot zero and handoffs always march.</summary>
-    public bool ShadowAmortize { get; init; }
-    /// <summary>Gets how the view turns its program into pixels: the interpreter, which marches the program per pixel,
-    /// or the baked-mesh path, which rasterizes the meshes its residency baked from the program
-    /// (<see cref="SdfMeshPathBake"/>). The path chooses the view's fragment, as <see cref="Temporal"/> does.</summary>
-    public SdfRenderPath RenderPath { get; init; }
 
-    /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
-    /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
-    /// when both ask. Neither can lift a restriction the other set.</summary>
+    /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, and the view
+    /// reconstructs over time only when both ask. Neither can lift a restriction the other set.</summary>
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
         SkyFieldScale = MathF.Min(x: SkyFieldFraction, y: other.SkyFieldFraction),
         GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
-        DisableFarBound = (DisableFarBound || other.DisableFarBound),
         DisableSoftShadows = (DisableSoftShadows || other.DisableSoftShadows),
-        ShadowDistanceScale = MathF.Min(
-            x: ((ShadowDistanceScale > 0f) ? ShadowDistanceScale : 1f),
-            y: ((other.ShadowDistanceScale > 0f) ? other.ShadowDistanceScale : 1f)
-        ),
-        UseCameraTileShadowMask = (UseCameraTileShadowMask || other.UseCameraTileShadowMask),
-        UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
-        UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
         Temporal = (Temporal && other.Temporal),
-        ShadowAmortize = (ShadowAmortize && other.ShadowAmortize),
-        RenderPath = RenderPath,
     };
-}
-/// <summary>How a view turns its residency's program into pixels.</summary>
-public enum SdfRenderPath {
-    /// <summary>The interpreter marches the program per pixel: primary, surface, ambient occlusion and soft shadows each
-    /// walk the field.</summary>
-    Interpreter = 0,
-    /// <summary>The baked-mesh path rasterizes the meshes the residency baked from the program, shadows them with
-    /// rasterized cascades and occludes them in screen space; no pass of the frame walks the field.</summary>
-    Mesh = 1,
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
 /// <param name="Program">The SDF program to render.</param>
@@ -203,40 +156,22 @@ public sealed record SdfFrame(
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>
     public SdfSky Sky { get; init; } = new();
-    /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
-    /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing
-    /// proven" tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data
-    /// (<c>render.farDistance</c>); the default is the exact value the shaders pinned as <c>MaxDistance</c> before it
-    /// became per-frame data, so a frame that never sets it renders bit-identically. Must be finite and positive — the
-    /// render frame throws otherwise (a document validator already refuses it by name upstream). Every pass block
+    /// <summary>The far distance, in world units: the depth past which a view draws nothing, which bounds its surfaces,
+    /// its far shadow cascade and the depth debug ramp. Authored as world data (<c>render.farDistance</c>). Must be
+    /// finite and positive — the render frame throws otherwise (a document validator already refuses it by name
+    /// upstream). Every pass block
     /// carries it as <c>farDistance</c> (<see cref="SdfFrameBlock"/>), which the cadence signature folds, so a change
     /// re-renders.</summary>
     public float FarDistance { get; init; } = DefaultFarDistance;
 
-    /// <summary>The slice debug view's plane selector: 0 (the default) = camera-locked (the plane through the world
-    /// origin with normal = camera forward), 1/2/3 = a world-axis-aligned plane (X/Y/Z normal) at
-    /// <see cref="DebugSliceOffset"/> along that axis. The pass block carries it as <c>debugSliceAxis</c>. Read only by
-    /// debug view mode 7 (slice).</summary>
-    public float DebugSliceAxis { get; init; }
-    /// <summary>The axis-aligned slice plane's signed offset along the <see cref="DebugSliceAxis"/> axis (world
-    /// units). Ignored while <see cref="DebugSliceAxis"/> is 0 (camera-locked).</summary>
-    public float DebugSliceOffset { get; init; }
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. The pass block carries it as <c>disableScreenLights</c>
     /// (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }
-    /// <summary>Disables the soft-shadow grid cull (default <see langword="false"/> = the cull is on). With the cull on
-    /// the world lit path gathers each lit pixel's shadow-ray grid neighborhood and marches only those instances —
-    /// bit-identical to the flat all-instances shadow but far cheaper on spread scenes. Setting this
-    /// <see langword="true"/> forces the flat all-instances march: the ground-truth reference for the cull, and the A/B
-    /// lever's off state (the <c>sdf.shadowcull</c> verb) — cull-equals-flat parity is checked by flipping the verb.
-    /// The pass block carries it as <c>disableShadowCull</c> (<see cref="SdfFrameBlock"/>). An unset frame uploads 0
-    /// and the cull stays on.</summary>
-    public bool DisableShadowCull { get; init; }
     /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
-    /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the
-    /// mask/beam/cull-args/views compute passes and re-composites from the retained views output — pixel-identical to a
+    /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
+    /// passes and re-composites from the retained views output — pixel-identical to a
     /// full re-render of the same inputs, at a fraction of the GPU cost. Built on change signatures (the packed
     /// per-frame byte spans the skipped passes consume, plus a program/decal revision), never wall-clock heuristics, so
     /// a camera ease — any input change at all — re-renders. The engine additionally forces a render whenever a live
@@ -245,7 +180,7 @@ public sealed record SdfFrame(
     /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
     /// unaffected.</summary>
     public bool EnableCadenceGate { get; init; }
-    /// <summary>The indirect-light tier the frame asks for, which sizes the mesh path's irradiance volume
+    /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
     /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
 
@@ -260,29 +195,12 @@ public sealed record SdfFrame(
     /// <summary>Gets receiver-only application controls, independent of the traced lighting.</summary>
     public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
 
-    /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
-    /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
-    /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow
-    /// re-march on dense-carve scenes to O(few). Default <see langword="false"/> = off (the full occluder set,
-    /// byte-identical): shadows still evaluate every carve. Conservative when on — a skipped carve can only make the
-    /// field more solid, so shadows go darker, never light-leak. The <c>sdf.shadow-proxy</c> bench toggle. The pass
-    /// block carries it as <c>enableShadowProxy</c> (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and the
-    /// proxy stays off.</summary>
-    public bool EnableShadowProxy { get; init; }
     /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
     /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host (the sky
     /// block, <see cref="SdfSkyBlock"/>, and the volume table), so no pass reads a raw tick. It comes from the
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
-    /// <summary>Selects the four-tap finite-difference surface normal instead of the default analytic forward-mode
-    /// gradient dual. The default <see langword="false"/> uses analytic normals (one dual field evaluation at the hit —
-    /// exact through the transform chain, immune to finite-difference cancellation). The pass block carries it as
-    /// <c>finiteDifferenceNormals</c> (<see cref="SdfFrameBlock"/>). A frame that never sets it uploads 0 and shades
-    /// with analytic normals.</summary>
-    public bool UseFiniteDifferenceNormals { get; init; }
-
-    /// <summary>The pinned default far distance — the shaders' retired <c>MaxDistance</c> constant (40 world
-    /// units). An unauthored <c>render.farDistance</c> resolves to exactly this, so such a world renders unchanged.</summary>
+    /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;
 }

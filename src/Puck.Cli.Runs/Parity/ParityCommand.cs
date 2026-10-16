@@ -37,7 +37,7 @@ public static class ParityCommand {
         public string ShippedName => WorldDocumentName.DocumentFile(name: Stem);
     }
 
-    private static int Run(string? source, bool bakes, bool debugLayers) {
+    private static int Run(string? source, bool debugLayers) {
         if (source is null) {
             return CliExit.Refuse(verb: "parity", what: "--world", why: "is required: name the parity world's .puck source. No live world is a parity world while the authored parity world is quarantined under experimental/tests/Puck.Parity.");
         }
@@ -62,7 +62,6 @@ public static class ParityCommand {
         Console.WriteLine(value: $"parity: artifacts {run.Path}");
 
         return run.Conclude(exitCode: Run(
-            bakes: bakes,
             debugLayers: debugLayers,
             parityWorld: world,
             repositoryRoot: repositoryRoot,
@@ -70,7 +69,7 @@ public static class ParityCommand {
         ));
     }
     // One parity run inside its run directory, which the caller concludes with the exit code this returns.
-    private static int Run(bool bakes, bool debugLayers, ParityWorld parityWorld, string repositoryRoot, string runDirectory) {
+    private static int Run(bool debugLayers, ParityWorld parityWorld, string repositoryRoot, string runDirectory) {
         var suiteClock = Stopwatch.StartNew();
 
         if (!WorldOffscreenLeg.TryResolveWorld(
@@ -108,7 +107,6 @@ public static class ParityCommand {
             var leg = RunBackend(
                 artifact: world.Path,
                 backend: backend,
-                bakes: bakes,
                 debugLayers: debugLayers,
                 sdfDocumentName: parityWorld.SdfDocumentName,
                 shippedWorld: shippedWorld,
@@ -320,10 +318,9 @@ public static class ParityCommand {
 
         return true;
     }
-    // Refuses a leg that resolved any bake on the device or drew none: with the pack every bake is held when the world
-    // loads, so the schedule resolves nothing (sdf.bakes.scheduled 0), and the bakes on, the parity world's creations
-    // draw them (sdf.bakes.drawn above 0).
-    private static string? BakeRefusal(string stdout, bool bakes) {
+    // Refuses a leg that resolved any bake on the device: with the pack every bake is held when the world loads, so the
+    // schedule resolves nothing (sdf.bakes.scheduled 0).
+    private static string? BakeRefusal(string stdout) {
         long? Count(string kind) {
             foreach (var line in stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n')) {
                 var fields = line.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
@@ -337,21 +334,17 @@ public static class ParityCommand {
         }
 
         var scheduled = Count(kind: "sdf.bakes.scheduled");
-        var drawn = Count(kind: "sdf.bakes.drawn");
 
-        if ((scheduled is null) || (drawn is null)) {
+        if (scheduled is null) {
             return "the leg printed no sdf.bakes counts";
         }
         if (scheduled != 0) {
             return $"the leg resolved {scheduled} bake(s) on the device (sdf.bakes.scheduled), so a capture could depend on a local bake";
         }
-        if (bakes && (drawn == 0)) {
-            return "the leg drew no bake (sdf.bakes.drawn 0), so the pack's bakes never reached a capture";
-        }
 
         return null;
     }
-    private static int RunBackend(string artifact, string backend, bool bakes, bool debugLayers, string sdfDocumentName, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
+    private static int RunBackend(string artifact, string backend, bool debugLayers, string sdfDocumentName, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
         validation = null;
 
         var captureDirectory = Path.Combine(
@@ -371,12 +364,11 @@ public static class ParityCommand {
         }
 
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
-        // only turns the bakes off when asked (a world carrying its bakes draws them), composes the world's companion SDF
-        // document, turns temporal reconstruction on at the reconstruction tick when the world converges a station, and
+        // composes the world's companion SDF document, turns temporal reconstruction on at the reconstruction tick when the world converges a station, and
         // waits past the last tick its captures rows schedule. A line after a wait releasing at tick R runs before tick
         // R + 1, so the reconstruction tick is exact.
         // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
-        var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
+        var script = $"world.sdf.load \"{Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
             path2: sdfDocumentName
         ).Replace(
@@ -403,7 +395,6 @@ public static class ParityCommand {
 
         return EvaluateBackend(
             backend: backend,
-            bakes: bakes,
             captureDirectory: captureDirectory,
             debugLayers: debugLayers,
             leg: leg,
@@ -413,7 +404,7 @@ public static class ParityCommand {
     }
 
     // Judge stderr even when the process failed, before any refusal leaves the leg.
-    public static int EvaluateBackend(string backend, bool bakes, string captureDirectory, bool debugLayers, int leg, CliProcessResult? process, out DebugLayerVerdict? validation) {
+    public static int EvaluateBackend(string backend, string captureDirectory, bool debugLayers, int leg, CliProcessResult? process, out DebugLayerVerdict? validation) {
         validation = DebugLayerOutput.Verdict(
             backend: backend,
             debugLayers: debugLayers,
@@ -426,7 +417,7 @@ public static class ParityCommand {
             return leg;
         }
 
-        if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
+        if (BakeRefusal(stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
             Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");
 
             return CliExit.Failed;
@@ -467,9 +458,7 @@ public static class ParityCommand {
             The parity world ships its bakes: the run compiles the source's directory with the World artifact's own
             CLI and boots the compiled world, whose BAKE chunk holds every bake from its pack, and a leg that
             resolved a bake on the device (sdf.bakes.scheduled above zero) fails, so no capture depends on a
-            local bake. The static creations draw their bakes, as a world that ships them does by default. With
-            --bakes off every creation draws through its field, and `puck parity compare` of an on run
-            against an off run holds each capture's stateHash, since bakes are presentation only.
+            local bake.
 
             With --debug-layers each leg boots its World under its backend's validation layer, as
             `puck canary --debug-layers` does, and prints one validation verdict: VALIDATION-OK, or
@@ -483,20 +472,15 @@ public static class ParityCommand {
             verdict held, 1 a verdict failed, 2 a leg/build refusal or a malformed manifest or contract.
             """);
 
-        var bakesOption = new Option<string>(name: "--bakes") { DefaultValueFactory = static _ => "on", Description = "Whether the parity world's static creations draw their bakes (on, the default) or their fields (off)." };
-
-        bakesOption.AcceptOnlyFromAmong(values: ["on", "off"]);
         var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot each backend's leg with --debug-layers, the validation layer of that backend, and fail the run when a leg's stderr has a validation message or says the layer never loaded." };
 
         var worldOption = new Option<string?>(name: "--world") { Description = "The parity world's .puck source, with its <stem>.contract.json and <stem>.sdf.json beside it. There is no default; a run without it is refused." };
 
-        command.Options.Add(item: bakesOption);
         command.Options.Add(item: debugLayersOption);
         command.Options.Add(item: worldOption);
         command.Subcommands.Add(item: ParityCompareCommand.Create());
         command.SetAction(action: result => Run(
             source: result.GetValue(option: worldOption),
-            bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal),
             debugLayers: result.GetValue(option: debugLayersOption)
         ));
         return command;

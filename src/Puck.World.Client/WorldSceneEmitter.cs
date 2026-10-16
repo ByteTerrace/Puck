@@ -49,7 +49,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The per-seat perception anchor: the crowd soft-shadow centers resolve each seat's body index through it, so a
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
-    private readonly WorldPerceptionAnchor m_anchor;
 
     // The static placements' palettes, reused across rebuilds (WorldPlacementStamper.EmitStatic).
     private readonly WorldStaticPalettes m_palettes = new();
@@ -71,7 +70,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // headroom. Frozen at construction; the apply-time measure charges max(candidate instances, this).
     private readonly int m_placementReservation;
     private readonly int m_placementShapeReservation;
-    private readonly WorldRenderSettings m_settings;
     private readonly WorldTextCatalog m_text;
 
     // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
@@ -94,10 +92,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
 
-    // The bakes a static rebuild draws in place of their fields (null for a presentation that bakes nothing), and the
-    // lookup the rebuild asks, made once so a rebuild allocates no delegate.
-    private readonly WorldBakeSchedule? m_bakes;
-    private readonly Func<string, WorldBakedDraw?> m_bakedFor;
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
 
@@ -241,7 +235,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 meshDraws: meshDraws,
                 colors: m_bakedColors,
                 palettes: m_palettes,
-                bakedFor: m_bakedFor,
                 picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
@@ -469,21 +462,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return padded;
     }
-    // Whether `position` lies within the crowd radius of any joined local seat (the stand-in soft-shadow gate). With no
-    // joined seats or a zero radius, nothing qualifies.
-    private static bool WithinCrowd(Vector3 position, ReadOnlySpan<Vector3> seats, float radiusSquared) {
-        foreach (var seat in seats) {
-            if (Vector3.DistanceSquared(
-                value1: position,
-                value2: seat
-            ) < radiusSquared) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>Composes a candidate definition's render-relevant sections into <paramref name="builder"/> — World
     /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
     /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
@@ -597,39 +575,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a distance-driven gait phase (an
     /// idle avatar holds its pose; a teleport is clamped so it cannot spin the limbs through dozens of cycles), and the
     /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
-    /// shadow participation or pose epoch moves, or its root follower is still settling; a body that stops drawing
+    /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        // Per-instance soft-shadow participation (the crowd lever): a local seat always casts; a stand-in casts only
-        // within m_settings.ShadowCrowdRadius of some joined seat's PERCEIVED body (the perception anchor's
-        // resolution, which follows a possession swap), bounding the dominant GPU term to the crowd around where the
-        // real players look from. The always-cast half of the gate is keyed on the RAW body index band
-        // (`index < LocalSeatCount`), not the anchor: possession policy is decided — a possessed body is NOT
-        // reclassified in v1, it keeps casting (or not) on its own index band exactly like an unpossessed body would,
-        // while the source seat's own (now-idle) body keeps casting because it is still a local seat's body.
-        // CastsSoftShadow false suppresses the entry from the soft-shadow march only (it still renders and
-        // self-lights). Radius 0 => only the seats cast; a large radius => everyone casts.
-        Span<Vector3> joinedSeats = stackalloc Vector3[WorldBodiesLimits.LocalSeatCount];
-        var joinedSeatCount = 0;
-
-        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
-            var body = m_anchor.PerceivedBody(slot: seat);
-
-            if (TryPresentedPose(
-                address: out _,
-                index: body,
-                orientation: out _,
-                position: out var joinedPosition
-            )) {
-                joinedSeats[joinedSeatCount++] = joinedPosition;
-            }
-        }
-
-        var crowdRadiusSquared = (m_settings.ShadowCrowdRadius * m_settings.ShadowCrowdRadius);
-
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!TryPresentedPose(
                 address: out var address,
@@ -655,14 +606,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 continue;
             }
 
-            var castsSoftShadow = ((index < WorldBodiesLimits.LocalSeatCount) || WithinCrowd(
-                position: position,
-                seats: joinedSeats[..joinedSeatCount],
-                radiusSquared: crowdRadiusSquared
-            ));
-
             if (!m_avatarOwners.Wake(
-                castsSoftShadow: castsSoftShadow,
                 deltaSeconds: deltaSeconds,
                 moved: moved,
                 orientation: orientation,
@@ -758,7 +702,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 : 1f),
                 moved: WorldTransformOwners.PackBody(
                 avatar: index,
-                castsSoftShadow: castsSoftShadow,
                 catalogBase: context.SlotBase,
                 gaitPhase: (m_avatarGaitPhases[index] * m_emittedAvatarGaitAmplitudes[index]),
                 moved: moved,
@@ -796,11 +739,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
     /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
-    /// (<see cref="WorldBakedColors.TryTakeMove"/>), then the bake schedule's revision, then a counter that moves when a
+    /// (<see cref="WorldBakedColors.TryTakeMove"/>), then a counter that moves when a
     /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the continuum's pinned
     /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>).
     /// <para>
-    /// Eight components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -817,66 +760,38 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         destination[(WorldClient.RevisionComponentCount + 1)] = m_bakedColorRevision;
-        // What the static placements draw from their bakes: none while the lever is off, and otherwise the schedule's
-        // revision, which moves whenever a bake lands, so a ready bake switches its placements on the next rebuild.
-        destination[(WorldClient.RevisionComponentCount + 2)] = ((m_settings.DrawsBakes(schedule: m_bakes) && (m_bakes is not null))
-            ? unchecked((int)((m_bakes.Revision * 2L) + 1L))
-            : 0);
 
         if (m_census.TryTakeMove()) {
             m_censusRevision++;
         }
 
-        destination[(WorldClient.RevisionComponentCount + 3)] = m_censusRevision;
-        destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.PresentationRevision;
+        destination[(WorldClient.RevisionComponentCount + 2)] = m_censusRevision;
+        destination[(WorldClient.RevisionComponentCount + 3)] = m_continuum.PresentationRevision;
     }
-
-    // A prototype's baked mesh and impostor when the presentation draws its bakes and this one is ready; the schedule counts
-    // the switch.
-    private WorldBakedDraw? BakedFor(string prototypeId) => ((
-        m_settings.DrawsBakes(schedule: m_bakes) &&
-        (m_bakes is not null) &&
-        m_bakes.TryGetDraw(
-            draw: out var draw,
-            prototypeId: prototypeId
-        ))
-        ? draw
-        : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
     /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
     /// <param name="client">The snapshot-fed entity view every pose, color, look, and active flag is read from.</param>
-    /// <param name="settings">The live render settings (the crowd soft-shadow radius is read while packing).</param>
     /// <param name="animator">The creation-stamp pool (animated placements, attached placements, body-rooted stamps).</param>
     /// <param name="audio">The narrow cue-submission seam the distance-driven footstep cue fires into while packing.</param>
-    /// <param name="anchor">The per-seat perception anchor the crowd soft-shadow centers resolve their body indices
-    /// through.</param>
     /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
     /// their original catalog slot across authority handoffs.</param>
     /// <param name="text">The world-relative font catalog used by creation text runs.</param>
-    /// <param name="bakes">The schedule whose ready bakes the static placements draw while <see cref="WorldRenderSettings.Bakes"/>
-    /// is on, or <see langword="null"/> for a presentation that bakes nothing.</param>
-    /// <exception cref="ArgumentNullException">An argument other than <paramref name="bakes"/> is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text, WorldBakeSchedule? bakes = null) {
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldSceneEmitter(WorldClient client, WorldStampPool animator, IWorldAudioCueSink audio, WorldContinuum continuum, WorldTextCatalog text) {
         ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
-        ArgumentNullException.ThrowIfNull(argument: anchor);
         ArgumentNullException.ThrowIfNull(argument: continuum);
         ArgumentNullException.ThrowIfNull(argument: text);
 
         m_client = client;
         m_bakedColors = new WorldBakedColors(mirror: client.StateMirror);
         m_continuum = continuum;
-        m_anchor = anchor;
-        m_settings = settings;
         m_animator = animator;
         m_meshDraws = new WorldSceneMeshDraws(pool: animator);
         m_text = text;
         m_audio = audio;
-        m_bakes = bakes;
-        m_bakedFor = BakedFor;
 
         var definition = client.Definition;
 
@@ -925,7 +840,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 4);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

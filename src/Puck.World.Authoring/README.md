@@ -559,16 +559,13 @@ open), and a creation whose OTHER shapes force
 a trimmed solid placement's collider is unchanged. Verified by
 `ShapeTrimLawTests`.
 
-## Shape detail (shading-only geometry)
+## Shape detail (visual-only geometry)
 
-`ShapeDocument.Detail` (bool, null = false) marks a shape SHADING-ONLY: the
-SDF VM's march (the beam, the fine march, shadow, AO) skips it entirely—it
-never carves the silhouette—and includes it only in the shading evaluation
-at an already-found hit, where its own material and its perturbation of the
-surface normal paint its footprint. A thin subtraction against a plate reads
-as a seam; a small union carrying its own material reads as a rivet; either
-stays a crisp mark at any distance instead of the dots a march-carved groove
-thinner than the footprint-relative acceptance produces.
+`ShapeDocument.Detail` (bool, null = false) marks a shape VISUAL-ONLY: it
+holds no contact geometry, while the baked frame samples it like any other
+shape, so a thin subtraction against a plate bakes in as a seam and a small
+union carrying its own material as a rivet, painted through the bake's
+point-sampled materials.
 
 Both emission paths (`CreationStampEmitter.EmitShapeChain`,
 `Client.WorldStampPool.EmitShape`) thread `Detail` into

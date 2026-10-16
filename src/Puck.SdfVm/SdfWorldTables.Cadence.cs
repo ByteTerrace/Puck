@@ -24,9 +24,8 @@ namespace Puck.SdfVm;
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped when packed transform contents or the active row count changes, so the table
-//                          is never re-hashed. Also covers the frame instance grid (a pure function of these transforms + the
-//                          program).
-//   - m_meshRevision     : the mesh draws the mesh pass rasterizes and primary bounds its march by.
+//                          is never re-hashed.
+//   - m_meshRevision     : the mesh draws the mesh and cascade passes rasterize.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
@@ -66,8 +65,7 @@ public sealed partial class SdfWorldTables {
     ]);
     private static readonly (int Offset, int Length)[] ShadowValues = Members(members: [
         SdfWorldPackage.ShadowSlots, SdfWorldPackage.ShadowSlotCount, SdfWorldPackage.ShadowFadeCount,
-        SdfWorldPackage.DisableSoftShadows, SdfWorldPackage.DisableShadowCull, SdfWorldPackage.ShadowDistanceScale,
-        SdfWorldPackage.EnableShadowProxy, SdfWorldPackage.CameraTileShadowMask, SdfWorldPackage.FastSoftShadowMarch,
+        SdfWorldPackage.DisableSoftShadows,
     ]);
 
     /// <summary>Returns the package-owned inputs of a pass group, independent of temporal sampling and graph versions.
@@ -110,7 +108,12 @@ public sealed partial class SdfWorldTables {
 
         hash.Add(value: geometry.Value);
         switch (part) {
-            case SdfWorldPackage.Parts.Shadow:
+            // The surface pass writes each pixel's shadow visibility from the cascades, which draw along the shadowed
+            // lights.
+            case SdfWorldPackage.Parts.Surface:
+            case SdfWorldPackage.Parts.ShadowNear:
+            case SdfWorldPackage.Parts.ShadowFar:
+            case SdfWorldPackage.Parts.ShadowSecond:
                 hash.Add(value: shadow.Value);
                 break;
             case SdfWorldPackage.Parts.Views:
@@ -331,7 +334,7 @@ public sealed partial class SdfWorldTables {
     }
 
     // Whether any brick slot is mid-bake: a Baking slot has RecordBrickBakeSlices writing new voxels every upload, so the
-    // sampled field the beam/views marches changes with no packed-span change — the cadence must render through it.
+    // sampled field the bake reads changes with no packed-span change — the cadence must render through it.
     private bool AnyBrickBaking() {
         if (m_brickBakePipeline is null) {
             return false;

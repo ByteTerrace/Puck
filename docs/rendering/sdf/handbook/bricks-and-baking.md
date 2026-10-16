@@ -1,29 +1,26 @@
 # Bricks and baking
 
 Puck caches a distance field only for settled, dense carve clusters where
-spatial culling cannot reduce the work. A brick stores a small 3D sample of the
-carve distance; the `√3` scale keeps trilinear interpolation safe to march. The
+bounds cannot reduce the work. A brick stores a small 3D sample of the carve
+distance; the `√3` scale keeps trilinear interpolation safe to march. The
 settle → bake → swap → invalidate lifecycle keeps that cache current while the
 analytic program remains the source of truth. A prototype bake, the mesh,
-textures and impostor a creation's field is sampled into, is the other kind of
-baking.
+textures and impostor a creation's field is sampled into, is a second kind of
+baking, and the frame's own mesh bake ([the bake](frame-rendering.md#the-bake))
+a third.
 
-## The problem: a cluster no cull can save
+## The problem: a cluster no bound can save
 
-Everywhere else in the engine, the answer to "too many instances" is spatial
-culling—bin instances into a grid, and each tile touches only the few near it
-([SDF frame rendering](frame-rendering.md)). That works beautifully when content is *spread out*. It does
-nothing when content is *stacked*.
+Everywhere else in the engine, the answer to "too many instances" is bounds:
+an instance whose bound a sample lies outside costs that sample nothing. That
+works beautifully when content is *spread out*. It does nothing when content is
+*stacked*.
 
 Picture a wall the player has shot a thousand craters into, all overlapping in one
-spot. Each crater is a subtraction instance. The spatial cull bins them, but they
-all land in the same handful of tiles, so every march sample in that region still
-enumerates all thousand of them. The per-tile mask can't narrow a set where every
-member overlaps the same tile. The ceiling is steep: with 1024 carves densely
-stacked in frame, every fine-march sample in the `views` pass enumerates all
-1024 instances, and the matching shadow re-march does the same again. That
-`views` cost is real geometry cost, and no amount of culling removes it —
-because the work genuinely *is* a thousand overlapping surfaces in those pixels.
+spot. Each crater is a subtraction instance, and every bake sample in that region
+lies inside all thousand bounds, so it evaluates all thousand. That cost is real
+geometry cost, and no bound removes it—because the work genuinely *is* a
+thousand overlapping surfaces there.
 
 The observation that unlocks the fix: once a cluster of carves has *settled*—the
 player stopped shooting, the damage is final—its combined distance field in that
@@ -57,11 +54,9 @@ cracks. The subtraction brick needs neither.
 
 In the ISA a brick is a single shape, `SampledRegion`, evaluated like any other
 primitive and composed through the existing subtraction blend tail. It gets a real
-cull bound (the box's circumscribed sphere), bins into the spatial grid by center
-like any static instance, and is automatically classified shadow-transparent
-because it's a pure subtraction. A thousand carve instances in a cluster's tiles
-collapse to *one* brick instance—which means the beam's per-tile enumeration
-collapses with the same stroke that the fine march does.
+bound (the box's circumscribed sphere) like any static instance. A thousand carve
+instances collapse to *one* brick instance, so a bake sample there evaluates one
+trilinear read instead of a thousand carves.
 
 ## The √3 rule keeps sampled marching safe
 
@@ -146,12 +141,10 @@ analytic field, and the slot re-bakes on the next settle. Other bins' bricks are
 untouched: invalidation is per-region, not global.
 
 The payoff in counted work is the whole reason the tier exists. Once the
-clustered-carve scene bakes, the beam's per-tile enumeration collapses
-(~1000 carve instances → ~3: floor, subject, brick), the primary march trades
-O(1024) per sample for one trilinear read, and shadows and ambient occlusion pay
-one brick fetch instead of a thousand. Every non-clustered scene is untouched:
-where nothing settles, the switch does nothing and the output is bit-identical to
-the analytic path.
+clustered-carve scene bakes, a mesh-bake sample in the cluster trades O(1024)
+carve evaluations for one trilinear read. Every non-clustered scene is
+untouched: where nothing settles, the switch does nothing and the field is
+bit-identical to the analytic path.
 
 ## Bricks are a cache, not the representation
 
@@ -177,7 +170,7 @@ governing rules:
 
 - **Bricks are never used for simulation.** CPU physics queries and the
   field evaluator ([Queries and determinism](queries-and-determinism.md)) never read a brick—they walk the analytic
-  program. The brick exists for the render marches and nothing else.
+  program. The brick exists for the mesh bake's samples and nothing else.
 
 - **You never author *into* a brick.** No voxel editing, no CSG against sampled
   data. Every edit goes to the analytic carve list; the brick is re-derived. And
@@ -348,87 +341,21 @@ sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
 samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
 hardware and WARP and holds it to the CPU decoder.
 
-A presentation draws its bakes by default when the loaded world's `BAKE`
-chunk supplies every bake from its pack (`WorldRenderSettings.DrawsBakes`).
-A source boot draws fields even when a cache or another world's pack holds
-the same keys. `world.bakes off` forces fields; `world.bakes on` permits ready
-local bakes to draw. While bakes draw, an untinted static placement
-whose prototype's bake is ready draws the baked mesh through the mesh pass and
-keeps
-its field as camera-hidden instances that still cast shadows and occlude; a
-creation with text or noise relief keeps drawing through its field. A baked
-mesh carries its five surface textures (`SdfMeshTextures`). The SDF tables pack
-every textured mesh a frame draws into five mesh atlases, one per usage
-(`SdfMeshAtlas`): each mesh takes a rectangle aligned to 16 texels, so its
-stored blocks move into the atlases unchanged at every level, and the mesh
-region writes its vertices' texture coordinates moved onto that rectangle. The
-atlases are World-group members of the `sdf.world` interface, bound with the
-tables in their World set of each ring slot at group 1; a change to the textured meshes a frame
-draws repacks them once the device is idle. At a textured mesh hit
-(`frame/sdf-mesh-textures.hlsli`) the hit passes interpolate the texture
-coordinate, choose the level whose texels match the pixel's footprint, blend
-the two nearest levels, and sample each level bilinearly inside the hit's own
-tile, clamped half a texel in, so no tap reads a neighbouring quad. Surface
-takes the normal (the octahedral pair under the draw's normal matrix) and the
-occlusion; views takes the material (the draw's plus the texel's palette entry,
-unfiltered), the albedo (decoded from sRGB after filtering) and the emission,
-which replaces the material's albedo times its emissive strength.
-`MeshTextureDeviceLawTests` holds the reads to the CPU decoders on Vulkan,
-Direct3D 12 hardware and WARP, and `SdfMeshAtlasLawTests` holds the packing.
-The engine is not ready until the bake schedule has reconciled and, while the
-presentation draws its bakes, settled, so a capture or `world.wait ready` never
-lands between a placement's field and its bake. The mesh region is always
-staged into device-local memory, never a ring in the host-visible device-local
-heap every residency's small tables share. `WorldBakeSchedule.TryGetDraw` hands out a ready prototype's mesh and
-impostor, decoded once, and counts the switch from field to bake once per bake
-(`sdf.bakes.drawn`); a bake landing moves the schedule's revision, so the static
-scene rebuilds on the next frame. A camera-hidden instance
-(`SdfInstanceRange.CameraHidden`, the second-highest bit of its segment-end lane)
-is left out of every camera mask the tile cull writes, so primary never marches
-it, while the shadow and ambient gathers still read it.
+No view draws a prototype bake: every view renders the residency's own baked
+meshes ([the bake](frame-rendering.md#the-bake)). Prototype bakes are compiled
+into a build's bake pack and held, and a presentation resolves the ones its cache
+lacks in the background (`WorldBakeSchedule`), as
+[creation bakes](../../../architecture/worlds.md#creation-bakes) describes.
 
-**The impostor draws as a card, and each view records the mesh or the card, never
-both.** A baked placement emits two draws bounded by the impostor's sphere: its mesh,
-and a card (`SdfMeshCard.Mesh` with `SdfMeshDraw.Impostor`). A view's mesh part
-records the one its sphere's projected diameter selects (`SdfMeshLodSelector`): the
-card once the diameter, twice the world radius over the center's forward depth in
-the view's render pixels, falls under the impostor's view edge (16 at the standard
-tier, so one impostor texel covers at most one pixel), the mesh again once it passes
-that edge by a quarter. The choice is the CPU's, made from each view's own camera
-(two views at two distances choose apart), and the `sdf.mesh.lod` source counts the
-draws recorded as `near` and `far`. The impostor's five textures pack into their own
-atlases (`SdfMeshImpostor`, `SdfMeshAtlas` over impostors), bound in the World set of
-every pass and, for the depth, in the mesh pass's own set. Each view retains its
-choice by draw identity through list revisions and reordering, so motion of another
-mesh does not erase hysteresis. When the impostor atlases cannot be packed, every
-baked placement records its mesh.
-
-The mesh pass draws the cards after its meshes, through a second pipeline. The
-vertex stage places a card on the plane perpendicular to the view that touches the
-sphere's near side, centered on the ray through the sphere's center, as wide as the
-sphere's silhouette can be on that plane. The card's fragment stage
-(`sdf-mesh-impostor.frag.hlsl`) takes the pixel's ray into the prototype's unit-sphere
-coordinates (`frame/sdf-mesh-impostor.hlsli`) and, for each of the three views of
-the grid nearest the direction toward the camera, weighted as a triangle of the grid
-continued across the octahedral edges by reflection,
-marches it through the sphere in eight steps against that view's depth, refining the
-first step behind the surface linearly. The ray's hit is the weighted mean of the
-views that hit, and a pixel is covered when views holding half the weight agree; the
-stage discards the rest, so a card never hides what stands behind its empty corners.
-It writes the same three values a mesh pixel writes and the surface's depth,
-promising it is no nearer than the card (`SV_DepthLessEqual`), which Direct3D 12
-allows when the position is interpolated in screen space at the centroid. The hit
-passes shade a card pixel from the same views: albedo, normal and emission blended by
-view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
-sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
-with each texel's own material: the impostor stores a material plane (R8, the
-program material id, never blended), and the card takes the nearest texel, at the
-pixel's level, of the highest-weighted view whose nearest depth texel is covered, added to
-the draw's material as a mesh's texel entry is. That is the rule the trace discards a pixel
-by too, so coverage and material have one provenance and filtered alpha decides neither.
-The level depends on the draw and the camera alone, the pixel's size at the sphere's
-center. Primary stores that
-material in the visibility record, shared by picking and lighting.
+The engine still draws a textured mesh or an impostor card when a frame's mesh
+draws carry one: the SDF tables pack textured meshes into five mesh atlases
+(`SdfMeshAtlas`) and impostors into their own (`SdfMeshImpostor`), the mesh
+pass draws a card through its impostor pipeline, and the light stage samples
+the atlases (`frame/sdf-mesh-textures.hlsli`,
+`frame/sdf-mesh-impostor-surface.hlsli`). No emitter produces such a draw
+today. `MeshTextureDeviceLawTests` holds the texture reads to the CPU decoders
+on Vulkan, Direct3D 12 hardware and WARP, and `SdfMeshAtlasLawTests` holds the
+packing.
 
 ---
 

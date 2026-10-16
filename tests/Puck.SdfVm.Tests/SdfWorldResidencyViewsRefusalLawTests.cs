@@ -11,21 +11,19 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// Laws for an <see cref="SdfWorldResidency"/> whose views kernel's creation fails while its tables exist, over a
-/// <see cref="FakeGpuDevice"/> whose driver fails the full and core views kernels' creations until the law lets them
-/// build. A failed views kernel is a named refusal, never a throw out of the frame: the residency holds the frame it last
-/// packed, its reason names the refused kernel and its failure, and a program whose own variant was refused renders with
-/// a fuller variant that is built. A refused kernel is never built again by a frame, however many arrive; a kernel reload
-/// or a device loss builds it again, and the residency is then ready on the program it held. The error stream reports
-/// each refusal once, and a device loss in an unselected views build escapes an ordinary refusal after tables exist.
+/// Laws for an <see cref="SdfWorldResidency"/> whose views kernel's creation fails, over a <see cref="FakeGpuDevice"/>
+/// whose driver fails the views kernel's creation until the law lets it build. A failed views kernel is a named refusal,
+/// never a throw out of the frame: the residency is not ready, and its reason and refusal name the kernel and its
+/// failure. A refused kernel is never built again by a frame, however many arrive; a kernel reload or a device loss
+/// builds it again, and the residency is then ready on the program it held. The error stream reports the refusal once,
+/// and a device loss in the views build escapes to the host's recovery.
 /// </summary>
-[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class SdfWorldResidencyViewsRefusalLawTests {
     private const uint Extent = 32;
     private const int Frames = 16;
 
     [Fact]
-    public void AViewsRefusalIsPrintedOnceEvenWhileFramesKeepRenderingTheHeldProgram() {
+    public void AViewsRefusalIsPrintedOnceWhileFramesKeepArriving() {
         var original = Console.Error;
         using var captured = new StringWriter();
 
@@ -34,142 +32,72 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         try {
             using var rig = new Rig();
 
-            rig.ProduceUntilReady();
-            rig.Source.Frame = Rig.Frame(program: Trapezoid()) with { ProgramChanged = true };
-
-            for (var frame = 0; (frame < Frames); frame++) {
-                Assert.True(condition: rig.Residency.Produce(context: in rig.Context));
-                _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-            }
-
+            rig.ProduceFrames();
             Assert.False(condition: rig.Residency.IsReady);
             var lines = captured.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
+            var line = Assert.Single(collection: lines, predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf-world-views]"));
 
-            foreach (var name in new[] { "sdf-world-views", "sdf-world-views-core" }) {
-                var line = Assert.Single(collection: lines, predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"[{name}]"));
-
-                Assert.Contains(actualString: line, expectedSubstring: "retried on a kernel reload or a device loss");
-                Assert.Contains(actualString: line, expectedSubstring: $"injected failure creating {name}");
-            }
+            Assert.Contains(actualString: line, expectedSubstring: "retried on a kernel reload or a device loss");
+            Assert.Contains(actualString: line, expectedSubstring: "injected failure creating sdf-world-views");
         } finally {
             Console.SetError(newError: original);
         }
     }
     [Fact]
-    public void ADeviceLossInAnUnselectedViewsBuildEscapesAnExistingRefusal() {
-        Assert.SkipWhen(
-            condition: (GpuPassPipelineCache.BuildConcurrency < 2),
-            reason: "The tables can finish beside a held creation only with at least two build turns."
-        );
-        using var entered = new ManualResetEventSlim(initialState: false);
-        using var finish = new ManualResetEventSlim(initialState: false);
-        var lost = new DeviceLostException(message: "injected device loss creating sdf-world-views-core");
-        var rig = new Rig(beforeComputePipeline: description => {
-            if (description.Name == "sdf-world-views-core") {
-                entered.Set();
-                finish.Wait();
-                throw lost;
-            }
-        });
-
-        try {
-            var context = rig.Context;
-
-            // The full program has no rendered frame: its kernel is refused while core stays in the driver.
-            rig.Source.Frame = Rig.Frame(program: Trapezoid());
-            TestLiveness.Until(
-                reason: () => rig.Residency.NotReadyReason,
-                step: () => {
-                    _ = rig.Residency.Produce(context: in context);
-
-                    return ((rig.Residency.Tables is not null) &&
-                        (rig.Residency.NotReadyReason?.Contains(comparisonType: StringComparison.Ordinal, value: "was refused") == true));
-                }
-            );
-            Assert.True(condition: entered.Wait(timeout: TestLiveness.Bound, cancellationToken: TestContext.Current.CancellationToken));
-            Assert.False(condition: rig.Residency.IsReady);
-
-            // Core cannot render this program, but its completed device loss must escape the ordinary full refusal.
-            finish.Set();
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-            Assert.Same(expected: lost, actual: Assert.Throws<DeviceLostException>(testCode: () => rig.Residency.Produce(context: in context)));
-        } finally {
-            finish.Set();
-            rig.Dispose();
-        }
-    }
-    [Fact]
-    public void AFailedViewsKernelIsANamedRefusalAndTheResidencyHoldsItsFrame() {
+    public void AFailedViewsKernelIsANamedRefusal() {
         using var rig = new Rig();
 
-        // The sphere selects the core variant, which was refused: the folds variant, built, renders it.
-        rig.ProduceUntilReady();
-        Assert.Same(
-            actual: rig.Residency.Frame,
-            expected: rig.Source.First
-        );
-
-        // A trapezoid selects the full ISA, also refused: the residency holds the sphere's frame and names the refusal.
-        rig.Source.Frame = Rig.Frame(program: Trapezoid(), cameraZ: -8f) with { ProgramChanged = true };
-
-        for (var frame = 0; (frame < Frames); frame++) {
-            Assert.True(condition: rig.Residency.Produce(context: in rig.Context));
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-            Assert.False(condition: rig.Residency.IsReady);
-            Assert.Same(
-                actual: rig.Residency.Frame,
-                expected: rig.Source.First
-            );
-            Assert.Equal(
-                actual: rig.Residency.CopyLiveProgramWords(),
-                expected: rig.Source.First.Program.Words.ToArray()
-            );
-        }
-
-        Assert.Contains(
-            actualString: rig.Residency.NotReadyReason,
-            expectedSubstring: "holds its frame: the views kernel its program selects, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
-        );
-    }
-    [Fact]
-    public void ARefusedViewsKernelIsTheResidencysRefusalAndAReadyOneIsNot() {
-        using var rig = new Rig();
-
-        rig.ProduceUntilReady();
-        Assert.Null(@object: rig.Residency.Refusal);
-
-        // A trapezoid selects the full ISA, also refused: the instance's refusal names the kernel and its failure, the one
-        // channel SdfWorldPasses.RefusalOf reports, so a host steps on rather than waiting on a kernel nothing retries.
-        rig.Source.Frame = Rig.Frame(program: Trapezoid(), cameraZ: -8f) with { ProgramChanged = true };
-
-        for (var frame = 0; (frame < Frames); frame++) {
-            _ = rig.Residency.Produce(context: in rig.Context);
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-        }
-
+        rig.ProduceFrames();
         Assert.False(condition: rig.Residency.IsReady);
         Assert.Contains(
+            actualString: rig.Residency.NotReadyReason,
+            expectedSubstring: "the views kernel, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
+        );
+        Assert.Contains(
             actualString: rig.Residency.Refusal,
-            expectedSubstring: "the views kernel its program selects, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
+            expectedSubstring: "the views kernel, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
         );
     }
     [Fact]
     public void ARefusedViewsKernelIsNeverBuiltAgainByAFrame() {
         using var rig = new Rig();
 
-        rig.ProduceUntilReady();
-        rig.Source.Frame = Rig.Frame(program: Trapezoid()) with { ProgramChanged = true };
-
-        for (var frame = 0; (frame < Frames); frame++) {
-            _ = rig.Residency.Produce(context: in rig.Context);
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-        }
-
+        rig.ProduceFrames();
+        rig.Fails = false;
+        rig.ProduceFrames();
         Assert.False(condition: rig.Residency.IsReady);
-        Assert.Equal(
-            actual: (rig.Attempts(name: "sdf-world-views"), rig.Attempts(name: "sdf-world-views-core")),
-            expected: (1, 1)
-        );
+        Assert.Equal(actual: rig.Attempts(name: "sdf-world-views"), expected: 1);
+    }
+    [Fact]
+    public void ADeviceLossInTheViewsBuildEscapesToRecovery() {
+        var lost = new DeviceLostException(message: "injected device loss creating sdf-world-views");
+        var rig = new Rig(beforeComputePipeline: description => {
+            if (description.Name == "sdf-world-views") {
+                throw lost;
+            }
+        });
+
+        try {
+            var context = rig.Context;
+            DeviceLostException? escaped = null;
+
+            TestLiveness.Until(
+                reason: () => rig.Residency.NotReadyReason,
+                step: () => {
+                    try {
+                        _ = rig.Residency.Produce(context: in context);
+                    } catch (DeviceLostException exception) {
+                        escaped = exception;
+                    }
+
+                    return (escaped is not null);
+                },
+                wait: rig.Residency.WaitPipelineBuilds
+            );
+            Assert.Same(expected: lost, actual: escaped);
+        } finally {
+            rig.Dispose();
+        }
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -179,27 +107,13 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         var root = scratch.RootPath;
 
         using var rig = new Rig();
-        var trapezoid = Rig.Frame(program: Trapezoid(), cameraZ: -8f);
 
-        rig.ProduceUntilReady();
-        rig.Source.Frame = trapezoid with { ProgramChanged = true };
-
-        for (var frame = 0; (frame < Frames); frame++) {
-            _ = rig.Residency.Produce(context: in rig.Context);
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-        }
-
+        rig.ProduceFrames();
         Assert.False(condition: rig.Residency.IsReady);
 
         // The driver now builds every kernel, which no frame retries.
         rig.Fails = false;
-        rig.Source.Frame = trapezoid;
-
-        for (var frame = 0; (frame < Frames); frame++) {
-            _ = rig.Residency.Produce(context: in rig.Context);
-            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-        }
-
+        rig.ProduceFrames();
         Assert.False(condition: rig.Residency.IsReady);
 
         if (deviceLoss) {
@@ -225,11 +139,11 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         Assert.Null(@object: rig.Residency.Refusal);
         Assert.Same(
             actual: rig.Residency.Frame!.Program,
-            expected: trapezoid.Program
+            expected: rig.Source.First.Program
         );
         Assert.Equal(
             actual: rig.Residency.CopyLiveProgramWords(),
-            expected: trapezoid.Program.Words.ToArray()
+            expected: rig.Source.First.Program.Words.ToArray()
         );
         Assert.Equal(
             actual: rig.Attempts(name: "sdf-world-views"),
@@ -239,7 +153,7 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         if (!deviceLoss) {
             Assert.Equal(
                 actual: (rig.Residency.ShaderReloadStatus.State, rig.Residency.ShaderReloadStatus.ChangedPipelines),
-                expected: ("applied", 2)
+                expected: ("applied", 1)
             );
         }
     }
@@ -254,23 +168,8 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
 
         return builder.Build();
     }
-    private static SdfProgram Trapezoid() {
-        var builder = new SdfProgramBuilder();
-
-        builder.Trapezoid(
-            bottomHalfWidth: 1f,
-            halfHeight: 0.5f,
-            lift: SdfLift.Revolve,
-            liftAmount: 0f,
-            material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)),
-            topHalfWidth: 0.5f
-        );
-
-        return builder.Build();
-    }
-
-    // A residency over a fake driver that fails the full and core views kernels' creations while Fails holds, counting
-    // every creation by name.
+    // A residency over a fake driver that fails the views kernel's creation while Fails holds, counting every creation by
+    // name.
     private sealed class Rig : IDisposable {
         private readonly Dictionary<string, int> m_attempts = [];
         private readonly Lock m_gate = new();
@@ -285,7 +184,7 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
 
                     beforeComputePipeline?.Invoke(obj: description);
 
-                    if (m_fails && (description.Name is "sdf-world-views" or "sdf-world-views-core")) {
+                    if (m_fails && (description.Name == "sdf-world-views")) {
                         throw new InvalidOperationException(message: $"injected failure creating {description.Name}");
                     }
                 },
@@ -350,6 +249,13 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
             }
         }
         public void Dispose() => Residency.Dispose();
+        // Produces a run of frames, waiting out the residency's builds between them.
+        public void ProduceFrames() {
+            for (var frame = 0; (frame < Frames); frame++) {
+                _ = Residency.Produce(context: in Context);
+                _ = Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
+            }
+        }
         // Produces frames until the residency is ready, waiting out its builds between them.
         public void ProduceUntilReady() {
             var context = Context;

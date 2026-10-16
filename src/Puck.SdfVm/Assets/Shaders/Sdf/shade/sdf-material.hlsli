@@ -87,9 +87,6 @@ SdfMaterialData sdfMaterialLoad(int material) {
     return data;
 }
 // Thin wrapper for callers that only shade the base color (debug views, palette ramps).
-float3 sdfMaterialAlbedo(int material) {
-    return sdfMaterialLoad(material).albedo;
-}
 // The Trowbridge-Reitz (GGX) normal distribution: alpha2 / (pi * d^2), d = nh^2*(alpha2-1)+1.
 float sdfGgxDistribution(float nDotH, float alpha2) {
     float d = ((nDotH * nDotH) * (alpha2 - 1.0)) + 1.0;

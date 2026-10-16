@@ -1,9 +1,9 @@
 # Lighting and shading
 
-After a march accepts a surface hit, the shading epilogue turns its position,
-material id, and field data into a lit pixel. Puck computes the surface normal
-from the shapes that decide the hit's field value, estimates soft
-shadow penumbrae, and treats diegetic CRT screens as both pictures and lights.
+After the mesh pass rasterizes a surface hit, the shading epilogue turns its
+position, material id and normal into a lit pixel. Puck interpolates the baked
+mesh's normal, estimates soft shadow penumbrae from cascades, and treats
+diegetic CRT screens as both pictures and lights.
 Runtime switches let a user isolate these terms for measurement or restyle the
 frame.
 
@@ -14,167 +14,45 @@ light while removing its indirect source. Rim highlights and attenuation-only
 lights have no diffuse source to scale. The packed light record retains its
 48-byte stride; its last word holds this gain.
 
-## The epilogue and its field-unit discipline
+## The epilogue reads the visibility record
 
-The primary march ([SDF frame rendering](frame-rendering.md)) is a loop that answers one question: *where does this ray
-first touch a surface?* Everything in this chapter runs **after** that loop
-breaks with a hit. The primary pass records a hit position, the material id
-captured at the accepting sample, and the accepted distance. It has **no
-normal, no shadow, no occlusion yet**—those belong to the later passes: the
-surface pass computes the normal and curvature (`sdfResolveSurface` in
-`sdf-surface.hlsli`), the ambient pass computes occlusion (`sdfResolveAmbient`),
-the shadow pass marches each selected light's soft shadow (`sdfShadowStage` in
-`surface/sdf-shadow.hlsli`), and the views pass computes materials and
-lighting from the record, read once as a surface sample (`sdfLightStage` in
-`passes/sdf-light-stage.hlsli`).
+The mesh pass ([SDF frame rendering](frame-rendering.md)) answers one question
+per pixel: *which baked triangle is nearest?* Everything in this chapter runs
+**after** it. The surface pass writes each pixel's visibility record from the
+mesh target: the ray parameter, the identity, the material, the triangle, the
+draw's frame slot, the normal (the mesh's vertex normals interpolated, carried
+to world space by the draw's inverse-transpose normal matrix, or the face
+normal), a screen-space ambient occlusion and the cascade shadows of the stable
+slots. The views pass computes materials and lighting from the record, read
+once as a surface sample (`sdfLightStage` in `passes/sdf-light-stage.hlsli`).
+No shading pass queries the field: the bake is the one GPU walk of the program,
+and its gradients are the mesh's normals
+([gradients and normals](../reference/gradients-and-normals.md)).
 
-Every technique here re-queries the same field function the march used, `map()`
-(and its tile-masked twin `mapMasked()`). So there is one discipline that
-threads through the whole chapter, and it's worth stating once as a rule:
+## Soft shadows: cascades and a penumbra filter
 
-> **The field is pre-scaled; de-scale it before any world-space comparison.**
-> `map()` returns a distance already multiplied by the program's baked
-> `stepScale = 1/L` (the Lipschitz clamp that keeps the march safe—see
-> [SDF program model](program-model.md)). Any shading term that compares a returned distance against a
-> real-world length—a shadow ray's clearance, an AO rung's height, a cone
-> radius—must divide `stepScale` back out first. Skip it and the term
-> silently tracks each program's Lipschitz bake instead of its geometry.
+The first two stable shadow slots' directional lights cast shadows from the
+mesh draws: `SdfMeshShadowCascades` fits two orthographic cascades along the
+key light and one along the second slot's light, and the cascade passes draw
+every mesh into them ([the shadow cascades](frame-rendering.md#the-shadow-cascades)).
+The surface pass answers each light with a percentage-closer soft shadow from
+the first cascade holding the point: a blocker search over a rotated disk finds
+the mean depth of the occluders, the gap to them times the light's authored
+penumbra half-slope (`worldShadowPenumbraSlope(lightIndex)`) sizes the
+penumbra, and a filter of that width answers. The ambient term still fills
+shadowed regions, so shadows read soft and colored, never black.
 
-Each pass reads the same program `stepScale`; for shadows and AO it is
-multiplied by the hit's local field gradient magnitude, which the surface pass
-records. Each term de-scales exactly where its math meets world
-units—and *only* there. (Coverage anti-aliasing is the deliberate exception:
-its ratio lives in the march's own clamped units, so de-scaling it would be the
-bug, not the fix.) Keep this rule in your pocket; it explains a comment on
-nearly every function below.
+Each light reads its own visibility from its K lane. A directional outside the
+slots is unshadowed, scaled by the surface's ambient occlusion. During a
+handoff, an outgoing light with cascade visibility `v` reads
+`1 - (1 - v) * (1 - progress)`, scaling its own occlusion deficit, and the
+incoming light, which holds no cascade until it takes the slot, lights
+unshadowed. Neither radiance is crossfaded.
 
-## The surface normal follows the deciding shapes
-
-Shading needs a surface normal—the field's gradient, normalized. The textbook
-way to get it from an SDF is a **finite-difference tetrahedron**: evaluate the
-field at four points slightly offset around the hit, subtract, and you have the
-gradient direction. It works, and Puck keeps it compiled as an A/B reference.
-But it is *not* the default, for two reasons that are both specific to Puck's
-architecture.
-
-Puck's field isn't a closed-form function—it's a **program** the shader
-interprets, walking a `uint[]` tape op by op. The interpreter's real cost is
-*memory traffic*: fetching and decoding each program word. A four-tap normal
-re-walks that whole tape four times, four separate fetch streams for one normal.
-
-The default first finds which shapes have a nonzero derivative weight at the
-hit, following the existing interpreter's scalar and blend decisions. Hard
-blends retain the deciding side; smooth blends retain both sides only inside
-their blend band. A second walk evaluates just the selected shape derivatives.
-Their `float3` tangents pass through the same hand-written transform and blend
-rules as a full forward-mode dual walk. This replaces repeated work on losing
-shapes with one scalar selection and a smaller derivative set.
-
-```text
-  Four-tap finite difference:           Selected analytic derivatives:
-    walk tape → f(p+dx)                   walk tape → values and blend weights
-    walk tape → f(p+dy)                   replay selected shape derivatives
-    walk tape → f(p+dz)                   combine weighted tangents
-    walk tape → f(p+dw)                   normalize
-    subtract, normalize
-```
-
-The second reason is **determinism**, and it's the stronger one. A finite
-difference computes `f(p+h) − f(p−h)`: a subtraction of two nearly-equal
-numbers whose *low bits* carry the answer. The two GPU backends are free to
-contract and reorder fused multiply-adds differently, so those two evaluations
-round slightly differently and their *cancelled difference* diverges more than
-the raw distance ever does, producing ±1-LSB clusters along gradients that a
-parity comparison would need a relaxed threshold to absorb. A dual
-walk never subtracts: the tangent is *built up* by the same multiplies, adds,
-and orthonormal transforms the distance channel already makes, so it is as
-parity-stable as the distance itself.
-
-Two design guardrails keep this cheap. The dual path is a **hit-only
-specialization**—a separate interpreter function (`mapGradCore`) called from the
-surface pass, so the primary march kernel's lean register footprint never
-carries the 4×-wide accumulator (a normal is computed once per pixel; the march
-evaluates the field dozens of times). Non-uniform scale needs
-the same conservative distance treatment as the march and an inverse-transpose
-gradient transform; paths that cannot provide that contract are refused.
-Translations leave the gradient untouched; rotations multiply it by their
-orthonormal matrix; folds apply their own reflection—each derivative
-hand-derived once per op. Common primitives have analytic leaf gradients; the
-remaining exotic primitives use a shape-local four-tap difference at the leaf,
-and the transform and blend chain still carries that gradient analytically.
-If the bounded contributor set fills, the interpreter takes the full dual
-walk, retaining every contributor. The [gradient reference](../reference/gradients-and-normals.md)
-describes the selection contract and the shape counters that include its cost.
-
-## Soft shadows: the penumbra cone
-
-Puck marches a separate shadow for each named light in the allocator's stable
-slots and each active incoming handoff, bounded by the policy's K + F. From the lit
-point the shadow pass marches the field toward the light and tracks, over the whole march,
-the **closest approach** to any occluder—the ratio of how near the ray came to
-something solid against how far it has travelled. A ray that sails clean stays
-fully lit; one that grazes an edge gets a soft penumbra proportional to how
-close it came. The ambient term still fills shadowed regions, so shadows read
-soft and colored, never black.
-
-Each light reads its own visibility. Stable visibilities pack into four 8-bit
-lanes in the record's K word; active incoming visibilities occupy a texture
-sized by the policy's fade capacity. A directional outside the slots is unshadowed,
-scaled by the surface's ambient occlusion. During a handoff, an outgoing light
-with marched visibility `v` reads
-`1 - (1 - v) * (1 - progress)`, and an incoming light reads
-`1 - (1 - v) * progress` using its own marched `v`. These scale each light's
-occlusion deficit independently. Neither radiance nor the two visibilities
-are crossfaded.
-
-The closest-approach refinement has a deliberate limit. A chord between the
-previous and current clearance spheres would read the previous sample too;
-whether a pair straddles the close approach can then flip across neighboring
-rays, producing stripes on a thin penumbra rim. It also collapses to zero for
-a ray leaving its own surface along the normal. Puck therefore uses the
-deterministic running minimum `k · c / t`, where `c` is the clearance and `t`
-is the traveled distance, without that chord fold. `k` is the reciprocal of the
-selected light's authored penumbra half-slope (`worldShadowPenumbraSlope(lightIndex)`). The field clearance is
-de-scaled before this world-space comparison, while the march step still uses
-the raw clamped sample.
-
-## The shadow gather follows the sun ray
-
-A shadow ray leaves the camera's cone, so it needs a *different* set of nearby
-occluders than the primary march narrowed to. Getting this wrong is a
-correctness bug, not just a speed one: reuse the camera's tile mask for the
-shadow march and **off-frustum occluders never cast into frame**—the frame is
-wrong-fast, and nothing about it looks broken until an occluder leaves the
-frustum.
-
-The current implementation is a **per-workgroup shadow gather**. Before the
-shadow march, the 64 lanes in an 8×8 workgroup walk the world-space instance
-grid along the current slot's light ray and cooperatively build one groupshared mask covering
-the complete instance capacity. Each pixel then marches that mask. The mask
-contains every occluder the flat all-instances march could hit, while its grid
-walk is shared across the workgroup. An admitted instance a pixel's ray never
-reaches composes as the accumulator to the bit, so by construction the masked
-march equals the flat march exactly. No automated check compares them. The next
-slot reuses the same gather and march sites after every lane finishes consuming
-the shared mask.
-
-The gather cone matters. It is **not** a bare ray: it is the *penumbra cone*,
-wider than the ray itself, because the closest-approach estimate must include
-occluders just beside the ray. A wider cone is always safe (a superset can't
-drop a needed occluder); too narrow leaks light. The chord is three penumbra
-half-slopes, `worldShadowPenumbraChord(lightIndex)` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope(lightIndex)`
-(`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
-cone with margin. `SdfLights.MaxPenumbraSlope` keeps the chord below one.
-
-**When the gather wins and when it doesn't** is a clean story about density:
-
-| Scene shape | What the gather does | Verdict |
-|---|---|---|
-| Spread content (a real room) | Narrows each shadow ray to a few local occluders | Correct shadows with fewer field evaluations than a flat march |
-| Dense clustering (everything stacked in one spot) | Nothing to narrow; gather ≈ flat, plus the static-mask occupancy tax | Pays the price of correctness—not a regression against a *correct* baseline |
-
-For dense scenes, performance work must accelerate the shadow march itself;
-changing the occluder mask would make the clearance proof unsound.
+A cascade covers only the slice of the view's frustum it was fitted to and the
+mesh draws inside its light camera's box, so an occluder outside it casts
+nothing into frame, and a body thinner than a cascade texel can miss its own
+shadow.
 
 ## Indirect light controls
 
@@ -183,9 +61,8 @@ explicit authored choices. `world.indirect` moves the live tier and `world.save`
 retains it. The shared `quality.puck` presets select Off, Medium and High for
 Low, Medium and High respectively. A preset's `indirect` member overrides that
 mapping; applying a preset does not change the source gains or receiver controls.
-The tier sizes the baked-mesh path's irradiance volume (below); Off reads no
-volume, and views light with the authored fill instead. The interpreter path
-draws no indirect light at any tier.
+The tier sizes the irradiance volume (below); Off reads no volume, and views
+light with the authored fill instead.
 
 `render.indirect.bounces` requests zero through four bounces after the direct
 light, capped by the tier (one at Medium, two at High); absent uses that cap.
@@ -247,8 +124,8 @@ previous-frame policy. An authored zero screen-source gain stays excluded.
 
 ## The mesh path's irradiance volume
 
-The [baked-mesh path](frame-rendering.md#the-baked-mesh-path) walks no field in
-the frame. Its indirect light is an irradiance volume baked on the CPU from the
+The frame walks no field ([the bake](frame-rendering.md#the-bake)). Its
+indirect light is an irradiance volume baked on the CPU from the
 meshes the frame already draws (`SdfMeshIrradiance`, one per residency), because
 worlds are mostly static and their evaluation belongs at edit time rather than
 in the frame.
@@ -272,8 +149,7 @@ in the frame.
   sky included, which is the Feedback source. The sources mask and
   gains of `render.indirect.sources` apply as described above. A probe
   whose rays mostly meet back faces lies inside geometry and is never read.
-- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`, compiled only into
-  the mesh path's views kernel) read the eight probes about the shaded point,
+- **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) read the eight probes about the shaded point,
   pushed 0.35 of a cell along its normal, weighted trilinearly and by how far
   each lies in front of the surface. The sky term is the live sky's irradiance
   over π under the volume's sky visibility, so
@@ -296,33 +172,21 @@ in the frame.
   only the direct sky term. Leaks are held back by the back-face weight and the
   inside-geometry test alone; there is no per-probe visibility.
 
-## Ambient occlusion: three taps into the ambient fill
+## Ambient occlusion: a screen-space hemisphere
 
-Puck's AO is the classic normal-ladder technique: from the hit, step fixed
-rungs outward along the surface normal, and at each rung compare the distance
-the field *should* read against what it *actually* reports; the deficit
-accumulates as occlusion. The textbook ladder uses five rungs; Puck's uses
-**three**, re-spaced to span the same reach at double pitch with the falloff
-and gain re-tuned so the fully-occluded floor matches the five-tap look. The
-rungs run in one rolled loop, so the ambient kernel carries a single inlined
-copy of the interpreter. It reads convincingly as contact shadowing in
-creases and under overhangs for the cost of three field evaluations, paid only
-on lit hits in the ambient pass. `world.ao-quality fast` swaps the ladder for a
-one-sample contact estimate, and `auto` does so at 16 or more simulated bodies.
+The surface pass estimates occlusion from the mesh target alone
+(`sdfMeshAmbient` in `passes/sdf-surface-stage.hlsli`): twelve samples over the
+normal-oriented hemisphere, within 0.75 metres or a quarter of the hit's
+distance, whichever is smaller, each occluding when the surface the camera sees
+through its pixel lies in front of it by no more than that radius. The disk
+rotates with each temporal sample, by a noise of the pixel and the sample
+count, so a temporal view's resolve averages its rotations.
 
 Two rules give it its shape. It multiplies into **ambient light only, never
 direct**—folding occlusion into the whole lighting equation causes ghosting;
-the sun stays governed by the soft shadow above. And the `(h − d)` deficit mixes
-a world-space rung height with a scaled field sample, so `d` is de-scaled first
-(the chapter's recurring rule again).
-
-There is *no* screen-space AO, no hemisphere sampling, and no AO history—all
-of that fights the no-RNG posture that keeps the renderer deterministic across
-backends, and every frame's occlusion comes from the field alone. (A temporal
-view's [reconstruction](frame-rendering.md#temporal-reconstruction) filters the
-shaded color afterwards and never feeds back into AO.) The three-tap ladder and its one-sample fast
-path are the whole AO story: the cheapest technique with the largest perceptual
-gain, and zero architectural disturbance.
+the sun stays governed by the soft shadow above. And it sees only what the
+camera sees: an occluder off screen or hidden behind a nearer surface occludes
+nothing.
 
 ## Every light answers through one interface
 
@@ -358,24 +222,6 @@ green field spills green onto the wall beside it. A `dot(screenNormal, −L)` ga
 enforces "light through the glass": a screen only lights what sits in front of
 its face, never behind it.
 
-## The shadow-proxy switch uses the union hull
-
-Destructible geometry creates a specific, expensive shape: a dense cluster of
-subtraction ("carve") instances, each one a hole punched in the world. Shadow
-rays through such a cluster re-march every carve, and the frame becomes
-shadow-bound on damage the player caused.
-
-The **shadow-proxy** switch trades a little visual fidelity for a lot of speed
-here. When enabled, the shadow gather *omits* carve-family instances—it
-evaluates the **pre-carve union hull** for shadowing purposes. On a dense carve
-cluster this collapses the occluder set from many to few by construction. It is
-*conservative*: skipping a pure subtraction can only make the field more solid,
-so shadows go slightly darker or fill holes that light would otherwise thread —
-they never leak the wrong way. The visual tradeoff is exactly that: light that
-"should" pass through a freshly-carved gap is instead blocked by the hull the
-gap was cut from. It is off by default and is set by `SdfFrame.EnableShadowProxy`;
-no `Puck.World` verb sets it.
-
 ## Shading switches
 
 Several shading terms are exposed as **live levers**—runtime settings a user
@@ -385,38 +231,24 @@ frame uploads zero and every default is preserved.
 
 | Verb | Effect | Why you'd use it |
 |---|---|---|
-| `world.shadows off\|low\|medium\|high\|0..1 [crowd-radius]` | `off` leaves the sun unshadowed; other values scale the shadow ray's reach *and* its gather cone together, and the optional radius bounds which avatars cast | Isolates the most expensive shading term, or measures shorter-reach shadows (both lengths must scale together or the gathered set is unsound) |
-| `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the three AO field evaluations per lit pixel |
-| `world.ao-quality auto\|exact\|fast` | Picks the three-rung ladder or the one-sample contact estimate | A/B of AO cost against look |
-| `world.shadow-mask auto\|exact\|camera-tile` | Picks the per-workgroup shadow gather or the camera tile's mask | Measures the gather's cost; the camera-tile mask drops off-frustum occluders |
-| `world.shadow-march auto\|exact\|fast` | Picks the full soft-shadow march or a shorter, coarser one | Bounds shadow cost in crowded sessions |
+| `world.shadows on\|off` | `off` leaves every light unshadowed and renders no cascade | Isolates the shadow cascades and filter |
+| `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the occlusion's twelve samples per pixel |
 
-The `auto` settings switch to the fast side at 16 or more simulated bodies.
-`SdfFrame` also carries lanes for disabling screen lights
-(`DisableScreenLights`), the shadow proxy (`EnableShadowProxy`), and the
-four-tap normal (`UseFiniteDifferenceNormals`); no `Puck.World` verb sets them.
+`SdfFrame` also carries a lane for disabling screen lights
+(`DisableScreenLights`); no `Puck.World` verb sets it.
 
 **Curvature shading** adds cavity darkening in creases, rim light on ridges,
-and ink lines where curvature spikes. The authored `render.lighting.curvature`
-gains enable it at runtime; all three at zero disable it. It uses four nearby
-field samples and a center distance to estimate a discrete Laplacian, since
-the analytic normal alone provides no second derivative. These samples also
-supply the surface normal. This path counts scalar shape evaluations and no
-analytic shape gradients; the courtyard's inherited curvature gains select it.
-Programs without
-shading-only detail reuse the center distance the visibility record holds. See
-the [renderer README](../../../../src/Puck.SdfVm/README.md) for that reuse.
+and ink lines where curvature spikes, from the record's curvature. The surface
+pass writes that curvature as zero, since the mesh carries none, so authored
+`render.lighting.curvature` gains draw nothing.
 
 ---
 
 ## Related resources
 
-- The forward-mode dual normal, its parity argument, and the four-tap comparison
-  path: [../reference/gradients-and-normals.md](../reference/gradients-and-normals.md).
-- Soft shadows (classic penumbra + closest-approach parabola), the normal-ladder
-  AO, the shadow-proxy, curvature/NPR, and the surveyed-but-unbuilt occlusion
-  family: [../reference/shading-ao-shadows.md](../reference/shading-ao-shadows.md).
-- The de-scale invariant and why coverage AA is the exception:
+- How the bake measures gradients and where a view's normal comes from:
+  [../reference/gradients-and-normals.md](../reference/gradients-and-normals.md).
+- The occlusion, the shadow cascades and the curvature limits:
+  [../reference/shading-ao-shadows.md](../reference/shading-ao-shadows.md).
+- The field's scale and bound contracts:
   [../reference/lipschitz-and-field-correctness.md](../reference/lipschitz-and-field-correctness.md).
-- Shadow culling wins or loses depending on occluder density; the boundary
-  between the two is unmeasured.

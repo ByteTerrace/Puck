@@ -235,7 +235,7 @@ public sealed partial class SdfSurfaceTransportLawTests {
         Assert.Contains(actualString: main, expectedSubstring: "float4 resolved = (accepted ? lerp(spatial, accumulated, saturate(total)) : spatial);");
         Assert.Contains(actualString: main, expectedSubstring: "(accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, saturate(total))) : spatialWord)");
         // A pixel copied whole carries its sample's distance, read where a native view's composite reads it.
-        Assert.Matches(actualString: resolve, expectedRegexPattern: @"if \(SDF_VISIBILITY_CURRENT\(pixel, cullBounds\)\) \{[^}]*t = \(sdfVisibilityHit\(visibility\) \? visibility\.t : 0\.0\);\s*\}\s*transport = sdfSampleTransport\(color\.a, t, origin, direction\);\s*word = sdfTransportSampleWord\(t\);");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"float t = \(sdfVisibilityHit\(visibility\) \? visibility\.t : 0\.0\);\s*color = [^;]+;\s*transport = sdfSampleTransport\(color\.a, t, origin, direction\);\s*word = sdfTransportSampleWord\(t\);");
         // The composite derives a sample's transport at one site, which a native pixel and a sample word both reach.
         Assert.Single(collection: Regex.Matches(input: (sky + composite), pattern: @"\bsdfSampleTransport\("));
         Assert.Contains(actualString: sky, expectedSubstring: "float4 surface = (sample ? sdfSampleTransport(coverage, t, origin, direction) : sdfUnpackTransport(word));");

@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 // the pump that drains the console. The leases outlive the tables built from them (a capacity or
 // export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
 // (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
-// built from changes. The set is ready once every pipeline but the views variants is built (SdfWorldPipelines.PollRequired),
+// built from changes. The set is ready once every pipeline but the views kernel is built (SdfWorldPipelines.PollRequired),
 // and the region copy and the mesh pass are too: the tables record their
 // upload and mesh region with the first and a view's mesh pass draws with the second.
 internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
@@ -22,8 +22,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_meshRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_impostorRaster;
-    // Whether every pipeline the tables need has been seen ready: all of the leased set but the views variants, which
-    // the tables dispatch only once the program's is built (SdfWorldTables.ViewsWaiting).
+    // Whether every pipeline the tables need has been seen ready: all of the leased set but the views kernel, which a
+    // frame waits for itself (SdfWorldTables.FrameWaiting).
     private bool m_ready;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;

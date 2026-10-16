@@ -12,8 +12,8 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-// The primary hit is matte in both scenes. Only the shading-only shell emits, so the resolve's reactivity input must
-// describe the shaded material rather than the primary visibility record's material. The readback uses the graph's
+// The inner sphere is matte in both scenes. Only the outer detail shell emits, and the shell is the surface the bake
+// draws, so the resolve's reactivity input must describe the emissive material the views pass shaded. The readback uses the graph's
 // normal package-copy path and therefore observes the buffer the real views pass wrote on each backend.
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
@@ -90,13 +90,21 @@ public sealed class SdfReactivityDeviceLawTests {
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device }));
         var index = 0L;
 
-        TestLiveness.Until(step: () => {
+        void Produce() {
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)Extent), DisplayWidth: ((int)Extent), DisplayHertz: 60,
                 Footprints: [], Index: index, Tick: index++, Roots: [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)]);
 
             _ = running.ProduceFrame(context: in context, frame: in scheduled);
-            return (probe.Latest is not null);
-        }, reason: () => residency.NotReadyReason, wait: residency.WaitPipelineBuilds);
+        }
+
+        // The spheres render once their bake lands; every frame slot then renders the baked meshes before the read.
+        TestLiveness.Until(step: () => {
+            Produce();
+            return ((probe.Latest is not null) && !residency.MeshPathBake.Pending);
+        }, reason: () => (residency.NotReadyReason ?? "the mesh bake is pending"), wait: residency.WaitPipelineBuilds);
+        for (var settled = 0; (settled <= SdfWorldTables.FrameRingSize); settled++) {
+            Produce();
+        }
         device.WaitIdle();
         Span<byte> result = stackalloc byte[sizeof(float)];
 
@@ -139,7 +147,8 @@ public sealed class SdfReactivityDeviceLawTests {
         }
 
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-            m_version = recording.Inputs[3].Version;
+            // The resolve reads the render-grid color, the visibility records, then the reactivity.
+            m_version = recording.Inputs[2].Version;
             m_offset = (sizeof(float) * (((recording.RenderHeight / 2) * recording.RenderWidth) + (recording.RenderWidth / 2)));
             return m_inner.Record(recording: in recording);
         }

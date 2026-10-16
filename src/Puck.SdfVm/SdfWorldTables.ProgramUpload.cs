@@ -39,22 +39,6 @@ public sealed partial class SdfWorldTables {
         // its slot was sent; only growing a capacity waits for the device to go idle.
         EnsureProgramCapacity(program: program);
 
-        // A program whose grid contains no active maskable dynamic instance has one invariant table. Build it against
-        // the tables' actual capacity envelope and stage the words that differ from the uploaded grid; the next frame
-        // copies them. Programs with moving binnable instances rebuild on the next frame and on every frame whose
-        // transforms move.
-        var rebuildInstanceGridPerFrame = program.RequiresFrameInstanceGridRebuild;
-
-        if (!rebuildInstanceGridPerFrame) {
-            var invariantInstanceGrid = program.BuildInvariantFrameInstanceGrid(
-                inputScratch: m_instanceGridInputScratch,
-                workspace: m_instanceGridWorkspace
-            );
-
-            ValidateInstanceGridCapacity(words: invariantInstanceGrid);
-            StageInstanceGrid(words: invariantInstanceGrid);
-        }
-
         WriteProgramWords(program: program);
         // Seed the screen-surface table from the program's declared surfaces (the "program uploaded once" baseline);
         // any SetScreenSurface call made before the next produced frame patches this same table before it goes out — a
@@ -65,10 +49,8 @@ public sealed partial class SdfWorldTables {
             offset: 0
         );
 
-        if (geometryChanged) { m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame; }
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
-        m_rebuildInstanceGridPerFrame = rebuildInstanceGridPerFrame;
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
         // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.
         m_programDeclaresScreenSlab = ProgramDeclaresShape(
@@ -82,14 +64,6 @@ public sealed partial class SdfWorldTables {
             m_seedDynamicHistory = true;
         }
         ReconfigureWork();
-
-        // Stage 1 kernel-variant selection — a pure function of the uploaded program's instruction stream (see
-        // SdfViewsKernelVariant): a program touching any exotic op/shape runs the full-ISA reference kernel; a
-        // core-only program runs the exotic-stripped variant, bit-identical by construction (the stripped cases are
-        // unreachable) but with far less live register state in the interpreter.
-        var (viewsVariant, _) = SdfViewsKernelVariants.Select(program: program);
-
-        m_viewsVariant = viewsVariant;
     }
 
     // Only material values are lighting-only. The exact prefix and suffix retain every instruction material ID,

@@ -11,9 +11,8 @@ namespace Puck.Shaders;
 /// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
 /// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
-/// named row per active invocation, including divergent layer branches, and <c>puckCountShadow(slot, steps)</c> adds an invocation's
-/// march steps for one shadow slot to that slot's column of the pass's row, and <c>puckCountShapes</c> adds a wave's
-/// primitive evaluations to the pass row.
+/// named row per active invocation, including divergent layer branches, and <c>puckCountShapes</c> adds a wave's primitive
+/// evaluations to the pass row.
 /// An interface that declares all
 /// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
 /// generated beside them; any other interface, a document pass's among them, gets them empty. So a kernel counts
@@ -79,11 +78,7 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
                 }
-                void puckCountShadow(uint slot, uint steps) {
-                }
                 void puckCountShapes(uint shapes, uint gradients) {
-                }
-                void puckCountShadowDecision(uint detail, uint slot, uint steps) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
@@ -99,8 +94,7 @@ public static class ShaderWorkCounters {
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
             // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-            // sky texture loads, then six shadow-slot step counts, secondary-shadow pixels,
-            // followed by shape evaluations and shape gradients, as a
+            // sky texture loads, shape evaluations and shape gradients, as a
             // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
             // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
@@ -109,9 +103,6 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkSkyWord = {{number((2 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkSkyHashesWord = {{number((3 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkSkyTextureLoadsWord = {{number((4 * GpuKernelCounters.CountWords))}}u;
-            static const uint PuckWorkShadowWord = {{number((GpuWork.ShadowStepsFirstKind * GpuKernelCounters.CountWords))}}u;
-            static const uint PuckWorkShadowSlots = {{number(GpuWork.ShadowSlotCount)}}u;
-            static const uint PuckWorkShadowPixelsWord = {{number((GpuWork.ShadowPixelsKind * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShapesWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapesEvaluated) * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkGradientsWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapeGradients) * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
@@ -162,21 +153,6 @@ public static class ShaderWorkCounters {
                     puckAddWork(row + PuckWorkShapesWord, waveShapes);
                     puckAddWork(row + PuckWorkGradientsWord, waveGradients);
                 }
-            }
-            // Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
-            // reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).
-            void puckCountShadow(uint slot, uint steps) {
-                if (slot < PuckWorkShadowSlots) {
-                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u)), steps);
-                }
-            }
-            // One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
-            // while its pixel count exposes rejections and reuse even when a march takes zero field samples.
-            void puckCountShadowDecision(uint detail, uint slot, uint steps) {
-                uint row = ((passGroup.{{DetailRow}} == 0u ? passGroup.{{Row}} : passGroup.{{DetailRow}} + detail) * PuckWorkRowWords);
-                puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
-                puckAddWork(row + PuckWorkStepsWord, steps);
-                puckAddWork(row + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u), steps);
             }
             // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
             // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the

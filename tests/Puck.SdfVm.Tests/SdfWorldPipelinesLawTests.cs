@@ -23,17 +23,17 @@ public sealed class SdfWorldPipelinesLawTests {
         using var pipelines = SdfTestPipelines.Build(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
 
-        Assert.Equal(expected: (20L, 20), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (9L, 9), actual: (Created(cache: cache), device.Persisted));
 
         using var reflector = SdfTestPipelines.Reflector();
 
         using (var unchanged = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 1),
+            kernels: SdfTestPipelines.Kernels(mask: 1),
             reflector: reflector
         )) {
             Assert.Equal(expected: 0, actual: unchanged.ChangedPipelines);
@@ -42,28 +42,28 @@ public sealed class SdfWorldPipelinesLawTests {
         using (var changed = pipelines.PrepareReload(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 2),
+            kernels: SdfTestPipelines.Kernels(mask: 2),
             reflector: reflector
         )) {
             await changed.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: (21L, 21), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (10L, 10), actual: (Created(cache: cache), device.Persisted));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
             cache: cache,
             device: device,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
 
-        Assert.Equal(expected: 21L, actual: Created(cache: cache));
+        Assert.Equal(expected: 10L, actual: Created(cache: cache));
     }
     // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
-    // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
-    // other's places, and one binding the cull bounds and the views' dispatch arguments, two buffers of one shape, in each
-    // other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
+    // set (its pass block carries another stamp), one binding the program words and the bake's instance masks in each
+    // other's places, and one binding the bake's written-sample count and the work counters, two buffers of one shape, in
+    // each other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
     // compiled as the host was prepare.
     [Fact]
     public async Task AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
@@ -72,42 +72,42 @@ public sealed class SdfWorldPipelinesLawTests {
         using var pipelines = SdfTestPipelines.Build(
             cache: cache,
             device: gpu,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         using var reflector = SdfTestPipelines.Reflector();
         var installed = pipelines.Kernels;
         var created = Created(cache: cache);
-        var changed = SdfTestPipelines.Kernels(beam: 2);
+        var changed = SdfTestPipelines.Kernels(mask: 2);
         var foreign = changed.With(
             bytecode: SpirvEdits.Renamed(
                 from: ("passGroup" + SdfWorldInterfaces.Stamp),
-                module: changed[SdfKernel.Beam].Span,
+                module: changed[SdfKernel.MeshBakeMask].Span,
                 to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
             ),
-            kernel: SdfKernel.Beam
+            kernel: SdfKernel.MeshBakeMask
         );
         var swapped = changed.With(
             bytecode: SpirvEdits.BindingsSwapped(
                 first: SdfWorldPackage.ProgramWords,
-                module: changed[SdfKernel.InstanceCull].Span,
-                second: SdfWorldPackage.FrameInstanceGrid
+                module: changed[SdfKernel.MeshBake].Span,
+                second: SdfWorldPackage.InstanceMasks
             ),
-            kernel: SdfKernel.InstanceCull
+            kernel: SdfKernel.MeshBake
         );
 
         var sameShaped = changed.With(
             bytecode: SpirvEdits.BindingsSwapped(
-                first: SdfWorldPackage.CullBoundsWritten,
-                module: changed[SdfKernel.CullArgs].Span,
-                second: SdfWorldPackage.ViewsArgsWritten
+                first: SdfWorldPackage.MeshBakeSamplesWritten,
+                module: changed[SdfKernel.MeshBake].Span,
+                second: ShaderWorkCounters.Buffer
             ),
-            kernel: SdfKernel.CullArgs
+            kernel: SdfKernel.MeshBake
         );
 
         foreach (var (kernels, stem, reason) in ((ReadOnlySpan<(SdfKernelSet, string, string)>)[
-            (foreign, "sdf-beam", "stamped"),
-            (swapped, "sdf-instance-cull", SdfWorldPackage.ProgramWords),
-            (sameShaped, "sdf-cull-args", SdfWorldPackage.CullBoundsWritten),
+            (foreign, "sdf-mesh-bake-mask", "stamped"),
+            (swapped, "sdf-mesh-bake", SdfWorldPackage.ProgramWords),
+            (sameShaped, "sdf-mesh-bake", SdfWorldPackage.MeshBakeSamplesWritten),
         ])) {
             var refusal = Assert.Throws<InvalidOperationException>(testCode: () => pipelines.PrepareReload(
                 cache: cache,
@@ -141,11 +141,11 @@ public sealed class SdfWorldPipelinesLawTests {
             cache: cache,
             device: gpu,
             includeBrickPipelines: true,
-            kernels: SdfTestPipelines.Kernels(beam: 1).With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake)
+            kernels: SdfTestPipelines.Kernels(mask: 1).With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake)
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 21L, actual: Created(cache: cache));
+        Assert.Equal(expected: 10L, actual: Created(cache: cache));
     }
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
@@ -158,7 +158,7 @@ public sealed class SdfWorldPipelinesLawTests {
             cache: cache,
             device: gpu,
             includeBrickPipelines: false,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         var started = new List<string>();
 
@@ -167,7 +167,7 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 20) {
+        while (started.Count < 9) {
             driver.Step();
             started.Add(item: driver.Next());
         }
@@ -177,7 +177,7 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
-            expected: (GpuPassPipelineCache.BuildConcurrency, 20, 20L)
+            expected: (GpuPassPipelineCache.BuildConcurrency, 9, 9L)
         );
     }
     [Fact]
@@ -191,7 +191,7 @@ public sealed class SdfWorldPipelinesLawTests {
             cache: cache,
             device: gpu,
             includeBrickPipelines: false,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
 
         for (var creation = 0; (creation < GpuPassPipelineCache.BuildConcurrency); creation++) {
@@ -228,7 +228,7 @@ public sealed class SdfWorldPipelinesLawTests {
             trackObjects: true
         ) {
             BeforeComputePipeline = description => {
-                if (description.Name is not ("sdf-beam" or "sdf-world-views")) {
+                if (description.Name is not ("sdf-mesh-bake" or "sdf-world-views")) {
                     return;
                 }
 
@@ -245,18 +245,18 @@ public sealed class SdfWorldPipelinesLawTests {
             cache: cache,
             device: gpu,
             includeBrickPipelines: false,
-            kernels: SdfTestPipelines.Kernels(beam: 1)
+            kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         var failure = await Assert.ThrowsAsync<AggregateException>(testCode: () => pipelines.WaitAsync(cancellationToken: CancellationToken.None));
 
         pipelines.Dispose();
         Assert.StartsWith(
             actualString: failure.Message,
-            expectedStartString: "The SDF pipeline set's build failed creating sdf-beam, sdf-world-views."
+            expectedStartString: "The SDF pipeline set's build failed creating sdf-mesh-bake, sdf-world-views."
         );
         Assert.Equal(
             actual: failure.InnerExceptions.Select(selector: static inner => inner.Message),
-            expected: ["injected failure creating sdf-beam", "injected failure creating sdf-world-views"]
+            expected: ["injected failure creating sdf-mesh-bake", "injected failure creating sdf-world-views"]
         );
         Assert.NotEmpty(collection: gpu.Created);
         Assert.All(

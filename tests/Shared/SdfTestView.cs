@@ -82,7 +82,8 @@ internal sealed class SdfTestView : IDisposable {
         Environment.Dispose();
         Residency.Dispose();
     }
-    // Produces one graph frame, returning whether the view presented an image.
+    // Produces one graph frame, returning whether the view presented an image of its settled scene: one whose mesh bake
+    // is not pending, so a law that waits on it measures the frame's steady state rather than a bake's frames.
     public bool Produce(in FrameContext context) {
         var frame = new RenderGraphFrame(
             DisplayHeight: ((int)m_extent),
@@ -96,9 +97,9 @@ internal sealed class SdfTestView : IDisposable {
 
         m_frame++;
 
-        return !Runtime.ProduceFrame(
+        return (!Runtime.ProduceFrame(
             context: in context,
             frame: in frame
-        ).IsEmpty;
+        ).IsEmpty && !Residency.MeshPathBake.Pending);
     }
 }

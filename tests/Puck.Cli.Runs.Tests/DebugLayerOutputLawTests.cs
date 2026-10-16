@@ -129,7 +129,7 @@ public sealed class DebugLayerOutputLawTests {
             TimedOut: false
         ) : null);
         var exit = ParityCommand.EvaluateBackend(
-            backend: "vulkan", bakes: true, captureDirectory: string.Empty, debugLayers: true,
+            backend: "vulkan", captureDirectory: string.Empty, debugLayers: true,
             leg: CliExit.Refused, process: process, validation: out var validation
         );
 
@@ -150,7 +150,7 @@ public sealed class DebugLayerOutputLawTests {
         );
 
         _ = ParityCommand.EvaluateBackend(
-            backend: "vulkan", bakes: true, captureDirectory: string.Empty, debugLayers: true,
+            backend: "vulkan", captureDirectory: string.Empty, debugLayers: true,
             leg: CliExit.Refused, process: process, validation: out var validation
         );
 

@@ -295,7 +295,6 @@ public static class WorldRenderRoot {
         };
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
-        probe.Bakes = bakes;
         probe.Device = device;
         probe.Residency = residency;
         probe.Root = root;

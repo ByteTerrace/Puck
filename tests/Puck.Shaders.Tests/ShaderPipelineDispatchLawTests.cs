@@ -170,7 +170,7 @@ public sealed class ShaderPipelineDispatchLawTests {
     [Fact]
     public void TheVocabularyReadsFromADocument() {
         var resource = System.Text.Json.JsonSerializer.Deserialize(
-            json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": [{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Instances"], "elements": 2 }] }""",
+            json: """{ "name": "table", "kind": "Buffer", "strideBytes": 16, "count": [{ "per": ["Viewports", "DynamicTransforms"], "elements": 4 }, { "per": ["Instances"], "elements": 2 }] }""",
             jsonTypeInfo: RenderGraphJsonContext.Default.ShaderPipelineResource
         );
         var pass = System.Text.Json.JsonSerializer.Deserialize(
@@ -181,7 +181,7 @@ public sealed class ShaderPipelineDispatchLawTests {
             count: [
                 new ShaderPipelineCountTerm(
                     Elements: 4,
-                    Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]
+                    Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.DynamicTransforms]
                 ),
                 new ShaderPipelineCountTerm(
                     Elements: 2,
@@ -239,8 +239,6 @@ public sealed class ShaderPipelineDispatchLawTests {
             InstanceMaskWords = 2,
             Instances = 7,
             ProgramWords = 100,
-            SegmentTapeWords = 37,
-            Tiles = 6,
             Viewports = 3,
         };
 
@@ -276,7 +274,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 count: Per(basis: basis),
                 name: basis.ToString()
             ).ResolveSizeBytes(counts: counts) / 4UL)),
-            expected: [32UL, 7UL, 100UL, 3UL, 6UL, 5UL, 2UL, 11UL, 13UL, 32UL, 37UL]
+            expected: [32UL, 7UL, 100UL, 3UL, 5UL, 2UL, 11UL, 13UL, 32UL]
         );
         // A count is the sum of its terms, each the product of its bases' units.
         Assert.Equal(
@@ -284,7 +282,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 count: [
                     new ShaderPipelineCountTerm(
                         Elements: 4,
-                        Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]
+                        Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.DynamicTransforms]
                     ),
                     new ShaderPipelineCountTerm(
                         Elements: 12,
@@ -293,7 +291,7 @@ public sealed class ShaderPipelineDispatchLawTests {
                 ],
                 name: "e"
             ).ResolveSizeBytes(counts: counts),
-            expected: (4UL * (((4UL * 3UL) * 6UL) + ((12UL * 3UL) * 7UL)))
+            expected: (4UL * (((4UL * 3UL) * 5UL) + ((12UL * 3UL) * 7UL)))
         );
         Assert.Equal(
             actual: Words(
@@ -402,10 +400,10 @@ public sealed class ShaderPipelineDispatchLawTests {
             Per(basis: ShaderPipelineCountBasis.Instances, elements: 0),
             [new ShaderPipelineCountTerm(Per: [])],
             Per(basis: ((ShaderPipelineCountBasis)99)),
-            [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.Tiles])],
+            [new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.DynamicTransforms, ShaderPipelineCountBasis.DynamicTransforms])],
             [
-                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]),
-                new ShaderPipelineCountTerm(Elements: 3, Per: [ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.Viewports]),
+                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.DynamicTransforms]),
+                new ShaderPipelineCountTerm(Elements: 3, Per: [ShaderPipelineCountBasis.DynamicTransforms, ShaderPipelineCountBasis.Viewports]),
             ],
         ];
 
@@ -418,7 +416,7 @@ public sealed class ShaderPipelineDispatchLawTests {
         var table = Words(
             count: [
                 new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Extent]),
-                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles]),
+                new ShaderPipelineCountTerm(Per: [ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.DynamicTransforms]),
             ],
             name: "table"
         );
@@ -435,11 +433,11 @@ public sealed class ShaderPipelineDispatchLawTests {
             expected: (4UL * 4UL)
         );
         Assert.Equal(
-            actual: table.ResolveSizeBytes(counts: new ShaderPipelineStorageCounts(Height: 0, Width: 2) { Tiles = 5, Viewports = 1 }),
+            actual: table.ResolveSizeBytes(counts: new ShaderPipelineStorageCounts(Height: 0, Width: 2) { DynamicTransforms = 5, Viewports = 1 }),
             expected: (4UL * 5UL)
         );
         Assert.Equal(
-            actual: table.ResolveSizeBytes(counts: counts with { Tiles = 5 }),
+            actual: table.ResolveSizeBytes(counts: counts with { DynamicTransforms = 5 }),
             expected: (4UL * (4UL + 5UL))
         );
 
@@ -448,7 +446,7 @@ public sealed class ShaderPipelineDispatchLawTests {
 
         Assert.Contains(
             actualString: refusal.Message,
-            expectedSubstring: "Buffer 'table' counts by Extent + Viewports * Tiles"
+            expectedSubstring: "Buffer 'table' counts by Extent + Viewports * DynamicTransforms"
         );
     }
 }

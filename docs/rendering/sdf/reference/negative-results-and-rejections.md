@@ -18,35 +18,21 @@ that cannot be represented or cached as bounded regions.
 
 ## General BVH or hardware ray-tracing hierarchies
 
-**Current decision:** Conditional.
+**Current decision:** Not applicable to the frame.
 
-The uniform grid and beam masks match current analytic-instance workloads with
-simple deterministic packing. A BVH or TLAS/BLAS split adds rebuild policy and
-backend-specific traversal concerns.
+The frame marches no ray: every view rasterizes baked meshes, and the bake
+selects a group's instances with a mask. A hierarchy over analytic instances
+would serve only a renderer that traces the field per pixel.
 
-**Reconsider when:** Profiles show density skew or sparse-world scale causing
-the uniform grid to dominate on both backends.
+**Reconsider when:** A view needs per-pixel field rays again.
 
-## Per-tile instruction-tape pruning
+## Per-tile instruction pruning and march scheduling
 
-**Current decision:** Rejected for ordinary flat programs; conditional for
-large multi-segment creations.
+**Current decision:** Not applicable.
 
-Specialization metadata and dispatch cost can exceed the interpreter work it
-removes. Ordered point and field state also make many ranges unsafe to omit.
-
-**Reconsider when:** Real creations contain enough independently bounded
-segments that most tiles evaluate only a small fraction of the stream.
-
-## Wavefront and persistent-thread marching
-
-**Current decision:** Conditional.
-
-These schedules can improve utilization for highly divergent rays but require
-queues, compaction, overflow handling, and portable synchronization semantics.
-
-**Reconsider when:** Lane-utilization profiles identify march divergence as the
-dominant cost after field and shading work are accounted for.
+Tile-pruned instruction tapes and wavefront or persistent-thread march
+schedulers reduce the cost of per-pixel field marches, which no view takes.
+The bake's cost is bounded per frame by `SdfMeshPathBake.FrameTaps` instead.
 
 ## Coverage rasterizers as geometry
 

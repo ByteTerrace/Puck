@@ -54,7 +54,7 @@ public sealed partial class WorldInspectorText {
         var settings = snapshot.Settings;
         var quality = snapshot.View?.Quality;
         var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderCeiling ?? 1f) }).RenderGrid;
-        var shadows = ((quality is { } resolved) ? (resolved.DisableSoftShadows ? 0 : ((resolved.ShadowDistanceScale > 0) ? resolved.ShadowDistanceScale : 1)) : (settings?.ShadowReach ?? 0));
+        var shadows = ((quality is { } resolved) ? !resolved.DisableSoftShadows : (settings?.Shadows ?? false));
         var ambient = ((quality is { } shading) ? !shading.DisableAmbientOcclusion : (settings?.AmbientOcclusion ?? false));
         var surfaced = (hit?.Hit ?? false);
         var distance = (surfaced ? hit.GetValueOrDefault().Distance : 0);
@@ -77,7 +77,7 @@ public sealed partial class WorldInspectorText {
             : scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
                 handler: $"point=unavailable normal=unavailable distance={distance:0.###}")) && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
-            handler: $"steps={(hit?.Steps ?? 0)} queries={(hit?.Queries ?? 0)} selection={(snapshot.Selection ?? "none")}") && Line(text: scratch[..written], lines: NameLines));
+            handler: $"selection={(snapshot.Selection ?? "none")}") && Line(text: scratch[..written], lines: NameLines));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"camera={camera.Position.X:0.###},{camera.Position.Y:0.###},{camera.Position.Z:0.###} forward={camera.Forward.X:0.###},{camera.Forward.Y:0.###},{camera.Forward.Z:0.###}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
@@ -85,11 +85,7 @@ public sealed partial class WorldInspectorText {
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"simulation-tick={snapshot.SimulationTick} presentation-tick={snapshot.PresentationTick}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
-            handler: $"render-scale={scale:0.####} debug={snapshot.DebugMode} shadows={shadows:0.###} ao={ambient}") && Line(text: scratch[..written]));
-        _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
-            handler: $"fast-shadow={(quality?.UseFastSoftShadowMarch ?? false)} tile-mask={(quality?.UseCameraTileShadowMask ?? false)} fast-ao={(quality?.UseFastAmbientOcclusion ?? false)}") && Line(text: scratch[..written]));
-        _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
-            handler: $"far-bound={!(quality?.DisableFarBound ?? false)}") && Line(text: scratch[..written]));
+            handler: $"render-scale={scale:0.####} debug={snapshot.DebugMode} shadows={shadows} ao={ambient}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"dispatches={snapshot.Dispatches} upload-bytes={snapshot.Uploads} created-total={snapshot.Created}") && Line(text: scratch[..written]));
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,

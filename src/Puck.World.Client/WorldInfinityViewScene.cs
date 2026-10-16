@@ -42,7 +42,6 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
     /// <returns>The quality.</returns>
     public static SdfViewQuality QualityOf(InfinityViewLevers levers) => new() {
         DisableAmbientOcclusion = !levers.HasFlag(flag: InfinityViewLevers.AmbientOcclusion),
-        DisableFarBound = true,
         DisableSoftShadows = !levers.HasFlag(flag: InfinityViewLevers.Shadows),
     };
 

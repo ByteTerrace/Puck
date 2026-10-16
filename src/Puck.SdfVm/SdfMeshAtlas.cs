@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// A frame's atlases of one kind of texture set: every distinct set (<see cref="SdfTextureSet"/>) packed into one image per
-/// usage. The mesh atlases pack baked meshes' surface textures (<see cref="SdfMeshTextures"/>), which the hit passes sample
+/// usage. The mesh atlases pack baked meshes' surface textures (<see cref="SdfMeshTextures"/>), which the views pass samples
 /// at a mesh hit's texture coordinate; the impostor atlases pack baked impostors' views (<see cref="SdfMeshImpostor"/>).
 /// Every set takes the same rectangle in all of its usages' images, so a mesh's texture coordinates move into the atlases
 /// by one scale and offset (<see cref="Placement"/>), which the mesh region applies to its vertices.

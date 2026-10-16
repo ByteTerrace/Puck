@@ -1,9 +1,8 @@
 // What the sky's field runs (sdf-sky-runs.comp.hlsl) and the composite (sdf-composite.comp.hlsl) share: the sky interface
 // (SdfWorldPackage.SkyMembers), one invocation a pixel of the pass's extent, and the reads of what the views or the
-// resolve left for them. The sky runs on its full or ceil-half field grid and reads the color views wrote; a native view's composite
-// reads views' lit image and visibility records: each current only inside the dispatch box cull-args wrote, outside which
-// the beam proved every tile empty, so a pixel there reads as a miss. A reduced or temporal view's composite reads the
-// resolve's lit image and transport at the output extent, written for every pixel (passGroup.resolvedSurface). A pixel's
+// resolve left for them. The sky runs on its full or ceil-half field grid and reads the color views wrote; a native view's
+// composite reads views' lit image and visibility records, and a reduced or temporal view's the resolve's lit image and
+// transport at the output extent (passGroup.resolvedSurface). Both are written for every pixel. A pixel's
 // sky direction is its unjittered one, so the sky never moves with a temporal view's samples.
 #ifndef PASSES_SDF_SKY_PASS_HLSLI
 #define PASSES_SDF_SKY_PASS_HLSLI
@@ -22,16 +21,11 @@
 #include "../shade/sdf-sky-environment.hlsli"
 #include "../shade/sdf-transport.hlsli"
 
-// Whether the lit image and the surface transport at a pixel were written this frame.
-bool sdfSkyPassCurrent(uint2 pixel) {
-    return ((passGroup.resolvedSurface != 0u) || SDF_VISIBILITY_CURRENT(pixel, cullBounds));
-}
-// The lit image at a pixel, clamped to the output: the color premultiplied by its coverage, the coverage in alpha, and
-// nothing where the pixel was not written this frame.
+// The lit image at a pixel, clamped to the output: the color premultiplied by its coverage, the coverage in alpha.
 float4 sdfSkyPassLit(int2 pixel) {
     uint2 clamped = (uint2)clamp(pixel, int2(0, 0), (int2(passGroup.extent) - 1));
 
-    return (sdfSkyPassCurrent(clamped) ? lit.Load(int3(clamped, 0)) : float4(0.0, 0.0, 0.0, 0.0));
+    return lit.Load(int3(clamped, 0));
 }
 // The transport of the surface share a pixel shows, of coverage `coverage`, along its ray from `origin` along `direction`
 // (sdf-transport.hlsli): each atmosphere kind's in-scatter weight, fog in x, haze in y and medium in z, each at most its
@@ -49,7 +43,7 @@ void sdfSkyPassSurface(uint2 pixel, float coverage, float3 origin, float3 direct
         word = transport[((pixel.y * passGroup.extent.x) + pixel.x)];
         sample = sdfTransportIsSample(word);
         t = sdfTransportSampleDistance(word);
-    } else if (SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
+    } else {
         SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
 
         t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);

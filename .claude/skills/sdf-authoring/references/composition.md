@@ -207,5 +207,6 @@ order:
 3. Replace a cutter with an appropriate seam blend, accepting its scope rule.
 4. Shorten text runs.
 
-`detail: true` excludes geometry from marches and contact, but does not reduce
-the stamp count. It is a rendering-work lever, not a capacity lever.
+`detail: true` excludes geometry from contact, but does not reduce the stamp
+count, and the baked frame samples it like any other shape. It is a contact
+lever, not a capacity lever.

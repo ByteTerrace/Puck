@@ -177,7 +177,6 @@ public sealed class WorldCatalogAllocationLawTests {
             for (var phase = 0; (phase < 16); phase++) {
                 WorldRigCatalog.PackTransforms(
                     avatar: 0,
-                    castsSoftShadow: true,
                     gaitPhase: ((phase * MathF.Tau) / 16),
                     rig: rig,
                     rootOrientation: orientation,
@@ -300,7 +299,6 @@ public sealed class WorldCatalogAllocationLawTests {
 
         WorldRigCatalog.PackTransforms(
             avatar: 0,
-            castsSoftShadow: true,
             gaitPhase: 0.7f,
             rig: Rig,
             rootOrientation: orientation,
@@ -318,7 +316,6 @@ public sealed class WorldCatalogAllocationLawTests {
         ));
         WorldRigCatalog.PackTransforms(
             avatar: LastBody,
-            castsSoftShadow: true,
             gaitPhase: 0.7f,
             rig: Rig,
             rootOrientation: orientation,

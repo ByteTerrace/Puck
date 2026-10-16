@@ -44,7 +44,7 @@ public static partial class GpuWork {
     internal const int ShapeGradientsColumn = (ShapesEvaluatedColumn + 1);
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
-    internal const int EnvironmentProjectionsColumn = (ShadowPixelsColumn + 1);
+    internal const int EnvironmentProjectionsColumn = (SkyTextureLoadsColumn + 1);
     internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
     internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
     internal const int SubmissionColumnCount = (ShapeGradientsColumn + 1);
@@ -90,10 +90,9 @@ public static partial class GpuWork {
     /// <summary>Gets the kind counting the bytes each buffer-range copy transfers, including readback and
     /// device-local history copies. Image copies have no buffer-byte count; host writes have their own kind.</summary>
     public static WorkKind BufferCopyBytes { get; } = new(name: "gpu.copies.buffer-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample of a march (the beam's,
-    /// primary's, the ambient occlusion's and the soft shadow's) and each query (a normal's taps). The kernels count it on
-    /// the GPU, so it is per-backend-deterministic: the marches run in floats, and an indirect pass runs only the tiles
-    /// culling leaves it.</summary>
+    /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample and gradient tap of the SDF
+    /// bake and each sample of a bounded volume. The kernels count it on the GPU, so it is per-backend-deterministic: the
+    /// samples run in floats.</summary>
     public static WorkKind MarchSteps { get; } = new(name: "gpu.march.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting the pixels a pass's kernels write an output for: an image texel, or a pixel's
     /// visibility record. The kernels count it on the GPU, so it is per-backend-deterministic, as
@@ -139,9 +138,8 @@ public static partial class GpuWork {
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
-    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShadowSteps"/> in slot order,
-    /// followed by <see cref="ShadowPixels"/>,
-    /// then <see cref="ShapesEvaluated"/> and <see cref="ShapeGradients"/>.</summary>
+    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShapesEvaluated"/> and
+    /// <see cref="ShapeGradients"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -155,7 +153,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels, ShapesEvaluated, ShapeGradients];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, ShapesEvaluated, ShapeGradients];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -178,7 +176,6 @@ public static partial class GpuWork {
             kinds[EnvironmentProjectionsColumn] = EnvironmentProjections;
             kinds[EnvironmentProjectionTexelsColumn] = EnvironmentProjectionTexels;
             kinds[EnvironmentSkippedColumn] = EnvironmentSkipped;
-            kinds[ShadowPixelsColumn] = ShadowPixels;
             kinds[DispatchesColumn] = Dispatches;
             kinds[IndirectDispatchesColumn] = IndirectDispatches;
             kinds[DrawsColumn] = Draws;
@@ -202,9 +199,6 @@ public static partial class GpuWork {
             kinds[SkyTextureLoadsColumn] = SkyTextureLoads;
             kinds[ShapesEvaluatedColumn] = ShapesEvaluated;
             kinds[ShapeGradientsColumn] = ShapeGradients;
-            for (var slot = 0; (slot < ShadowSlotCount); slot++) {
-                kinds[(ShadowStepsFirstColumn + slot)] = ShadowSteps[slot];
-            }
 
             return kinds;
         }

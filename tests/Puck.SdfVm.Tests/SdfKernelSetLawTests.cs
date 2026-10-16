@@ -17,12 +17,8 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
-        "sdf-world-ambient", "sdf-beam", "sdf-tape", "sdf-brick-bake", "sdf-cull-args",
-        "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky-runs", "sdf-world-surface", "sdf-world-views",
-        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
-        "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission",
-        "sdf-world-mesh-surface", "sdf-mesh-bake-mask", "sdf-mesh-bake",
-        "sdf-world-views-mesh",
+        "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-brick-bake", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
+        "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake",
     ];
 
     private static WorkCounterSet Work() =>
@@ -61,8 +57,8 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
         Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
         // Passed through: each kernel is its own file's bytes.
-        Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Ambient].ToArray());
-        Assert.Equal(expected: Enumerable.Repeat(count: 13, element: ((byte)12)), actual: kernels[SdfKernel.ViewsFolds].ToArray());
+        Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Surface].ToArray());
+        Assert.Equal(expected: Enumerable.Repeat(count: 5, element: ((byte)4)), actual: kernels[SdfKernel.Views].ToArray());
 
         _ = SdfKernelSet.Load(
             bytecodeExtension: ".spv",

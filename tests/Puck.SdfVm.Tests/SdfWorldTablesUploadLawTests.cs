@@ -81,11 +81,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Twelve per-frame tables; mesh and shadow handoffs are staged. The other ten each use one aperture
+        // Eleven per-frame tables; mesh and shadow handoffs are staged. The other nine each use one aperture
         // buffer per ring slot, and a transform move copies nothing.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (10 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (9 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -798,7 +798,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     ) {
         DynamicTransforms = transforms,
     };
-    // The transforms packed as the device-local table holds them: position + shadow flag, quaternion, lanes.
+    // The transforms packed as the device-local table holds them: position and a zero word, quaternion, lanes.
     private static byte[] Packed(DynamicTransform[] transforms) {
         var packed = new float[(transforms.Length * (DynamicTransformBytes / sizeof(float)))];
 
@@ -806,7 +806,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var transform = transforms[slot];
             var b = (slot * 12);
 
-            packed[(b + 0)] = transform.Position.X; packed[(b + 1)] = transform.Position.Y; packed[(b + 2)] = transform.Position.Z; packed[(b + 3)] = (transform.CastsSoftShadow ? 0f : 1f);
+            packed[(b + 0)] = transform.Position.X; packed[(b + 1)] = transform.Position.Y; packed[(b + 2)] = transform.Position.Z; packed[(b + 3)] = 0f;
             packed[(b + 4)] = transform.Orientation.X; packed[(b + 5)] = transform.Orientation.Y; packed[(b + 6)] = transform.Orientation.Z; packed[(b + 7)] = transform.Orientation.W;
             packed[(b + 8)] = transform.Lanes.X; packed[(b + 9)] = transform.Lanes.Y; packed[(b + 10)] = transform.Lanes.Z; packed[(b + 11)] = transform.Lanes.W;
         }

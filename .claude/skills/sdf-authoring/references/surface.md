@@ -259,7 +259,6 @@ templates (`clearDay`, `starryNight`, `polarNight`, `overcast`) and their air
 | Field | Range | Default | Read-back |
 |---|---|---|---|
 | `shadows` | `Off`/`Low`/`Medium`/`High` | `Off` | `world.shadows` |
-| `shadowCrowdRadius` | 0..100 | 0 | `world.shadows` |
 | `shadowLights` | 0..4 | 1 | `world.lighting` |
 | `shadowFadeSlots` | 0..2 | 0 | `world.lighting` |
 | `shadowFadeTicks` | nonnegative engine ticks | 0 | `world.lighting` |

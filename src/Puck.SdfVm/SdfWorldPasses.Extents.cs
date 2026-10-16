@@ -9,8 +9,7 @@ public sealed partial class SdfWorldPasses {
     /// <inheritdoc/>
     /// <remarks>A view that asks for temporal reconstruction runs <see cref="SdfWorldPackage.TemporalFragment"/> at
     /// any render scale; otherwise a reduced view runs <see cref="SdfWorldPackage.Fragment"/> and a native one
-    /// <see cref="SdfWorldPackage.NativeFragment"/>. Each allocates the incoming handoff image when its policy allows
-    /// fades (<see cref="SdfWorldPackage.FragmentFor"/>).</remarks>
+    /// <see cref="SdfWorldPackage.NativeFragment"/>.</remarks>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
         var entry = Refresh(instance: instance);
 
@@ -26,8 +25,8 @@ public sealed partial class SdfWorldPasses {
                 return ((views is { Count: > 0 }) ? views[Math.Min(val1: view!.Value.View, val2: (views.Count - 1))] : default);
             }
         }
-        // Ceiling, temporal reconstruction and fade capacity choose the fragment and its storage. The revision covers
-        // all three; the resolved scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
+        // Ceiling and temporal reconstruction choose the fragment and its storage. The revision covers both; the resolved
+        // scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
         private double Ceiling => Snapshot.RenderCeiling;
 
         public double CurrentScale => Snapshot.RenderGrid;
@@ -36,22 +35,13 @@ public sealed partial class SdfWorldPasses {
         public float RenderedSharpness { get; set; }
         // Whether the resolved view asks for temporal reconstruction, which chooses its fragment as the ceiling does.
         public bool RequestsTemporal => Snapshot.Quality.Temporal;
-        public int CurrentShadowFadeCapacity => (View?.Residency.Frame?.Lights.ShadowSlots.FadeCapacity ?? 0);
-        public int RenderedShadowFadeCapacity { get; set; } = -1;
-        // Whether the resolved view takes the baked-mesh path, which chooses its fragment as temporal reconstruction does.
-        public bool RequestsMesh => (Snapshot.Quality.RenderPath == SdfRenderPath.Mesh);
-        public RenderGraphPackageFragment Fragment {
-            get {
-                var fragment = SdfWorldPackage.FragmentFor(reconstructs: Snapshot.Reconstructs, temporal: RequestsTemporal, fadeCapacity: CurrentShadowFadeCapacity);
+        public RenderGraphPackageFragment Fragment => (RequestsTemporal
+            ? SdfWorldPackage.TemporalFragment
+            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment));
 
-                return (RequestsMesh ? SdfWorldPackage.MeshPathFragmentOf(source: fragment) : fragment);
-            }
-        }
-
-        // Three low bits distinguish temporal reconstruction, whether the policy allows fades, which allocates the
-        // incoming image, and the baked-mesh path; every nonzero capacity plans the same fragment. Render ceilings are
-        // fractions from zero through one, whose binary exponents share the high bits shifted out here.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 3) | (RequestsTemporal ? 1L : 0L) | ((CurrentShadowFadeCapacity > 0) ? 2L : 0L) | (RequestsMesh ? 4L : 0L);
+        // The low bit distinguishes temporal reconstruction. Render ceilings are fractions from zero through one, whose
+        // binary exponents share the high bit shifted out here.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 1) | (RequestsTemporal ? 1L : 0L);
         double IShaderPipelineRenderExtent.Grid => CurrentScale;
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => Pixels(width: width, height: height, scale: Ceiling);

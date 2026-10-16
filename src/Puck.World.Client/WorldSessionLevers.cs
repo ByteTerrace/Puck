@@ -17,32 +17,21 @@ public static partial class WorldSessionLevers {
     public const string SkyMute = "sky-layer.mute";
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
-    /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>
-    public const string AmbientOcclusionQuality = "ao-quality";
     /// <summary>One seat's on-screen binding-bar visibility (<c>world.binding-bar</c>), folding into
     /// <c>bindings</c>. Seat-scoped: <see cref="WorldSessionLever.Seat"/> names the 0-based local seat.</summary>
     public const string BindingBar = "binding-bar";
     /// <summary>The <see cref="WorldSessionLever.A"/> value <see cref="BindingBar"/> carries to clear a seat's
     /// override and return it to authored behavior; a non-negative value forces the bar off (0) or on (1).</summary>
     public const double BindingBarAuto = -1.0;
-    /// <summary>Whether ready bakes draw in place of their fields (<c>world.bakes</c>).</summary>
-    public const string Bakes = "bakes";
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
-    /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
-    public const string FarBound = "far-field.bound";
     /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
     public const string RenderScale = "render-scale";
-    /// <summary>The shadow march tier ordinal (<c>world.shadow-march</c>).</summary>
-    public const string ShadowMarch = "shadow-march";
-    /// <summary>The shadow mask tier ordinal (<c>world.shadow-mask</c>).</summary>
-    public const string ShadowMask = "shadow-mask";
-    /// <summary>Soft-shadow reach in <see cref="WorldSessionLever.A"/> and crowd radius in
-    /// <see cref="WorldSessionLever.B"/> (<c>world.shadows</c>).</summary>
+    /// <summary>Whether the shadow cascades render, nonzero in <see cref="WorldSessionLever.A"/> (<c>world.shadows</c>).</summary>
     public const string Shadows = "shadows";
     /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
     public const string ShadowSlots = "shadow-slots";
@@ -55,11 +44,6 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
-    /// <summary>The render path of the world's own views (<c>world.render-path</c>), the <see cref="Puck.SdfVm.SdfRenderPath"/>
-    /// value in its first argument.</summary>
-    public const string RenderPath = "render-path";
-    /// <summary>Secondary shadow history reuse (<c>world.shadow-amortize</c>).</summary>
-    public const string ShadowAmortize = "shadow-amortize";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -96,42 +80,19 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: Shadows,
-            setter: lever => {
-                settings.ShadowReach = ((float)lever.A);
-                settings.ShadowCrowdRadius = ((float)lever.B);
-            }
+            setter: lever => settings.Shadows = Flag(lever: lever)
         );
         sink.Register(
             name: AmbientOcclusion,
             setter: lever => settings.AmbientOcclusion = Flag(lever: lever)
         );
         sink.Register(
-            name: AmbientOcclusionQuality,
-            setter: lever => settings.AmbientOcclusionQuality = ((AmbientOcclusionMode)((int)lever.A))
-        );
-        sink.Register(
-            name: Bakes,
-            setter: lever => settings.Bakes = Flag(lever: lever)
-        );
-        sink.Register(
             name: CadenceGate,
             setter: lever => settings.CadenceGate = Flag(lever: lever)
         );
         sink.Register(
-            name: FarBound,
-            setter: lever => settings.FarBound = Flag(lever: lever)
-        );
-        sink.Register(
             name: Indirect,
             setter: lever => settings.IndirectTier = ((SdfIndirectTier)((int)lever.A))
-        );
-        sink.Register(
-            name: ShadowMask,
-            setter: lever => settings.ShadowMask = ((ShadowMaskMode)((int)lever.A))
-        );
-        sink.Register(
-            name: ShadowMarch,
-            setter: lever => settings.ShadowMarch = ((ShadowMarchMode)((int)lever.A))
         );
         sink.Register(
             name: RenderScale,
@@ -145,8 +106,6 @@ public static partial class WorldSessionLevers {
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
-        sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
-        sink.Register(name: RenderPath, setter: lever => settings.RenderPath = ((Puck.SdfVm.SdfRenderPath)((int)lever.A)));
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
                 Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");

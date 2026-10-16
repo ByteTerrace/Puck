@@ -1,11 +1,10 @@
-// The baked-mesh path's surface stage (SDF_MESH_SURFACE_PASS): one pass in place of primary, surface, ambient and
-// shadow, which reads no field. From the mesh target the mesh pass rasterized it writes the whole visibility record a
-// mesh pixel carries (V, C and L as primary writes them, N and S as surface writes them), the screen-space ambient
-// occlusion into S, and the key light's visibility from the shadow cascades into K's first slot. Views then shades the
-// record as it shades any mesh pixel; the pass block's renderPath tells it the K row is current for mesh pixels.
-#ifndef SURFACE_SDF_MESH_PATH_HLSLI
-#define SURFACE_SDF_MESH_PATH_HLSLI
-#ifdef SDF_MESH_SURFACE_PASS
+// The surface pass's stage (SDF_SURFACE_PASS), which reads no field. From the mesh target the mesh pass rasterized it
+// writes every pixel's whole visibility record (frame/sdf-visibility.hlsli), misses included: the mesh hit, its draw's
+// frame slot and its normal, the screen-space ambient occlusion, and the key light's and the second shadow slot's
+// visibility from the shadow cascades into K's first two slots. Views then shades the record.
+#ifndef PASSES_SDF_SURFACE_STAGE_HLSLI
+#define PASSES_SDF_SURFACE_STAGE_HLSLI
+#ifdef SDF_SURFACE_PASS
 
 // The screen-space occlusion's world radius, sample count and the depth band past which a closer surface no longer
 // occludes.
@@ -172,71 +171,47 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
     return 1.0;
 }
 
-void sdfMeshPathStage(SdfPixel p) {
+void sdfSurfaceStage(SdfPixel p) {
     if (!p.active) {
         return;
     }
 
-    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
     SdfMeshSample meshHit = sdfMeshSampleAt(p.pixel);
     bool hit = (meshHit.covered && (meshHit.t < p.farDistance));
-    SdfVisibility visibility;
-    visibility.t = (hit ? meshHit.t : p.farDistance);
-    visibility.identity = (hit ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_MESH, meshHit.draw) : 0u);
-    visibility.material = (hit ? sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex) : 0);
-    visibility.flags = 0u;
-    SdfVisibilityCoverage coverage;
-    coverage.terminalRadius = 0.0;
-    coverage.threshold = 1.0;
-    coverage.blendWeight = 0.0;
-    coverage.blendOther = 0;
-    sdfStoreVisibility(record, visibility);
-    sdfStoreVisibilityCoverage(record, coverage);
-    sdfStoreVisibilityMeshTriangle(record, (hit ? meshHit.triangleIndex : 0u));
-    // The draw's frame slot, which views places a material's layers in and reads lanes from (sdfVisibilityFrameSlot).
-    sdfVisibilityStoreWord(record + SdfVisibilityRowL + 1u,
-        (hit ? sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SdfMeshFrameSlotWord] : asuint(SDF_TRANSFORM_SLOT_NONE)));
-    // The ambient and shadow passes' query tallies: no query reads the field here.
-    sdfVisibilityStoreWord(record + SDF_VISIBILITY_AMBIENT_QUERIES_WORD, 0u);
-    sdfVisibilityStoreWord(record + SDF_VISIBILITY_SHADOW_QUERIES_WORD, 0u);
-
-    float3 normal = float3(0.0, 0.0, 0.0);
-    float ambient = 1.0;
-    float shadow = 1.0;
-    float second = 1.0;
+    SdfVisibilityRecordValue value;
+    value.visibility.t = (hit ? meshHit.t : p.farDistance);
+    value.visibility.identity = (hit ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_MESH, meshHit.draw) : 0u);
+    value.visibility.material = (hit ? sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex) : 0);
+    value.triangleIndex = (hit ? meshHit.triangleIndex : 0u);
+    value.frameSlot = (hit ? asint(sdfMeshRegion[sdfMeshRecord(meshHit.draw) + SdfMeshFrameSlotWord]) : SDF_TRANSFORM_SLOT_NONE);
+    value.normal = float3(0.0, 0.0, 0.0);
+    value.curvature = 0.0;
+    value.ambient = 1.0;
+    value.shadows = float4(1.0, 1.0, 1.0, 1.0);
 
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
+        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection);
 
-        normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection);
+        value.normal = normal;
         if (!worldAoDisabled()) {
-            ambient = sdfMeshAmbient(p, surfacePoint, normal, meshHit.t);
+            value.ambient = sdfMeshAmbient(p, surfacePoint, normal, meshHit.t);
         }
         if (!worldSoftShadowsDisabled() && (passGroup.meshShadowCount > 0u)) {
             // The cascades look along the key light; a surface facing away from it is in its own shadow, which the
             // light's cosine already darkens, so only a lit side queries them.
             float4 parameters = passGroup.meshShadowParameters;
             float3 key = -sdfMeshCascadeAt(0u).forward;
-            shadow = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
+            value.shadows.x = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
             // The second shadow slot's light, from its one cascade.
             if (parameters.w > 0.0) {
                 float3 fill = -sdfMeshCascadeAt(2u).forward;
-                second = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 2u, 3u, parameters.w) : 1.0);
+                value.shadows.y = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 2u, 3u, parameters.w) : 1.0);
             }
         }
     }
 
-    SdfVisibilityNormal geometric;
-    geometric.normal = normal;
-    geometric.gradientMagnitude = 1.0;
-    SdfVisibilitySurface surface;
-    surface.curvature = 0.0;
-    surface.queries = 0.0;
-    surface.ambient = ambient;
-    surface.flags = 0u;
-    sdfStoreVisibilityNormal(record, geometric);
-    sdfStoreVisibilitySurface(record, surface);
-    sdfStoreVisibilityShadows(record, float4(shadow, second, 1.0, 1.0));
+    sdfStoreVisibilityRecord(worldVisibilityRecord(p.pixel, p.viewIndex), value);
 }
 
 #endif

@@ -82,12 +82,12 @@ internal static class SdfTestPipelines {
             ),
             ledger: ledger
         );
-    // The build's own SPIR-V kernel set, whose beam kernel's generator word the caller chooses so two sets can differ by
-    // one kernel whose bindings are the same, and whose brick kernel is empty, so no set built from it has brick pipelines.
-    // Every kernel reads the host's interface, so a reload of it passes the interface check.
-    public static SdfKernelSet Kernels(byte beam = 1) =>
+    // The build's own SPIR-V kernel set, whose bake mask kernel's generator word the caller chooses so two sets can differ
+    // by one kernel whose bindings are the same, and whose brick kernel is empty, so no set built from it has brick
+    // pipelines. Every kernel reads the host's interface, so a reload of it passes the interface check.
+    public static SdfKernelSet Kernels(byte mask = 1) =>
         new(bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
-            SdfKernel.Beam => SpirvEdits.WithGenerator(generator: beam, module: Compiled.Value[((int)kernel)].Span),
+            SdfKernel.MeshBakeMask => SpirvEdits.WithGenerator(generator: mask, module: Compiled.Value[((int)kernel)].Span),
             SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
             _ => Compiled.Value[((int)kernel)],
         })]);

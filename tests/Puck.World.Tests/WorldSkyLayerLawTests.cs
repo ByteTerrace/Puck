@@ -95,6 +95,6 @@ public sealed class WorldSkyLayerLawTests {
         Assert.True(condition: DebugViewModes.TryParse(mode: out var mode, name: "sky-cost"));
         Assert.Equal(actual: mode, expected: DebugViewModes.SkyCost);
         Assert.Equal("sky-cost", DebugViewModes.Name(mode: mode));
-        Assert.Equal(actual: mode, expected: 13);
+        Assert.Equal(actual: mode, expected: 7);
     }
 }

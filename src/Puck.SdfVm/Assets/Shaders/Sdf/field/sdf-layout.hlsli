@@ -15,7 +15,7 @@ struct SdfFieldSave {
 // Numerically equal to SDF_INSTANCE_MASK_ALL by coincidence only — the two name unrelated contracts.
 #define SDF_SEGMENT_NONE 0xFFFFFFFFu
 
-// Advances the visible-instance cursor to the next SET BIT of the caller's per-tile mask (ascending instance index,
+// Advances the visible-instance cursor to the next SET BIT of the caller's instance mask (ascending instance index,
 // so ascending segment index — instances' segment ranges are disjoint and ascend with declaration order) and loads
 // that instance's identity and [segmentFirst, segmentEnd) directory range. The identity selects a complete shared
 // part program where supported; all three outputs are SDF_SEGMENT_NONE when no visible instance remains.
@@ -92,11 +92,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         uint entryBase = sdfInstanceEntryOffset(instanceOffset, instanceIndex);
         if (instanceIndex >= instanceCount || !sdfProgramRange(entryBase, SDF_BOUND_RECORD_VECTORS, 1u)) { break; }
         // A PARKED instance (a reserved-pool slot with no live content this rebuild) packs a negative-radius sentinel in
-        // its bound (SdfProgram.ParkedBoundRadius): it contributes nothing to any ray, so skip its whole segment range —
-        // this is what makes the beam prepass's own cone march (which evaluates under the SDF_INSTANCE_MASK_ALL sentinel,
-        // so it would otherwise walk every parked pool slot's segments) cost track LIVE content, not reserved capacity.
-        // Stage 1 never reaches here for a parked instance (its per-tile mask bit is always 0), so this only fires on the
-        // all-visible cone-march / full-eval paths — exactly the ones that lacked the beam's per-tile skip.
+        // its bound (SdfProgram.ParkedBoundRadius): it contributes nothing to any sample, so skip its whole segment range,
+        // which makes a walk under the SDF_INSTANCE_MASK_ALL sentinel cost track LIVE content, not reserved capacity.
         float parkedRadius = asfloat(sdfProgramWord(entryBase)).w;
 
         if (parkedRadius < 0.0) {
@@ -104,16 +101,6 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         uint4 instanceMeta = sdfProgramWord(entryBase + 1u);
-#ifdef SDF_DYNAMIC_TRANSFORMS
-        // The per-instance shadow-participation skip is active in direct soft-shadow marches; ordinary
-        // camera/AO/coverage enumerations do not use it. A DYNAMIC instance whose packed
-        // position.w > 0.5 is shadow-suppressed (host encoding: 0 casts / 1 suppressed), so drop its whole segment range
-        // from the shadow enumeration — mirroring the parked-radius continue above. Static instances (no dynamic slot)
-        // always cast: they never take this branch.
-        if (sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransformRow(3u * instanceMeta.y).w > 0.5)) {
-            continue;
-        }
-#endif
         // Strip the two visibility flag bits before using this lane as segmentEnd.
         // Their values never change the segment range they classify.
         uint metaSegmentEnd = (instanceMeta.w & SDF_INSTANCE_SEGMENT_END_MASK);
@@ -129,12 +116,10 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
     instanceIndex = SDF_SEGMENT_NONE;
 }
 
-// The program's LAYOUT — every offset/count mapCore/mapGradCore need to walk the instruction stream. There is one
-// program per dispatch, so this is dispatch-uniform; mapCore/mapGradCore used to re-derive it from sdfProgramWord(0) on
-// EVERY call, and marchers call them once per step (up to 128 primary steps plus exhaustion re-evaluation) —
-// DXC's no-GVN-over-StructuredBuffer-loads gap (see sdfInstanceDirectoryOffsetFrom above)
-// turned that into a real per-step reload. sdfLoadProgramLayout is now the ONE decode point; mapCore/mapGradCore read
-// the cached static instead.
+// The program's LAYOUT — every offset/count mapCore needs to walk the instruction stream. There is one program per
+// dispatch, so this is dispatch-uniform; deriving it from sdfProgramWord(0) on every call would reload it per sample,
+// since DXC does not merge StructuredBuffer loads (see sdfInstanceDirectoryOffsetFrom above). sdfLoadProgramLayout is
+// the ONE decode point; mapCore reads the cached static.
 struct SdfProgramLayout {
     bool valid;
     uint instructionCount;
@@ -207,8 +192,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
     return layout;
 }
 
-// The generic evaluator both map() (every existing consumer; a zero-instance program's ONLY path) and mapMasked()
-// (the world render path's Stage 1) share. A ZERO-INSTANCE program takes the linear fast path — every segment in
+// The generic evaluator mapCore runs, under the SDF_INSTANCE_MASK_ALL sentinel or a bake lattice's instance mask. A
+// ZERO-INSTANCE program takes the linear fast path — every segment in
 // directory order, the pre-instancing interpreter verbatim (`hasInstances` is read once, per-program-uniform, so the
 // branch never diverges within one program's invocations). An INSTANCED program merges the WORLD-SEGMENT list
 // (always evaluated) with the VISIBLE instances' segment ranges by ascending segment index — the flat stream's
@@ -216,14 +201,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
 // a call costs O(world segments + visible instances' segments): a masked-out instance's segments are never loaded,
 // never owner-tested, never bound-tested. With the SDF_INSTANCE_MASK_ALL sentinel every instance enumerates as
 // visible (validity-masked to the real instance count), so the merge degenerates to the full ascending walk.
-#ifdef SDF_VM_EAGER_PAYLOADS
-#define SDF_VM_LOAD_DATA0
-#define SDF_VM_LOAD_DATA1
-#else
 // The validated payload span and the interpreter's index < instructionCount guard dominate these reads.
 #define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)])
 #define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u])
-#endif
-
 
 #endif

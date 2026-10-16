@@ -24,7 +24,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     [loop] for (int y = first.y; y <= last.y; y++) {
         [loop] for (int x = first.x; x <= last.x; x++) {
             uint2 pixel = uint2(clamp(int2(x, y), int2(0, 0), int2(passGroup.imageExtent) - 1));
-            seen = seen || (sdfSkyPassCurrent(pixel) ? lit.Load(int3(pixel, 0)).a < 1.0 : true);
+            seen = seen || (lit.Load(int3(pixel, 0)).a < 1.0);
         }
     }
 

@@ -1,8 +1,8 @@
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
-    /// <summary>The pass-block value holding the enabled indirect source-category bits (<c>SdfIndirectSources</c>) the mesh
-    /// path's views pass reads beside the irradiance volume (<c>uint</c>).</summary>
+    /// <summary>The pass-block value holding the enabled indirect source-category bits (<c>SdfIndirectSources</c>) the views
+    /// pass reads beside the irradiance volume (<c>uint</c>).</summary>
     public const string IndirectSources = "indirectSources";
     /// <summary>The pass-block value holding the origin gains for direct lights, material emission, screen emission and
     /// sky exits (<c>float4</c>); views reads the sky's.</summary>

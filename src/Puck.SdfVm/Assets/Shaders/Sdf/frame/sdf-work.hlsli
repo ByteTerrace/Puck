@@ -3,11 +3,10 @@
 #ifndef FRAME_SDF_WORK_HLSLI
 #define FRAME_SDF_WORK_HLSLI
 
-// The field evaluations the pass makes, one for each sample of a march (the beam's, primary's, the occlusion's, the soft
-// shadow's, a bounded volume's) and each query (a normal's taps). Never reset: it counts this pass alone, whatever
-// sdfEvalCount carries over from the visibility record.
+// The field evaluations the pass makes, one for each bake sample and gradient tap and each bounded volume sample.
+// Never reset: it counts this pass alone.
 static uint sdfWorkSteps = 0u;
-// Outputs written for this pixel: the visibility record counts once, and an incoming-visibility image store
-// counts once more. Zero means this invocation wrote neither output.
+// Outputs written for this pixel: the visibility record or the output texel counts once. Zero means this invocation
+// wrote no output.
 static uint sdfWorkTexels = 0u;
 #endif

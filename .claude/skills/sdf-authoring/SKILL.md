@@ -203,8 +203,8 @@ the groups retain their own inner scopes. The VM admits two scope levels.
 `puck creation stats` prints it as `shapes: N, stamp budget: M/367`. When you
 are over, reduce emitted shapes: fold repetition, remove panel/trim copies,
 replace an appropriate cutter with a blend, or shorten text runs.
-`detail: true` saves march and contact work, **not stamp budget**; detail shapes
-are still charged.
+`detail: true` saves contact work, **not stamp budget**; detail shapes are still
+charged, and the baked frame samples them like any other shape.
 
 ## Surface and look
 
@@ -267,8 +267,9 @@ A creation's bake (its mesh, textures and impostor) is the deterministic contact
 field's view of it: detail shapes, sweeps, text, noise relief, volumes and the
 omitted warp facets are absent from the bake, and a creation the fixed-point
 evaluator refuses (a residual nonuniform `Scale`, a wallpaper fold) has none and
-keeps drawing through its field. A world that ships its bakes draws them by default; a source boot draws fields until `world.bakes on`, when a ready bake's textured mesh
-draws in place of its static placements' fields. See
+has none. No view draws a prototype bake: every view renders the residency's
+own baked meshes ([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)),
+and prototype bakes are compiled and held for their pack alone. See
 [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes).
 
 ## Verifying

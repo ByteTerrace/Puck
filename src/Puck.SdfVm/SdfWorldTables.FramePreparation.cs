@@ -120,20 +120,15 @@ public sealed partial class SdfWorldTables {
         return false;
     }
 
-    // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
-    // direct soft-shadow march), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what
-    // an op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
-    // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
-    /// <summary>Packs a transform into the world table's three float4 rows: position and shadow participation,
-    /// orientation, then render lanes.</summary>
+    // The lanes row is what an op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity
+    // lane) reads through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero. position.w is unused.
+    /// <summary>Packs a transform into the world table's three float4 rows: position, orientation, then render
+    /// lanes.</summary>
     /// <param name="floats">The destination, with at least twelve elements.</param>
     /// <param name="transform">The frame's posed transform.</param>
     /// <exception cref="IndexOutOfRangeException">The destination has fewer than twelve elements.</exception>
     public static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
-        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = (transform.CastsSoftShadow
-            ? 0f
-            : 1f
-        );
+        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = 0f;
         floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
@@ -195,11 +190,11 @@ public sealed partial class SdfWorldTables {
         MeshDraws: MeshDrawCount,
         ScreenCount: BoundScreenCount()
     );
-    /// <summary>Gets the live program's per-tile instance-mask width, which every pass block carries.</summary>
+    /// <summary>Gets the live program's instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
-    /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, rebuilds the
-    /// frame instance grid when a binnable instance moved, and packs the screen lights, the lights and the sky, the volumes
+    /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, and packs
+    /// the screen lights, the lights and the sky, the volumes
     /// and the mesh draws. Each region
     /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
     /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
@@ -242,25 +237,7 @@ public sealed partial class SdfWorldTables {
             );
         }
 
-        var transformsChanged = PackDynamicTransforms(frame: frame);
-
-        // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose
-        // transforms moved (or after a program upload): the grid is a pure function of the program and the transforms.
-        // Invariant programs staged their grid once at UploadProgram.
-        if (
-            m_rebuildInstanceGridPerFrame &&
-            (transformsChanged || m_instanceGridRebuildOwed)
-        ) {
-            var frameGrid = m_liveProgram.BuildFrameInstanceGrid(
-                transforms: frame.DynamicTransforms,
-                inputScratch: m_instanceGridInputScratch,
-                workspace: m_instanceGridWorkspace
-            );
-
-            ValidateInstanceGridCapacity(words: frameGrid);
-            StageInstanceGrid(words: frameGrid);
-            m_instanceGridRebuildOwed = false;
-        }
+        _ = PackDynamicTransforms(frame: frame);
 
         // The volume table is packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
@@ -274,11 +251,5 @@ public sealed partial class SdfWorldTables {
             draws: frame.MeshDraws,
             revision: frame.MeshDrawsRevision
         );
-    }
-
-    private void ValidateInstanceGridCapacity(ReadOnlySpan<uint> words) {
-        if (words.Length > m_instanceGridWordCapacity) {
-            throw new InvalidOperationException(message: $"The frame instance grid packed {words.Length} words into a {m_instanceGridWordCapacity}-word construction envelope.");
-        }
     }
 }

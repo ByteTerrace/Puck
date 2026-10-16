@@ -14,7 +14,7 @@ public sealed partial class SdfWorldPassesLawTests {
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
-            kernels: SdfTestPipelines.Kernels().With(bytecode: ReadOnlyMemory<byte>.Empty, kernel: SdfKernel.Shadow),
+            kernels: SdfTestPipelines.Kernels().With(bytecode: ReadOnlyMemory<byte>.Empty, kernel: SdfKernel.Surface),
             name: "refused-leases",
             pipelines: pipelines,
             width: Extent
@@ -27,7 +27,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         residency.BeginFrame();
         Assert.False(condition: residency.Prepare(context: in context));
-        Assert.Contains(expectedSubstring: "sdf-world-shadow", actualString: residency.NotReadyReason);
+        Assert.Contains(expectedSubstring: "sdf-world-surface", actualString: residency.NotReadyReason);
         Assert.Equal(expected: 0, actual: pipelines.Pipelines.SharedPipelines);
         residency.OnDeviceLost();
         residency.BeginFrame();

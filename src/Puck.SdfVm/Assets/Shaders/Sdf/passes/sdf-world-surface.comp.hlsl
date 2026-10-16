@@ -1,5 +1,7 @@
-// Shares the visibility record grid and descriptor layout; writes only its deferred record rows.
+// The surface pass (sdf-surface-stage.hlsli): the whole visibility record of every pixel from the mesh target, the
+// screen-space occlusion and the shadow cascades. It calls no field query, so the interpreter the world modules declare
+// compiles out of it.
 #define SDF_SURFACE_PASS
-#include "sdf-hit-pass.hlsli"
-#include "../surface/sdf-surface.hlsli"
-#include "sdf-hit-entry.hlsli"
+#include "sdf-pixel-pass.hlsli"
+#include "sdf-surface-stage.hlsli"
+#include "sdf-pixel-entry.hlsli"

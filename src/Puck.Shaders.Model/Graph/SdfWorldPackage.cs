@@ -10,29 +10,28 @@ namespace Puck.Shaders;
 /// extent and the world values in ordinal name order and whose resources follow. A buffer one pass writes and a later
 /// pass reads is two members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a
 /// read-only member for its readers.</para>
-/// <para>The fragment (<see cref="Fragment"/>) is one view: the instance masks, the beam, the cull arguments, the mesh
-/// pass, primary traversal, surface, ambient and shadow resolution, shading the hits into the lit image, then the sky's
-/// field runs and the composite that writes the output. Its scratch is retained,
-/// one allocation shared by every frame slot, and scales with the counts its host resolves: the view's extent, one
-/// viewport, its tiles at <see cref="TileSize"/>, and the program's instances and instance-mask words.</para>
+/// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the bake's instance
+/// masks and field samples while a bake is pending, the shadow cascades' and the view's mesh rasterization, the surface
+/// pass that writes every pixel's visibility record from them, shading the records into the lit image, then the sky's
+/// field runs and the composite that writes the output. Its scratch is retained, one allocation shared by every frame
+/// slot, and scales with the counts its host resolves: the view's extent, one viewport, and the program's instance-mask
+/// words.</para>
 /// </summary>
 public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the render extent in pixels: the per-view visibility record stride.</summary>
     public const string ImageExtent = "imageExtent";
-    /// <summary>The pass-group value holding the tiles per viewport, columns then rows: the cull buffer's per-viewport
-    /// stride.</summary>
-    public const string TileGrid = "tileGrid";
     /// <summary>The pass-group value holding every view the dispatch set renders.</summary>
     public const string ViewportCount = "viewportCount";
     /// <summary>The pass-group value holding one past the highest screen whose source is bound this frame, or zero when
     /// none is: the bound the screen-light loop runs to.</summary>
     public const string ScreenCount = "screenCount";
-    /// <summary>The pass-group value holding the live program's per-tile instance-mask width.</summary>
+    /// <summary>The pass-group value holding the live program's instance-mask width: the words one bake lattice's mask
+    /// holds before its summary.</summary>
     public const string InstanceMaskWordCount = "instanceMaskWordCount";
     /// <summary>The pass-group value naming the view the dispatch set renders, whose visibility records it indexes.</summary>
     public const string ViewBase = "viewBase";
-    /// <summary>The pass-group value holding the frame's mesh draws, or zero when no mesh draws: the hit passes read the
-    /// mesh visibility target only when it is non-zero, and cull-args then covers the whole extent.</summary>
+    /// <summary>The pass-group value holding the frame's mesh draws, or zero when no mesh draws: the surface pass reads the
+    /// mesh visibility target only when it is non-zero.</summary>
     public const string MeshDraws = "meshDraws";
     /// <summary>The pass-group value holding the view's camera position in world space (<c>float3</c>).</summary>
     public const string ViewPosition = "viewPosition";
@@ -92,12 +91,6 @@ public static partial class SdfWorldPackage {
     public const string CurvatureInkHigh = "curvatureInkHigh";
     /// <summary>The pass-group value holding the ink outline's linear color (<c>float3</c>).</summary>
     public const string CurvatureInkColor = "curvatureInkColor";
-    /// <summary>The pass-group value selecting the slice debug view's plane: zero camera-locked, one to three the world
-    /// X, Y or Z axis (<c>float</c>).</summary>
-    public const string DebugSliceAxis = "debugSliceAxis";
-    /// <summary>The pass-group value holding the slice plane's signed offset along its axis, in world units
-    /// (<c>float</c>).</summary>
-    public const string DebugSliceOffset = "debugSliceOffset";
     /// <summary>The pass-group value holding the view's grid flags: bit 0 the world grid on the working plane, bit 1 the
     /// object grid, bit 2 the world grid projected onto every surface (<c>uint</c>).</summary>
     public const string GridFlags = "gridFlags";
@@ -127,33 +120,12 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the object grid's patch radius in reference-local units, zero disabling it
     /// (<c>float</c>).</summary>
     public const string GridObjectPatchRadius = "gridObjectPatchRadius";
-    /// <summary>The pass-group value set to one to shade normals with four finite-difference taps instead of the analytic
-    /// gradient (<c>uint</c>).</summary>
-    public const string FiniteDifferenceNormals = "finiteDifferenceNormals";
-    /// <summary>The pass-group value set to one to march every instance for soft shadows instead of the grid-gathered
-    /// set (<c>uint</c>).</summary>
-    public const string DisableShadowCull = "disableShadowCull";
     /// <summary>The pass-group value set to one to skip the soft-shadow march (<c>uint</c>).</summary>
     public const string DisableSoftShadows = "disableSoftShadows";
     /// <summary>The pass-group value set to one to skip ambient occlusion (<c>uint</c>).</summary>
     public const string DisableAmbientOcclusion = "disableAmbientOcclusion";
-    /// <summary>The pass-group value scaling the soft-shadow reach; zero reads as the full reach (<c>float</c>).</summary>
-    public const string ShadowDistanceScale = "shadowDistanceScale";
     /// <summary>The pass-group value set to one to skip the screens' area lights (<c>uint</c>).</summary>
     public const string DisableScreenLights = "disableScreenLights";
-    /// <summary>The pass-group value set to one to leave shadow-transparent carves out of the soft-shadow occluders
-    /// (<c>uint</c>).</summary>
-    public const string EnableShadowProxy = "enableShadowProxy";
-    /// <summary>The pass-group value set to one to shadow with the camera tile's instance mask instead of the gathered
-    /// one (<c>uint</c>).</summary>
-    public const string CameraTileShadowMask = "cameraTileShadowMask";
-    /// <summary>The pass-group value set to one to march soft shadows with the bounded-cost marcher (<c>uint</c>).</summary>
-    public const string FastSoftShadowMarch = "fastSoftShadowMarch";
-    /// <summary>The pass-group value set to one to take one contact sample for ambient occlusion (<c>uint</c>).</summary>
-    public const string FastAmbientOcclusion = "fastAmbientOcclusion";
-    /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
-    /// (<c>uint</c>).</summary>
-    public const string DisableFarBound = "disableFarBound";
     /// <summary>The pass-group value set to one to publish premultiplied geometry color and coverage without background sky
     /// (<c>uint</c>), for a far sky layer.</summary>
     public const string GeometryOnly = "geometryOnly";
@@ -168,29 +140,13 @@ public static partial class SdfWorldPackage {
     /// <summary>The preceding rendered camera: position and validity, right and tangent, up and aspect, forward,
     /// extent, and near distance with jittered frustum offset.</summary>
     public const string PreviousView = "previousView";
-    /// <summary>The frame-local instance grid.</summary>
-    public const string FrameInstanceGrid = "sdfFrameInstanceGrid";
-    /// <summary>The per-tile instance masks, read by the beam and the hit passes.</summary>
+    /// <summary>The bake lattices' instance masks, read by the bake.</summary>
     public const string InstanceMasks = "sdfInstanceMasks";
-    /// <summary>The per-tile instance masks, written by the mask pass.</summary>
+    /// <summary>The bake lattices' instance masks, written by the mask pass.</summary>
     public const string InstanceMasksWritten = "sdfInstanceMasksRW";
-    /// <summary>The certified per-tile live-segment masks and slab balls.</summary>
-    public const string SegmentTapes = "sdfSegmentTapes";
-    /// <summary>The live-segment masks written by the tape pass.</summary>
-    public const string SegmentTapesWritten = "sdfSegmentTapesRW";
-    /// <summary>The cull buffer, read by cull-args and the hit passes.</summary>
-    public const string Tiles = "tiles";
-    /// <summary>The cull buffer, written by the beam.</summary>
-    public const string TilesWritten = "tilesRW";
-    /// <summary>The dispatch box, read by the hit passes.</summary>
-    public const string CullBounds = "cullBounds";
-    /// <summary>The dispatch box, written by cull-args.</summary>
-    public const string CullBoundsWritten = "cullBoundsRW";
-    /// <summary>The hit passes' indirect dispatch arguments, written by cull-args.</summary>
-    public const string ViewsArgsWritten = "viewsArgsRW";
-    /// <summary>The visibility records, read by views.</summary>
+    /// <summary>The visibility records, read by views, the resolve and the composite.</summary>
     public const string VisibilityRecords = "sdfVisibilityRecords";
-    /// <summary>The visibility records, written by primary, surface and ambient.</summary>
+    /// <summary>The visibility records, written by the surface pass.</summary>
     public const string VisibilityRecordsWritten = "sdfVisibilityRecordsRW";
     /// <summary>The image a pass writes its color to: the lit image views shades, the resolved lit image the resolve
     /// writes, and the view's output the composite writes.</summary>
@@ -206,19 +162,19 @@ public static partial class SdfWorldPackage {
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
     public const string DecalCells = "sdfDecalCells";
-    /// <summary>The brick pool, read by the beam and the hit passes.</summary>
+    /// <summary>The brick pool, read by the bake.</summary>
     public const string BrickPool = "sdfBrickPool";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
     /// <summary>The mesh region as a stream of words: the draw records, then the positions and indices the mesh pass
     /// reads.</summary>
     public const string MeshRegion = "sdfMeshRegion";
-    /// <summary>The mesh visibility target the mesh pass draws and the hit passes read: per pixel the ray parameter, the
+    /// <summary>The mesh visibility target the mesh pass draws and the surface pass reads: per pixel the ray parameter, the
     /// draw index plus one (zero where no mesh covers it) and the triangle.</summary>
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
-    /// <summary>The mesh albedo atlas, sRGB-encoded BC7 the hit passes decode after sampling.</summary>
+    /// <summary>The mesh albedo atlas, sRGB-encoded BC7 the views pass decodes after sampling.</summary>
     public const string MeshAlbedo = "sdfMeshAlbedo";
     /// <summary>The mesh normal atlas: octahedral object-space normal pairs, BC5.</summary>
     public const string MeshNormals = "sdfMeshNormals";
@@ -258,22 +214,9 @@ public static partial class SdfWorldPackage {
     public const string Samplers = "samplers";
     /// <summary>The length of <see cref="Samplers"/>: one sampler per <see cref="GpuSamplerFilter"/>.</summary>
     public const uint SamplerCount = 2;
-    /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer count in.
-    /// KEEP IN SYNC with <c>WorldTileSize</c> in <c>frame/sdf-tile.hlsli</c>.</summary>
-    public const uint TileSize = 16;
-    /// <summary>The bytes of one visibility record: the sixteen words in its V, C, L, N, S and K rows that
-    /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
-    public const int VisibilityRecordByteLength = (16 * sizeof(uint));
-    /// <summary>The planes the cull buffer holds per tile: the march start, the first exit, the second entry and the far
-    /// bound. KEEP IN SYNC with <c>WorldTilePlaneCount</c> in <c>frame/sdf-frame.hlsli</c>.</summary>
-    public const uint TilePlaneCount = 4;
-    /// <summary>The floats the cull buffer holds per live instance after its tile planes: two float3 corners in each of
-    /// the primary and ambient part-bound bands. KEEP IN SYNC with <c>SdfPartBoundFloatCount</c> in
-    /// <c>march/sdf-part-bounds.hlsli</c>.</summary>
-    public const uint PartBoundFloatCount = 12;
-    /// <summary>The bytes of the dispatch box cull-args writes: the surviving tiles' group origin, then their exclusive
-    /// group end, four <c>uint</c>s.</summary>
-    public const ulong CullBoundsByteLength = (4 * sizeof(uint));
+    /// <summary>The bytes of one visibility record: the eight words <c>sdf-visibility.hlsli</c> lays out
+    /// (<c>SdfVisibilityWords</c>).</summary>
+    public const int VisibilityRecordByteLength = (8 * sizeof(uint));
     /// <summary>The format of the mesh visibility target: per pixel the ray parameter, the draw index plus one and the
     /// triangle, each a whole number a float holds exactly.</summary>
     public const GpuPixelFormat MeshTargetFormat = GpuPixelFormat.R32G32B32A32Float;
@@ -309,7 +252,6 @@ public static partial class SdfWorldPackage {
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
         Value(name: ScreenCount, type: ShaderValueType.Uint),
-        Value(name: TileGrid, type: ShaderValueType.Uint2),
         Value(name: ViewBase, type: ShaderValueType.Uint),
         Value(name: ViewportCount, type: ShaderValueType.Uint),
         Value(name: ViewPosition, type: ShaderValueType.Float3),
@@ -321,9 +263,6 @@ public static partial class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
-        Value(name: ShadowAmortize, type: ShaderValueType.Uint),
-        Value(name: ShadowOwnershipReject, type: ShaderValueType.Uint),
-        Value(name: ShadowLightReject, type: ShaderValueType.Uint),
         Value(name: Temporal, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
@@ -339,8 +278,6 @@ public static partial class SdfWorldPackage {
         Value(name: CurvatureInkLow, type: ShaderValueType.Float),
         Value(name: CurvatureInkHigh, type: ShaderValueType.Float),
         Value(name: CurvatureInkColor, type: ShaderValueType.Float3),
-        Value(name: DebugSliceAxis, type: ShaderValueType.Float),
-        Value(name: DebugSliceOffset, type: ShaderValueType.Float),
         Value(name: GridFlags, type: ShaderValueType.Uint),
         Value(name: GridPlaneY, type: ShaderValueType.Float),
         Value(name: GridLineWidth, type: ShaderValueType.Float),
@@ -351,19 +288,10 @@ public static partial class SdfWorldPackage {
         Value(name: GridObjectPitch, type: ShaderValueType.Float3),
         Value(name: GridObjectFrame, type: ShaderValueType.Float4),
         Value(name: GridObjectPatchRadius, type: ShaderValueType.Float),
-        Value(name: FiniteDifferenceNormals, type: ShaderValueType.Uint),
-        Value(name: DisableShadowCull, type: ShaderValueType.Uint),
         Value(name: DisableSoftShadows, type: ShaderValueType.Uint),
         Value(name: DisableAmbientOcclusion, type: ShaderValueType.Uint),
-        Value(name: ShadowDistanceScale, type: ShaderValueType.Float),
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
-        Value(name: EnableShadowProxy, type: ShaderValueType.Uint),
-        Value(name: CameraTileShadowMask, type: ShaderValueType.Uint),
-        Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
-        Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
-        Value(name: DisableFarBound, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
-        Value(name: RenderPath, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
@@ -383,7 +311,6 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
         Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
         Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
-        Table(element: ShaderValueType.Uint, name: FrameInstanceGrid),
         Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
         Table(element: ShaderValueType.Float4, name: ScreenMappings),
         Table(element: ShaderValueType.Float4, name: ScreenLights),
@@ -411,25 +338,15 @@ public static partial class SdfWorldPackage {
         WorldImage(name: ImpostorEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
-    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh target and the work counters;
-    /// and the World
-    /// group's members (<see cref="Tables"/>).</summary>
+    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh and cascade targets and the
+    /// work counters; and the World group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
-        Read(element: ShaderValueType.Uint, name: SegmentTapes),
-        Written(element: ShaderValueType.Uint, name: SegmentTapesWritten),
-        Read(element: ShaderValueType.Float, name: Tiles),
-        Written(element: ShaderValueType.Float, name: TilesWritten),
-        Read(element: ShaderValueType.Uint, name: CullBounds),
-        Written(element: ShaderValueType.Uint, name: CullBoundsWritten),
-        Written(element: ShaderValueType.Uint, name: ViewsArgsWritten),
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
-        Read(element: ShaderValueType.Uint, name: ShadowHistory),
-        Written(element: ShaderValueType.Uint, name: ShadowHistoryWritten),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
@@ -453,65 +370,55 @@ public static partial class SdfWorldPackage {
         Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
         ShaderWorkCounters.BufferMember,
         .. Tables,
-        .. IncomingMembers,
     ];
-    /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch retained and counted, its
-    /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates
-    /// its field runs where the lit image's coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the
-    /// color (<see cref="Parts.Composite"/>). Every pass counts its kernels' march steps and texels written into the work counters
-    /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
-    /// target.</summary>
+    /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
+    /// one output the view's color. While a bake is pending the mask and bake passes sample its lattices
+    /// (<see cref="Parts.Mask"/>, <see cref="Parts.Bake"/>); the cascades and the mesh pass rasterize the frame's mesh
+    /// draws, the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), views shades
+    /// the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
+    /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
+    /// Every pass counts its kernels' work into the work counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>):
+    /// the raster passes each fragment they write to their target.</summary>
     public static RenderGraphPackageFragment NativeFragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
-            Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
-            Pass(inputs: [Parts.InstanceMasks, Parts.Tiles], name: Parts.Tape, outputs: [Parts.SegmentTapes]),
-            Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
-            new RenderGraphFragmentPass(
-                CountsKernelWork: true,
-                InputAccesses: [],
-                Inputs: [],
-                Name: Parts.Mesh,
-                OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-                Outputs: [Parts.MeshTarget, Parts.MeshDepth]
+            Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]),
+            Raster(name: Parts.ShadowNear, target: Parts.ShadowNearTarget, depth: Parts.ShadowNearDepth),
+            Raster(name: Parts.ShadowFar, target: Parts.ShadowFarTarget, depth: Parts.ShadowFarDepth),
+            Raster(name: Parts.ShadowSecond, target: Parts.ShadowSecondTarget, depth: Parts.ShadowSecondDepth),
+            Raster(name: Parts.Mesh, target: Parts.MeshTarget, depth: Parts.MeshDepth),
+            // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
+            // back, stays live in the planned graph.
+            Pass(
+                inputs: [Parts.MeshTarget, Parts.ShadowNearTarget, Parts.ShadowFarTarget, Parts.ShadowSecondTarget, Parts.BakeSamples],
+                name: Parts.Surface,
+                outputs: [Parts.Visibility]
             ),
-            Hit(mesh: true, name: Parts.Primary, visibility: null, written: Parts.Visibility),
-            Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
-            Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
-            Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit),
-            Pass(inputs: [Parts.Lit, Parts.CullBounds], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
-            Pass(inputs: [Parts.Lit, Parts.CullBounds, Parts.ShadowVisibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
+            Pass(inputs: [Parts.Visibility], name: Parts.Views, outputs: [Parts.Lit]),
+            Pass(inputs: [Parts.Lit], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
+            Pass(inputs: [Parts.Lit, Parts.Visibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
         Resources: [
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
             .. SkyResources,
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
             Buffer(
-                count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
+                count: [Term(MeshBakeBatch, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,
                 sizeBytes: null,
                 strideBytes: sizeof(uint)
             ),
             Buffer(
-                count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.SegmentTapeWords)],
-                name: Parts.SegmentTapes,
-                sizeBytes: null,
+                count: null,
+                name: Parts.BakeSamples,
+                sizeBytes: (((ulong)MeshBakeMaxSamples) * MeshBakeSampleWords * sizeof(uint)),
                 strideBytes: sizeof(uint)
             ),
-            Buffer(
-                count: [
-                    Term(TilePlaneCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles),
-                    Term(PartBoundFloatCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Instances),
-                ],
-                name: Parts.Tiles,
-                sizeBytes: null,
-                strideBytes: sizeof(float)
-            ),
-            Buffer(count: null, name: Parts.Arguments, sizeBytes: ShaderPipelineDispatch.ArgumentBytes, strideBytes: sizeof(uint)),
-            Buffer(count: null, name: Parts.CullBounds, sizeBytes: CullBoundsByteLength, strideBytes: sizeof(uint)),
+            .. ShadowResources(target: Parts.ShadowNearTarget, depth: Parts.ShadowNearDepth),
+            .. ShadowResources(target: Parts.ShadowFarTarget, depth: Parts.ShadowFarDepth),
+            .. ShadowResources(target: Parts.ShadowSecondTarget, depth: Parts.ShadowSecondDepth),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             new ShaderPipelineResource(
                 Dimensions: ShaderPipelineDimensions.Relative(),
@@ -521,10 +428,13 @@ public static partial class SdfWorldPackage {
                 Name: Parts.MeshDepth,
                 Retained: true
             ),
-            Visibility(from: null, name: Parts.Visibility),
-            Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
-            Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
-            Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
+            new ShaderPipelineResource(
+                Count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)],
+                Kind: ShaderPipelineResourceKind.Buffer,
+                Name: Parts.Visibility,
+                StrideBytes: VisibilityRecordByteLength,
+                Retained: true
+            ),
         ]
     );
 
@@ -573,17 +483,6 @@ public static partial class SdfWorldPackage {
         StrideBytes: strideBytes,
         Retained: true
     );
-    // A version of the visibility records forwarding another: the storage's declaration, less the retained class only its
-    // first version declares.
-    private static ShaderPipelineResource Visibility(string name, string? from) => new(
-        Count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)],
-        From: from,
-        Kind: ShaderPipelineResourceKind.Buffer,
-        Name: name,
-        StrideBytes: VisibilityRecordByteLength,
-        Retained: (from is null),
-        PreservesPredecessor: (from is not null)
-    );
     // A compute pass, whose kernel counts its own work as every pass of the fragment does.
     private static RenderGraphFragmentPass Pass(string name, string[] outputs, string[]? inputs = null) => new(
         CountsKernelWork: true,
@@ -593,50 +492,66 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [.. outputs.Select(selector: static _ => RenderGraphPortAccess.ComputeWrite)],
         Outputs: [.. outputs.Select(selector: static output => new ResourceReference(Name: output))]
     );
-    // A pass dispatched indirectly over the cull arguments' surviving tiles: it reads the dispatch box, the masks and the
-    // tiles, the mesh visibility target when it resolves mesh pixels, and the visibility records when it shades them.
-    private static RenderGraphFragmentPass Hit(string name, bool mesh, string? visibility, string written) {
-        string[] inputs = [
-            Parts.CullBounds,
-            Parts.InstanceMasks,
-            Parts.Tiles,
-            Parts.SegmentTapes,
-            .. (mesh ? (string[])[Parts.MeshTarget] : []),
-            .. ((visibility is null) ? [] : (string[])[visibility]),
-        ];
-
-        return Pass(
-            inputs: inputs,
-            name: name,
-            outputs: [written]
-        ) with {
-            Dispatch = ShaderPipelineDispatch.Indirect(arguments: Parts.Arguments),
-        };
-    }
+    // A raster pass drawing the frame's mesh draws through the mesh pipeline into its target and depth: the view's mesh
+    // pass, or a shadow cascade's from the cascade's light camera.
+    private static RenderGraphFragmentPass Raster(string name, string target, string depth) => new(
+        CountsKernelWork: true,
+        InputAccesses: [],
+        Inputs: [],
+        Name: name,
+        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
+        Outputs: [new ResourceReference(Name: target), new ResourceReference(Name: depth)]
+    );
+    // A cascade's target and depth attachment, MeshShadowResolution texels a side.
+    private static ShaderPipelineResource[] ShadowResources(string target, string depth) => [
+        new ShaderPipelineResource(
+            Dimensions: ShaderPipelineDimensions.Absolute(height: MeshShadowResolution, width: MeshShadowResolution),
+            Format: MeshTargetFormat.ToString(),
+            Name: target,
+            Retained: true
+        ),
+        new ShaderPipelineResource(
+            ClearDepth: MeshClearDepth,
+            Dimensions: ShaderPipelineDimensions.Absolute(height: MeshShadowResolution, width: MeshShadowResolution),
+            Format: MeshDepthFormat.ToString(),
+            Kind: ShaderPipelineResourceKind.Depth,
+            Name: depth,
+            Retained: true
+        ),
+    ];
 
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static class Parts {
-        /// <summary>The instance-cull pass building each tile's instance mask.</summary>
+        /// <summary>The mesh bake's instance-mask pass, selecting each bake lattice's instances.</summary>
         public const string Mask = "mask";
-        /// <summary>The beam prepass writing the tile planes and part bounds.</summary>
-        public const string Beam = "beam";
-        /// <summary>The certified segment-pruning pass over the tile's depth slabs.</summary>
-        public const string Tape = "tape";
-        /// <summary>The live-segment masks, summary words, slab balls and working mask.</summary>
-        public const string SegmentTapes = "segmentTapes";
-        /// <summary>The reduction to the indirect dispatch arguments and the dispatch box.</summary>
-        public const string CullArgs = "cull-args";
+        /// <summary>The bake pass, sampling one instance group's field on a lattice for the host to mesh.</summary>
+        public const string Bake = "bake";
+        /// <summary>The bake samples, copied back to the host after the bake pass.</summary>
+        public const string BakeSamples = "bakeSamples";
+        /// <summary>The near shadow cascade's raster pass.</summary>
+        public const string ShadowNear = "shadow-near";
+        /// <summary>The far shadow cascade's raster pass.</summary>
+        public const string ShadowFar = "shadow-far";
+        /// <summary>The second shadow slot's cascade raster pass.</summary>
+        public const string ShadowSecond = "shadow-second";
+        /// <summary>The near cascade's target: per texel the light-space depth of the nearest caster.</summary>
+        public const string ShadowNearTarget = "shadowNearTarget";
+        /// <summary>The near cascade's depth attachment.</summary>
+        public const string ShadowNearDepth = "shadowNearDepth";
+        /// <summary>The far cascade's target.</summary>
+        public const string ShadowFarTarget = "shadowFarTarget";
+        /// <summary>The far cascade's depth attachment.</summary>
+        public const string ShadowFarDepth = "shadowFarDepth";
+        /// <summary>The second slot's cascade target.</summary>
+        public const string ShadowSecondTarget = "shadowSecondTarget";
+        /// <summary>The second slot's cascade depth attachment.</summary>
+        public const string ShadowSecondDepth = "shadowSecondDepth";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>
         public const string Mesh = "mesh";
-        /// <summary>Primary traversal, writing the visibility records.</summary>
-        public const string Primary = "primary";
-        /// <summary>Surface resolution, continuing the visibility records.</summary>
+        /// <summary>The surface pass, writing every pixel's visibility record from the mesh target, the screen-space
+        /// occlusion and the shadow cascades.</summary>
         public const string Surface = "surface";
-        /// <summary>Ambient resolution, continuing the visibility records.</summary>
-        public const string Ambient = "ambient";
-        /// <summary>Each stable and active incoming slot's soft shadow, continuing the visibility records.</summary>
-        public const string Shadow = "shadow";
-        /// <summary>Shading the hits into the lit image.</summary>
+        /// <summary>Shading the visibility records into the lit image.</summary>
         public const string Views = "views";
         /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
         public const string Sky = "sky";
@@ -644,9 +559,8 @@ public static partial class SdfWorldPackage {
         /// the fog and the bounded media, into the view's color.</summary>
         public const string Composite = "composite";
         /// <summary>The lit image: the hits' shaded color premultiplied by coverage and by the fog's transmittance over each
-        /// hit's ray distance, the coverage in its alpha (one for a solid hit, the silhouette's weight on an edge, zero on a
-        /// miss), written by views in a native view and, at the output extent, by the resolve in a reduced or temporal
-        /// one.</summary>
+        /// hit's ray distance, the coverage in its alpha (one for a hit, zero on a miss), written by views in a native view
+        /// and, at the output extent, by the resolve in a reduced or temporal one.</summary>
         public const string Lit = "lit";
         /// <summary>Each output pixel's surface transport, which the resolve writes for the composite in a reduced or
         /// temporal view, reconstructed from the render samples with the lit image's weights: two words a pixel
@@ -666,28 +580,15 @@ public static partial class SdfWorldPackage {
         public const string SkyUpper1 = "skyUpper1";
         /// <summary>The third of the sky's upper field runs' images.</summary>
         public const string SkyUpper2 = "skyUpper2";
-        /// <summary>The per-tile instance masks.</summary>
+        /// <summary>The bake lattices' instance masks.</summary>
         public const string InstanceMasks = "instanceMasks";
-        /// <summary>The cull buffer: the tile planes and the part bounds.</summary>
-        public const string Tiles = "tiles";
-        /// <summary>The hit passes' indirect dispatch arguments.</summary>
-        public const string Arguments = "arguments";
-        /// <summary>The dispatch box.</summary>
-        public const string CullBounds = "cullBounds";
         /// <summary>The mesh visibility target.</summary>
         public const string MeshTarget = "meshTarget";
         /// <summary>The mesh pass's depth attachment.</summary>
         public const string MeshDepth = "meshDepth";
-        /// <summary>Primary's visibility records.</summary>
+        /// <summary>The visibility records the surface pass writes.</summary>
         public const string Visibility = "visibility";
-        /// <summary>Surface's visibility records, forwarding primary's.</summary>
-        public const string SurfaceVisibility = "surfaceVisibility";
-        /// <summary>Ambient's visibility records, forwarding surface's.</summary>
-        public const string AmbientVisibility = "ambientVisibility";
-        /// <summary>Shadow's visibility records, forwarding ambient's.</summary>
-        public const string ShadowVisibility = "shadowVisibility";
-        /// <summary>The reactivity buffer views writes where it shades and the resolve reads inside the dispatch
-        /// box.</summary>
+        /// <summary>The reactivity buffer views writes where it shades and the resolve reads.</summary>
         public const string Reactivity = "reactivity";
         /// <summary>The history color: the resolved color, one image a frame slot, read by the next frame.</summary>
         public const string HistoryColor = "historyColor";

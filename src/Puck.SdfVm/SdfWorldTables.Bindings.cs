@@ -20,9 +20,6 @@ public sealed partial class SdfWorldTables {
     internal IGpuImage SampledFiller => m_sampledFiller;
     // Gets the image a pass binds at a storage member it does not touch, resting General.
     internal IGpuImage StorageFiller => m_storageFiller;
-    // Gets the image a pass binds at the incoming handoff storage member when its graph allocates no incoming image,
-    // resting General.
-    internal IGpuImage IncomingStorageFiller => m_incomingStorageFiller;
     // Gets the device's bindings, counted under the tables.
     internal IGpuBindings Bindings => m_bindings;
 
@@ -68,7 +65,6 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
         WriteWorldBuffer(buffer: m_previousDynamicTransforms, member: SdfWorldPackage.PreviousDynamicTransforms, set: set);
         WriteWorldBuffer(buffer: m_previousMeshTransforms, member: SdfWorldPackage.PreviousMeshTransforms, set: set);
-        WriteWorldBuffer(buffer: m_instanceGridRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameInstanceGrid, set: set);
         WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenSurfaces, set: set);
         WriteWorldBuffer(buffer: m_screenMappingRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenMappings, set: set);
         WriteWorldBuffer(buffer: ScreenEmission, member: SdfWorldPackage.ScreenLights, set: set);

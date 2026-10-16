@@ -28,7 +28,7 @@ struct SdfLightSource {
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1) and each stable and incoming light's shadow visibility.
+// material's already relaxed toward 1) and each stable slot's shadow visibility.
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -36,37 +36,28 @@ struct SdfShadeSurface {
     SdfMaterialData material;
     float ambientOcclusion;
     float4 shadowVisibility;
-    float2 incomingVisibility;
 };
 
-bool sdfLightDirection(int index, out float3 direction) {
-    direction = 0.0;
-    if (index < 0 || (uint)index >= worldLightCount()) { return false; }
-    SdfLight light = sdfLights[(uint)index];
-    if (light.Kind != SDF_LIGHT_DIRECTIONAL) { return false; }
-    direction = light.Direction;
-    return true;
-}
-
-// Each participant scales only its own occlusion deficit. Unslotted directionals retain ambient occlusion.
-float sdfLightVisibility(int lightIndex, float4 stable, float2 incoming, float ambientOcclusion) {
+// A light's shadow visibility. A handoff fades a stable slot from its outgoing light to its incoming one: the outgoing
+// light's own occlusion deficit, which the slot's cascades still render, fades out with the handoff's weight, and the
+// incoming light, which no cascade renders until it holds the slot, shades unshadowed. Unslotted directionals retain
+// ambient occlusion.
+float sdfLightVisibility(int lightIndex, float4 stable, float ambientOcclusion) {
     if (lightIndex < 0) {
         return ambientOcclusion;
     }
-#if SDF_SHADOW_FADE_SLOTS > 0
     [loop]
-    for (uint fade = 0u; fade < (uint)SDF_SHADOW_FADE_SLOTS; fade++) {
-        if (fade >= worldShadowIncomingCount()) { break; }
+    for (uint fade = 0u; fade < (uint)SDF_SHADOW_FADE_CAPACITY; fade++) {
+        if (fade >= worldShadowHandoffCount()) { break; }
         SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
         if (handoff.Slot < 0 || (uint)handoff.Slot >= SDF_MAX_SHADOW_SLOTS) { continue; }
         if (lightIndex == handoff.Outgoing) {
             return (1.0 - ((1.0 - stable[handoff.Slot]) * (1.0 - handoff.Weight)));
         }
         if (lightIndex == handoff.Incoming) {
-            return (1.0 - ((1.0 - incoming[fade]) * handoff.Weight));
+            return 1.0;
         }
     }
-#endif
     [loop]
     for (uint shadowSlot = 0u; shadowSlot < SDF_MAX_SHADOW_SLOTS; shadowSlot++) {
         if (shadowSlot >= worldShadowStableCount()) { break; }
@@ -171,7 +162,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
 
     if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
-        float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.incomingVisibility, surface.ambientOcclusion);
+        float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion);
 
         response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
     } else if (light.kind == SDF_LIGHT_POINT) {

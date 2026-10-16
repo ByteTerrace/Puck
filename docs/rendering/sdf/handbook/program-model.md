@@ -13,11 +13,11 @@ small.
 A signed distance field is a function: give it a point in space, it returns the
 distance to the nearest surface—negative inside, positive outside, zero on the
 skin. That single function defines the SDF geometry without triangles or
-vertices; a frame can also carry opaque meshes beside it. The renderer finds SDF
-surfaces by *marching*: from each pixel's ray it repeatedly asks "how far to the nearest
-surface?" and steps that far, safe in the knowledge that a correct distance can
-never overshoot. A dozen or so steps later the ray has either converged on a
-surface or escaped to the sky.
+vertices; a frame can also carry opaque meshes beside it. The engine samples the
+function on lattices and contours its zero set into the meshes every view draws
+([the bake](frame-rendering.md#the-bake)), and the CPU queries find surfaces by
+*marching*: a ray repeatedly asks "how far to the nearest surface?" and steps
+that far, safe in the knowledge that a correct distance can never overshoot.
 
 So the interesting question becomes: how do you *describe* that distance
 function? In Puck the answer is a small **program**. A scene is a flat list of
@@ -164,8 +164,8 @@ a lattice with no edge that a bounded shape intersects, or that is subtracted fr
 one, leaves the scope as bounded as that shape. There is one fine-print
 rule—a scoped field op grows the surface *outward* past the authored geometry
 bound, so the packer inflates the instance's cull bound by that reach (`Onion(t)`
-moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`) or the beam would
-mask away tiles the grown shell reaches and the surface would hole at tile seams.
+moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`) or the bound skip
+would drop the instance where the grown shell reaches and the bake would clip it.
 Scope depth is capped at two. The outer scope can isolate an engraved moving
 creation while the inner scopes keep its groups' cutters and field operations
 local. Nested distance clamps multiply along each parent/child path. The bound

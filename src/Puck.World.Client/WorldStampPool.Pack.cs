@@ -255,7 +255,6 @@ public sealed partial class WorldStampPool {
         );
 
         return m_owners.Wake(
-            castsSoftShadow: false,
             deltaSeconds: deltaSeconds,
             discontinuity: discontinuity,
             moved: moved,

@@ -109,12 +109,12 @@ anchor-driven resolve, doesn't have to duplicate the formula. Every
 object-intent camera that has ever existed in this codebase reduces to this
 one function.
 
-## Camera matrices share the march's convention
+## Camera matrices share the rays' convention
 
-The SDF march needs no matrices: it builds each pixel's ray from the camera
-basis. Rasterized geometry does, and `ViewProjection`
-(`src/Puck.Abstractions/Cameras`) derives them from the same
-`CameraSnapshot` and frustum offset so both agree on every pixel. World space
+The shading passes build each pixel's ray from the camera basis, and the mesh
+pass rasterizes through matrices `ViewProjection`
+(`src/Puck.Abstractions/Cameras`) derives from the same `CameraSnapshot` and
+frustum offset, so both agree on every pixel. World space
 is right-handed and view space looks down −Z. The projection is reversed-Z
 with an infinite far plane: depth is `near / d` for forward distance `d`, 1 on
 the near plane and falling toward 0, so a nearer surface always has the
@@ -122,16 +122,16 @@ greater depth. The pass block carries the camera's own near plane
 (`CameraSnapshot.Near`, zero when its image begins at the eye) as
 `nearDistance`, and the bounded volumes composite from it. Surfaces render
 from that plane but never nearer than `SdfWorldPackage.MinimumNear`
-(`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
-march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
+(`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): the mesh pass
+clips there. Normalized device coordinates put +Y
 up and a view's UV origin is its top-left corner. Ordinary rendering samples
 the pixel center. A capture with a positive `converge` count samples a repeating
 eight-position Halton (2, 3) sequence whose first position is the center.
 `ViewProjection.Jitter` carries the offset in normalized device coordinates;
 the SDF pass block carries it in render pixels, with positive Y down.
-The shared viewport lens applies the same offset to mesh projection and SDF
-rays. `RayParameter` turns a depth back into the distance
-the march records, measured along the normalized ray through the sample. The
+The shared viewport lens applies the same offset to mesh projection and the
+shading rays. `RayParameter` turns a depth back into the distance
+the visibility record holds, measured along the normalized ray through the sample. The
 previous frame's transforms ride beside the current ones; a view without a
 usable history carries its own matrices as the previous ones and so reports
 no motion. A transform that changed owner has no previous pose of its own, so

@@ -16,8 +16,8 @@ namespace Puck.SdfVm;
 /// <see cref="SdfWorldTables.ProgramWordCapacity"/> reports while no program exceeds it. It allocates nothing: the
 /// program region holds the live program and <see cref="SdfWorldTables.UploadProgram"/> grows it by half again when a
 /// larger one arrives.</param>
-/// <param name="InstanceCapacity">An optional initial instance reserve for the instance grid and the per-tile masks a
-/// view's scratch is counted by. The tables provision at least the initial program's instance count and grow with later
+/// <param name="InstanceCapacity">An optional initial instance reserve for the bake's instance masks a view's scratch is
+/// counted by. The tables provision at least the initial program's instance count and grow with later
 /// uploads.</param>
 /// <param name="BrickPoolVoxelCapacity">The carve-bake brick pool's voxel (f32 word) capacity, fixed at construction.
 /// Defaults to <see cref="SdfWorldTables.DefaultBrickPoolVoxelCapacity"/> (16.7M voxels = 64 MB —

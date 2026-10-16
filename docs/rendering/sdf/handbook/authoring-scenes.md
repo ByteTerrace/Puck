@@ -125,8 +125,9 @@ outermost columns.
 > half the spacing per axis is exact. An off-center or oversized prototype
 > creases the field at the cell wall with an **overestimate**—the nearest
 > real surface is one cell over, and nothing catches this (it isn't a
-> Lipschitz violation, it's a missing neighbor check)—so it can hole the
-> march at grazing angles. Size the prototype to fit inside half its
+> Lipschitz violation, it's a missing neighbor check)—so a CPU query can
+> march through it at grazing angles, and the bake's contour loses the
+> neighbor's surface there. Size the prototype to fit inside half its
 > spacing on every axis it repeats along, the same rule `CellJitter`'s
 > in-cell containment follows.
 
@@ -302,8 +303,8 @@ consumer can still register a smaller ceiling and refuse the edit.
 - **DO** keep a `Repeat`/`RepeatLimited`/`CellJitter` prototype within half
   its spacing per axis. **DON'T** let it overspill a cell—the fold has no
   neighbor check, so an oversized or off-center prototype creases the field
-  at the cell wall with an overestimate that can hole the march at grazing
-  angles.
+  at the cell wall with an overestimate that can hole a query's march at
+  grazing angles and the baked mesh there.
 - **DO** emboss (a proud union) or engrave (a subtraction) a text label
   against its backing surface. **DON'T** ever place a label's field exactly
   coplanar with a surface it sits on—two surfaces sharing the same

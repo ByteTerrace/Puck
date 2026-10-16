@@ -8,11 +8,7 @@
 
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
-// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World. The incoming
-// handoff image is always declared; a kernel compiled with SDF_SHADOW_FADE_SLOTS reads its fade count from the pass block.
-#ifndef SDF_SHADOW_FADE_SLOTS
-#define SDF_SHADOW_FADE_SLOTS 0
-#endif
+// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
 #include "../isa/sdf-world.interface.hlsli"
 
 // The field modules, in the order the interpreter declares them: each reads only what the modules before it declare.
@@ -21,12 +17,8 @@
 #include "sdf-noise.hlsli"
 #include "sdf-shapes.hlsli"
 #include "sdf-blend.hlsli"
-#include "sdf-gradients.hlsli"
 #include "sdf-layout.hlsli"
-#include "sdf-tape.hlsli"
 #include "sdf-parts.hlsli"
 #include "sdf-map.hlsli"
-#include "sdf-map-grad.hlsli"
-#include "sdf-instance-flags.hlsli"
 
 #endif

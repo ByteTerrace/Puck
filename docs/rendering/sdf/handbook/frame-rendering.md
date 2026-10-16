@@ -1,28 +1,27 @@
 # SDF frame rendering
 
-One world frame turns an SDF program and opaque meshes into pixels through a
-fixed sequence of compute and graphics passes. The upload precedes culling; the mask pass builds per-tile instance
-visibility before the beam and primary marches; a tape pass removes certified
-noncontributing shapes, surface, ambient, shadow and view passes shade each view's hits, and
-the sky and composite passes finish its image. The sequence exposes
-where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
-instances, how render-scale tiers trade resolution for frame budget, and how
-frames stay in flight without stalling the whole device.
+One world frame turns an SDF program into pixels without walking the field per
+pixel: the residency bakes the program into meshes, and every view rasterizes
+those meshes and shades the rasterized surface. A frame runs a fixed sequence of
+compute and graphics passes: the bake's mask and sampling passes while a bake is
+pending, the shadow cascades, the mesh raster, the surface and views passes that
+shade each view's hits, and the sky and composite passes that finish its image.
+The sequence exposes where the GPU work goes, how render-scale tiers trade
+resolution for frame budget, and how frames stay in flight without stalling the
+whole device.
 
-## One indirect render pipeline
+## One render pipeline
 
 A world frame has two halves. The scene's shared tables — the program, the
 moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's twelve native passes into its own submission, reading the tables
-the upload wrote. The upload precedes culling; camera traversal, surface evaluation, AO,
-the selected lights' shadows, lighting, the sky and the composite have separate dispatches. The
-passes finish that view's own output image:
+records the package's ten native passes into its own submission, reading the
+tables the upload wrote. The passes finish that view's own output image:
 
 ```text
-   upload → mask → beam → tape → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
+   upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → surface → views → sky → composite
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -30,105 +29,61 @@ declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
 between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
-`sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
-rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
-describes the visibility records the five per-pixel passes share: one per pixel
-of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
-native puts the full-output `resolve` pass described under
-[render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
-and the sky, and a view that reconstructs over time does so at any scale
+`sdf.world$mask` through `sdf.world$composite`. Here is what each pass does;
+[the engine README](../../../../src/Puck.SdfVm/README.md) describes the
+visibility records the surface pass writes and the later passes read: one per
+pixel of each view's render grid, 32 bytes. A view whose render-scale ceiling is
+below native puts the full-output `resolve` pass described under
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time) between
+views and the sky, and a view that reconstructs over time does so at any scale
 ([temporal reconstruction](#temporal-reconstruction)). The sky and the composite
 are described under [the sky once, and a composite last](#the-sky-once-and-a-composite-last).
 
-**mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
-set of instances that could possibly matter to that tile—a bitmask, one bit per
-instance. It reads a host-built uniform grid (instances binned by center into
-world-space cells) and, for each tile, walks only the grid cells the tile's cone
-overlaps, testing each binned instance's bound sphere against the cone. Dynamic
-and unmaskable instances ride an always-tested list. The output is a compact
-per-tile instance bitmask.
+**mask** and **bake** run only while the residency's bake is pending
+([the bake](#the-bake)): `sdf-mesh-bake-mask` writes the instance selection of
+each lattice the frame samples, and `sdf-mesh-bake` samples those lattices
+through the interpreter (`mapCore`), the frame's one walk of the SDF program. A
+frame with no pending bake skips both, so a settled scene evaluates no field on
+the GPU at all.
 
-**beam** (`sdf-beam.comp.hlsl`) runs a coarse cone-march per tile over the
-*mask-restricted* field. One representative cone per 16×16 tile marches until it
-hits something or proves a stretch of space empty, recording where the fine march
-should start and, when worthwhile, an empty gap it can teleport across. Programs
-admitted to independent part tracing use a short entry search; their cheaper
-per-part marches finish the work. Other programs also search gap and tail bounds.
-Budget exhaustion leaves the unproven bounds disabled. Because the beam marches
-`mapMasked`—the field with masked-out instances excluded—it never pays for
-instances the mask already ruled out. Its cost is dominated by the VM evaluations
-performed along the representative cone.
-
-**tape** (`sdf-tape.comp.hlsl`) reads each tile's instance mask and beam bounds.
-Eight balls cover depth slabs of the tile's cone between its entry and far
-bound. At each ball's centre, the existing interpreter evaluates each candidate
-once; its certified world-space Lipschitz bound and outward floating-point
-error margin enclose that candidate over the whole ball. A separated interval
-proves which side of a union, intersection or subtraction decides the value;
-a smooth blend requires separation beyond its blend radius. Unknown operations
-and candidates without finite certificates stay live.
-
-Each slab has its own live-instruction mask and a segment mask with summary
-words. Only shapes and field pops occupy mask bits; transform instructions
-retain their ordered execution without expanding those masks. The depth
-intervals follow the fourth power of normalized depth from the beam entry,
-placing more precision near the first surface. Their balls enclose the cone's axial and
-radial extent together. Scalar and gradient queries select a containing ball
-and consume its tape through the existing instance-mask walk. A losing shape
-can be omitted inside a retained segment while its point and field operations
-still execute. A query outside the covered balls retains the unpruned
-walk. Secondary rays, another gather mask, or a different detail selection
-also retain their full walk, as do root queries that omit independently marched
-parts. Compiled parts read the same instruction decisions
-through each placement's original instruction indices. Small masked programs retain their segments without paying for slab
-evaluation. The [field-correctness reference](../reference/lipschitz-and-field-correctness.md#tile-pruning-certificates)
-explains why the candidate's distance scale alone cannot certify a deletion.
-
-**cull-args** (`sdf-cull-args.comp.hlsl`) reads the beam's per-tile results and packs the
-indirect-dispatch arguments for primary, surface, ambient, shadow and views. A parallel min/max reduction
-finds the bounding rectangle of surviving tiles. Empty margins outside that
-rectangle launch no threads; holes inside it remain in the dispatch.
+**shadow-near**, **shadow-far** and **shadow-second** draw every mesh draw from
+the light cameras `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades))
+into their 2048-texel targets. A frame with no mesh draw, or whose view has no
+cascade, skips them; `shadow-second` runs only while a second stable shadow slot
+holds a directional light.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each (and the impostor cards a view records, through a second pipeline with
-`sdf-mesh-impostor.frag.hlsl`, after the meshes; a baked placement's mesh and card are alternatives, and the view records
-one, as [the impostor](bricks-and-baking.md#prototype-bakes) describes), into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
-the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Primary alone reads the
-target: it resolves the triangle's material from the mesh region (the draw's, plus the triangle's palette entry
-when its mesh carries one) and records the draw and the triangle in the pixel's visibility record, from which
-surface resolves its normal at the hit point (the vertex normals interpolated when its mesh
-carries them, carried to world space by the draw's inverse-transpose normal matrix so a nonuniform scale keeps
-them perpendicular to the surface; the face normal otherwise), turned toward the camera and clamped so a grazing ray
-never sees it lean away, and views a textured mesh's albedo, material and emission. The draw plus one and the triangle are stored as floats, so a region holds at most 2^24
-draws and a mesh at most 2^24 triangles, each refused by name past that. A frame with no mesh draws skips the pass,
-its target's and depth's barriers included, and the hit passes read nothing of the target. The target and its depth attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
-Primary bounds its march by that ray parameter
-and keeps an SDF surface only when it is strictly nearer, so a mesh pixel becomes a mesh visibility
-record; while a mesh draws, cull-args covers the whole view, and a mesh pixel shades with neutral shadows
-and ambient occlusion.
+`sdf-mesh-impostor.frag.hlsl`, after the meshes), into the mesh visibility target at the view's extent: per pixel the ray parameter,
+the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. The draw plus one and the triangle are
+stored as floats, so a region holds at most 2^24 draws and a mesh at most 2^24 triangles, each refused by name past
+that. A frame with no mesh draws skips the pass, its target's and depth's barriers included. The target and its depth
+attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
 
-**primary** (`sdf-world-primary.comp.hlsl`) traces camera rays from their tile's entry
-depth, raised to the mesh projection's near plane when necessary, and writes
-each pixel's visibility record: ray parameter, identity, material and march data,
-misses included. Its stepping samples ask for distance alone; only the accepted or
-resolved sample tracks material. Under a hard-union root, a visible instance that is
-one static box (a one-leaf rigid plan, corner radius allowed) is an operand of its
-own: a ray that enters its sharp hull on a face's flat part meets it there exactly,
-and the partless march omits it and ends at that depth, so a ground grazed near the
-horizon costs a slab test rather than dozens of steps. A ray that starts inside the
-hull or enters it where a corner rounds away marches the box as before. **surface** adds the geometric normal and curvature to it.
-**ambient** evaluates contact occlusion along those normals into the record.
-**shadow** gathers and marches each selected light from each lit surface,
-packing four 8-bit stable visibilities into the record's K word. Each active
-handoff adds one incoming march, bounded by K + F; its visibility uses a
-retained two-byte-per-pixel texture whenever the policy allows fades, absent at
-F = 0. One shadow kernel and one kernel per views variant serve every F, reading
-the active fade count from the pass block.
-**views** reads those visibilities and computes materials, lighting and
-volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
-soft shadows off skips that pass; quality is each view's, so views of one frame
-render at different cost. Compare all six passes when measuring per-pixel field cost: moving
-work between kernels can reduce register pressure but adds buffer traffic.
+**surface** (`sdf-world-surface.comp.hlsl`) calls no field query. It writes
+every pixel's whole visibility record from the mesh target, misses included:
+the ray parameter, identity, material, triangle and the draw's frame slot; the
+normal at the hit point (the vertex normals interpolated when the mesh carries
+them, carried to world space by the draw's inverse-transpose normal matrix so a
+nonuniform scale keeps them perpendicular to the surface; the face normal
+otherwise), turned toward the camera and clamped so a grazing ray never sees it
+lean away; a screen-space ambient occlusion, twelve normal-oriented hemisphere
+samples against the mesh target's ray distances; and the stable shadow slots'
+visibility into the K word, a percentage-closer soft shadow from the first
+cascade holding the point: a blocker search sizes the penumbra from the light's
+penumbra slope and the gap to the blockers, and a filter of that width answers.
+
+**views** (`sdf-world-views.comp.hlsl`) calls no field query either. It reads
+each record and computes materials (a textured mesh's atlas texel, an impostor's
+surface, or the draw's palette entry), lighting, the irradiance volume's
+indirect light and the bounded volumes. A view whose quality
+(`SdfViewSnapshot.Quality`) turns ambient occlusion or soft shadows off reads
+none of the record's occlusion or K; quality is each view's, so views of one
+frame render at different cost.
+
+Every in-extent record is the frame's own: the surface and views passes
+dispatch one 8×8 group per block of the render grid, with no culled region and
+no indirect arguments.
 
 No pass assembles views. Each view's output is its instance's own image, sized
 to its output extent. Reduced views reconstruct their current color in `resolve`
@@ -152,11 +107,12 @@ refreshes the shared environment at the irradiance threshold described in
 [The environment map](#the-environment-map); the submitted map's
 revision also changes those lighting passes. Lighting-visible panels affect
 analytic reflections directly, so their edits change lighting passes even below
-the map's threshold. A selected shadow direction adds `shadow`; geometry
-or camera changes render every active pass. A sky layer that
+the map's threshold. A selected shadow direction adds the cascades and `surface`;
+geometry or camera changes render every active pass. A sky layer that
 samples a screen (a panorama, a textured disc) runs `sky` and `composite` every
 frame, since the screen's image changes in place where no signature sees it;
-the march passes still stand. `world.lighting` reports each keyed value's change class, including
+the raster and surface passes still stand. The bake's passes record whenever
+they run. `world.lighting` reports each keyed value's change class, including
 fields keyed through a section.
 
 Temporal sampling renders the geometry again while a sample is owed. Once
@@ -165,66 +121,17 @@ lit history converges, visual edits leave its sample count and ring standing.
 
 ## What each pass costs
 
-The passes scale with different things. `mask` and `beam` scale with how many
-instances lie near each tile's cone. `tape` scales with the masked instructions
-and its fixed slab count, and reduces repeated shape work in later queries.
-`primary`, `surface`, `ambient`, `shadow` and
-`views` scale with on-screen content: how many pixels hit a surface and how
-much of the program each field query walks. `cull-args` is small; `composite`
-scales with the output's pixels and `sky` with the uncovered ones. **The five per-pixel passes are the scale lever for
-on-screen content; `mask`+`beam` is the scale lever for instance count.**
-Moving work between the per-pixel passes can relieve register pressure but
-adds hit-buffer traffic, so compare their sum as well as each label.
+The passes scale with different things. `mask` and `bake` scale with the
+field evaluations a frame's lattices take, which `SdfMeshPathBake.FrameTaps`
+bounds, and run only while a bake is pending. The three cascades and `mesh`
+scale with the triangles drawn and the fragments they cover. `surface` and
+`views` scale with the render grid's pixels: every pixel runs the same fixed
+occlusion and shadow filter taps, and a hit pixel's lighting scales with the
+lights and volumes it reads. `composite` scales with the output's pixels and
+`sky` with the uncovered ones.
 
-Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`, and
-`gpu.shapes.gradients` for primitive derivatives. The shape count includes
-tape construction and gradient winner selection. A pruning comparison keeps
-march steps unchanged and includes the tape's work in the savings; fewer
-shapes per query alone do not establish a cheaper frame.
-
-## Why the mask pass flattens beam cost
-
-Without a mask, every beam march step evaluates the whole program, and each
-evaluation checks every instance segment's bound early-out. The beam's cost
-then grows linearly with instance count even when the instances are nowhere
-near the tile, because binning the instances is cheap while re-checking all of
-them at every march step is not.
-
-The set of instances a tile's cone actually needs is exactly what a spatial
-cull computes, and it can be computed *once per tile* instead of re-derived at
-every march step. So the pipeline puts the mask pass **first**: compute each
-tile's relevant-instance bitmask up front, then let the cone march consume the
-already-masked field. The march stops enumerating instances per sample; it
-only ever touches the handful the mask kept.
-
-The per-pixel passes do the same work with or without the mask, because the
-masked field is bit-identical to the full field inside the tile's cone. With
-the mask in place, a frame with many on-screen instances is bound by the
-per-pixel passes rather than by `beam`, which is where the cost belongs: on
-visible shading, not on culling.
-
-Two design choices determine both correctness and occupancy. The cull is a
-**separate pass, not fused into the beam**—a fused variant's per-thread mask
-scratch lowers the co-resident cone march's occupancy
-([SDF performance](performance.md) turns this into the general register-pressure
-lesson). And the mask output uses **direct mask-buffer bit writes** (OR is
-commutative, so insertion order doesn't matter), never a per-thread accumulation
-array. Occupancy is part of the contract here, not a detail.
-
-Correctness rides the exact-cull contract from [SDF program model](program-model.md): a masked-out
-instance's bound excludes the tile's whole cone, and a far-neutral blend
-(union/subtraction) returns the accumulator *to the bit* when its member is
-skipped. So the masked march is bit-identical to the flat one. No runtime
-switch disables the mask, and no automated check compares the two.
-
-One nuance worth carrying: the cull raises the *total* instance ceiling, not the
-*per-tile* one. Scattered content—a persistently damaged world, carves spread
-across the map—costs almost nothing per frame because each tile's cone touches
-only a few grid cells. But instances **densely stacked in one spot** overlap the
-same tiles and are genuinely un-cullable there; their `views` cost is real and the
-grid rightly doesn't touch it. The honest ceilings after the cull are (a)
-dense per-tile stacking and (b) on-screen visible-instance shading—both
-per-pixel `views` costs.
+Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
+baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
 
 ## Render-scale tiers trade resolution for frame time
 
@@ -268,7 +175,7 @@ the first frame at it
 ([loading and installing](../../../reference/shaders.md#loading-and-installing)).
 
 A view whose ceiling is native and whose quality does not ask for temporal
-reconstruction keeps the twelve-pass native fragment and writes its output
+reconstruction keeps the ten-pass native fragment and writes its output
 directly. It allocates no resolve resources and ignores the current
 grid, so a layout transition does not dip it. A changed ceiling rebuilds the
 view's graph beside the installed one, which presents its last image until the
@@ -337,11 +244,10 @@ within the budget.
 
 Views shades only the pixels a surface covers. It writes the **lit image**: each
 pixel's shaded color premultiplied by its **coverage**, with the coverage in the
-alpha, which is one for a solid hit, the silhouette's share on an edge beside the
-sky, and zero for a miss. The color has already passed through the atmosphere
-between the camera and the hit (see [surface transport](#surface-transport)). In a native
-view a pixel outside the dispatch box is never written, so the passes after views
-read it as uncovered; in a reduced or temporal view the resolve reconstructs the
+alpha, which is one for a hit and zero for a miss; a rasterized silhouette has no
+partial coverage. The color has already passed through the atmosphere
+between the camera and the hit (see [surface transport](#surface-transport)). In a
+reduced or temporal view the resolve reconstructs the
 lit image, coverage with color, and each pixel's surface transport at the output
 extent.
 
@@ -613,13 +519,10 @@ demands nothing of its writer, and device loss starts from none.
   surface transport, two words.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
-extent, which only the resolve reads, inside the dispatch box: one where a screen
-covers the pixel, and, since the material model cannot tell steady emission from
-animated, the share of the pixel's color it emits after detail material
-selection, material layers and mesh-atlas sampling. For temporal secondary
-shadows, rejection caused by ownership, light motion or occluder motion sets
-reactivity to one independently of K reuse, and receiver rejection does so when
-K is reused. Coverage stays in the color's
+extent, which only the resolve reads: one where a screen covers the pixel, and,
+since the material model cannot tell steady emission from animated, the share of
+the pixel's color it emits after material layers and mesh-atlas sampling.
+Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
 inside the lit color and the transport, as a property of each sample's surface.
@@ -628,7 +531,7 @@ The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
 pixels. It reprojects the pixel through the nearest-depth sample's motion
 (`frame/sdf-reprojection.hlsli`, the one reprojection implementation, through its
-shape's or triangle's previous pose and the instance's previous view), or, where
+draw's previous pose and the instance's previous view), or, where
 the 3x3 saw no surface, through the camera's rotation alone. History at the moved
 position is rejected when the history surface there names another identity or a
 ray distance more than 5% from the reprojected one; the pixel then shows the
@@ -660,7 +563,7 @@ The count is part of the epoch, so a temporal view shown again starts
 a new epoch while a spatial view's still output stands without a render.
 
 A plain capture (`converge: 0`) observes the next normal temporal sample and
-keeps clean color and shadow history. An explicit converging capture starts its
+keeps clean color history. An explicit converging capture starts its
 sample sequence at zero; any capture also discards retained tainted history
 before recording filled inputs.
 
@@ -694,99 +597,82 @@ checks flat colors and saturated edges. Disabling `sharpen` at full strength
 returns the source codes, making the sharpened-edge claims fail. Both canaries
 require a GPU and run in the merge selection on Vulkan and Direct3D 12.
 
-## The baked-mesh path
+## The bake
 
-A view whose quality names the baked-mesh path (`SdfViewQuality.RenderPath`,
-the world's own views by default in `Puck.World`, whose `world.render-path interpreter` session lever returns them to the interpreter) renders without
-walking the field in the frame. It runs its interpreter fragment's mesh-path
-form (`SdfWorldPackage.MeshPathFragmentOf`), which adds a bake pass and two
-shadow-cascade raster passes and keeps everything else:
+`SdfMeshPathBake`, one per residency, bakes the residency's program into meshes
+while a bake is pending, and the mask and bake passes run only then. A group is
+the instances one rigid frame moves: every active instance riding one
+dynamic-transform slot, or one static instance; the segments no instance owns
+form one more group. The mask pass runs `sdf-mesh-bake-mask`, which writes each
+lattice's group selection into its instance mask words, and the bake pass runs
+`sdf-mesh-bake`, which samples up to sixteen lattices a frame through the
+interpreter, one call site, with only the group's instances in the walk
+(`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
+lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`,
+a gradient sample counting five), so a frame that bakes keeps its budget. A
+group refines from a coarse lattice over its bounding sphere to the box its
+surface can cross, then samples a final lattice of at most 65 samples a side, no
+finer than 1.5 cm, in slabs of whole planes, values alone; it then measures
+gradients only at the corners of the cells whose corners disagree in sign, the
+only samples the contour reads one at. The samples are read back and contoured
+on the thread pool by `SdfSampledLattice`, the prototype baker's dual contouring
+(`SdfDualContouring`) over a lattice whose spacing may differ per axis. A sample
+whose material no shape of the group carries reads as outside, since the walk
+can answer with a shape of another instance where compiled parts are shared.
 
-```text
-   upload → mask → bake → cull-args → shadow-near → shadow-far → mesh → primary → views → resolve → sky → composite
-```
+The material is then sampled where a field hit would read it: the bake writes
+four points a quad, its quarters' centres lifted half a millimetre off the
+surface, into the tables' point table (`SdfWorldTables.WriteMeshBakePoints`,
+World member `sdfMeshBakePoints`) ahead of the frame's upload, and
+`sdf-mesh-bake` samples them as a points lattice. A quad whose quarters agree
+keeps one material; any other splits into its quarters, so a material boundary,
+a painted iris or pupil included, resolves at half a cell even where its shape
+is thinner than the mesh.
 
-On this path the beam, tape, surface, ambient and shadow passes skip,
-and the parts that run change their kernels:
+A dynamic group bakes in its slot's frame: its box, lattices and points are in
+that frame, and `sdf-mesh-bake` carries each sample through the slot's transform
+in the frame that dispatches it, so a body that moves while it bakes is sampled
+where it is rather than where it stood when the bake began. Its mesh stays in
+that frame and draws at the slot's live transform, and its draw names that slot
+(`SdfMeshDraw.FrameSlot`, the draw record's word 41), which the surface pass
+writes into the visibility record so views places material layers in the body's
+frame and reads its lanes; a static group's mesh is in world space.
 
-- **The bake.** `SdfMeshPathBake`, one per residency, bakes the residency's
-  program into meshes while a bake is pending, and the mask and bake passes run
-  only then. A group is the instances one rigid frame moves: every active
-  instance riding one dynamic-transform slot, or one static instance; the
-  segments no instance owns form one more group. The mask pass runs
-  `sdf-mesh-bake-mask`, which writes each group's selection into a tile's mask
-  words, and the bake pass runs `sdf-mesh-bake`, which samples up to sixteen
-  lattices a frame through the frame's own interpreter, one call site, with only
-  the group's instances in the walk (`sdfMapOmitWorldSegments` drops the
-  unowned segments from it). A frame's lattices stay within its share of field
-  evaluations (`SdfMeshPathBake.FrameTaps`, a gradient sample counting five), so
-  a frame that bakes keeps its budget. A group refines from a coarse lattice
-  over its bounding sphere to the box its surface can cross, then samples a
-  final lattice of at most 65 samples a side, no finer than 1.5 cm, in slabs of
-  whole planes, values alone; it then measures gradients only at the corners of
-  the cells whose corners disagree in sign, the only samples the contour reads
-  one at. The samples are read back and contoured on the thread pool by
-  `SdfSampledLattice`, the prototype baker's dual contouring
-  (`SdfDualContouring`) over a lattice whose spacing may differ per axis. A
-  sample whose material no shape of the group carries reads as outside, since
-  the walk can answer with a shape of another instance where compiled parts are
-  shared. The material is then sampled where a field hit would read it: the
-  bake writes four points a quad, its quarters' centres lifted half a
-  millimetre off the surface, into the tables' point table
-  (`SdfWorldTables.WriteMeshBakePoints`, World member `sdfMeshBakePoints`) ahead
-  of the frame's upload, and `sdf-mesh-bake` samples them as a points lattice.
-  A quad whose quarters agree keeps one material; any other splits into its
-  quarters, so a material boundary, a painted iris or pupil included, resolves
-  at half a cell even where its shape is thinner than the mesh. A dynamic
-  group bakes in its slot's frame: its box, lattices and points are in that
-  frame, and `sdf-mesh-bake` carries each sample through the slot's transform
-  in the frame that dispatches it, so a body that moves while it bakes is
-  sampled where it is rather than where it stood when the bake began. Its mesh
-  stays in that frame and draws at the slot's live transform, and its draw
-  names that slot (`SdfMeshDraw.FrameSlot`,
-  the draw record's word 41), which the surface pass writes into the L row so
-  views places material layers in the body's frame and reads its lanes; a
-  static group's mesh is in world space. The tables keep each mesh at the words
-  it was first placed at (`SdfMeshRegionArena`: a reserve of draw records, then
-  each mesh whole), so a frame whose bodies moved packs only its draw records
-  (`SdfMeshRegion.WriteDraws`), and a frame where a group's mesh lands writes the
-  records and that mesh alone. Every mesh is written again only when the arena
-  outgrows its draw reserve or packs out its holes, the mesh atlases change, or
-  the region grows, to twice its need. The bake keeps a
-  group whose instructions a program rebuild left unchanged, so only an edited
-  group bakes again, and it reports its groups, dispatches, samples, triangles,
-  vertices and wall time on stderr when it finishes.
-- **The shadow cascades.** `SdfMeshShadowCascades` fits two orthographic
-  cameras along the key light (the frame's first shadow slot): the near one
-  around the view frustum's first 16 metres, the far one to 120 metres or the
-  far distance, each a bounding sphere of its slice snapped to whole texels. The
-  `shadow-near` and `shadow-far` passes draw every mesh draw from their camera
-  through the mesh pass's own pipeline, whose stages take their orthographic
-  form under the pass block's `lightCamera` flag, into 2048-texel targets of the mesh target's format.
-  The second shadow slot's light, when one holds it, gets one cascade over the
-  first 40 metres, drawn by `shadow-second` and written into K's second slot.
-- **The surface pass.** Primary records `sdf-world-mesh-surface`, which calls
-  no field query and writes each pixel's whole visibility record from the mesh
-  target: the V, C and L rows primary writes for a mesh pixel, the N and S rows
-  surface writes, a screen-space ambient occlusion (twelve normal-oriented
-  hemisphere samples against the mesh target's ray distances) into S, and the
-  key light's visibility into K's first slot. The visibility is a
-  percentage-closer soft shadow from the first cascade holding the point: a
-  blocker search sizes the penumbra from the light's penumbra slope and the gap
-  to the blockers, and a filter of that width answers.
-- **Views and after.** Views records `sdf-world-views-mesh`, the views kernel
-  with its field reads compiled out (`SDF_VIEWS_MESH_ONLY`), so it carries no
-  interpreter; it shades the records as it shades any mesh pixel, and the pass
-  block's `renderPath` lets it read a mesh pixel's K row and frame slot. The
-  resolve, the sky and the composite are the interpreter path's.
-- **Indirect light.** Views read the irradiance volume
-  ([the mesh path's irradiance volume](lighting-and-shading.md#the-mesh-paths-irradiance-volume))
-  at the tier `world.indirect` and the quality preset ask for
-  (`SdfWorldResidency.IndirectTier`). The interpreter path draws no indirect
-  light.
+The tables keep each mesh at the words it was first placed at
+(`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a
+frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`),
+and a frame where a group's mesh lands writes the records and that mesh alone.
+Every mesh is written again only when the arena outgrows its draw reserve or
+packs out its holes, the mesh atlases change, or the region grows, to twice its
+need. The bake keeps a group whose instructions a program rebuild left
+unchanged, so only an edited group bakes again, and it reports its groups,
+dispatches, samples, triangles, vertices and wall time on stderr when it
+finishes. Until a group's first mesh lands, the group draws nothing.
 
-The cascade targets carry the mesh target's four floats a texel, which reuses
-the mesh pipeline at 16 bytes a texel more than a depth-only pipeline needs.
+## The shadow cascades
+
+`SdfMeshShadowCascades` fits two orthographic cameras along the key light (the
+frame's first stable shadow slot): the near one around the view frustum's first
+16 metres, the far one to 120 metres or the far distance, each a bounding sphere
+of its slice snapped to whole texels. The `shadow-near` and `shadow-far` passes
+draw every mesh draw from their camera through the mesh pass's own pipeline,
+whose stages take their orthographic form under the pass block's `lightCamera`
+flag, into 2048-texel targets of the mesh target's format. The second shadow
+slot's light, when one holds it, gets one cascade over the first 40 metres,
+drawn by `shadow-second` and written into K's second slot. The cascade targets
+carry the mesh target's four floats a texel, which reuses the mesh pipeline at
+16 bytes a texel more than a depth-only pipeline needs.
+
+A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
+outgoing light fades from its stable slot's cascade by the handoff's weight, and
+the incoming light, which holds no cascade until the handoff retires and it
+takes the slot, lights unshadowed. Neither the fade policy nor a live handoff
+plans or allocates anything.
+
+Indirect light is the irradiance volume
+([the irradiance volume](lighting-and-shading.md#the-mesh-paths-irradiance-volume)),
+which views reads at the tier `world.indirect` and the quality preset ask for
+(`SdfWorldResidency.IndirectTier`).
 
 ## Frames in flight
 
@@ -802,7 +688,7 @@ waits on the previous upload's fence; that fence signals once every submission
 queued before it has finished, so the views that read the slot two uploads
 earlier are done with it. This is what lets a moving screen or a walking player
 update its transform in place each frame without racing the GPU reading last
-frame's copy. A rewrite of what every slot shares — a program or instance grid
+frame's copy. A rewrite of what every slot shares — a program
 that outgrew its region, a grown mesh region, a new glyph atlas, a reloaded
 kernel — waits for the whole device to go idle instead, because the submissions
 of other nodes read it too.
@@ -814,7 +700,7 @@ matters most on unified-memory devices such as the Steam Deck. So a frame
 writes only what changed since the frame before it.
 
 Every table the kernels read from the host is a `GpuRegion`: the program
-words, dynamic transforms, the frame instance grid, screen surfaces, screen
+words, dynamic transforms, screen surfaces, screen
 mappings, screen lights, bounded volumes, glyph decals and mesh draws, which the
 residency's tables hold. What is not a table rides each pass's block instead:
 the view's camera, far distance and debug view mode, the frame's shading levers
@@ -858,7 +744,7 @@ a different draw list. Each scene emitter states its draws, a static placement's
 fixed at its rebuild and a stamp's posed at its root each frame, and returns the
 same list while none moved, so a still scene packs nothing. The region starts with one draw record when the tables are built
 and grows by half again when a list outgrows it. The mesh pass reads its triangles,
-and primary reads the winning mesh's material.
+and the surface pass reads the winning draw's material.
 
 A host-baked brick reaches the brick pool through a staged region whose
 destination is the pool itself. Since the carve bake also writes the pool, each
@@ -878,16 +764,15 @@ clock: the twinkle's phase and the clouds' drift, which the World's environment
 resolver integrates from each rate, keyed or literal, ride the pass blocks, which the
 view's node writes whole each frame it renders, and each medium's advection and
 pulse ride the volume table, which a frame writes only when the tick moves
-them. The frame instance grid is rebuilt only on a frame whose
-transforms moved. `world.counters gpu` reports the tables' written bytes as
+them. `world.counters gpu` reports the tables' written bytes as
 `uploads.host-visible` on its `upload` line, and a brick's on its `bricks` line.
 
 Nothing on the live path waits for its own submission: the upload and each
 view's passes are submitted and the fences do the pacing. A capture reads a
 view back through the render graph, which serves it from a frame it renders.
 
-A view's device-local scratch (tile buffers, instance masks, indirect
-arguments, visibility records, the mesh target) is *retained*: one allocation
+A view's device-local scratch (the bake's instance masks and samples, the
+cascade targets, visibility records, the mesh target) is *retained*: one allocation
 per instance, shared by every frame slot rather than duplicated. The planner
 orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other
@@ -928,11 +813,10 @@ helper lanes, and adds them with one atomic into the pass's row of the node's
 kernel counters, which the node clears ahead of the view's first pass and
 copies to the frame slot's readback behind its last; the counts join the pass's
 line once the submission completes, as `march.steps` and `texels.written`. The
-marches run in floats and an indirect pass runs only the tiles culling leaves
-it, so these counts are per backend deterministic. The clear, the copy and their
+bake samples in floats, so these counts are per backend deterministic. The clear, the copy and their
 three barriers (after the clear, before the copy, and from the copy to the host)
-count outside every pass. A pass the frame skips, such as the ambient and
-shadow passes at a tier that turns them off, is reported as skipped, not as a
+count outside every pass. A pass the frame skips, such as a
+cascade in a frame that draws no mesh, is reported as skipped, not as a
 pass that ran and counted nothing. A view the cadence gate finds unchanged is not rendered at
 all: the render graph keeps its latest output, and its passes record nothing.
 Counts are published only once the GPU has finished the submission, so
@@ -961,8 +845,6 @@ disassembly or trace the code path instead.
   [`src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs).
 - Measurement method and the register-pressure lesson:
   [SDF performance](performance.md).
-- The uniform-grid cull rationale and why a per-frame BVH was rejected for it:
-  [Hierarchical and instance acceleration](../reference/hierarchical-and-instance-acceleration.md).
 - The two-deep upload ring and its per-slot fences: `FrameRingSize` in
   [`src/Puck.SdfVm/SdfWorldTables.cs`](../../../../src/Puck.SdfVm/SdfWorldTables.cs)
   and `SubmitUpload` in
@@ -977,33 +859,17 @@ disassembly or trace the code path instead.
 
 A rendered view exposes `SdfWorldPicker` through its `SdfWorldPasses`. A request
 uses normalized view coordinates and reads one visibility pixel asynchronously.
-The copy takes the record's V, C and L.x words (32 bytes) and, beside them, the
-frame's 16-byte dispatch box. V supplies kind, source, ray distance and material.
-The source is the SDF program instance ordinal plus one, or the mesh draw
-ordinal. Static instances therefore remain distinguishable even with the same
-material. A queued coordinate captures the program and immutable host identity
-map when its pixel copy records, so a content revision before recording keeps the
-request. A view change cancels it; after recording, a changed program or map
-rejects the answer and the request records again. Pose-only mesh changes keep
-that map.
-
-A pixel outside the frame's dispatch box holds an earlier frame's record, so the
-answer applies the rule the hit passes use, `SdfVisibility.IsCurrent`, to the box
-its own frame wrote, and a pixel outside it answers nothing, as sky. The kernels
-read the same rule through the generated `SDF_VISIBILITY_CURRENT`, and the
-identity's kind and source fields through `SdfVisibility` too.
-
-The 64-byte visibility record keeps the winning shape's exact transform slot in
-L.x, or `SDF_TRANSFORM_SLOT_NONE` (`SdfProgram.NoDynamicTransformSlot`) for
-static geometry. This slot can differ from an articulated instance's bound slot.
-A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the
-transform table of the frame the record was rendered from, the rows that frame's
-upload staged, captured when the copy records, as `SdfPickResult.Transform`.
-Surface shading reads the four anonymous lanes from the existing dynamic
-transform row; static hits read zero. L.y is spare.
-L.z and L.w carry the ambient and shadow query counts. A slot
-fits every lane that carries it: `SdfProgram.DynamicTransformSlotBits` is the
-float data lane's exact range, and a program naming a larger slot is refused.
+The copy takes the record's first four words (16 bytes): the ray distance, the
+identity, the material and the triangle; an inspector's copy takes six (24
+bytes), through the normal. The identity supplies kind and source: the mesh draw
+ordinal, which the host's pick map resolves to its placement. Every in-extent
+record is the frame's own, so the answer needs no currency check. A queued
+coordinate captures the program and immutable host identity map when its pixel
+copy records, so a content revision before recording keeps the request. A view
+change cancels it; after recording, a changed program or map rejects the answer
+and the request records again. Pose-only mesh changes keep that map. The
+identity's kind and source fields come from `SdfVisibility`, which the kernels
+read through their generated spellings.
 
 Build mode and locally opened passthrough panes demand hover from the same
 picker. At most one copy is in flight: while it is, a moved pointer's latest

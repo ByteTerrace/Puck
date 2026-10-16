@@ -1,7 +1,7 @@
 # Level of detail and bounds
 
-Puck uses conservative bounds to skip work without changing the rendered
-field. A skip is valid only when the omitted candidate cannot affect the
+Puck uses conservative bounds to skip work without changing the field the
+bake samples or the CPU queries read. A skip is valid only when the omitted candidate cannot affect the
 accumulated result for the current sample.
 
 ## Levels of bounds
@@ -23,36 +23,6 @@ accumulated result for the current sample.
 Bounds must include transform reach, smooth-blend radius, and scoped field
 expansion. Operations whose influence cannot be bounded conservatively make the
 affected range ineligible for exact skipping.
-
-## Primary part bounds
-
-For hard-union roots admitted to independent part tracing, the beam computes a
-box around each complete compiled part for each viewport. The primary ray can
-skip a box it misses and start its local march at the box entry. Cuts and smooth
-blends still execute as one ordered field; the box never replaces that field.
-
-These boxes enclose the positive distance band accepted by the pixel-footprint
-hit rule. They include the scope and domain distance corrections, smooth-union
-expansion, and the current pose. Starting with the far plane's footprint, two
-further refinements use the previous box's farthest corner to tighten the depth
-limit. Each refinement still contains every possible accepted point.
-
-The implementation in `sdf-part-bounds.hlsli` bounds spheres, capsules, tori,
-sweeps, superellipsoids (every ellipsoid included), boxes, screen slabs and supported extruded
-or revolved profiles, with optional scale, axial profile or shear. Unknown
-formulae publish an unbounded sentinel and preserve the original local march.
-This cache changes primary sample positions within the existing hit band; it
-does not change the field or collision queries.
-
-A separate AO band encloses the raw-field sublevel set at 0.15. It also admits
-supported flat chains and complete uncompiled scopes. Cuts and intersections
-retain all leaf bounds; smooth unions add their expansion, and scope corrections
-enlarge the required raw level. An unsupported operation makes the complete
-expression unbounded. Only independent hard-union roots use these exclusions.
-Each AO rung checks that its scale-corrected ceiling fits this band before
-using the cached candidates; a failed check restores the full field. The
-[engine README](../../../../src/Puck.SdfVm/README.md#the-render-pipeline) describes
-the shared-buffer layout and AO composition.
 
 ## One effective-scale rule
 

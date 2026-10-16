@@ -1,6 +1,6 @@
 // The view's one path from its render extent to its output extent (SdfWorldPackage.Resolve), one invocation an output
 // pixel. It resolves the lit image, color premultiplied by coverage and fog transmittance with coverage in alpha, which
-// only views wrote, and only inside the dispatch box cull-args left: every render sample outside it reads as transparent.
+// views wrote for every render sample.
 // Beside it, it resolves each sample's surface transport (shade/sdf-transport.hlsli), computed from the sample's coverage
 // and its own visibility record's ray distance along the output pixel's ray, with exactly the color's weights, so the
 // composite's atmosphere and media see the coverage the color has. Spatial, it reconstructs the active render grid without sampling unrendered ceiling pixels
@@ -110,8 +110,8 @@ float3 sdfResolveAirDirection(uint2 pixel, uint2 extent) {
 
     return cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
 }
-// A render sample's transport beside the color tap read at the same pixel: zero where that tap has no coverage, which
-// every tap outside the dispatch box has, and for a sample with no surface.
+// A render sample's transport beside the color tap read at the same pixel: zero where that tap has no coverage, and for
+// a sample with no surface.
 float4 sdfResolveTransportAt(int2 pixel, uint2 render, float coverage, float3 origin, float3 direction) {
     if (coverage <= 0.0) {
         return float4(0.0, 0.0, 0.0, 0.0);
@@ -125,16 +125,14 @@ float4 sdfResolveTransportAt(int2 pixel, uint2 render, float coverage, float3 or
 // same taps with one set of weights, and the transport word the composite reads; or, where the output has the grid's
 // extent and no jitter, the render pixel itself, whose word is its sample's ray distance (sdfTransportSampleWord), read
 // from the record exactly where a native view's composite reads it.
-void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, uint4 current, float3 origin, float3 direction, out float4 color, out float4 transport, out uint2 word) {
+void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, float3 origin, float3 direction, out float4 color, out float4 transport, out uint2 word) {
+    uint4 current = uint4(0u, 0u, render);
+
     if (exact) {
-        float t = 0.0;
+        SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, render));
+        float t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
 
         color = puckReconstructionTapWithin(currentColor, int2(pixel), render, uint2(0, 0), current);
-        if (SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
-            SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, render));
-
-            t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
-        }
         transport = sdfSampleTransport(color.a, t, origin, direction);
         word = sdfTransportSampleWord(t);
         return;
@@ -165,8 +163,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (any(id.xy >= extent)) return;
     uint2 render = passGroup.imageExtent;
     float2 jitter = passGroup.jitter;
-    // Only the dispatch box holds this frame's lit samples: the box cull-args wrote, in render pixels.
-    uint4 current = (uint4(cullBounds[0], cullBounds[1], cullBounds[2], cullBounds[3]) * SDF_VISIBILITY_BOX_EDGE);
     bool temporal = ((passGroup.temporal != 0u) && (passGroup.debugMode == 0u));
     // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
     bool unjittered = (!temporal || all(jitter == 0.0));
@@ -177,7 +173,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 spatialWord;
 
     sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
-        (unjittered && all(render == extent)), render, current, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+        (unjittered && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
     if (!temporal) {
         output[id.xy] = spatial;
         sdfWorkTexels = 1u;
@@ -208,31 +204,27 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     [unroll] for (int dy = -1; dy <= 1; dy++) {
         [unroll] for (int dx = -1; dx <= 1; dx++) {
             uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
-            bool current = SDF_VISIBILITY_CURRENT(pixel, cullBounds);
-            float4 color = (current ? currentColor.Load(int3(pixel, 0)) : float4(0.0, 0.0, 0.0, 0.0));
+            float4 color = currentColor.Load(int3(pixel, 0));
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
             float4 transport = float4(0.0, 0.0, 0.0, 0.0);
 
-            if (current) {
-                reactive = max(reactive, reactivity[sdfReactivityIndex(pixel, 0u, render)]);
+            reactive = max(reactive, reactivity[sdfReactivityIndex(pixel, 0u, render)]);
 
-                uint record = sdfVisibilityRecord(pixel, 0u, render);
-                SdfVisibility visibility = sdfLoadVisibility(record);
+            uint record = sdfVisibilityRecord(pixel, 0u, render);
+            SdfVisibility visibility = sdfLoadVisibility(record);
+            bool surface = sdfVisibilityHit(visibility);
 
-                bool surface = sdfVisibilityHit(visibility);
-
-                if (surface) {
-                    transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
-                }
-                if (surface && (!hit || (visibility.t < hitT))) {
-                    hit = true;
-                    hitT = visibility.t;
-                    hitIdentity = visibility.identity;
-                    hitRecord = record;
-                    hitPixel = pixel;
-                }
+            if (surface) {
+                transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
+            }
+            if (surface && (!hit || (visibility.t < hitT))) {
+                hit = true;
+                hitT = visibility.t;
+                hitIdentity = visibility.identity;
+                hitRecord = record;
+                hitPixel = pixel;
             }
             sum += (weight * color);
             transportSum += (weight * transport);

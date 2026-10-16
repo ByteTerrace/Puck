@@ -4,20 +4,13 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 public static partial class SdfFrameBlock {
-    private static readonly int RenderPathOffset = Offset(member: SdfWorldPackage.RenderPath);
     private static readonly int MeshShadowCascadesOffset = Offset(member: SdfWorldPackage.MeshShadowCascades);
     private static readonly int MeshShadowCountOffset = Offset(member: SdfWorldPackage.MeshShadowCount);
     private static readonly int MeshShadowParametersOffset = Offset(member: SdfWorldPackage.MeshShadowParameters);
     private static readonly int MeshBakeLatticesOffset = Offset(member: SdfWorldPackage.MeshBakeLattices);
     private static readonly int MeshBakeCountOffset = Offset(member: SdfWorldPackage.MeshBakeCount);
 
-    /// <summary>Writes the render path the pass's graph runs: one on the baked-mesh path, whose surface pass writes a mesh
-    /// pixel's shadow row, zero on the interpreter path.</summary>
-    /// <param name="block">The pass block <see cref="Write"/> filled.</param>
-    /// <param name="mesh">Whether the graph is the mesh path's (<see cref="SdfWorldPackage.MeshPathFragment"/>).</param>
-    public static void WriteRenderPath(Span<byte> block, bool mesh) =>
-        WriteUInt32(block: block, offset: RenderPathOffset, value: (mesh ? 1u : 0u));
-    /// <summary>Writes the shadow cascades the mesh path's surface pass reads.</summary>
+    /// <summary>Writes the shadow cascades the surface pass reads.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="cascades">The frame's cascades.</param>
     public static void WriteMeshShadows(Span<byte> block, in SdfMeshShadowCascades cascades) {
@@ -37,7 +30,7 @@ public static partial class SdfFrameBlock {
             WriteRow(block: block, offset: (row + 48), value: camera.Forward, w: camera.Far);
         }
     }
-    /// <summary>Writes one cascade's orthographic light camera as the view a mesh-path shadow raster pass draws from: the
+    /// <summary>Writes one cascade's orthographic light camera as the view a shadow cascade's raster pass draws from: the
     /// view rows the mesh pass's stages read, the light-camera flag that puts them in their orthographic form, the cascade target's
     /// extent, and no jitter.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
@@ -85,7 +78,7 @@ public static partial class SdfFrameBlock {
         }
     }
 
-    /// <summary>Writes the irradiance volume the mesh path's views pass reads (<see cref="SdfMeshIrradiance"/>); a disabled
+    /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>); a disabled
     /// volume writes zeros, and views then light as without indirect light.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="volume">The volume's parameters.</param>

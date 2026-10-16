@@ -27,7 +27,7 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         var root = scratch.RootPath;
 
         var context = Context(gpu: new FakeGpuDevice());
-        var changed = SdfTestPipelines.Kernels(beam: 2);
+        var changed = SdfTestPipelines.Kernels(mask: 2);
         using var node = Node();
 
         node.ProduceFirstFrame(context: in context);
@@ -36,27 +36,27 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             (changed.With(
                 bytecode: SpirvEdits.Renamed(
                     from: ("passGroup" + SdfWorldInterfaces.Stamp),
-                    module: changed[SdfKernel.Beam].Span,
+                    module: changed[SdfKernel.MeshBakeMask].Span,
                     to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
                 ),
-                kernel: SdfKernel.Beam
+                kernel: SdfKernel.MeshBakeMask
             ), "stamped"),
             (changed.With(
                 bytecode: SpirvEdits.BindingsSwapped(
                     first: SdfWorldPackage.ProgramWords,
-                    module: changed[SdfKernel.InstanceCull].Span,
-                    second: SdfWorldPackage.FrameInstanceGrid
+                    module: changed[SdfKernel.MeshBake].Span,
+                    second: SdfWorldPackage.InstanceMasks
                 ),
-                kernel: SdfKernel.InstanceCull
+                kernel: SdfKernel.MeshBake
             ), SdfWorldPackage.ProgramWords),
             (changed.With(
                 bytecode: SpirvEdits.BindingsSwapped(
-                    first: SdfWorldPackage.CullBoundsWritten,
-                    module: changed[SdfKernel.CullArgs].Span,
-                    second: SdfWorldPackage.ViewsArgsWritten
+                    first: SdfWorldPackage.MeshBakeSamplesWritten,
+                    module: changed[SdfKernel.MeshBake].Span,
+                    second: ShaderWorkCounters.Buffer
                 ),
-                kernel: SdfKernel.CullArgs
-            ), SdfWorldPackage.CullBoundsWritten),
+                kernel: SdfKernel.MeshBake
+            ), SdfWorldPackage.MeshBakeSamplesWritten),
         ])) {
             Tree(
                 kernels: kernels,
@@ -95,9 +95,9 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
 
         var context = Context(gpu: new FakeGpuDevice());
         var passes = SdfKernelSet.PassesDirectory(tree: root);
-        var cullArgs = Path.Combine(
+        var mask = Path.Combine(
             path1: passes,
-            path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.CullArgs)}.comp.hlsl"
+            path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.MeshBakeMask)}.comp.hlsl"
         );
         using var node = Node();
 
@@ -113,12 +113,12 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         Assert.Equal(expected: ("failed", 0L), actual: (empty.State, empty.Generation));
         Assert.Contains(actualString: empty.Error, expectedSubstring: "carries no kernel");
 
-        // The changed beam alone: every other kernel keeps its bytecode.
+        // The changed bake mask alone: every other kernel keeps its bytecode.
         File.WriteAllBytes(
-            bytes: SdfTestPipelines.Kernels(beam: 2)[SdfKernel.Beam].ToArray(),
+            bytes: SdfTestPipelines.Kernels(mask: 2)[SdfKernel.MeshBakeMask].ToArray(),
             path: Path.Combine(
                 path1: passes,
-                path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Beam)}.comp.spv"
+                path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.MeshBakeMask)}.comp.spv"
             )
         );
 
@@ -130,10 +130,11 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
 
         Assert.Equal(expected: ("applied", 1L, 1), actual: (bytecode.State, bytecode.Generation, bytecode.ChangedPipelines));
 
-        // A cull-args source beside it: the reload compiles it, and the beam it already installed is unchanged.
+        // A bake mask source in its place: the reload compiles it, replacing the bytecode it already installed.
+        File.Delete(path: Path.Combine(path1: passes, path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.MeshBakeMask)}.comp.spv"));
         File.WriteAllText(
-            contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.x;"),
-            path: cullArgs
+            contents: MaskSource(body: "sdfInstanceMasksRW[0] = passGroup.extent.x;"),
+            path: mask
         );
 
         var compiled = Reload(
@@ -145,8 +146,8 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         Assert.Equal(expected: ("applied", 2L, 1), actual: (compiled.State, compiled.Generation, compiled.ChangedPipelines));
 
         File.WriteAllText(
-            contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.w;"),
-            path: cullArgs
+            contents: MaskSource(body: "sdfInstanceMasksRW[0] = passGroup.extent.w;"),
+            path: mask
         );
 
         var broken = Reload(
@@ -156,12 +157,12 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
         );
 
         Assert.Equal(expected: ("failed", 2L), actual: (broken.State, broken.Generation));
-        Assert.Contains(actualString: broken.Error, expectedSubstring: $"{Path.GetFileName(path: cullArgs)}:5:");
+        Assert.Contains(actualString: broken.Error, expectedSubstring: $"{Path.GetFileName(path: mask)}:5:");
         Assert.True(condition: node.Produce(context: in context));
     }
 
-    // A cull-args kernel that reads this host's world interface and runs one statement, on its fifth line.
-    private static string CullArgsSource(string body) =>
+    // A bake mask kernel that reads this host's world interface and runs one statement, on its fifth line.
+    private static string MaskSource(string body) =>
         $$"""
         #include "{{RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory).Replace(newChar: '/', oldChar: '\\')}}/isa/sdf-world.interface.hlsli"
 
@@ -215,7 +216,7 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: frame),
             height: Extent,
-            kernels: SdfTestPipelines.Kernels(beam: 1),
+            kernels: SdfTestPipelines.Kernels(mask: 1),
             name: "world",
             pipelines: SdfTestPipelines.Cache(),
             width: Extent

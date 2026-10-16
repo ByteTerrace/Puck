@@ -14,12 +14,8 @@ namespace Puck.World.Client;
 /// <param name="Unmaskable">Whether any instance cannot be finitely culled.</param>
 /// <param name="StampPoolSlots">Reserved transform slots for this placement's live stamp registration.</param>
 /// <param name="MeshDraws">Live mesh draws belonging to the placement.</param>
-/// <param name="HiddenFieldInstances">SDF instances hidden from the camera while another representation draws.</param>
 public sealed record WorldPlacementCost(string Placement, string? Prototype, int OwnedWords, int Shapes, int Instances,
-    int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, int StampPoolSlots, int MeshDraws, int HiddenFieldInstances) {
-    /// <summary>Gets the representation captured by this frame's emission, independently of another world's bake cache.</summary>
-    public bool DrawsBake { get; init; }
-}
+    int ScopeClamps, float BoundRadius, float Halo, bool Unmaskable, int StampPoolSlots, int MeshDraws);
 /// <summary>Partitions a live program's words into placement ownership, other instance ownership and shared tables.
 /// Reading this report performs no emission, GPU work or simulation mutation.</summary>
 /// <param name="ProgramWords">The live packed program's total words.</param>
@@ -55,7 +51,6 @@ public sealed record WorldPlacementCostReport(int ProgramWords, int SharedWords,
                 BoundRadius = MathF.Max(x: row.BoundRadius, y: cost.BoundRadius),
                 Halo = MathF.Max(x: row.Halo, y: cost.Halo),
                 Unmaskable = (row.Unmaskable || cost.Unmaskable),
-                HiddenFieldInstances = (row.HiddenFieldInstances + (program.Instances[index].CameraHidden ? 1 : 0)),
             };
         }
         for (var index = 0; (index < frame.MeshDraws.Count); index++) {
@@ -71,6 +66,6 @@ public sealed record WorldPlacementCostReport(int ProgramWords, int SharedWords,
         WorldPlacementCost Row(WorldPickTarget target, string placement) => (rows.TryGetValue(key: placement, value: out var row)
             ? row : new WorldPlacementCost(Placement: placement, Prototype: target.Prototype, OwnedWords: 0, Shapes: 0,
                 Instances: 0, ScopeClamps: 0, BoundRadius: 0, Halo: 0, Unmaskable: false, StampPoolSlots: target.StampPoolSlots,
-                MeshDraws: 0, HiddenFieldInstances: 0) { DrawsBake = target.DrawsBake });
+                MeshDraws: 0));
     }
 }

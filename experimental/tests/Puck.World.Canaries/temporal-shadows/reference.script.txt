@@ -1,3 +1,0 @@
-world.cadence off
-world.wait ready 600
-world.wait 210

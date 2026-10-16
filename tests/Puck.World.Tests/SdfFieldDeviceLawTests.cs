@@ -3,8 +3,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
-using Puck.SdfVm;
-using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Testing;
@@ -75,8 +73,8 @@ public sealed partial class SdfFieldDeviceLawTests {
         }
     }
 
-    private static byte[] Kernel(string extension) =>
-        File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (KernelName + extension)));
+    private static byte[] Kernel(string extension, string name = KernelName) =>
+        File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (name + extension)));
     private static void Verify(string backend, byte[] kernel, GpuDeviceServices services) {
         var legs = Legs();
         var results = Run(
@@ -120,15 +118,9 @@ public sealed partial class SdfFieldDeviceLawTests {
         );
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
-    // results back, one per case in leg order. A tape probe passes its build kernel, which runs ahead of the probe on
-    // each leg as the engine's tape pass runs ahead of the views, behind a barrier on the tapes and the results.
-    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null,
-        Vector3[]? points = null, Vector4[]? parameters = null, int tapeWordsPerCase = 0, uint[]? instanceMasks = null,
-        byte[]? tapeBuildKernel = null) {
-        if ((tapeWordsPerCase == 0) != (tapeBuildKernel is null)) {
-            throw new ArgumentException(message: "A tape probe passes both its tape words and its build kernel.", paramName: nameof(tapeBuildKernel));
-        }
-
+    // results back, one per case in leg order.
+    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector3[]? points = null,
+        Vector4[]? parameters = null) {
         points ??= Points;
         var caseCount = checked((legs.Count * points.Length));
 
@@ -137,31 +129,12 @@ public sealed partial class SdfFieldDeviceLawTests {
         }
 
         var height = ((((uint)caseCount) + (ResultsWidth - 1U)) / ResultsWidth);
-
-        uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.WorldLayout, member: member);
-        var visibilityBinding = Binding(member: SdfWorldPackage.VisibilityRecordsWritten);
-        var tapeReadBinding = Binding(member: SdfWorldPackage.SegmentTapes);
-        var tapeWriteBinding = Binding(member: SdfWorldPackage.SegmentTapesWritten);
-        var instanceMaskBinding = Binding(member: SdfWorldPackage.InstanceMasks);
         var worldGroup = new GpuGroupLayoutDescription(
-            bindings: ((transforms is null)
-                ? [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)]
-                : [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer), new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer)]),
+            bindings: [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)],
             ordinal: WorldGroup
         );
-        // A probe that reads visibility records also reads the pass block (a record's frame slot reads its render path);
-        // a zeroed block is the interpreter path.
-        var passLayout = SdfWorldInterfaces.WorldLayout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
-        var passBlockBinding = passLayout.Bindings.Single(predicate: static binding => ((binding.Kind == GpuBindingKind.ConstantBuffer) && !binding.Pushed)).Binding;
         var passGroup = new GpuGroupLayoutDescription(
             bindings: [
-                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [
-                    new GpuGroupBinding(binding: visibilityBinding, kind: GpuBindingKind.ReadWriteBuffer),
-                    new GpuGroupBinding(binding: passBlockBinding, kind: GpuBindingKind.ConstantBuffer)]),
-                .. ((instanceMasks is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: instanceMaskBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
-                .. ((tapeWordsPerCase == 0) ? Array.Empty<GpuGroupBinding>() : [
-                    new GpuGroupBinding(binding: tapeReadBinding, kind: GpuBindingKind.ReadOnlyBuffer),
-                    new GpuGroupBinding(binding: tapeWriteBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
                 new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                 new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
             ],
@@ -201,11 +174,6 @@ public sealed partial class SdfFieldDeviceLawTests {
             description: description,
             name: default
         );
-        using var buildModule = ((tapeBuildKernel is null) ? null : services.ShaderModuleFactory.Create(
-            bytecode: tapeBuildKernel, stage: GpuShaderStage.Compute));
-        using var buildPipeline = ((buildModule is null) ? null : services.PipelineFactory.Create(
-            computeShaderModule: buildModule, description: description, name: default));
-        IGpuComputePipeline[] stages = ((buildPipeline is null) ? [pipeline] : [buildPipeline, pipeline]);
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var output = services.ImageFactory.Create(
             format: GpuPixelFormat.R32G32B32A32Float,
@@ -220,21 +188,6 @@ public sealed partial class SdfFieldDeviceLawTests {
             sizeBytes: ((ulong)(caseWords.Length * sizeof(uint))),
             usage: GpuBufferUsage.Storage
         );
-        using var dynamicTable = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
-            name: default, sizeBytes: (((ulong)transforms.Length) * 16), usage: GpuBufferUsage.Storage));
-        // One whole visibility record per case, as the kernels lay it out; a shorter buffer leaves the later cases'
-        // records out of range, which Direct3D 12 drops on store and reads back as zero.
-        using var visibility = ((transforms is null) ? null : services.BufferFactory.CreateDeviceLocal(
-            name: default, sizeBytes: (((ulong)caseCount) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage));
-        using var passBlock = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
-            data: new byte[((passLayout.BlockSizeBytes + 255U) & ~255U)], name: default, usage: GpuBufferUsage.Uniform));
-        using var tapes = ((tapeWordsPerCase == 0) ? null : services.BufferFactory.CreateDeviceLocal(
-            name: default, sizeBytes: checked(((((ulong)tapeWordsPerCase) * ((ulong)caseCount)) * sizeof(uint))), usage: GpuBufferUsage.Storage));
-        using var masks = ((instanceMasks is null) ? null : services.BufferFactory.CreateHostVisible(
-            name: default, sizeBytes: checked((((ulong)instanceMasks.Length) * sizeof(uint))), usage: GpuBufferUsage.Storage));
-
-        dynamicTable?.Write<Vector4>(data: transforms);
-        masks?.Write<uint>(data: instanceMasks);
         var programs = new List<IGpuStorageBuffer>(capacity: legs.Count);
 
         cases.Write<uint>(data: caseWords);
@@ -261,24 +214,6 @@ public sealed partial class SdfFieldDeviceLawTests {
                 poolHandle: pool
             );
 
-            if (visibility is not null) {
-                bindings.WriteBuffer(binding: visibilityBinding, bufferHandle: visibility.BufferHandle, bufferSize: visibility.SizeBytes,
-                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
-            }
-            if (passBlock is not null) {
-                bindings.WriteConstantBuffer(arrayElement: 0, binding: passBlockBinding, bufferHandle: passBlock.BufferHandle,
-                    bufferSize: passBlock.SizeBytes, descriptorSetHandle: passSet);
-            }
-            if (tapes is not null) {
-                bindings.WriteBuffer(binding: tapeReadBinding, bufferHandle: tapes.BufferHandle, bufferSize: tapes.SizeBytes,
-                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadOnlyBuffer);
-                bindings.WriteBuffer(binding: tapeWriteBinding, bufferHandle: tapes.BufferHandle, bufferSize: tapes.SizeBytes,
-                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
-            }
-            if (masks is not null) {
-                bindings.WriteBuffer(binding: instanceMaskBinding, bufferHandle: masks.BufferHandle, bufferSize: masks.SizeBytes,
-                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadOnlyBuffer);
-            }
             bindings.WriteBuffer(
                 binding: CasesBinding,
                 bufferHandle: cases.BufferHandle,
@@ -321,10 +256,6 @@ public sealed partial class SdfFieldDeviceLawTests {
                     poolHandle: pool
                 );
 
-                if (dynamicTable is not null) {
-                    bindings.WriteBuffer(binding: 1, bufferHandle: dynamicTable.BufferHandle, bufferSize: dynamicTable.SizeBytes,
-                        descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
-                }
                 bindings.WriteBuffer(
                     binding: WordsBinding,
                     bufferHandle: program.BufferHandle,
@@ -335,56 +266,39 @@ public sealed partial class SdfFieldDeviceLawTests {
                 );
                 ReadOnlySpan<uint> pushed = [(((uint)(index * points.Length)) | (((uint)points.Length) << 16))];
 
-                for (var stage = 0; (stage < stages.Length); stage++) {
-                    var stagePipeline = stages[stage];
-
-                    recorder.BindPipeline(
-                        bindPoint: GpuBindPoint.Compute,
-                        commandBufferHandle: command,
-                        pipelineHandle: stagePipeline.Handle
-                    );
-                    recorder.BindDescriptorSet(
-                        bindPoint: GpuBindPoint.Compute,
-                        commandBufferHandle: command,
-                        descriptorSetHandle: passSet,
-                        group: PassGroup,
-                        pipelineLayoutHandle: stagePipeline.LayoutHandle
-                    );
-                    recorder.BindDescriptorSet(
-                        bindPoint: GpuBindPoint.Compute,
-                        commandBufferHandle: command,
-                        descriptorSetHandle: worldSet,
-                        group: WorldGroup,
-                        pipelineLayoutHandle: stagePipeline.LayoutHandle
-                    );
-                    recorder.PushConstants(
-                        bindPoint: GpuBindPoint.Compute,
-                        commandBufferHandle: command,
-                        data: MemoryMarshal.AsBytes(span: pushed),
-                        offset: 0U,
-                        pipelineLayoutHandle: stagePipeline.LayoutHandle,
-                        stageFlags: GpuShaderStage.Compute
-                    );
-                    if ((tapes is not null) && (stage == 0)) {
-                        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: tapes.BufferHandle,
-                            sourceAccessMask: ((index == 0) ? GpuAccess.None : GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
-                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-                            sourceStageMask: ((index == 0) ? GpuStage.TopOfPipe : GpuStage.ComputeShader),
-                            destinationStageMask: GpuStage.ComputeShader);
-                    }
-                    if (stage > 0) {
-                        // The probe reads the tapes and the build's result texel the build kernel just wrote.
-                        recorder.MemoryBarrier(commandBufferHandle: command,
-                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
-                            sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
-                    }
-                    recorder.Dispatch(
-                        commandBufferHandle: command,
-                        groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
-                        groupCountY: 1U,
-                        groupCountZ: 1U
-                    );
-                }
+                recorder.BindPipeline(
+                    bindPoint: GpuBindPoint.Compute,
+                    commandBufferHandle: command,
+                    pipelineHandle: pipeline.Handle
+                );
+                recorder.BindDescriptorSet(
+                    bindPoint: GpuBindPoint.Compute,
+                    commandBufferHandle: command,
+                    descriptorSetHandle: passSet,
+                    group: PassGroup,
+                    pipelineLayoutHandle: pipeline.LayoutHandle
+                );
+                recorder.BindDescriptorSet(
+                    bindPoint: GpuBindPoint.Compute,
+                    commandBufferHandle: command,
+                    descriptorSetHandle: worldSet,
+                    group: WorldGroup,
+                    pipelineLayoutHandle: pipeline.LayoutHandle
+                );
+                recorder.PushConstants(
+                    bindPoint: GpuBindPoint.Compute,
+                    commandBufferHandle: command,
+                    data: MemoryMarshal.AsBytes(span: pushed),
+                    offset: 0U,
+                    pipelineLayoutHandle: pipeline.LayoutHandle,
+                    stageFlags: GpuShaderStage.Compute
+                );
+                recorder.Dispatch(
+                    commandBufferHandle: command,
+                    groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
+                    groupCountY: 1U,
+                    groupCountZ: 1U
+                );
             }
 
             recorder.EndCommandBuffer(commandBufferHandle: command);

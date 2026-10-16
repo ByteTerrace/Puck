@@ -1,10 +1,7 @@
-// The views pass's stage over the pixel's visibility record. Each hit pass compiles its own stage after
-// sdf-hit-pass.hlsli: primary marches and writes its V, C and L rows (march/sdf-primary.hlsli), surface its N and S rows
-// and ambient its occlusion (surface/sdf-surface.hlsli), shadow its K row (surface/sdf-shadow.hlsli), and views shades
-// the record (sdfViewsStage below).
+// The views pass's stage over the pixel's visibility record, which the surface pass wrote (sdf-surface-stage.hlsli):
+// views shades the record (sdfViewsStage below).
 #ifndef PASSES_SDF_VIEWS_STAGE_HLSLI
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
-#include "sdf-views-field.hlsli"
 #include "sdf-light-stage.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
@@ -13,9 +10,9 @@
 // reactivity (sdfLightStage). A hit's color leaves through the atmosphere's transmittance over its own ray
 // (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the atmosphere's
 // in-scatter, the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's
-// history. A surface debug view draws the whole pixel, so it covers it and is not fogged. Sky cost retains the surface's real
-// coverage so the composite can measure the visible sky. A lane past the render extent returns black,
-// which the caller never stores.
+// history. A surface debug view draws the whole pixel, so it covers it and is not fogged. Sky cost retains the surface's
+// real coverage so the composite can measure the visible sky. A lane past the render extent returns black, which the
+// caller never stores.
 float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     coverage = 0.0;
     reactivity = 0.0;
@@ -25,37 +22,20 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     }
 
     SdfSurfaceSample s = sdfLoadSurfaceSample(worldVisibilityRecord(p.pixel, p.viewIndex));
-    uint record = worldVisibilityRecord(p.pixel, p.viewIndex);
-    if (!worldAoDisabled()) s.surfaceQueries += float(sdfVisibilityRecordBuffer[record + SDF_VISIBILITY_AMBIENT_QUERIES_WORD]);
-    if (!worldSoftShadowsDisabled() && passGroup.shadowSlotCount > 0u) s.surfaceQueries += float(sdfVisibilityRecordBuffer[record + SDF_VISIBILITY_SHADOW_QUERIES_WORD]);
-
-    // The query tally the evals heatmap reads, from the marches every stage before this one made.
-    sdfEvalCount = s.queries;
-
-    // Every field read of the stage runs through one loop (sdfViewsFieldReads) ahead of the shading that uses it: the
-    // light stage's detail re-resolve and probes for a hit it shades with a material below the screen range, and the
-    // debug views' reads.
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool curvatureShading = worldCurvatureShadingEnabled();
     precise float3 rayTravel = p.rayDirection * s.t;
     precise float3 surfacePoint = p.rayOrigin + rayTravel;
-    bool shaded = s.hit && useFinalShading && (s.material < SDF_SCREEN_MATERIAL);
     int material = s.material;
     SdfLightMesh mesh = (SdfLightMesh)0;
-    if (shaded && s.mesh) {
+
+    if (s.hit && useFinalShading && (s.material < SDF_SCREEN_MATERIAL)) {
         mesh = sdfLightMeshAt(p, s, surfacePoint, material);
     }
-    SdfDebugSlice slice = sdfDebugSliceOf(p);
-    SdfViewsFieldReads reads = sdfViewsFieldReads(p, s, shaded, surfacePoint, material, curvatureShading, slice);
 
-    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, mesh, reads, coverage, reactivity);
-    // Shadow changes reject old color even when every shadow is marched afresh and no K history is reused.
-    if ((passGroup.temporal != 0u) && !worldSoftShadowsDisabled() && (passGroup.shadowSlotCount > 1u)) {
-        uint word = (SDF_SHADOW_HISTORY_WORDS * (((p.viewIndex * passGroup.imageExtent.y + p.pixel.y) * passGroup.imageExtent.x) + p.pixel.x));
-        reactivity = max(reactivity, (float)shadowHistory[word + 4u]);
-    }
+    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, mesh, material, coverage, reactivity);
+    float3 viewColor = sdfDebugView(p, s, color);
 
-    float3 viewColor = sdfDebugView(p, s, color, slice, reads.firstRead, reads.secondRead);
     if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {
         coverage = 1.0;
 

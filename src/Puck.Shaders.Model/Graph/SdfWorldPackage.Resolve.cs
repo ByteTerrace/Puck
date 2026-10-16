@@ -32,7 +32,7 @@ public static partial class SdfWorldPackage {
     public const uint HistorySurfaceWords = 4;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the resolved lit image and surface
-    /// transport it writes, the visibility records and the dispatch box it reads the render grid through, and what the
+    /// transport it writes, the visibility records it reads the render grid through, and what the
     /// temporal mode reads and writes beside them: the reactivity, the history color and surface of the preceding frame
     /// and of this one, and the World group's tables <c>sdfReprojection</c> reads poses from. A spatial resolve binds a
     /// filler at each temporal member. It adds no bindings to native passes.</summary>
@@ -45,7 +45,6 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: CurrentColor, type: ShaderValueType.Float4),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
-            Read(element: ShaderValueType.Uint, name: CullBounds),
             Written(element: ShaderValueType.Uint2, name: TransportWritten),
             Read(element: ShaderValueType.Float, name: Reactivity),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: HistoryColor, type: ShaderValueType.Float4),
@@ -60,7 +59,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The reduced render-grid fragment. Traversal and shading use the render extent, and so does the color the
     /// views pass shades, which the resolve pass reads within the frame: one retained allocation every frame slot
     /// shares. The resolve writes the lit image and each output pixel's surface transport at the output extent, from the
-    /// render grid's samples inside the dispatch box, and the sky and the composite run at the output extent over them;
+    /// render grid's samples, and the sky and the composite run at the output extent over them;
     /// only the published color the composite writes has one image per frame slot. Native views use
     /// <see cref="NativeFragment"/> and allocate no resolve resources; a view that reconstructs over time uses
     /// <see cref="TemporalFragment"/>.</summary>
@@ -69,25 +68,25 @@ public static partial class SdfWorldPackage {
     /// with the reactivity buffer views writes at the render extent, and the history the resolve keeps at the output
     /// extent: the history color and the history surface, each one allocation a frame slot that the next frame reads
     /// (<see cref="ResourceReference.PreviousFrame"/>), zero until the resolve first writes it. The resolve reads the
-    /// visibility records and the dispatch box to reproject each pixel through <c>sdfReprojection</c>, and writes the lit
+    /// visibility records to reproject each pixel through <c>sdfReprojection</c>, and writes the lit
     /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
     /// evaluated and composited after the resolve.</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
 
-    // The resolve's inputs in either mode, in port order: the render-grid color, then the visibility records and the
-    // dispatch box the samples are read through.
-    private static string[] ResolveInputs => [CurrentColor, Parts.ShadowVisibility, Parts.CullBounds];
+    // The resolve's inputs in either mode, in port order: the render-grid color, then the visibility records the samples
+    // are read through.
+    private static string[] ResolveInputs => [CurrentColor, Parts.Visibility];
     // The resolve's outputs in either mode, in port order: the lit image and the surface transport.
     private static string[] ResolveOutputs => [Parts.Lit, Parts.Transport];
-    // The sky's inputs in either mode, in port order: the render-grid color views writes, whose coverage says where the sky
-    // is seen, and the dispatch box it is current inside. The sky evaluates its field runs on the render grid, and the
-    // composite reads them at the output extent.
-    private static string[] SkyInputs => [CurrentColor, Parts.CullBounds];
+    // The sky's inputs in either mode: the render-grid color views writes, whose coverage says where the sky is seen. The
+    // sky evaluates its field runs on the render grid, and the composite reads them at the output extent.
+    private static string[] SkyInputs => [CurrentColor];
 
-    // Traversal resources follow the package render grid, independently of a reconstructed image output or a
-    // buffer producer's placeholder extent. Keep images and counted per-pixel storage on that same basis.
+    // The view's own scratch follows the package render grid, independently of a reconstructed image output or a
+    // buffer producer's placeholder extent: frame-relative images and counted per-pixel storage take that basis, while
+    // an image of fixed extent (a shadow cascade's) keeps its own.
     private static ShaderPipelineResource AtRenderExtent(ShaderPipelineResource resource) => resource with {
-        Dimensions = ((resource.Dimensions is null) ? null : ShaderPipelineDimensions.Render()),
+        Dimensions = ((resource.Dimensions is not { Mode: ShaderPipelineDimensionMode.Relative }) ? resource.Dimensions : ShaderPipelineDimensions.Render()),
         Count = ((resource.Count is null) ? null : [.. resource.Count.Select(selector: static term => term with {
             Per = [.. term.Per.Select(selector: static basis => ((basis == ShaderPipelineCountBasis.Extent) ? ShaderPipelineCountBasis.RenderExtent : basis))],
         })]),
@@ -131,14 +130,6 @@ public static partial class SdfWorldPackage {
                 .. ResolveFragment.Value.Resources,
                 Buffer(count: ReactivityCount, name: Parts.Reactivity, sizeBytes: null, strideBytes: sizeof(float)),
                 new ShaderPipelineResource(
-                    Count: [Term(ShadowHistoryWords, ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports)],
-                    History: true,
-                    Initialization: ShaderPipelineInitialization.Zero,
-                    Kind: ShaderPipelineResourceKind.Buffer,
-                    Name: ShadowHistory,
-                    StrideBytes: sizeof(uint)
-                ),
-                new ShaderPipelineResource(
                     Dimensions: ShaderPipelineDimensions.Relative(),
                     Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
                     History: true,
@@ -156,20 +147,12 @@ public static partial class SdfWorldPackage {
             ],
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
-                    Parts.Shadow => pass with {
-                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory, PreviousFrame: true)],
-                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
-                        Outputs = [.. pass.Outputs, new ResourceReference(Name: ShadowHistory)],
-                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
-                    },
                     Parts.Views => pass with {
-                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory)],
-                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
                         OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.Reactivity)],
                     },
                     Resolve => pass with {
-                        InputAccesses = [.. Enumerable.Repeat(count: 6, element: RenderGraphPortAccess.ComputeRead)],
+                        InputAccesses = [.. Enumerable.Repeat(count: 5, element: RenderGraphPortAccess.ComputeRead)],
                         Inputs = [
                             .. ResolveInputs.Select(selector: static input => new ResourceReference(Name: input)),
                             new ResourceReference(Name: Parts.Reactivity),

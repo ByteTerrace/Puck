@@ -26,9 +26,8 @@ public interface ISdfCameraRig {
 /// <param name="AuthoritativeTick">The latest authoritative simulation tick visible to presentation.</param>
 public readonly record struct SdfCameraClock(float PresentationSeconds, ulong AuthoritativeTick);
 /// <summary>
-/// Orbits a target at a yaw/pitch/distance — the shape every object-intent camera reduces to, including
-/// <see cref="Debug.SdfDebugController"/>'s own orbit camera (which now holds one of these internally instead of
-/// carrying its own bare yaw/pitch/distance/target fields — see that type). <see cref="Offset"/> is the shared pure
+/// Orbits a target at a yaw/pitch/distance — the shape every object-intent camera reduces to. <see cref="Offset"/> is
+/// the shared pure
 /// function all of them reduce to; a caller that only wants the vector (not a full anchor-driven <see cref="Resolve(float)"/>)
 /// can call it directly instead of duplicating the trig.
 /// </summary>
@@ -44,17 +43,16 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// parameter threaded through every orbit consumer.</summary>
     public bool HeadOn { get; set; }
     /// <summary>The orbit tilt, radians (positive looks up). The caller owns any envelope clamp (this type applies
-    /// none) — <see cref="Debug.SdfDebugController"/> clamps to its own ±1.35 rad envelope before assigning here.</summary>
+    /// none).</summary>
     public float Pitch { get; set; }
     /// <summary>The rig's own orbit pivot, world space — for a caller that orbits a host-controlled point (panned by
-    /// a stick, like <see cref="Debug.SdfDebugController"/>'s right-stick pan) rather than a live external anchor.
+    /// a stick) rather than a live external anchor.
     /// Read by the parameterless <see cref="Resolve(float)"/> convenience overload; the interface's
     /// <see cref="ISdfCameraRig.Resolve"/> uses <see cref="SdfAnchor.Position"/> instead (for orbiting
     /// something that moves on its own, like a companion) and never reads this property.</summary>
     public Vector3 Target { get; set; }
     /// <summary>The orbit heading, radians (0 = looking down +Z). Mutable — a controller (a pad, a scripted pose)
-    /// drives this directly frame to frame, exactly like <see cref="Debug.SdfDebugController"/>'s stick-driven
-    /// orbit.</summary>
+    /// drives this directly frame to frame.</summary>
     public float Yaw { get; set; }
 
     /// <summary>The orbit distance, world units. The caller owns any envelope clamp, same as <see cref="Pitch"/>.</summary>
@@ -64,8 +62,7 @@ public sealed class OrbitRig : ISdfCameraRig {
 
     /// <summary>The pure orbit math every object-intent camera in this codebase shares: the forward vector at
     /// <paramref name="yaw"/>/<paramref name="pitch"/>, scaled to <paramref name="distance"/> — added to a target
-    /// position, this is the eye; negated and added to an eye, the near-side point a subject-relative probe (like
-    /// <see cref="Debug.SdfDebugController"/>'s pad-carve center) wants.</summary>
+    /// position, this is the eye; negated and added to an eye, the near-side point a subject-relative probe wants.</summary>
     /// <param name="yaw">The heading, radians (0 = +Z).</param>
     /// <param name="pitch">The tilt, radians (positive = up).</param>
     /// <param name="distance">The scale to apply to the resulting direction.</param>
@@ -99,7 +96,7 @@ public sealed class OrbitRig : ISdfCameraRig {
         return ((target + offset), target, FovRadians);
     }
     /// <summary>Resolves against this rig's own <see cref="Target"/> rather than an externally-supplied anchor — the
-    /// convenience overload a self-contained/pad-panned orbit (like <see cref="Debug.SdfDebugController"/>'s) uses.</summary>
+    /// convenience overload a self-contained or pad-panned orbit uses.</summary>
     /// <param name="time">The presentation clock (unused — see the interface member's remarks).</param>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(float time) =>
         Resolve(

@@ -11,7 +11,6 @@ namespace Puck.World.Client;
 /// while preserving the owner's pending follower work. See <see cref="SdfMovedTransforms"/> for the table's side.
 /// </summary>
 public sealed class WorldTransformOwners {
-    private readonly bool[] m_casts;
     private readonly Quaternion[] m_orientation;
     private readonly Vector3[] m_position;
     private readonly bool[] m_reseated;
@@ -24,7 +23,6 @@ public sealed class WorldTransformOwners {
     public WorldTransformOwners(int capacity) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
 
-        m_casts = new bool[capacity];
         m_orientation = new Quaternion[capacity];
         m_position = new Vector3[capacity];
         m_reseated = new bool[capacity];
@@ -38,14 +36,13 @@ public sealed class WorldTransformOwners {
     /// <param name="moved">The frame's moved set; a frame owing everything repacks every owner.</param>
     /// <param name="position">The owner's root position this frame.</param>
     /// <param name="orientation">The owner's root orientation this frame.</param>
-    /// <param name="castsSoftShadow">The owner's soft-shadow participation this frame.</param>
     /// <param name="deltaSeconds">The seconds available to advance the owner's followers this frame.</param>
     /// <param name="discontinuity">Whether the owner's pose jumped this frame (a teleport, a reused body index), which
     /// always repacks it.</param>
     /// <param name="version">Any other input the owner's pack reads, as a counter that moves when it does (a state
     /// delivery); zero when there is none.</param>
     /// <returns><see langword="true"/> when the owner repacks.</returns>
-    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, bool castsSoftShadow, float deltaSeconds, bool discontinuity = false, int version = 0) {
+    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, float deltaSeconds, bool discontinuity = false, int version = 0) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var wake = (
@@ -55,14 +52,12 @@ public sealed class WorldTransformOwners {
             (m_restless[owner] && (deltaSeconds > 0f)) ||
             (m_position[owner] != position) ||
             (m_orientation[owner] != orientation) ||
-            (m_casts[owner] != castsSoftShadow) ||
             (m_version[owner] != version)
         );
 
         m_reseated[owner] = (discontinuity || !m_resident[owner]);
         m_position[owner] = position;
         m_orientation[owner] = orientation;
-        m_casts[owner] = castsSoftShadow;
         m_version[owner] = version;
 
         return wake;
@@ -105,12 +100,11 @@ public sealed class WorldTransformOwners {
     /// <param name="rootPosition">The body's root position.</param>
     /// <param name="rootOrientation">The body's root orientation.</param>
     /// <param name="gaitPhase">The body's gait phase, radians.</param>
-    /// <param name="castsSoftShadow">The body's soft-shadow participation.</param>
     /// <param name="rig">The resolved catalog rig, or -1 for the body's default pick.</param>
     /// <param name="scale">The look's uniform render scale.</param>
     /// <param name="reseat">Whether the body's slots changed owner (<see cref="Reseats"/>).</param>
     /// <returns><see langword="true"/> when the pack moved any of the body's slots.</returns>
-    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, bool castsSoftShadow, int rig, float scale, bool reseat) {
+    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, int rig, float scale, bool reseat) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var (first, count) = WorldRigCatalog.BodySlots(avatar: avatar);
@@ -123,7 +117,6 @@ public sealed class WorldTransformOwners {
         ).CopyTo(destination: previous);
         WorldRigCatalog.PackTransforms(
             avatar: avatar,
-            castsSoftShadow: castsSoftShadow,
             gaitPhase: gaitPhase,
             rig: rig,
             rootOrientation: rootOrientation,

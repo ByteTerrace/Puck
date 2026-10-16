@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-world\.shadows|world\.ao\b|world\.ao-quality|world\.render-scale
+world\.shadows|world\.ao\b|world\.indirect|world\.render-scale

@@ -10,9 +10,9 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The render levers: engine-wide render options any presentation shape honors — shadows and their crowd radius,
-/// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
-/// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
+/// The render levers: engine-wide render options any presentation shape honors — shadows, ambient occlusion, the
+/// unchanged-frame cadence gate, indirect light, render scale, temporal reconstruction, upscale sharpness, the sky's
+/// quality, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view
 /// view, which affects only live presentation settings.
@@ -20,38 +20,18 @@ namespace Puck.World;
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-/// <param name="population">The authority's population supplying adaptive-quality demand.</param>
 /// <param name="settings">The presentation settings receiving admitted render levers.</param>
 /// <param name="server">The authority whose live definition and grants the commands inspect.</param>
 /// <param name="link">The existing submission path for authoritative session levers.</param>
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
-public sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
-    /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
-    private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
-        var (configured, isFast) = mode switch {
-            1 => (exact, ((bool?)false)),
-            2 => (fast, ((bool?)true)),
-            _ => ("auto", ((bool?)null)),
-        };
-        var resolved = ((isFast ?? (population.SimulatedCount >= 16))
-            ? fast
-            : exact
-        );
-
-        return $"[{verb}: {configured} → {resolved} | simulated={population.SimulatedCount}]";
-    }
-    private string DescribeAmbientOcclusionQuality() =>
-        DescribeAdaptiveQuality(
-            mode: ((int)settings.AmbientOcclusionQuality),
-            verb: "world.ao-quality"
-        );
+public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     // The world.quality echo: the current individual settings the preset (or a later override) left in place.
     private string DescribeQuality() {
-        return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
+        return $"[world.quality: shadows={(settings.Shadows
+            ? "on"
+            : "off")} ao={(settings.AmbientOcclusion
             ? "on"
             : "off")} temporal={(settings.Temporal
-            ? "on"
-            : "off")} shadow-amortize={(settings.ShadowAmortize
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
@@ -66,17 +46,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
     // The world.sky-quality echo.
     private static string SkyQualityEcho(WorldRenderSettings settings) =>
         $"[world.sky-quality: {SkyQualityName(tier: settings.SkyQuality)}]";
-    private string DescribeShadowMarch() =>
-        DescribeAdaptiveQuality(
-            mode: ((int)settings.ShadowMarch),
-            verb: "world.shadow-march"
-        );
-    private string DescribeShadowMask() =>
-        DescribeAdaptiveQuality(
-            fast: "camera-tile",
-            mode: ((int)settings.ShadowMask),
-            verb: "world.shadow-mask"
-        );
     // The world.cadence echo.
     private static string CadenceEcho(WorldRenderSettings settings) {
         return $"[world.cadence: {(settings.CadenceGate
@@ -96,39 +65,9 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         return string.Create(CultureInfo.InvariantCulture,
             $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} budget={controller.StepBudget} signal={signal.ToString().ToLowerInvariant()}]");
     }
-    // The world.render-path argument a path is spelled with.
-    private static string RenderPathName(Puck.SdfVm.SdfRenderPath path) => path switch {
-        Puck.SdfVm.SdfRenderPath.Mesh => "mesh",
-        _ => "interpreter",
-    };
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
         $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
-    // The world.bakes echo.
-    private static string BakesEcho(WorldRenderSettings settings) =>
-        $"[world.bakes: {settings.Bakes switch {
-            true => "on",
-            false => "off",
-            null => "default: a world's bakes draw when it ships them",
-        }}]";
-    // The world.far-field echo.
-    private static string FarFieldEcho(WorldRenderSettings settings) {
-        return $"[world.far-field: bound {(settings.FarBound
-            ? "on"
-            : "off")}]";
-    }
-    private static bool MatchesAny(in WireArgs args, string[] spellings) {
-        foreach (var spelling in spellings) {
-            if (args.Is(
-                index: 0,
-                value: spelling
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
     private static bool? ParseOnOff(ReadOnlySpan<char> token) {
         if (token.Equals(
@@ -159,14 +98,10 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             handler: $"{(scale * 100f):0.#}%"
         );
     }
-    private static string ShadowEcho(WorldRenderSettings settings) {
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##} | gradient-scaled]"
-        );
-    }
+    // The world.shadows echo.
+    private static string ShadowEcho(WorldRenderSettings settings) =>
+        $"[world.shadows: {(settings.Shadows ? "on" : "off")}]";
 
-    // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
     // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
     // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
     // world.target passes Host explicitly.
@@ -199,100 +134,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         return formatEcho();
     }
 
-    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
-    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
-    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
-    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
-        if (args.Is(
-            index: 0,
-            value: "auto"
-        )) {
-            mode = autoMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: exact
-        )) {
-            mode = exactMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: fast
-        )) {
-            mode = fastMode;
-
-            return true;
-        }
-
-        mode = default;
-
-        return false;
-    }
-    private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
-        if (text.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "off"
-        )) {
-            reach = 0f;
-        } else if (text.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "low"
-        )) {
-            reach = 0.25f;
-        } else if (text.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "medium"
-        )) {
-            reach = 0.5f;
-        } else if (
-            text.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "high"
-        ) ||
-            text.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            other: "on"
-        )
-        ) {
-            reach = 1f;
-        } else {
-            reach = float.NaN;
-        }
-
-        if (!float.IsNaN(f: reach)) {
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!CommandArgs.TryParseFloat(
-            text: token,
-            value: out reach
-        )) {
-            return false;
-        }
-
-        if (percent) {
-            reach /= 100f;
-        }
-
-        return (
-            float.IsFinite(f: reach) &&
-            (reach >= 0f) &&
-            (reach <= 1f)
-        );
-    }
     private static bool TryParseUpscaleSharpness(ReadOnlySpan<char> text, out float sharpness) {
         if (
             text.Equals(
@@ -389,34 +230,14 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadows",
-            description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
+            description: "Turns the shadow cascades on or off ENGINE-WIDE, live (no rebuild): world.shadows [on|off] — no argument echoes the current state. Off, every light goes unshadowed and no cascade renders.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: ShadowEcho(settings: settings));
                 }
 
-                if (!TryParseShadowReach(
-                    text: args[0],
-                    reach: out var reach
-                )) {
-                    return CommandResult.Error(output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]");
-                }
-
-                var crowdRadius = settings.ShadowCrowdRadius;
-
-                if (args.Count >= 2) {
-                    if (
-                        !args.TryFloat(
-                        index: 1,
-                        value: out var radius
-                    ) ||
-                        (radius < 0f) ||
-                        (radius > 100f)
-                    ) {
-                        return CommandResult.Error(output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]");
-                    }
-
-                    crowdRadius = radius;
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.shadows: unknown state '{args[0]}' — on|off]");
                 }
 
                 // The echo formats INSIDE SubmitLever's completion — after the lever has applied (or been refused),
@@ -425,8 +246,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Shadows,
-                    a: reach,
-                    b: crowdRadius,
+                    a: (on ? 1.0 : 0.0),
                     formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings))
                 );
             }
@@ -458,66 +278,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                     ? "on"
                     : "off")}]")
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.bakes",
-            description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). By default, ready bakes draw when the loaded world ships them; fields draw otherwise.",
-            handler: (context, args) => {
-                if (
-                    (args.Count == 0) ||
-                    args.Is(
-                    index: 0,
-                    value: "status"
-                )
-                ) {
-                    return new CommandResult(Output: BakesEcho(settings: settings));
-                }
-
-                if (ParseOnOff(token: args[0]) is not { } state) {
-                    return CommandResult.Error(output: $"[world.bakes: unknown '{args.Tail(start: 0)}' — on|off|status]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.Bakes,
-                    a: (state
-                    ? 1.0
-                    : 0.0),
-                    formatEcho: () => new CommandResult(Output: BakesEcho(settings: settings))
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.far-field",
-            description: "Toggles the beam-published per-tile far bound live (no rebuild): world.far-field [on|off|status]. Output-identical when on (it skips empty-sky march steps); off is the paired-run baseline. Ships ON.",
-            handler: (context, args) => {
-                if (
-                    (args.Count == 0) ||
-                    args.Is(
-                    index: 0,
-                    value: "status"
-                )
-                ) {
-                    return new CommandResult(Output: FarFieldEcho(settings: settings));
-                }
-
-                if (ParseOnOff(token: args[0]) is not { } state) {
-                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.FarBound,
-                    a: (state
-                    ? 1.0
-                    : 0.0),
-                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
                 );
             }
         );
@@ -607,96 +367,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shadow-mask",
-            description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses the exact per-tile grid gather (one shadow candidate mask per 8x8 workgroup, equal to the flat march to the bit by construction, though no automated check compares them) below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: DescribeShadowMask());
-                }
-
-                if (!TryParseAdaptiveMode(
-                    args: in args,
-                    autoMode: ShadowMaskMode.Auto,
-                    exact: ExactOrGather,
-                    exactMode: ShadowMaskMode.ExactGather,
-                    fast: CameraTileAliases,
-                    fastMode: ShadowMaskMode.CameraTile,
-                    mode: out var mode
-                )) {
-                    return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.ShadowMask,
-                    a: ((double)mode),
-                    formatEcho: () => new CommandResult(Output: DescribeShadowMask())
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.ao-quality",
-            description: "Selects the ambient-occlusion sampler live: world.ao-quality [auto|exact|fast]. auto keeps the three-rung quality ladder below 16 simulated stand-ins and uses the calibrated one-sample contact path at the 16/64/128 fleet tiers; exact and fast force either side for visual/performance A/B.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: DescribeAmbientOcclusionQuality());
-                }
-
-                if (!TryParseAdaptiveMode(
-                    args: in args,
-                    autoMode: AmbientOcclusionMode.Auto,
-                    exact: ExactOrQuality,
-                    exactMode: AmbientOcclusionMode.Exact,
-                    fast: FastOrFleet,
-                    fastMode: AmbientOcclusionMode.Fast,
-                    mode: out var mode
-                )) {
-                    return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.AmbientOcclusionQuality,
-                    a: ((double)mode),
-                    formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shadow-march",
-            description: "Selects the soft-shadow marcher live: world.shadow-march [auto|exact|fast]. auto keeps the exact 64-step, 9-unit path below 16 simulated stand-ins and uses the bounded-cost 12-step, 5-unit near-field path at the 16/64/128 fleet tiers; exact and fast force either side for visual/performance A/B.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: DescribeShadowMarch());
-                }
-
-                if (!TryParseAdaptiveMode(
-                    args: in args,
-                    autoMode: ShadowMarchMode.Auto,
-                    exact: ExactOrQuality,
-                    exactMode: ShadowMarchMode.Exact,
-                    fast: FastOrFleet,
-                    fastMode: ShadowMarchMode.Fast,
-                    mode: out var mode
-                )) {
-                    return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.ShadowMarch,
-                    a: ((double)mode),
-                    formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.render-scale",
             description: "Controls view resolution: world.render-scale [view] [<tier|fraction|percent>|floor <tier>|pin <scale>|auto [on|off]]. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
@@ -771,42 +441,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "world.render-path",
-            description: "Chooses how the world's own views turn its program into pixels, live: world.render-path [interpreter|mesh] — no argument echoes the current path. interpreter marches the program per pixel; mesh bakes each rigid group of the program to a mesh on the GPU (once per program, a lattice a frame), then rasterizes the meshes with rasterized shadow cascades and screen-space occlusion, and no pass of the frame walks the field. A change rebuilds each view's graph beside the installed one; the bake reports its counts and time on stderr when it finishes.",
-            handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.render-path: {RenderPathName(path: settings.RenderPath)}]");
-
-                if (args.Count == 0) { return Echo(); }
-
-                Puck.SdfVm.SdfRenderPath? path = args[0] switch {
-                    "interpreter" => Puck.SdfVm.SdfRenderPath.Interpreter,
-                    "mesh" => Puck.SdfVm.SdfRenderPath.Mesh,
-                    _ => null,
-                };
-
-                if (path is not { } chosen) {
-                    return CommandResult.Error(output: $"[world.render-path: unknown path '{args[0]}' — interpreter|mesh]");
-                }
-
-                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.RenderPath, a: ((int)chosen), formatEcho: Echo);
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shadow-amortize",
-            description: "Reuses secondary shadow history with temporal reconstruction: world.shadow-amortize [on|off]. Slot zero and fading slots march fully. Other slots march one quarter-grid selected by the jitter index, rejecting history on light ownership, light motion, occluder motion, or receiver identity and depth changes.",
-            handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.shadow-amortize: {(settings.ShadowAmortize ? "on" : "off")}]");
-                if (args.Count == 0) { return Echo(); }
-                if (ParseOnOff(token: args[0]) is not { } on) {
-                    return CommandResult.Error(output: $"[world.shadow-amortize: unknown state '{args[0]}' — on|off]");
-                }
-                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
-                    a: (on ? 1.0 : 0.0), formatEcho: Echo);
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
             name: "world.sky-quality",
             description: "Sets the sky's quality tier, live: world.sky-quality [low|medium|high] — no argument echoes the current tier. A sky layer whose tier lies above it writes no entry and counts no work; below high each kind draws its reduced form (clouds take one thickness tap and three octaves at low, shaded flat, and three octaves at medium; stars stop twinkling at low; an aurora and a noise field take fewer octaves). The world's quality presets set it through their sky row.",
             handler: (context, args) => {
@@ -876,8 +510,7 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Shadows,
-                    a: ShadowTiers.Scale(tier: preset.Shadows),
-                    b: settings.ShadowCrowdRadius
+                    a: ((preset.Shadows != ShadowTier.Off) ? 1.0 : 0.0)
                 );
                 SubmitLever(
                     link: link,
@@ -895,8 +528,6 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
                     ? 1.0
                     : 0.0)
                 );
-                SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
-                    a: (preset.ShadowAmortize ? 1.0 : 0.0));
                 SubmitLever(
                     link: link,
                     principal: context.Principal,
@@ -934,10 +565,4 @@ public sealed class WorldRenderLeverCommandModule(WorldPopulation population, Wo
             }
         );
     }
-
-    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
-    private static readonly string[] ExactOrGather = ["exact", "gather"];
-    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
-    private static readonly string[] ExactOrQuality = ["exact", "quality"];
-    private static readonly string[] FastOrFleet = ["fast", "fleet"];
 }

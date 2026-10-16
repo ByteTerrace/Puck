@@ -1,5 +1,5 @@
 // An impostor card's surface: where the camera's ray meets the baked prototype the card stands for. The card is a quad the
-// mesh pass places in front of the prototype's bounding sphere (sdf-mesh.vert.hlsl), and its fragments, and the hit passes
+// mesh pass places in front of the prototype's bounding sphere (sdf-mesh.vert.hlsl), and its fragments, and the views pass
 // after them, find the surface behind each pixel in the impostor's views (SdfBakedImpostor): a grid of orthographic views
 // of the sphere along the directions an octahedral map decodes, +Y its pole, each one tile of the impostor atlases. The ray
 // is taken in the prototype's object space, in units of the sphere's radius, and for each of the three views nearest the
@@ -125,7 +125,7 @@ SdfImpostorViews sdfImpostorViewsAt(SdfImpostor impostor, float3 toward) {
 
 // The level of the impostor atlases a pixel reads: the one whose texels are nearest the pixel's size at the sphere's
 // center, clamped to the chain. `pixelAngle` is a pixel's world size per unit of distance. The level depends on the draw and
-// the camera alone, so the mesh pass's trace and every hit pass read the same level of the same pixel.
+// the camera alone, so the mesh pass's trace and the views pass read the same level of the same pixel.
 uint sdfImpostorLevel(SdfImpostor impostor, uint record, float3 origin, float pixelAngle, uint levels) {
     float footprint = (length((sdfImpostorWorldCenter(record, impostor) - origin)) * pixelAngle);
     float texelsAcross = ((float)impostor.viewTexels / max((2.0 * impostor.radius * sdfImpostorScale(record)), 1.0e-6));

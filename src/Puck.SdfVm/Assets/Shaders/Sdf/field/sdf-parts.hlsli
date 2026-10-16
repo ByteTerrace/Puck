@@ -2,14 +2,10 @@
 #define PUCK_SDF_PARTS_HLSLI
 
 // Root composition admission is rebuilt by SdfProgram.PartPrograms.cs. Header .x stores the compiled count
-// in bits 0..30 and independent-tracing admission in bit 31. Beam and primary share this decision.
+// in bits 0..30 and independent-tracing admission in bit 31.
 bool sdfCanTracePartsIndependently() {
-#ifndef SDF_VM_DISABLE_PART_PROGRAMS
     uint table = sdfProgramLayout.partProgramOffset;
     return table != 0u && (sdfProgramWord(table).x & 0x80000000u) != 0u;
-#else
-    return false;
-#endif
 }
 
 // The distance gain a part entry certifies (SdfProgram.InstanceDistanceGain, packed by EncodePartDistanceGain and
@@ -18,19 +14,6 @@ bool sdfCanTracePartsIndependently() {
 float sdfPartDistanceGain(uint4 part) {
     uint field = (part.z >> SDF_PART_DISTANCE_GAIN_SHIFT) & SDF_PART_DISTANCE_GAIN_MASK;
     return ((field == SDF_PART_DISTANCE_GAIN_MASK) ? 1.0 : ((float)field * SDF_PART_DISTANCE_GAIN_UNIT));
-}
-
-// The shadow and ambient-occlusion walks' bounded field (SdfProgram.InstanceBoundsSecondaryField): set only for the
-// duration of those walks (sdfShadowStage's softShadowVisibility, sdfResolveAmbient's calcAO). There an instance
-// whose part entry carries SDF_PART_BOUNDED_SECONDARY reads as max(field, gap to its packed influence sphere), so it is
-// rejected whole at a unit gain and, when it is walked, every candidate it composes into the root union is floored
-// at that gap. The sphere contains the surface those walks see, so the maximum keeps every surface and interior and
-// never exceeds the true distance where the field does not. Every other walk reads the field itself.
-static bool sdfBoundedFieldActive = false;
-
-// Whether the active walk reads this part entry's instance as bounded (see sdfBoundedFieldActive).
-bool sdfPartBoundsWalk(uint4 part) {
-    return (sdfBoundedFieldActive && ((part.z & SDF_PART_BOUNDED_SECONDARY) != 0u));
 }
 
 // The gap from worldPosition to a visible instance's packed bound (SdfProgram's instance directory entry), with a
@@ -56,31 +39,24 @@ float sdfInstanceGap(uint instanceOffset, uint instance, float3 worldPosition) {
 // Whether a whole visible instance at gap from its bound cannot replace the incumbent: the per-sample twin of the
 // segment walk's skip sphere. Outside the bound the instance's field is at least the gap times its distance gain
 // (sdfPartDistanceGain: its scopes' rescales, its gauges' and non-uniform scales' slower growth, its smooth unions' sag
-// absorbed by the packed radius), or at least the gap itself where the walk floors it (sdfPartBoundsWalk, gain 1), so
-// a scaled gap at least the incumbent loses a hard union's strict test exactly and skipping the instance changes no
+// absorbed by the packed radius), so a scaled gap at least the incumbent loses a hard union's strict test exactly and skipping the instance changes no
 // distance, material or seam. A zero gain (an approximate primitive, a warp, an optional clipper) is never rejected.
 // It asks only where the instance joins as a hard union: a compiled part always does, and a generic instance does
-// under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is skipped. A shadow,
-// ambient or normal probe far from a body skips all of its leaves, as primary's own ray bounds do.
+// under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is skipped.
 bool sdfInstanceCannotWin(float gap, float gain, float incumbent) {
-#ifdef SDF_TAPE_BUILD
-    if (sdfTapeBuilding) { return false; }
-#endif
     // A scope starts at the finite far sentinel before its rescale, even when every leaf lies farther away; the gain
     // never exceeds that rescale.
     if (!(gain > 0.0) || incumbent >= SDF_FAR_DISTANCE * gain) { return false; }
     return ((gap > 0.0) && ((gap * gain) >= incumbent));
 }
 
-// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|distance gain|bounded secondary|dynamic,
+// Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|distance gain|dynamic,
 // scope scale);
 // an instance the table does not compile has a zero count, its distance gain and nothing else.
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
-// A floored walk (sdfPartBoundsWalk) composes max(scope field, gapFloor), the gap to the instance's bound.
-void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial,
-    bool floored, float gapFloor) {
+void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
     float parentWeight = sdfMaterialBlendWeight;
     int parentOther = sdfMaterialBlendOther;
     if (trackMaterial) {
@@ -106,11 +82,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         uint4 code = sdfProgramWord(part.x + leaf);
         if (code.x >= sdfProgramLayout.instructionCount || code.y > sdfProgramLayout.instructionCount) { parent = sdfIsaErrorHit(); return; }
         uint4 shape = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + code.x);
-        if (!sdfShapeEnabled(SDF_INSTRUCTION_SHAPE(shape))) {
-            continue;
-        }
         uint4 binding = sdfProgramWord(part.y + leaf);
-        if (!sdfTapeShapeLive(binding.z)) { sdfTapeSkippedShape(shape); continue; }
         float3 localPosition = worldPosition;
         float4 lanes = 0.0;
         int slot = SDF_TRANSFORM_SLOT_NONE;
@@ -136,7 +108,6 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
                 localPosition /= data0.xyz;
                 distanceScale *= data0.w;
             }
-#ifndef SDF_STRIP_HEAVY
             else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) {
                 float4 data1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u));
                 uint axis = SDF_INSTRUCTION_SHAPE(domain);
@@ -156,13 +127,11 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
                 float t = localPosition[driver];
                 localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
             }
-#endif
         }
 
         float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x));
         float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u));
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
-        if (sdfTapeDecided(binding.z)) { child.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shape)); }
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
     }
@@ -170,7 +139,6 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     // Same hard-union PopField semantics as the generic scalar walk. Losing scopes retain the parent's seam;
     // a winning scope carries its internal material seam through its baked candidate scale.
     float candidate = child.distance * asfloat(part.w);
-    if (floored) { candidate = max(candidate, gapFloor); }
     bool wins = candidate < parent.distance;
     float childWeight = sdfMaterialBlendWeight;
     int childOther = sdfMaterialBlendOther;

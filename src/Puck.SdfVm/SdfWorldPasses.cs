@@ -10,8 +10,8 @@ namespace Puck.SdfVm;
 public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View);
 /// <summary>
 /// The <c>sdf.world</c> package's recorders: each instance of the package is a view of a residency's frame, run as the
-/// package's fragment (<see cref="SdfWorldPackage.Fragment"/>) — the sky, the instance masks, the beam, the cull
-/// arguments, the mesh pass, primary traversal, surface and ambient resolution and shading into the view's color — every
+/// package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>) — the mesh bake while one is pending, the shadow
+/// cascades, the mesh pass, the surface pass, shading, the sky and the composite into the view's color — every
 /// pass recorded into its instance's submission with the barriers the planner planned, over scratch the instance
 /// allocates once, counted by the residency (<see cref="SdfWorldResidency.CountsAt"/>). The host names the residency and
 /// view each instance renders (<c>resolve</c>), and the package keeps every residency it has resolved or a recorder
@@ -68,8 +68,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
-    /// its tables' build or the views kernel its program selects, refused by name, which only a change to what they are
-    /// built from retries.</remarks>
+    /// its tables' build or its views kernel, refused by name, which only a change to what they are built from
+    /// retries.</remarks>
     public string? RefusalOf(string instance) {
         lock (m_gate) {
             return ((m_entries.TryGetValue(
@@ -186,7 +186,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
-            (entry.RenderedShadowFadeCapacity == entry.CurrentShadowFadeCapacity) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
             entry.Temporal.Stands(
@@ -299,7 +298,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.RenderedBindings = entry.Bindings;
             entry.RenderedScale = entry.CurrentScale;
             entry.RenderedSharpness = entry.CurrentSharpness;
-            entry.RenderedShadowFadeCapacity = entry.CurrentShadowFadeCapacity;
             if (entry.SampleRenderedFrame == m_frame) { entry.Temporal.Rendered(); }
         }
     }

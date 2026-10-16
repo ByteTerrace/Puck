@@ -1,5 +1,5 @@
 // The mesh bake's instance masks: one workgroup per lattice of the dispatch's batch (the pass block's meshBakeLattices),
-// writing tile `lattice`'s mask words, which select the instances that lattice samples, so the bake pass's field walk
+// writing lattice `lattice`'s mask words, which select the instances that lattice samples, so the bake pass's field walk
 // (sdf-mesh-bake.comp.hlsl) evaluates that group alone. A non-negative selector names a dynamic-transform slot, every
 // active instance riding it; a negative one names the single instance -(selector + 1). Each workgroup strides its words,
 // then writes the summary the walk skips empty words by.

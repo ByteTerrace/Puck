@@ -23,7 +23,7 @@ indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/
 owns source and receiver semantics.
 
 `WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` carries the
-engine defaults, including Medium indirect. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
+engine defaults, including Medium indirect. The boot levers (`shadows`, `shadowLights`,
 `shadowFadeSlots`, `shadowFadeTicks`, `shadowOverflow`,
 `ambientOcclusion`, `renderScale`, `upscaleSharpness`, `temporal`,
 `dynamicResolution`, the `low`/`medium`/`high` presets, each also carrying a
@@ -39,19 +39,18 @@ section when the world omits it and the render-scale ceiling moved, and
 otherwise leaves an absent `render` section absent. Presentation fields are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
 `lighting`/`sky`/`indirect` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
-(`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
-march ends at (the fine march's far exit, the beam's cone proofs, the fog and
-depth ramps' reach): nullable, absent resolves to the engine's pinned 40
-(`SdfFrame.DefaultFarDistance`) so an unauthored world marches to 40;
+(`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every view's
+geometry ends at (the mesh raster's far plane, the bake's and the irradiance
+volume's reach, the fog and depth ramps' reach): nullable, absent resolves to
+the engine's pinned 40 (`SdfFrame.DefaultFarDistance`);
 an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
-within [1, 8192].` Geometry past it is never marched, so an infinite plane
+within [1, 8192].` Geometry past it is never drawn, so an infinite plane
 ends on a horizon curve at that depth unless `render.atmosphere.fog.density` has absorbed it
 first. Read back with `world.row.set render` (the section's read arm) and
 `world.budget`, which quotes the far distance with its derived costs: the
-reach multiplier over the default, the horizon-ray step count per unit of
-camera height against the primary march's 128-step budget, and the fog
+reach multiplier over the default and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 `rendering` skill sync pairs, the pass block (`farDistance`).
 

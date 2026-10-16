@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-sdf-occlusion\.hlsli|sdfResolveAmbient|sdf-surface\.hlsli
+sdf-surface-stage\.hlsli|sdfMeshAmbient

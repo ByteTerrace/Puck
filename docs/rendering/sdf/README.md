@@ -1,8 +1,9 @@
 # SDF renderer
 
 Puck's signed-distance-field (SDF) renderer represents scene content as a
-packed program of distance-field operations. The GPU interprets that program,
-marches rays through the resulting fields, and shades the visible surfaces.
+packed program of distance-field operations. The GPU interprets that program
+to bake it into meshes, every view rasterizes those meshes, and the frame
+shades the visible surfaces.
 The same scene data also has deterministic query and evaluation paths; those
 paths are described where the handbook discusses queries and determinism.
 
@@ -19,7 +20,7 @@ separates deterministic queries from presentation; and chapters 8–9 cover
 performance and sampled distance caches.
 
 Use the [technical reference](reference/README.md) when you need a specific
-contract or technique. It links to articles on marching and culling,
+contract or technique. It links to articles on bounds,
 Lipschitz bounds, gradients, filtering, materials, text, shading, and recorded
 verdicts.
 
@@ -28,9 +29,10 @@ verdicts.
 The renderer and the deterministic evaluator share the packed instruction
 layout and the field semantics. A GPU result is a presentation result: GPU
 floating-point execution and backend-specific output are not the simulation's
-authoritative state. Conservative bounds still govern ray marching and culling,
-and the authored instruction stream remains the source representation while
-sampled distance bricks serve as invalidatable render caches.
+authoritative state. Conservative bounds still govern the bake's and the
+queries' skips, and the authored instruction stream remains the source
+representation while baked meshes and sampled distance bricks serve as
+invalidatable render caches.
 
 For the shared shader manifests, pipeline graphs, descriptor bindings, and
 configuration model, see the [`Puck.Shaders` README](../../../src/Puck.Shaders/README.md).

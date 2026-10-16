@@ -116,8 +116,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// run passes its peak here so the table is sized once.</param>
     /// <param name="programWordCapacity">An optional floor on the program's packed-word capacity (see
     /// <see cref="SdfWorldTablesOptions"/>): a frame source that hot-swaps programs declares its envelope here.</param>
-    /// <param name="instanceCapacity">An optional floor on the instance count the instance grid and a view's per-tile masks
-    /// are sized for.</param>
+    /// <param name="instanceCapacity">An optional floor on the instance count the bake's instance masks are sized
+    /// for.</param>
     /// <param name="brickPoolVoxelCapacity">The carve-bake brick pool's voxel capacity (see
     /// <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>), frozen at construction; 0 allocates no pool.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -206,9 +206,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
     /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
-    /// first frame captured and packed, its policy's shadow kernel and its program's views kernel, or a fuller one, are built. A program that
-    /// selects a stripped views variant never waits for the full ISA's. It is false again after a device loss until the
-    /// rebuilt tables are, and while a captured frame waits for a shadow or views kernel that is still building or was refused,
+    /// first frame captured and packed, and its views kernel built. It is false again after a device loss until the
+    /// rebuilt tables are, and while a captured frame waits for a views kernel that is still building or was refused,
     /// during which the residency holds the frame it last packed. A refused kernel is built again only on a kernel
     /// reload (<see cref="RequestShaderReload"/>) or a device loss (<see cref="OnDeviceLost"/>).</summary>
     public bool IsReady => ((m_tables is not null) && (m_pipelineWaiting is null) && Volatile.Read(location: ref m_ready).Task.IsCompletedSuccessfully);
@@ -216,7 +215,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
     /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come,
-    /// the refusal of its tables' latest build, which is retried when its inputs change, or the shadow or views kernel its frame
+    /// the refusal of its tables' latest build, which is retried when its inputs change, or the views kernel its frame
     /// waits on and, when that kernel was refused, its failure, or <see langword="null"/> once it
     /// is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
     /// report.</summary>
@@ -226,13 +225,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
             ? $"residency '{Name}' has captured no frame"
             : (((m_tables is { } tables) && (m_pipelineWaiting is { } views))
                 ? ((tables.PipelineRefusal(kernel: views) is { } refusal)
-                    ? $"residency '{Name}' holds its frame: the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
-                    : $"residency '{Name}' holds its frame until the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
+                    ? $"residency '{Name}' holds its frame: the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                    : $"residency '{Name}' holds its frame until the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
                 : m_pipelines.Describe())));
     /// <summary>Gets why the residency cannot become ready until something it is built from changes, or
     /// <see langword="null"/> while it is ready or what it waits on is still building: the refused build of its tables
-    /// (the device, the kernels, its options or a reload retries it) or the refused shadow or views kernel its frame selects (a
-    /// kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
+    /// (the device, the kernels, its options or a reload retries it) or its refused views kernel (a kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
     /// <see cref="SdfWorldPasses"/> reports it as its instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>), the one
     /// channel a host reads, while <see cref="NotReadyReason"/> describes the wait.</summary>
     public string? Refusal {
@@ -245,7 +243,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
 
             return (((m_tables is { } tables) && (m_pipelineWaiting is { } views) && (tables.PipelineRefusal(kernel: views) is { } refusal))
-                ? $"residency '{Name}': the {KernelRole(kernel: views)}, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                ? $"residency '{Name}': the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
                 : null);
         }
     }
@@ -470,22 +468,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objA: frame,
             objB: m_packedFrame
         )) {
-            // A frame whose shadow or views kernel still builds waits. A source may recycle light tables, so a retained
-            // frame of another fade capacity takes its own copy before the next capture can overwrite them.
-            if (tables.FrameWaiting(program: frame.Program) is { } waiting) {
+            // A frame whose views kernel still builds waits.
+            if (tables.FrameWaiting() is { } waiting) {
                 m_pipelineWaiting = waiting;
                 m_pendingFrame = frame;
-                if ((m_packedFrame is { } packed) && !m_holdingFrame &&
-                    (packed.Lights.ShadowSlots.FadeCapacity != frame.Lights.ShadowSlots.FadeCapacity)) {
-                    var lights = new SdfLights();
-
-                    lights.CopyFrom(source: packed.Lights);
-                    m_packedFrame = packed with { Lights = lights };
-                    m_holdingFrame = true;
-                }
                 m_frame = (m_packedFrame ?? frame);
                 ResetReady();
-                return ((m_packedFrame is not null) && (tables.FrameWaiting(program: null) is null));
+                return false;
             }
             if (m_programPending) {
                 // A program whose views kernel is still building, or was refused, is not uploaded: the residency holds the
@@ -502,21 +491,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
-            m_holdingFrame = false;
             LiveVolumes = frame.Volumes.Count;
         }
 
-        // The mesh path's bake takes its batch before the upload, which carries the batch's surface points.
-        if ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
-            MeshPathBake.Stage(frame: PackageFrame, tables: tables);
-            MeshIrradianceParameters = MeshIrradiance.Stage(frame: meshFrame, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
-        } else {
-            MeshIrradianceParameters = default;
-        }
+        // The bake takes its batch before the upload, which carries the batch's surface points.
+        MeshPathBake.Stage(frame: PackageFrame, tables: tables);
+        MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
 
         tables.UpdateTablesSignature();
-        // The views render once the policy's shadow kernel and a usable views kernel are built; the residency is ready then.
-        m_pipelineWaiting = tables.FrameWaiting(program: null);
+        // The views render once the views kernel is built; the residency is ready then.
+        m_pipelineWaiting = tables.FrameWaiting();
 
         if (m_pipelineWaiting is not null) {
             ResetReady();
@@ -537,7 +521,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool IsUnchanged(in FrameContext context, int view) {
         if (
             !Prepare(context: in context) ||
-            ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh) && (MeshPathBake.Pending || MeshIrradiance.Settling)) ||
+            MeshPathBake.Pending || MeshIrradiance.Settling ||
             (m_frame is not { } frame) ||
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||
@@ -637,8 +621,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfSkyDetails SkyDetails => m_skyDetails;
 
     /// <summary>Returns the counts a view of the residency allocates its counted scratch by at an extent: one viewport,
-    /// its tiles, the provisioned instances and their mask words, and the current program's segment tape words
-    /// (<see cref="CapacityRevision"/>).</summary>
+    /// and the provisioned instances and their mask words (<see cref="CapacityRevision"/>).</summary>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
     /// <returns>The counts.</returns>
@@ -650,20 +633,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
             Width: width
         ) {
             InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
-            SegmentTapeWords = ((ulong)CountedTapeWords),
             Instances = ((ulong)instances),
-            Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
             Viewports = 1,
         };
     }
 
     /// <summary>Gets a revision that moves whenever <see cref="CountsAt"/> would return another value at an unchanged
-    /// extent: the provisioned instance count and the captured program's tape storage. Before the tables exist,
-    /// the instance count is the capacity they will receive for that captured frame.</summary>
-    public long CapacityRevision => (((long)CountedInstances) << 32) | ((uint)CountedTapeWords);
+    /// extent: the provisioned instance count. Before the tables exist, it is the capacity they will receive for that
+    /// captured frame.</summary>
+    public long CapacityRevision => CountedInstances;
 
-    private int CountedTapeWords => SdfWorldPackage.SegmentTapeWordCountFor(
-        segments: (m_frame?.Program.SkipSegmentCount ?? 0), tokens: (m_frame?.Program.TapeTokenCount ?? 0));
     // The instances a view's counted scratch is sized for: the tables' capacity, or before they are built the one they are
     // built with, the larger of the captured program's instances and the residency's floor.
     private int CountedInstances => (m_tables?.InstanceCapacity ?? Math.Max(
@@ -690,14 +669,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_deviceContext = null;
     }
 
-    /// <summary>Gets the baked-mesh path's bake of the residency's program, which draws while its first view takes that
-    /// path.</summary>
+    /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; } = new();
-    /// <summary>Gets the baked-mesh path's indirect lighting, the irradiance volume its views read while the first view
-    /// takes that path and asks for indirect light.</summary>
+    /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
+    /// indirect light.</summary>
     public SdfMeshIrradiance MeshIrradiance { get; } = new();
-    /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled off the mesh path or with
-    /// indirect light off.</summary>
+    /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled with indirect light
+    /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
 
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
@@ -721,8 +699,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     private bool m_programPending;
-    private bool m_holdingFrame;
-    // The shadow or views kernel the residency waits on while it holds its last packed frame (SdfWorldTables.FrameWaiting).
+    // The views kernel the residency waits on while it holds its last packed frame (SdfWorldTables.FrameWaiting).
     private SdfKernel? m_pipelineWaiting;
     // Whether the frame's preparation left the tables holding a frame the views can render.
     private bool m_renders;
@@ -761,10 +738,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
 
-        // A residency whose first view takes the baked-mesh path draws its program's baked meshes in every view.
-        if ((frame.Views.Count > 0) && (frame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
-            frame = MeshPathBake.Dress(frame: frame);
-        }
+        // Every view draws the program's baked meshes.
+        frame = MeshPathBake.Dress(frame: frame);
 
         m_frame = frame;
         m_pendingFrame = null;
@@ -823,10 +798,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return true;
     }
-    private static string KernelRole(SdfKernel kernel) => kernel switch {
-        _ when SdfWorldPipelines.IsViews(kernel: kernel) => "views kernel its program selects",
-        _ => "shadow kernel its policy selects",
-    };
     private void ResetReady() {
         var ready = Volatile.Read(location: ref m_ready);
 

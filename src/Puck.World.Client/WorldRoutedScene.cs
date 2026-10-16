@@ -65,7 +65,6 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
             shadowSettings: shadowSettings,
-            castsAvatarShadows: true,
             domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror

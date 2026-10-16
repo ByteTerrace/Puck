@@ -11,7 +11,7 @@
 #define SHADE_SDF_TRANSPORT_HLSLI
 #include "sdf-atmosphere.hlsli"
 
-// The scale the coverage over the ray distance is held at, so a half float keeps it normal over every distance a march
+// The scale the coverage over the ray distance is held at, so a half float keeps it normal over every distance a view
 // reaches: from SDF_MINIMUM_NEAR (1024 / 0.02 = 51200, below the half's 65504) to the far limit 8192 at a coverage of
 // one thousandth (1.25e-4, above its smallest normal 6.1e-5), each within a relative 2^-11. KEEP IN SYNC with
 // SdfSurfaceTransport.InverseDistanceScale.

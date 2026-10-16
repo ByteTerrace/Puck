@@ -4,7 +4,7 @@ While the debug world is the one live world, only its two workloads stay here:
 `debug.world.json` with `shadow.script.txt` and `avatar.world.json` with
 `avatar.script.txt`, and the report schema; the debug workload is
 `puck counters`' default. Every other
-workload, script, batch and reference this page describes is quarantined at the
+workload, script, batch and reference is quarantined at the
 same path under
 [`experimental/tests/Puck.Counters`](../../experimental/tests/Puck.Counters),
 and none is run until the owner calls for qualification
@@ -27,81 +27,39 @@ before it and one from after it on the same device, held to each other with
 
 | Workload | Scene | Script |
 |---|---|---|
-| `counters.puck` | Two blocks and their caps | `counters.script.txt` |
-| `nexus.world.json` | The Nexus overworld hub, inherited from `puck.world.json` | `counters.script.txt` |
-| `courtyard.world.json` | The Moth courtyard, inherited from `moth-courtyard.puck` | `counters.script.txt` |
-| `debug.world.json` | The debug world's wide soft-shadowed key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` |
+| `debug.world.json` | The debug world's wide key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` |
 | `avatar.world.json` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` |
-| `sky-still.puck` | An unchanging sky | `sky.script.txt` |
-| `sky-drift.puck` | Moving clouds | `sky.script.txt` |
-| `sky-twinkle.puck` | Twinkling stars | `sky.script.txt` |
-| `sky-cycle.puck` | A changing sky cycle | `sky.script.txt` |
 
-The dense workloads inherit their scenes' geometry and behavior. Each fixes
-one camera at `(0, 2.5, 7)`, looking at `(0, 0.8, 0)`, with a vertical field of
-view of 0.9 radians. Its 1920×1080 output uses the floor preset's 1440×810 render
-grid. Temporal reconstruction and dynamic resolution are off, so the hit
-samples share one camera and extent across comparisons. The script disables
-cadence, pauses simulation until the renderer is ready, and then advances 120
-ticks before its one reading.
+Every view renders from the meshes its program is baked into
+([frame rendering](../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)),
+so a frame's field evaluations are the bake's alone: they fall to zero once
+every group has baked, and the counts read after readiness are the mesh
+passes' raster and lighting work.
 
-The debug workload uses the same camera at the medium preset instead, with
-temporal reconstruction and indirect lighting off and the exact shadow mask and
-march, so every frame marches every lit pixel's shadow afresh. Its shadow
-pass's shape evaluations are most of them the Moth's: a field walk that rejects
-none of the avatar's gauge-built pool instances whole doubles them
-(2,011,520,826 against 962,344,651 on the RTX 2060's Vulkan driver, measured
-before the shadow and ambient walks' bounded field, which rejects every Moth
-instance whole at a unit gain).
+The debug workload fixes one camera at `(0, 2.5, 7)`, looking at
+`(0, 0.8, 0)`, with a vertical field of view of 0.9 radians, over a 1920×1080
+output at the medium preset, with temporal reconstruction and indirect lighting
+off so every frame rasterizes its shadow cascades and lights every pixel
+afresh. The script disables cadence, pauses simulation until the renderer is
+ready, and then advances 120 ticks before its one reading.
 
 The seated-avatar workload is the debug world as played: its 1280×720 output
 shows the Moth seated before the default third-person camera, at the shipped
-high preset with temporal reconstruction and indirect lighting off and the
-exact shadow mask and march, read 30 ticks after readiness. The Moth is 179
-pool instances built mostly of superellipsoid gauges and non-uniformly scaled
-profiles, so its counts show every field pass's walk of a many-instance body:
-an avatar whose instances lose their distance gains doubles the shadow pass's
-shape evaluations (1,282,324,096 against 640,428,760 over 40.3M march steps on
-the RTX 2060's Vulkan driver).
+high preset with temporal reconstruction and indirect lighting off, read 30
+ticks after readiness.
 
 Run these commands from the repository root using a private copy of the
 candidate's built CLI. Each command runs both GPU backends; run them serially,
 one GPU at a time:
 
 ```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/nexus.world.json --script tests/Puck.Counters/counters.script.txt --output <reports>/nexus.json
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/courtyard.world.json --script tests/Puck.Counters/counters.script.txt --output <reports>/courtyard.json
+dotnet <cli-copy>/Puck.Cli.dll counters --output <reports>/debug.json
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/avatar.world.json --script tests/Puck.Counters/avatar.script.txt --output <reports>/avatar.json
 ```
 
 Keep each report beside the corresponding comparison report:
 `counters compare` names every changed comparable count, including
-intentional savings. Comparisons of renderer optimizations use law-level or
-compiled variants and retain the same world, camera, extent and hit samples.
-
-`primary-reference.script.txt` applies the `primary-reference` shader tree
-through `world.shaders.reload` while simulation is paused. Its primary wrapper
-defines `SDF_TAPE_REFERENCE` and includes the production kernel, so the
-reference compiles out only primary's tape reads. The tape pass still runs and
-counts its own cost. The script then advances the same 120 ticks as
-`counters.script.txt`. Run both worlds with this reference beside the ordinary
-runs above:
-
-```text
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/nexus.world.json --script tests/Puck.Counters/primary-reference.script.txt --output <reports>/nexus-primary-reference.json
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/courtyard.world.json --script tests/Puck.Counters/primary-reference.script.txt --output <reports>/courtyard-primary-reference.json
-dotnet <cli-copy>/Puck.Cli.dll counters compare <reports>/nexus-primary-reference.json <reports>/nexus.json
-dotnet <cli-copy>/Puck.Cli.dll counters compare <reports>/courtyard-primary-reference.json <reports>/courtyard.json
-```
-
-The comparison reports intentional count differences and therefore exits 1
-when work falls. Read each backend's `world` node: let `full` and `pruned` be
-`sdf.world$primary`'s `gpu.shapes.evaluated` in its two reports, and `tape` be
-the optimized report's `sdf.world$tape` shape count. The Nexus requires
-`pruned <= 0.60 × full`, a reduction of at least 40%. Both dense workloads
-require `tape < 0.25 × (full - pruned)`, equal primary `gpu.march.steps`, and
-passing parity. Shader compiler and pipeline lifetime counts differ because
-the reference reloads one kernel. The two scripts have different identities;
-the compare verb compares their measured rows.
+intentional savings.
 
 The `sdf.transforms.*` totals count actual packing work over produced frames,
 including interpolated poses between ticks. They have class `pacing`, so
@@ -112,70 +70,4 @@ are also cache-dependent: `world.boot.compile-documents-read`,
 `world.boot.compile-compositions`, and
 `world.boot.compile-compositions-shared` have class `pacing`. Ordinary boot
 document reads and compositions remain deterministic and must agree between
-the production and reference runs. Shader reload reads no world documents.
-
-The floor-tier RTX 2060 measurements meet these conditions. Primary shape
-evaluations fall by 42.7% on the Nexus and 2.2% on the courtyard; tape work
-costs 1.5% and 8.6% of the respective savings. March steps remain equal on both
-backends, and parity passes. The courtyard has no independent percentage
-reduction threshold.
-
-For winner gradients, the Nexus reference full walk supplies the number of
-shapes with nonzero blend weight. The device laws hold `gpu.shapes.gradients`
-to that count and require total shape evaluations, including winner selection,
-to be lower than the full-gradient walk. These laws pass on both backends at
-the same hit samples; CPU document loading alone does not establish them.
-
-The CPU inventory and camera study run without a device:
-
-```text
-dotnet test tests/Puck.World.Presentation.Tests -c Release --no-build --no-restore --filter-class Puck.World.Presentation.Tests.SdfTapeInventoryLawTests Puck.World.Presentation.Tests.SdfTapePredictionLawTests --output Detailed
-```
-
-The study counts every tile and slab of the initial composed frame using the
-production certificates and Puck.Maths primitive enclosures. It reports finite
-coverage, rejected models, and exact counts of certified deletion decisions.
-It uses a conservative camera-cone mask, near-plane entry and authored far
-bound because it has no GPU beam readback. Its interval centre values enclose
-the admitted float results; they do not predict a backend's centre-value bits.
-These counts therefore describe the CPU enclosures, not the live workload's
-120-tick, march-weighted shape reduction. Slab rows separate the near-camera
-decisions from overlap in larger far balls; zero-radius and direct interval
-diagnostics distinguish radius limits from primitive-enclosure limits.
-
-The tape retains unknown or uncertified candidates. It applies only to the
-camera mask, inside its covered balls and under the same detail selection;
-secondary queries keep their own full masks. Each slab has its own instruction
-mask, so losing shapes inside retained segments can disappear. Compiled-part
-fast paths read the mask through each placement's original instruction indices;
-independently marched parts retain their own field even when their root union
-loses. Root queries that omit those parts use the full root walk. These limits
-preserve the full field's result and remain part of the
-measured workload cost.
-
-Run the field device laws and parity serially before accepting the counts:
-
-```text
-dotnet test tests/Puck.World.Tests -c Release --no-build --no-restore --filter-class Puck.World.Tests.SdfFieldDeviceLawTests
-dotnet <cli-copy>/Puck.Cli.dll parity --debug-layers
-dotnet <cli-copy>/Puck.Cli.dll canary pipeline-counters world-counters --keep-transcripts
-```
-
-The device-law filter includes both Vulkan and DirectX versions of
-`GradientsEvaluateExactlyTheFinalWeightedShapes`,
-`NexusHitGradientsEvaluateExactlyTheFinalWeightedShapes`,
-`TileTapesPreserveEverySampleAndCountLessShapeWork`, and
-`NexusTileTapesPreserveTheFullMarchSamples`,
-`SparseTileTapesPreserveMaskedInstancesAndWorldSegments`,
-`PowerGaugeEnforcesItsCertifiedNormEnvelope`, and
-`SmoothGradientEndpointsReturnTheDecidingGradientExactly`, alongside the existing field and
-gradient checks. Each pair must execute without skips. The Nexus laws capture
-the presenter's composed frame and actual dynamic transforms on the CPU, then
-compare both walks at the same GPU hit samples. The counters workloads run the
-live world through their fixed simulation script.
-
-The `world-counters` canary's CPU upload law holds the tape dispatch and its
-pass-block upload. The tape clears its enable words and evaluates no shapes in
-this empty field. The GPU transcript checks the complete exact rows. The
-`pipeline-counters` fixture also evaluates no SDF shapes and pins zero in both
-shape columns.
+two runs of one build.

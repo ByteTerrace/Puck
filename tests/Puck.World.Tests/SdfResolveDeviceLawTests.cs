@@ -11,8 +11,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The shipped spatial resolve preserves the analytic step colors, and copies a grid of its output's own
-/// extent exactly. These inputs isolate the resolver from traversal: the dispatch box covers the whole grid, every
-/// visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
+/// extent exactly. These inputs isolate the resolver from the surface pass: every visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
 /// reduced-world canary exercises its ordinary package recorder. Every output transport element is poisoned before the
 /// dispatch and read back afterwards: native copies carry the sample tag and zero distance, reconstructed misses carry
 /// zero weights, and both formats overwrite the second packed word. An accepted finite history with a chroma
@@ -160,13 +159,8 @@ public sealed class SdfResolveDeviceLawTests {
         using var historyInput = (narrowChromaHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
         using var historySeed = (narrowChromaHistory ? services.BufferFactory.CreateHostVisible(data: historyInputBytes, name: default, usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
-        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss. Each output pixel's
-        // transport occupies the structured element declared by the resolve interface, including both packed words.
-        var box = new byte[16];
-
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 8), value: ((RenderWidth + 7) / 8));
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 12), value: ((RenderHeight + 7) / 8));
-        using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
+        // Every record a miss. Each output pixel's transport occupies the structured element declared by the resolve
+        // interface, including both packed words.
         using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
         var transportStride = parameters.Layout.Bindings.Single(predicate: binding => (binding.Name == SdfWorldPackage.TransportWritten)).ElementStride;
 
@@ -229,7 +223,6 @@ public sealed class SdfResolveDeviceLawTests {
             };
             var buffers = new Dictionary<uint, IGpuBuffer> {
                 [Binding(member: ShaderWorkCounters.Buffer)] = counters,
-                [Binding(member: SdfWorldPackage.CullBounds)] = cullBounds,
                 [Binding(member: SdfWorldPackage.VisibilityRecords)] = visibility,
                 [Binding(member: SdfWorldPackage.TransportWritten)] = transport,
             };

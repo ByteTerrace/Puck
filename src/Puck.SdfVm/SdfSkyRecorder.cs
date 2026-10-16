@@ -9,9 +9,9 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The sky's field runs and the composite (SdfWorldPackage.Parts.Sky and Parts.Composite), which read the sky interface
-// (SdfWorldInterfaces.SkyParameters). The sky runs on its independent full or ceil-half field grid, reading the color views writes with the dispatch box
-// it is current inside, in every fragment; the composite runs at the output extent, reading a native view's lit image with
-// the visibility records and the box, or a reduced or temporal view's resolved lit image and surface transport. Both bind
+// (SdfWorldInterfaces.SkyParameters). The sky runs on its independent full or ceil-half field grid, reading the color views
+// writes, in every fragment; the composite runs at the output extent, reading a native view's lit image with the
+// visibility records, or a reduced or temporal view's resolved lit image and surface transport. Both bind
 // the residency's World set, whose tables hold the sky block and layer table, the volumes and the dynamic transforms, and a
 // pass group binding each port at its member, the screens the sky's layers sample (a panorama's, a textured disc's), and
 // a filler at every member the pass does not read or write. Their block holds
@@ -31,7 +31,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
     private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.CullBounds, SdfWorldPackage.TransportRead];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.TransportRead];
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -337,8 +337,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     // The member a pass reads a fragment version through.
     private static string ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor => SdfWorldPackage.LitImage,
-        SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
-        SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
+        SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,
         SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperImages[Array.IndexOf(array: ReadParts, value: version)],

@@ -13,7 +13,7 @@ namespace Puck.SdfVm;
 /// carries, the packed-layout constants the interpreter decodes words with, the screen count,
 /// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
 /// pass block's environment array, with its light kinds, and the visibility record's identity fields, transform-slot
-/// sentinel and currency rule (<see cref="SdfVisibility"/>). Every value is read from the C# model, never
+/// sentinel and workgroup edge (<see cref="SdfVisibility"/>). Every value is read from the C# model, never
 /// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
@@ -101,9 +101,7 @@ public static class SdfIsaHlsl {
         var declarations = new Declarations();
 
         declarations.Members<SdfOp>(prefix: "SDF_OP");
-        declarations.Members<SdfShadowDecision>(prefix: "SDF_SHADOW_DECISION");
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
-        declarations.Count(name: "SDF_SHADOW_HISTORY_WORDS", value: ((int)SdfWorldPackage.ShadowHistoryWords));
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
         declarations.Members<SdfLift>(prefix: "SDF_LIFT");
@@ -137,8 +135,6 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_PART_DISTANCE_GAIN_MASK", value: SdfProgram.PartDistanceGainMask);
         declarations.Real(name: "SDF_PART_DISTANCE_GAIN_UNIT", value: SdfProgram.PartDistanceGainUnit);
         declarations.Bits(name: "SDF_PART_BOUNDED_SECONDARY", value: SdfProgram.PartBoundedSecondaryFlag);
-        declarations.Count(name: "SDF_TAPE_SLAB_COUNT", value: SdfWorldPackage.TapeSlabCount);
-        declarations.Count(name: "SDF_TAPE_HEADER_WORDS", value: SdfWorldPackage.TapeHeaderWords);
         declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);
         declarations.Bits(name: "SDF_TAPE_OMISSIBLE", value: SdfTapeCertificate.OmissibleSegment);
         declarations.Bits(name: "SDF_TAPE_DYNAMIC_FRAME", value: SdfTapeCertificate.DynamicFrame);
@@ -297,14 +293,11 @@ public static class SdfIsaHlsl {
         declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
         declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
-        declarations.Section(title: "The visibility record's identity fields, transform-slot lane and currency box (SdfVisibility).");
+        declarations.Section(title: "The visibility record's identity fields, frame-slot lane and the record passes' workgroup edge (SdfVisibility).");
         declarations.Count(name: "SDF_VISIBILITY_KIND_SHIFT", value: SdfVisibility.KindShift);
         declarations.Bits(name: "SDF_VISIBILITY_SOURCE_MASK", value: SdfVisibility.SourceMask);
         declarations.Signed(name: "SDF_TRANSFORM_SLOT_NONE", value: SdfProgram.NoDynamicTransformSlot);
-        declarations.Count(name: "SDF_VISIBILITY_BOX_EDGE", value: SdfVisibility.BoxEdgePixels);
-        declarations.Count(name: "SDF_VISIBILITY_AMBIENT_QUERIES_WORD", value: SdfVisibility.AmbientQueriesWord);
-        declarations.Count(name: "SDF_VISIBILITY_SHADOW_QUERIES_WORD", value: SdfVisibility.ShadowQueriesWord);
-        declarations.Expression(name: "SDF_VISIBILITY_CURRENT(pixel, bounds)", value: SdfVisibility.CurrencyHlsl);
+        declarations.Count(name: "SDF_VISIBILITY_GROUP_EDGE", value: SdfVisibility.GroupEdgePixels);
         declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
         declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);
         declarations.Count(name: "SDF_SHADOW_SLOTS", value: SdfShadowSlots.MaxSlots);

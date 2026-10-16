@@ -1,11 +1,9 @@
-// The slot lights the shadow march and shading read from the lights table (sdfLights, SdfLight records generated from
-// Puck.SignedDistance.SdfLight), and a positional light's current position.
+// The slot lights shading reads from the lights table (sdfLights, SdfLight records generated from
+// Puck.SignedDistance.SdfLight), the shadow handoffs fading a slot from one light to another, and a positional light's
+// current position.
 #ifndef FRAME_SDF_LIGHTS_HLSLI
 #define FRAME_SDF_LIGHTS_HLSLI
 #include "sdf-environment.hlsli"
-#ifndef SDF_SHADOW_FADE_SLOTS
-#define SDF_SHADOW_FADE_SLOTS 0
-#endif
 
 // Both the declared count and the actual bound buffer constrain a read.
 uint worldLightCount() {
@@ -15,15 +13,12 @@ uint worldLightCount() {
     return min(passGroup.lightCount, min(count, SDF_MAX_LIGHTS));
 }
 uint worldShadowStableCount() { return min(passGroup.shadowSlotCount, SDF_MAX_SHADOW_SLOTS); }
-uint worldShadowIncomingCount() {
-#if SDF_SHADOW_FADE_SLOTS > 0
+// The active handoffs, at most the fade capacity the handoff table holds.
+uint worldShadowHandoffCount() {
     uint count;
     uint stride;
     sdfShadowHandoffs.GetDimensions(count, stride);
-    return min(passGroup.shadowFadeCount, min(count, (uint)SDF_SHADOW_FADE_SLOTS));
-#else
-    return 0u;
-#endif
+    return min(passGroup.shadowFadeCount, min(count, (uint)SDF_SHADOW_FADE_CAPACITY));
 }
 
 // A point or occluder light's current world-space position: the live dynamic transform its slot names (an anchored
@@ -47,24 +42,6 @@ float3 worldSunDirection() {
     int index = passGroup.shadowSlots.x;
 
     return ((index >= 0 && (uint)index < worldLightCount()) ? sdfLights[(uint)index].Direction : SdfSunDirection);
-}
-float worldShadowPenumbraSlope(int index) {
-    return ((index >= 0 && (uint)index < worldLightCount()) ? max(sdfLights[(uint)index].Param, 1.0e-3) : (1.0 / 9.0));
-}
-// March rows are the K stable slots followed by the active incoming controls, never the reserved fade capacity.
-uint worldShadowMarchCount() {
-    return worldShadowStableCount() + worldShadowIncomingCount();
-}
-int worldShadowMarchLight(uint shadowSlot) {
-    uint stable = worldShadowStableCount();
-    if (shadowSlot < stable) {
-        return passGroup.shadowSlots[shadowSlot];
-    }
-#if SDF_SHADOW_FADE_SLOTS > 0
-    return shadowSlot - stable < worldShadowIncomingCount() ? sdfShadowHandoffs[shadowSlot - stable].Incoming : -1;
-#else
-    return -1;
-#endif
 }
 
 #endif

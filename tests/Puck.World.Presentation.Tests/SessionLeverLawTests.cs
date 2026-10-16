@@ -278,18 +278,11 @@ public sealed class SessionLeverLawTests {
         var sink = ComposeShipped(visibility: new WorldBindingBarVisibility());
         string[] expected = [
             WorldSessionLevers.AmbientOcclusion,
-            WorldSessionLevers.AmbientOcclusionQuality,
-            WorldSessionLevers.Bakes,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
-            WorldSessionLevers.FarBound,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
-            WorldSessionLevers.RenderPath,
             WorldSessionLevers.RenderScale,
-            WorldSessionLevers.ShadowAmortize,
-            WorldSessionLevers.ShadowMarch,
-            WorldSessionLevers.ShadowMask,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
             WorldSessionLevers.SkyMute,

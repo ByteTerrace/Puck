@@ -144,7 +144,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             : ((((atmosphere.Fog is null) ? 0 : 1) + ((atmosphere.Haze is null) ? 0 : 1)) + ((atmosphere.Medium is null) ? 0 : 1)));
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
         var lattice = ((population.Fields is { } fields)
             ? fields.DescribeCost(

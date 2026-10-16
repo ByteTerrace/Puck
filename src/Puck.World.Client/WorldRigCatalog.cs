@@ -583,7 +583,6 @@ public static class WorldRigCatalog {
         Vector3 rootPosition,
         Quaternion rootOrientation,
         float gaitPhase,
-        bool castsSoftShadow,
         Span<DynamicTransform> transforms,
         int rig = -1,
         float scale = 1f
@@ -598,7 +597,6 @@ public static class WorldRigCatalog {
                 );
             }
             transforms[firstSlot] = new DynamicTransform(
-                CastsSoftShadow: castsSoftShadow,
                 Orientation: rootOrientation,
                 Position: rootPosition
             );
@@ -633,7 +631,6 @@ public static class WorldRigCatalog {
             ));
 
             transforms[slot] = new DynamicTransform(
-                CastsSoftShadow: castsSoftShadow,
                 Orientation: orientation,
                 Position: position
             );

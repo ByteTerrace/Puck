@@ -85,11 +85,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private IReadOnlyList<WorldScreen> m_textRows = [];
 
-    /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips soft shadows, ambient
-    /// occlusion and the far bound, whose cost buys little in a small screen-space result.</summary>
+    /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips shadows and ambient
+    /// occlusion, whose cost buys little in a small screen-space result.</summary>
     public static SdfViewQuality ReducedQuality { get; } = new() {
         DisableAmbientOcclusion = true,
-        DisableFarBound = true,
         DisableSoftShadows = true,
     };
 
@@ -97,7 +96,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private int m_bodyColorRevision;
 
-    private readonly bool m_castsAvatarShadows;
     // The prototypes a far scene holds (see the constructor), or null for a scene of the whole world.
     private readonly IReadOnlySet<string>? m_onlyPrototypes;
 
@@ -176,13 +174,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// (a named camera row carries its own lens).</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
-    /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
     /// <param name="shadowSettings">The routed view's live policy, or its own boot policy when absent.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <param name="onlyPrototypes">The prototypes the scene holds, or <see langword="null"/> for the whole world: far
     /// geometry (<c>Puck.SdfVm.Views.InfinityViewKind.Far</c>) emits the placements of these prototypes alone, with no
     /// screen, no avatar and no body stamp, so its cost scales with what it shows.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null) {
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: domains);
 
@@ -192,7 +189,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
-        m_castsAvatarShadows = castsAvatarShadows;
         m_onlyPrototypes = onlyPrototypes;
         m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
@@ -703,7 +699,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             var address = m_mirror.Address(index: index);
 
             if (!m_avatarOwners.Wake(
-                castsSoftShadow: m_castsAvatarShadows,
                 deltaSeconds: 1f,
                 discontinuity: (
                 !m_avatarPoseSeeded[index] ||
@@ -731,7 +726,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 moved: WorldTransformOwners.PackBody(
                 avatar: index,
                 // Session panels omit avatar shadows; a routed scene participates when its host enables them.
-                castsSoftShadow: m_castsAvatarShadows,
                 catalogBase: context.SlotBase,
                 gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
                 moved: moved,

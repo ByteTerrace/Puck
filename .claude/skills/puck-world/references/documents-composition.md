@@ -243,13 +243,11 @@ or a non-zero `group`, and on a creation that otherwise needs its own field scop
 refuses them; and refused by name when the REFERENCE carries `domain` ops or a non-zero `group`, since its copy is
 re-emitted from its own slot and authored pose alone (a fold's slot carries only its parent's delta frame, a grouped
 member rides its group's chain) and would land in the wrong place. Render-only, like `panel`: the deterministic fixed-point contact evaluator never reads it. A shape's
-`detail` (bool, null = false) marks it SHADING-ONLY: the SDF VM
-skips it entirely during the beam and fine march (so it never carves the silhouette or holds contact geometry —
-`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip a detail shape outright, unlike Panel/Trims,
-which only skip their SECOND copy) and includes it only in the shading evaluation at an already-found hit, where
-its own material and its perturbation of the surface normal paint its footprint — a thin subtraction (a seam) or
-a small union carrying its own material (a rivet) that stays a crisp mark at any distance instead of the dots a
-march-carved groove thinner than the footprint-relative acceptance produces. Refused by name alongside `panel` or
+`detail` (bool, null = false) marks it VISUAL-ONLY: it never holds contact geometry
+(`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip a detail shape outright, unlike Panel/Trims,
+which only skip their SECOND copy), while the baked frame samples it like any other shape, so a thin subtraction (a
+seam) or a small union carrying its own material (a rivet) bakes into the view's mesh and paints its footprint through
+the bake's point-sampled materials. Refused by name alongside `panel` or
 `trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
 `secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
 ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`, gated on

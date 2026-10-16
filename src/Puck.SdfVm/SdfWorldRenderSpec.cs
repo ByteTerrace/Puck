@@ -32,7 +32,7 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>Whether the resolved host backend is Direct3D 12 — the one input every backend-specific choice
     /// (bytecode extension, overlay availability) derives from.</summary>
     public bool HostsOnDirectX { get; init; }
-    /// <summary>A floor on the instance count the per-tile mask buffer is sized for — the capacity envelope for a
+    /// <summary>A floor on the instance count the bake's instance masks are sized for — the capacity envelope for a
     /// frame source that hot-swaps programs whose instance counts grow past the first frame's.</summary>
     public int InstanceCapacity { get; init; }
     /// <summary>A floor on the program buffer's packed-word capacity — the capacity envelope for a frame source

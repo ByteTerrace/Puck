@@ -10,8 +10,8 @@
 // only the mesh pass's stages draw from.
 bool sdfLightCamera() { return (passGroup.lightCamera != 0u); }
 
-// The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
-// read it through.
+// The view the pass renders, gathered from the pass block into the rows the shading and the mesh projection read it
+// through.
 struct ViewportData {
     float4 position;    // xyz = world position, w = zero
     float4 right;       // xyz = right basis, w = tan(fov / 2), or world half-width for the scoped light camera
@@ -89,16 +89,15 @@ float worldRayDistanceAt(ViewportData view, float3 rayDirection, float forwardDi
     return (forwardDistance / dot(rayDirection, view.forward.xyz));
 }
 
-// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (the primary stage), the
-// beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
-// carries, and the depth/overshoot debug ramps. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance), never a
+// The frame's FAR DISTANCE — the depth at which every view's geometry ends: the mesh raster's far plane, the sky's and
+// the media's reach, and the depth debug ramp. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance), never a
 // shader constant: the host refuses a non-finite or non-positive value before writing it, so no kernel guards it.
 float worldFarDistance(ViewportData view) {
     return view.lens.w;
 }
 
 // A view's render extent in pixels: its output image's size, written by the host as exact integers. Every consumer (the
-// sky, the tile passes' coverage, the hit passes and views) reads this one value, so none can disagree on it.
+// sky, the surface pass and views) reads this one value, so none can disagree on it.
 uint2 worldViewDims(ViewportData view) {
     return max((uint2)view.extent.xy, uint2(1u, 1u));
 }

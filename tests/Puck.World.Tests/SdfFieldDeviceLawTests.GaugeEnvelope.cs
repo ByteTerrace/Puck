@@ -27,7 +27,7 @@ public sealed partial class SdfFieldDeviceLawTests {
         };
         var expected = new[] { 6.88f, 8f, 7.5f, 8f, 8f, 8f, 5.76f, 0f };
         var program = Pack(emit: static (builder, material) => builder.ResetPoint().Sphere(radius: 1f, material: material));
-        var results = Run(kernel: GradientKernel(extension: extension, name: "sdf-gauge-envelope.comp"), services: services,
+        var results = Run(kernel: Kernel(extension: extension, name: "sdf-gauge-envelope.comp"), services: services,
             legs: [new SdfFieldLeg(Name: "power norm envelope", Words: program.Words.ToArray(), Distances: [], Materials: [])], points: points);
 
         Assert.Equal(expected: expected.Length, actual: results.Length);

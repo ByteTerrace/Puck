@@ -8,8 +8,9 @@ corresponding material rule.
 
 Hard operations use a strict winner comparison so ties are deterministic.
 Smooth composition blends distance over an authored radius and records the
-information needed for hit-only material interpolation. The interpolation is a
-shading concern and must not change the march field.
+information for material interpolation, which the interpreter tracks but no
+view draws: the bake point-samples each quad's winning material. The
+interpolation state must never change the field.
 
 Scoped fields isolate operations such as intersection, onion, dilation, and
 displacement from the parent accumulator, then compose the scoped result back

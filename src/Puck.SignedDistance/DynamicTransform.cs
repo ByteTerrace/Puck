@@ -6,12 +6,7 @@ namespace Puck.SignedDistance;
 /// these into the per-frame dynamic-transform buffer the <c>SdfOp.TransformDynamic</c> opcode indexes by slot, so an
 /// entity moves without rebuilding the scene program. The slot is the entity's index in
 /// <c>Puck.SdfVm.SdfFrame.DynamicTransforms</c>.
-/// <para><paramref name="CastsSoftShadow"/> (default <see langword="true"/> = casts) rides the packed position row's spare
-/// <c>.w</c> lane (see <c>SdfWorldTables.PackDynamicTransforms</c>): <see langword="false"/> means this dynamic instance is
-/// skipped by the soft-shadow march only — the camera/AO marches are unaffected, so a suppressed avatar still renders and
-/// self-occludes, it just stops casting/receiving through the sun-shadow enumeration. Per-frame data (avatars move every
-/// frame); flipping it never rebuilds the program. Default casts is byte-identical to every prior frame's zero-pad upload.</para>
 /// <para><paramref name="Lanes"/> is an anonymous four-component carrier, indexed 0 through 3. Every component
 /// must be finite. Shape operations and material layers select their component explicitly; the engine assigns
 /// no meaning to a component. A chain without a dynamic transform reads four zeros.</para></summary>
-public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, bool CastsSoftShadow = true, Vector4 Lanes = default);
+public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, Vector4 Lanes = default);

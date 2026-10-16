@@ -1,39 +1,32 @@
 # SDF technique index
 
-This table summarizes how major technique families fit the current renderer.
+This table summarizes how major technique families fit the current engine.
 It intentionally omits implementation chronology and review provenance.
 
 | Technique family | Current applicability | Detail |
 |---|---|---|
-| Auto-relaxed sphere tracing | Shipped default with strict reference path | [Marching acceleration](marching-acceleration.md) |
-| Fold-safe step bounds | Required for discontinuous domain folds | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
+| Fold-safe step bounds | Required for discontinuous domain folds on every CPU marcher | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Per-composition chamfer bound | Required; a per-program or per-chain chamfer factor is unsound | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Conservative non-convergence on CPU query verbs | Required, and directed per verb by what its true half asserts: an obstruction verb folds "gave up" to a hit, a surface verb to "not found" | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
-| Step scale on every marcher over the stream, GPU and CPU | Required; a rigid-only op subset does not license a raw advance, because chamfer blends overestimate | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
+| Step scale on every marcher over the stream | Required; a rigid-only op subset does not license a raw advance, because chamfer blends overestimate | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Iteration budget derived from the step scale | Required; a fixed budget shortens a clamped march's reach in proportion | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Cell-local field evaluation behind a hierarchical position | Not applicable; a world-space seam must rebase or refuse | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
-| Uniform-grid instance culling | Shipped default | [Hierarchical and instance acceleration](hierarchical-and-instance-acceleration.md) |
-| Per-region tape pruning | Not useful for ordinary flat room programs; reconsider inside large multi-segment instances | [Tape pruning and inclusion](tape-pruning-and-inclusion.md) |
 | Per-segment bounds | Open priority for placed creations | [Level of detail and bounds](lod-and-bounds.md) |
-| BVH or TLAS/BLAS for analytic instances | Conditional on a workload the uniform grid cannot handle | [Hierarchical and instance acceleration](hierarchical-and-instance-acceleration.md) |
-| Wavefront or persistent-thread marching | Conditional on measured divergence and portable scheduling semantics | [March-loop scheduling](march-loop-scheduling.md) |
-| Analytic forward-mode normals | Shipped default; four-tap comparison remains available | [Gradients and normals](gradients-and-normals.md) |
-| Normal-ladder AO | Shipped three-tap ambient-only path | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| Cone AO and bent normals | Optional quality tier; open | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| Irradiance volume traced on the CPU against the baked meshes | Shipped on the baked-mesh path; the field-traced radiance cache it replaced is deleted | [The mesh path's irradiance volume](../handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination) |
-| Penumbra soft shadows | Shipped with a workgroup grid gather | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
+| Tetrahedral bake gradients and interpolated vertex normals | Shipped: the bake measures gradients only at sign-change corners | [Gradients and normals](gradients-and-normals.md) |
+| Screen-space hemisphere AO | Shipped in the surface pass, ambient-only | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
+| Irradiance volume traced on the CPU against the baked meshes | Shipped | [The mesh path's irradiance volume](../handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination) |
+| Cascaded percentage-closer soft shadows | Shipped: two cascades for the key light, one for the second stable slot | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
+| Material blending at smooth seams | Tracked by the interpreter, not drawn: the bake point-samples each quad's winning material | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
 | Host bounds on the screen material sentinel band | Required on both ends, with the shader bounding the decoded index | [Materials and primitives](materials-and-primitives.md) |
 | Degenerate profile bounds sized to the fixed-point representation | Required wherever an exact core divides by its own dimensions; refused at the builder, the packed program constructor, and the document validator | [Materials and primitives](materials-and-primitives.md) |
 | Finiteness of packed operand lanes | Required at the packed door, skipping exactly the lanes that carry reinterpreted integer fields | [Materials and primitives](materials-and-primitives.md) |
-| Instance ranges as an ownership partition | Required; overlap is refused at the door and the first-match resolve stays as defence in depth | [Hierarchical and instance acceleration](hierarchical-and-instance-acceleration.md) |
+| Instance ranges as an ownership partition | Required; overlap is refused at the door and the first-match resolve stays as defence in depth | [Instance bounds and ownership](instance-bounds.md) |
 | One effective-scale rule shared by bound analysis and emission | Required; an analyzer reading the authored scale disagrees with an emission that clamps it | [Level of detail and bounds](lod-and-bounds.md) |
 | Negative authored scale as a mirror | Not supported; refused at the creation document validator in favour of the symmetry domain op | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |
 | Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [Level of detail and bounds](lod-and-bounds.md) |
-| Coverage AA | Shipped footprint-aware path | [Antialiasing and filtering](antialiasing-and-filtering.md) |
+| Rasterized coverage with temporal reconstruction | Shipped; no partial silhouette coverage | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Temporal reconstruction | Shipped as a per-view quality: a jittered sample a frame, resolved over the view's own history | [Temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction) |
-| Ray-differential CRT filtering | Open when minification is visible | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [Level of detail and bounds](lod-and-bounds.md) |
 | Global voxel or clipmap representation | Not a current fit; requires a distinct content-source boundary | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |

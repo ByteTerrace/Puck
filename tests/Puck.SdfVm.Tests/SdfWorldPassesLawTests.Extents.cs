@@ -9,7 +9,11 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
     public void VariableRenderGridKeepsOutputAndCeilingStorageWhilePickingUsesTheActiveStride() {
-        var gpu = new UploadModelGpu();
+        // The view's three shadow cascades hold about 250 MB, so a rebuild's replacement peak needs a device that reports
+        // more memory than the unreported device's pipeline budget.
+        var gpu = new UploadModelGpu {
+            MemoryProfile = new GpuMemoryProfile(CoherentUnifiedMemory: false, DeviceLocalBytes: (8UL << 30), HostVisibleDeviceLocalBytes: 0UL, LargestDeviceLocalHeapBytes: (8UL << 30), UnifiedMemory: false),
+        };
         var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
         var current = Frame();
 
@@ -28,11 +32,9 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
         Assert.Contains(collection: node.Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
-        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * 64));
+        var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * SdfWorldPackage.VisibilityRecordByteLength));
 
-        Assert.Equal(expected: ((24 * 24) * 64), actual: storage.Length);
-        // No kernel runs on the model, so the frame's dispatch box is written here: the whole grid is current.
-        Buffer.BlockCopy(count: BoxBytes, dst: gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes), dstOffset: 0, src: WholeBox, srcOffset: 0);
+        Assert.Equal(expected: ((24 * 24) * SdfWorldPackage.VisibilityRecordByteLength), actual: storage.Length);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // Picking allocates its tiny readback only on demand; warm every frame slot before measuring scale changes.
         for (var warm = 0; (warm < 4); warm++) {
@@ -51,9 +53,12 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = view.Produce(context: in context);
             var row = view.Runtime.Latest!.Instances[0];
 
-            // The ten passes through views and the sky at the active grid, the resolve and the composite at the output.
-            Assert.Equal(expected: 13, actual: row.Passes);
-            Assert.Equal(expected: (((11L * pixels) * pixels) + (2 * (Extent * Extent))), actual: row.PassPixels);
+            // The bake's two passes, the mesh, surface, views and sky at the active grid, the three shadow cascades at their
+            // own resolution, and the resolve and the composite at the output.
+            const long Cascade = SdfWorldPackage.MeshShadowResolution;
+
+            Assert.Equal(expected: 11, actual: row.Passes);
+            Assert.Equal(expected: ((((6L * pixels) * pixels) + (3 * (Cascade * Cascade))) + (2 * (Extent * Extent))), actual: row.PassPixels);
             // The resolve's pass set, the third from the frame's last: the sky and the composite follow it.
             var set = gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
 
@@ -69,7 +74,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: revision, actual: node.WorkRevision);
             // The picker copies one record from the active packed grid, independently of output and allocation size.
             Array.Clear(array: storage);
-            var offset = checked((int)(((((pixels * 3) / 4) * pixels) + (pixels / 4)) * 64));
+            var offset = checked((int)(((((pixels * 3) / 4) * pixels) + (pixels / 4)) * SdfWorldPackage.VisibilityRecordByteLength));
 
             BitConverter.GetBytes(value: 123f).CopyTo(array: storage, index: offset);
             _ = picker.Demand(x: 0.25f, y: 0.75f);
@@ -80,7 +85,7 @@ public sealed partial class SdfWorldPassesLawTests {
         // Changing the ceiling rebuilds allocation while preserving the published output. Switching off the separate
         // grid removes the resolve and its scratch; switching back selects the same declared resolve topology.
         foreach (var (ceiling, active, passes, renderPixels) in new[] {
-            (0.5f, 0.25f, 13, 8u), (1f, 0f, 12, 32u), (0.75f, 0.5f, 13, 16u),
+            (0.5f, 0.25f, 11, 8u), (1f, 0f, 10, 32u), (0.75f, 0.5f, 11, 16u),
         }) {
             current = current with { Views = [current.Views[0] with { RenderScale = ceiling, ResolvedRenderScale = active }], Time = (current.Time + 1f) };
             TestLiveness.Until(step: () => {
@@ -95,7 +100,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
             }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-            Assert.Equal(expected: (passes == 13), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
+            Assert.Equal(expected: (passes == 11), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
         current = current with { EnableCadenceGate = true };
         _ = view.Produce(context: in context);

@@ -23,7 +23,7 @@ namespace Puck.SdfVm;
 /// subtract from world-space positions before emitting. <see cref="Vector3.Zero"/> today (every current host anchors
 /// render-relative space at its spawn cell) — reserved for a future emitter that needs it.</param>
 /// <param name="ParkPosition">Where a hidden/unused dynamic-transform slot should sit this frame (a "parked" position
-/// far outside anything the camera or the tile-cull beam reaches) — the composed value a well-behaved
+/// far outside anything a view or the bake reaches) — the composed value a well-behaved
 /// <see cref="ISdfSceneEmitter.PackDynamicTransforms"/> writes for any slot it isn't actively using this frame.</param>
 /// <param name="SlotBase">The first dynamic-transform slot index this emitter owns (see
 /// <see cref="ISdfSceneEmitter.DynamicSlotCount"/>) — every slot this emitter writes in

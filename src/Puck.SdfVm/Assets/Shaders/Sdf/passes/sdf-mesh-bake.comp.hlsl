@@ -1,6 +1,6 @@
 // The mesh bake's field sampler: one invocation per sample of the dispatch's batch of lattices (the pass block's
 // meshBakeLattices, each sample x fastest within its lattice, the lattices back to back), evaluating the instances its
-// lattice's tile mask selects (sdf-mesh-bake-mask.comp.hlsl) at the sample and, when the lattice asks for gradients, at
+// lattice's instance mask selects (sdf-mesh-bake-mask.comp.hlsl) at the sample and, when the lattice asks for gradients, at
 // four tetrahedral taps around it, through the kernel's one interpreter call site. A lattice whose selector names a
 // dynamic-transform slot lies in that slot's frame: each sample and tap is carried to world space through the slot's
 // transform in this frame, so a body that moves while it bakes is sampled where it is, and its gradient comes back in
@@ -67,9 +67,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // The segments no instance owns form a group of their own (the selector SdfMeshPathBake.WorldSelector, whose
         // mask selects no instance); every other group samples its instances without them.
         sdfMapOmitWorldSegments = (asuint(row1.w) != 0x80000000u);
-        // A mesh carries the detail shapes (painted features, rivets) the views pass re-resolves at a field hit, since no
-        // field read resolves them for a mesh pixel.
-        sdfDetailShadingActive = true;
         uint taps = ((dims.w == 3u) ? 5u : 1u);
         float value = 0.0;
         int material = 0;
