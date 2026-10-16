@@ -492,7 +492,14 @@ by the strong Lucas test with Selfridge Method A. Its exactness throughout
 `ulong` rests on published exhaustive computation and the equivalence of
 Methods A and A*, as the
 [finite-field reference](../../src/Puck.Maths/FiniteFields/README.md#primality-on-ulong)
-explains. `IsPrime(ulong)`, enumeration, factorization, finite fields and random
+explains. The strong Lucas test as implemented, Method A, rejects every base-two
+strong pseudoprime below 2^64, and so does `IsPrime(ulong)`; both reject all
+118,968,378 base-two Fermat pseudoprimes in Feitsma and Galway's
+[list](https://www.cecm.sfu.ca/Pseudoprimes/). The check is reproducible with a
+harness outside the repository that streams the list and runs
+`PrimeField64.IsStrongLucasProbablePrime`, `IsPrime(ulong)` and
+`PrimeKernels.PassesBaseTwoBatch` over every entry, as the finite-field
+reference describes. `IsPrime(ulong)`, enumeration, factorization, finite fields and random
 selection share this decision; the random selector runs its own small-factor
 filter first, and enumeration and counting presieve instead of trial-dividing.
 
