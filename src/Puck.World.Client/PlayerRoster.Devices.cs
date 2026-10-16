@@ -182,10 +182,16 @@ public sealed partial class PlayerRoster {
     /// <summary>Formats the device table for the <c>world.devices</c> verb — every seen device token in first-seen
     /// order, its name when known, and the player it currently drives. A device that is its slot's most-recently-
     /// assigned device of its own kind (what <see cref="TryGetSeatDevice"/> would resolve for that kind) is marked
-    /// <c>*</c> — the one that matters when several devices of one kind (e.g. two cameras) share a team.</summary>
+    /// <c>*</c> — the one that matters when several devices of one kind (e.g. two cameras) share a team. A gamepad's
+    /// segment ends with its <paramref name="gamepadStatus"/> text (battery and accessories) when that returns one.</summary>
+    /// <param name="gamepadStatus">Optional per-gamepad status lookup (see <see cref="GamepadStatusText"/>), called
+    /// only for devices classified as gamepads; <see langword="null"/>, or a <see langword="null"/>/empty result,
+    /// leaves the segment bare. The roster holds no gamepad manager of its own, so the caller supplies the lookup.</param>
     /// <returns>A line of the form
-    /// <c>[world.devices: keyboard1=p1* | mouse1=p1* | gamepad1=p2* | camera1 'Logitech BRIO'=p1 | camera2 'HD Pro Webcam C920'=p1*]</c>.</returns>
-    public string DescribeDevices() {
+    /// <c>[world.devices: keyboard1=p1* | mouse1=p1* | gamepad1=p2* battery 94% headset | camera1 'Logitech BRIO'=p1 | camera2 'HD Pro Webcam C920'=p1*]</c>;
+    /// the status suffix is <c>battery N%</c>, <c>charging N%</c>, <c>not charging N%</c>, <c>charged</c> or
+    /// <c>wired</c> (nothing when power is unknown), then <c>headset</c>, <c>headphones</c> or <c>microphone</c>.</returns>
+    public string DescribeDevices(Func<InputDeviceId, string?>? gamepadStatus = null) {
         var segments = new List<string>(capacity: m_deviceOrder.Count);
 
         foreach (var device in m_deviceOrder) {
@@ -212,9 +218,16 @@ public sealed partial class PlayerRoster {
                 (resolved == device)
             );
 
+            var status = (((gamepadStatus is not null) && (DeviceKindOf(device: device) == InputDeviceKind.Gamepad))
+                ? gamepadStatus(device)
+                : null
+            );
+
             segments.Add(item: $"{label}={owner}{(isResolved
                 ? "*"
-                : string.Empty)}");
+                : string.Empty)}{(string.IsNullOrEmpty(value: status)
+                ? string.Empty
+                : $" {status}")}");
         }
 
         return $"[world.devices: {string.Join(

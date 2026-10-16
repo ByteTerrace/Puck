@@ -69,6 +69,8 @@ as an explicit remainder; it does not re-emit prototypes or change state.
   When several devices of one
   kind share a seat, `TryGetSeatDevice` resolves whichever was assigned to it
   most recently (`world.devices` marks that one `*`).
+  `DescribeDevices` takes an optional per-gamepad status lookup, so the roster holds
+  no gamepad manager; `GamepadStatusText.cs` spells the battery and accessories text.
 - `SeatController.cs`—the per-seat device-intent producer: typed movement
   and look samples, toggled motion input, and held channel lanes folded into
   the seat's per-tick `PlayerIntent` submission.
