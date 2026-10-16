@@ -8,6 +8,7 @@ starting work, and tick or remove an item in the same change that closes it.
 
 These items belong to no single programme.
 
+- [ ] Two console verbs break the operator MCP attachment (`puck mcp --profile operator` against a World that ran `world.control start`). `world.wait <ticks>` answers at once (`releasing at tick N`) and the attachment's next call fails with "Host disconnected; dispatched outcome is unknown"; `world.reload` on a World booted from `.puck` source never answers, and the call ends at its deadline. Both work from stdin. Until they are fixed, an MCP session restarts the World to pick up a source edit and fences on a log line or a capture instead of `world.wait`. See [`Puck.Mcp`](../../src/Puck.Mcp/README.md).
 - [x] Honor launcher help/version actions before host setup. Native help (including `-h`) and standalone version probes exit before world/config loading and state-directory creation; invalid options still refuse. Version combined with other arguments follows the parser's refusal.
 - [x] One authored `sort` with explicit numeric keys. Compilation selects own-value or token-attribute storage paths; stable ties, per-key direction, row-shape refusal, domain checks and allocation ceilings are covered (see [State transforms](../reference/state/transforms.md)).
 - [x] Separate storage kind from the participant role's `Counter` and `Timer` ownership, landed as `StateParticipantRole` (see [Participant and identity slots](../reference/state/data-model.md#participant-and-identity-slots)).

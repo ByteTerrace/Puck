@@ -1,5 +1,5 @@
 // The debug world: a flat 256 m ground under a clear day, with axis markers and reference cubes at the origin and
-// the Moth avatar to walk it. It is the plain starting point the island is built up from, in engine: boot it with
+// the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. It is the plain starting point the island is built up from, in engine: boot it with
 // `--world src/Puck.World/Assets/worlds/debug.puck`, edit this source, and `world.reload` recompiles it in place.
 
 schema: "puck.world.definition.v1"
@@ -8,9 +8,14 @@ documentId: "debug"
 
 import "skies.puck"
 
+// The test room's palette slots.
+let roomWhite = 0 // #E6E2DA
+let roomRed = 1 // #C8322B
+let roomGreen = 2 // #2FA84A
+
 metadata {
   title: "Debug"
-  description: "A flat 256 m ground under a clear day, with axis markers and 1, 2 and 4 m reference cubes at the origin."
+  description: "A flat 256 m ground under a clear day, with axis markers, 1, 2 and 4 m reference cubes and a coloured test room near the origin."
 }
 
 placements {
@@ -44,6 +49,13 @@ placements {
   placement "cube-4m" {
     prototype: "cube-4m"
     position [-12, 2, 6]
+    solid
+  }
+
+  placement "gi-corner" {
+    prototype: "gi-corner"
+    position [-2, 0, 13]
+    yawDegrees: -45
     solid
   }
 }
@@ -154,6 +166,68 @@ prototypes {
         material: 0
         position [0, 0, 0]
         scale [1, 1, 1]
+      }
+    }
+  }
+
+  // A Cornell-style room for judging indirect light: red and green side walls, a white back wall, ceiling and raised
+  // floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open sky
+  // elsewhere in this world hides them.
+  prototype "gi-corner" {
+    document {
+      name: "gi-corner"
+      palette [
+        {
+          color: "#E6E2DA"
+          roughness: 0.9
+          specular: 0.02
+        }
+        {
+          color: "#C8322B"
+          roughness: 0.9
+          specular: 0.02
+        }
+        {
+          color: "#2FA84A"
+          roughness: 0.9
+          specular: 0.02
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: roomWhite
+        position [0, 0.05, 0]
+        scale [2.1, 0.05, 2.1]
+      }
+      shape Box "red-wall" {
+        material: roomRed
+        position [-2.05, 1.6, 0]
+        scale [0.05, 1.5, 2.1]
+      }
+      shape Box "green-wall" {
+        material: roomGreen
+        position [2.05, 1.6, 0]
+        scale [0.05, 1.5, 2.1]
+      }
+      shape Box "back-wall" {
+        material: roomWhite
+        position [0, 1.6, -2.05]
+        scale [2.1, 1.5, 0.05]
+      }
+      shape Box "ceiling" {
+        material: roomWhite
+        position [0, 3.15, 0]
+        scale [2.1, 0.05, 2.1]
+      }
+      shape Box "low-block" {
+        material: roomWhite
+        position [0.8, 0.6, 0.4]
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Box "tall-block" {
+        material: roomWhite
+        position [-0.7, 1.1, -0.7]
+        scale [0.5, 1, 0.5]
       }
     }
   }
