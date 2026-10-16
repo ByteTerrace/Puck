@@ -17,7 +17,7 @@ namespace Puck.Platform.Windows.Gamepad;
 /// Rumble takes one path per write: the four GameInput motors (body and impulse triggers) once the slot is bound
 /// to its GameInput device, and the two XInput body motors until then. The body pair and the trigger pair expire
 /// independently, and a zero-duration effect stops only its own pair. The Share button and Elite paddles are not
-/// reachable through XInput; a plugged-in headset reads through the headset battery report.
+/// reachable through XInput; a plugged-in headset reads through the voice-device capability flag.
 /// </remarks>
 public sealed class XInputGamepadConnection : IGamepadConnection {
     private const int CorrelationIntervalTicks = 12; // ~48 ms at 250 Hz between GameInput bind attempts
@@ -318,12 +318,12 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             _ => GamepadPower.Unknown,
         };
     }
-    /// <summary>Converts an XInput headset battery report into the accessories it implies.</summary>
-    /// <param name="information">The headset battery report of <c>XInputGetBatteryInformation</c>.</param>
-    /// <returns>Headphones and microphone when a headset is plugged in (any battery type but disconnected);
-    /// otherwise none. XInput reports one headset device, so it cannot tell the two apart.</returns>
-    public static GamepadAccessories ToAccessories(in XInputBatteryInformation information) =>
-        ((XInput.BatteryTypeDisconnected == information.BatteryType)
+    /// <summary>Converts XInput capability flags into the accessories they imply.</summary>
+    /// <param name="flags">The <c>XINPUT_CAPABILITIES</c> flags.</param>
+    /// <returns>Headphones and microphone when a voice device (a headset) is attached; otherwise none. XInput
+    /// reports one voice device, so it cannot tell the two apart.</returns>
+    public static GamepadAccessories ToAccessories(ushort flags) =>
+        ((0 == (flags & XInput.CapabilityVoiceSupported))
             ? GamepadAccessories.None
             : (GamepadAccessories.Headphones | GamepadAccessories.Microphone)
         );
@@ -370,12 +370,12 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             m_hasPacket = false;    // the next poll re-feeds its state so the new charge reaches the coalescer
         }
     }
-    /// <summary>Records a fresh headset report; the next fed state carries it. Does nothing once disposed.</summary>
-    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c> for the headset device:
-    /// any battery type but disconnected means a headset (earpieces and microphone) is plugged in.</param>
-    public void ApplyHeadset(in XInputBatteryInformation information) {
+    /// <summary>Records fresh capability flags; the next fed state carries the accessories they imply. Does
+    /// nothing once disposed.</summary>
+    /// <param name="flags">The <c>XINPUT_CAPABILITIES</c> flags.</param>
+    public void ApplyCapabilities(ushort flags) {
         lock (m_gate) {
-            var accessories = ToAccessories(information: in information);
+            var accessories = ToAccessories(flags: flags);
 
             if (
                 m_disposed ||

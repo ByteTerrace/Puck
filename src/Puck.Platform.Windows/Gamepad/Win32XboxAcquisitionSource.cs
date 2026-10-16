@@ -14,8 +14,9 @@ namespace Puck.Platform.Windows.Gamepad;
 /// <remarks>
 /// A slot's family comes from its USB identity (the ordinal-108 capabilities). Steam Input's virtual XInput pad
 /// is skipped: it mirrors a physical controller this engine already reads directly. Battery is read about every
-/// two seconds, since <c>XInputGetBatteryInformation</c> costs a driver round trip; the headset report rides the
-/// same poll. A cycle sweeps every slot first and only then services output, so the sole-connection decision never
+/// two seconds, since <c>XInputGetBatteryInformation</c> costs a driver round trip; the capability flags that say
+/// whether a headset is attached ride the same poll. (The headset battery query is no evidence of a headset: on a
+/// current pad it echoes the pad's own battery.) A cycle sweeps every slot first and only then services output, so the sole-connection decision never
 /// rests on a half-discovered topology, and it waits out a settle window after the last slot or GameInput device
 /// change before it lets a lone slot bind a lone device.
 /// </remarks>
@@ -204,12 +205,13 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                             connection.ApplyBattery(information: in battery);
                         }
 
-                        if (XInput.ErrorSuccess == XInput.GetBatteryInformation(
-                            deviceType: XInput.DeviceTypeHeadset,
-                            information: out var headset,
+                        if (XInput.ErrorSuccess == XInput.GetCapabilitiesEx(
+                            capabilities: out var capabilities,
+                            flags: 0u,
+                            one: 1u,
                             userIndex: ((uint)slot)
                         )) {
-                            connection.ApplyHeadset(information: in headset);
+                            connection.ApplyCapabilities(flags: capabilities.Flags);
                         }
 
                         if (cancellationToken.IsCancellationRequested) {

@@ -347,22 +347,37 @@ code. A release qualification needs its own recorded hardware run.
 Every protocol path is pinned by golden-byte tests against the reference
 drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
 
-- **DualSense USB and Bluetooth input, motion, rumble, LEDs and adaptive
-  triggers were observed on hardware** before the current calibration,
-  improved-rumble, battery, mute and Edge paths, which await a hardware run.
-  Bluetooth input reports whose CRC fails are dropped.
-- **Switch Pro over Bluetooth, its IMU calibration and its HD-rumble table await
-  a hardware run.**
+- **Observed on hardware, DualSense over USB:** every button including Mute,
+  both sticks to full deflection, analog triggers, both touches, calibrated
+  motion, battery, rumble, the light bar, adaptive triggers and the
+  microphone-mute LED, at about 255 Hz. The current Bluetooth path and the
+  DualSense Edge await a hardware run. Bluetooth input reports whose CRC fails
+  are dropped.
+- **Observed on hardware, Switch Pro over USB:** every button including Capture
+  and Home, calibrated sticks and IMU, battery, HD rumble and the Home LED, at
+  about 75 Hz. Bluetooth awaits a hardware run.
+- **Observed on hardware, Triton through its puck receiver:** every button
+  including the four paddles, both trackpad clicks, the trigger switches and
+  stick and grip capacitive sense, trackpad position and pressure, motion,
+  battery (`0x43`) and rumble, at about 265 Hz. The receiver also sends an
+  undocumented report `0x7B` about twice a second, which the parser drops.
+  Reports `0x45`/`0x47`, the other transports and pairing events await a
+  hardware run.
+- **Observed on hardware, Xbox Series X|S:** every button including Guide, sticks,
+  triggers, its family from the ordinal-108 identity, battery and body rumble.
+- **Motion agrees across families on hardware:** on the DualSense, the Switch
+  Pro and the Triton alike, a quarter turn to the left reads +90° about Y and
+  lifting the far edge reads a positive rotation about X, in both the integrated
+  gyro and the fused orientation.
 - **The classic Steam Controller is protocol-derived** and has not been run on
   physical hardware.
-- **Triton has hardware evidence for feature writes, rumble, steady-state IMU
-  and roughly 265 Hz input.** Pairing events, battery, pad pressure and the
-  `0x45`/`0x47` reports await a hardware run.
 - **Xbox reaches the Share button and Elite paddles through neither XInput nor
   the inbox GameInput v0 runtime**; they need the GameInput redistributable,
   which the engine does not ship. Impulse-trigger rumble needs a GameInput
-  runtime that `GameInputCreate` accepts; where it is missing, rumble falls back
-  to the two XInput body motors.
+  runtime that `GameInputCreate` accepts; without the GameInput service it fails
+  with `0xD0000034` (logged as `[gameinput]`), and rumble falls back to the two
+  XInput body motors. A headset is read from XInput's voice-device capability
+  flag, since the headset battery query echoes the pad's own battery.
 - **Not surfaced:** the Triton's trackpad haptic reports `0x81`–`0x85`, the
   DualSense's audio-driven haptics and speaker (an audio-endpoint feature, not
   HID), the Switch's `0x6086` stick deadzone, and the classic Steam Controller's

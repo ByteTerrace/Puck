@@ -88,7 +88,7 @@ public sealed class XboxConnectionTests {
         connection.Dispose();
         connection.Apply(state: in state);
         connection.ApplyBattery(information: new XInputBatteryInformation { BatteryLevel = 3, BatteryType = XInput.BatteryTypeAlkaline, });
-        connection.ApplyHeadset(information: new XInputBatteryInformation { BatteryType = XInput.BatteryTypeWired, });
+        connection.ApplyCapabilities(flags: XInput.CapabilityVoiceSupported);
         connection.ServiceOutput(soleConnection: false);
 
         Assert.False(condition: connection.TryTakeRumble(rumble: out var rumble));
@@ -99,20 +99,20 @@ public sealed class XboxConnectionTests {
         connection.Dispose();
     }
     [Fact]
-    public void A_headset_report_flows_into_the_published_accessories() {
+    public void An_attached_voice_device_flows_into_the_published_accessories() {
         using var connection = Open();
         var state = new XInputState { PacketNumber = 7, Gamepad = new XInputGamepad { Buttons = 0x1000, }, };
 
         Assert.Equal(
             expected: GamepadAccessories.None,
-            actual: XInputGamepadConnection.ToAccessories(information: new XInputBatteryInformation { BatteryType = XInput.BatteryTypeDisconnected, })
+            actual: XInputGamepadConnection.ToAccessories(flags: 0x0002)
         );
 
         connection.Apply(state: in state);
 
         Assert.Equal(expected: GamepadAccessories.None, actual: connection.Coalescer.Latest.Accessories);
 
-        connection.ApplyHeadset(information: new XInputBatteryInformation { BatteryLevel = 2, BatteryType = XInput.BatteryTypeAlkaline, });
+        connection.ApplyCapabilities(flags: XInput.CapabilityVoiceSupported);
         connection.Apply(state: in state);
 
         Assert.Equal(
@@ -120,7 +120,7 @@ public sealed class XboxConnectionTests {
             actual: connection.Coalescer.Latest.Accessories
         );
 
-        connection.ApplyHeadset(information: new XInputBatteryInformation { BatteryType = XInput.BatteryTypeDisconnected, });
+        connection.ApplyCapabilities(flags: 0);
         connection.Apply(state: in state);
 
         Assert.Equal(expected: GamepadAccessories.None, actual: connection.Coalescer.Latest.Accessories);

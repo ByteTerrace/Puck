@@ -262,10 +262,15 @@ public sealed class GameInputHaptics : IDisposable {
         }
 
         try {
+            var created = GameInputNative.GameInputCreate(gameInput: out var gameInput);
+
             if (
-                (GameInputNative.GameInputCreate(gameInput: out var gameInput) < 0) ||
+                (created < 0) ||
                 (gameInput is null)
             ) {
+                // 0xD0000034 (object not found) means the GameInput service is not installed.
+                m_diagnostics?.Invoke($"[gameinput] GameInputCreate failed (hr=0x{created:x8})");
+
                 return false;
             }
 
