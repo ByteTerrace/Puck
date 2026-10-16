@@ -80,6 +80,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   reload keeps the previous kernels when a tree's kernels do not match the
   host's interface. Change the C# layout and the HLSL layout together
   ([sync pairs](references/sync-pairs.md)).
+- **No signed `%` of a value that can be negative.** NVIDIA's Vulkan driver answers a
+  signed remainder (`OpSRem`, which DXC emits for `%` on `int`) of a negative operand
+  wrongly where Direct3D 12 answers it right: lift the value to non-negative and
+  wrap it as `uint`, as `sdfMeshIrradianceSlot` does.
 - **Bindings are generated.** No kernel declares a binding or register by hand;
   a new resource is a member of `SdfKernelInterfaces`.
 

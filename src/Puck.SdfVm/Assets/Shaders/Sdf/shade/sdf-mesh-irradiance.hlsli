@@ -16,9 +16,13 @@ uint sdfMeshIrradianceKey(int3 cell) {
     uint3 low = (asuint(cell) & 1023u);
     return (low.x | (low.y << 10) | (low.z << 20));
 }
+// The cell's coordinates modulo the volume's size, from 0, wrapped unsigned after a lift by 2^16 sizes, which covers every
+// cell within 2^16 volumes of the origin: NVIDIA's Vulkan driver answers a signed remainder (OpSRem) of a negative operand
+// wrongly, where Direct3D 12 answers it right.
 uint sdfMeshIrradianceSlot(int3 cell, int3 dims) {
-    int3 wrapped = (((cell % dims) + dims) % dims);
-    return (uint)(wrapped.x + (dims.x * (wrapped.y + (dims.y * wrapped.z))));
+    uint3 size = (uint3)dims;
+    uint3 wrapped = ((uint3)(cell + (dims * 65536)) % size);
+    return (wrapped.x + (size.x * (wrapped.y + (size.y * wrapped.z))));
 }
 float sdfMeshIrradianceHalf(uint word, uint high) {
     return f16tof32((high != 0u) ? (word >> 16) : (word & 0xffffu));
