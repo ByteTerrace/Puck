@@ -9,42 +9,66 @@ using Puck.Input.Output;
 namespace Puck.Platform.Windows.Gamepad;
 
 /// <summary>
-/// An XInput-backed controller (Xbox). Unlike the HID devices it has no read loop of its own — the manager's
-/// shared XInput poll thread calls <see cref="Apply"/> with each polled state and <see cref="TryTakeRumble"/>
-/// to flush queued rumble — but it exposes the same <see cref="IGamepadConnection"/> surface so it flows
-/// through the identical coalescer → command pipeline. Xbox controllers have no motion sensor, so gyro and
-/// orientation are always neutral.
+/// An XInput-backed controller (Xbox and XInput-compatible pads). It has no read loop of its own: the acquisition
+/// source's shared poll thread calls <see cref="Apply"/> with each polled state and <see cref="ServiceOutput"/>
+/// once per tick, and it exposes the same <see cref="IGamepadConnection"/> surface as the HID devices so it flows
+/// through the identical coalescer and command pipeline. Xbox pads have no motion sensor.
 /// </summary>
+/// <remarks>
+/// Rumble takes one path per write: the four GameInput motors (body and impulse triggers) once the slot is bound
+/// to its GameInput device, and the two XInput body motors until then. The Share button and Elite paddles are not
+/// reachable through XInput.
+/// </remarks>
 public sealed class XInputGamepadConnection : IGamepadConnection {
-    private const int CorrelationIntervalTicks = 12; // ~48ms at 250Hz between GameInput bind attempts while held
+    private const int CorrelationIntervalTicks = 12; // ~48 ms at 250 Hz between GameInput bind attempts
     private const short LeftThumbDeadzone = 7849;   // XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE
     private const short RightThumbDeadzone = 8689;  // XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE
     private const byte TriggerThreshold = 30;       // XINPUT_GAMEPAD_TRIGGER_THRESHOLD
+    private const ushort VendorMicrosoft = 0x045E;
 
+    // The Xbox Series X|S controller's product ids (USB and Bluetooth LE); every other XInput pad reports as an
+    // Xbox One controller.
+    private static ReadOnlySpan<ushort> SeriesProductIds => [0x0B12, 0x0B13,];
+
+    private readonly IInputClock m_clock;
+    private readonly GamepadCoalescer m_coalescer = new();
     private readonly GameInputHaptics? m_haptics;
     private readonly GamepadOutput m_output;
+    private readonly GamepadOutputQueue m_outputQueue = new();
     private readonly uint m_slot;
 
     private int m_correlationCountdown;
     private volatile bool m_faulted;
+    private bool m_hasPacket;
     private float m_highFrequency;
+    private uint m_lastPacketNumber;
     private uint m_latestGameInputButtons;
     private float m_leftTrigger;
     private float m_lowFrequency;
+    private GamepadPower m_power;
     private float m_rightTrigger;
     private bool m_rumbleActive;
-
-    private readonly GamepadCoalescer m_coalescer = new();
-    private readonly GamepadOutputQueue m_outputQueue = new();
     private long m_rumbleExpiry = long.MaxValue;
+    private ulong m_sequence;
 
-    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics) {
+    /// <summary>Initializes a new instance of the <see cref="XInputGamepadConnection"/> class.</summary>
+    /// <param name="slot">The XInput user index, 0 through 3.</param>
+    /// <param name="deviceId">The device's stable identity.</param>
+    /// <param name="playerIndex">The zero-based player slot.</param>
+    /// <param name="haptics">The GameInput rumble service, or <see langword="null"/> where GameInput is unavailable.</param>
+    /// <param name="clock">The capture clock that stamps each polled state's arrival.</param>
+    /// <param name="type">The controller family the slot's product id identifies.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="clock"/> is <see langword="null"/>.</exception>
+    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics, IInputClock clock, GamepadType type) {
+        ArgumentNullException.ThrowIfNull(clock);
+
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
+        Type = type;
+        m_clock = clock;
         m_haptics = haptics;
         m_output = new GamepadOutput(
-            // GameInput drives all four motors, so the Xbox connection advertises trigger (impulse) rumble when
-            // GameInput is available; without it only the two main XInput motors can be reached.
+            // Only GameInput reaches the impulse-trigger motors.
             capabilities: ((haptics is not null)
             ? GamepadOutputCapabilities.Rumble | GamepadOutputCapabilities.TriggerRumble
             : GamepadOutputCapabilities.Rumble),
@@ -59,13 +83,12 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     /// <inheritdoc />
     public InputDeviceId DeviceId { get; }
     /// <summary>
-    /// The GameInput device this connection rumbles, correlated to this XInput slot by input state and reused
-    /// for the connection's whole life so its ON and OFF writes always reach the same controller. Owned by the
-    /// haptics device dictionary; this is a borrowed reference cleared (not released) on dispose.
+    /// The GameInput device this connection rumbles, correlated to this XInput slot and reused for the
+    /// connection's whole life so its writes always reach the same controller. Owned by the haptics device
+    /// dictionary; this is a borrowed reference cleared (not released) on dispose.
     /// </summary>
     public IGameInputDevice? GameInputDevice { get; set; }
     /// <inheritdoc />
-    // Xbox controllers have analog triggers but no motion sensor.
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.AnalogTriggers;
     /// <inheritdoc />
     public bool IsFaulted => m_faulted;
@@ -80,7 +103,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     /// <summary>The XInput user index (0-3) this connection polls.</summary>
     public uint Slot => m_slot;
     /// <inheritdoc />
-    public GamepadType Type => GamepadType.XboxSeries;
+    public GamepadType Type { get; }
 
     private void ApplyRumble(RumbleEffect effect) {
         if (effect.DurationMilliseconds == 0u) {
@@ -161,14 +184,17 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             : 0f
         );
     private static Vector2 NormalizeStick(short rawX, short rawY, short deadzone) {
-        var stick = new Vector2(
-            x: (rawX / 32767f),
-            y: (rawY / 32767f)
+        var stick = Vector2.Clamp(
+            max: Vector2.One,
+            min: -Vector2.One,
+            value1: new Vector2(
+                x: (rawX / 32767f),
+                y: (rawY / 32767f)
+            )
         );
-        var normalizedDeadzone = (deadzone / 32767f);
 
         return GamepadNormalization.ApplyRadialDeadzone(
-            deadzone: normalizedDeadzone,
+            deadzone: (deadzone / 32767f),
             stick: stick
         );
     }
@@ -217,13 +243,71 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
         return result;
     }
 
-    /// <summary>Feeds a freshly polled XInput state into the coalescer (called on the poll thread).</summary>
-    /// <param name="pad">The polled gamepad state.</param>
-    public void Apply(in XInputGamepad pad) {
-        var state = Convert(pad: in pad);
+    /// <summary>Classifies an XInput pad from its USB identity.</summary>
+    /// <param name="vendorId">The pad's USB vendor id.</param>
+    /// <param name="productId">The pad's USB product id.</param>
+    /// <returns><see cref="GamepadType.XboxSeries"/> for an Xbox Series X|S controller; otherwise
+    /// <see cref="GamepadType.XboxOne"/>.</returns>
+    public static GamepadType ClassifyType(ushort vendorId, ushort productId) {
+        return (((VendorMicrosoft == vendorId) && SeriesProductIds.Contains(value: productId))
+            ? GamepadType.XboxSeries
+            : GamepadType.XboxOne
+        );
+    }
+    /// <summary>Converts an XInput battery report into a power report.</summary>
+    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c>.</param>
+    /// <returns>The power report: a cable-powered pad has no battery, and the four charge levels read as 10, 40,
+    /// 70 and 100 percent (SDL).</returns>
+    public static GamepadPower ToPower(in XInputBatteryInformation information) {
+        return information.BatteryType switch {
+            XInput.BatteryTypeWired => new GamepadPower(
+                Percent: 0,
+                State: GamepadPowerState.NoBattery
+            ),
+            XInput.BatteryTypeAlkaline or XInput.BatteryTypeNickelMetalHydride => new GamepadPower(
+                Percent: ((byte)((Math.Min(
+                    val1: information.BatteryLevel,
+                    val2: ((byte)3)
+                ) * 30) + 10)),
+                State: GamepadPowerState.OnBattery
+            ),
+            _ => GamepadPower.Unknown,
+        };
+    }
+    /// <summary>Feeds a freshly polled XInput state into the coalescer (called on the poll thread). A state whose
+    /// packet number has not changed is the same report again and is not fed.</summary>
+    /// <param name="state">The polled state.</param>
+    public void Apply(in XInputState state) {
+        if (
+            m_hasPacket &&
+            (state.PacketNumber == m_lastPacketNumber)
+        ) {
+            return;
+        }
 
-        m_latestGameInputButtons = ToGameInputButtons(xinputButtons: pad.Buttons);
-        m_coalescer.Update(state: in state);
+        m_hasPacket = true;
+        m_lastPacketNumber = state.PacketNumber;
+        m_latestGameInputButtons = ToGameInputButtons(xinputButtons: state.Gamepad.Buttons);
+
+        var converted = Convert(pad: in state.Gamepad) with {
+            ArrivalTicks = m_clock.NowTicks,
+            Power = m_power,
+            SequenceNumber = ++m_sequence,
+        };
+
+        m_coalescer.Update(state: in converted);
+    }
+    /// <summary>Records a fresh battery report; the next fed state carries it.</summary>
+    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c>.</param>
+    public void ApplyBattery(in XInputBatteryInformation information) {
+        var power = ToPower(information: in information);
+
+        if (power == m_power) {
+            return;
+        }
+
+        m_power = power;
+        m_hasPacket = false;    // the next poll re-feeds its state so the new charge reaches the coalescer
     }
     public void Dispose() {
         m_faulted = true;
@@ -251,26 +335,25 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
         }
     }
     /// <summary>
-    /// Actuates this connection's pending output on the manager's poll thread: correlates its GameInput device
-    /// (throttled, while a distinctive button is held) and writes any changed rumble to BOTH the correlated
-    /// GameInput device (all four motors, and the wireless transports XInput can't reach) and the legacy XInput
-    /// motors (which reach a pad whose GameInput output is owned by an overlay such as Steam Input). Called once
-    /// per polled tick, after <see cref="Apply"/>.
+    /// Actuates this connection's pending output on the poll thread: correlates its GameInput device and writes
+    /// any changed rumble through exactly one path, the bound GameInput device (all four motors) or else XInput
+    /// (the two body motors). Called once per polled tick, after <see cref="Apply"/>.
     /// </summary>
-    public void ServiceOutput() {
-        // Bind this slot to its physical GameInput device while a button is held — the global "current reading"
-        // device can't tell controllers apart. Throttled: a human holds a button far longer than the interval,
-        // so binding stays imperceptible while avoiding per-tick COM marshalling and lock contention.
+    /// <param name="soleConnection">Whether this is the only connected XInput slot, which lets it bind the only
+    /// GameInput gamepad without waiting for a held button to disambiguate.</param>
+    public void ServiceOutput(bool soleConnection) {
         if (
             (m_haptics is not null) &&
-            (GameInputDevice is null) &&
-            (m_latestGameInputButtons != 0u)
+            (GameInputDevice is null)
         ) {
             if (m_correlationCountdown > 0) {
                 --m_correlationCountdown;
             } else {
                 m_correlationCountdown = CorrelationIntervalTicks;
-                GameInputDevice = m_haptics.Bind(targetButtons: m_latestGameInputButtons);
+                GameInputDevice = (soleConnection
+                    ? m_haptics.BindSole()
+                    : null
+                ) ?? m_haptics.Bind(targetButtons: m_latestGameInputButtons);
             }
         }
 
@@ -282,13 +365,16 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
 
         if (
             (m_haptics is not null) &&
-            (device is not null) &&
-            !m_haptics.RumbleDevice(
-            device: device,
-            rumbleParams: in rumble
-        )
+            (device is not null)
         ) {
-            // The bound device disconnected; drop the stale binding so the next held button re-correlates.
+            if (m_haptics.RumbleDevice(
+                device: device,
+                rumbleParams: in rumble
+            )) {
+                return;
+            }
+
+            // The bound device disconnected; drop the stale binding and fall back to XInput for this write.
             m_haptics.Unbind(device: device);
             GameInputDevice = null;
         }
@@ -305,10 +391,10 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     }
     /// <inheritdoc />
     public void Start() {
-        // Driven by the manager's shared XInput poll loop; nothing per-connection to start.
+        // Driven by the acquisition source's shared poll loop; nothing per-connection to start.
     }
     /// <summary>
-    /// Drains queued rumble / trigger-rumble requests and honors finite-duration expiry, returning the
+    /// Drains queued rumble and trigger-rumble requests and honors finite-duration expiry, returning the
     /// four-motor state to apply this tick (called on the poll thread).
     /// </summary>
     /// <param name="rumble">The four motor intensities to apply when a write is needed.</param>

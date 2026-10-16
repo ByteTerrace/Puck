@@ -11,4 +11,6 @@ namespace Puck.Input.Devices;
 /// <param name="IsActive">Whether a finger is currently touching this slot.</param>
 /// <param name="Id">The contact id the controller increments for each new touch, for tracking continuity across frames.</param>
 /// <param name="Position">The normalized contact position, 0..1 per component, origin top-left.</param>
-public readonly record struct GamepadTouchPoint(bool IsActive, byte Id, Vector2 Position);
+/// <param name="Pressure">The normalized contact pressure, 0..1, on a pad that senses it (Steam Controller Triton);
+/// zero on a pad that does not.</param>
+public readonly record struct GamepadTouchPoint(bool IsActive, byte Id, Vector2 Position, float Pressure = 0f);

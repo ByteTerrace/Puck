@@ -23,13 +23,17 @@ public sealed class GamepadManager : IDisposable {
     private readonly List<IGamepadConnection> m_devices = [];
     private readonly List<IGamepadConnection> m_orderedDevices = [];
 
-    private const ushort ProductDualSense = 3302;      // 0x0CE6 (same over USB and Bluetooth)
-    private const ushort ProductSteamControllerDongle = 4418;  // 0x1142 (wireless receiver; up to four slots)
-    private const ushort ProductSteamControllerTriton = 4868;  // 0x1304 (2026 "Triton" pad, over its wireless puck receiver)
-    private const ushort ProductSteamControllerWired = 4354;   // 0x1102 (wired)
-    private const ushort ProductSwitchPro = 8201;      // 0x2009 (same over USB and Bluetooth)
+    private const ushort ProductDualSense = 0x0CE6;     // same over USB and Bluetooth
+    private const ushort ProductDualSenseEdge = 0x0DF2;
+    private const ushort ProductSteamControllerDongle = 0x1142;  // wireless receiver; up to four slots
+    private const ushort ProductSteamControllerWired = 0x1102;
+    private const ushort ProductSwitchPro = 0x2009;      // same over USB and Bluetooth
+    // The 2026 "Triton" pad: wired, Bluetooth LE, the Proteus puck receiver (four slots) and the Nereid dongle.
+    private const ushort ProductTritonBluetooth = 0x1303;
+    private const ushort ProductTritonNereid = 0x1305;
+    private const ushort ProductTritonPuck = 0x1304;
+    private const ushort ProductTritonWired = 0x1302;
     private const ushort SteamControllerUsage = 0x0001;
-    private const ushort VendorMicrosoft = 1118;
     private const ushort VendorNintendo = 1406;
     private const ushort VendorSony = 1356;
     // The Steam Controller exposes its controller state on a vendor-defined HID collection (usage page 0xFF00,
@@ -97,7 +101,7 @@ public sealed class GamepadManager : IDisposable {
         return slot;
     }
     private static IGamepadParser? CreateParser(IHidDevice hid) {
-        // Switch Pro and DualSense are wired up over HID; Xbox flows through the acquisition source, not here.
+        // Xbox pads flow through the acquisition source, not here.
         if (
             (VendorNintendo == hid.VendorId) &&
             (ProductSwitchPro == hid.ProductId)
@@ -107,7 +111,7 @@ public sealed class GamepadManager : IDisposable {
 
         if (
             (VendorSony == hid.VendorId) &&
-            (ProductDualSense == hid.ProductId)
+            (hid.ProductId is ProductDualSense or ProductDualSenseEdge)
         ) {
             return new DualSenseController(device: hid);
         }
@@ -143,7 +147,7 @@ public sealed class GamepadManager : IDisposable {
     private static bool IsDeferredActivationProduct(ushort vendorId, ushort productId) {
         return (
             (VendorValve == vendorId) &&
-            (productId is ProductSteamControllerDongle or ProductSteamControllerTriton)
+            (productId is ProductSteamControllerDongle or ProductTritonPuck or ProductTritonNereid)
         );
     }
     private static bool IsGamepadCollection(IHidDevice hid) {
@@ -157,7 +161,7 @@ public sealed class GamepadManager : IDisposable {
         );
     }
     private static bool IsKnownVendor(ushort vendorId) {
-        return (vendorId is VendorMicrosoft or VendorSony or VendorNintendo or VendorValve);
+        return (vendorId is VendorSony or VendorNintendo or VendorValve);
     }
     // The Steam Controller's input arrives on a vendor-defined collection that the generic gamepad gate rejects;
     // accept it explicitly (a supported product's usage-0x01 vendor collection), and only it — the receiver's
@@ -175,7 +179,7 @@ public sealed class GamepadManager : IDisposable {
     private static bool IsSteamControllerTritonInputInterface(IHidDevice hid) {
         return (
             (VendorValve == hid.VendorId) &&
-            (ProductSteamControllerTriton == hid.ProductId) &&
+            (hid.ProductId is ProductTritonWired or ProductTritonBluetooth or ProductTritonPuck or ProductTritonNereid) &&
             (VendorUsagePage == hid.UsagePage) &&
             (SteamControllerUsage == hid.Usage)
         );
@@ -660,6 +664,18 @@ public sealed class GamepadManager : IDisposable {
             missing: null!,
             selector: static connection => connection.Output,
             value: out output
+        );
+    /// <summary>Resolves the power source and battery charge a connected device last reported.</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="power">The device's latest power report when found; <see cref="GamepadPower.Unknown"/> before its
+    /// first report or on a family that reports none.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetPower(InputDeviceId deviceId, out GamepadPower power) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: GamepadPower.Unknown,
+            selector: static connection => connection.Coalescer.Latest.Power,
+            value: out power
         );
     /// <summary>Resolves the zero-based player slot of a connected device (drives its indicator color).</summary>
     /// <param name="deviceId">The device to resolve.</param>

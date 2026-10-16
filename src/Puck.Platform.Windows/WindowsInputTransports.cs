@@ -13,7 +13,10 @@ public static class WindowsInputTransports {
     /// <param name="diagnostics">The diagnostics sink for acquisition/enumeration failures.</param>
     /// <returns>The constructed gamepad manager.</returns>
     public static GamepadManager CreateGamepadManager(IInputClock clock, Action<string> diagnostics) => new(
-        acquisitionSource: new Win32XboxAcquisitionSource(diagnostics: diagnostics),
+        acquisitionSource: new Win32XboxAcquisitionSource(
+            clock: clock,
+            diagnostics: diagnostics
+        ),
         clock: clock,
         diagnostics: diagnostics,
         hidSource: new Win32HidDeviceSource()

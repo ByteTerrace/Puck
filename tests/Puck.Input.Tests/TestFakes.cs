@@ -153,7 +153,26 @@ internal sealed class TestHidDevice : IHidDevice {
         cancellationToken: cancellationToken,
         timeoutInMilliseconds: timeoutInMilliseconds
     );
-    public bool TryGetFeatureReport(Span<byte> buffer) => false;
+    /// <summary>Gets the feature reports the device answers, by report id; an id it maps to null is unanswered.</summary>
+    public Func<byte, byte[]?>? FeatureReports { get; init; }
+    /// <summary>Gets the replies the device sends to output writes: each write's reply, if any, is queued as input.</summary>
+    public Func<byte[], byte[]?>? Responder { get; init; }
+
+    public bool TryGetFeatureReport(Span<byte> buffer) {
+        if (FeatureReports?.Invoke(arg: buffer[0]) is not { } report) {
+            return false;
+        }
+
+        report.AsSpan(
+            length: Math.Min(
+                val1: report.Length,
+                val2: buffer.Length
+            ),
+            start: 0
+        ).CopyTo(destination: buffer);
+
+        return true;
+    }
     public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
         lock (FeatureWrites) {
             FeatureWrites.Add(item: buffer.ToArray());
@@ -177,14 +196,20 @@ internal sealed class TestHidDevice : IHidDevice {
         return signal.Task.WaitAsync(cancellationToken: cancellationToken);
     }
     public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
+        var written = buffer.ToArray();
+
         lock (Writes) {
-            Writes.Add(item: buffer.ToArray());
+            Writes.Add(item: written);
+        }
+
+        if (Responder?.Invoke(arg: written) is { } reply) {
+            EnqueueReport(report: reply);
         }
 
         return ValueTask.CompletedTask;
     }
 }
-internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
+internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IServicedGamepadParser, IDisposable {
     private readonly Lock m_gate = new();
 
     public List<(float Low, float High)> RumbleWrites { get; } = [];
@@ -194,6 +219,8 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public int InitializeCount { get; private set; }
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
     public int ResetCount { get; private set; }
+    public TimeSpan RumbleRefreshInterval { get; init; }
+    public TimeSpan RumbleWriteInterval { get; init; }
     public GamepadType Type => GamepadType.Unknown;
 
     public WirelessSlotEvent ClassifySlotEvent(ReadOnlySpan<byte> report) =>
@@ -211,6 +238,15 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
         lock (m_gate) {
             ++InitializeCount;
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public int ServiceCount { get; private set; }
+
+    public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+        lock (m_gate) {
+            ++ServiceCount;
         }
 
         return ValueTask.CompletedTask;

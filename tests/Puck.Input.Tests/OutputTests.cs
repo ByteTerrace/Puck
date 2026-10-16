@@ -71,10 +71,12 @@ public sealed class OutputTests {
     [Fact]
     public void Xbox_zero_duration_stops_every_motor() {
         using var connection = new XInputGamepadConnection(
+            clock: new ManualInputClock(),
             deviceId: InputDeviceId.New(),
             haptics: null,
             playerIndex: 0,
-            slot: 0u
+            slot: 0u,
+            type: Puck.Input.Devices.GamepadType.XboxSeries
         );
         var start = new RumbleEffect(
             DurationMilliseconds: 1000u,

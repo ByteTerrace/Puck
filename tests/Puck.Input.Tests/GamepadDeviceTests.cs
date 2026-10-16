@@ -185,6 +185,112 @@ public sealed class GamepadDeviceTests {
         );
     }
     [Fact]
+    public async Task A_weaker_rumble_inside_the_write_interval_is_held_until_the_interval_passes() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { RumbleWriteInterval = TimeSpan.FromMilliseconds(value: 30), };
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 0.5f, HighFrequency: 0.5f, DurationMilliseconds: 10_000u)));
+        // Written at t = 16 ms, so the weaker update dequeued at t = 32 ms waits for t = 46 ms.
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 4
+        );
+        Assert.Equal(
+            expected: [(1f, 1f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: hid.Time.Armed(dueTime: TimeSpan.FromMilliseconds(value: 14))
+        );
+
+        hid.Time.Advance(by: TimeSpan.FromMilliseconds(value: 14));
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 5
+        );
+        Assert.Equal(
+            expected: [(1f, 1f), (0.5f, 0.5f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.True(condition: (parser.ServiceCount > 0));
+    }
+    [Fact]
+    public async Task A_refreshed_controller_hears_its_rumble_every_interval_and_its_stop_three_more_times() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { RumbleRefreshInterval = TimeSpan.FromMilliseconds(value: 40), };
+        var ordinal = 2;
+        var shortStep = TimeSpan.FromMilliseconds(value: 8);
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        async Task Step(TimeSpan by) {
+            hid.Time.Advance(by: by);
+            await hid.WhenReadAsync(
+                cancellationToken: cancellationToken,
+                ordinal: ++ordinal
+            );
+        }
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: ordinal
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        await Step(by: SteadyStatePoll);    // t = 16: written
+        await Step(by: SteadyStatePoll);    // t = 32
+        await Step(by: SteadyStatePoll);    // t = 48
+        await Step(by: shortStep);          // t = 56: refreshed
+        Assert.Equal(
+            expected: [(1f, 1f), (1f, 1f)],
+            actual: parser.RumbleWrites
+        );
+
+        Assert.True(condition: device.Output.Rumble(effect: RumbleEffect.Off));
+        await Step(by: SteadyStatePoll);    // t = 72: stopped
+
+        // The stop is rewritten at t = 112, 152 and 192 ms; after that the loop polls at its steady rate.
+        for (var repeat = 0; (repeat < 3); ++repeat) {
+            await Step(by: SteadyStatePoll);
+            await Step(by: SteadyStatePoll);
+            await Step(by: shortStep);
+        }
+
+        await Step(by: SteadyStatePoll);
+        await Step(by: SteadyStatePoll);
+        await Step(by: SteadyStatePoll);
+
+        Assert.Equal(
+            expected: [(1f, 1f), (1f, 1f), (0f, 0f), (0f, 0f), (0f, 0f), (0f, 0f)],
+            actual: parser.RumbleWrites
+        );
+    }
+    [Fact]
     public async Task Scheduled_trigger_effect_is_held_until_its_tick_and_fires_without_another_input_report() {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var hid = new TestHidDevice();

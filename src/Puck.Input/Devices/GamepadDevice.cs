@@ -16,6 +16,7 @@ public sealed class GamepadDevice : IGamepadConnection {
     private readonly Lock m_lifecycleGate = new();
     private readonly GamepadOutputQueue m_outputQueue = new();
     private long m_rumbleExpiry = long.MaxValue;
+    private long m_rumbleLastWrite = long.MinValue;
 
     public const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
     public const int SteadyStatePollMilliseconds = 16;     // services output/schedules even when input reports pause
@@ -24,6 +25,7 @@ public sealed class GamepadDevice : IGamepadConnection {
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
+    private const int StopRefreshCount = 3;             // a refreshed controller hears its stop this many more times
     private const int StreamingDeadlineSeconds = 5;     // fault if never streaming
 
     private readonly bool m_activateOnStream;
@@ -34,6 +36,8 @@ public sealed class GamepadDevice : IGamepadConnection {
     private readonly IGamepadParser m_parser;
     private readonly byte[] m_readBuffer;
     private readonly long m_receiverSilenceTimeoutTicks;
+    private readonly long m_rumbleRefreshTicks;
+    private readonly long m_rumbleWriteIntervalTicks;
     private readonly long m_streamingDeadlineTicks;
     private readonly TimeProvider m_time;
 
@@ -42,6 +46,12 @@ public sealed class GamepadDevice : IGamepadConnection {
     private volatile bool m_hasStream;
     private Task? m_loop;
     private bool m_rumbleActive;
+    private bool m_rumblePending;
+    private float m_rumbleHigh;
+    private float m_rumbleLow;
+    private float m_rumbleSentHigh;
+    private float m_rumbleSentLow;
+    private int m_rumbleStopRefreshes;
     private bool m_scheduledTriggerActive;
     private ulong m_scheduledTriggerFireTick;
     private TriggerEffectSpec m_scheduledTriggerLeft;
@@ -95,6 +105,17 @@ public sealed class GamepadDevice : IGamepadConnection {
         );
         m_parser = parser;
         m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * time.TimestampFrequency) / 1000L);
+
+        if (parser is IRumbleParser rumbleParser) {
+            m_rumbleRefreshTicks = ToTicks(
+                frequency: time.TimestampFrequency,
+                interval: rumbleParser.RumbleRefreshInterval
+            );
+            m_rumbleWriteIntervalTicks = ToTicks(
+                frequency: time.TimestampFrequency,
+                interval: rumbleParser.RumbleWriteInterval
+            );
+        }
         m_streamingDeadlineTicks = (StreamingDeadlineSeconds * time.TimestampFrequency);
         m_time = time;
         // Size the read buffer from the device's declared input report length (Bluetooth reports exceed 64);
@@ -148,32 +169,161 @@ public sealed class GamepadDevice : IGamepadConnection {
         PlayerIndex = -1;
     }
 
-    private async ValueTask ApplyRumbleAsync(RumbleEffect effect, CancellationToken cancellationToken) {
+    // Records a requested rumble. The write itself happens in ServiceRumbleAsync, which owns the controller's cadence.
+    private void RequestRumble(in RumbleEffect effect) {
+        if (effect.DurationMilliseconds == 0u) {
+            m_rumbleHigh = 0f;
+            m_rumbleLow = 0f;
+        } else {
+            m_rumbleHigh = NormalizeIntensity(intensity: effect.HighFrequency);
+            m_rumbleLow = NormalizeIntensity(intensity: effect.LowFrequency);
+        }
+
+        m_rumblePending = true;
+        m_rumbleActive = ((0f < m_rumbleHigh) || (0f < m_rumbleLow));
+        m_rumbleExpiry = (m_rumbleActive
+            ? (m_time.GetTimestamp() + ((long)(effect.DurationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
+            : long.MaxValue
+        );
+    }
+    private static float NormalizeIntensity(float intensity) =>
+        (float.IsFinite(f: intensity)
+            ? Math.Clamp(
+                max: 1f,
+                min: 0f,
+                value: intensity
+            )
+            : 0f
+        );
+    // The earliest instant rumble work falls due: a duration's expiry, a held update's write, or a refresh.
+    private long NextRumbleDeadline() {
+        var deadline = (m_rumbleActive
+            ? m_rumbleExpiry
+            : long.MaxValue
+        );
+
+        if (m_rumblePending) {
+            deadline = Math.Min(
+                val1: deadline,
+                val2: (m_rumbleLastWrite + m_rumbleWriteIntervalTicks)
+            );
+        }
+
+        if (
+            (m_rumbleRefreshTicks > 0L) &&
+            ((0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow) || (m_rumbleStopRefreshes > 0))
+        ) {
+            deadline = Math.Min(
+                val1: deadline,
+                val2: (m_rumbleLastWrite + m_rumbleRefreshTicks)
+            );
+        }
+
+        return deadline;
+    }
+    // Ends an elapsed duration, writes a requested change once the controller's write spacing allows (a stop or a
+    // stronger request goes at once), and rewrites a running rumble on a controller that drops its motors without
+    // fresh writes. A refreshed controller hears its stop a few more times, so a lost stop cannot leave it running.
+    private async ValueTask ServiceRumbleAsync(CancellationToken cancellationToken) {
         if (m_parser is not IRumbleParser rumbleParser) {
             return;
         }
 
-        var applied = ((effect.DurationMilliseconds == 0u)
-            ? RumbleEffect.Off
-            : effect
-        );
-
-        await rumbleParser.SetRumbleAsync(
-            cancellationToken: cancellationToken,
-            highFrequency: applied.HighFrequency,
-            lowFrequency: applied.LowFrequency
-        );
+        var now = m_time.GetTimestamp();
 
         if (
-            (0f >= applied.HighFrequency) &&
-            (0f >= applied.LowFrequency)
+            m_rumbleActive &&
+            (now >= m_rumbleExpiry)
         ) {
             m_rumbleActive = false;
             m_rumbleExpiry = long.MaxValue;
-        } else {
-            m_rumbleActive = true;
-            m_rumbleExpiry = (m_time.GetTimestamp() + ((long)(applied.DurationMilliseconds * (m_time.TimestampFrequency / 1000.0))));
+            m_rumbleHigh = 0f;
+            m_rumbleLow = 0f;
+            m_rumblePending = true;
         }
+
+        var sinceLastWrite = ((m_rumbleLastWrite == long.MinValue)
+            ? long.MaxValue
+            : (now - m_rumbleLastWrite)
+        );
+
+        if (m_rumblePending) {
+            var stop = !m_rumbleActive;
+            var stronger = (MathF.Max(
+                x: m_rumbleLow,
+                y: m_rumbleHigh
+            ) > MathF.Max(
+                x: m_rumbleSentLow,
+                y: m_rumbleSentHigh
+            ));
+
+            if (
+                !stop &&
+                !stronger &&
+                (sinceLastWrite < m_rumbleWriteIntervalTicks)
+            ) {
+                return;
+            }
+
+            m_rumblePending = false;
+            m_rumbleStopRefreshes = (stop
+                ? StopRefreshCount
+                : 0
+            );
+
+            await WriteRumbleAsync(
+                cancellationToken: cancellationToken,
+                high: m_rumbleHigh,
+                low: m_rumbleLow,
+                parser: rumbleParser,
+                timestamp: now
+            );
+
+            return;
+        }
+
+        if (
+            (m_rumbleRefreshTicks <= 0L) ||
+            (sinceLastWrite < m_rumbleRefreshTicks)
+        ) {
+            return;
+        }
+
+        if ((0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow)) {
+            await WriteRumbleAsync(
+                cancellationToken: cancellationToken,
+                high: m_rumbleSentHigh,
+                low: m_rumbleSentLow,
+                parser: rumbleParser,
+                timestamp: now
+            );
+        } else if (m_rumbleStopRefreshes > 0) {
+            --m_rumbleStopRefreshes;
+
+            await WriteRumbleAsync(
+                cancellationToken: cancellationToken,
+                high: 0f,
+                low: 0f,
+                parser: rumbleParser,
+                timestamp: now
+            );
+        }
+    }
+    private static long ToTicks(TimeSpan interval, long frequency) =>
+        ((interval <= TimeSpan.Zero)
+            ? 0L
+            : ((long)(interval.TotalSeconds * frequency))
+        );
+    private async ValueTask WriteRumbleAsync(IRumbleParser parser, float low, float high, long timestamp, CancellationToken cancellationToken) {
+        await parser.SetRumbleAsync(
+            cancellationToken: cancellationToken,
+            highFrequency: high,
+            lowFrequency: low
+        );
+
+        m_rumbleLastWrite = timestamp;
+        m_rumbleSentHigh = high;
+        m_rumbleSentLow = low;
     }
     private static GamepadOutputCapabilities CapabilitiesFor(IGamepadParser parser) {
         // Derive capabilities from what the parser actually implements, so every advertised feature has a real
@@ -199,10 +349,7 @@ public sealed class GamepadDevice : IGamepadConnection {
         for (var count = 0; ((count < MaximumOutputCommandsPerIteration) && m_outputQueue.TryDequeue(command: out var command)); ++count) {
             switch (command.Kind) {
                 case GamepadOutputKind.Rumble:
-                    await ApplyRumbleAsync(
-                        cancellationToken: cancellationToken,
-                        effect: command.Rumble
-                    );
+                    RequestRumble(effect: command.Rumble);
 
                     break;
                 case GamepadOutputKind.Led when (m_parser is ILedParser led):
@@ -249,16 +396,7 @@ public sealed class GamepadDevice : IGamepadConnection {
             }
         }
 
-        // Honor a finite rumble duration by returning the motors to rest once it elapses.
-        if (
-            m_rumbleActive &&
-            (m_time.GetTimestamp() >= m_rumbleExpiry)
-        ) {
-            await ApplyRumbleAsync(
-                cancellationToken: cancellationToken,
-                effect: RumbleEffect.Off
-            );
-        }
+        await ServiceRumbleAsync(cancellationToken: cancellationToken);
 
         // Fire a scheduled trigger effect once the capture clock reaches its tick. The steady-state timed read
         // bounds service latency even when reports pause; the device clock is the timing authority.
@@ -280,16 +418,27 @@ public sealed class GamepadDevice : IGamepadConnection {
         // The pad may still be reachable with its motors running on the last written speed, and the tracked
         // expiry is about to be discarded — return the motors to rest first. When the pad is truly gone the
         // write lands on the receiver and is harmless.
-        if (m_rumbleActive) {
-            await ApplyRumbleAsync(
+        if (
+            (m_parser is IRumbleParser rumbleParser) &&
+            (m_rumbleActive || (0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow))
+        ) {
+            await rumbleParser.SetRumbleAsync(
                 cancellationToken: cancellationToken,
-                effect: RumbleEffect.Off
+                highFrequency: 0f,
+                lowFrequency: 0f
             );
         }
 
         m_sequence = 0UL;
         m_rumbleActive = false;
         m_rumbleExpiry = long.MaxValue;
+        m_rumbleHigh = 0f;
+        m_rumbleLastWrite = long.MinValue;
+        m_rumbleLow = 0f;
+        m_rumblePending = false;
+        m_rumbleSentHigh = 0f;
+        m_rumbleSentLow = 0f;
+        m_rumbleStopRefreshes = 0;
         m_scheduledTriggerActive = false;
         m_output.Suspend();
         m_coalescer.Reset();
@@ -339,6 +488,14 @@ public sealed class GamepadDevice : IGamepadConnection {
             while (!cancellationToken.IsCancellationRequested) {
                 await DrainOutputAsync(cancellationToken: cancellationToken);
 
+                if (m_parser is IServicedGamepadParser serviced) {
+                    await serviced.ServiceAsync(
+                        cancellationToken: cancellationToken,
+                        timestamp: m_time.GetTimestamp(),
+                        timestampFrequency: m_time.TimestampFrequency
+                    );
+                }
+
                 // Poll while streaming so output, scheduled effects, rumble expiry, and receiver-silence detection
                 // continue to make progress even when input reports pause. The Windows transport reuses its timeout
                 // source across reads that complete before the deadline instead of creating one for every read.
@@ -351,10 +508,11 @@ public sealed class GamepadDevice : IGamepadConnection {
                         timeoutInMilliseconds: StartupPollMilliseconds
                     );
                 } else {
-                    var timeout = ((m_rumbleActive && (m_rumbleExpiry != long.MaxValue))
+                    var rumbleDeadline = NextRumbleDeadline();
+                    var timeout = ((rumbleDeadline != long.MaxValue)
                         ? Math.Min(
                             val1: SteadyStatePollMilliseconds,
-                            val2: RemainingMilliseconds(expiryTimestamp: m_rumbleExpiry)
+                            val2: RemainingMilliseconds(expiryTimestamp: rumbleDeadline)
                         )
                         : SteadyStatePollMilliseconds
                     );

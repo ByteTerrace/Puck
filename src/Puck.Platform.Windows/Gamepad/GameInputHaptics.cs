@@ -11,6 +11,8 @@ namespace Puck.Platform.Windows.Gamepad;
 /// reading" device is global and can't distinguish controllers.
 /// </summary>
 public sealed class GameInputHaptics : IDisposable {
+    private static readonly List<GameInputDeviceCallback> UnregisteredCallbacks = [];
+
     private readonly HashSet<IGameInputDevice> m_bound = [];
     private readonly Dictionary<nint, IGameInputDevice> m_devices = [];
     private readonly Lock m_deviceLock = new();
@@ -120,6 +122,28 @@ public sealed class GameInputHaptics : IDisposable {
             return match;
         }
     }
+    /// <summary>Reserves the only connected GameInput gamepad, when exactly one is connected and unbound, for the
+    /// only connected XInput slot: with one of each there is nothing to disambiguate.</summary>
+    /// <returns>The reserved device, or <see langword="null"/> unless exactly one device is connected and unbound.</returns>
+    public IGameInputDevice? BindSole() {
+        lock (m_deviceLock) {
+            if (
+                (m_gameInput is null) ||
+                (1 != m_devices.Count) ||
+                (0 != m_bound.Count)
+            ) {
+                return null;
+            }
+
+            foreach (var device in m_devices.Values) {
+                _ = m_bound.Add(item: device);
+
+                return device;
+            }
+
+            return null;
+        }
+    }
     public void Dispose() {
         if (!OperatingSystem.IsWindows()) {
             m_gameInput = null;
@@ -130,11 +154,19 @@ public sealed class GameInputHaptics : IDisposable {
         var gameInput = m_gameInput;
 
         if (gameInput is not null) {
-            if (m_callbackToken != 0ul) {
-                _ = gameInput.UnregisterCallback(
+            if (
+                (m_callbackToken != 0ul) &&
+                !gameInput.UnregisterCallback(
                     callbackToken: m_callbackToken,
                     timeoutInMicroseconds: 1_000_000ul
-                );
+                ) &&
+                (m_deviceCallback is not null)
+            ) {
+                // GameInput may still invoke a callback it failed to unregister, so its delegate stays rooted
+                // for the life of the process rather than being collected under native code.
+                lock (UnregisteredCallbacks) {
+                    UnregisteredCallbacks.Add(item: m_deviceCallback);
+                }
             }
 
             // Drop references and let the GC/finalizers release the COM objects. Explicitly releasing the device

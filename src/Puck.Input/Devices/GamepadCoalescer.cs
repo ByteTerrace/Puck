@@ -21,6 +21,16 @@ public sealed class GamepadCoalescer {
     private GamepadButtons m_previousButtons;
     private GamepadButtons m_released;
 
+    /// <summary>Gets the most recent normalized state without taking the frame's edges or motion samples
+    /// (<see cref="GamepadState.Neutral"/> until a report arrives).</summary>
+    public GamepadState Latest {
+        get {
+            lock (m_gate) {
+                return m_latest;
+            }
+        }
+    }
+
     /// <summary>Clears every retained sample before a receiver slot begins carrying another controller,
     /// converting any still-held button into a pending release edge.</summary>
     public void Reset() {
