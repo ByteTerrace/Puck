@@ -152,9 +152,11 @@
          sweeps its bytecode. A changed DXC with unchanged sources is not seen here; build with no-incremental after
          replacing the toolchain. -->
     <PropertyGroup>
-        <!-- Named by the cache and the DXC command too, so pointing either elsewhere (an empty cache compiles everything
-             afresh) never reads another's record. -->
-        <_PuckShaderBuildInputs>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.$([MSBuild]::StableStringHash('$(PuckShaderCacheDirectory)|$(DxcCommand)').ToString('x8')).inputs'))</_PuckShaderBuildInputs>
+        <!-- Named by the cache, the DXC command and the enabled backends too, so pointing either elsewhere (an empty cache
+             compiles everything afresh) never reads another's record, and a build that enables a backend the last one left
+             off (SPIR-V after a DXIL-only build) never reads that build's record as making the backend's older outputs
+             current. -->
+        <_PuckShaderBuildInputs>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.$([MSBuild]::StableStringHash('$(PuckShaderCacheDirectory)|$(DxcCommand)|$(PuckShaderSpirvEnabled)|$(PuckShaderDxilEnabled)|$(PuckComputeShaderDxilEnabled)|$(_PuckShaderHostBuildsDxil)').ToString('x8')).inputs'))</_PuckShaderBuildInputs>
     </PropertyGroup>
     <Target Name="_PuckReadShaderBuildInputs" Condition="'$(DesignTimeBuild)' != 'true'">
         <ReadLinesFromFile File="$(_PuckShaderBuildInputs)" Condition="Exists('$(_PuckShaderBuildInputs)')">

@@ -66,7 +66,8 @@ public abstract class ShaderBuildTargetsLaws {
         Assert.True(condition: waiting.IsSet, userMessage: "The process ended without observing contention on the source tree's publication lock.");
     }
 }
-/// <summary>The shipped shader targets publish from the cache, recompile only what an edited include reaches,
+/// <summary>The shipped shader targets publish from the cache, recompile only what an edited include reaches, compile
+/// again the outputs of a backend the last build left off,
 /// compile again into an empty cache, gate a pack on the publication lock and the commit record, and remove only the
 /// bytecode they wrote; a design-time build runs none of it.</summary>
 public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
@@ -120,6 +121,26 @@ public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
         fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "changed shared declaration");
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Equal(expected: ["a.comp.hlsl", "b.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 4).Order(comparer: StringComparer.Ordinal));
+    }
+    [Fact]
+    public void ABuildThatEnablesABackendTheLastBuildLeftOffCompilesThatBackendsOlderOutputs() {
+        using var fixture = new ShaderBuildFixture();
+        // Both backends for the one compute source, whatever the host: DXIL stands in for a Windows host's.
+        string[] dxil = ["PuckComputeShaderDxilEnabled=true", "_PuckShaderHostBuildsDxil=true"];
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
+        fixture.ShaderProject(body: ShaderBuildFixture.Sources);
+        fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=true"], target: "Build"));
+        Assert.Equal(expected: 2, actual: fixture.Compiles());
+
+        // A DXIL-only build of an edit leaves the SPIR-V output older than its source.
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "edited source");
+        fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=false"], target: "Build"));
+        Assert.Equal(expected: 3, actual: fixture.Compiles());
+
+        fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=true"], target: "Build"));
+        Assert.Equal(expected: 4, actual: fixture.Compiles());
+        fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=true"], target: "CollectShaderBytecode"));
     }
     [Fact]
     public void AnEmptyCacheCompilesEveryOutputAgainHoweverCurrentTheTree() {
