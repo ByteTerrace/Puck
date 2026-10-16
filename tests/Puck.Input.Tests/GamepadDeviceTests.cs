@@ -291,6 +291,82 @@ public sealed class GamepadDeviceTests {
         );
     }
     [Fact]
+    public async Task A_streaming_controller_that_falls_silent_faults() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { StreamSilenceTimeout = TimeSpan.FromMilliseconds(value: 32), };
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+        Assert.False(condition: device.IsFaulted);
+
+        hid.Time.Advance(by: SteadyStatePoll);
+
+        for (var attempt = 0; ((attempt < 200) && !device.IsFaulted); ++attempt) {
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                millisecondsDelay: 5
+            );
+        }
+
+        Assert.True(condition: device.IsFaulted);
+    }
+    [Fact]
+    public async Task Disposal_stops_running_motors_and_releases_adaptive_triggers() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser();
+
+        hid.EnqueueReport(1);
+
+        var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+        var effect = TriggerEffectSpec.Feedback(
+            position: 2,
+            strength: 3
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        Assert.True(condition: device.Output.SetTriggerEffect(left: in effect, right: in effect));
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+
+        await DisposeOnItsOwnThread(device: device);
+
+        Assert.Equal(
+            expected: [(1f, 1f), (0f, 0f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.Equal(
+            expected: (TriggerEffectSpec.Off, TriggerEffectSpec.Off),
+            actual: parser.TriggerWrites[^1]
+        );
+    }
+    [Fact]
     public async Task Scheduled_trigger_effect_is_held_until_its_tick_and_fires_without_another_input_report() {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var hid = new TestHidDevice();

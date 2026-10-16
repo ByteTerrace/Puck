@@ -4,7 +4,8 @@ namespace Puck.Input.Output;
 /// A dual-motor rumble request. <paramref name="LowFrequency"/> drives the large/low-frequency motor and
 /// <paramref name="HighFrequency"/> the small/high-frequency motor, each a normalized 0..1 intensity. The
 /// effect plays for <paramref name="DurationMilliseconds"/>, after which the backend returns the motors to
-/// rest (a duration of zero stops rumble immediately).
+/// rest (a duration of zero stops them immediately). Trigger motors, where a controller has them, are driven
+/// separately by <see cref="TriggerRumbleEffect"/> and keep running.
 /// </summary>
 /// <param name="LowFrequency">The low-frequency motor intensity, 0..1.</param>
 /// <param name="HighFrequency">The high-frequency motor intensity, 0..1.</param>

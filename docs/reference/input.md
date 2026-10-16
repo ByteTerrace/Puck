@@ -73,11 +73,11 @@ Registered arbiter lanes provide alternate views without draining again:
 
 | Family | Transport | Input | Motion | Output | Power |
 |---|---|---|---|---|---|
-| **DualSense** and **DualSense Edge** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches; Edge Fn buttons and back paddles | calibrated gyro and accelerometer, fused orientation | rumble, RGB light bar, player LEDs, microphone-mute LED, adaptive triggers | battery and charging |
+| **DualSense** and **DualSense Edge** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches; Edge Fn buttons and back paddles | calibrated gyro and accelerometer, fused orientation | rumble, RGB light bar, player LEDs, microphone-mute LED, adaptive triggers | battery and charging; headphone and microphone jacks |
 | **Switch Pro** | HID over USB or Bluetooth | buttons including Home and Capture, calibrated sticks, digital triggers | calibrated gyro and accelerometer, fused orientation | HD rumble, player LEDs, Home LED | battery and charging |
-| **Steam Controller** | HID over USB or the classic receiver | buttons, analog triggers, stick, two trackpads, grip buttons | gyro and accelerometer, fused orientation | trackpad haptic pulses, Steam-button LED | wireless battery |
-| **Steam Controller Triton** | HID over USB, Bluetooth LE, the puck receiver or the Nereid dongle | buttons, four paddles, analog triggers, two sticks, two pressure-sensing trackpads | gyro and accelerometer, fused orientation | dual-motor rumble | battery and charging |
-| **Xbox** | XInput, with GameInput for the trigger motors | buttons including Guide, sticks, analog triggers | — | body rumble; impulse triggers once bound to GameInput | battery |
+| **Steam Controller** | HID over USB or the classic receiver | buttons, analog triggers and their full-pull switches, stick, two trackpads, grip buttons | gyro and accelerometer, fused orientation | trackpad haptic pulses, Steam-button LED | wireless battery |
+| **Steam Controller Triton** | HID over USB, Bluetooth LE, the puck receiver or the Nereid dongle | buttons, four paddles, analog triggers and their full-pull switches, two sticks, two pressure-sensing trackpads, stick and grip capacitive sense | gyro and accelerometer, fused orientation | dual-motor rumble | battery and charging |
+| **Xbox** | XInput, with GameInput for the trigger motors | buttons including Guide, sticks, analog triggers | — | body rumble; impulse triggers once bound to GameInput | battery; headset |
 
 Each parser follows the reference drivers for its family: Linux `hid-playstation`,
 `hid-nintendo`, `hid-steam` and `xpad`, and SDL's `hidapi` drivers, with the
@@ -122,7 +122,15 @@ ends between two rendered frames.
 `GamepadManager` rescans HID interfaces about every 1.5 seconds. A supported
 interface is opened, assigned the lowest free player slot, and started. A
 faulted connection is removed at the next drain or rescan, and disposal occurs
-outside the manager lock.
+outside the manager lock. Disposing a live pad first stops its motors and
+releases its adaptive triggers, bounded to 100 ms per write.
+
+A controller that streams continuously (DualSense, Switch Pro) faults when its
+parsed stream falls silent (2 s and 3 s), which releases its held input when a
+Bluetooth link drops without a removal notice; the rescan reopens it if it is
+still present. One controller reached over USB and Bluetooth at once counts once:
+its parser reads the pad's Bluetooth address (`IPhysicalIdentityParser`), and
+the Bluetooth connection gives up its player slot while the USB one streams.
 
 Classic and Triton Steam receivers expose several input collections, most of
 which can be empty. Those collections start dormant: they hold no player slot,
@@ -283,9 +291,10 @@ weaker update inside the spacing is held and written when it passes; a stop or a
 stronger update is written at once, and a refreshed controller hears a stop
 three more times.
 
-Rumble duration is finite by contract: a zero-millisecond request stops every
-motor immediately. Intensities are clamped to `0..1` and non-finite values map
-to rest before a parser encodes them.
+Rumble duration is finite by contract. A zero-millisecond `RumbleEffect` stops
+the body motors and a zero-millisecond `TriggerRumbleEffect` stops the trigger
+motors; each pair expires on its own. Intensities are clamped to `0..1` and
+non-finite values map to rest before a parser encodes them.
 
 - **DualSense** keeps one output image for rumble, both adaptive triggers, the
   light bar, the player LEDs and the microphone-mute LED. USB writes report
@@ -297,16 +306,20 @@ to rest before a parser encodes them.
 - **Switch Pro** encodes HD rumble through the Linux amplitude table: the low
   intensity drives a 160 Hz band and the high intensity a 320 Hz band on both
   actuators. Every output report carries the current rumble, so a subcommand
-  never interrupts it. `SetLed` sets the Home LED's brightness from the
-  brightest channel.
+  never interrupts it, and every report, rumble or subcommand, waits for the
+  transport's spacing (20 ms on USB, 60 ms over Bluetooth), past which a
+  Bluetooth pad drops off the link. `SetLed` sets the Home LED's brightness from
+  the brightest channel. Initialization faults, and the manager reopens the pad,
+  when the IMU, the full report mode or vibration is never acknowledged.
 - **Steam Controller** drives each trackpad actuator with a pulse train whose
   duty cycle follows intensity; the low band is the left pad. `SetLed` sets the
   Steam-button brightness.
 - **Triton** drives its two motors with output report `0x80`.
 - **Xbox** writes each rumble through one path: the four GameInput motors once
   the XInput slot is bound to its GameInput device, the two XInput body motors
-  until then. A slot binds at once when it is the only pad, otherwise while a
-  button is held that tells the pads apart.
+  until then. A slot binds without a held button only when it is the only pad
+  and the slot and device topology has been still for 1.5 s; otherwise it binds
+  while a button is held that tells the pads apart.
 
 ## Dynamic lighting
 
@@ -350,8 +363,7 @@ drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
   which the engine does not ship. Impulse-trigger rumble needs a GameInput
   runtime that `GameInputCreate` accepts; where it is missing, rumble falls back
   to the two XInput body motors.
-- **Not surfaced:** stick and grip capacitive sense and the trackpad haptic
-  reports `0x81`–`0x85` (Triton), headphone and microphone jack state and the
+- **Not surfaced:** the Triton's trackpad haptic reports `0x81`–`0x85`, the
   DualSense's audio-driven haptics and speaker (an audio-endpoint feature, not
   HID), the Switch's `0x6086` stick deadzone, and the classic Steam Controller's
   Bluetooth LE transport.
@@ -367,7 +379,12 @@ feature framing. Triton feature messages use report id 1 and
 `[type][length][payload]`; report id 0 is rejected with Win32 error 87.
 
 `GamepadManager.TryGetPower` returns a device's last `GamepadPower`: where it
-draws power from and its charge, at the resolution its family reports.
+draws power from and its charge, at the resolution its family reports, with a
+charger fault as `NotCharging` and an unvalidated or reserved value as
+`Unknown`. `TryGetAccessories` returns the headphones and microphone plugged
+into it. A report that carries no fresh motion (a subcommand reply, a battery
+report, a repeated packet) sets `GamepadState.IsMotionSample` false and is not
+averaged into the frame's gyro.
 
 ## Core types
 

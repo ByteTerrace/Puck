@@ -14,6 +14,17 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
     public IEnumerable<HidDeviceInfo> EnumerateInterfaces() => [];
     public IHidDevice? Open(string devicePath) => null;
 }
+/// <summary>A HID source over fixed in-memory devices, each opened by its path.</summary>
+internal sealed class TestHidDeviceSource(params TestHidDevice[] devices) : IHidDeviceSource {
+    public IEnumerable<HidDeviceInfo> EnumerateInterfaces() =>
+        devices.Select(device => new HidDeviceInfo(
+            Path: device.DevicePath,
+            ProductId: device.ProductId,
+            Transport: device.Transport,
+            VendorId: device.VendorId
+        ));
+    public IHidDevice? Open(string devicePath) => devices.FirstOrDefault(device => (device.DevicePath == devicePath));
+}
 /// <summary>
 /// An in-memory HID transport. Reads honor the <see cref="IHidDevice"/> contract: a report enqueued while a
 /// read is pending completes that read, and a timed read returns zero only once its timeout elapses on
@@ -155,8 +166,8 @@ internal sealed class TestHidDevice : IHidDevice {
     );
     /// <summary>Gets the feature reports the device answers, by report id; an id it maps to null is unanswered.</summary>
     public Func<byte, byte[]?>? FeatureReports { get; init; }
-    /// <summary>Gets the replies the device sends to output writes: each write's reply, if any, is queued as input.</summary>
-    public Func<byte[], byte[]?>? Responder { get; init; }
+    /// <summary>Gets the replies the device sends to output writes: each write's replies, if any, are queued as input.</summary>
+    public Func<byte[], IReadOnlyList<byte[]>?>? Responder { get; init; }
 
     public bool TryGetFeatureReport(Span<byte> buffer) {
         if (FeatureReports?.Invoke(arg: buffer[0]) is not { } report) {
@@ -202,14 +213,16 @@ internal sealed class TestHidDevice : IHidDevice {
             Writes.Add(item: written);
         }
 
-        if (Responder?.Invoke(arg: written) is { } reply) {
-            EnqueueReport(report: reply);
+        if (Responder?.Invoke(arg: written) is { } replies) {
+            foreach (var reply in replies) {
+                EnqueueReport(report: reply);
+            }
         }
 
         return ValueTask.CompletedTask;
     }
 }
-internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IServicedGamepadParser, IDisposable {
+internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IServicedGamepadParser, IStreamingParser, IDisposable {
     private readonly Lock m_gate = new();
 
     public List<(float Low, float High)> RumbleWrites { get; } = [];
@@ -220,6 +233,7 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
     public int ResetCount { get; private set; }
     public TimeSpan RumbleRefreshInterval { get; init; }
+    public TimeSpan StreamSilenceTimeout { get; init; }
     public TimeSpan RumbleWriteInterval { get; init; }
     public GamepadType Type => GamepadType.Unknown;
 
