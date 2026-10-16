@@ -11,7 +11,7 @@ public sealed class TestCommandLawTests {
         path1: RepositoryPaths.RequireRoot(),
         path2: "src",
         path3: "Puck.World",
-        path4: "bin/Release/net10.0/Puck.World.dll"
+        path4: "bin/Release/net11.0/Puck.World.dll"
     );
     private static (int ExitCode, string Output) RunTest(params string[] arguments) =>
         ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: [

@@ -3,7 +3,6 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.Extensions.Configuration;
 using System.Net;
 using Puck.Azure.Functions.Services;
 using Puck.Azure.Functions.Utilities;

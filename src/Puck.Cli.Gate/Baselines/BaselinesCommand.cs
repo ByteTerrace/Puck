@@ -90,7 +90,7 @@ public static class BaselinesCommand {
         }
 
         var project = Path.Combine(paths: [repositoryRoot, "tests", artifact.Project, $"{artifact.Project}.csproj"]);
-        var output = Path.Combine(paths: [repositoryRoot, "tests", artifact.Project, "bin", "Release", "net10.0"]);
+        var output = Path.Combine(paths: [repositoryRoot, "tests", artifact.Project, "bin", "Release", "net11.0"]);
         var records = Path.Combine(paths: [output, "records", artifact.Name]);
         var committed = Path.Combine(
             path1: repositoryRoot,

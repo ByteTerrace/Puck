@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
 WORKDIR /source
 # Build from the repository root: shared targets, analyzers, and Puck.Maths are required.
 COPY . .
@@ -6,7 +6,7 @@ ENV CI=true
 RUN dotnet restore src/Puck.Actors/Puck.Actors.csproj --locked-mode \
     && dotnet publish src/Puck.Actors/Puck.Actors.csproj --configuration Release --no-restore --output /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app .

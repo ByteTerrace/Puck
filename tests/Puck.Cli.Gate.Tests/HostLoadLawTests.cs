@@ -112,18 +112,18 @@ public sealed class HostLoadLawTests {
         // Free memory not over the capacity threshold holds CAPACITY back without being PRESSURE.
         Assert.Equal(actual: Kinds(lines: full.Observe(sample: Reading(ram: 4, seconds: 0))), expected: ["GPU idle", "LOADED"]);
     }
-    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
     [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
-    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net11.0/Puck.World.Tests.dll --filter-not-trait Category=Gpu")]
     [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.World.Tests.dll\0--filter-class\0*CaptureLawTests\0")]
-    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.dll")]
     [Theory]
     public void AHeavyTestRunIsAnyRunningPuckWorldTestsWhateverItsFilter(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsHeavyTest(commandLine: commandLine, name: name));
     [InlineData("dotnet", "dotnet test --project tests/Puck.World.Tests -c Release --no-build --filter-not-trait Category=Gpu")]
     [InlineData("dotnet", "dotnet build tests/Puck.World.Tests -c Release -m:2 -nodeReuse:false")]
     [InlineData("grep", "grep.exe --line-buffered Puck.World.Tests")]
-    [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe --filter-class Puck.Cli.Tests.HostLoadLawTests")]
+    [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net11.0\Puck.Cli.Tests.exe --filter-class Puck.Cli.Tests.HostLoadLawTests")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe --filter-trait Category=Gpu")]
     [Theory]
     public void ADriverBuildFollowerOrLighterSuiteIsNoHeavyTestRun(string name, string commandLine) =>

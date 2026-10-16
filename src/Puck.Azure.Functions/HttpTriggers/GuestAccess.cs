@@ -1,8 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.Extensions.Configuration;
 using System.Net;
-using System.Net.Http.Json;
 using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.HttpTriggers;

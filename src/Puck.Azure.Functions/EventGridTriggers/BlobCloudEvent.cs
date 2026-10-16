@@ -3,8 +3,6 @@ using Azure.Core;
 using Azure.Messaging;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;

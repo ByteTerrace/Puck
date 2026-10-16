@@ -43565,7 +43565,7 @@
       "title": "WorldTimelineSection"
     },
     "schema": {
-      "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed projection.",
+      "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed projection. A document that omits it is refused: the initializer names what the canonical writer emits, and does not stand in for a tag a peer left out.",
       "type": "string"
     }
   },
@@ -43594,7 +43594,8 @@
     "looks",
     "lookAssignment",
     "dynamics",
-    "hud"
+    "hud",
+    "schema"
   ],
   "additionalProperties": false,
   "patternProperties": {

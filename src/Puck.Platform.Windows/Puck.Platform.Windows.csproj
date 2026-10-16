@@ -6,12 +6,10 @@
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <!-- Puck.Platform.Windows remains net10.0 (the same neutral TFM Puck.Platform uses) so CA1416's
+        <!-- Puck.Platform.Windows remains net11.0 (the same neutral TFM Puck.Platform uses) so CA1416's
              [SupportedOSPlatform] surface annotations keep firing here exactly as they do in Puck.DirectX.
              PackageDownload makes the official C#/WinRT Windows SDK projection available without a Windows TFM. -->
         <PackageDownload Include="Microsoft.Windows.SDK.NET.Ref" Version="[$(WindowsSdkNetRefVersion)]" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="[10.*, )" />
-        <PackageReference Include="Microsoft.Extensions.Options" Version="[10.*, )" />
         <PackageReference Include="Microsoft.Windows.CsWin32" Version="[0.3.183]">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

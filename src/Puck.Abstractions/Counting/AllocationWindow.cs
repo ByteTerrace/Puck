@@ -25,7 +25,7 @@ namespace Puck.Abstractions.Counting;
 /// <para>
 /// A non-zero verdict is diagnosed before it is reported: the body runs again under an <see cref="EventListener"/>
 /// enabled for the runtime's <c>AllocationSampled</c> event (event 303 of <c>Microsoft-Windows-DotNETRuntime</c>,
-/// keyword <c>AllocationSamplingKeyword</c> = <c>0x80000000000</c>, .NET 10), and the thrown
+/// keyword <c>AllocationSamplingKeyword</c> = <c>0x80000000000</c>), and the thrown
 /// <see cref="AllocationWindowException"/> names the types sampled on this thread. The runtime samples about one
 /// allocation per 100 KB allocated, so the diagnosis repeats the body until it has allocated several sampling
 /// intervals' worth, within a bounded number of runs. The event reaches an in-process listener on the runtime's

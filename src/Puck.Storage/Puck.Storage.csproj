@@ -10,7 +10,5 @@
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*, )" />
         <PackageReference Include="Azure.Storage.Blobs" Version="[12.*, )" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="[10.*, )" />
-        <PackageReference Include="Microsoft.Extensions.Options" Version="[10.*, )" />
     </ItemGroup>
 </Project>

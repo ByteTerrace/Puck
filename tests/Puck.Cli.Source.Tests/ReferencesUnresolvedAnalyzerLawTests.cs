@@ -25,7 +25,7 @@ public sealed class ReferencesUnresolvedAnalyzerLawTests {
             cancellationToken: TestContext.Current.CancellationToken,
             contents: """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup><Analyzer Include="absent/Absent.Analyzer.dll" /></ItemGroup>
             </Project>
             """,

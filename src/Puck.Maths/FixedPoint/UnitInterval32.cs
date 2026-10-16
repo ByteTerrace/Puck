@@ -214,8 +214,8 @@ public readonly record struct UnitInterval32
     public static UnitInterval32 Multiply(UnitInterval32 x, UnitInterval32 y) {
         // The one place the extra bit costs anything: one times one is 2^64 exactly, which no 64-bit product holds, so
         // the exact product is taken in 128 bits. A UInt128 multiply of two widened ulongs is the shape the JIT expands
-        // to a single widening multiply on .NET 10 (measured about twice as fast as Math.BigMul) — do not "optimize"
-        // this into BigMul.
+        // to a single widening multiply (once measured about twice as fast as Math.BigMul, which now lowers to one
+        // widening multiply as well) — do not "optimize" this into BigMul.
         var product = (((UInt128)x.Value) * y.Value);
         var truncated = ((ulong)(product >> FractionBitCount));
         var remainder = ((ulong)product) & FractionBitMask;

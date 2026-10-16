@@ -480,7 +480,7 @@ public sealed partial class LawProofLawTests : LawProofLaws {
                 var directory = Path.Combine(path1: tree, path2: "obj");
 
                 while (directory.Length < 300) {
-                    directory = Path.Combine(path1: directory, path2: "Release-net10.0-intermediate");
+                    directory = Path.Combine(path1: directory, path2: "Release-net11.0-intermediate");
                 }
 
                 _ = Directory.CreateDirectory(path: directory);

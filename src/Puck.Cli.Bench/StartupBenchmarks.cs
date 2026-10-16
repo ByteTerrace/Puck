@@ -13,7 +13,7 @@ namespace Puck.Cli.Bench;
 public static class StartupBenchmarks {
     public static Command Create() {
         var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "World sources/documents. Default: the debug world, src/Puck.World/Assets/worlds/debug.puck." };
-        var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net10.0/Puck.World.dll. Never builds." };
+        var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net11.0/Puck.World.dll. Never builds." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
         var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
         var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 120, Description = "Seconds one sample may take before it is abandoned, 1 to 3600." };
@@ -34,7 +34,7 @@ public static class StartupBenchmarks {
             return 2;
         }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return 2; }
-        artifact = Path.GetFullPath(path: (artifact ?? Path.Combine(path1: root, path2: "src/Puck.World/bin/Release/net10.0/Puck.World.dll")));
+        artifact = Path.GetFullPath(path: (artifact ?? Path.Combine(path1: root, path2: "src/Puck.World/bin/Release/net11.0/Puck.World.dll")));
         if (!File.Exists(path: artifact)) {
             Console.Error.WriteLine(value: $"startup: missing World artifact {artifact}; build World in Release before measuring.");
             return 2;

@@ -364,7 +364,7 @@ module functionApplication 'br/public:avm/res/web/site:0.24.0' = {
       }
       runtime: {
         name: 'dotnet-isolated'
-        version: '10.0'
+        version: '11.0'
       }
       scaleAndConcurrency: {
         instanceMemoryMB: 512

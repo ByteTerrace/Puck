@@ -79,8 +79,8 @@ public static class FormatFileProject {
                 // Exec belong to Tasks.Core beside the Framework and Utilities.Core task APIs.
                 File.WriteAllText(
                     contents: (IsInlineTask(source: original)
-                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll\" /></ItemGroup></Project>"
-                        : "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Library</OutputType></PropertyGroup></Project>"
+                        ? "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Library</OutputType><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><RunAnalyzers>false</RunAnalyzers><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Framework.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Utilities.Core.dll\" /><Reference Include=\"$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll\" /></ItemGroup></Project>"
+                        : "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Library</OutputType></PropertyGroup></Project>"
                     ),
                     path: project
                 );

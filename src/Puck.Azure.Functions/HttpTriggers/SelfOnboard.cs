@@ -2,9 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using Microsoft.Extensions.Configuration;
 using System.Net;
-using System.Net.Http.Json;
 using Puck.Azure.Functions.Middleware;
 using Puck.Azure.Functions.Utilities;
 

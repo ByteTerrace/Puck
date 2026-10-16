@@ -10,7 +10,7 @@ namespace Puck.Cli.Release.Tests.Automation;
 /// </summary>
 public sealed class ArtifactsShardLawTests {
     private static string[] Manifest(int count) => [
-        .. Enumerable.Range(count: count, start: 0).Select(selector: index => $"tests/Puck.Suite{index}.Tests/bin/Release/net10.0/Puck.Suite{index}.Tests.dll"),
+        .. Enumerable.Range(count: count, start: 0).Select(selector: index => $"tests/Puck.Suite{index}.Tests/bin/Release/net11.0/Puck.Suite{index}.Tests.dll"),
     ];
 
     [Fact]

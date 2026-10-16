@@ -1302,7 +1302,7 @@ public sealed class StorageCompositionLawTests {
         var store = new FakeObjectBlobStore();
 
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: "{}"),
+            bytes: Encoding.UTF8.GetBytes(s: "{\"schema\": \"puck.world.definition.v0\"}"),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );

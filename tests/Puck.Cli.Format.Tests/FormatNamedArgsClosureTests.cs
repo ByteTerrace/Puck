@@ -249,7 +249,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         Directory.CreateDirectory(path: library);
         Directory.CreateDirectory(path: sample);
         File.WriteAllText(
-            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""",
+            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>""",
             path: Path.Combine(
                 path1: library,
                 path2: "Library.csproj"
@@ -263,7 +263,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             )
         );
         File.WriteAllText(
-            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup></Project>""",
+            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup></Project>""",
             path: Path.Combine(
                 path1: sample,
                 path2: "Sample.csproj"
@@ -291,7 +291,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             path1: library,
             path2: "obj",
             path3: "Release",
-            path4: "net10.0/ref/Library.dll"
+            path4: "net11.0/ref/Library.dll"
         ));
 
         var (code, report) = Format(
@@ -334,7 +334,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
 
             Directory.CreateDirectory(path: directory);
             File.WriteAllText(
-                contents: $"""<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>{reference}</Project>""",
+                contents: $"""<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>{reference}</Project>""",
                 path: project
             );
             File.WriteAllText(
@@ -626,7 +626,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         File.WriteAllText(
             contents: $"""
                 <Project Sdk="Microsoft.NET.Sdk">
-                    <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+                    <PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
                     <ItemGroup><Compile Include="{Path.Combine(path1: shared, path2: "Shared.cs")}" Link="Shared.cs" /></ItemGroup>
                 </Project>
                 """,
@@ -754,7 +754,7 @@ public sealed class BuiltSampleProject : IDisposable {
         File.WriteAllText(
             contents: $"""
                 <Project Sdk="Microsoft.NET.Sdk">
-                    <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+                    <PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
                     <ItemGroup Condition="'$(Configuration)' == 'Release'">
                         <Reference Include="xunit.v3.assert"><HintPath>{typeof(Assert).Assembly.Location}</HintPath></Reference>
                     </ItemGroup>

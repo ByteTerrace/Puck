@@ -296,7 +296,7 @@ internal static class NuGetReleaseCommand {
 
         Directory.CreateDirectory(path: probe);
         File.WriteAllText(
-            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>",
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>",
             path: Path.Combine(
                 path1: probe,
                 path2: "Probe.csproj"

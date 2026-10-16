@@ -60,7 +60,7 @@
             "dependsOn": "build (functions)",
             "isBackground": true,
             "options": {
-                "cwd": "${workspaceFolder}/bin/Debug/net10.0"
+                "cwd": "${workspaceFolder}/bin/Debug/net11.0"
             },
             "problemMatcher": "$func-dotnet-watch",
             "type": "func"

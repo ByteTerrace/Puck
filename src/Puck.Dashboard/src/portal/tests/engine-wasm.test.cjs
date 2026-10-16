@@ -19,7 +19,7 @@ function repositoryRoot() {
 }
 
 const root = repositoryRoot();
-const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
+const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
 const { officialTreeMissing, officialSchemaBundle } = require('./support/officialTree.cjs');
 // A test that needs a compiled world skips itself by name when no official tree has been built.

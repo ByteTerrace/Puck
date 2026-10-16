@@ -23,7 +23,7 @@
         <!-- A browser-wasm exe (Puck.World.Browser itself) cannot be referenced as an ordinary assembly — its
              [SupportedOSPlatform("browser")] surface and RID-specific output make it unloadable outside a wasm
              host. Engine/*.cs carries no JS-interop attribute at all (only Exports/ does), so it links unmodified
-             as source and runs under the ordinary net10.0 test host, proving the same code the AppBundle ships. -->
+             as source and runs under the ordinary net11.0 test host, proving the same code the AppBundle ships. -->
         <Compile Include="../../src/Puck.World.Browser/Engine/**/*.cs" LinkBase="Engine" />
     </ItemGroup>
     <ItemGroup>

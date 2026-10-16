@@ -61,7 +61,7 @@ public sealed class VulkanShaderCapabilitiesLawTests {
     }
     [Fact]
     public void Every_module_the_World_ships_declares_only_enabled_capabilities() {
-        var shaders = Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "src/Puck.World/bin/Release/net10.0/Assets/Shaders");
+        var shaders = Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "src/Puck.World/bin/Release/net11.0/Assets/Shaders");
         var modules = Directory.EnumerateFiles(path: shaders, searchOption: SearchOption.AllDirectories, searchPattern: "*.spv")
             .Order(comparer: StringComparer.Ordinal)
             .ToArray();

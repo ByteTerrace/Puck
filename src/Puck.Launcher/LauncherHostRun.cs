@@ -90,7 +90,7 @@ public static class LauncherHostRun {
             }
         }
 
-        // .NET 10's RunAsync returns normally while a BackgroundService's ExecuteTask is faulted, so pump failures are
+        // The host's RunAsync returns normally while a BackgroundService's ExecuteTask is faulted, so pump failures are
         // read from the tasks themselves. A pump's fault ended the run, so it precedes anything RunAsync raised while
         // stopping or disposing the host, and it is the failure the run reports.
         Exception? pumpFault = null;

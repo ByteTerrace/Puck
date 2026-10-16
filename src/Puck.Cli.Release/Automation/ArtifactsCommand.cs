@@ -74,20 +74,20 @@ public static class ArtifactsCommand {
         );
         CliFiles.CopyDirectory(
             destination: "artifacts/batteries/hgb",
-            source: "src/Puck.HumbleGamingBrick.Post/bin/Release/net10.0"
+            source: "src/Puck.HumbleGamingBrick.Post/bin/Release/net11.0"
         );
         CliFiles.CopyDirectory(
             destination: "artifacts/batteries/agb",
-            source: "src/Puck.AdvancedGamingBrick.Post/bin/Release/net10.0"
+            source: "src/Puck.AdvancedGamingBrick.Post/bin/Release/net11.0"
         );
         CliFiles.CopyDirectory(
             destination: "artifacts/batteries/hgd",
-            source: "src/Puck.HumbleGamingDeck.Post/bin/Release/net10.0"
+            source: "src/Puck.HumbleGamingDeck.Post/bin/Release/net11.0"
         );
         foreach (var project in new[] { "Puck.World.Azure.Tests", "Puck.World.Schema.Tests", "Puck.World.Silo.Tests" }) {
             CliFiles.CopyDirectory(
                 destination: $"artifacts/world-tests/{project}",
-                source: $"tests/{project}/bin/Release/net10.0"
+                source: $"tests/{project}/bin/Release/net11.0"
             );
         }
         using var stream = new FileStream(

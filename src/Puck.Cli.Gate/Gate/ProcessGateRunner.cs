@@ -40,7 +40,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
             path1: repositoryRoot,
             path2: "src/Puck.Cli/bin",
             path3: CliOptions.DefaultConfiguration,
-            path4: "net10.0"
+            path4: "net11.0"
         );
 
         foreach (var file in Directory.EnumerateFiles(path: output, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {

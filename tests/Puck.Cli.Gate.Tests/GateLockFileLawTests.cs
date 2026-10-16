@@ -16,14 +16,14 @@ internal static class LockScratch {
         {
           "version": 1,
           "dependencies": {
-            "net10.0": {}
+            "net11.0": {}
           }
         }
         """;
     private const string Project = """
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
-            <TargetFramework>net10.0</TargetFramework>
+            <TargetFramework>net11.0</TargetFramework>
             <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
             <RestoreLockedMode>true</RestoreLockedMode>
           </PropertyGroup>
@@ -33,7 +33,7 @@ internal static class LockScratch {
         {
           "version": 1,
           "dependencies": {
-            "net10.0": {
+            "net11.0": {
               "Dropped.Package": {
                 "type": "Direct",
                 "requested": "[1.0.0, )",
@@ -102,7 +102,7 @@ public sealed class GateLockFileLawTests : GateRunLaws {
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
         Assert.Contains(actualString: output, expectedSubstring: "gate: locks FAILED (exit 1, ");
-        Assert.Contains(actualString: output, expectedSubstring: "  src/Drifted/Drifted.csproj: NU1004 The package references have changed for net10.0.");
+        Assert.Contains(actualString: output, expectedSubstring: "  src/Drifted/Drifted.csproj: NU1004 The package references have changed for net11.0.");
         Assert.Contains(actualString: output, expectedSubstring: "  src/Unlocked/Unlocked.csproj: has no packages.lock.json");
         Assert.Contains(actualString: output, expectedSubstring: "puck locks");
         Assert.DoesNotContain(actualString: output, expectedSubstring: "src/Clean/");

@@ -11,17 +11,17 @@ namespace Puck.Cli.Tests;
 public sealed class HostGpuWorkLawTests {
     private static IReadOnlyDictionary<string, Func<System.CommandLine.Command>> Grammars => PuckRootCommand.Gate.GpuVerbGrammars;
 
-    [InlineData("Puck.World", @"C:\Puck\src\Puck.World\bin\Release\net10.0\Puck.World.exe --world worlds/a.puck")]
+    [InlineData("Puck.World", @"C:\Puck\src\Puck.World\bin\Release\net11.0\Puck.World.exe --world worlds/a.puck")]
     [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
     [InlineData("dotnet", @"dotnet ""C:\scratch\l1-cli\Puck.Cli.dll"" canary pipeline-ink")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll parity")]
     [InlineData("puck", "puck counters --world w.json")]
-    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --port 1")]
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --port 1")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe")]
     [InlineData("Puck.Platform.Windows.Tests", "Puck.Platform.Windows.Tests.exe")]
-    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Vulkan.Tests\bin\Release\net10.0\Puck.Vulkan.Tests.dll")]
-    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.DirectX.Tests\bin\Release\net10.0\Puck.DirectX.Tests.dll")]
-    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Vulkan.Tests\bin\Release\net11.0\Puck.Vulkan.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.DirectX.Tests\bin\Release\net11.0\Puck.DirectX.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.dll")]
     [Theory]
     public void TheWorldAGpuVerbAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
@@ -30,7 +30,7 @@ public sealed class HostGpuWorkLawTests {
     [InlineData("dotnet", "dotnet restore src/Puck.World")]
     [InlineData("dotnet", @"""C:\Program Files\dotnet\dotnet.exe"" ""C:\Program Files\dotnet\sdk\10.0.402\MSBuild.dll"" /nologo /nodemode:1 /nodeReuse:true")]
     [InlineData("MSBuild", "MSBuild.exe /nodemode:1")]
-    [InlineData("dotnet", @"""C:\Program Files\dotnet\dotnet.exe"" exec ""C:\Program Files\dotnet\sdk\10.0.402\Roslyn\bincore\csc.dll"" /noconfig /out:obj\Release\net10.0\Puck.World.dll")]
+    [InlineData("dotnet", @"""C:\Program Files\dotnet\dotnet.exe"" exec ""C:\Program Files\dotnet\sdk\10.0.402\Roslyn\bincore\csc.dll"" /noconfig /out:obj\Release\net11.0\Puck.World.dll")]
     [InlineData("dotnet", @"""C:\Program Files\dotnet\dotnet.exe"" ""C:\Program Files\dotnet\sdk\10.0.402\Roslyn\bincore\VBCSCompiler.dll"" -pipename:x")]
     [InlineData("VBCSCompiler", "VBCSCompiler.exe -pipename:x")]
     [InlineData("pwsh", "pwsh -c Get-Process Puck.World; puck canary x")]
@@ -38,16 +38,16 @@ public sealed class HostGpuWorkLawTests {
     // A filter or follower whose arguments name a test assembly runs no test: a run is the process executing it.
     [InlineData("grep", "grep.exe --line-buffered -E \"passed|Puck.World.Tests exit\"")]
     [InlineData("tail", @"tail -f C:\scratch\Puck.World.Tests\gate.steps")]
-    [InlineData("node", "node watch.js tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll")]
+    [InlineData("node", "node watch.js tests/Puck.World.Tests/bin/Release/net11.0/Puck.World.Tests.dll")]
     [InlineData("dotnet", "dotnet tool run report --assembly Puck.World.Tests.dll")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll host load --watch")]
-    [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe -class Puck.Cli.Tests.CanaryPlanLawTests")]
-    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.dll")]
+    [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net11.0\Puck.Cli.Tests.exe -class Puck.Cli.Tests.CanaryPlanLawTests")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net11.0\Puck.Cli.Tests.dll")]
     [Theory]
     public void BuildsShellsAndOtherTestsAreNeverGpuWork(string name, string commandLine) =>
         Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
-    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
-    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll --filter-class *CaptureLawTests --filter-not-trait Category=Gpu")]
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net11.0/Puck.World.Tests.dll --filter-class *CaptureLawTests --filter-not-trait Category=Gpu")]
     [InlineData("Puck.Vulkan.Tests", "Puck.Vulkan.Tests.exe --filter-not-trait=Category=Gpu")]
     [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.DirectX.Tests.dll\0--filter-not-trait\0Category=Gpu\0")]
     [Theory]

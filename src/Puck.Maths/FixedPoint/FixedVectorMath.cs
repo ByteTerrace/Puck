@@ -567,7 +567,7 @@ public static class FixedVectorMath {
         ulong remainder;
 
         if (high == 0UL) {
-            // Unit-ish rigid transforms stay within 128 bits and take one division. .NET 10 lowers this common
+            // Unit-ish rigid transforms stay within 128 bits and take one division. The JIT lowers this common
             // 128-by-64 shape to the x64 DivRem instruction when the quotient fits a machine word.
             var numerator = (((UInt128)middle) << 64) | low;
             var fullQuotient = (numerator / denominator);

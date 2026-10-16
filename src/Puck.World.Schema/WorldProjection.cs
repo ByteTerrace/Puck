@@ -158,7 +158,10 @@ public sealed record WorldProjectionDocument(
     /// <see cref="WorldProjection.TryDeserialize"/>.</summary>
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
-    /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed projection.</summary>
+    /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed projection. A document
+    /// that omits it is refused: the initializer names what the canonical writer emits, and does not stand in for a
+    /// tag a peer left out.</summary>
+    [JsonRequired]
     public string Schema { get; init; } = SchemaVersion;
 }
 /// <summary>

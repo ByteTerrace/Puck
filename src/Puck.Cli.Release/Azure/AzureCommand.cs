@@ -419,7 +419,7 @@ public static partial class AzureCommand {
             );
         } else {
             CliFiles.CopyDirectory(
-                destination: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle",
+                destination: "src/Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle",
                 source: Path.Combine(
                     path1: runtimeArtifacts,
                     path2: "browser"
@@ -437,7 +437,7 @@ public static partial class AzureCommand {
             "--channel",
             "stable",
             "--engine",
-            "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle"
+            "src/Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle"
         );
         await PuckAsync(
             "official",

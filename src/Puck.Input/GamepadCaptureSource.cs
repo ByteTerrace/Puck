@@ -29,7 +29,7 @@ public sealed class GamepadCaptureSource {
     // A device absent from this frame's accepted set — disconnected OR rejected by the focus predicate — can no
     // longer deliver a return-to-rest through this capture path. InputRouter carries samples until an explicit
     // zero/release, so the latch pays every edge it still owes before it is dropped. Removing during enumeration
-    // is supported by Dictionary on the repository's net10.0 target.
+    // is supported by Dictionary on the repository's net11.0 target.
     private void ClearDepartedDevices(ulong frameTick) {
         foreach (var (deviceId, latch) in m_analogLatches) {
             if (m_capturedDeviceIds.Contains(item: deviceId)) {

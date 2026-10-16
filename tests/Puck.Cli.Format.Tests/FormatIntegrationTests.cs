@@ -144,7 +144,7 @@ public sealed class FormatIntegrationTests {
         const string Linked = "internal class Linked{ public int Read( ) {return 4;} }\n";
 
         File.WriteAllText(
-            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup><ItemGroup><Compile Remove=\"linked/*.cs\"/><Compile Include=\"linked/Three.cs\" Link=\"Three.cs\"/></ItemGroup></Project>",
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup><ItemGroup><Compile Remove=\"linked/*.cs\"/><Compile Include=\"linked/Three.cs\" Link=\"Three.cs\"/></ItemGroup></Project>",
             path: project
         );
         File.WriteAllText(

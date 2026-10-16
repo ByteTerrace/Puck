@@ -14,7 +14,7 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
     [Theory]
     public void ADiagnosedCorruptReferenceIsRepairedOnceAndItsFailureIsRetained(bool proofRunner, bool truncatedImage) {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-recovery-law-");
-        var reference = directory.PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+        var reference = directory.PathOf(name: "Library/obj/Release/net11.0/ref/Library.dll");
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
         File.WriteAllBytes(reference, (truncatedImage ? File.ReadAllBytes(path: typeof(CliProjectBuild).Assembly.Location)[..128] : new byte[128]));
@@ -43,7 +43,7 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
     [Theory]
     public void ASecondCorruptReferenceFailureNeverStartsAThirdBuild(bool proofRunner) {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-recovery-law-");
-        var reference = directory.PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+        var reference = directory.PathOf(name: "Library/obj/Release/net11.0/ref/Library.dll");
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
         File.WriteAllBytes(bytes: new byte[128], path: reference);
@@ -63,7 +63,7 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
     public void AnOutsideOrManagedReferenceIsPreservedWithoutRetry(bool proofRunner, bool managed) {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-recovery-law-");
         using var outside = new TemporaryDirectory(prefix: "puck-ref-outside-law-");
-        var reference = (managed ? directory : outside).PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+        var reference = (managed ? directory : outside).PathOf(name: "Library/obj/Release/net11.0/ref/Library.dll");
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
         if (managed) { File.Copy(typeof(CliProjectBuild).Assembly.Location, reference); } else { File.WriteAllBytes(bytes: new byte[128], path: reference); }
@@ -84,7 +84,7 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-recovery-law-");
         using var target = new TemporaryDirectory(prefix: "puck-ref-target-law-");
         var original = target.WriteText(name: "Library.dll", text: "corrupt reference");
-        var linked = directory.PathOf(name: "Library/obj/Release/net10.0/ref");
+        var linked = directory.PathOf(name: "Library/obj/Release/net11.0/ref");
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: linked)!);
         DirectoryLinks.Create(link: linked, target: target.RootPath);
@@ -108,7 +108,7 @@ public sealed class ReferenceAssemblyRecoveryLawTests {
     [Theory]
     public void ARecoveryNeedsWorkCountsFromEveryBuildAttempt(int missingReport) {
         using var directory = new TemporaryDirectory(prefix: "puck-ref-counts-law-");
-        var reference = directory.PathOf(name: "Library/obj/Release/net10.0/ref/Library.dll");
+        var reference = directory.PathOf(name: "Library/obj/Release/net11.0/ref/Library.dll");
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: reference)!);
         File.WriteAllBytes(bytes: new byte[128], path: reference);

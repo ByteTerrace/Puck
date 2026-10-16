@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Caching.Hybrid;
-using Microsoft.Extensions.Configuration;
-using System.Net.Http.Json;
 using Puck.Azure.Functions.Utilities;
 using Puck.Storage;
 

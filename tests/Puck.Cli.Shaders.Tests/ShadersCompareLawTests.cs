@@ -96,7 +96,7 @@ public sealed class ShadersCompareLawTests {
     [Fact]
     public void BuildOutputCopiesAreNotCompared() {
         var (exitCode, output, _) = Compare(
-            actual: Tree(("src/A/k.spv", [1]), ("src/A/bin/Release/net10.0/k.spv", [7]), ("src/A/obj/k.spv", [8])),
+            actual: Tree(("src/A/k.spv", [1]), ("src/A/bin/Release/net11.0/k.spv", [7]), ("src/A/obj/k.spv", [8])),
             expected: Tree(("src/A/k.spv", [1]))
         );
 

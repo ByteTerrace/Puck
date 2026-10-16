@@ -35,7 +35,7 @@ internal sealed partial class ShaderBuildFixture {
         task.BuildEngine = engine;
         void Set(string name, object value) => task.GetType().GetProperty(name: name)!.SetValue(obj: task, value: value);
         Set(name: "Host", value: "dotnet");
-        Set(name: "Tool", value: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{Configuration}/net10.0/Puck.Shaders.Generator.dll"));
+        Set(name: "Tool", value: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{Configuration}/net11.0/Puck.Shaders.Generator.dll"));
         Set(name: "Mode", value: "compile");
         Set(name: "ProjectDirectory", value: Root);
         Set(name: "LockFile", value: PathOf(path: "obj/shader-publish.lock"));

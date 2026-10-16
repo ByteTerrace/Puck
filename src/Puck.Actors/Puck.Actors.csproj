@@ -8,7 +8,7 @@
         <PuckLayer>Composition roots</PuckLayer>
         <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
         <RootNamespace>Puck.Actors</RootNamespace>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <UserSecretsId>e1b0662e-9c2a-4c04-9b53-4e4dbf1a6a10</UserSecretsId>
     </PropertyGroup>
     <ItemGroup>

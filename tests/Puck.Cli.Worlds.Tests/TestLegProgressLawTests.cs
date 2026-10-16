@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Puck.Cli.Test;
@@ -22,6 +23,9 @@ public sealed class TestLegProgressLawTests {
     private const int RateHz = 30;
     private const int TickMilliseconds = 750;
 
+    // The running framework's full version, prerelease label included: a runtime config that asks for 11.0.0 is not met
+    // by 11.0.0-rc.1, which Environment.Version spells 11.0.0.
+    private static readonly string RuntimeVersion = typeof(object).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split(separator: '+')[0];
     private static readonly MetadataReference[] References = ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
         .Split(separator: Path.PathSeparator)
         .Select(selector: static path => MetadataReference.CreateFromFile(path: path))
@@ -95,7 +99,7 @@ public sealed class TestLegProgressLawTests {
 
         Assert.True(condition: result.Success, userMessage: string.Join(separator: "\n", values: result.Diagnostics));
         _ = scratch.WriteText(name: "host/StandInWorld.runtimeconfig.json", text: $$"""
-            { "runtimeOptions": { "tfm": "net10.0", "framework": { "name": "Microsoft.NETCore.App", "version": "{{Environment.Version.ToString(fieldCount: 3)}}" } } }
+            { "runtimeOptions": { "tfm": "net11.0", "framework": { "name": "Microsoft.NETCore.App", "version": "{{RuntimeVersion}}" } } }
             """);
 
         return assembly;

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-
 namespace Puck.Azure.Functions.Utilities;
 
 internal static class ConfigurationExtensions {

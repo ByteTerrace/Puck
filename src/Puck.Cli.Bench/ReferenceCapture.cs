@@ -51,7 +51,7 @@ public static class ReferenceCapture {
     private const string NoWarn = "--nowarn:IL2104;IL3053;IL2026;IL2050;IL2055;IL2057;IL2059;IL2060;IL2062;IL2063;IL2064;IL2065;IL2066;IL2067;IL2068;IL2069;IL2070;IL2072;IL2075;IL2077;IL2080;IL2087;IL2090;IL2091;IL3050;IL3051;IL3054;IL2110;IL2111;IL2112;IL2113;IL2114;IL2116;IL2118;IL2119;IL2120;IL2121;IL2122";
     // The State project every other State project sits beneath, so its output carries the whole family.
     private const string StateProject = "src/Puck.State.Search/Puck.State.Search.csproj";
-    private const string StateOutput = "src/Puck.State.Search/bin/Release/net10.0";
+    private const string StateOutput = "src/Puck.State.Search/bin/Release/net11.0";
     private const string Tab = "\t";
 
     // The assemblies the reference lowering roots. Rooting an assembly compiles every method it declares, which is
@@ -265,7 +265,7 @@ public static class ReferenceCapture {
         );
         var runtime = Path.Combine(
             path1: pack,
-            path2: "lib/net10.0"
+            path2: "lib/net11.0"
         );
         // The framework's own managed assemblies are split across the pack: the reference set sits under lib, while
         // the core library, the type loader, the reflection executor and the stack-trace metadata sit beside the

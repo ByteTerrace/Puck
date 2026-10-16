@@ -19,7 +19,7 @@ public sealed class LawBuildLawTests {
             return result;
         }
         public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
-            var run = CliProcess.RunCaptured(fileName: "dotnet", arguments: [Path.Combine(path1: tree, path2: "Application/bin/Release/net10.0/Application.dll")], input: string.Empty, timeout: TimeSpan.FromMinutes(value: 1), workingDirectory: tree, cancellationToken: cancellationToken);
+            var run = CliProcess.RunCaptured(fileName: "dotnet", arguments: [Path.Combine(path1: tree, path2: "Application/bin/Release/net11.0/Application.dll")], input: string.Empty, timeout: TimeSpan.FromMinutes(value: 1), workingDirectory: tree, cancellationToken: cancellationToken);
             var value = run.Stdout.Trim();
 
             return new LawRun(Tests: [law], Failures: ((value == "1") ? [new LawFailure(Message: "the binary still returns the withheld value", Test: law)] : []), Error: (((run.ExitCode != 0) || run.TimedOut || (value is not ("1" or "2"))) ? "the binary did not return a law verdict" : null));
@@ -36,9 +36,9 @@ public sealed class LawBuildLawTests {
         checkout.Write(name: "Directory.Build.props", text: "<Project />\n");
         checkout.Write(name: "Directory.Build.targets", text: "<Project />\n");
         checkout.Write(name: "NuGet.Config", text: "<configuration><packageSources><clear /></packageSources></configuration>\n");
-        checkout.Write(name: "Library/Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n");
+        checkout.Write(name: "Library/Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
         checkout.Write(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 1; }\n");
-        checkout.Write(name: "Application/Application.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
+        checkout.Write(name: "Application/Application.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
         checkout.Write(name: "Application/Program.cs", text: "System.Console.WriteLine(Value.Read());\n");
         _ = checkout.Commit(message: "initial");
         checkout.Write(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 2; }\n");
@@ -82,14 +82,14 @@ public sealed class LawBuildLawTests {
         _ = directory.WriteText(name: "Directory.Build.props", text: "<Project />\n");
         _ = directory.WriteText(name: "Directory.Build.targets", text: "<Project />\n");
         _ = directory.WriteText(name: "NuGet.Config", text: "<configuration><packageSources><clear /></packageSources></configuration>\n");
-        _ = directory.WriteText(name: "Library/Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n");
+        _ = directory.WriteText(name: "Library/Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
         _ = directory.WriteText(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 1; }\n");
         const string Project = "Application/Application.csproj";
 
-        _ = directory.WriteText(name: Project, text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
+        _ = directory.WriteText(name: Project, text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
         _ = directory.WriteText(name: "Application/Program.cs", text: "System.Console.WriteLine(Value.Read());\n");
         // An unrelated, unbuildable project proves that only the selected project's closure is built.
-        _ = directory.WriteText(name: "Unrelated/Unrelated.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>\n");
+        _ = directory.WriteText(name: "Unrelated/Unrelated.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
         _ = directory.WriteText(name: "Unrelated/Failure.cs", text: "#error OUTSIDE_SELECTED_CLOSURE\n");
         var runner = new DotnetLawRunner();
         var cold = runner.Build(tree: directory.RootPath, project: Project, logDirectory: directory.PathOf(name: "cold"), cancellationToken: TestContext.Current.CancellationToken);
@@ -111,7 +111,7 @@ public sealed class LawBuildLawTests {
         Assert.True(condition: changed.Succeeded, userMessage: string.Join(separator: '\n', values: changed.Errors));
         Assert.Equal(expected: 1, actual: changed.Counts.Compiled);
         Assert.Equal(expected: 1, actual: changed.Counts.UpToDate);
-        var run = CliProcess.RunCaptured(fileName: "dotnet", arguments: [directory.PathOf(name: "Application/bin/Release/net10.0/Application.dll")], input: string.Empty, timeout: TimeSpan.FromMinutes(value: 1), workingDirectory: directory.RootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var run = CliProcess.RunCaptured(fileName: "dotnet", arguments: [directory.PathOf(name: "Application/bin/Release/net11.0/Application.dll")], input: string.Empty, timeout: TimeSpan.FromMinutes(value: 1), workingDirectory: directory.RootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(expected: 0, actual: run.ExitCode);
         Assert.Equal(expected: "2", actual: run.Stdout.Trim());

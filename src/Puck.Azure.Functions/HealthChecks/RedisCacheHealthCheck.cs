@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Azure;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;

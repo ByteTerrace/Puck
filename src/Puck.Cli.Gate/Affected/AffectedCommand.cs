@@ -17,7 +17,7 @@ public static class AffectedCommand {
     /// Release output.</summary>
     public const string ShippedTree = "src/Puck.World/Assets/worlds";
     /// <summary>The game's Release catalog of shipped worlds, repository-relative.</summary>
-    public const string ShippedCatalog = "src/Puck.World/bin/Release/net10.0/Assets/worlds";
+    public const string ShippedCatalog = "src/Puck.World/bin/Release/net11.0/Assets/worlds";
 
     // The projects whose code decides the bytes the tree compile writes: the world composer, the SDF baker, the shader
     // packager and the texture codecs. Everything they reference decides them too.

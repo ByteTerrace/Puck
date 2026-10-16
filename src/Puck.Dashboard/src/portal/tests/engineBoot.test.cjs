@@ -25,7 +25,7 @@ const root = findRepositoryRoot(__dirname);
 const officialManifest = process.env.PUCK_TEST_OFFICIAL_MANIFEST || path.join(root, 'artifacts', 'official', 'dev', 'manifest.json');
 const officialTreeDir = path.dirname(path.dirname(officialManifest));
 const pckExe = puckCommand(root);
-const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
+const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'browser-wasm', 'AppBundle');
 const CHANNEL = path.basename(path.dirname(officialManifest));
 
 const ready = fs.existsSync(path.join(officialTreeDir, CHANNEL, 'manifest.json'));

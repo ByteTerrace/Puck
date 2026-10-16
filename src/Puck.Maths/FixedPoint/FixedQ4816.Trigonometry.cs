@@ -251,7 +251,7 @@ public readonly partial record struct FixedQ4816 {
     // Signed (x·y) >> 60. The bounded residuals and unit-scale coefficients fit the signed product.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static long BigMulShift60(long x, long y) {
-        // The explicit halves keep .NET 10's inliner from leaving Int128 shift/multiply helper calls in the singles.
+        // The explicit halves keep the inliner from leaving Int128 shift/multiply helper calls in the singles.
         var high = Math.BigMul(
             a: x,
             b: y,

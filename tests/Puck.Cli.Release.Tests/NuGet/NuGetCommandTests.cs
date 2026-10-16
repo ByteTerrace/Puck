@@ -105,7 +105,7 @@ public sealed class NuGetCommandTests {
                 mode: ZipArchiveMode.Create
             )) {
                 using (var writer = new StreamWriter(stream: zip.CreateEntry(entryName: $"{id}.nuspec").Open())) {
-                    writer.Write(value: $"<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><id>{id}</id><version>{Version}</version>{license}<dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>");
+                    writer.Write(value: $"<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><id>{id}</id><version>{Version}</version>{license}<dependencies><group targetFramework=\"net11.0\">{dependencies}</group></dependencies></metadata></package>");
                 }
                 foreach (var name in new[] { "README.md", "LICENSE.md", "icon.png" }) { zip.CreateEntry(entryName: name); }
             }

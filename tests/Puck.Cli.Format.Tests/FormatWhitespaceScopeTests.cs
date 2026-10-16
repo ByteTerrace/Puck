@@ -104,7 +104,7 @@ public sealed class FormatWhitespaceScopeTests {
             )
         );
         File.WriteAllText(
-            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><Compile Include=\"../Linked.cs\" Link=\"Linked.cs\" /></ItemGroup></Project>",
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup><ItemGroup><Compile Include=\"../Linked.cs\" Link=\"Linked.cs\" /></ItemGroup></Project>",
             path: Path.Combine(
                 path1: root,
                 path2: "Project.csproj"

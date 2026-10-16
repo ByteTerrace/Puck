@@ -27,7 +27,7 @@
       "name": "official-serve",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": [
-        "src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll",
+        "src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll",
         "official",
         "serve",
         "--tree",

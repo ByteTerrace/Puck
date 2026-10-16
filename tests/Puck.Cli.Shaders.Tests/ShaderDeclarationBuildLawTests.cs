@@ -53,7 +53,7 @@ public sealed class ShaderDeclarationBuildLawTests {
         File.SetLastWriteTimeUtc(path: stamp, lastWriteTimeUtc: new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2099));
 
         var configuration = new DirectoryInfo(path: AppContext.BaseDirectory).Parent!.Name;
-        var host = RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{configuration}/net10.0/Puck.Shaders.Generator.dll");
+        var host = RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{configuration}/net11.0/Puck.Shaders.Generator.dll");
         var targets = XDocument.Load(uri: RepositoryPaths.Resolve(relativePath: "src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj")).Root!.Elements(name: "Target");
         var project = new XElement(name: "Project", content: [
             new XElement(name: "PropertyGroup", content: [

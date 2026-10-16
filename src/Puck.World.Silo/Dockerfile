@@ -3,7 +3,7 @@
 # shader compiles.
 FROM scratch AS shader-cache
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
 WORKDIR /source
 # The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
 # binaries' content, so a different DXC here would miss every entry CI restores.
@@ -34,7 +34,7 @@ FROM public.ecr.aws/docker/library/caddy:2.11.6@sha256:3422ce6de165df66534f9b9ba
 # TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
 RUN setcap -r /usr/bin/caddy
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-resolute AS runtime
 COPY --from=tls /usr/bin/caddy /usr/bin/caddy
 ADD https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
 RUN echo 'c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
