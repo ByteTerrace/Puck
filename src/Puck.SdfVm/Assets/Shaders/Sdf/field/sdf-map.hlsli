@@ -62,17 +62,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint instanceOffset = sdfProgramLayout.instanceOffset;
     uint instanceCount = sdfProgramLayout.instanceCount;
     uint worldSegmentOffset = sdfProgramLayout.worldSegmentOffset;
-    bool hasInstances = sdfProgramLayout.hasInstances;
 
     if (!sdfProgramLayout.valid || instanceCount > SDF_MAX_INSTANCES) {
         return sdfIsaErrorHit();
     }
 
-    // The merge cursors (instanced programs only): the next always-evaluated WORLD segment, and the visible-instance
-    // enumeration (current mask word + remaining bits, the in-progress instance's [instanceSegment, instanceSegmentEnd)
-    // range). SDF_SEGMENT_NONE = exhausted on either side. The mask cursor starts "before word 0" (0xFFFFFFFFu, 0u),
-    // so sdfNextVisibleInstanceRange's own word-fetch loop wraps onto word 0 on its first call.
-    uint linearCursor = 0u;
+    // The merge cursors: the next always-evaluated WORLD segment, and the visible-instance enumeration (current mask
+    // word + remaining bits, the in-progress instance's [instanceSegment, instanceSegmentEnd) range).
+    // SDF_SEGMENT_NONE = exhausted on either side. The mask cursor starts "before word 0" (0xFFFFFFFFu, 0u), so
+    // sdfNextVisibleInstanceRange's own word-fetch loop wraps onto word 0 on its first call. A program with no instance
+    // lists every segment as a world segment (SdfProgram.PackWorldSegments), so the merge is the one walk. Keep it one:
+    // NVIDIA's Direct3D 12 driver on Turing takes a linear all-segment walk beside it, chosen by a program-uniform flag,
+    // for instanced programs too, evaluating every instance whatever the lattice's mask.
     uint worldCursor = 0u;
     uint worldCount = 0u;
     uint worldNext = SDF_SEGMENT_NONE;
@@ -87,11 +88,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint testedWord = SDF_SEGMENT_NONE;
     bool rootUnion = sdfCanTracePartsIndependently();
 
-    if (hasInstances) {
-        worldCount = (sdfMapOmitWorldSegments ? 0u : SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset)));
-        worldNext = ((0u < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS).x : SDF_SEGMENT_NONE);
-        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
-    }
+    worldCount = (sdfMapOmitWorldSegments ? 0u : SDF_WORLD_SEGMENT_COUNT(sdfProgramWord(worldSegmentOffset)));
+    worldNext = ((0u < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS).x : SDF_SEGMENT_NONE);
+    sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
 
     float3 localPosition = worldPosition;
     // distanceScale is the PER-SAMPLE, PER-CANDIDATE domain correction: SDF_OP_SCALE folds its min-axis factor in here
@@ -132,20 +131,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint previousSegment = SDF_SEGMENT_NONE;
     [loop]
     for (uint merge = 0u; merge < sdfProgramLayout.vectorCount; merge++) {
-        // Select the next segment. Zero-instance: the plain linear counter (independent of any loaded value, so the
-        // per-segment sphere loads pipeline across iterations). Instanced: the two-pointer merge — world segments
-        // never fall inside an instance's range, so comparing the next world segment against the next owned segment
-        // yields the globally ascending order the blend ops require.
+        // Select the next segment by the two-pointer merge: world segments never fall inside an instance's range, so
+        // comparing the next world segment against the next owned segment yields the globally ascending order the
+        // blend ops require.
         uint segment;
         int segmentInstance = -1;
 
-        if (!hasInstances) {
-            if (linearCursor >= segmentCount) {
-                break;
-            }
-
-            segment = linearCursor++;
-        } else if (worldNext < instanceSegment) {
+        if (worldNext < instanceSegment) {
             segment = worldNext;
             worldCursor++;
             worldNext = ((worldCursor < worldCount) ? sdfProgramWord(worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldCursor).x : SDF_SEGMENT_NONE);

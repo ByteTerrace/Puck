@@ -136,7 +136,6 @@ struct SdfProgramLayout {
     uint instanceCount;      // packed (unclamped) instance count
     uint worldSegmentOffset; // world-segment list offset
     uint chainTableOffset;   // chain table offset (worldHeader.y), validated where it is read
-    bool hasInstances;       // instanceCount != 0
 };
 
 // Every kernel calling a field evaluator must initialize this per-thread cache once at entry.
@@ -187,16 +186,13 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.instanceCount = instanceCount;
     layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));
     layout.chainTableOffset = SDF_CHAIN_TABLE_OFFSET(worldHeader);
-    layout.hasInstances = (instanceCount != 0u);
 
     return layout;
 }
 
-// The generic evaluator mapCore runs, under the SDF_INSTANCE_MASK_ALL sentinel or a bake lattice's instance mask. A
-// ZERO-INSTANCE program takes the linear fast path — every segment in
-// directory order, the pre-instancing interpreter verbatim (`hasInstances` is read once, per-program-uniform, so the
-// branch never diverges within one program's invocations). An INSTANCED program merges the WORLD-SEGMENT list
-// (always evaluated) with the VISIBLE instances' segment ranges by ascending segment index — the flat stream's
+// The generic evaluator mapCore runs, under the SDF_INSTANCE_MASK_ALL sentinel or a bake lattice's instance mask. It
+// merges the WORLD-SEGMENT list (always evaluated, and every segment of a program with no instance) with the
+// VISIBLE instances' segment ranges by ascending segment index — the flat stream's
 // order, so order-dependent blend ops (SmoothSubtraction, Xor, ...) compose exactly as an unmasked walk would — and
 // a call costs O(world segments + visible instances' segments): a masked-out instance's segments are never loaded,
 // never owner-tested, never bound-tested. With the SDF_INSTANCE_MASK_ALL sentinel every instance enumerates as

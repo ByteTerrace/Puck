@@ -358,7 +358,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 }
                 target.Record = true;
                 target.Batch = batch;
-                batch.Recorded = true;
+                residency.MeshPathBake.Record(batch: batch);
                 target.Version = recording.Outputs[0].Version;
             }
         }

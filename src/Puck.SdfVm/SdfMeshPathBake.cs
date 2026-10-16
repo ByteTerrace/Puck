@@ -46,9 +46,9 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             return samples;
         }
     }
-    /// <summary>Gets or sets whether a bake pass recorded the batch; a batch no pass recorded returns to its groups when
-    /// the next frame takes one.</summary>
-    public bool Recorded { get; set; }
+    /// <summary>Gets whether a bake pass recorded the batch (<see cref="SdfMeshPathBake.Record"/>); a batch no pass
+    /// recorded returns to its groups when the next frame takes one.</summary>
+    public bool Recorded { get; internal set; }
     private string? m_instance;
 
     /// <summary>Claims the batch for a view instance's mask and bake passes: the first instance to ask claims it, so a
@@ -129,6 +129,7 @@ public sealed class SdfMeshPathBake {
     private long m_dispatches;
     private long m_samples;
     private long m_taps;
+    private long m_discarded;
     private double m_seconds;
     private bool m_reported;
 
@@ -220,11 +221,7 @@ public sealed class SdfMeshPathBake {
             if (m_frameTaken != frame) {
                 m_frameTaken = frame;
                 // A batch no bake pass recorded, as while the view's graph rebuilds, answers nothing.
-                if (m_frameBatch is { Recorded: false } unrecorded) {
-                    foreach (var ticket in unrecorded.Tickets) {
-                        if (ticket is Group stale) { stale.InFlight = false; }
-                    }
-                }
+                if (m_frameBatch is { Recorded: false } unrecorded) { Return(batch: unrecorded); }
                 m_frameBatch = null;
 
                 var lattices = m_takenLattices;
@@ -247,9 +244,6 @@ public sealed class SdfMeshPathBake {
                     if ((lattices.Count > 0) && ((taps + next.Taps) > FrameTaps)) { break; }
                     group.InFlight = true;
                     m_cursor = ((index + 1) % m_groups.Count);
-                    m_dispatches++;
-                    m_samples += next.Samples;
-                    m_taps += next.Taps;
                     samples += next.Samples;
                     taps += next.Taps;
                     lattices.Add(item: next);
@@ -286,9 +280,29 @@ public sealed class SdfMeshPathBake {
     /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took, or <see langword="null"/>.</param>
     public void Abandon(SdfMeshBakeBatch? batch) {
         if (batch is null) { return; }
+        lock (m_gate) { Return(batch: batch); }
+    }
+    // Returns a batch's lattices to their groups, which dispatch them again; a recorded batch's samples were dispatched
+    // for nothing.
+    private void Return(SdfMeshBakeBatch batch) {
+        for (var index = 0; (index < batch.Tickets.Length); index++) {
+            if (batch.Tickets[index] is Group group) { group.InFlight = false; }
+            m_discarded += (batch.Recorded ? batch.Lattices[index].Samples : 0);
+        }
+    }
+    /// <summary>Marks a batch a bake pass records, which dispatches it, and counts its lattices, samples and field
+    /// evaluations as the bake's work; a batch taken by a frame no bake pass records is no work.</summary>
+    /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
+    public void Record(SdfMeshBakeBatch batch) {
+        ArgumentNullException.ThrowIfNull(argument: batch);
+
         lock (m_gate) {
-            foreach (var ticket in batch.Tickets) {
-                if (ticket is Group group) { group.InFlight = false; }
+            batch.Recorded = true;
+            foreach (var lattice in batch.Lattices) {
+                m_dispatches++;
+                m_samples += lattice.Samples;
+                m_taps += lattice.Taps;
             }
         }
     }
@@ -386,7 +400,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} taps={m_taps} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -491,6 +505,7 @@ public sealed class SdfMeshPathBake {
             m_dispatches = 0;
             m_samples = 0;
             m_taps = 0;
+            m_discarded = 0;
             m_reported = false;
             m_clock.Restart();
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
@@ -767,7 +782,7 @@ public sealed class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} taps={m_taps} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.

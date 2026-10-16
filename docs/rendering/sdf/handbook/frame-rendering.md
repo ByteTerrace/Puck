@@ -647,7 +647,21 @@ packs out its holes, the mesh atlases change, or the region grows, to twice its
 need. The bake keeps a group whose instructions a program rebuild left
 unchanged, so only an edited group bakes again, and it reports its groups,
 dispatches, samples, triangles, vertices and wall time on stderr when it
-finishes. Until a group's first mesh lands, the group draws nothing.
+finishes. It counts a batch as work when a bake pass records it: a frame that
+takes a batch no pass records, as while the boot's pipelines build, dispatches
+nothing, and its lattices go to the next frame. A recorded batch whose readback
+never arrives is dispatched again, and the line reports those samples as
+`discarded`, so `samples` less `discarded` is the same on every run of one
+build. Until a group's first mesh lands, the group draws nothing.
+
+The walk merges the world-segment list with the selected instances' ranges and
+has no second path: a program with no instance lists every segment as a world
+segment. A second walk beside it, a linear one over every segment chosen by a
+program-uniform flag, is a hazard: NVIDIA's Direct3D 12 driver on Turing (an
+RTX 2060) takes it for instanced programs too, while Vulkan on the same card
+does not, so every group samples the whole program. A group lying under a
+larger neighbour (an axis line on the floor, a wall of the test room) then bakes
+empty, and quads take their neighbours' materials.
 
 ## The shadow cascades
 
