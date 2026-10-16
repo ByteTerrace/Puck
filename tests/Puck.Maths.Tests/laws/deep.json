@@ -2592,6 +2592,10 @@
       {
         "Type": "Puck.Maths.PrimeKernels",
         "Name": "PassesStrongLucasRound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeKernels",
+        "Name": "SelfridgeDiscriminant"
       }
     ],
     "Legs": [

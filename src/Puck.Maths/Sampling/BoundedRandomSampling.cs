@@ -6,11 +6,25 @@ namespace Puck.Maths;
 /// Provides unbiased bounded integer sampling routines over 32-bit draw generators.
 /// </summary>
 internal static class BoundedRandomSampling {
-    // Lemire reduction at 64 bits. Count raw draws, including biased-window rejections, so a degenerate
-    // caller generator cannot turn a finite prime-selection budget into an unbounded inner loop.
-    internal readonly struct Range64(ulong exclusiveHigh) {
+    /// <summary>Lemire's nearly divisionless bounded draw at 64 bits, over a bound fixed for the request.</summary>
+    /// <param name="exclusiveHigh">The exclusive bound, at least two.</param>
+    /// <remarks>
+    /// <para>
+    /// Raw draws are counted, biased-window rejections included, so a degenerate generator cannot turn a finite
+    /// prime-selection budget into an unbounded inner loop.
+    /// </para>
+    /// <para>
+    /// The rejection threshold <c>2^64 mod exclusiveHigh</c> is the one hardware divide of a request, and it is
+    /// derived on the first draw whose low product is below the bound: every rejected low product is below the
+    /// threshold, which is below the bound, so a draw whose low product is at or past the bound is accepted without
+    /// it, and a request whose draws all land there never pays for it. Until then the bound itself stands in for the
+    /// threshold, so the accepting path is one compare against a field either way; a threshold is always below the
+    /// bound, so the bound also marks it underived.
+    /// </para>
+    /// </remarks>
+    internal struct Range64(ulong exclusiveHigh) {
         private readonly ulong m_exclusiveHigh = exclusiveHigh;
-        private readonly ulong m_threshold = (unchecked((0UL - exclusiveHigh)) % exclusiveHigh);
+        private ulong m_threshold = exclusiveHigh;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal bool TrySample<TGenerator>(ref TGenerator generator, ref int attempts, out ulong value)
@@ -22,7 +36,15 @@ internal static class BoundedRandomSampling {
                 // The halves of word * exclusiveHigh, taken separately: a widened product hands its low half back
                 // through memory. The bound is the left factor, the operand MULX reads implicitly, so the
                 // generator's state never has to make way for it.
-                if (unchecked((word * m_exclusiveHigh)) < m_threshold) { continue; }
+                var low = unchecked((word * m_exclusiveHigh));
+
+                if (low < m_threshold) {
+                    if (m_threshold != m_exclusiveHigh) { continue; }
+
+                    m_threshold = (unchecked((0UL - m_exclusiveHigh)) % m_exclusiveHigh);
+
+                    if (low < m_threshold) { continue; }
+                }
                 value = ScaledResidueRing64.MultiplyHigh(
                     left: m_exclusiveHigh,
                     right: word

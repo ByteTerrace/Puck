@@ -290,7 +290,28 @@ internal static partial class Oracles {
         if (2UL > value) { return false; }
         if (2UL == value) { return true; }
         if (0UL == (value & 1UL)) { return false; }
-        if (PerfectSquareByBisection(value: value)) { return false; }
+
+        var discriminant = SelfridgeDiscriminant(value: value);
+
+        if (0L == discriminant) { return false; }
+
+        return StrongLucasRecurrence(
+            q: ((1L - discriminant) / 4L),
+            value: value
+        );
+    }
+    /// <summary>Selfridge's Method A search on an odd value: the first discriminant of <c>5, −7, 9, −11, 13, …</c>
+    /// whose Jacobi symbol over the value is <c>−1</c>, or zero when the search rejects the value.</summary>
+    /// <param name="value">The odd candidate, at least three.</param>
+    /// <returns>The signed discriminant, or zero when the value is a perfect square or shares a factor with a candidate
+    /// it does not divide outright.</returns>
+    /// <remarks>The sign is carried as a sign and every candidate is tried in turn, with the symbol from
+    /// <see cref="JacobiSymbolWord(long, ulong)"/>: no residue table, no product of candidates, no skipped square
+    /// discriminant. A square is rejected first, since no discriminant has symbol <c>−1</c> over one and the subject's
+    /// own square test fires only past its tabulated candidates; the outcomes agree because a square can only be
+    /// rejected either way.</remarks>
+    public static long SelfridgeDiscriminant(ulong value) {
+        if (PerfectSquareByBisection(value: value)) { return 0L; }
 
         var discriminant = 5L;
         var step = 0;
@@ -301,11 +322,11 @@ internal static partial class Oracles {
                 numerator: discriminant
             );
 
-            if (-1 == symbol) { break; }
+            if (-1 == symbol) { return discriminant; }
             if (
                 (0 == symbol) &&
                 (0UL != (((ulong)long.Abs(value: discriminant)) % value))
-            ) { return false; }
+            ) { return 0L; }
 
             ++step;
 
@@ -316,11 +337,6 @@ internal static partial class Oracles {
                 : magnitude
             );
         }
-
-        return StrongLucasRecurrence(
-            q: ((1L - discriminant) / 4L),
-            value: value
-        );
     }
     /// <summary>The strong Lucas probable-prime predicate of <c>P = 1</c> and a given <c>Q</c>, from the <c>U</c> and
     /// <c>V</c> doubling recurrence in fixed-width plain residues.</summary>

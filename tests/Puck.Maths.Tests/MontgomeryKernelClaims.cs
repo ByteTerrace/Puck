@@ -10,6 +10,54 @@ internal static partial class Subjects {
 
         ulong NextWord() => (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
 
+        string? CheckRadix(ulong modulus) {
+            if ((modulus < 3UL) || (0UL == (modulus & 1UL))) { return null; }
+
+            var one = ScaledResidueRing64.RadixResidue(modulus: modulus);
+
+            return ((((BigInteger)one) == (MontgomeryRadix % modulus)) ? null : $"RadixResidue({modulus}) = {one}, not 2^64 mod {modulus}");
+        }
+        string? CheckRadixAround(ulong center) {
+            for (var offset = -9L; (offset <= 9L); ++offset) {
+                if (CheckRadix(modulus: unchecked((ulong)(((long)center) + offset))) is { } failure) { return failure; }
+            }
+
+            return null;
+        }
+
+        // Every path of RadixResidue at its handover: the neighbours of every power of two and of the floors, every odd
+        // modulus on the divide path, the moduli whose quotient 2^64 / n is nearest an integer (where the estimate's
+        // truncation turns on its last bit), and drawn words at every width.
+        for (var exponent = 2; (exponent < 64); ++exponent) {
+            if (CheckRadixAround(center: (1UL << exponent)) is { } failure) { return failure; }
+        }
+        foreach (var floor in (ulong[])[ScaledResidueRing64.RadixFoldFloor, ScaledResidueRing64.RadixEstimateFloor, ScaledResidueRing64.SignedModulusCeiling, ulong.MaxValue]) {
+            if (CheckRadixAround(center: floor) is { } failure) { return failure; }
+        }
+        for (var modulus = 3UL; (modulus < ScaledResidueRing64.RadixEstimateFloor); modulus += 2UL) {
+            if (CheckRadix(modulus: modulus) is { } failure) { return failure; }
+        }
+        for (var quotient = 2UL; (quotient < 200_000UL); ++quotient) {
+            var nearest = ((ulong)(((UInt128)MontgomeryRadix) / quotient));
+
+            for (var offset = -2L; (offset <= 2L); ++offset) {
+                if (CheckRadix(modulus: unchecked((ulong)(((long)nearest) + offset))) is { } failure) { return failure; }
+            }
+        }
+        for (var draw = 0; (draw < 100_000); ++draw) {
+            var quotient = ((NextWord() >> 15) | (1UL << 30));
+            var nearest = ((ulong)(((UInt128)MontgomeryRadix) / quotient));
+
+            for (var offset = -2L; (offset <= 2L); ++offset) {
+                if (CheckRadix(modulus: unchecked((ulong)(((long)nearest) + offset))) is { } failure) { return failure; }
+            }
+        }
+        for (var width = 2; (width <= 64); ++width) {
+            for (var draw = 0; (draw < 64); ++draw) {
+                if (CheckRadix(modulus: ((NextWord() >> (64 - width)) | 1UL)) is { } failure) { return failure; }
+            }
+        }
+
         for (var trial = 0; (trial < 60_000); ++trial) {
             // Alternate full-width moduli, moduli above 2^63 (where the radix sits between the modulus and twice it),
             // moduli below the lazy ceiling and below 2^62 and narrow ones, then pin the carrier's extremes, the lazy

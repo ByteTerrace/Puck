@@ -237,6 +237,11 @@ consume no draws, and a singleton candidate is decided once without drawing.
 Reversed intervals and nonpositive budgets throw. Identical starting states and
 arguments reproduce both the answer and the final generator state; this API adds
 no entropy.
+No hardware divide runs per candidate: the range reduction derives its
+rejection threshold on the first draw that can be rejected, the Montgomery
+radix residue of each candidate comes from a fold or a corrected binary64
+estimate (`ScaledResidueRing64.RadixResidue`), and Selfridge's search reads its
+first residues from one constant-divisor remainder.
 
 Candidates within `uint` use the exact `uint` test. Above it, reciprocal filters
 reject factors from 7 through 163, the 35 inverse/ceiling pairs of the trial

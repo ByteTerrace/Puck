@@ -104,6 +104,8 @@ public static partial class PrimeKernels {
     private const int BaseTwoSeedWindow = 7;
     /// <summary>The first discriminant magnitude Selfridge's Method A tries, <c>D = 5</c>, the one whose <c>Q</c> is <c>-1</c>.</summary>
     private const ulong FirstSelfridgeMagnitude = 5UL;
+    /// <summary>The product <c>3 * 5 * 7 * 11 * 13 = 15015</c>: one remainder of a value by it, a multiply by the JIT's reciprocal, yields the value's residues modulo three and every candidate magnitude of <see cref="SelfridgeMagnitudeCore(ulong)"/> below 17 as constant-divisor remainders of a 14-bit value.</summary>
+    private const ulong SelfridgeSearchModulus = 15015UL;
     /// <summary>The bit width of an odd-prime rank word.</summary>
     private const int RankWordShift = 6;
     /// <summary>The exclusive bound on the discriminant magnitudes whose Jacobi symbols <see cref="SelfridgeSymbols"/> tabulates: one residue per bit of a word.</summary>
@@ -814,35 +816,9 @@ public static partial class PrimeKernels {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal static bool PassesStrongLucas(ulong value, ulong one, ulong inverse) {
-        var magnitude = FirstSelfridgeMagnitude;
-        var symbol = SelfridgeSymbolCore(
-            magnitude: magnitude,
-            residue: (value % FirstSelfridgeMagnitude)
-        );
+        var magnitude = SelfridgeMagnitudeCore(value: value);
 
-        while (-1 != symbol) {
-            if (
-                (0 == symbol) &&
-                (0UL != (magnitude % value))
-            ) { return false; }
-
-            magnitude += 2UL;
-
-            if (SelfridgeTableLimit > magnitude) {
-                symbol = SelfridgeSymbolCore(
-                    magnitude: magnitude,
-                    residue: (value % magnitude)
-                );
-            } else {
-                if ((SelfridgeTableLimit + 1UL) == magnitude) {
-                    var root = value.SquareRoot();
-
-                    if (value == (root * root)) { return false; }
-                }
-
-                symbol = value.JacobiSymbol(modulus: magnitude);
-            }
-        }
+        if (0UL == magnitude) { return false; }
 
         // Q = (1 - D) / 4 is positive exactly when D is negative, which is when its magnitude is three modulo four.
         var isNegativeDiscriminant = (3UL == (magnitude & 3UL));
@@ -856,6 +832,110 @@ public static partial class PrimeKernels {
                 : (magnitude - 1UL)) >>> 2),
             value: value
         );
+    }
+
+    /// <summary>Runs Selfridge's Method A search on an odd value: the first discriminant of <c>5, -7, 9, -11, 13, ...</c> whose Jacobi symbol over the value is <c>-1</c>.</summary>
+    /// <param name="value">The odd value, at least three.</param>
+    /// <returns>The signed discriminant <c>D</c>, of magnitude at least five, or zero when the search rejects the value: a perfect square, or a value sharing a factor with a candidate it does not divide outright.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is even or below three.</exception>
+    /// <remarks>The search <see cref="PrimeField64.IsStrongLucasProbablePrime(ulong)"/> runs before its ladder, exposed so that the law <c>prime-field.lucas-trace-ladder-vs-recurrence</c> can pin the chosen discriminant, which the test's verdict on a prime cannot see: a prime accepts at every discriminant of symbol <c>-1</c>.</remarks>
+    public static long SelfridgeDiscriminant(ulong value) {
+        if ((3UL > value) || (0UL == (value & 1UL))) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(value), actualValue: value, message: "The value must be odd and at least three.");
+        }
+
+        var magnitude = SelfridgeMagnitudeCore(value: value);
+
+        return ((3UL == (magnitude & 3UL))
+            ? -((long)magnitude)
+            : ((long)magnitude));
+    }
+
+    /// <summary>Runs Selfridge's Method A search on an odd value and returns the magnitude of the discriminant it chooses, or zero when it rejects the value.</summary>
+    /// <param name="value">The odd value, at least three.</param>
+    /// <returns>The magnitude of the first discriminant <c>D</c> of <c>5, -7, 9, -11, 13, ...</c> whose Jacobi symbol over the value is <c>-1</c>; the sign is negative exactly where the magnitude is three modulo four. Zero when the value is a perfect square or shares a factor with a candidate it does not divide outright, where the strong Lucas test is decided against it.</returns>
+    /// <remarks>
+    /// <para>
+    /// Every candidate is congruent to one modulo four, so quadratic reciprocity turns <c>(D / value)</c> into
+    /// <c>(value mod |D| / |D|)</c> with no sign to track, zero cases included: below <see cref="SelfridgeTableLimit"/>
+    /// the symbol is one bit of a precomputed residue mask, and beyond it the shipped descent. A vanishing symbol means
+    /// the value shares a factor with the candidate, which is a proper divisor unless the value divides the candidate.
+    /// A perfect square never reaches a symbol of <c>-1</c>; the square test that bounds its search runs only once the
+    /// tabulated candidates are exhausted, which no non-square on the random-selection path reaches in practice.
+    /// </para>
+    /// <para>
+    /// The residues the first candidates need come from one remainder by the constant
+    /// <see cref="SelfridgeSearchModulus"/>, a multiply, and constant-divisor remainders of that 14-bit value: no
+    /// hardware division runs before the candidate 17, which one search in sixteen reaches. The square discriminant
+    /// 9 is skipped: <c>(9 / value)</c> is <c>(3 / value)</c> squared, never <c>-1</c>, and it vanishes exactly when
+    /// three divides the value, which rejects the value unless it divides nine. At each candidate below 17 the value
+    /// divides the candidate exactly when it is one of the candidate's divisors above one, which is the equality test
+    /// spelled in place of the remainder.
+    /// </para>
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong SelfridgeMagnitudeCore(ulong value) {
+        var residues = ((uint)(value % SelfridgeSearchModulus));
+        var magnitude = FirstSelfridgeMagnitude;
+        var symbol = SelfridgeSymbolCore(magnitude: 5UL, residue: (residues % 5U));
+
+        if (-1 != symbol) {
+            if ((0 == symbol) && (5UL != value)) { return 0UL; }
+
+            magnitude = 7UL;
+            symbol = SelfridgeSymbolCore(magnitude: 7UL, residue: (residues % 7U));
+        }
+        if (-1 != symbol) {
+            if ((0 == symbol) && (7UL != value)) { return 0UL; }
+            if ((0U == (residues % 3U)) && (3UL != value) && (9UL != value)) { return 0UL; }
+
+            magnitude = 11UL;
+            symbol = SelfridgeSymbolCore(magnitude: 11UL, residue: (residues % 11U));
+        }
+        if (-1 != symbol) {
+            if ((0 == symbol) && (11UL != value)) { return 0UL; }
+
+            magnitude = 13UL;
+            symbol = SelfridgeSymbolCore(magnitude: 13UL, residue: (residues % 13U));
+        }
+        if (-1 != symbol) {
+            if ((0 == symbol) && (13UL != value)) { return 0UL; }
+
+            magnitude = 15UL;
+            symbol = SelfridgeSymbolCore(magnitude: 15UL, residue: (residues % 15U));
+        }
+        if (-1 != symbol) {
+            if ((0 == symbol) && (3UL != value) && (5UL != value) && (15UL != value)) { return 0UL; }
+
+            magnitude = 17UL;
+            symbol = SelfridgeSymbolCore(magnitude: 17UL, residue: (value % 17UL));
+        }
+
+        while (-1 != symbol) {
+            if (
+                (0 == symbol) &&
+                (0UL != (magnitude % value))
+            ) { return 0UL; }
+
+            magnitude += 2UL;
+
+            if (SelfridgeTableLimit > magnitude) {
+                symbol = SelfridgeSymbolCore(
+                    magnitude: magnitude,
+                    residue: (value % magnitude)
+                );
+            } else {
+                if ((SelfridgeTableLimit + 1UL) == magnitude) {
+                    var root = value.SquareRoot();
+
+                    if (value == (root * root)) { return 0UL; }
+                }
+
+                symbol = value.JacobiSymbol(modulus: magnitude);
+            }
+        }
+
+        return magnitude;
     }
 
     /// <summary>Runs the strong Lucas probable-prime test with <c>P = 1</c> and a given <c>Q</c> on an odd value: the test <see cref="PrimeField64.IsStrongLucasProbablePrime(ulong)"/> runs once Selfridge's search has chosen <c>Q</c>.</summary>
