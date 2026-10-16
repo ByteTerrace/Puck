@@ -19,7 +19,7 @@ namespace Puck.Input.Devices;
 /// through unchanged. The firmware does not light the microphone-mute LED or mute the microphone itself; as on the
 /// console, each press of the mute button toggles both.
 /// </remarks>
-public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser, IServicedGamepadParser {
+public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser, IServicedGamepadParser, IPhysicalIdentityParser, IStreamingParser {
     // Offsets relative to the shared input block (byte 1 of the USB report, byte 2 of Bluetooth 0x31).
     private const int AccelerometerOffset = 21;
     private const float AccelerometerGPerLsb = (1f / 8192f);
@@ -38,6 +38,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private const int CalibrationReadAttempts = 12;
     private const int CalibrationRetryDelayMilliseconds = 30;
     private const ushort EdgeProductId = 0x0DF2;
+    private const byte FeatureCrcSeed = 0xA3;
     private const byte FirmwareFeatureReportId = 0x20;
     private const int FirmwareFeatureReportLength = 64;
     private const int FirmwareUpdateVersionOffset = 44;
@@ -67,6 +68,8 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private const float MaximumCalibrationScaleError = 0.5f;
     private const byte MicMuteLedOn = 0x01;
     private const byte OutputCrcSeed = 0xA2;
+    private const byte PairingFeatureReportId = 0x09;
+    private const int PairingFeatureReportLength = 20;   // the Bluetooth address, little-endian, at bytes 1..6
     // Output offsets relative to the shared output block (byte 1 of USB 0x02, byte 3 of Bluetooth 0x31).
     private const int OutputLeftTriggerOffset = 21;
     private const int OutputLightbarRedOffset = 44;
@@ -87,7 +90,8 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private const int SimpleLeftTriggerOffset = 7;
     private const int SimpleReportLength = 10;
     private const int SimpleRightTriggerOffset = 8;
-    private const int StatusOffset = 52;
+    private const int StatusOffset = 52;              // battery: charge (low nibble), charger state (high nibble)
+    private const int StatusPluggedOffset = 53;       // bit 0 headphones, bit 1 microphone
     private const int StickCenter = 128;
     private const float StickDeadzone = 0.12f;
     private const float StickRange = 127f;
@@ -120,6 +124,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     private bool m_improvedRumble;
     private uint m_lastSensorTimestamp;
     private TriggerEffectSpec m_leftTriggerEffect;
+    private bool m_ledReleaseDue;
     private bool m_lightbarReassertPending;
     private LedColor m_lightbar;
     private bool m_micMuted;
@@ -154,9 +159,14 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
     /// <inheritdoc />
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro | GamepadInputCapabilities.AnalogTriggers;
     /// <inheritdoc />
+    public string? PhysicalId { get; private set; }
+    /// <inheritdoc />
     public TimeSpan RumbleRefreshInterval => TimeSpan.Zero;
     /// <inheritdoc />
     public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: 30);
+    /// <inheritdoc />
+    /// <remarks>The pad streams at about 250 Hz on either transport.</remarks>
+    public TimeSpan StreamSilenceTimeout => TimeSpan.FromSeconds(value: 2);
     /// <inheritdoc />
     public GamepadType Type => GamepadType.PlayStation5;
 
@@ -245,7 +255,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             // 0xA and 0xB report a charger that is not charging (voltage or temperature out of range).
             0xA or 0xB => new GamepadPower(
                 Percent: percent,
-                State: GamepadPowerState.OnBattery
+                State: GamepadPowerState.NotCharging
             ),
             _ => GamepadPower.Unknown,
         };
@@ -271,10 +281,12 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             value: m_device.FeatureReportByteLength
         )];
 
-        report[0] = FirmwareFeatureReportId;
-
         // An unreadable version is treated as current firmware, as SDL does over Bluetooth.
-        var version = (m_device.TryGetFeatureReport(buffer: report)
+        var version = (TryReadFeature(
+            id: FirmwareFeatureReportId,
+            length: FirmwareFeatureReportLength,
+            report: report
+        )
             ? BinaryPrimitives.ReadUInt16LittleEndian(source: report[FirmwareUpdateVersionOffset..])
             : ((ushort)0)
         );
@@ -284,6 +296,31 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             (0 == version) ||
             (version >= ImprovedRumbleFirmwareVersion)
         );
+    }
+    // Feature report 0x09 carries the pad's Bluetooth address, the identity one pad shares across USB and Bluetooth.
+    private void LoadPhysicalId() {
+        Span<byte> report = stackalloc byte[Math.Clamp(
+            max: 128,
+            min: PairingFeatureReportLength,
+            value: m_device.FeatureReportByteLength
+        )];
+
+        if (!TryReadFeature(
+            id: PairingFeatureReportId,
+            length: PairingFeatureReportLength,
+            report: report
+        )) {
+            return;
+        }
+
+        Span<byte> address = stackalloc byte[6];
+
+        report.Slice(
+            length: 6,
+            start: 1
+        ).CopyTo(destination: address);
+        address.Reverse();
+        PhysicalId = Convert.ToHexString(bytes: address);
     }
     private static short ReadInt16(ReadOnlySpan<byte> report, int offset) {
         return BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]);
@@ -346,9 +383,11 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             value: m_device.FeatureReportByteLength
         )];
 
-        report[0] = CalibrationFeatureReportId;
-
-        if (!m_device.TryGetFeatureReport(buffer: report)) {
+        if (!TryReadFeature(
+            id: CalibrationFeatureReportId,
+            length: CalibrationFeatureReportLength,
+            report: report
+        )) {
             return false;
         }
 
@@ -474,6 +513,27 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             );
         }
     }
+    // Reads a feature report. Over Bluetooth its logical `length` bytes end in a CRC-32 seeded with 0xA3 over the
+    // bytes before it, and a report whose CRC fails is unread (Linux ps_get_report).
+    private bool TryReadFeature(byte id, int length, Span<byte> report) {
+        report.Clear();
+        report[0] = id;
+
+        if (
+            !m_device.TryGetFeatureReport(buffer: report) ||
+            (report[0] != id)
+        ) {
+            return false;
+        }
+
+        return (
+            !m_isBluetooth ||
+            (ComputeCrc32(
+                data: report[..(length - 4)],
+                seed: FeatureCrcSeed
+            ) == BinaryPrimitives.ReadUInt32LittleEndian(source: report[(length - 4)..]))
+        );
+    }
     private bool TryParseFull(ReadOnlySpan<byte> report, int dataStart, out GamepadState state) {
         var block = report[dataStart..];
         var buttons = DecodeButtons(buttons: block[ButtonsOffset..]);
@@ -508,11 +568,18 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
             (sensorTimestamp >= LightbarAnimationEndTimestamp)
         ) {
             m_lightbarReassertPending = false;
-            m_outputStale = true;
+            m_ledReleaseDue = true;
         }
+
+        var plugged = block[StatusPluggedOffset];
 
         state = new GamepadState(
             Accelerometer: accelerometer,
+            Accessories: (((0 != (plugged & 0x01))
+                ? GamepadAccessories.Headphones
+                : GamepadAccessories.None) | ((0 != (plugged & 0x02))
+                ? GamepadAccessories.Microphone
+                : GamepadAccessories.None)),
             Buttons: buttons,
             Gyro: gyro,
             LeftStick: ReadStick(
@@ -683,6 +750,7 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
 
         await LoadCalibrationAsync(cancellationToken: cancellationToken);
         LoadFirmwareVersion();
+        LoadPhysicalId();
         await WriteOutputAsync(
             cancellationToken: cancellationToken,
             releaseLeds: true
@@ -693,14 +761,26 @@ public sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedPar
         );
     }
     /// <inheritdoc />
-    public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+    /// <remarks>Writes a state the parser changed itself (the mute toggle), and once the Bluetooth connection
+    /// animation has ended releases the LEDs and rewrites the light bar (SDL).</remarks>
+    public async ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+        if (m_ledReleaseDue) {
+            m_ledReleaseDue = false;
+            m_outputStale = true;
+
+            await WriteOutputAsync(
+                cancellationToken: cancellationToken,
+                releaseLeds: true
+            );
+        }
+
         if (!m_outputStale) {
-            return ValueTask.CompletedTask;
+            return;
         }
 
         m_outputStale = false;
 
-        return WriteOutputAsync(
+        await WriteOutputAsync(
             cancellationToken: cancellationToken,
             releaseLeds: false
         );

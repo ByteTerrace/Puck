@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Numerics;
 using Puck.Input.Hid;
 using Puck.Input.Output;
@@ -18,7 +17,7 @@ namespace Puck.Input.Devices;
 /// interrupts a running rumble. The face buttons map by position (B south, A east, Y west, X north), and the
 /// Home LED is the settable indicator: its brightness follows the brightest channel of the requested colour.
 /// </remarks>
-public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, ILedParser, IServicedGamepadParser {
+public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, ILedParser, IServicedGamepadParser, IPhysicalIdentityParser, IStreamingParser, IDisposable {
     private const float AccelerometerNominalGPerLsb = (1f / 4096f);
     private const int BatteryOffset = 2;
     private const int BluetoothOutputReportLength = 49;
@@ -50,6 +49,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private const byte InitCommandOutputReportId = 0x80;
     private const int LeftStickOffset = 6;
     private const float MaximumCalibrationScaleError = 0.5f;
+    private const int DeviceInfoAddressOffset = 19;   // the Bluetooth address, big-endian, in a 0x02 reply
     private const int MinimumStateReportLength = 13;
     private const int RightStickOffset = 9;
     private const byte RumbleOutputReportId = 0x10;
@@ -83,9 +83,10 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private const int SubcommandReplyReads = 16;
     private const byte SubcommandSetInputReportMode = 0x03;
     private const byte SubcommandSpiFlashRead = 0x10;
-    // Bluetooth drops a pad that is sent subcommands faster than this (Linux enforces 60 ms over Bluetooth).
-    private const int SubcommandSpacingBluetoothMilliseconds = 60;
-    private const int SubcommandSpacingUsbMilliseconds = 20;
+    // Every output report, rumble or subcommand, is spaced at least this far apart: a Bluetooth pad sent them
+    // faster drops off the link (Linux joycon_enforce_subcmd_rate).
+    private const int OutputSpacingBluetoothMilliseconds = 60;
+    private const int OutputSpacingUsbMilliseconds = 20;
     private const int UsbOutputReportLength = 64;
     private const uint UserImuCalibrationAddress = 0x8028U;
     private const uint UserImuMagicAddress = 0x8026U;
@@ -108,6 +109,8 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
 
     private readonly IHidDevice m_device;
     private readonly bool m_isBluetooth;
+    private readonly long m_outputSpacingTicks;
+    private readonly TimeProvider m_time;
     private readonly byte[] m_outputBuffer;
     private readonly byte[] m_responseBuffer;
     private readonly byte[] m_rumbleData = new byte[RumbleLength];
@@ -118,21 +121,34 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private Vector3 m_gyroOffset;
     private Vector3 m_gyroScale = new(value: GyroNominalRadiansPerSecondPerLsb);
     private byte m_homeLedIntensity;
+    private bool m_hasFullReport;
+    private bool m_homeLedPending;
+    private bool m_imuReenablePending;
     private bool m_imuSilent;
+    private Vector3 m_lastAccelerometer;
+    private Vector3 m_lastGyro;
+    private long m_lastOutputTimestamp = long.MinValue;
     private long m_lastReportTimestamp;
     private StickCalibration m_leftStickCalibration;
     private long m_nextImuReenable;
     private byte m_packetNumber;
     private StickCalibration m_rightStickCalibration;
+    private bool m_rumblePending;
 
     /// <summary>Initializes a new instance of the <see cref="NintendoSwitchController"/> class.</summary>
     /// <param name="device">The opened HID device handle for the Switch Pro Controller.</param>
+    /// <param name="timeProvider">The clock that spaces output reports and measures the report interval, or
+    /// <see langword="null"/> for <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
-    public NintendoSwitchController(IHidDevice device) {
+    public NintendoSwitchController(IHidDevice device, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(device);
 
         m_device = device;
         m_isBluetooth = (device.Transport == HidTransport.Bluetooth);
+        m_time = (timeProvider ?? TimeProvider.System);
+        m_outputSpacingTicks = (((m_isBluetooth
+            ? OutputSpacingBluetoothMilliseconds
+            : OutputSpacingUsbMilliseconds) * m_time.TimestampFrequency) / 1000L);
         // Output reports are 64 bytes on USB and 49 over Bluetooth; Windows requires the declared length, which is
         // floored to the documented one because composition writes at protocol offsets.
         m_outputBuffer = new byte[Math.Max(
@@ -163,9 +179,17 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     /// <inheritdoc />
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro;
     /// <inheritdoc />
+    public string? PhysicalId { get; private set; }
+    /// <inheritdoc />
     public TimeSpan RumbleRefreshInterval => TimeSpan.FromMilliseconds(value: 50);
     /// <inheritdoc />
-    public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: 30);
+    /// <remarks>The parser additionally holds every output report to its transport's spacing.</remarks>
+    public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: (m_isBluetooth
+        ? OutputSpacingBluetoothMilliseconds
+        : OutputSpacingUsbMilliseconds));
+    /// <inheritdoc />
+    /// <remarks>The full report streams every 8 to 15 ms; SDL treats three silent seconds as a lost pad.</remarks>
+    public TimeSpan StreamSilenceTimeout => TimeSpan.FromSeconds(value: 3);
     /// <inheritdoc />
     public GamepadType Type => GamepadType.SwitchPro;
 
@@ -199,10 +223,14 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     // Byte 2: the high nibble's upper three bits are the charge in quarters (0 empty .. 4 full), bit 4 is
     // charging, and bit 0 says the pad is powered by its cable.
     private static GamepadPower DecodePower(byte status) {
-        var percent = ((byte)Math.Min(
-            val1: ((status >> 5) * 25),
-            val2: 100
-        ));
+        var level = (status >> 5);
+
+        // Levels past 4 are not a charge the pad reports (Linux rejects them).
+        if (level > 4) {
+            return GamepadPower.Unknown;
+        }
+
+        var percent = ((byte)(level * 25));
 
         if (0 != (status & 0x10)) {
             return new GamepadPower(
@@ -495,6 +523,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
                 buffer: buffer,
                 cancellationToken: cancellationToken
             );
+            m_lastOutputTimestamp = m_time.GetTimestamp();
 
             for (var read = 0; (read < SubcommandReplyReads); ++read) {
                 var count = await m_device.ReadAsync(
@@ -516,8 +545,8 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
                     await Task.Delay(
                         cancellationToken: cancellationToken,
                         millisecondsDelay: (m_isBluetooth
-                            ? SubcommandSpacingBluetoothMilliseconds
-                            : SubcommandSpacingUsbMilliseconds
+                            ? OutputSpacingBluetoothMilliseconds
+                            : OutputSpacingUsbMilliseconds
                         )
                     );
 
@@ -632,29 +661,47 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             return (amplitudes.Length - 1);
         }
     }
-    private ValueTask WriteRumbleReportAsync(CancellationToken cancellationToken) {
+    // Writes at most one pending output report once the transport's spacing has passed since the last: a pending
+    // subcommand first (it carries the current rumble too), else the rumble.
+    private ValueTask FlushOutputAsync(CancellationToken cancellationToken) {
+        if (!m_rumblePending && !m_homeLedPending && !m_imuReenablePending) {
+            return ValueTask.CompletedTask;
+        }
+
+        var now = m_time.GetTimestamp();
+
+        if (
+            (m_lastOutputTimestamp != long.MinValue) &&
+            ((now - m_lastOutputTimestamp) < m_outputSpacingTicks)
+        ) {
+            return ValueTask.CompletedTask;
+        }
+
+        m_lastOutputTimestamp = now;
+
         var buffer = m_outputBuffer;
 
         buffer.AsSpan().Clear();
-        buffer[0] = RumbleOutputReportId;
         buffer[1] = NextPacketNumber();
         m_rumbleData.CopyTo(destination: buffer.AsSpan(start: 2));
 
-        return m_device.WriteAsync(
-            buffer: buffer,
-            cancellationToken: cancellationToken
-        );
-    }
-    // Writes a subcommand without waiting for its reply, for the steady-state I/O loop, which must keep reading.
-    private ValueTask WriteSubcommandAsync(byte subcommand, ReadOnlySpan<byte> arguments, CancellationToken cancellationToken) {
-        var buffer = m_outputBuffer;
+        if (m_homeLedPending || m_imuReenablePending) {
+            buffer[0] = SubcommandOutputReportId;
 
-        buffer.AsSpan().Clear();
-        buffer[0] = SubcommandOutputReportId;
-        buffer[1] = NextPacketNumber();
-        m_rumbleData.CopyTo(destination: buffer.AsSpan(start: 2));
-        buffer[SubcommandOffset] = subcommand;
-        arguments.CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
+            if (m_homeLedPending) {
+                m_homeLedPending = false;
+                buffer[SubcommandOffset] = SubcommandHomeLed;
+                HomeLedArguments().CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
+            } else {
+                m_imuReenablePending = false;
+                buffer[SubcommandOffset] = SubcommandEnableImu;
+                buffer[(SubcommandOffset + 1)] = 0x01;
+            }
+        } else {
+            buffer[0] = RumbleOutputReportId;
+        }
+
+        m_rumblePending = false;
 
         return m_device.WriteAsync(
             buffer: buffer,
@@ -667,10 +714,23 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
 
         return [0x01, intensity, intensity, 0x00,];
     }
+    // Sends a configuration subcommand the pad cannot work without, faulting initialization when it is never
+    // acknowledged so the manager reopens the pad rather than keep a half-configured one (Linux joycon_init).
+    private async ValueTask SendRequiredSubcommandAsync(byte subcommand, byte argument, string purpose, CancellationToken cancellationToken) {
+        if (!await SendSubcommandAsync(
+            arguments: new byte[] { argument, },
+            cancellationToken: cancellationToken,
+            matches: null,
+            subcommand: subcommand
+        )) {
+            throw new InvalidOperationException(message: $"The Switch Pro Controller did not acknowledge {purpose}.");
+        }
+    }
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
         m_packetNumber = 0;
+        m_hasFullReport = false;
 
         if (!m_isBluetooth) {
             // USB: request status, handshake, raise the baud rate, handshake again, then force HID-only mode (which
@@ -705,7 +765,17 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         _ = await SendSubcommandAsync(
             arguments: ReadOnlyMemory<byte>.Empty,
             cancellationToken: cancellationToken,
-            matches: null,
+            matches: (reply, count) => {
+                if (count >= (DeviceInfoAddressOffset + 6)) {
+                    PhysicalId = Convert.ToHexString(
+                        inArray: reply,
+                        length: 6,
+                        offset: DeviceInfoAddressOffset
+                    );
+                }
+
+                return true;
+            },
             subcommand: SubcommandDeviceInfo
         );
         m_leftStickCalibration = await LoadStickCalibrationAsync(
@@ -723,22 +793,22 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             userAddress: UserRightStickCalibrationAddress
         );
         await LoadImuCalibrationAsync(cancellationToken: cancellationToken);
-        _ = await SendSubcommandAsync(
-            arguments: new byte[] { 0x01, },
+        await SendRequiredSubcommandAsync(
+            argument: 0x01,
             cancellationToken: cancellationToken,
-            matches: null,
+            purpose: "enabling its IMU",
             subcommand: SubcommandEnableImu
         );
-        _ = await SendSubcommandAsync(
-            arguments: new byte[] { StandardInputReportId, },
+        await SendRequiredSubcommandAsync(
+            argument: StandardInputReportId,
             cancellationToken: cancellationToken,
-            matches: null,
+            purpose: "the full input report mode",
             subcommand: SubcommandSetInputReportMode
         );
-        _ = await SendSubcommandAsync(
-            arguments: new byte[] { 0x01, },
+        await SendRequiredSubcommandAsync(
+            argument: 0x01,
             cancellationToken: cancellationToken,
-            matches: null,
+            purpose: "enabling vibration",
             subcommand: SubcommandEnableVibration
         );
         _ = await SendSubcommandAsync(
@@ -758,25 +828,39 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             subcommand: SubcommandHomeLed
         );
     }
+    /// <summary>Writes a still-pending rumble report past the output spacing, so a stop requested as the engine
+    /// releases the pad reaches it. Best-effort and bounded, while the handle is still open after the I/O loop
+    /// stopped.</summary>
+    public void Dispose() {
+        if (!m_rumblePending) {
+            return;
+        }
+
+        m_lastOutputTimestamp = long.MinValue;
+        m_homeLedPending = false;
+        m_imuReenablePending = false;
+
+        try {
+            _ = FlushOutputAsync(cancellationToken: CancellationToken.None).AsTask().Wait(millisecondsTimeout: 100);
+        } catch (AggregateException) {
+            // The pad may already be gone; there is nothing left to stop.
+        }
+    }
     /// <inheritdoc />
     public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
         if (
-            !m_imuSilent ||
-            (timestamp < m_nextImuReenable)
+            m_imuSilent &&
+            (timestamp >= m_nextImuReenable)
         ) {
-            return ValueTask.CompletedTask;
+            m_nextImuReenable = (timestamp + ((long)(ImuReenableSeconds * timestampFrequency)));
+            m_imuReenablePending = true;
         }
 
-        m_nextImuReenable = (timestamp + ((long)(ImuReenableSeconds * timestampFrequency)));
-
-        return WriteSubcommandAsync(
-            arguments: [0x01,],
-            cancellationToken: cancellationToken,
-            subcommand: SubcommandEnableImu
-        );
+        return FlushOutputAsync(cancellationToken: cancellationToken);
     }
     /// <inheritdoc />
-    /// <remarks>The Home LED has one channel, so its brightness follows the brightest of the three.</remarks>
+    /// <remarks>The Home LED has one channel, so its brightness follows the brightest of the three. The write
+    /// waits for the transport's output spacing.</remarks>
     public ValueTask SetLedAsync(LedColor color, CancellationToken cancellationToken = default) {
         m_homeLedIntensity = ((byte)(Math.Max(
             val1: color.Red,
@@ -785,16 +869,14 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
                 val2: color.Blue
             )
         ) >> 4));
+        m_homeLedPending = true;
 
-        return WriteSubcommandAsync(
-            arguments: HomeLedArguments(),
-            cancellationToken: cancellationToken,
-            subcommand: SubcommandHomeLed
-        );
+        return FlushOutputAsync(cancellationToken: cancellationToken);
     }
     /// <inheritdoc />
     /// <remarks>Both sides carry the same bands: the low intensity drives the 160 Hz band and the high intensity
-    /// the 320 Hz band, each through the HD-rumble amplitude table.</remarks>
+    /// the 320 Hz band, each through the HD-rumble amplitude table. The write waits for the transport's output
+    /// spacing.</remarks>
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
         WriteRumbleSide(
             destination: m_rumbleData.AsSpan(
@@ -808,12 +890,14 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             length: 4,
             start: 0
         ).CopyTo(destination: m_rumbleData.AsSpan(start: 4));
+        m_rumblePending = true;
 
-        return WriteRumbleReportAsync(cancellationToken: cancellationToken);
+        return FlushOutputAsync(cancellationToken: cancellationToken);
     }
     /// <inheritdoc />
-    /// <remarks>Accepts the full report <c>0x30</c> and the subcommand reply <c>0x21</c>, whose leading bytes
-    /// carry the same buttons, sticks and battery; a reply keeps the last orientation.</remarks>
+    /// <remarks>Accepts the full report <c>0x30</c>, and once it streams the subcommand reply <c>0x21</c>, whose
+    /// leading bytes carry the same buttons, sticks and battery; a reply repeats the last motion and is not a
+    /// motion sample. A reply before the first full report is not state, so it cannot pass for streaming.</remarks>
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
 
@@ -825,7 +909,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
 
         if (
             !full &&
-            (SubcommandReplyInputReportId != report[0])
+            ((SubcommandReplyInputReportId != report[0]) || !m_hasFullReport)
         ) {
             return false;
         }
@@ -838,18 +922,21 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         }
 
         var buttons = DecodeButtons(report: report);
-        var accelerometer = Vector3.Zero;
-        var gyro = Vector3.Zero;
+        var accelerometer = m_lastAccelerometer;
+        var gyro = m_lastGyro;
         var orientation = m_tracker.Orientation;
+        var motionSample = false;
 
         if (full) {
-            var now = Stopwatch.GetTimestamp();
+            var now = m_time.GetTimestamp();
+
+            m_hasFullReport = true;
 
             if (m_lastReportTimestamp != 0L) {
                 var interval = Math.Clamp(
                     max: 0.05f,
                     min: 0.002f,
-                    value: ((float)((now - m_lastReportTimestamp) / ((double)Stopwatch.Frequency)))
+                    value: ((float)((now - m_lastReportTimestamp) / ((double)m_time.TimestampFrequency)))
                 );
 
                 m_averageReportSeconds += ((interval - m_averageReportSeconds) / 64f);
@@ -862,19 +949,27 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
                 (0 == BinaryPrimitives.ReadInt16LittleEndian(source: report[(ImuOffset + 4)..]))
             );
 
-            if (!m_imuSilent) {
+            if (m_imuSilent) {
+                accelerometer = Vector3.Zero;
+                gyro = Vector3.Zero;
+            } else {
                 orientation = ReadImu(
                     accelerometer: out accelerometer,
                     gyro: out gyro,
                     report: report
                 );
+                motionSample = true;
             }
+
+            m_lastAccelerometer = accelerometer;
+            m_lastGyro = gyro;
         }
 
         state = new GamepadState(
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
+            IsMotionSample: motionSample,
             LeftStick: ReadStick(
                 calibration: in m_leftStickCalibration,
                 offset: LeftStickOffset,

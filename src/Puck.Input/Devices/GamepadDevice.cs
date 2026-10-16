@@ -21,6 +21,7 @@ public sealed class GamepadDevice : IGamepadConnection {
     public const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
     public const int SteadyStatePollMilliseconds = 16;     // services output/schedules even when input reports pause
 
+    private const int DisposeOutputMilliseconds = 100;  // the bound on the final neutral writes at disposal
     private const int MaximumOutputCommandsPerIteration = 32;
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
@@ -38,6 +39,7 @@ public sealed class GamepadDevice : IGamepadConnection {
     private readonly long m_receiverSilenceTimeoutTicks;
     private readonly long m_rumbleRefreshTicks;
     private readonly long m_rumbleWriteIntervalTicks;
+    private readonly long m_streamSilenceTicks;
     private readonly long m_streamingDeadlineTicks;
     private readonly TimeProvider m_time;
 
@@ -53,6 +55,7 @@ public sealed class GamepadDevice : IGamepadConnection {
     private float m_rumbleSentLow;
     private int m_rumbleStopRefreshes;
     private bool m_scheduledTriggerActive;
+    private bool m_triggerEffectApplied;
     private ulong m_scheduledTriggerFireTick;
     private TriggerEffectSpec m_scheduledTriggerLeft;
     private TriggerEffectSpec m_scheduledTriggerRight;
@@ -106,6 +109,14 @@ public sealed class GamepadDevice : IGamepadConnection {
         m_parser = parser;
         m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * time.TimestampFrequency) / 1000L);
 
+        m_streamSilenceTicks = ((parser is IStreamingParser streaming)
+            ? ToTicks(
+                frequency: time.TimestampFrequency,
+                interval: streaming.StreamSilenceTimeout
+            )
+            : 0L
+        );
+
         if (parser is IRumbleParser rumbleParser) {
             m_rumbleRefreshTicks = ToTicks(
                 frequency: time.TimestampFrequency,
@@ -147,6 +158,11 @@ public sealed class GamepadDevice : IGamepadConnection {
     public GamepadInputCapabilities InputCapabilities => m_parser.InputCapabilities;
     /// <summary>Whether the device's I/O loop has stopped due to a disconnect or I/O error (eligible for pruning).</summary>
     public bool IsFaulted => m_faulted;
+    /// <summary>The controller's physical identity once its parser has read it, or <see langword="null"/>; see
+    /// <see cref="IPhysicalIdentityParser"/>.</summary>
+    public string? PhysicalId => (m_parser as IPhysicalIdentityParser)?.PhysicalId;
+    /// <summary>The transport the device is connected over.</summary>
+    public HidTransport Transport => m_hid.Transport;
     /// <summary>The device interface path, used to match against enumeration so a connected device isn't reopened.</summary>
     public string Key => m_hid.DevicePath;
     public IGamepadOutput Output => m_output;
@@ -185,6 +201,41 @@ public sealed class GamepadDevice : IGamepadConnection {
             ? (m_time.GetTimestamp() + ((long)(effect.DurationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
             : long.MaxValue
         );
+    }
+    // Leaves a pad that stays connected at rest when the engine releases it: motors stopped and adaptive
+    // triggers released. Best-effort and bounded, on the disposing thread once the I/O loop has stopped.
+    private void NeutralizeOutput() {
+        if (!m_hasStream) {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(millisecondsDelay: DisposeOutputMilliseconds);
+
+        try {
+            if (
+                (m_parser is IRumbleParser rumbleParser) &&
+                (m_rumbleActive || (0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow))
+            ) {
+                _ = rumbleParser.SetRumbleAsync(
+                    cancellationToken: timeout.Token,
+                    highFrequency: 0f,
+                    lowFrequency: 0f
+                ).AsTask().Wait(millisecondsTimeout: DisposeOutputMilliseconds);
+            }
+
+            if (
+                (m_parser is ITriggerEffectParser triggerParser) &&
+                m_triggerEffectApplied
+            ) {
+                _ = triggerParser.SetTriggerEffectAsync(
+                    cancellationToken: timeout.Token,
+                    left: TriggerEffectSpec.Off,
+                    right: TriggerEffectSpec.Off
+                ).AsTask().Wait(millisecondsTimeout: DisposeOutputMilliseconds);
+            }
+        } catch (Exception exception) when (exception is AggregateException or IOException or OperationCanceledException or ObjectDisposedException) {
+            // The pad may already be gone; there is nothing left to stop.
+        }
     }
     private static float NormalizeIntensity(float intensity) =>
         (float.IsFinite(f: intensity)
@@ -368,6 +419,7 @@ public sealed class GamepadDevice : IGamepadConnection {
                         (m_clock.NowTicks >= command.ScheduleTick)
                     ) {
                         m_scheduledTriggerActive = false;
+                        m_triggerEffectApplied = true;
 
                         await triggerEffect.SetTriggerEffectAsync(
                             cancellationToken: cancellationToken,
@@ -406,6 +458,7 @@ public sealed class GamepadDevice : IGamepadConnection {
             (m_parser is ITriggerEffectParser scheduledParser)
         ) {
             m_scheduledTriggerActive = false;
+            m_triggerEffectApplied = true;
 
             await scheduledParser.SetTriggerEffectAsync(
                 cancellationToken: cancellationToken,
@@ -622,6 +675,17 @@ public sealed class GamepadDevice : IGamepadConnection {
                     m_diagnostics?.Invoke($"[gamepad] {Type} receiver stream silent; releasing slot and parking");
                 }
 
+                // A continuously streaming controller that falls silent has lost its link even when the transport
+                // reports no removal; faulting releases its held input and lets the manager reopen it.
+                if (
+                    firstParsed &&
+                    !m_activateOnStream &&
+                    (m_streamSilenceTicks > 0L) &&
+                    ((m_time.GetTimestamp() - lastParsedTimestamp) >= m_streamSilenceTicks)
+                ) {
+                    throw new TimeoutException(message: $"{Type} stopped streaming for {(m_streamSilenceTicks / (double)m_time.TimestampFrequency):F1}s");
+                }
+
                 // A deferred-activation device is a receiver slot that may legitimately sit empty forever, so
                 // stream silence is not a fault for it; everything else must prove liveness within the deadline.
                 if (
@@ -715,6 +779,8 @@ public sealed class GamepadDevice : IGamepadConnection {
         }
 
         if (!hidForceClosed) {
+            NeutralizeOutput();
+
             try {
                 // Give a parser that holds device state a chance to restore it (e.g. a controller switched out of
                 // its built-in keyboard/mouse emulation) while the live handle is no longer owned by the loop.

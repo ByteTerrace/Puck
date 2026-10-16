@@ -285,32 +285,70 @@ public sealed class GamepadManager : IDisposable {
             }
         }
     }
-    // Deferred-activation devices (wireless-receiver slots) hold a player slot only while a controller actually
-    // streams through them: assign the lowest free slot when streaming starts, release it when the receiver
-    // reports the slot empty again. Runs under the gate, from both the rescan and the per-frame drain (so
-    // activation latency is one frame, not one rescan).
-    private void ReconcileDeferredActivationLocked() {
+    // A Bluetooth connection is held back while a USB connection to the same physical controller streams (a cable
+    // plugged into a paired pad), so one controller counts once; it returns when the cable does.
+    private bool IsShadowedLocked(GamepadDevice device) {
+        if (
+            (device.Transport != HidTransport.Bluetooth) ||
+            (device.PhysicalId is not { } physicalId)
+        ) {
+            return false;
+        }
+
+        foreach (var connection in m_devices) {
+            if (
+                (connection is GamepadDevice other) &&
+                !ReferenceEquals(objA: other, objB: device) &&
+                !other.IsFaulted &&
+                other.HasStream &&
+                (other.Transport != HidTransport.Bluetooth) &&
+                string.Equals(
+                    a: other.PhysicalId,
+                    b: physicalId,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Reconciles each HID device's player slot with whether it should hold one: a deferred-activation device (a
+    // wireless-receiver slot) only while a controller streams through it, and any device only while no USB twin
+    // shadows it. Runs under the gate, from both the rescan and the per-frame drain, so activation latency is one
+    // frame, not one rescan. A device losing its slot drops its coalesced state, whose releases the capture path
+    // already applies when the device leaves the drained set.
+    private void ReconcileActivationLocked() {
         foreach (var connection in m_devices) {
             if (
                 (connection is not GamepadDevice device) ||
-                !device.ActivateOnStream ||
                 device.IsFaulted
             ) {
                 continue;
             }
 
+            var shadowed = IsShadowedLocked(device: device);
+            var active = (
+                !shadowed &&
+                (!device.ActivateOnStream || device.HasStream)
+            );
+
             if (
-                device.HasStream &&
+                active &&
                 (device.PlayerIndex < 0)
             ) {
                 device.AssignPlayerSlot(playerIndex: AllocatePlayerSlotLocked());
-                m_diagnostics?.Invoke($"[gamepad] {device.Type} paired as player {(device.PlayerIndex + 1)} ({device.DeviceId})");
+                m_diagnostics?.Invoke($"[gamepad] {device.Type} active as player {(device.PlayerIndex + 1)} ({device.DeviceId})");
             } else if (
-                !device.HasStream &&
+                !active &&
                 (device.PlayerIndex >= 0)
             ) {
                 device.ReleasePlayerSlot();
-                m_diagnostics?.Invoke($"[gamepad] {device.Type} unpaired; player slot released ({device.DeviceId})");
+                device.Coalescer.Reset();
+                m_diagnostics?.Invoke((shadowed
+                    ? $"[gamepad] {device.Type} Bluetooth connection held back while its USB connection streams ({device.DeviceId})"
+                    : $"[gamepad] {device.Type} unpaired; player slot released ({device.DeviceId})"));
             }
         }
     }
@@ -352,7 +390,7 @@ public sealed class GamepadManager : IDisposable {
             // the set's growth. Then prune faulted devices (disposed after the gate is released, below).
             ReconcileRejectedLocked(candidates: candidates);
             PruneFaultedLocked(disposed: faulted);
-            ReconcileDeferredActivationLocked();
+            ReconcileActivationLocked();
 
             foreach (var candidate in candidates) {
                 // Skip devices we already track, and known-vendor devices we've already opened but can't drive
@@ -565,7 +603,7 @@ public sealed class GamepadManager : IDisposable {
         lock (m_gate) {
             // Promote a receiver slot that just started streaming (and demote one whose pad left) before folding
             // contributions, so its very first drained data already carries a player identity.
-            ReconcileDeferredActivationLocked();
+            ReconcileActivationLocked();
 
             for (var index = (m_devices.Count - 1); (index >= 0); --index) {
                 var device = m_devices[index];

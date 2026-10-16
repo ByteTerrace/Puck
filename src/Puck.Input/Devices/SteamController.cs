@@ -274,6 +274,8 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
             ((uint)report[((dataStart + ButtonsOffset) + 2)] << 16));
         var buttons = GamepadButtons.None;
 
+        if (0u != (raw & 0x000001)) { buttons |= GamepadButtons.RightTriggerClick; }
+        if (0u != (raw & 0x000002)) { buttons |= GamepadButtons.LeftTriggerClick; }
         if (0u != (raw & 0x000080)) { buttons |= GamepadButtons.ButtonSouth; }    // A
         if (0u != (raw & 0x000020)) { buttons |= GamepadButtons.ButtonEast; }     // B
         if (0u != (raw & 0x000040)) { buttons |= GamepadButtons.ButtonWest; }     // X
@@ -301,21 +303,30 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
         Vector2 leftStickRaw;
         Vector2? leftPad;
 
+        // A cached value survives only while the firmware interleaves the two; otherwise the channel the report
+        // does not carry is at rest, and its cache is cleared so a later interleave cannot resurrect it (SDL).
         if (fingerDown) {
             leftPad = shared;
-            leftStickRaw = (interleaved
-                ? m_previousLeftStick
-                : Vector2.Zero
-            );
             m_previousLeftPad = shared;
             m_hasPreviousPad = true;
+
+            if (!interleaved) {
+                m_previousLeftStick = Vector2.Zero;
+            }
+
+            leftStickRaw = m_previousLeftStick;
         } else {
             leftStickRaw = shared;
-            leftPad = ((interleaved && m_hasPreviousPad)
+            m_previousLeftStick = shared;
+
+            if (!interleaved) {
+                m_hasPreviousPad = false;
+            }
+
+            leftPad = (m_hasPreviousPad
                 ? m_previousLeftPad
                 : null
             );
-            m_previousLeftStick = shared;
         }
 
         if (0u != (raw & MaskLeftPadClicked)) {
@@ -351,6 +362,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
+            IsMotionSample: !repeated,
             LeftStick: SteamControllerInput.Deadzone(stick: (leftStickRaw / StickRange)),
             LeftTrigger: GamepadNormalization.NormalizeTrigger(
                 raw: report[(dataStart + LeftTriggerOffset)],
@@ -531,7 +543,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
                 ),
                 State: GamepadPowerState.OnBattery
             );
-            state = m_lastState with { Power = m_power, };
+            state = m_lastState with { IsMotionSample = false, Power = m_power, };
             m_lastState = state;
 
             return true;

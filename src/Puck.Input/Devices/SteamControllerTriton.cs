@@ -36,6 +36,9 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private const uint ButtonL4 = (1u << 17);             // rear paddle, left top
     private const uint ButtonL5 = (1u << 18);             // rear paddle, left bottom
     private const uint ButtonLeftBumper = (1u << 19);
+    private const uint ButtonLeftGripTouch = (1u << 29);
+    private const uint ButtonLeftStickTouch = (1u << 24);
+    private const uint ButtonLeftTriggerClick = (1u << 27);
     private const uint ButtonLeftPadClick = (1u << 26);
     private const uint ButtonLeftPadTouch = (1u << 25);
     private const uint ButtonLeftStickClick = (1u << 15);
@@ -44,6 +47,9 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private const uint ButtonR4 = (1u << 7);              // rear paddle, right top
     private const uint ButtonR5 = (1u << 8);              // rear paddle, right bottom
     private const uint ButtonRightBumper = (1u << 9);
+    private const uint ButtonRightGripTouch = (1u << 28);
+    private const uint ButtonRightStickTouch = (1u << 20);
+    private const uint ButtonRightTriggerClick = (1u << 23);
     private const uint ButtonRightPadClick = (1u << 22);
     private const uint ButtonRightPadTouch = (1u << 21);
     private const uint ButtonRightStickClick = (1u << 5);
@@ -150,7 +156,8 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
         buffer[4] = ((byte)(value & 0xFF));
         buffer[5] = ((byte)(value >> 8));
     }
-    // Report 0x43: [1] the charger state, [2] the charge in percent.
+    // Report 0x43: [1] the charger state (0 reset, 1 discharging, 2 charging, 3 validating the source, 4 done),
+    // [2] the charge in percent. A reset or a source still being validated says nothing yet (SDL).
     private static GamepadPower DecodePower(ReadOnlySpan<byte> report) {
         var percent = Math.Min(
             val1: report[2],
@@ -162,7 +169,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
                 Percent: percent,
                 State: GamepadPowerState.OnBattery
             ),
-            2 or 3 => new GamepadPower(
+            2 => new GamepadPower(
                 Percent: percent,
                 State: GamepadPowerState.Charging
             ),
@@ -337,7 +344,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
             }
 
             m_power = DecodePower(report: report);
-            state = m_lastState with { Power = m_power, };
+            state = m_lastState with { IsMotionSample = false, Power = m_power, };
             m_lastState = state;
 
             return true;
@@ -377,6 +384,12 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
         if (0u != (raw & ButtonR5)) { buttons |= GamepadButtons.RightGrip; }
         if (0u != (raw & ButtonRightPadClick)) { buttons |= GamepadButtons.Touchpad; }
         if (0u != (raw & ButtonLeftPadClick)) { buttons |= GamepadButtons.TouchpadLeft; }
+        if (0u != (raw & ButtonLeftTriggerClick)) { buttons |= GamepadButtons.LeftTriggerClick; }
+        if (0u != (raw & ButtonRightTriggerClick)) { buttons |= GamepadButtons.RightTriggerClick; }
+        if (0u != (raw & ButtonLeftStickTouch)) { buttons |= GamepadButtons.LeftStickTouch; }
+        if (0u != (raw & ButtonRightStickTouch)) { buttons |= GamepadButtons.RightStickTouch; }
+        if (0u != (raw & ButtonLeftGripTouch)) { buttons |= GamepadButtons.LeftGripTouch; }
+        if (0u != (raw & ButtonRightGripTouch)) { buttons |= GamepadButtons.RightGripTouch; }
 
         // Report 0x47 inserts a 16-bit trackpad clock before the pads, shifting them two bytes.
         var padShift = (shortTimestamp
