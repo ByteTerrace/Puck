@@ -162,8 +162,10 @@ motion fusion from live hardware.
 
 DualSense reads its factory gyro and accelerometer calibration from feature
 report `0x05`. Switch reads stick and IMU calibration from SPI flash, preferring
-the user block over the factory one. Each falls back to its nominal scale when a
-read is missing or strays more than half from nominal. Both Steam families use
+the user block over the factory one, and each stick's own radial deadzone from its
+device parameters (`0x6086` left, `0x6098` right), normalized by the stick's
+travel; a Pro Controller reads about 0.11. Each falls back to its nominal scale,
+and the deadzone to 0.12, when a read is missing or implausible. Both Steam families use
 the fixed ±2000 deg/s and ±2 g scales of their sensors.
 
 ## Keyboard, mouse commands, text, and pointer browsing
@@ -306,18 +308,36 @@ non-finite values map to rest before a parser encodes them.
   every Edge, use the improved rumble emulation; older firmware gets the classic
   emulation at half strength, as SDL does. Each press of the mute button toggles
   the microphone mute and its LED, which the firmware leaves to the host.
-- **Switch Pro** encodes HD rumble through the Linux amplitude table: the low
-  intensity drives a 160 Hz band and the high intensity a 320 Hz band on both
-  actuators. Every output report carries the current rumble, so a subcommand
-  never interrupts it, and every report, rumble or subcommand, waits for the
-  transport's spacing (20 ms on USB, 60 ms over Bluetooth), past which a
-  Bluetooth pad drops off the link. `SetLed` sets the Home LED's brightness from
-  the brightest channel. Initialization faults, and the manager reopens the pad,
-  when the IMU, the full report mode or vibration is never acknowledged.
+- **Switch Pro** plays HD rumble (`RumbleHd`): each actuator's low band (41 to
+  626 Hz) and high band (82 to 1253 Hz) take their own carrier and amplitude,
+  encoded as `round(32 · log2(f / 10))` and the Linux amplitude table. An
+  ordinary `Rumble` plays the low intensity on a 160 Hz band and the high one on
+  a 320 Hz band on both actuators. Every output report carries the current
+  rumble, so a subcommand never interrupts it, and every report, rumble or
+  subcommand, waits for the transport's spacing (20 ms on USB, 60 ms over
+  Bluetooth), past which a Bluetooth pad drops off the link. The Home LED plays a
+  `HomeLedPattern` (`SetHomeLedPattern`): up to 15 steps of brightness, fade and
+  hold over a base step of about 8 to 175 ms, repeated or held, as subcommand
+  `0x38`. `SetLed` holds a steady brightness from the brightest channel through
+  SDL's perceptual curve. Over USB, the pad is sent the HID-only command again
+  when its reports stop for 100 ms, since another driver (Steam) can switch it
+  back to its proprietary mode. Initialization faults, and the manager reopens
+  the pad, when the IMU, the full report mode or vibration is never acknowledged.
 - **Steam Controller** drives each trackpad actuator with a pulse train whose
-  duty cycle follows intensity; the low band is the left pad. `SetLed` sets the
+  duty cycle follows intensity; the low band is the left pad. `PlayTrackpadHaptic`
+  also plays an explicit pulse train with its gain. `SetLed` sets the
   Steam-button brightness.
-- **Triton** drives its two motors with output report `0x80`.
+- **Triton** drives its two motors with output report `0x80` and plays every
+  `TrackpadHapticEffect` form on its trackpad actuators: a pulse train (`0x81`),
+  a built-in effect such as a tick or click (`0x82`), a tone with an optional
+  low-frequency oscillator (`0x83`), a logarithmic sweep (`0x84`) and a stored
+  script (`0x85`), laid out as Valve's `controller_structs.h` declares them.
+  Initialization turns off the keyboard-and-mouse emulation together with the
+  firmware watchdog (setting 71) that would re-arm it without a Steam client,
+  and release restores the default mappings and settings (Linux
+  `steam_set_lizard_mode`).
+- `IGamepadOutput.TrackpadHaptics` names the forms a device plays; a haptic of
+  another form is refused.
 - **Xbox** writes each rumble through one path: the four GameInput motors once
   the XInput slot is bound to its GameInput device, the two XInput body motors
   until then. A slot binds without a held button only when it is the only pad
@@ -357,15 +377,20 @@ drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
   DualSense Edge await a hardware run. Bluetooth input reports whose CRC fails
   are dropped.
 - **Observed on hardware, Switch Pro over USB:** every button including Capture
-  and Home, calibrated sticks and IMU, battery, HD rumble and the Home LED, at
-  about 75 Hz. Bluetooth awaits a hardware run.
+  and Home, calibrated sticks and IMU, its stick deadzone from flash, battery,
+  HD rumble at the default carriers and a steady Home LED, at about 75 Hz.
+  Bluetooth, HD rumble at other carriers and Home LED patterns await a hardware
+  run.
 - **Observed on hardware, Triton through its puck receiver:** every button
   including the four paddles, both trackpad clicks, the trigger switches and
   stick and grip capacitive sense, trackpad position and pressure, motion,
   battery (`0x43`) and rumble, at about 265 Hz. The receiver also sends an
   undocumented report `0x7B` about twice a second, which the parser drops.
-  Reports `0x45`/`0x47`, the other transports and pairing events await a
-  hardware run.
+  Reports `0x45`/`0x47`, the other transports, pairing events, the trackpad
+  haptics and the watchdog setting await a hardware run; the side codes of
+  reports `0x82` to `0x85` (left 1, right 2, both 3, from Valve's
+  `MsgTriggerHaptic`) are unconfirmed, while the pulse report's (left 1, right
+  0) follow Linux.
 - **Observed on hardware, Xbox Series X|S:** every button including Guide, sticks,
   triggers, its family from the ordinal-108 identity, battery and body rumble.
 - **Motion agrees across families on hardware:** on the DualSense, the Switch
@@ -381,10 +406,9 @@ drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
   with `0xD0000034` (logged as `[gameinput]`), and rumble falls back to the two
   XInput body motors. A headset is read from XInput's voice-device capability
   flag, since the headset battery query echoes the pad's own battery.
-- **Not surfaced:** the Triton's trackpad haptic reports `0x81`–`0x85`, the
-  DualSense's audio-driven haptics and speaker (an audio-endpoint feature, not
-  HID), the Switch's `0x6086` stick deadzone, and the classic Steam Controller's
-  Bluetooth LE transport.
+- **Not surfaced:** the DualSense's audio-driven haptics and speaker (an
+  audio-endpoint feature, not HID) and the classic Steam Controller's Bluetooth
+  LE transport.
 - **Only the Windows HID transport exists.** The parsers are platform-neutral,
   but no Linux `hidraw` implementation has exercised them.
 - **Steam lizard mode and LampArray host control restore only during clean

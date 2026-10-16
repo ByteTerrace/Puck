@@ -39,11 +39,9 @@ public static class GamepadStatusText {
 
         if (headphones && microphone) {
             parts.Add(item: "headset");
-        }
-        else if (headphones) {
+        } else if (headphones) {
             parts.Add(item: "headphones");
-        }
-        else if (microphone) {
+        } else if (microphone) {
             parts.Add(item: "microphone");
         }
 
