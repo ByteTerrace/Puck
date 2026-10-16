@@ -3,6 +3,7 @@ using System.IO.Hashing;
 using System.Numerics;
 using Puck.Input.Devices;
 using Puck.Input.Hid;
+using Puck.Input.Output;
 using Puck.Platform.Windows.Gamepad;
 
 namespace Puck.Input.Tests;
@@ -393,17 +394,130 @@ public sealed class ControllerProtocolTests {
         Assert.Equal(expected: WirelessSlotEvent.None, actual: parser.ClassifySlotEvent(report: [0x79, 0x09,]));
     }
     [Fact]
-    public async Task Triton_reasserts_lizard_off_every_three_seconds() {
+    public async Task Triton_turns_lizard_mode_and_its_watchdog_off_together_and_restores_the_defaults_on_release() {
+        var hid = new TestHidDevice();
+        var parser = new SteamControllerTriton(device: hid);
+
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: TestContext.Current.CancellationToken);
+        parser.Dispose();
+
+        Assert.Equal(expected: [0x01, 0x81, 0x00,], actual: hid.FeatureWrites[0][..3]);
+        Assert.Equal(expected: [0x01, 0x87, 9, 9, 0, 0, 71, 0, 0, 48, 0x18, 0x00,], actual: hid.FeatureWrites[1][..12]);
+        Assert.Equal(expected: [0x01, 0x85, 0x00,], actual: hid.FeatureWrites[2][..3]);
+        Assert.Equal(expected: [0x01, 0x8E, 0x00,], actual: hid.FeatureWrites[3][..3]);
+        hid.Dispose();
+    }
+    [Fact]
+    public async Task Triton_encodes_every_trackpad_haptic_as_valve_lays_it_out() {
         var cancellationToken = TestContext.Current.CancellationToken;
-        using var hid = new TestHidDevice();
+        using var hid = new TestHidDevice { OutputReportByteLength = 64, };
         using var parser = new SteamControllerTriton(device: hid);
 
-        await parser.ServiceAsync(timestamp: 10L, timestampFrequency: 1L, cancellationToken: cancellationToken);
-        await parser.ServiceAsync(timestamp: 12L, timestampFrequency: 1L, cancellationToken: cancellationToken);
-        Assert.Empty(collection: hid.FeatureWrites);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Left, onMicroseconds: 400, offMicroseconds: 100, repeat: 3), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Builtin(side: TrackpadSide.Right, command: TrackpadHapticCommand.Click, gainDecibels: -6), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Both, frequencyHertz: 200, durationMilliseconds: 500, lfoFrequencyHertz: 4, lfoDepthPercent: 150), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.LogSweep(side: TrackpadSide.Left, startHertz: 100, endHertz: 800, durationMilliseconds: 300, gainDecibels: 3), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.StoredScript(side: TrackpadSide.Right, scriptId: 5), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: default, cancellationToken: cancellationToken);
 
-        await parser.ServiceAsync(timestamp: 13L, timestampFrequency: 1L, cancellationToken: cancellationToken);
-        Assert.Equal(expected: [0x01, 0x87, 3, 9, 0, 0,], actual: Assert.Single(collection: hid.FeatureWrites)[..6]);
+        Assert.Equal(expected: 5, actual: hid.Writes.Count);
+        Assert.All(collection: hid.Writes, action: write => Assert.Equal(expected: 64, actual: write.Length));
+        Assert.Equal(expected: [0x81, 1, 0x90, 0x01, 100, 0, 3, 0,], actual: hid.Writes[0][..8]);
+        Assert.Equal(expected: [0x82, 2, 2, 0xFA,], actual: hid.Writes[1][..4]);
+        Assert.Equal(expected: [0x83, 3, 0, 200, 0, 0xF4, 0x01, 4, 0, 100,], actual: hid.Writes[2][..10]);
+        Assert.Equal(expected: [0x84, 1, 3, 0x2C, 0x01, 100, 0, 0x20, 0x03,], actual: hid.Writes[3][..9]);
+        Assert.Equal(expected: [0x85, 2, 5, 0,], actual: hid.Writes[4][..4]);
+    }
+    [Fact]
+    public void Steam_plays_pulse_haptics_only() {
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        Assert.Equal(expected: TrackpadHapticKinds.Pulse, actual: parser.SupportedTrackpadHaptics);
+        Assert.True(condition: parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Both, onMicroseconds: 300, offMicroseconds: 200, repeat: 2, gainDecibels: -3), cancellationToken: TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+        Assert.True(condition: parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Builtin(side: TrackpadSide.Left, command: TrackpadHapticCommand.Tick), cancellationToken: TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+
+        Assert.Equal(expected: [0x00, 0x8F, 8, 2, 0x2C, 0x01, 0xC8, 0x00, 2, 0, 0xFD,], actual: Assert.Single(collection: hid.FeatureWrites)[..11]);
+    }
+    [Fact]
+    public async Task Switch_encodes_hd_rumble_carriers_and_home_led_patterns() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new NintendoSwitchController(device: hid, timeProvider: hid.Time);
+        var spacing = TimeSpan.FromMilliseconds(value: 20);
+        var left = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 1f, FrequencyHertz: 1253f), Low: new HdRumbleBand(Amplitude: 1f, FrequencyHertz: 41f));
+        var right = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 0f, FrequencyHertz: 5000f), Low: new HdRumbleBand(Amplitude: 0f, FrequencyHertz: 1f));
+
+        await parser.SetHdRumbleAsync(left: left, right: right, cancellationToken: cancellationToken);
+        // 1253 Hz is the 9-bit high code 0x1FC and 41 Hz the low code 0x01; the right side clamps to 1253 Hz and 41 Hz.
+        Assert.Equal(expected: [0xFC, 0xC9, 0x01, 0x72, 0xFC, 0x01, 0x01, 0x40,], actual: hid.Writes[0][2..10]);
+
+        hid.Time.Advance(by: spacing);
+        await parser.SetHomeLedPatternAsync(
+            pattern: new HomeLedPattern(
+                Repeat: 2,
+                StartIntensity: 3,
+                StepDuration: TimeSpan.FromMilliseconds(value: 175),
+                Steps: [
+                    new HomeLedStep(FadeSteps: 4, HoldSteps: 5, Intensity: 15),
+                    new HomeLedStep(FadeSteps: 6, HoldSteps: 7, Intensity: 0),
+                    new HomeLedStep(FadeSteps: 1, HoldSteps: 2, Intensity: 9),
+                ]
+            ),
+            cancellationToken: cancellationToken
+        );
+        // Three steps at the 175 ms base (code 15), start 3, twice; then the steps paired: intensities, timings.
+        Assert.Equal(expected: 0x01, actual: hid.Writes[1][0]);
+        Assert.Equal(expected: [0x38, 0x3F, 0x32, 0xF0, 0x45, 0x67, 0x90, 0x12,], actual: hid.Writes[1][10..18]);
+
+        hid.Time.Advance(by: spacing);
+        await parser.SetLedAsync(color: new LedColor(Red: 255, Green: 0, Blue: 0), cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x38, 0x11, 0xF0, 0xF0, 0x01,], actual: hid.Writes[2][10..15]);
+    }
+    [Fact]
+    public async Task Switch_reads_its_stick_deadzone_from_flash_and_keeps_usb_alive_when_reports_stop() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        static byte[] Reply(byte[] request) {
+            var reply = SwitchSubcommandReply(request: request);
+
+            if ((request[10] == 0x10) && (BinaryPrimitives.ReadUInt32LittleEndian(source: request.AsSpan(start: 11)) is 0x6086U or 0x6098U)) {
+                reply.AsSpan(start: 20).Clear();
+                reply[(20 + 3)] = 0xB4;   // deadzone 180 counts, against the nominal 1800-count travel
+            }
+
+            return reply;
+        }
+        using var hid = new TestHidDevice {
+            Responder = request => request[0] switch {
+                0x80 => [[0x81, request[1],]],
+                0x01 => [Reply(request: request)],
+                _ => null,
+            },
+        };
+        var parser = new NintendoSwitchController(device: hid, timeProvider: hid.Time);
+        var full = new byte[49];
+
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+
+        // Left stick x at 2048 + 198 (0.11 of the nominal travel), y centred at 2048: past the pad's 0.1 deadzone but
+        // inside the 0.12 default, so only the deadzone read from flash lets it through.
+        full[0] = 0x30;
+        full[6] = 0xC6;
+        full[7] = 0x08;
+        full[8] = 0x80;
+        BinaryPrimitives.WriteInt16LittleEndian(destination: full.AsSpan(start: 13), value: 4096);
+
+        Assert.True(condition: parser.TryParse(report: full, state: out var state));
+        Assert.True(condition: (state.LeftStick.X > 0f));
+
+        var writes = hid.Writes.Count;
+
+        hid.Time.Advance(by: TimeSpan.FromMilliseconds(value: 100));
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+
+        Assert.Equal(expected: (writes + 1), actual: hid.Writes.Count);
+        Assert.Equal(expected: [0x80, 0x04,], actual: hid.Writes[^1][..2]);
     }
     [Fact]
     public void Xbox_identity_and_battery_map_to_the_family_and_power_vocabulary() {

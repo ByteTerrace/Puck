@@ -20,7 +20,7 @@ namespace Puck.Input.Devices;
 /// The right trackpad doubles as the right stick, and the trackpads surface as <see cref="GamepadState.Touch0"/>
 /// (right) and <see cref="GamepadState.Touch1"/> (left).
 /// </remarks>
-public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
+public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser, ITrackpadHapticParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     private const float AccelerometerGPerLsb = (1f / 16384f);
     private const int AccelerometerOffset = 28;
     private const byte AttributeConnectionInterval = 11;
@@ -112,6 +112,9 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
     /// <inheritdoc />
     public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: 30);
     /// <inheritdoc />
+    /// <remarks>The classic pad plays pulse trains only (feature command <c>0x8F</c>).</remarks>
+    public TrackpadHapticKinds SupportedTrackpadHaptics => TrackpadHapticKinds.Pulse;
+    /// <inheritdoc />
     public GamepadType Type => GamepadType.SteamController;
 
     void IGamepadStreamReset.ResetStreamState() {
@@ -136,6 +139,16 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
         );
         var off = ((ushort)(period - on));
 
+        return FirePulse(
+            count: count,
+            gainDecibels: 0,
+            off: off,
+            on: on,
+            side: side
+        );
+    }
+    // MsgFireHapticPulse: pad, on-time and off-time in µs, pulse count, gain in dB (Linux steam_haptic_pulse).
+    private bool FirePulse(byte side, ushort on, ushort off, ushort count, sbyte gainDecibels) {
         return SendFeature(
             command: CommandTriggerHapticPulse,
             payload: [
@@ -143,7 +156,7 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
                 ((byte)(on & 0xFF)), ((byte)(on >> 8)),
                 ((byte)(off & 0xFF)), ((byte)(off >> 8)),
                 ((byte)(count & 0xFF)), ((byte)(count >> 8)),
-                0,                                                   // gain, dB
+                unchecked((byte)gainDecibels),
             ]
         );
     }
@@ -480,6 +493,27 @@ public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser,
             ]
         );
         LoadConnectionInterval();
+    }
+    /// <inheritdoc />
+    public ValueTask PlayTrackpadHapticAsync(TrackpadHapticEffect effect, CancellationToken cancellationToken = default) {
+        if (effect.Kind != TrackpadHapticKinds.Pulse) {
+            return ValueTask.CompletedTask;
+        }
+
+        // The pulse command numbers the pads left 1, right 0 and both 2, swapped for legacy reasons (Linux).
+        _ = FirePulse(
+            count: effect.Repeat,
+            gainDecibels: effect.GainDecibels,
+            off: effect.OffMicroseconds,
+            on: effect.OnMicroseconds,
+            side: effect.Side switch {
+                TrackpadSide.Left => HapticSideLeft,
+                TrackpadSide.Right => HapticSideRight,
+                _ => ((byte)2),
+            }
+        );
+
+        return ValueTask.CompletedTask;
     }
     /// <inheritdoc />
     /// <remarks>The Steam-button LED has one channel, so its brightness follows the brightest of the three.</remarks>

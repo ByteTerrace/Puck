@@ -303,3 +303,46 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
         return false;
     }
 }
+/// <summary>A parser for the typed output forms: HD rumble, Home LED patterns and trackpad haptics.</summary>
+internal sealed class TestHdParser : IGamepadParser, IRumbleParser, IHdRumbleParser, IHomeLedPatternParser, ITrackpadHapticParser {
+    private readonly Lock m_gate = new();
+
+    public List<(HdRumbleSide Left, HdRumbleSide Right)> HdWrites { get; } = [];
+    public List<TrackpadHapticEffect> Haptics { get; } = [];
+    public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
+    public List<HomeLedPattern> Patterns { get; } = [];
+    public TimeSpan RumbleRefreshInterval => TimeSpan.Zero;
+    public TimeSpan RumbleWriteInterval => TimeSpan.Zero;
+    public TrackpadHapticKinds SupportedTrackpadHaptics => TrackpadHapticKinds.Tone;
+    public GamepadType Type => GamepadType.Unknown;
+
+    public ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    public ValueTask PlayTrackpadHapticAsync(TrackpadHapticEffect effect, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            Haptics.Add(item: effect);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetHdRumbleAsync(HdRumbleSide left, HdRumbleSide right, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            HdWrites.Add(item: (left, right));
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetHomeLedPatternAsync(HomeLedPattern pattern, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            Patterns.Add(item: pattern);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException(message: "An HD-rumble parser receives every rumble as HD rumble.");
+    public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
+        state = GamepadState.Neutral;
+
+        return (!report.IsEmpty && (report[0] == 1));
+    }
+}

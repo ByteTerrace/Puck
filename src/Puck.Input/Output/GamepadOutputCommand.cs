@@ -12,6 +12,12 @@ public enum GamepadOutputKind : byte {
     Raw = 3,
     /// <summary>Adaptive trigger effects.</summary>
     TriggerEffect = 4,
+    /// <summary>HD rumble with per-band frequency and amplitude.</summary>
+    HdRumble = 5,
+    /// <summary>A Home LED brightness pattern.</summary>
+    HomeLedPattern = 6,
+    /// <summary>A trackpad haptic.</summary>
+    TrackpadHaptic = 7,
 }
 /// <summary>
 /// A single queued output request handed from a caller's thread to the device's I/O loop. One tagged shape
@@ -24,6 +30,9 @@ public enum GamepadOutputKind : byte {
 /// <param name="Raw">The raw report payload (for <see cref="GamepadOutputKind.Raw"/>).</param>
 /// <param name="TriggerEffectLeft">The left trigger's adaptive effect (for <see cref="GamepadOutputKind.TriggerEffect"/>).</param>
 /// <param name="TriggerEffectRight">The right trigger's adaptive effect (for <see cref="GamepadOutputKind.TriggerEffect"/>).</param>
+/// <param name="HdRumble">The HD-rumble payload (for <see cref="GamepadOutputKind.HdRumble"/>).</param>
+/// <param name="HomeLedPattern">The Home LED pattern (for <see cref="GamepadOutputKind.HomeLedPattern"/>).</param>
+/// <param name="TrackpadHaptic">The trackpad haptic (for <see cref="GamepadOutputKind.TrackpadHaptic"/>).</param>
 /// <param name="ScheduleTick">
 /// The capture-clock (<see cref="Puck.Commands.IInputClock"/>) engine tick at which a <see cref="GamepadOutputKind.TriggerEffect"/>
 /// should be applied; <c>0</c> applies it immediately. Lets a caller schedule rhythm-grade haptics ahead of time.
@@ -36,5 +45,8 @@ public readonly record struct GamepadOutputCommand(
     byte[]? Raw,
     TriggerEffectSpec TriggerEffectLeft = default,
     TriggerEffectSpec TriggerEffectRight = default,
-    ulong ScheduleTick = 0UL
+    ulong ScheduleTick = 0UL,
+    HdRumbleEffect HdRumble = default,
+    HomeLedPattern HomeLedPattern = default,
+    TrackpadHapticEffect TrackpadHaptic = default
 );

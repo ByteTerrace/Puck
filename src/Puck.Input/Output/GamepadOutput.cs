@@ -22,16 +22,19 @@ public sealed class GamepadOutput : IGamepadOutput {
     /// <param name="capabilities">The output effects supported by the device.</param>
     /// <param name="queue">The device I/O loop's bounded command queue.</param>
     /// <param name="accepting">Whether the output begins ready to accept requests.</param>
+    /// <param name="trackpadHaptics">The trackpad haptic forms the device plays.</param>
     /// <exception cref="ArgumentNullException"><paramref name="queue"/> is <see langword="null"/>.</exception>
     public GamepadOutput(
         InputDeviceId deviceId,
         GamepadOutputCapabilities capabilities,
         GamepadOutputQueue queue,
-        bool accepting = true
+        bool accepting = true,
+        TrackpadHapticKinds trackpadHaptics = TrackpadHapticKinds.None
     ) {
         ArgumentNullException.ThrowIfNull(queue);
 
         Capabilities = capabilities;
+        TrackpadHaptics = trackpadHaptics;
         DeviceId = deviceId;
         m_queue = queue;
         m_state = (accepting
@@ -44,6 +47,8 @@ public sealed class GamepadOutput : IGamepadOutput {
     public GamepadOutputCapabilities Capabilities { get; }
     /// <inheritdoc />
     public InputDeviceId DeviceId { get; }
+    /// <inheritdoc />
+    public TrackpadHapticKinds TrackpadHaptics { get; }
 
     /// <summary>Resumes output after a wireless receiver slot begins streaming again.</summary>
     public void Resume() {
@@ -98,6 +103,40 @@ public sealed class GamepadOutput : IGamepadOutput {
         );
     }
     /// <inheritdoc />
+    public bool PlayTrackpadHaptic(in TrackpadHapticEffect effect) {
+        if ((effect.Kind == TrackpadHapticKinds.None) || ((TrackpadHaptics & effect.Kind) != effect.Kind)) {
+            return false;
+        }
+
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.TrackpadHaptic,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TrackpadHaptic: effect,
+                TriggerRumble: default
+            ),
+            required: GamepadOutputCapabilities.TrackpadHaptics
+        );
+    }
+    /// <inheritdoc />
+    public bool RumbleHd(in HdRumbleEffect effect) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                HdRumble: effect,
+                Kind: GamepadOutputKind.HdRumble,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default
+            ),
+            required: (Capabilities.HasFlag(flag: GamepadOutputCapabilities.HdRumble)
+                ? GamepadOutputCapabilities.HdRumble
+                : GamepadOutputCapabilities.Rumble)
+        );
+    }
+    /// <inheritdoc />
     public bool RumbleTriggers(in TriggerRumbleEffect effect) {
         return TryEnqueue(
             command: new GamepadOutputCommand(
@@ -121,6 +160,20 @@ public sealed class GamepadOutput : IGamepadOutput {
                 TriggerRumble: default
             ),
             required: GamepadOutputCapabilities.RawEffect
+        );
+    }
+    /// <inheritdoc />
+    public bool SetHomeLedPattern(in HomeLedPattern pattern) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                HomeLedPattern: pattern,
+                Kind: GamepadOutputKind.HomeLedPattern,
+                Led: default,
+                Raw: null,
+                Rumble: default,
+                TriggerRumble: default
+            ),
+            required: GamepadOutputCapabilities.HomeLedPattern
         );
     }
     /// <inheritdoc />

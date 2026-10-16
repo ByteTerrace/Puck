@@ -367,6 +367,47 @@ public sealed class GamepadDeviceTests {
         );
     }
     [Fact]
+    public async Task Typed_output_reaches_an_hd_parser_and_a_plain_parser_gets_band_amplitudes() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        using var plainHid = new TestHidDevice();
+        var parser = new TestHdParser();
+        var plain = new TestParser();
+        var band = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 0.25f, FrequencyHertz: 900f), Low: new HdRumbleBand(Amplitude: 2f, FrequencyHertz: 60f));
+        var effect = new HdRumbleEffect(DurationMilliseconds: 10_000u, Left: band, Right: HdRumbleSide.Rest);
+
+        hid.EnqueueReport(1);
+        plainHid.EnqueueReport(1);
+        using var device = new GamepadDevice(clock: new ManualInputClock(), deviceId: InputDeviceId.New(), hid: hid, parser: parser, playerIndex: 0, timeProvider: hid.Time);
+        using var plainDevice = CreateDevice(hid: plainHid, parser: plain);
+
+        device.Start();
+        plainDevice.Start();
+        await hid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 2);
+        await plainHid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 2);
+
+        Assert.True(condition: device.Output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.HdRumble | GamepadOutputCapabilities.HomeLedPattern | GamepadOutputCapabilities.TrackpadHaptics));
+        Assert.True(condition: device.Output.RumbleHd(effect: in effect));
+        Assert.True(condition: device.Output.SetHomeLedPattern(pattern: HomeLedPattern.Breathing(intensity: 15, period: TimeSpan.FromSeconds(value: 2))));
+        Assert.True(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Left, frequencyHertz: 200, durationMilliseconds: 100)));
+        Assert.False(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Left, onMicroseconds: 1, offMicroseconds: 1, repeat: 1)));
+        Assert.True(condition: plainDevice.Output.RumbleHd(effect: in effect));
+        Assert.False(condition: plainDevice.Output.SetHomeLedPattern(pattern: HomeLedPattern.Steady(intensity: 1)));
+        hid.Time.Advance(by: SteadyStatePoll);
+        plainHid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 3);
+        await plainHid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 3);
+
+        var (left, right) = Assert.Single(collection: parser.HdWrites);
+
+        Assert.Equal(expected: 1f, actual: left.Low.Amplitude);
+        Assert.Equal(expected: 900f, actual: left.High.FrequencyHertz);
+        Assert.Equal(expected: HdRumbleSide.Rest, actual: right);
+        Assert.Equal(expected: 2, actual: Assert.Single(collection: parser.Patterns).Steps.Length);
+        Assert.Single(collection: parser.Haptics);
+        Assert.Equal(expected: [(1f, 0.25f)], actual: plain.RumbleWrites);
+    }
+    [Fact]
     public async Task Scheduled_trigger_effect_is_held_until_its_tick_and_fires_without_another_input_report() {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var hid = new TestHidDevice();

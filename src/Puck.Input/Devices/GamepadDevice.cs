@@ -49,10 +49,10 @@ public sealed class GamepadDevice : IGamepadConnection {
     private Task? m_loop;
     private bool m_rumbleActive;
     private bool m_rumblePending;
-    private float m_rumbleHigh;
-    private float m_rumbleLow;
-    private float m_rumbleSentHigh;
-    private float m_rumbleSentLow;
+    private HdRumbleSide m_rumbleLeft;
+    private HdRumbleSide m_rumbleRight;
+    private HdRumbleSide m_rumbleSentLeft;
+    private HdRumbleSide m_rumbleSentRight;
     private int m_rumbleStopRefreshes;
     private bool m_scheduledTriggerActive;
     private bool m_triggerEffectApplied;
@@ -102,6 +102,7 @@ public sealed class GamepadDevice : IGamepadConnection {
         m_hid = hid;
         m_output = new GamepadOutput(
             capabilities: CapabilitiesFor(parser: parser),
+            trackpadHaptics: ((parser as ITrackpadHapticParser)?.SupportedTrackpadHaptics ?? TrackpadHapticKinds.None),
             deviceId: deviceId,
             queue: m_outputQueue,
             accepting: !activateOnStream
@@ -185,23 +186,34 @@ public sealed class GamepadDevice : IGamepadConnection {
         PlayerIndex = -1;
     }
 
-    // Records a requested rumble. The write itself happens in ServiceRumbleAsync, which owns the controller's cadence.
-    private void RequestRumble(in RumbleEffect effect) {
-        if (effect.DurationMilliseconds == 0u) {
-            m_rumbleHigh = 0f;
-            m_rumbleLow = 0f;
+    private bool RumbleSent => ((0f < m_rumbleSentLeft.PeakAmplitude) || (0f < m_rumbleSentRight.PeakAmplitude));
+
+    private static HdRumbleSide Normalize(HdRumbleSide side) => new(
+        High: (side.High with { Amplitude = NormalizeIntensity(intensity: side.High.Amplitude), }),
+        Low: (side.Low with { Amplitude = NormalizeIntensity(intensity: side.Low.Amplitude), })
+    );
+    // Records a requested rumble: an ordinary one is both actuators at their default carriers. The write itself
+    // happens in ServiceRumbleAsync, which owns the controller's cadence.
+    private void RequestRumble(HdRumbleSide left, HdRumbleSide right, uint durationMilliseconds) {
+        if (durationMilliseconds == 0u) {
+            m_rumbleLeft = HdRumbleSide.Rest;
+            m_rumbleRight = HdRumbleSide.Rest;
         } else {
-            m_rumbleHigh = NormalizeIntensity(intensity: effect.HighFrequency);
-            m_rumbleLow = NormalizeIntensity(intensity: effect.LowFrequency);
+            m_rumbleLeft = Normalize(side: left);
+            m_rumbleRight = Normalize(side: right);
         }
 
         m_rumblePending = true;
-        m_rumbleActive = ((0f < m_rumbleHigh) || (0f < m_rumbleLow));
+        m_rumbleActive = ((0f < m_rumbleLeft.PeakAmplitude) || (0f < m_rumbleRight.PeakAmplitude));
         m_rumbleExpiry = (m_rumbleActive
-            ? (m_time.GetTimestamp() + ((long)(effect.DurationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
+            ? (m_time.GetTimestamp() + ((long)(durationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
             : long.MaxValue
         );
     }
+    private static HdRumbleSide RumbleSide(in RumbleEffect effect) => new(
+        High: new HdRumbleBand(Amplitude: effect.HighFrequency, FrequencyHertz: 0f),
+        Low: new HdRumbleBand(Amplitude: effect.LowFrequency, FrequencyHertz: 0f)
+    );
     // Leaves a pad that stays connected at rest when the engine releases it: motors stopped and adaptive
     // triggers released. Best-effort and bounded, on the disposing thread once the I/O loop has stopped.
     private void NeutralizeOutput() {
@@ -214,12 +226,14 @@ public sealed class GamepadDevice : IGamepadConnection {
         try {
             if (
                 (m_parser is IRumbleParser rumbleParser) &&
-                (m_rumbleActive || (0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow))
+                (m_rumbleActive || RumbleSent)
             ) {
-                _ = rumbleParser.SetRumbleAsync(
+                _ = WriteRumbleAsync(
                     cancellationToken: timeout.Token,
-                    highFrequency: 0f,
-                    lowFrequency: 0f
+                    left: HdRumbleSide.Rest,
+                    parser: rumbleParser,
+                    right: HdRumbleSide.Rest,
+                    timestamp: m_time.GetTimestamp()
                 ).AsTask().Wait(millisecondsTimeout: DisposeOutputMilliseconds);
             }
 
@@ -262,7 +276,7 @@ public sealed class GamepadDevice : IGamepadConnection {
 
         if (
             (m_rumbleRefreshTicks > 0L) &&
-            ((0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow) || (m_rumbleStopRefreshes > 0))
+            (RumbleSent || (m_rumbleStopRefreshes > 0))
         ) {
             deadline = Math.Min(
                 val1: deadline,
@@ -288,8 +302,8 @@ public sealed class GamepadDevice : IGamepadConnection {
         ) {
             m_rumbleActive = false;
             m_rumbleExpiry = long.MaxValue;
-            m_rumbleHigh = 0f;
-            m_rumbleLow = 0f;
+            m_rumbleLeft = HdRumbleSide.Rest;
+            m_rumbleRight = HdRumbleSide.Rest;
             m_rumblePending = true;
         }
 
@@ -301,11 +315,11 @@ public sealed class GamepadDevice : IGamepadConnection {
         if (m_rumblePending) {
             var stop = !m_rumbleActive;
             var stronger = (MathF.Max(
-                x: m_rumbleLow,
-                y: m_rumbleHigh
+                x: m_rumbleLeft.PeakAmplitude,
+                y: m_rumbleRight.PeakAmplitude
             ) > MathF.Max(
-                x: m_rumbleSentLow,
-                y: m_rumbleSentHigh
+                x: m_rumbleSentLeft.PeakAmplitude,
+                y: m_rumbleSentRight.PeakAmplitude
             ));
 
             if (
@@ -324,9 +338,9 @@ public sealed class GamepadDevice : IGamepadConnection {
 
             await WriteRumbleAsync(
                 cancellationToken: cancellationToken,
-                high: m_rumbleHigh,
-                low: m_rumbleLow,
+                left: m_rumbleLeft,
                 parser: rumbleParser,
+                right: m_rumbleRight,
                 timestamp: now
             );
 
@@ -340,12 +354,12 @@ public sealed class GamepadDevice : IGamepadConnection {
             return;
         }
 
-        if ((0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow)) {
+        if (RumbleSent) {
             await WriteRumbleAsync(
                 cancellationToken: cancellationToken,
-                high: m_rumbleSentHigh,
-                low: m_rumbleSentLow,
+                left: m_rumbleSentLeft,
                 parser: rumbleParser,
+                right: m_rumbleSentRight,
                 timestamp: now
             );
         } else if (m_rumbleStopRefreshes > 0) {
@@ -353,9 +367,9 @@ public sealed class GamepadDevice : IGamepadConnection {
 
             await WriteRumbleAsync(
                 cancellationToken: cancellationToken,
-                high: 0f,
-                low: 0f,
+                left: HdRumbleSide.Rest,
                 parser: rumbleParser,
+                right: HdRumbleSide.Rest,
                 timestamp: now
             );
         }
@@ -365,16 +379,32 @@ public sealed class GamepadDevice : IGamepadConnection {
             ? 0L
             : ((long)(interval.TotalSeconds * frequency))
         );
-    private async ValueTask WriteRumbleAsync(IRumbleParser parser, float low, float high, long timestamp, CancellationToken cancellationToken) {
-        await parser.SetRumbleAsync(
-            cancellationToken: cancellationToken,
-            highFrequency: high,
-            lowFrequency: low
-        );
+    // An HD-rumble controller receives both actuators' bands; any other gets each band's larger amplitude as its
+    // low and high motor intensity.
+    private async ValueTask WriteRumbleAsync(IRumbleParser parser, HdRumbleSide left, HdRumbleSide right, long timestamp, CancellationToken cancellationToken) {
+        if (parser is IHdRumbleParser hdParser) {
+            await hdParser.SetHdRumbleAsync(
+                cancellationToken: cancellationToken,
+                left: left,
+                right: right
+            );
+        } else {
+            await parser.SetRumbleAsync(
+                cancellationToken: cancellationToken,
+                highFrequency: MathF.Max(
+                    x: left.High.Amplitude,
+                    y: right.High.Amplitude
+                ),
+                lowFrequency: MathF.Max(
+                    x: left.Low.Amplitude,
+                    y: right.Low.Amplitude
+                )
+            );
+        }
 
         m_rumbleLastWrite = timestamp;
-        m_rumbleSentHigh = high;
-        m_rumbleSentLow = low;
+        m_rumbleSentLeft = left;
+        m_rumbleSentRight = right;
     }
     private static GamepadOutputCapabilities CapabilitiesFor(IGamepadParser parser) {
         // Derive capabilities from what the parser actually implements, so every advertised feature has a real
@@ -394,13 +424,51 @@ public sealed class GamepadDevice : IGamepadConnection {
             capabilities |= GamepadOutputCapabilities.TriggerEffect;
         }
 
+        if (parser is IHdRumbleParser) {
+            capabilities |= GamepadOutputCapabilities.HdRumble;
+        }
+
+        if (parser is IHomeLedPatternParser) {
+            capabilities |= GamepadOutputCapabilities.HomeLedPattern;
+        }
+
+        if (parser is ITrackpadHapticParser) {
+            capabilities |= GamepadOutputCapabilities.TrackpadHaptics;
+        }
+
         return capabilities;
     }
     private async ValueTask DrainOutputAsync(CancellationToken cancellationToken) {
         for (var count = 0; ((count < MaximumOutputCommandsPerIteration) && m_outputQueue.TryDequeue(command: out var command)); ++count) {
             switch (command.Kind) {
                 case GamepadOutputKind.Rumble:
-                    RequestRumble(effect: command.Rumble);
+                    RequestRumble(
+                        durationMilliseconds: command.Rumble.DurationMilliseconds,
+                        left: RumbleSide(effect: command.Rumble),
+                        right: RumbleSide(effect: command.Rumble)
+                    );
+
+                    break;
+                case GamepadOutputKind.HdRumble:
+                    RequestRumble(
+                        durationMilliseconds: command.HdRumble.DurationMilliseconds,
+                        left: command.HdRumble.Left,
+                        right: command.HdRumble.Right
+                    );
+
+                    break;
+                case GamepadOutputKind.HomeLedPattern when (m_parser is IHomeLedPatternParser pattern):
+                    await pattern.SetHomeLedPatternAsync(
+                        cancellationToken: cancellationToken,
+                        pattern: command.HomeLedPattern
+                    );
+
+                    break;
+                case GamepadOutputKind.TrackpadHaptic when (m_parser is ITrackpadHapticParser haptic):
+                    await haptic.PlayTrackpadHapticAsync(
+                        cancellationToken: cancellationToken,
+                        effect: command.TrackpadHaptic
+                    );
 
                     break;
                 case GamepadOutputKind.Led when (m_parser is ILedParser led):
@@ -473,7 +541,7 @@ public sealed class GamepadDevice : IGamepadConnection {
         // write lands on the receiver and is harmless.
         if (
             (m_parser is IRumbleParser rumbleParser) &&
-            (m_rumbleActive || (0f < m_rumbleSentHigh) || (0f < m_rumbleSentLow))
+            (m_rumbleActive || RumbleSent)
         ) {
             await rumbleParser.SetRumbleAsync(
                 cancellationToken: cancellationToken,
@@ -485,12 +553,12 @@ public sealed class GamepadDevice : IGamepadConnection {
         m_sequence = 0UL;
         m_rumbleActive = false;
         m_rumbleExpiry = long.MaxValue;
-        m_rumbleHigh = 0f;
+        m_rumbleLeft = HdRumbleSide.Rest;
         m_rumbleLastWrite = long.MinValue;
-        m_rumbleLow = 0f;
+        m_rumbleRight = HdRumbleSide.Rest;
         m_rumblePending = false;
-        m_rumbleSentHigh = 0f;
-        m_rumbleSentLow = 0f;
+        m_rumbleSentLeft = HdRumbleSide.Rest;
+        m_rumbleSentRight = HdRumbleSide.Rest;
         m_rumbleStopRefreshes = 0;
         m_scheduledTriggerActive = false;
         m_output.Suspend();

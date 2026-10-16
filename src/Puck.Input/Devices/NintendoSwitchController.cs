@@ -17,7 +17,7 @@ namespace Puck.Input.Devices;
 /// interrupts a running rumble. The face buttons map by position (B south, A east, Y west, X north), and the
 /// Home LED is the settable indicator: its brightness follows the brightest channel of the requested colour.
 /// </remarks>
-public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, ILedParser, IServicedGamepadParser, IPhysicalIdentityParser, IStreamingParser, IDisposable {
+public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, ILedParser, IServicedGamepadParser, IPhysicalIdentityParser, IStreamingParser, IHdRumbleParser, IHomeLedPatternParser, IDisposable {
     private const float AccelerometerNominalGPerLsb = (1f / 4096f);
     private const int BatteryOffset = 2;
     private const int BluetoothOutputReportLength = 49;
@@ -28,10 +28,23 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private const byte CommandFastBaudRate = 0x03;
     private const byte CommandHandshake = 0x02;
     private const byte CommandRequestStatus = 0x01;
-    // The default HD-rumble carriers (Linux): 160 Hz for the low band and 320 Hz for the high band, encoded as
-    // enc = round(32 * log2(f / 10)) with the high band storing (enc - 0x60) * 4 and the low band enc - 0x40.
-    private const byte DefaultLowFrequencyCode = 0x40;
-    private const ushort DefaultHighFrequencyCode = 0x0100;
+    // HD-rumble carriers (Linux, dekuNukem): 160 Hz low and 320 Hz high by default; the low band spans 41 to
+    // 626 Hz and the high band 82 to 1253 Hz.
+    private const float DefaultHighFrequencyHertz = 320f;
+    private const float DefaultLowFrequencyHertz = 160f;
+    private const float MaximumHighFrequencyHertz = 1253f;
+    private const float MaximumLowFrequencyHertz = 626f;
+    private const float MinimumHighFrequencyHertz = 82f;
+    private const float MinimumLowFrequencyHertz = 41f;
+    private const int HomeLedArgumentLength = 25;
+    // The Home LED's base step runs about 8 ms (code 1) through 175 ms (code 15).
+    private const double HomeLedMaximumStepMilliseconds = 175.0;
+    private const double HomeLedMinimumStepMilliseconds = 8.0;
+    private const uint LeftStickParametersAddress = 0x6086U;
+    private const uint RightStickParametersAddress = 0x6098U;
+    private const int StickParametersLength = 18;
+    // SDL resends the HID-only command when a USB pad stops reporting for this long (Steam can switch it back).
+    private const int UsbKeepAliveMilliseconds = 100;
     private const uint FactoryImuCalibrationAddress = 0x6020U;
     private const uint FactoryLeftStickCalibrationAddress = 0x603DU;
     private const uint FactoryRightStickCalibrationAddress = 0x6046U;
@@ -67,7 +80,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private const int StickCalibrationMinCenter = 512;
     private const int StickCalibrationMinSpan = 128;
     private const int StickCenter = 2048;
-    private const float StickDeadzone = 0.12f;
+    private const float StickDeadzone = 0.12f;     // used when the pad's own deadzone is unreadable
     private const float StickRange = 1800f;
     private const int SubcommandAttempts = 5;
     private const byte SubcommandDeviceInfo = 0x02;
@@ -120,7 +133,10 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
     private float m_averageReportSeconds = 0.015f;
     private Vector3 m_gyroOffset;
     private Vector3 m_gyroScale = new(value: GyroNominalRadiansPerSecondPerLsb);
-    private byte m_homeLedIntensity;
+    private byte[] m_homeLedArguments = EncodeHomeLedPattern(pattern: HomeLedPattern.Steady(intensity: 0));
+    private long m_lastKeepAliveTimestamp = long.MinValue;
+    private float m_leftStickDeadzone = StickDeadzone;
+    private float m_rightStickDeadzone = StickDeadzone;
     private bool m_hasFullReport;
     private bool m_homeLedPending;
     private bool m_imuReenablePending;
@@ -167,8 +183,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
                 length: 4,
                 start: 0
             ),
-            high: 0f,
-            low: 0f
+            side: HdRumbleSide.Rest
         );
         m_rumbleData.AsSpan(
             length: 4,
@@ -427,7 +442,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
 
         return m_tracker.Orientation;
     }
-    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration) {
+    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration, float deadzone) {
         var rawX = report[offset] | ((report[(offset + 1)] & 0x0F) << 8);
         var rawY = (report[(offset + 1)] >> 4) | (report[(offset + 2)] << 4);
         float x, y;
@@ -450,7 +465,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         }
 
         return GamepadNormalization.ApplyRadialDeadzone(
-            deadzone: StickDeadzone,
+            deadzone: deadzone,
             stick: new Vector2(
                 x: Math.Clamp(
                     max: 1f,
@@ -633,19 +648,32 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
 
         return false;
     }
-    // Writes one side's four HD-rumble bytes: the 320 Hz high band at the high intensity's amplitude step and
-    // the 160 Hz low band at the low intensity's. The 9-bit high-band frequency lends its top bit to byte 1, and
-    // the 9-bit low-band amplitude lends its top bit to byte 2.
-    private static void WriteRumbleSide(Span<byte> destination, float high, float low) {
-        var highStep = AmplitudeStep(intensity: high);
-        var lowStep = AmplitudeStep(intensity: low);
+    // Writes one actuator's four HD-rumble bytes (Linux joycon_encode_rumble, SDL EncodeRumble): each carrier
+    // encodes as enc = round(32 * log2(f / 10)), the high band storing (enc - 0x60) * 4 in 9 bits and the low
+    // band enc - 0x40 in 7; each amplitude takes the first table step at or above it. The high-band frequency
+    // lends its top bit to byte 1, and the 9-bit low-band amplitude lends its top bit to byte 2.
+    private static void WriteRumbleSide(Span<byte> destination, HdRumbleSide side) {
+        var highCode = ((EncodeFrequency(
+            fallback: DefaultHighFrequencyHertz,
+            hertz: side.High.FrequencyHertz,
+            maximum: MaximumHighFrequencyHertz,
+            minimum: MinimumHighFrequencyHertz
+        ) - 0x60) * 4);
+        var lowCode = (EncodeFrequency(
+            fallback: DefaultLowFrequencyHertz,
+            hertz: side.Low.FrequencyHertz,
+            maximum: MaximumLowFrequencyHertz,
+            minimum: MinimumLowFrequencyHertz
+        ) - 0x40);
+        var highStep = AmplitudeStep(intensity: side.High.Amplitude);
+        var lowStep = AmplitudeStep(intensity: side.Low.Amplitude);
         var lowAmplitude = ((((lowStep & 1) != 0)
             ? 0x8000
             : 0) | (0x40 + (lowStep >> 1)));
 
-        destination[0] = ((byte)(DefaultHighFrequencyCode & 0xFF));
-        destination[1] = ((byte)((highStep * 2) | ((DefaultHighFrequencyCode >> 8) & 0x01)));
-        destination[2] = ((byte)(DefaultLowFrequencyCode | ((lowAmplitude >> 8) & 0x80)));
+        destination[0] = ((byte)(highCode & 0xFF));
+        destination[1] = ((byte)((highStep * 2) | ((highCode >> 8) & 0x01)));
+        destination[2] = ((byte)(lowCode | ((lowAmplitude >> 8) & 0x80)));
         destination[3] = ((byte)(lowAmplitude & 0xFF));
 
         static int AmplitudeStep(float intensity) {
@@ -659,6 +687,18 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             }
 
             return (amplitudes.Length - 1);
+        }
+        static int EncodeFrequency(float hertz, float fallback, float minimum, float maximum) {
+            var clamped = ((float.IsFinite(f: hertz) && (hertz > 0f))
+                ? Math.Clamp(
+                    max: maximum,
+                    min: minimum,
+                    value: hertz
+                )
+                : fallback
+            );
+
+            return ((int)MathF.Round(x: (32f * MathF.Log2(x: (clamped / 10f)))));
         }
     }
     // Writes at most one pending output report once the transport's spacing has passed since the last: a pending
@@ -691,7 +731,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             if (m_homeLedPending) {
                 m_homeLedPending = false;
                 buffer[SubcommandOffset] = SubcommandHomeLed;
-                HomeLedArguments().CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
+                m_homeLedArguments.CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
             } else {
                 m_imuReenablePending = false;
                 buffer[SubcommandOffset] = SubcommandEnableImu;
@@ -708,11 +748,74 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             cancellationToken: cancellationToken
         );
     }
-    private byte[] HomeLedArguments() {
-        // Mini-cycle 1 at a steady intensity, no further cycles (SDL).
-        var intensity = ((byte)(m_homeLedIntensity << 4));
+    // Encodes subcommand 0x38's 25 bytes (dekuNukem, Set HOME Light): [0] step count (high nibble) and base step
+    // code (low), [1] start intensity (high) and repeat count (low, 0 forever), then the steps in pairs: one byte
+    // with both intensities, then a fade/hold byte for each.
+    private static byte[] EncodeHomeLedPattern(HomeLedPattern pattern) {
+        var arguments = new byte[HomeLedArgumentLength];
+        var steps = (pattern.Steps.IsDefault
+            ? []
+            : pattern.Steps
+        );
+        var count = Math.Min(
+            val1: steps.Length,
+            val2: HomeLedPattern.MaximumSteps
+        );
+        var stepCode = ((int)Math.Clamp(
+            max: 15.0,
+            min: 1.0,
+            value: (Math.Round(a: ((pattern.StepDuration.TotalMilliseconds - HomeLedMinimumStepMilliseconds) / ((HomeLedMaximumStepMilliseconds - HomeLedMinimumStepMilliseconds) / 14.0))) + 1.0)
+        ));
 
-        return [0x01, intensity, intensity, 0x00,];
+        arguments[0] = ((byte)((count << 4) | stepCode));
+        arguments[1] = ((byte)((Nibble(value: pattern.StartIntensity) << 4) | Nibble(value: pattern.Repeat)));
+
+        for (var index = 0; (index < count); ++index) {
+            var step = steps[index];
+            var group = (2 + ((index / 2) * 3));
+            var timing = ((byte)((Nibble(value: step.FadeSteps) << 4) | Nibble(value: step.HoldSteps)));
+
+            if (0 == (index % 2)) {
+                arguments[group] = ((byte)(Nibble(value: step.Intensity) << 4));
+                arguments[(group + 1)] = timing;
+            } else {
+                arguments[group] |= Nibble(value: step.Intensity);
+                arguments[(group + 2)] = timing;
+            }
+        }
+
+        return arguments;
+
+        static byte Nibble(byte value) => Math.Min(
+            val1: value,
+            val2: ((byte)15)
+        );
+    }
+    // Reads a stick's device parameters (18 bytes at 0x6086 left, 0x6098 right) for its radial deadzone, the third
+    // packed 12-bit value (dekuNukem), and normalizes it by the stick's travel. An unreadable or implausible block
+    // keeps the default.
+    private async ValueTask<float> LoadStickDeadzoneAsync(uint address, StickCalibration calibration, CancellationToken cancellationToken) {
+        var data = new byte[StickParametersLength];
+
+        if (!await TryReadSpiFlashAsync(
+            address: address,
+            cancellationToken: cancellationToken,
+            destination: data
+        )) {
+            return StickDeadzone;
+        }
+
+        var raw = (data[3] | ((data[4] & 0x0F) << 8));
+        var travel = (calibration.IsValid
+            ? ((calibration.MaxAboveX + calibration.MaxAboveY + calibration.MinBelowX + calibration.MinBelowY) / 4f)
+            : StickRange
+        );
+        var deadzone = (raw / travel);
+
+        return (((raw > 0) && (raw < 0xFFF) && (deadzone < 0.5f))
+            ? deadzone
+            : StickDeadzone
+        );
     }
     // Sends a configuration subcommand the pad cannot work without, faulting initialization when it is never
     // acknowledged so the manager reopens the pad rather than keep a half-configured one (Linux joycon_init).
@@ -792,6 +895,16 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             stickName: "right",
             userAddress: UserRightStickCalibrationAddress
         );
+        m_leftStickDeadzone = await LoadStickDeadzoneAsync(
+            address: LeftStickParametersAddress,
+            calibration: m_leftStickCalibration,
+            cancellationToken: cancellationToken
+        );
+        m_rightStickDeadzone = await LoadStickDeadzoneAsync(
+            address: RightStickParametersAddress,
+            calibration: m_rightStickCalibration,
+            cancellationToken: cancellationToken
+        );
         await LoadImuCalibrationAsync(cancellationToken: cancellationToken);
         await SendRequiredSubcommandAsync(
             argument: 0x01,
@@ -822,7 +935,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             subcommand: SubcommandPlayerLights
         );
         _ = await SendSubcommandAsync(
-            arguments: HomeLedArguments(),
+            arguments: m_homeLedArguments,
             cancellationToken: cancellationToken,
             matches: null,
             subcommand: SubcommandHomeLed
@@ -847,7 +960,10 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         }
     }
     /// <inheritdoc />
-    public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+    /// <remarks>Flushes held output once its spacing passes, re-enables a silent IMU every three seconds, and on USB
+    /// resends the HID-only command when reports stop for 100 ms (SDL), since another driver such as Steam can
+    /// switch the pad back to its proprietary mode.</remarks>
+    public async ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
         if (
             m_imuSilent &&
             (timestamp >= m_nextImuReenable)
@@ -856,43 +972,105 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             m_imuReenablePending = true;
         }
 
-        return FlushOutputAsync(cancellationToken: cancellationToken);
+        await FlushOutputAsync(cancellationToken: cancellationToken);
+
+        if (
+            m_isBluetooth ||
+            !m_hasFullReport
+        ) {
+            return;
+        }
+
+        var now = m_time.GetTimestamp();
+        var keepAliveTicks = ((UsbKeepAliveMilliseconds * m_time.TimestampFrequency) / 1000L);
+
+        if (
+            ((now - m_lastReportTimestamp) < keepAliveTicks) ||
+            ((m_lastKeepAliveTimestamp != long.MinValue) && ((now - m_lastKeepAliveTimestamp) < keepAliveTicks))
+        ) {
+            return;
+        }
+
+        m_lastKeepAliveTimestamp = now;
+        m_outputBuffer.AsSpan().Clear();
+        m_outputBuffer[0] = InitCommandOutputReportId;
+        m_outputBuffer[1] = CommandDisableUsbTimeout;
+
+        await m_device.WriteAsync(
+            buffer: m_outputBuffer,
+            cancellationToken: cancellationToken
+        );
     }
     /// <inheritdoc />
-    /// <remarks>The Home LED has one channel, so its brightness follows the brightest of the three. The write
-    /// waits for the transport's output spacing.</remarks>
+    /// <remarks>The Home LED has one channel: its brightness follows the brightest of the three through SDL's
+    /// perceptual curve. The write waits for the transport's output spacing.</remarks>
     public ValueTask SetLedAsync(LedColor color, CancellationToken cancellationToken = default) {
-        m_homeLedIntensity = ((byte)(Math.Max(
+        var brightness = ((Math.Max(
             val1: color.Red,
             val2: Math.Max(
                 val1: color.Green,
                 val2: color.Blue
             )
-        ) >> 4));
+        ) * 100) / 255);
+        var intensity = ((brightness <= 0)
+            ? 0
+            : ((brightness < 65)
+                ? ((brightness + 5) / 10)
+                : ((int)MathF.Ceiling(x: (15f * MathF.Pow(x: (brightness / 100f), y: 2.13f))))
+            )
+        );
+
+        return SetHomeLedPatternAsync(
+            cancellationToken: cancellationToken,
+            pattern: HomeLedPattern.Steady(intensity: ((byte)Math.Min(
+                val1: intensity,
+                val2: 15
+            )))
+        );
+    }
+    /// <inheritdoc />
+    /// <remarks>The write waits for the transport's output spacing.</remarks>
+    public ValueTask SetHomeLedPatternAsync(HomeLedPattern pattern, CancellationToken cancellationToken = default) {
+        m_homeLedArguments = EncodeHomeLedPattern(pattern: pattern);
         m_homeLedPending = true;
 
         return FlushOutputAsync(cancellationToken: cancellationToken);
     }
     /// <inheritdoc />
-    /// <remarks>Both sides carry the same bands: the low intensity drives the 160 Hz band and the high intensity
-    /// the 320 Hz band, each through the HD-rumble amplitude table. The write waits for the transport's output
-    /// spacing.</remarks>
-    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
+    /// <remarks>The write waits for the transport's output spacing.</remarks>
+    public ValueTask SetHdRumbleAsync(HdRumbleSide left, HdRumbleSide right, CancellationToken cancellationToken = default) {
         WriteRumbleSide(
             destination: m_rumbleData.AsSpan(
                 length: 4,
                 start: 0
             ),
-            high: highFrequency,
-            low: lowFrequency
+            side: left
         );
-        m_rumbleData.AsSpan(
-            length: 4,
-            start: 0
-        ).CopyTo(destination: m_rumbleData.AsSpan(start: 4));
+        WriteRumbleSide(
+            destination: m_rumbleData.AsSpan(
+                length: 4,
+                start: 4
+            ),
+            side: right
+        );
         m_rumblePending = true;
 
         return FlushOutputAsync(cancellationToken: cancellationToken);
+    }
+    /// <inheritdoc />
+    /// <remarks>Both actuators play at their default carriers: the low intensity drives the 160 Hz band and the
+    /// high intensity the 320 Hz band.</remarks>
+    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
+        var side = new HdRumbleSide(
+            High: new HdRumbleBand(Amplitude: highFrequency, FrequencyHertz: 0f),
+            Low: new HdRumbleBand(Amplitude: lowFrequency, FrequencyHertz: 0f)
+        );
+
+        return SetHdRumbleAsync(
+            cancellationToken: cancellationToken,
+            left: side,
+            right: side
+        );
     }
     /// <inheritdoc />
     /// <remarks>Accepts the full report <c>0x30</c>, and once it streams the subcommand reply <c>0x21</c>, whose
@@ -972,6 +1150,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             IsMotionSample: motionSample,
             LeftStick: ReadStick(
                 calibration: in m_leftStickCalibration,
+                deadzone: m_leftStickDeadzone,
                 offset: LeftStickOffset,
                 report: report
             ),
@@ -982,6 +1161,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             Power: DecodePower(status: report[BatteryOffset]),
             RightStick: ReadStick(
                 calibration: in m_rightStickCalibration,
+                deadzone: m_rightStickDeadzone,
                 offset: RightStickOffset,
                 report: report
             ),

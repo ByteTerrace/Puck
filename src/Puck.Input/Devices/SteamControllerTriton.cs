@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Input.Hid;
+using Puck.Input.Output;
 
 namespace Puck.Input.Devices;
 
@@ -17,10 +18,13 @@ namespace Puck.Input.Devices;
 /// <remarks>
 /// Control messages are feature reports under report id 1 (<c>[type][length][payload]</c>); the classic pad's
 /// id-0 framing is rejected (Windows error 87). Rumble is output report <c>0x80</c>, which the firmware drops after
-/// about 50 ms without a fresh write, so the device refreshes a running rumble every 40 ms. The firmware also
-/// re-arms its keyboard-and-mouse emulation, so lizard mode is turned off again every three seconds.
+/// about 50 ms without a fresh write, so the device refreshes a running rumble every 40 ms. Initialization turns
+/// off the keyboard-and-mouse ("lizard") emulation together with the firmware watchdog that would otherwise re-arm
+/// it when no Steam client answers (Linux <c>steam_set_lizard_mode</c>). The trackpad actuators take typed haptics
+/// as output reports <c>0x81</c> (pulse), <c>0x82</c> (built-in effect), <c>0x83</c> (tone), <c>0x84</c> (sweep)
+/// and <c>0x85</c> (stored script), laid out as Valve's <c>controller_structs.h</c> declares them.
 /// </remarks>
-public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWirelessSlotParser, IGamepadStreamReset, IServicedGamepadParser, IDisposable {
+public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrackpadHapticParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     private const float AccelerometerGPerLsb = (1f / 16384f);   // ±2 g over int16 (SDL)
     private const int AccelerometerOffset = 34;
     private const byte BatteryReportId = 0x43;
@@ -58,6 +62,9 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private const uint ButtonX = (1u << 2);
     private const uint ButtonY = (1u << 3);
     private const int ButtonsOffset = 2;
+    private const byte CommandClearDigitalMappings = 0x81;
+    private const byte CommandLoadDefaultSettings = 0x8E;
+    private const byte CommandSetDefaultDigitalMappings = 0x85;
     private const byte ControllerSettingSize = 3;         // settingNum (u8) + value (u16)
     private const byte FeatureReportId = 0x01;
     private const int GyroOffset = 40;
@@ -71,9 +78,12 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private const byte InputReportShortTimestampId = 0x47;
     private const int LeftStickOffset = 10;
     private const ushort LizardModeOff = 0;
-    private const ushort LizardModeOn = 1;
-    private const float LizardWatchdogSeconds = 3f;
     private const int MinimumReportLength = (GyroOffset + 6);
+    private const byte OutputHapticCommandReportId = 0x82;
+    private const byte OutputHapticLogSweepReportId = 0x84;
+    private const byte OutputHapticLfoToneReportId = 0x83;
+    private const byte OutputHapticPulseReportId = 0x81;
+    private const byte OutputHapticScriptReportId = 0x85;
     private const byte OutputRumbleReportId = 0x80;
     private const float PadHalf = 0.5f;
     private const float PadRange = 65536f;
@@ -85,6 +95,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private const byte SetSettingsValuesCommand = 0x87;
     private const byte SettingImuMode = 48;
     private const byte SettingLizardMode = 9;
+    private const byte SettingSteamWatchdog = 71;
     private const int ShortTimestampOffset = 32;          // u16 LE in 32 µs units (report 0x47)
     private const float ShortTimestampSecondsPerUnit = (32f / 1_000_000f);
     private const float TimestampSecondsPerUnit = (1f / 1_000_000f);
@@ -105,7 +116,6 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     private bool m_hasState;
     private uint m_lastSensorTimestamp;
     private GamepadState m_lastState = GamepadState.Neutral;
-    private long m_nextLizardWatchdog;
     private GamepadPower m_power;
 
     /// <summary>Initializes a new instance of the <see cref="SteamControllerTriton"/> class.</summary>
@@ -133,6 +143,8 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
     /// <inheritdoc />
     public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: 30);
     /// <inheritdoc />
+    public TrackpadHapticKinds SupportedTrackpadHaptics => TrackpadHapticKinds.Pulse | TrackpadHapticKinds.Command | TrackpadHapticKinds.Tone | TrackpadHapticKinds.Sweep | TrackpadHapticKinds.Script;
+    /// <inheritdoc />
     public GamepadType Type => GamepadType.SteamControllerTriton;
 
     void IGamepadStreamReset.ResetStreamState() {
@@ -140,22 +152,35 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
         m_hasState = false;
         m_lastSensorTimestamp = 0u;
         m_lastState = GamepadState.Neutral;
-        m_nextLizardWatchdog = 0L;
         m_power = GamepadPower.Unknown;
         m_tracker.Reset();
     }
 
-    private void BuildSingleSetting(byte settingNum, ushort value) {
+    // Builds a feature message under report id 1: [1][command][payload length][payload].
+    private void BuildFeature(byte command, ReadOnlySpan<byte> payload) {
         var buffer = m_featureBuffer;
 
         buffer.AsSpan().Clear();
         buffer[0] = FeatureReportId;
-        buffer[1] = SetSettingsValuesCommand;
-        buffer[2] = ControllerSettingSize;
-        buffer[3] = settingNum;
-        buffer[4] = ((byte)(value & 0xFF));
-        buffer[5] = ((byte)(value >> 8));
+        buffer[1] = command;
+        buffer[2] = ((byte)payload.Length);
+        payload.CopyTo(destination: buffer.AsSpan(start: 3));
     }
+    // The pulse report numbers the pads as the classic pulse command does, left 1 and right 0 (Linux
+    // steam_haptic_pulse); the other haptic reports take Valve's MsgTriggerHaptic side codes, left 1, right 2 and
+    // both 3.
+    private static byte EncodeSide(TrackpadSide side, bool pulse) => (pulse
+        ? side switch {
+            TrackpadSide.Left => ((byte)1),
+            TrackpadSide.Right => ((byte)0),
+            _ => ((byte)2),
+        }
+        : side switch {
+            TrackpadSide.Left => ((byte)1),
+            TrackpadSide.Right => ((byte)2),
+            _ => ((byte)3),
+        }
+    );
     // Report 0x43: [1] the charger state (0 reset, 1 discharging, 2 charging, 3 validating the source, 4 done),
     // [2] the charge in percent. A reset or a source still being validated says nothing yet (SDL).
     private static GamepadPower DecodePower(ReadOnlySpan<byte> report) {
@@ -199,10 +224,10 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
             )
         );
     }
-    private async ValueTask<bool> SendSettingAsync(byte settingNum, ushort value, CancellationToken cancellationToken) {
-        BuildSingleSetting(
-            settingNum: settingNum,
-            value: value
+    private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
+        BuildFeature(
+            command: command,
+            payload: payload
         );
 
         return await HidFeatureWriteRetry.TryWriteAsync(
@@ -211,10 +236,10 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
             device: m_device
         );
     }
-    private bool SendSetting(byte settingNum, ushort value) {
-        BuildSingleSetting(
-            settingNum: settingNum,
-            value: value
+    private bool SendFeature(byte command, ReadOnlySpan<byte> payload) {
+        BuildFeature(
+            command: command,
+            payload: payload
         );
 
         return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
@@ -280,42 +305,96 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IWire
         };
     }
     /// <summary>
-    /// Restores the controller's keyboard-and-mouse emulation so it behaves as a desktop device again once the
-    /// engine releases it. Best-effort and synchronous, while the handle is still open after the I/O loop stopped.
+    /// Restores the controller's keyboard-and-mouse emulation and default settings, its firmware watchdog included,
+    /// so it behaves as a desktop device again once the engine releases it (Linux <c>steam_set_lizard_mode</c>).
+    /// Best-effort and synchronous, while the handle is still open after the I/O loop stopped.
     /// </summary>
     public void Dispose() {
-        _ = SendSetting(
-            settingNum: SettingLizardMode,
-            value: LizardModeOn
+        _ = SendFeature(
+            command: CommandSetDefaultDigitalMappings,
+            payload: []
+        );
+        _ = SendFeature(
+            command: CommandLoadDefaultSettings,
+            payload: []
         );
     }
     /// <inheritdoc />
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
-        _ = await SendSettingAsync(
+        _ = await SendFeatureAsync(
             cancellationToken: cancellationToken,
-            settingNum: SettingLizardMode,
-            value: LizardModeOff
+            command: CommandClearDigitalMappings,
+            payload: []
         );
-        _ = await SendSettingAsync(
+        _ = await SendFeatureAsync(
             cancellationToken: cancellationToken,
-            settingNum: SettingImuMode,
-            value: ImuModeRaw
+            command: SetSettingsValuesCommand,
+            payload: [
+                SettingLizardMode, ((byte)(LizardModeOff & 0xFF)), ((byte)(LizardModeOff >> 8)),
+                SettingSteamWatchdog, 0, 0,
+                SettingImuMode, ((byte)(ImuModeRaw & 0xFF)), ((byte)(ImuModeRaw >> 8)),
+            ]
         );
-        m_nextLizardWatchdog = 0L;
     }
     /// <inheritdoc />
-    public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
-        if (0L == m_nextLizardWatchdog) {
-            m_nextLizardWatchdog = (timestamp + ((long)(LizardWatchdogSeconds * timestampFrequency)));
-        } else if (timestamp >= m_nextLizardWatchdog) {
-            m_nextLizardWatchdog = (timestamp + ((long)(LizardWatchdogSeconds * timestampFrequency)));
-            _ = SendSetting(
-                settingNum: SettingLizardMode,
-                value: LizardModeOff
-            );
+    public ValueTask PlayTrackpadHapticAsync(TrackpadHapticEffect effect, CancellationToken cancellationToken = default) {
+        var buffer = m_outputBuffer;
+        var pulse = (effect.Kind == TrackpadHapticKinds.Pulse);
+
+        buffer.AsSpan().Clear();
+        buffer[1] = EncodeSide(
+            pulse: pulse,
+            side: effect.Side
+        );
+
+        switch (effect.Kind) {
+            case TrackpadHapticKinds.Pulse:
+                buffer[0] = OutputHapticPulseReportId;
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 2), value: effect.OnMicroseconds);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 4), value: effect.OffMicroseconds);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 6), value: effect.Repeat);
+
+                break;
+            case TrackpadHapticKinds.Command:
+                buffer[0] = OutputHapticCommandReportId;
+                buffer[2] = ((byte)effect.Command);
+                buffer[3] = unchecked((byte)effect.GainDecibels);
+
+                break;
+            case TrackpadHapticKinds.Tone:
+                buffer[0] = OutputHapticLfoToneReportId;
+                buffer[2] = unchecked((byte)effect.GainDecibels);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 3), value: effect.FrequencyHertz);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 5), value: effect.DurationMilliseconds);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 7), value: effect.LfoFrequencyHertz);
+                buffer[9] = Math.Min(
+                    val1: effect.LfoDepthPercent,
+                    val2: ((byte)100)
+                );
+
+                break;
+            case TrackpadHapticKinds.Sweep:
+                buffer[0] = OutputHapticLogSweepReportId;
+                buffer[2] = unchecked((byte)effect.GainDecibels);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 3), value: effect.DurationMilliseconds);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 5), value: effect.FrequencyHertz);
+                BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: 7), value: effect.EndFrequencyHertz);
+
+                break;
+            case TrackpadHapticKinds.Script:
+                buffer[0] = OutputHapticScriptReportId;
+                buffer[2] = effect.ScriptId;
+                buffer[3] = unchecked((byte)effect.GainDecibels);
+
+                break;
+            default:
+                return ValueTask.CompletedTask;
         }
 
-        return ValueTask.CompletedTask;
+        return m_device.WriteAsync(
+            buffer: buffer,
+            cancellationToken: cancellationToken
+        );
     }
     /// <inheritdoc />
     /// <remarks>The low band drives the left motor and the high band the right; zero on both stops them.</remarks>
