@@ -63,12 +63,12 @@ public static partial class PrimeKernels {
 
     /// <summary>The number of base-two strong rounds <see cref="PassesBaseTwoBatch(ReadOnlySpan{ulong})"/> interleaves.</summary>
     /// <remarks>
-    /// Four independent squaring chains: a chain's step, one REDC and one conditional doubling, issues four
-    /// multiplies, and on current cores the multiplier retires about four in the time a lazy step's dependency chain
-    /// takes, so four chains fill it for exactly as long as a step lasts. A fifth would wait on the multiplier, and the
-    /// expected number of batches a selection decides falls more slowly than the batch grows: at the top of the
-    /// carrier one in six survivors is prime, so a width of three decides 2.0 batches per selected prime, four
-    /// decides 1.6 and five 1.4.
+    /// Four independent squaring chains: a chain's step, one REDC and one conditional doubling, issues three
+    /// multiplies, and on a core with one 64-bit multiplier four chains issue twelve in about the cycles a lazy step's
+    /// dependency chain takes, so four chains fill it for exactly as long as a step lasts. A fifth would wait on the
+    /// multiplier there, and the expected number of batches a selection decides falls more slowly than the batch
+    /// grows: at the top of the carrier about one survivor in five is prime, so a width of three decides 2.0 batches
+    /// per selected prime, four decides 1.6 and five 1.4.
     /// </remarks>
     public const int BaseTwoBatchWidth = 4;
 
@@ -737,8 +737,10 @@ public static partial class PrimeKernels {
         var residue = (one & ~wide) | (wide & 1UL);
         var shift = ((int)(prefix - (wide & 64UL)));
         var factor = unchecked((0UL - (residue * inverse))) & (ulong.MaxValue >>> (64 - shift));
-        var low = unchecked(((factor * modulus) + residue));
-        var high = (ScaledResidueRing64.MultiplyHigh(left: factor, right: modulus) + (low < residue).As<ulong>());
+        var high = Math.BigMul(a: factor, b: modulus, low: out var low);
+
+        low = unchecked((low + residue));
+        high += (low < residue).As<ulong>();
 
         return (high << (64 - shift)) | (low >>> shift);
     }
@@ -1571,20 +1573,19 @@ public static partial class PrimeKernels {
         /// <see cref="ScaledResidueRing64.Reduce(ulong, ulong, ulong, ulong)"/>'s subtractive form with the constant taken
         /// off the high half first: two reduced operands keep both high halves below the modulus, so the high half less
         /// the constant, folded, and then less the correction, folded, is the reduced result, and the first fold runs
-        /// while the correction's multiply does. The factor is formed first, in the source as well, so that its
-        /// truncated multiplies, the critical path, issue ahead of the high multiply, as
-        /// <see cref="ScaledResidueRing64.ReduceSignedSquareSubtract(long, long, ulong, ulong)"/>'s do. The second fold
+        /// while the correction's multiply does. One widening multiply gives both halves; the factor's truncated
+        /// multiply follows its low half on the critical path while the first fold runs on its high half. The second fold
         /// is <see cref="ScaledResidueRing64.SubtractBySelect(ulong, ulong, ulong)"/>, a call, so that it is a conditional
         /// move on the ladder's critical path; the first stays the inlined mask, off it.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong ReduceSubtract(ulong left, ulong right, ulong subtrahend, ulong modulus, ulong inverse) {
-            var factor = unchecked(((left * right) * inverse));
             var high = ScaledResidueRing64.Subtract(
-                left: ScaledResidueRing64.MultiplyHigh(left: left, right: right),
+                left: Math.BigMul(a: left, b: right, low: out var low),
                 modulus: modulus,
                 right: subtrahend
             );
+            var factor = unchecked((low * inverse));
 
             return ScaledResidueRing64.SubtractBySelect(
                 left: high,
@@ -1609,14 +1610,14 @@ public static partial class PrimeKernels {
         /// <c>2^64</c>, so the square of an operand below <c>4n</c> is below <c>2^64 n</c>, both high halves are below
         /// <c>n</c>, the lifted difference lies in <c>(0, 2n)</c> and its doubling in <c>(0, 4n)</c>: the operand bound
         /// holds by induction from a reduced start. The lifted half is below <c>2n</c>, so neither shift leaves the
-        /// carrier, and the shifted difference is the difference shifted. The high half is formed and lifted before the
-        /// factor, in that order in the source as well: the JIT allocates in source order, and this order keeps the
-        /// interleaved four-chain walk free of stack traffic.
+        /// carrier, and the shifted difference is the difference shifted. One widening multiply gives both halves of
+        /// the square; the high half is lifted while the factor's truncated multiply and the correction's high
+        /// multiply run.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong SquareDouble(ulong value, ulong doubling, ulong modulus, ulong inverse) {
-            var lifted = (ScaledResidueRing64.MultiplyHigh(left: value, right: value) + modulus);
-            var factor = unchecked(((value * value) * inverse));
+            var lifted = (Math.BigMul(a: value, b: value, low: out var low) + modulus);
+            var factor = unchecked((low * inverse));
 
             return ((lifted << ((int)doubling)) - (ScaledResidueRing64.MultiplyHigh(left: factor, right: modulus) << ((int)doubling)));
         }

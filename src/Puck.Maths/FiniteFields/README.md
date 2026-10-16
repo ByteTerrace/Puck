@@ -695,9 +695,10 @@ processed in full rather than wrapping a 32-bit count.
 ### The Montgomery-form residue ring
 
 `ScaledResidueRing64` represents a residue `a` by `a · R mod n`, where the radix
-`R` is `2⁶⁴`. In that representation a product reduces by REDC—two high-half
-multiplies, two truncated multiplies (the product's low half and its product
-with the modulus inverse), one subtraction, and one masked correction—instead
+`R` is `2⁶⁴`. In that representation a product reduces by REDC—one widening
+multiply (both halves of the product), one truncated multiply (the low half
+times the modulus inverse), one high-half multiply, one subtraction, and one
+masked correction—instead
 of by the 128-by-64 divide that a direct `(a * b) % n` costs. The saving belongs to the chain rather than to any
 one product: `Encode` and `Decode` each spend a REDC of their own, so a lone
 product is cheaper left on the divide. The pattern is to convert once on the way
@@ -722,9 +723,11 @@ across a whole chain. REDC is the subtractive form: the factor
 `m = lo(a·b) · n⁻¹` makes `m·n` agree with the product in its low half, so the
 quotient is the difference of the two high halves, which lies in `(−n, n)` and
 takes one masked addition of the modulus. A reduced residue is unique, so this
-form returns the same bits as any other exact reduction. The high halves come
-from BMI2's flag-free `MULX` where the processor has it and from
-`Math.BigMul` otherwise; both return the same bits.
+form returns the same bits as any other exact reduction. The product's two
+halves come from one `Math.BigMul`, which the JIT lowers to one `MUL` with both
+halves in registers; the correction's high half alone comes from BMI2's
+flag-free `MULX` where the processor has it and from `Math.BigMul` otherwise.
+Both return the same bits.
 
 The prime kernels' chains carry unreduced representatives between products and
 fold only where a residue is compared. A **lazy** chain lifts the subtractive
@@ -748,8 +751,8 @@ word and the unsigned high word of `q·n`, which lies in `[0, n)`. Below
   `[0, n)` and the reduced square in `(−n, n)`, the bound it started under. No
   product is formed from the doubled operand: the square's low word shifted is
   `lo(x²)` times the inverse shifted, a shift the exponent bit alone decides,
-  so a square-and-double step's critical path is two truncated multiplies, one
-  high multiply and one subtraction.
+  so a square-and-double step's critical path is one widening multiply, one
+  truncated multiply, one high multiply and one subtraction.
 - `ReduceSigned` multiplies two operands within `n` of zero and subtracts a
   constant centered into `[−(n − 1) / 2, (n − 1) / 2]` by `Center`. The
   product's signed high word lies within about `n / 2` of zero, so less the
@@ -758,10 +761,9 @@ word and the unsigned high word of `q·n`, which lies in `[0, n)`. Below
   `(−n, n)` again. `ReduceSignedSquareSubtract` is its square.
 
 No step folds after its reduction, and the residue is the representative plus
-the modulus under its sign. No signed widening multiply runs, because
-`Math.BigMul`'s signed form and the `Int128` product hand their low word back
-through memory: each signed high word is the unsigned `MultiplyHigh` corrected
-by sign masks, `hi(a·b) − [a < 0]·b − [b < 0]·a`. Above `2⁶³` no signed word
+the modulus under its sign. Each signed product is `Math.BigMul`'s signed form,
+one `IMUL` whose high word is already signed and whose low word is in a
+register. Above `2⁶³` no signed word
 holds a representative within the modulus of zero, so `ReduceBorrowedSquare`
 carries one as a word and a borrow mask, `x = w − 2⁶⁴·b`: the square's high word
 is that of `w²` less `2w` under the mask, and the reduced square borrows exactly

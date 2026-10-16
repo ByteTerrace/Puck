@@ -274,10 +274,11 @@ draw order. A generator whose draws depend on anything outside its own fields
 must hold a reference, which keeps the sequential order.
 
 Four chains because a chain's step, one REDC and one conditional doubling,
-issues four multiplies, and on current cores the multiplier retires about four
-in the time a lazy step's dependency chain takes, so four chains keep it busy
-for exactly as long as a step lasts and a fifth would wait on it. At the top of
-the carrier one survivor in six is prime, so a width of three decides 2.0
+issues three multiplies, and a core with one 64-bit multiplier retires the
+twelve of four chains in about the cycles a lazy step's dependency chain takes,
+so four chains keep it busy for exactly as long as a step lasts and a fifth
+would wait on it. At the top of
+the carrier about one survivor in five is prime, so a width of three decides 2.0
 batches per selected prime, four 1.6 and five 1.4. A batch walks in the widest
 of the arithmetics the [primality](#primality) section describes that its
 largest modulus admits: lazily below 2^60, signed below 2^63, exactly
@@ -586,8 +587,8 @@ correction factor `q = lo(T)·n⁻¹` unsigned, so `(T − q·n) / 2^64` is the 
 difference of `T`'s signed high word and the unsigned high word of `q·n`, which
 lies in `[0, n)`. A square, doubled or not, keeps an accumulator within the
 modulus of zero with no fold at all; the doubling shifts the inverse rather than
-the operand, so a step's critical path is two truncated multiplies, one high
-multiply and one subtraction. The Lucas ladder subtracts `t` or two, centered
+the operand, so a step's critical path is one widening multiply, one truncated
+multiply, one high multiply and one subtraction. The Lucas ladder subtracts `t` or two, centered
 into `[−(n−1)/2, (n−1)/2]`, from every product's high word and folds that once by
 its sign while the reduction's multiplies run, which keeps its traces within the
 modulus of zero too. Above 2^63 no signed word holds such a representative:

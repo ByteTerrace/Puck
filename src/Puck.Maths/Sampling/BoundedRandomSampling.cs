@@ -33,8 +33,8 @@ internal static class BoundedRandomSampling {
                 --attempts;
                 var word = (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
 
-                // The halves of word * exclusiveHigh, taken separately: a widened product hands its low half back
-                // through memory. The bound is the left factor, the operand MULX reads implicitly, so the
+                // The halves of word * exclusiveHigh, taken separately, keep the product off the fixed registers a
+                // widening multiply pins. The bound is the left factor, the operand MULX reads implicitly, so the
                 // generator's state never has to make way for it.
                 var low = unchecked((word * m_exclusiveHigh));
 

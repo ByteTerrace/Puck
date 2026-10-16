@@ -11,8 +11,9 @@ namespace Puck.Maths;
 /// <remarks>
 /// <para>
 /// A residue <c>a</c> is represented by <c>a * R mod n</c>, where the radix <c>R</c> is <c>2^64</c>. In that
-/// representation a product reduces by REDC — two high-half multiplies, two truncated multiplies, one subtraction, and
-/// one masked correction — instead of by the <c>128 / 64</c> divide a direct <c>(a * b) % n</c> costs. The saving
+/// representation a product reduces by REDC — one widening multiply, one truncated multiply, one high-half multiply,
+/// one subtraction, and one masked correction — instead of by the <c>128 / 64</c> divide a direct <c>(a * b) % n</c>
+/// costs. The saving
 /// belongs to the chain, not to one product: <see cref="Encode(ulong)"/> and <see cref="Decode(ulong)"/> each spend a
 /// REDC of their own, so a lone product is cheaper left on the divide. Convert once, stay in the ring, convert back
 /// once. The additive operations — <see cref="Add(ulong, ulong)"/> and <see cref="Subtract(ulong, ulong)"/> — are
@@ -198,9 +199,10 @@ public readonly struct ScaledResidueRing64 {
     /// <param name="right">The second factor.</param>
     /// <returns><c>floor(left * right / 2^64)</c>.</returns>
     /// <remarks>
-    /// BMI2's flag-free <c>MULX</c> where the processor has it, which leaves the low half to an ordinary truncated
-    /// multiply the out-of-order core runs beside it; <see cref="Math.BigMul(ulong, ulong, out ulong)"/> otherwise. Both
-    /// return the same bits, and the choice is a JIT-time constant.
+    /// For a product whose low half nothing reads: BMI2's flag-free <c>MULX</c> where the processor has it,
+    /// <see cref="Math.BigMul(ulong, ulong, out ulong)"/> otherwise. Both return the same bits, and the choice is a
+    /// JIT-time constant. A product that needs both halves is one <see cref="Math.BigMul(ulong, ulong, out ulong)"/>,
+    /// which the JIT lowers to one <c>MUL</c> with both halves in registers.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong MultiplyHigh(ulong left, ulong right) =>
@@ -299,9 +301,10 @@ public readonly struct ScaledResidueRing64 {
     /// <para>
     /// The correction is a mask rather than a conditional: the comparison sits on a multiplication chain's critical
     /// path, where a data-dependent branch mispredicts about half the time, and the JIT turns a select inside a loop
-    /// into a branch rather than a conditional move. The low half of the product is a separate truncated multiply
-    /// rather than the second output of the widening one: <see cref="Math.BigMul(ulong, ulong, out ulong)"/> and the
-    /// <see cref="UInt128"/> product both hand that half back through memory, and it heads the chain's critical path.
+    /// into a branch rather than a conditional move. The product is one widening multiply,
+    /// <see cref="Math.BigMul(ulong, ulong, out ulong)"/>, which the JIT lowers to one <c>MUL</c> with both halves in
+    /// registers; its low half heads the chain's critical path, and the correction's high half alone is a
+    /// <see cref="MultiplyHigh(ulong, ulong)"/>.
     /// The prime kernels' chains below <see cref="SignedModulusCeiling"/> carry unreduced representatives instead, a
     /// REDC lifted by the modulus below <see cref="LazyModulusCeiling"/> or a signed one,
     /// <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>, and have no correction at all.
@@ -309,11 +312,8 @@ public readonly struct ScaledResidueRing64 {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ulong Reduce(ulong left, ulong right, ulong modulus, ulong inverse) {
-        var factor = unchecked(((left * right) * inverse));
-        var high = MultiplyHigh(
-            left: left,
-            right: right
-        );
+        var high = Math.BigMul(a: left, b: right, low: out var low);
+        var factor = unchecked((low * inverse));
         var correction = MultiplyHigh(
             left: factor,
             right: modulus
@@ -340,22 +340,16 @@ public readonly struct ScaledResidueRing64 {
     /// operands started under, so a chain of these products needs no other fold.
     /// </para>
     /// <para>
-    /// The fold runs on the high word, which is ready while the factor's two truncated multiplies and the correction's
-    /// high multiply, the critical path, are still running, so the step's critical path is the reduction's own. The
-    /// signed high word is the unsigned one less each factor under the other's sign mask, modulo <c>2^64</c>: the word of
-    /// a negative factor is the factor plus <c>2^64</c>. No signed widening multiply runs, since
-    /// <see cref="Math.BigMul(long, long, out long)"/> and the <see cref="Int128"/> product hand their low word back
-    /// through memory; the low word is a separate truncated multiply. The constant and the correction terms are
-    /// gathered and negated before the high multiply is added, which keeps the high word out of the register
-    /// <c>MULX</c> reads implicitly, so the trace ladder gives it no stack slot.
+    /// The product is the signed widening multiply <see cref="Math.BigMul(long, long, out long)"/>, which the JIT
+    /// lowers to one <c>IMUL</c> whose high word is already signed, so no sign mask corrects it. The fold runs on that
+    /// high word, which is ready while the factor's truncated multiply and the correction's high multiply, the
+    /// critical path, are still running, so the step's critical path is the reduction's own.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long ReduceSigned(long left, long right, long subtrahend, ulong modulus, ulong inverse) {
-        var first = unchecked(((ulong)left));
-        var second = unchecked(((ulong)right));
-        var factor = unchecked(((first * second) * inverse));
-        var high = unchecked(((0UL - (((SignMask(value: first) & second) + (SignMask(value: second) & first)) + ((ulong)subtrahend))) + MultiplyHigh(left: first, right: second)));
+        var high = unchecked((((ulong)Math.BigMul(a: left, b: right, low: out var low)) - ((ulong)subtrahend)));
+        var factor = unchecked((((ulong)low) * inverse));
 
         high = unchecked((high + (SignMask(value: high) & modulus)));
 
@@ -369,17 +363,14 @@ public readonly struct ScaledResidueRing64 {
     /// <returns>A value congruent to <c>value^2 / 2^64 - subtrahend</c> modulo <paramref name="modulus"/>, in <c>(-modulus, modulus)</c>.</returns>
     /// <remarks>
     /// The interval proof is <see cref="ReduceSigned(long, long, long, ulong, ulong)"/>'s, with the square's high word
-    /// in <c>[0, n / 2)</c>. The factor is formed before the high word, in that order in the source as well: the JIT
-    /// emits in source order and the core issues the oldest ready instruction first, so the factor's two truncated
-    /// multiplies, the critical path, run ahead of the high multiply off it. Beside the cross product in the trace
-    /// ladder the JIT gives the factor a stack slot, and this order still measures faster than the high word first,
-    /// which keeps every term in a register.
+    /// in <c>[0, n / 2)</c>. One signed widening multiply gives both halves; the factor's truncated multiply and the
+    /// correction's high multiply follow its low half on the critical path, and the constant and the fold run on its
+    /// high half beside them.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long ReduceSignedSquareSubtract(long value, long subtrahend, ulong modulus, ulong inverse) {
-        var word = unchecked(((ulong)value));
-        var factor = unchecked(((word * word) * inverse));
-        var high = unchecked(((0UL - ((SignMask(value: word) & (word << 1)) + ((ulong)subtrahend))) + MultiplyHigh(left: word, right: word)));
+        var high = unchecked((((ulong)Math.BigMul(a: value, b: value, low: out var low)) - ((ulong)subtrahend)));
+        var factor = unchecked((((ulong)low) * inverse));
 
         high = unchecked((high + (SignMask(value: high) & modulus)));
 
@@ -403,17 +394,16 @@ public readonly struct ScaledResidueRing64 {
     /// <para>
     /// No product is formed from the doubled operand. The low word of <c>T</c> is that of <c>x^2</c> shifted, so the
     /// factor is <c>lo(x^2)</c> times the inverse shifted, a shift that depends on the bit alone and leaves the
-    /// chain's critical path two truncated multiplies, one high multiply and one subtraction. The high word of
-    /// <c>x^2</c> is the unsigned one less <c>2x</c> for a negative <c>x</c>, since the word of a negative <c>x</c> is
-    /// <c>x + 2^64</c>, and the doubling shifts the carry of the low word into it.
+    /// chain's critical path one widening multiply, one truncated multiply, one high multiply and one subtraction.
+    /// The signed widening multiply gives the square's signed high word directly, and the doubling shifts the carry
+    /// of the low word into it.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static long ReduceSignedSquare(long value, int doubling, ulong modulus, ulong inverse) {
-        var word = unchecked(((ulong)value));
-        var low = unchecked((word * word));
+        var high = unchecked(((ulong)Math.BigMul(a: value, b: value, low: out var signedLow)));
+        var low = unchecked(((ulong)signedLow));
         var factor = unchecked((low * (inverse << doubling)));
-        var high = unchecked((MultiplyHigh(left: word, right: word) - (SignMask(value: word) & (word << 1))));
 
         return unchecked(((long)(((high << doubling) | ((low >>> 63) & ((ulong)doubling))) - MultiplyHigh(left: factor, right: modulus))));
     }
@@ -435,14 +425,14 @@ public readonly struct ScaledResidueRing64 {
     /// </para>
     /// <para>
     /// The borrow is the only fold, and nothing waits on it: the next square reads it only to correct its high word,
-    /// off the chain's critical path, which is two truncated multiplies, one high multiply and one subtraction. The
-    /// residue is the word plus the modulus under the borrow mask, in <c>[0, n)</c>.
+    /// off the chain's critical path, which is one widening multiply, one truncated multiply, one high multiply and
+    /// one subtraction. The residue is the word plus the modulus under the borrow mask, in <c>[0, n)</c>.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static (ulong Value, ulong Borrow) ReduceBorrowedSquare(ulong value, ulong borrow, ulong modulus, ulong inverse) {
-        var factor = unchecked(((value * value) * inverse));
-        var high = unchecked((MultiplyHigh(left: value, right: value) - (borrow & (value << 1))));
+        var high = unchecked((Math.BigMul(a: value, b: value, low: out var low) - (borrow & (value << 1))));
+        var factor = unchecked((low * inverse));
         var correction = MultiplyHigh(left: factor, right: modulus);
 
         return (unchecked((high - correction)), unchecked((0UL - (high < correction).As<ulong>())));

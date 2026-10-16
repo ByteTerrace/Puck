@@ -80,13 +80,8 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   Õ(√N) or analytic counting methods below 2^64, a branching trace ladder at
   any size (the signed masked ladder is 3 to 6% faster than the lazy branching
   one it replaced below 2^61), the signed batch below 2^60 (selection 7 to 18%
-  slower than the lazy one), a signed widening multiply (`Math.BigMul(long,
-  long)`, `Int128`) in a signed reduction (its low word goes through memory),
-  the signed product's high word formed as the high multiply less its
-  corrections (the JIT homes it in RDX and spills it; form it as the negated
-  corrections plus the high multiply), the signed square formed high word first
-  (spill-free, but the ladder is 8% slower: its critical multiplies must issue
-  first), a vector selection filter (40 to 128 primes: within noise on AVX-512,
+  slower than the lazy one), an `Int128` product in a signed reduction (its
+  low word goes through memory), a vector selection filter (40 to 128 primes: within noise on AVX-512,
   5 to 18% slower per selected prime on AVX2, where most candidates leave at the
   first divisor), and above 2^63 a borrowed trace ladder (every trace a word and
   a borrow mask: 80 instructions a step against 53, 7% slower), a branchless
@@ -122,8 +117,10 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   what remains. On the 7800X3D, whose divider is fast, the three removals
   together measure 0.4 to 1.3% slower per selected prime at every band from
   2^33 to 2^64 (ten-round round-robin of the base and each step's build,
-  paired medians; the three builds sit within 0.5% of one another), inside
-  the 1 to 3% that code layout alone moves; llvm-mca models
+  paired medians; the three builds sit within 0.5% of one another), and 0.7
+  to 1.5% slower against the `BigMul` kernels on .NET 11 (six alternating
+  rounds, one-sided), inside the 1 to 3% that code layout alone moves but
+  consistent in sign; `IsPrime(ulong)` moves under 0.5%; llvm-mca models
   the four-lane radix setup at 170 cycles with four divides against 61 with
   the estimate on znver2, 116 against 52 on skylake and 84 against 47 on
   alderlake. Dead ends measured on the way: a doubling loop from `2^b - n`
@@ -134,6 +131,21 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   the dividend. AMDuProfPcm's per-interval instruction counts on a loaded host
   differed 6% between intervals of one run, so counts are read from the JIT
   listings, not the counters.
+- Every REDC in the prime kernels is one `Math.BigMul` for the product, one
+  truncated multiply for the factor and one `MultiplyHigh` for the correction:
+  three multiplies. .NET 11 lowers `Math.BigMul(ulong, ulong, out ulong)` to
+  one `MUL` and the signed overload to one one-operand `IMUL`, both halves in
+  registers (dotnet/runtime #117261); .NET 10 handed the low half back through
+  memory, which is why the kernels once spent a fourth, truncated multiply on
+  it. Against that four-multiply shape, on .NET 11, selection measures 9 to 16%
+  faster per selected prime from 2^33 through 2^63 and 4% at 2^64, and
+  `IsPrime(ulong)` 14% faster on primes and 12 to 14% on random odd words over
+  the same bands (3 to 4% at 2^64), with the lazy and signed walks at
+  12 multiplies per four-lane step instead of 16. On
+  .NET 10 the same `BigMul` form measures 0 to 3% slower, so the build's major
+  decides the shape. The four-chain walk is bound by multiplier throughput and
+  rewards fewer multiplies even when a half crosses the stack; the single-chain
+  ladder is latency-bound and gains uops more than cycles.
 - The speculative selector's Lucas confirmations read each survivor's inverse
   and radix residue from the batch block the base-two kernel filled, unchecked:
   a checked read there makes the JIT clone the decision loop, which measured
@@ -146,10 +158,8 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   borrow mask. `prime-field.signed-reduction-interval-vs-big-integer` checks
   each result's interval as well as its congruence, since a dropped correction
   stays congruent. Every factor is read unsigned; the doubling shifts the
-  inverse, not the operand. The squares and the cross product form the factor
-  before the high word, and measure faster that way even where the JIT then
-  gives the factor a stack slot; reading stack traffic alone would choose
-  wrongly.
+  inverse, not the operand. Each product is one signed `Math.BigMul`, whose
+  high word is already signed, so no sign mask corrects it.
 - Above 2^63 the ladder and the batch fold after every product, and the JIT's
   compare-and-mask fold (`setb`, `movzx`, `neg`, `and`, `add`) sits on the
   critical path where a conditional move would cost one cycle; that is the
