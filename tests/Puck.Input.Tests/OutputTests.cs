@@ -69,7 +69,7 @@ public sealed class OutputTests {
         Assert.True(condition: output.Rumble(effect: in effect));
     }
     [Fact]
-    public void Xbox_zero_duration_stops_every_motor() {
+    public void Xbox_zero_duration_rumble_stops_the_body_motors() {
         using var connection = new XInputGamepadConnection(
             clock: new ManualInputClock(),
             deviceId: InputDeviceId.New(),

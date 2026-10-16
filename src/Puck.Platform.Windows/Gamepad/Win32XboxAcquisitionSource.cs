@@ -14,7 +14,10 @@ namespace Puck.Platform.Windows.Gamepad;
 /// <remarks>
 /// A slot's family comes from its USB identity (the ordinal-108 capabilities). Steam Input's virtual XInput pad
 /// is skipped: it mirrors a physical controller this engine already reads directly. Battery is read about every
-/// two seconds, since <c>XInputGetBatteryInformation</c> costs a driver round trip.
+/// two seconds, since <c>XInputGetBatteryInformation</c> costs a driver round trip; the headset report rides the
+/// same poll. A cycle sweeps every slot first and only then services output, so the sole-connection decision never
+/// rests on a half-discovered topology, and it waits out a settle window after the last slot or GameInput device
+/// change before it lets a lone slot bind a lone device.
 /// </remarks>
 public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
     private const int BatteryPollSeconds = 2;
@@ -30,6 +33,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
 
     private GameInputHaptics? m_gameInputHaptics;
     private IGamepadConnectionRegistry? m_registry;
+    private int m_disposed;
     private int m_started;
     private Thread? m_thread;
 
@@ -112,6 +116,8 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
         var pollPeriodTicks = (Stopwatch.Frequency / XInputPollHz);
         var recheckPeriodTicks = Stopwatch.Frequency;   // empty slots are re-probed about once a second
         var batteryPeriodTicks = (BatteryPollSeconds * Stopwatch.Frequency);
+        var settleTicks = ((long)(GameInputHaptics.SoleSettleMilliseconds * (Stopwatch.Frequency / 1000.0)));
+        var lastSlotChange = Stopwatch.GetTimestamp();  // the last time a slot opened or closed
         var nextBatteryPoll = 0L;
         using var timer = Win32HighResolutionWaitableTimer.TryCreate();
 
@@ -119,19 +125,13 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             while (!cancellationToken.IsCancellationRequested) {
                 var cycleStart = Stopwatch.GetTimestamp();
                 var pollBattery = (cycleStart >= nextBatteryPoll);
-                var connected = 0;
 
                 if (pollBattery) {
                     nextBatteryPoll = (cycleStart + batteryPeriodTicks);
                 }
 
-                foreach (var connection in connections) {
-                    connected += ((connection is null)
-                        ? 0
-                        : 1
-                    );
-                }
-
+                // Sweep every slot first: open, close, and feed. Output is serviced only after the sweep, once the
+                // cycle knows how many slots are connected.
                 for (var slot = 0; (slot < XInputSlotCount); ++slot) {
                     var connection = connections[slot];
 
@@ -147,10 +147,16 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                         userIndex: ((uint)slot)
                     );
 
+                    // A native call can outlast a dispose; never touch a connection or the registry after one.
+                    if (cancellationToken.IsCancellationRequested) {
+                        return;
+                    }
+
                     if (status != XInput.ErrorSuccess) {
                         if (connection is not null) {
                             CloseSlot(connection: connection);
                             connections[slot] = null;
+                            lastSlotChange = cycleStart;
                         }
 
                         skipped[slot] = false;
@@ -177,6 +183,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
 
                         connection = OpenSlot(slot: ((uint)slot));
                         connections[slot] = connection;
+                        lastSlotChange = cycleStart;
 
                         if (connection is null) {
                             skipped[slot] = true;
@@ -185,23 +192,53 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                             continue;
                         }
 
-                        connected++;
                         pollBattery = true;
                     }
 
-                    if (
-                        pollBattery &&
-                        (XInput.ErrorSuccess == XInput.GetBatteryInformation(
+                    if (pollBattery) {
+                        if (XInput.ErrorSuccess == XInput.GetBatteryInformation(
                             deviceType: XInput.DeviceTypeGamepad,
                             information: out var battery,
                             userIndex: ((uint)slot)
-                        ))
-                    ) {
-                        connection.ApplyBattery(information: in battery);
+                        )) {
+                            connection.ApplyBattery(information: in battery);
+                        }
+
+                        if (XInput.ErrorSuccess == XInput.GetBatteryInformation(
+                            deviceType: XInput.DeviceTypeHeadset,
+                            information: out var headset,
+                            userIndex: ((uint)slot)
+                        )) {
+                            connection.ApplyHeadset(information: in headset);
+                        }
+
+                        if (cancellationToken.IsCancellationRequested) {
+                            return;
+                        }
                     }
 
                     connection.Apply(state: in state);
-                    connection.ServiceOutput(soleConnection: (1 == connected));
+                }
+
+                var connected = 0;
+
+                foreach (var connection in connections) {
+                    connected += ((connection is null)
+                        ? 0
+                        : 1
+                    );
+                }
+
+                // One slot with one device is only a sole pair once the topology has held still; until then a
+                // partially discovered second pad (or its not-yet-reported GameInput device) could be mistaken
+                // for absence.
+                var soleConnection = (
+                    (1 == connected) &&
+                    ((cycleStart - lastSlotChange) >= settleTicks)
+                );
+
+                foreach (var connection in connections) {
+                    connection?.ServiceOutput(soleConnection: soleConnection);
                 }
 
                 var remaining = ((cycleStart + pollPeriodTicks) - Stopwatch.GetTimestamp());
@@ -219,6 +256,9 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                     }
                 }
             }
+        } catch (ObjectDisposedException) {
+            // The manager (or this source) was disposed while the loop ran; there is nobody left to feed.
+            m_diagnostics?.Invoke("[gamepad] XInput poll loop stopped: the connection registry was disposed");
         } catch (Exception exception) {
             // This runs on a dedicated thread, where an unhandled exception would terminate the process. Fail
             // soft: drop Xbox support for this session rather than take the app down.
@@ -232,10 +272,23 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
 
     /// <inheritdoc />
     public void Dispose() {
+        if (0 != Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        )) {
+            return;
+        }
+
         m_cancellation.Cancel();
 
-        // Join the poll thread, whose finally disposes the GameInput haptics it solely owns.
-        _ = (m_thread?.Join(millisecondsTimeout: DisposeJoinMilliseconds));
+        // Join the poll thread, whose finally disposes the GameInput haptics it solely owns. A thread that does not
+        // stop in time may still be inside a native call and read the token afterwards, so its cancellation source is
+        // left to finalization rather than disposed under it.
+        if (m_thread?.Join(millisecondsTimeout: DisposeJoinMilliseconds) == false) {
+            m_diagnostics?.Invoke("[gamepad] XInput poll thread did not stop within its teardown bound; continuing shutdown");
+
+            return;
+        }
 
         m_cancellation.Dispose();
     }

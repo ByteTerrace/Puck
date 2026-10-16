@@ -726,6 +726,13 @@ public sealed class GamepadManager : IDisposable {
             IGamepadConnection connection;
 
             lock (m_owner.m_gate) {
+                // A source whose poll thread outlived the manager's teardown must not strand a connection in a set
+                // nobody will dispose.
+                ObjectDisposedException.ThrowIf(
+                    condition: m_owner.m_disposed,
+                    instance: m_owner
+                );
+
                 var playerIndex = m_owner.AllocatePlayerSlotLocked();
 
                 connection = connectionFactory(arg: playerIndex);

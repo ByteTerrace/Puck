@@ -62,13 +62,16 @@ public static partial class XInput {
     public const byte BatteryTypeWired = 1;
     /// <summary>The battery-information device type of the gamepad itself.</summary>
     public const byte DeviceTypeGamepad = 0;
+    /// <summary>The battery-information device type of a headset plugged into the pad.</summary>
+    public const byte DeviceTypeHeadset = 1;
     public const uint ErrorSuccess = 0u;
     /// <summary>The Guide/home button bit, exposed only by the undocumented <see cref="GetStateEx"/>.</summary>
     public const ushort GamepadGuide = 0x0400;
 
     /// <summary>Reads a controller's battery type and its charge level, 0 (empty) through 3 (full).</summary>
     /// <param name="userIndex">The XInput user index, 0 through 3.</param>
-    /// <param name="deviceType">The device whose battery is read; <see cref="DeviceTypeGamepad"/> for the pad.</param>
+    /// <param name="deviceType">The device whose battery is read; <see cref="DeviceTypeGamepad"/> for the pad,
+    /// <see cref="DeviceTypeHeadset"/> for a plugged-in headset (disconnected when none is).</param>
     /// <param name="information">The battery report.</param>
     /// <returns><see cref="ErrorSuccess"/> on success; otherwise a Win32 error code.</returns>
     [LibraryImport(libraryName: "xinput1_4.dll", EntryPoint = "XInputGetBatteryInformation")]
