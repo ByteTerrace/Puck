@@ -61,7 +61,18 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   hot loops call the core.
 - Judge a change by counted work, JIT disassembly and llvm-mca (znver4 for the
   AVX-512 path; znver2 and alderlake for the AVX2 path), then hardware
-  counters where available; time it only when the owner asks.
+  counters where available; wall-clock time is evidence read beside those
+  counts, never alone.
+- Measure tiered code. A harness that pins itself to one CPU at high priority
+  before it warms up starves the runtime's background tiering thread, and the
+  run then times Tier0 code (four times slower, with swings between runs): warm
+  up unpinned, sleep, then pin, and check each hot method's tier with
+  `DOTNET_JitDisasmSummary=1`. AMDuProfPcm waits on its console when a killed
+  run left the counters programmed; launch it with `-r` and stdin closed, and
+  read its per-interval rows, since `-C` reports nothing for a launched
+  program. Two builds whose hot loops match instruction for instruction can
+  still differ by 1 to 3% in cycles; padding the code heap does not move it, so
+  read instructions retired beside the cycles.
 - Measured dead ends, not to re-propose: a cutoff z above y, VPOPCNTQ from
   C#, fusing the semiprime stream into the hard-leaf sweep, per-pair rework of
   the medium-prime sieve entry, walk-to-next-prime selection (it weights each
@@ -87,7 +98,10 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   select if-converts (all 252 are conditional moves, but 924 stack accesses
   leave it only 3% faster than the masks), and the non-inlined select on both
   of a reduction's subtractions (270 to 297 ns against 247 ns for the final one
-  alone; it moves with code layout).
+  alone; it moves with code layout); and two exact ladders interleaved for
+  selection above 2^63 (23 to 28% faster per ladder in isolation, but selection
+  needs only the first base-two survivor's ladder, so a pair costs about 1.7
+  ladders' time for one answer).
 - Signed Montgomery reduction is the arithmetic of the single base-two round,
   the Lucas ladder and the base-two batch below 2^63 (the batch from 2^60);
   `ScaledResidueRing64`'s `ReduceSigned`, `ReduceSignedSquareSubtract` and
@@ -112,10 +126,11 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   loop's critical path is a call: `ScaledResidueRing64.SubtractBySelect` is a
   `NoInlining` leaf that compiles to `cmp`, `cmovb`, `ret`, and the exact
   ladder's `ExactArithmetic.ReduceSubtract` ends in it, on its final subtraction
-  only: 16% off the isolated ladder, and 2 to 5% off `IsPrime` on primes at
-  2^63 (the call spills three values around the loop, and the gain moves with
-  the host process's code placement), nothing below 2^63. `Subtract` stays the
-  inlined mask for everything else. Re-run the select
+  only: 16% off the isolated ladder, nothing below 2^63. A call clobbers every
+  volatile register, so the exact walk carries one selection word (the Gray
+  bits and the step count together) and leaves the pair unswapped for a caller
+  that reads it symmetrically; that keeps the term in flight in a callee-saved
+  register. `Subtract` stays the inlined mask for everything else. Re-run the select
   probe (see [open items](../../../docs/plans/open-items.md)) on each new .NET
   major, and when in-loop if-conversion lands, before changing this.
 - `IsPrime(ulong)` trial-divides by the 128 odd primes through 727 before

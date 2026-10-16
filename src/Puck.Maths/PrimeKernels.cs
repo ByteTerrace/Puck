@@ -1222,7 +1222,8 @@ public static partial class PrimeKernels {
     /// <remarks>
     /// <para>
     /// The pair stops at <c>(C_h, C_(h+1))</c>, one doubling short of <c>C_d</c>, because it already decides both of
-    /// the first acceptance tests. For <c>e = 1</c> or <c>-1</c>,
+    /// the first acceptance tests. The walk leaves it in either order, and every use below is symmetric in its two
+    /// terms, the product included, so it is never swapped back. For <c>e = 1</c> or <c>-1</c>,
     /// <c>C_(h+1) - e C_h = z^(-h-1) (z - e) (z^d - e)</c>, and the first two factors are units: <c>z</c> has norm
     /// one, <c>z - 1</c> norm <c>2 - t = -D / Q</c> and <c>z + 1</c> norm <c>2 + t = 1 / Q</c>. So <c>z^d = 1</c>, which
     /// is <c>U_d = 0</c>, exactly when <c>C_h = C_(h+1)</c>, and <c>z^d = -1</c>, which is <c>V_d = 0</c>, exactly when
@@ -1261,10 +1262,10 @@ public static partial class PrimeKernels {
             ); // C_(k+1) = t^2 - 2
 
             WalkTraceLadder<TArithmetic>(
-                current: ref low,
-                index: half,
+                crossed: ref low,
+                selections: LadderSelections(index: half),
                 inverse: inverse,
-                next: ref high,
+                squared: ref high,
                 traceSubtrahend: traceSubtrahend,
                 twoSubtrahend: twoSubtrahend,
                 value: value
@@ -1313,15 +1314,21 @@ public static partial class PrimeKernels {
 
         return false;
     }
+    /// <summary>Returns the word that selects a trace ladder's terms: the bits of the index's Gray code below its leading one, most significant first from bit 63, then a sentinel one.</summary>
+    /// <param name="index">The index the ladder walks to, at least one and below <c>2^63</c>.</param>
+    /// <returns>The selection word; the sentinel reaches bit 63 after one shift per step, with nothing left below it.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ulong LadderSelections(ulong index) =>
+        ((((index ^ (index >>> 1)) << 1) | 1UL) << (63 - BitOperations.Log2(value: index)));
     /// <summary>Advances the pair <c>(C_k, C_(k+1))</c> from <c>k = 1</c> to <c>k = index</c> over the bits of the index below its leading one, selecting by mask rather than branching.</summary>
     /// <typeparam name="TArithmetic">The ladder's arithmetic.</typeparam>
     /// <param name="value">The odd modulus.</param>
-    /// <param name="current">The trace <c>C_k</c>, replaced by <c>C_index</c>.</param>
+    /// <param name="crossed">The trace <c>C_1</c>, replaced by the pair's crossed term: <c>C_index</c> when the index is odd, <c>C_(index+1)</c> when it is even.</param>
     /// <param name="inverse">The modulus's inverse modulo <c>2^64</c>.</param>
     /// <param name="twoSubtrahend">Two in the form <see cref="IResidueArithmetic.Subtrahend(ulong, ulong)"/> returns.</param>
     /// <param name="traceSubtrahend">The trace <c>t</c> in the form <see cref="IResidueArithmetic.Subtrahend(ulong, ulong)"/> returns.</param>
-    /// <param name="next">The trace <c>C_(k+1)</c>, replaced by <c>C_(index+1)</c>.</param>
-    /// <param name="index">The index the pair is walked to, at least one.</param>
+    /// <param name="squared">The trace <c>C_2</c>, replaced by the pair's squared term: <c>C_(index+1)</c> when the index is odd, <c>C_index</c> when it is even.</param>
+    /// <param name="selections">The selection word <see cref="LadderSelections(ulong)"/> returns for the index the pair is walked to, at least one.</param>
     /// <remarks>
     /// <para>
     /// A set bit takes <c>(C_(2k+1), C_(2k+2))</c>, a clear one <c>(C_2k, C_(2k+1))</c>; each is one cross product
@@ -1330,47 +1337,47 @@ public static partial class PrimeKernels {
     /// <c>(C_(k+1), C_k)</c> after a set bit and <c>(C_k, C_(k+1))</c> after a clear one. The cross product is the same
     /// either way, and the term to square is <c>crossed</c> exactly where the bit differs from the one above it, a bit
     /// of the index's Gray code <c>index ^ (index >>> 1)</c>, chosen by a mask; the leading bit is set, so the pair
-    /// starts as <c>(next, current)</c>. One last mask swaps it back. The select adds its latency to every step, which
-    /// costs less than a branch on each bit, which mispredicts about half the time; that holds for the signed step at
-    /// every size, the shortest included.
+    /// starts as <c>(C_2, C_1)</c>. The walk leaves it unswapped, since its caller reads the pair symmetrically. The
+    /// select adds its latency to every step, which costs less than a branch on each bit, which mispredicts about half
+    /// the time; that holds for the signed step at every size, the shortest included.
     /// </para>
     /// <para>
-    /// The second argument arrives in the register <c>MULX</c> reads implicitly, so it is the reference to <c>C_k</c>,
-    /// read once before the loop and written once after it. The trace subtrahend arriving there is given a stack home
-    /// that the loop reloads and stores on every step, which costs the ladder about a twentieth of its time.
+    /// The exact step calls <see cref="ScaledResidueRing64.SubtractBySelect(ulong, ulong, ulong)"/> twice, and a call
+    /// clobbers every volatile register, so what the loop carries across it has to fit the eight callee-saved ones: the
+    /// modulus, the inverse, both subtrahends, both references and the term in flight. One word carries the bits and
+    /// the step count together, so the term stays in a register; the word's next value, off the critical path, and the
+    /// square's correction factor, held across its <c>MULX</c>, are what pass through memory.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private static void WalkTraceLadder<TArithmetic>(ulong value, ref ulong current, ulong inverse, ulong twoSubtrahend, ulong traceSubtrahend, ref ulong next, ulong index)
+    private static void WalkTraceLadder<TArithmetic>(ulong value, ref ulong crossed, ulong inverse, ulong twoSubtrahend, ulong traceSubtrahend, ref ulong squared, ulong selections)
         where TArithmetic : struct, IResidueArithmetic {
-        var squared = next;
-        var crossed = current;
-        var gray = index ^ (index >>> 1);
+        var squaredTerm = squared;
+        var crossedTerm = crossed;
+        var bits = selections;
 
-        for (var bit = (BitOperations.Log2(value: index) - 1); (0 <= bit); --bit) {
-            var swap = unchecked((0UL - ((gray >>> bit) & 1UL)));
-            var term = (squared & ~swap) | (crossed & swap);
+        for (; (0UL != (bits << 1)); bits <<= 1) {
+            var swap = unchecked(((ulong)(((long)bits) >> 63)));
+            var term = (squaredTerm & ~swap) | (crossedTerm & swap);
             var cross = TArithmetic.ReduceSubtract(
                 inverse: inverse,
-                left: crossed,
+                left: crossedTerm,
                 modulus: value,
-                right: squared,
+                right: squaredTerm,
                 subtrahend: traceSubtrahend
             ); // C_(2k+1)
 
-            squared = TArithmetic.SquareSubtract(
+            squaredTerm = TArithmetic.SquareSubtract(
                 inverse: inverse,
                 modulus: value,
                 subtrahend: twoSubtrahend,
                 value: term
             ); // C_(2k+2) for a set bit, C_2k for a clear one
-            crossed = cross;
+            crossedTerm = cross;
         }
 
-        var last = unchecked((0UL - (index & 1UL)));
-
-        current = (squared & ~last) | (crossed & last);
-        next = (crossed & ~last) | (squared & last);
+        crossed = crossedTerm;
+        squared = squaredTerm;
     }
 
     /// <summary>The <see cref="BaseTwoBatchWidth"/> Montgomery accumulators of <see cref="WalkBaseTwoBatch(Span{ulong}, ref BaseTwoBatchPowers)"/>.</summary>

@@ -592,9 +592,14 @@ each product. The one exception is the last subtraction of the exact ladder's
 reduction: `ScaledResidueRing64.SubtractBySelect` is a non-inlined leaf, which
 the JIT compiles to a compare and a conditional move, and a call is the one
 boundary that keeps the select out of the loop's branch conversion. It takes 16%
-off the isolated ladder and 2 to 5% off `IsPrime` on primes at 2^63, and costs
-three spills around the loop; the same call on the first subtraction as well
-measured slower and moved with code layout. Unrolling the ladder so that every
+off the isolated ladder. A call clobbers every volatile register, so what the
+loop carries across it must fit the eight callee-saved ones: one word holds the
+Gray bits and the step count together, and the walk leaves the final pair
+unswapped, since the acceptance tests and the product `C_h·C_(h+1)` read it
+symmetrically. That keeps the term in flight in a register, and the ladder is
+about 4% faster than with the term, the bit count and the Gray code on the
+stack. The same call on the first subtraction as well measured slower and moved
+with code layout. Unrolling the ladder so that every
 select converts gained 3% and moved 924 values through the stack, and a ternary in the loop lost 63%.
 
 ## Constellations
