@@ -71,15 +71,17 @@ Registered arbiter lanes provide alternate views without draining again:
 
 ## Device support
 
-| Family | Transport | Input | Motion | Output |
-|---|---|---|---|---|
-| **Switch Pro** | HID over USB | buttons, sticks, digital triggers | gyro, accelerometer, fused orientation | approximate HD rumble; player LEDs at initialization |
-| **Xbox** | XInput + GameInput | buttons including Guide, sticks, analog triggers |—| four-motor rumble including impulse triggers |
-| **DualSense** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches | calibrated gyro, accelerometer, fused orientation | rumble, RGB and player LEDs, adaptive triggers |
-| **Steam Controller** | HID over USB or classic receiver | buttons, analog trigger stages, stick, two trackpads | nominal gyro and accelerometer scales, fused orientation | coarse dual-pad haptic pulses |
-| **Steam Controller Triton** | HID through the 2026 receiver | buttons, four paddles, analog triggers, two sticks, two trackpads | nominal gyro and accelerometer scales, fused orientation | dual-motor rumble |
+| Family | Transport | Input | Motion | Output | Power |
+|---|---|---|---|---|---|
+| **DualSense** and **DualSense Edge** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches; Edge Fn buttons and back paddles | calibrated gyro and accelerometer, fused orientation | rumble, RGB light bar, player LEDs, microphone-mute LED, adaptive triggers | battery and charging; headphone and microphone jacks |
+| **Switch Pro** | HID over USB or Bluetooth | buttons including Home and Capture, calibrated sticks, digital triggers | calibrated gyro and accelerometer, fused orientation | HD rumble, player LEDs, Home LED | battery and charging |
+| **Steam Controller** | HID over USB or the classic receiver | buttons, analog triggers and their full-pull switches, stick, two trackpads, grip buttons | gyro and accelerometer, fused orientation | trackpad haptic pulses, Steam-button LED | wireless battery |
+| **Steam Controller Triton** | HID over USB, Bluetooth LE, the puck receiver or the Nereid dongle | buttons, four paddles, analog triggers and their full-pull switches, two sticks, two pressure-sensing trackpads, stick and grip capacitive sense | gyro and accelerometer, fused orientation | dual-motor rumble, trackpad haptics (pulse, built-in effect, tone, sweep, script) | battery and charging |
+| **Xbox** | XInput, with GameInput for the trigger motors | buttons including Guide, sticks, analog triggers | — | body rumble; impulse triggers once bound to GameInput | battery; headset |
 
-Support means that a parser and acquisition path exist. The [limits and hardware
+Each parser follows the reference drivers for its family: Linux `hid-playstation`,
+`hid-nintendo`, `hid-steam` and `xpad`, and SDL's `hidapi` drivers, with the
+dekuNukem notes for the Switch. The [limits and hardware
 evidence](#limits-and-hardware-evidence) distinguish implementation coverage from
 reported device observations.
 
@@ -93,7 +95,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 30
 ```
 
 While the host runs, `world.devices` and `world.players` show the connected set
-and seat assignments. Controller diagnostics use `[gamepad]` or `[gameinput]`
+and seat assignments. `world.devices` also ends each gamepad's entry with its
+power then its accessories when it reports them: `battery N%`, `charging N%`,
+`not charging N%`, `charged` or `wired`, then `headset`, `headphones` or
+`microphone` (for example `gamepad1=p2* battery 94% headset`). Controller diagnostics use `[gamepad]` or `[gameinput]`
 lines on stderr. Bindings are data in `Puck.World`; they are not hard-coded in
 this project.
 
@@ -120,34 +125,48 @@ ends between two rendered frames.
 `GamepadManager` rescans HID interfaces about every 1.5 seconds. A supported
 interface is opened, assigned the lowest free player slot, and started. A
 faulted connection is removed at the next drain or rescan, and disposal occurs
-outside the manager lock.
+outside the manager lock. Disposing a live pad first stops its motors and
+releases its adaptive triggers, bounded to 100 ms per write.
+
+A controller that streams continuously (DualSense, Switch Pro) faults when its
+parsed stream falls silent (2 s and 3 s), which releases its held input when a
+Bluetooth link drops without a removal notice; the rescan reopens it if it is
+still present. One controller reached over USB and Bluetooth at once counts once:
+its parser reads the pad's Bluetooth address (`IPhysicalIdentityParser`), and
+the Bluetooth connection gives up its player slot while the USB one streams.
 
 Classic and Triton Steam receivers expose several input collections, most of
 which can be empty. Those collections start dormant: they hold no player slot,
 are excluded from public connection queries, and do not run the ordinary
 five-second first-report watchdog. The first parsed state activates a slot.
-The classic receiver reports a disconnect event and can return to dormancy.
-Triton disconnect framing is not decoded, so the device loop also parks any
-active receiver whose parsed state stream is silent for one second. Parking
+Both receivers report pairing events: a connection re-initializes the slot for
+the pad that arrived, and a disconnection returns it to dormancy. The device loop
+also parks any active receiver whose parsed state stream is silent for one
+second, for a pad that powers off without an event. Parking
 clears coalesced state, pending output, scheduled effects, rumble, motion-fusion
 history, and the player slot before that receiver carries another controller.
 
 ### Motion fusion
 
-The motion-capable parsers map their sensor frames to a common right-handed
-frame before calling `ImuOrientationTracker`. DualSense uses its report counter
-for `dt`; Switch integrates three fixed five-millisecond samples per report;
-Triton derives `dt` from its microsecond sensor timestamp, while the classic
-Steam Controller uses a nominal four milliseconds per report. The clock-free tracker
+The motion-capable parsers map their sensor frames to one right-handed frame
+(X right, Y up, Z toward the player) before calling `ImuOrientationTracker`, and
+`GamepadState.Gyro` and `Accelerometer` carry that frame. DualSense takes `dt`
+from its sensor clock; Switch spaces its three samples a third of the measured
+report interval apart; Triton derives `dt` from its IMU clock; the classic Steam
+Controller uses the connection interval it reports and skips a repeated packet.
+The clock-free tracker
 integrates angular velocity, estimates stationary gyro bias, and corrects pitch
 and roll toward accelerometer gravity. Capture the resulting orientation with
 the input snapshot; replay consumes that orientation rather than recomputing
 motion fusion from live hardware.
 
-DualSense reads factory gyro calibration from feature report `0x05`. Switch
-reads factory or user stick calibration from SPI flash and falls back to its
-nominal scale if a read is missing or implausible. Switch IMU calibration and
-both Steam families currently use nominal scales.
+DualSense reads its factory gyro and accelerometer calibration from feature
+report `0x05`. Switch reads stick and IMU calibration from SPI flash, preferring
+the user block over the factory one, and each stick's own radial deadzone from its
+device parameters (`0x6086` left, `0x6098` right), normalized by the stick's
+travel; a Pro Controller reads about 0.11. Each falls back to its nominal scale,
+and the deadzone to 0.12, when a read is missing or implausible. Both Steam families use
+the fixed ±2000 deg/s and ±2 g scales of their sensors.
 
 ## Keyboard, mouse commands, text, and pointer browsing
 
@@ -265,23 +284,67 @@ rendering programme.
 
 `IGamepadOutput` accepts typed output commands and a raw-report escape hatch.
 The connection advertises capabilities from the interfaces its parser actually
-implements. Switch and DualSense throttle equal-or-weaker rumble updates to a
-minimum 30-millisecond cadence while allowing starts, stops, and intensity
-increases through immediately.
+implements. A parser with periodic work of its own (`IServicedGamepadParser`)
+is serviced on its device loop after every read.
 
-Rumble duration is finite by contract: a zero-millisecond request stops every
-motor immediately. Backends clamp finite intensities to `0..1` and map non-finite
-values to rest before encoding a report.
+`GamepadDevice` owns rumble cadence. A parser declares the shortest spacing its
+controller accepts between writes and, when the controller drops its motors
+without fresh writes, a refresh period: 30 ms spacing on the DualSense and both
+Steam families and the Switch's own transport spacing (20 ms on USB, 60 ms over
+Bluetooth), and refreshes every 50 ms on the Switch and the classic Steam
+Controller and every 40 ms on the Triton (whose firmware stops its motors after
+about 50 ms). A
+weaker update inside the spacing is held and written when it passes; a stop or a
+stronger update is written at once, and a refreshed controller hears a stop
+three more times.
 
-Xbox output writes through both GameInput and XInput. GameInput reaches wireless
-devices and the impulse-trigger motors; the XInput write remains useful when an
-overlay has captured the GameInput endpoint.
+Rumble duration is finite by contract. A zero-millisecond `RumbleEffect` stops
+the body motors and a zero-millisecond `TriggerRumbleEffect` stops the trigger
+motors; each pair expires on its own. Intensities are clamped to `0..1` and
+non-finite values map to rest before a parser encodes them.
 
-DualSense uses one persistent output image for rumble, LEDs, and both adaptive
-triggers. USB writes use report `0x02`; Bluetooth writes use report `0x31` with
-its logical 78-byte framing and trailing CRC even when Windows advertises a
-larger output buffer. A later rumble or LED update therefore preserves the
-current trigger effects on either transport.
+- **DualSense** keeps one output image for rumble, both adaptive triggers, the
+  light bar, the player LEDs and the microphone-mute LED. USB writes report
+  `0x02`; Bluetooth writes report `0x31` with its 78-byte framing and trailing
+  CRC even when Windows advertises a larger buffer. Firmware 2.24 and later, and
+  every Edge, use the improved rumble emulation; older firmware gets the classic
+  emulation at half strength, as SDL does. Each press of the mute button toggles
+  the microphone mute and its LED, which the firmware leaves to the host.
+- **Switch Pro** plays HD rumble (`RumbleHd`): each actuator's low band (41 to
+  626 Hz) and high band (82 to 1253 Hz) take their own carrier and amplitude,
+  encoded as `round(32 · log2(f / 10))` and the Linux amplitude table. An
+  ordinary `Rumble` plays the low intensity on a 160 Hz band and the high one on
+  a 320 Hz band on both actuators. Every output report carries the current
+  rumble, so a subcommand never interrupts it, and every report, rumble or
+  subcommand, waits for the transport's spacing (20 ms on USB, 60 ms over
+  Bluetooth), past which a Bluetooth pad drops off the link. The Home LED plays a
+  `HomeLedPattern` (`SetHomeLedPattern`): up to 15 steps of brightness, fade and
+  hold over a base step of about 8 to 175 ms, repeated or held, as subcommand
+  `0x38`. `SetLed` holds a steady brightness from the brightest channel through
+  SDL's perceptual curve. Over USB, the pad is sent the HID-only command again
+  when its reports stop for 100 ms, since another driver (Steam) can switch it
+  back to its proprietary mode. Initialization faults, and the manager reopens
+  the pad, when the IMU, the full report mode or vibration is never acknowledged.
+- **Steam Controller** drives each trackpad actuator with a pulse train whose
+  duty cycle follows intensity; the low band is the left pad. `PlayTrackpadHaptic`
+  also plays an explicit pulse train with its gain. `SetLed` sets the
+  Steam-button brightness.
+- **Triton** drives its two motors with output report `0x80` and plays every
+  `TrackpadHapticEffect` form on its trackpad actuators: a pulse train (`0x81`),
+  a built-in effect such as a tick or click (`0x82`), a tone with an optional
+  low-frequency oscillator (`0x83`), a logarithmic sweep (`0x84`) and a stored
+  script (`0x85`), laid out as Valve's `controller_structs.h` declares them.
+  Initialization turns off the keyboard-and-mouse emulation together with the
+  firmware watchdog (setting 71) that would re-arm it without a Steam client,
+  and release restores the default mappings and settings (Linux
+  `steam_set_lizard_mode`).
+- `IGamepadOutput.TrackpadHaptics` names the forms a device plays; a haptic of
+  another form is refused.
+- **Xbox** writes each rumble through one path: the four GameInput motors once
+  the XInput slot is bound to its GameInput device, the two XInput body motors
+  until then. A slot binds without a held button only when it is the only pad
+  and the slot and device topology has been still for 1.5 s; otherwise it binds
+  while a button is held that tells the pads apart.
 
 ## Dynamic lighting
 
@@ -306,33 +369,67 @@ The hardware observations below were recorded without a dated build identifier.
 They describe reported results, while the transport-fake suite checks current
 code. A release qualification needs its own recorded hardware run.
 
-- **DualSense USB and Bluetooth are hardware-verified.** Input, motion, rumble,
-  LEDs, and adaptive triggers share the current output path. Bluetooth input
-  CRC is left to the link layer; output supplies the required seeded CRC.
-- **Switch Bluetooth is not supported.** The current initializer performs the
-  USB handshake and has not implemented the Bluetooth-specific vibration setup.
-- **Xbox Bluetooth is expected to flow through XInput and GameInput but has not
-  been recorded as hardware-verified here.**
+Every protocol path is pinned by golden-byte tests against the reference
+drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
+
+- **Observed on hardware, DualSense over USB:** every button including Mute,
+  both sticks to full deflection, analog triggers, both touches, calibrated
+  motion, battery, rumble, the light bar, adaptive triggers and the
+  microphone-mute LED, at about 255 Hz. The current Bluetooth path and the
+  DualSense Edge await a hardware run. Bluetooth input reports whose CRC fails
+  are dropped.
+- **Observed on hardware, Switch Pro over USB:** every button including Capture
+  and Home, calibrated sticks and IMU, its stick deadzone from flash, battery,
+  HD rumble at the default carriers and a steady Home LED, at about 75 Hz.
+  Bluetooth, HD rumble at other carriers and Home LED patterns await a hardware
+  run.
+- **Observed on hardware, Triton through its puck receiver:** every button
+  including the four paddles, both trackpad clicks, the trigger switches and
+  stick and grip capacitive sense, trackpad position and pressure, motion,
+  battery (`0x43`) and rumble, at about 265 Hz. The receiver also sends an
+  undocumented report `0x7B` about twice a second, which the parser drops.
+  Reports `0x45`/`0x47`, the other transports, pairing events, the trackpad
+  haptics and the watchdog setting await a hardware run; the side codes of
+  reports `0x82` to `0x85` (left 1, right 2, both 3, from Valve's
+  `MsgTriggerHaptic`) are unconfirmed, while the pulse report's (left 1, right
+  0) follow Linux. A built-in click on the right pad settles it: under these codes
+  only the right pad clicks, under the pulse report's numbering both do.
+- **Observed on hardware, Xbox Series X|S:** every button including Guide, sticks,
+  triggers, its family from the ordinal-108 identity, battery and body rumble.
+- **Motion agrees across families on hardware:** on the DualSense, the Switch
+  Pro and the Triton alike, a quarter turn to the left reads +90° about Y and
+  lifting the far edge reads a positive rotation about X, in both the integrated
+  gyro and the fused orientation.
+- **The classic Steam Controller is protocol-derived** and has not been run on
+  physical hardware.
+- **Xbox reaches the Share button and Elite paddles through neither XInput nor
+  the inbox GameInput v0 runtime**; they need the GameInput redistributable,
+  which the engine does not ship. Impulse-trigger rumble needs a GameInput
+  runtime that `GameInputCreate` accepts; without the GameInput service it fails
+  with `0xD0000034` (logged as `[gameinput]`), and rumble falls back to the two
+  XInput body motors. A headset is read from XInput's voice-device capability
+  flag, since the headset battery query echoes the pad's own battery.
+- **Not surfaced:** the DualSense's audio-driven haptics and speaker (an
+  audio-endpoint feature, not HID) and the classic Steam Controller's Bluetooth
+  LE transport.
 - **Only the Windows HID transport exists.** The parsers are platform-neutral,
   but no Linux `hidraw` implementation has exercised them.
-- **Classic Steam Controller support is protocol-derived and not verified on
-  physical classic hardware.** Lizard-mode control, raw IMU, state parsing,
-  receiver events, and haptic framing are implemented.
-- **Triton has hardware evidence for feature writes, rumble, steady-state IMU,
-  and roughly 265 Hz input.** Its pairing/status report is not decoded; a
-  one-second parsed-stream silence watchdog releases a slot after power-off.
-  IMU axes and scales remain nominal, and decoded pressure and
-  capacitive-touch fields have no `GamepadState` carrier.
 - **Steam lizard mode and LampArray host control restore only during clean
   disposal.** An abnormal process exit can leave the device in the last mode
   until another driver or a replug resets it.
-- **Switch HD-rumble uses a perceptible linear approximation rather than the
-  complete perceptual frequency/amplitude table.**
 
 For receiver diagnostics, match Steam VID `0x28DE` and the supported PID on
 vendor input usage `0xFF00/0x01`. Classic control messages use their classic
 feature framing. Triton feature messages use report id 1 and
 `[type][length][payload]`; report id 0 is rejected with Win32 error 87.
+
+`GamepadManager.TryGetPower` returns a device's last `GamepadPower`: where it
+draws power from and its charge, at the resolution its family reports, with a
+charger fault as `NotCharging` and an unvalidated or reserved value as
+`Unknown`. `TryGetAccessories` returns the headphones and microphone plugged
+into it. A report that carries no fresh motion (a subcommand reply, a battery
+report, a repeated packet) sets `GamepadState.IsMotionSample` false and is not
+averaged into the frame's gyro.
 
 ## Core types
 
@@ -343,9 +440,9 @@ feature framing. Triton feature messages use report id 1 and
 | `GamepadSnapshotInputCapture` | Connects the arbiter's frame drain to the snapshot input pump. |
 | `GamepadCaptureSource` | Converts drained normalized states into timestamped `InputSignal`s. |
 | `GamepadDevice` | Hosts one HID parser and owns that handle's asynchronous I/O loop. |
-| `IGamepadParser` | Defines initialization and report parsing for a controller family. |
+| `IGamepadParser` / `IServicedGamepadParser` | Define initialization, report parsing and periodic device work for a controller family. |
 | `GamepadCoalescer` / `GamepadDrain` | Bridge high-rate acquisition to a loss-aware per-frame view. |
-| `GamepadState` / `GamepadButtons` | Define the normalized controller state and button vocabulary. |
+| `GamepadState` / `GamepadButtons` / `GamepadPower` | Define the normalized controller state, button vocabulary and power report. |
 | `ImuOrientationTracker` | Holds complementary-filter orientation and gyro-bias state. |
 | `InputSources` / `WindowInputMapper` | Own physical source names and neutral keyboard/mouse/text mapping. |
 | `HeldDigitalInputState` | Retains edge-reported held controls in press order and produces safe per-frame reassertions. |
@@ -364,6 +461,28 @@ acquisition source live in `src/Puck.Platform.Windows`.
 The [Input test suite](../../tests/Puck.Input.Tests/README.md) owns the test
 coverage and run instructions. Live hardware checks use the [Quick start](#quick-start)
 inspection path, stderr diagnostics, and physical output observation.
+
+A hardware run drives a `GamepadManager` from `WindowsInputTransports` in a
+small program, or a parser over `Win32HidDeviceSource` directly, and logs each
+drained state. Only one process can hold a pad's HID handle at a time, so run no
+second probe or `Puck.World` beside it. What each check expects:
+
+- **Inputs:** every button reaches its `GamepadButtons` flag, sticks reach ±1,
+  triggers sweep 0 to 1, touch position (and Triton pressure) tracks, and
+  `TryGetPower` and `TryGetAccessories` agree with the pad.
+- **Motion:** integrate the drained gyro between two presses. A quarter turn to
+  the left, flat on a table, reads about +90° about Y; lifting the far edge reads
+  a positive rotation about X; the fused orientation agrees.
+- **Outputs:** low and high rumble on every pad, the DualSense light bar,
+  adaptive triggers and mute LED, the Switch Home LED (steady and a
+  `HomeLedPattern`), Switch `RumbleHd` sweeps across each band's range (the
+  pitch should rise), and each Triton `TrackpadHapticEffect` form on each side.
+  `Builtin(Right, Click)` settles the side codes of reports `0x82` to `0x85`:
+  only the right pad clicking confirms them, both pads clicking means they take
+  the pulse report's numbering.
+- **Lizard mode:** some seconds after a Triton initializes, a finger on its
+  right trackpad must not move the cursor. A probe stopped without disposing
+  leaves the pad out of lizard mode until it is power-cycled.
 
 ## Further reading
 

@@ -1,210 +1,394 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Input.Hid;
+using Puck.Input.Output;
 
 namespace Puck.Input.Devices;
 
-public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
-    // The accelerometer reports ≈ 0.000244 g per LSB (≈ ±8g full scale). Nominal/uncalibrated.
-    private const float AccelerometerGPerLsb = 0.000244f;
+/// <summary>
+/// Parses the Nintendo Switch Pro Controller over USB and Bluetooth and drives its HD rumble, player LEDs and Home
+/// LED, following the Linux <c>hid-nintendo</c> driver, SDL's <c>SDL_hidapi_switch</c> and the dekuNukem protocol
+/// notes. USB first runs the <c>0x80</c> handshake that switches the pad to HID; both transports then read the
+/// stick and IMU calibration from SPI flash, enable the IMU and vibration, and select the full input report
+/// <c>0x30</c>, which carries three 5 ms IMU samples, the buttons, both sticks and the battery.
+/// </summary>
+/// <remarks>
+/// Every output report shares one 4-bit packet counter and carries the current rumble, so a subcommand never
+/// interrupts a running rumble. The face buttons map by position (B south, A east, Y west, X north), and the
+/// Home LED is the settable indicator: its brightness follows the brightest channel of the requested colour.
+/// </remarks>
+public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, ILedParser, IServicedGamepadParser, IPhysicalIdentityParser, IStreamingParser, IHdRumbleParser, IHomeLedPatternParser, IDisposable {
+    private const float AccelerometerNominalGPerLsb = (1f / 4096f);
+    private const int BatteryOffset = 2;
+    private const int BluetoothOutputReportLength = 49;
     private const int ButtonsLeftOffset = 5;    // Down, Up, Right, Left, SR, SL, L, ZL
     private const int ButtonsRightOffset = 3;   // Y, X, B, A, SR, SL, R, ZR
-    private const int ButtonsSharedOffset = 4;   // -, +, RStick, LStick, Home, Capture
-    private const byte DisableUsbTimeoutCommand = 0x04;
-    private const byte EnableFastBaudRateCommand = 0x03;   // 0x80 0x03: switch to the 3 Mbit baud rate
-    // Factory stick calibration lives in SPI flash: 9 bytes per stick, three 12-bit-packed (x, y) triples for the
-    // center, the below-center span, and the above-center span. The LEFT and RIGHT sticks pack those three triples
-    // in DIFFERENT orders (LEFT: above, center, below — RIGHT: center, below, above; see TryDecodeStickCalibration).
-    // User calibration, when present (magic 0xB2 0xA1), OVERRIDES the factory values.
+    private const int ButtonsSharedOffset = 4;  // -, +, RStick, LStick, Home, Capture
+    private const byte CommandDisableUsbTimeout = 0x04;
+    private const byte CommandFastBaudRate = 0x03;
+    private const byte CommandHandshake = 0x02;
+    private const byte CommandRequestStatus = 0x01;
+    // HD-rumble carriers (Linux, dekuNukem): 160 Hz low and 320 Hz high by default; the low band spans 41 to
+    // 626 Hz and the high band 82 to 1253 Hz.
+    private const float DefaultHighFrequencyHertz = 320f;
+    private const float DefaultLowFrequencyHertz = 160f;
+    private const float MaximumHighFrequencyHertz = 1253f;
+    private const float MaximumLowFrequencyHertz = 626f;
+    private const float MinimumHighFrequencyHertz = 82f;
+    private const float MinimumLowFrequencyHertz = 41f;
+    private const int HomeLedArgumentLength = 25;
+    // The Home LED's base step runs about 8 ms (code 1) through 175 ms (code 15).
+    private const double HomeLedMaximumStepMilliseconds = 175.0;
+    private const double HomeLedMinimumStepMilliseconds = 8.0;
+    private const uint LeftStickParametersAddress = 0x6086U;
+    private const uint RightStickParametersAddress = 0x6098U;
+    private const int StickParametersLength = 18;
+    // SDL resends the HID-only command when a USB pad stops reporting for this long (Steam can switch it back).
+    private const int UsbKeepAliveMilliseconds = 100;
+    private const uint FactoryImuCalibrationAddress = 0x6020U;
     private const uint FactoryLeftStickCalibrationAddress = 0x603DU;
     private const uint FactoryRightStickCalibrationAddress = 0x6046U;
-    // The IMU gyro reports ~0.070 deg/s per LSB (≈ ±2294 dps full scale), then degrees → radians.
-    // Nominal/uncalibrated — per-device calibration would refine it.
-    private const float GyroRadiansPerSecondPerLsb = (0.070f * (MathF.PI / 180f));
-    private const byte HandshakeCommand = 0x02;            // 0x80 0x02: USB handshake
+    // The gyro reads 936 deg/s across the span between its calibration offset and sensitivity (SDL, dekuNukem);
+    // the factory sensitivity of 13371 gives the nominal 0.07 deg/s per LSB.
+    private const float GyroCalibrationDegreesPerSecond = 936f;
+    private const float GyroNominalRadiansPerSecondPerLsb = ((GyroCalibrationDegreesPerSecond / 13371f) * (MathF.PI / 180f));
+    private const int ImuCalibrationLength = 24;
     private const int ImuOffset = 13;   // three 12-byte samples (accel xyz, gyro xyz; int16 LE)
     private const int ImuSampleCount = 3;
-    private const float ImuSampleSeconds = 0.005f; // each of the three IMU sub-samples spans a fixed 5 ms
     private const int ImuSampleSize = 12;
-    private const byte InertialMeasurementUnitCommand = 0x40;
-    private const byte InitCommandInputReportId = 0x81;    // device -> host: reply to a 0x80 init command
-    private const byte InitCommandOutputReportId = 0x80;   // host -> device: USB init command
-    private const int LeftStickOffset = 6;    // 3 bytes, two 12-bit axes
-    private const byte PlayerLightsCommand = 0x30;
-    private const int ReportSizeInBytes = 64;
-    private const byte RequestStatusCommand = 0x01;        // 0x80 0x01: request controller status (MAC + type), NOT "enable UART"
-    private const int RightStickOffset = 9;    // 3 bytes, two 12-bit axes
+    // A pad whose IMU reads all zero has lost its enable (SDL); it is re-enabled at this cadence.
+    private const float ImuReenableSeconds = 3f;
+    private const byte InitCommandInputReportId = 0x81;
+    private const byte InitCommandOutputReportId = 0x80;
+    private const int LeftStickOffset = 6;
+    private const float MaximumCalibrationScaleError = 0.5f;
+    private const int DeviceInfoAddressOffset = 19;   // the Bluetooth address, big-endian, in a 0x02 reply
+    private const int MinimumStateReportLength = 13;
+    private const int RightStickOffset = 9;
     private const byte RumbleOutputReportId = 0x10;
-    private const byte RumbleSubcommandOutputReportId = 0x01; // host -> device: rumble + optional subcommand
-    private const byte SetInputReportModeCommand = 0x03;   // subcommand 0x03: select the input report mode (arg 0x30 = standard full)
-    private const byte SpiFlashReadCommand = 0x10;         // subcommand 0x10: read SPI flash (payload: u32 LE address + u8 length)
-    private const int SpiReadAttempts = 5;              // resend the read request this many times before giving up
-    // A 0x21 subcommand reply to an SPI read echoes: [15..18] address (u32 LE), [19] length, [20..] the flash data.
+    private const int RumbleLength = 8;
+    private const int SpiReadAttempts = 5;
+    // A 0x21 subcommand reply to an SPI read echoes the address (u32 LE) at 15, the length at 19, then the data.
     private const int SpiReplyAddressOffset = 15;
     private const int SpiReplyDataOffset = 20;
     private const int SpiReplyLengthOffset = 19;
-    private const byte StandardFullModeArgument = 0x30;    // arg to subcommand 0x03
-    // Standard full input report layout (report id 0x30); byte offsets per the Switch Pro report format.
+    private const int StandardReportLength = (ImuOffset + (ImuSampleCount * ImuSampleSize));
     private const byte StandardInputReportId = 0x30;
     private const int StickCalibrationDataLength = 9;
     private const int StickCalibrationMaxCenter = 3583;
     private const int StickCalibrationMaxSpan = 2400;
-    // Plausibility bounds that reject unprogrammed/garbage flash (all-0x000 or all-0xFFF, absurd spans) so a bad
-    // read degrades to the nominal scale rather than poisoning an axis. A 12-bit axis is 0..4095, nominal center ~2048.
     private const int StickCalibrationMinCenter = 512;
     private const int StickCalibrationMinSpan = 128;
-    private const int StickCenter = 2048;  // nominal center of a 12-bit axis before calibration
-    private const float StickDeadzone = 0.12f;
-    private const float StickRange = 1800f; // nominal half-travel; clamped to ±1 after scaling
-    private const byte SubcommandReplyAckOffset = 14;         // echoed subcommand id within a 0x21 reply
-    private const byte SubcommandReplyInputReportId = 0x21;   // device -> host: subcommand acknowledgement/reply
-    private const byte UserCalibrationMagic0 = 0xB2;
-    private const byte UserCalibrationMagic1 = 0xA1;
-    private const uint UserLeftStickCalibrationAddress = 0x8010U;   // 2 magic bytes at 0x8010, then 9 data bytes at 0x8012
-    private const uint UserRightStickCalibrationAddress = 0x801BU;  // 2 magic bytes at 0x801B, then 9 data bytes at 0x801D
+    private const int StickCenter = 2048;
+    private const float StickDeadzone = 0.12f;     // used when the pad's own deadzone is unreadable
+    private const float StickRange = 1800f;
+    private const int SubcommandAttempts = 5;
+    private const byte SubcommandDeviceInfo = 0x02;
+    private const byte SubcommandEnableImu = 0x40;
+    private const byte SubcommandEnableVibration = 0x48;
+    private const byte SubcommandHomeLed = 0x38;
+    private const int SubcommandOffset = 10;
+    private const byte SubcommandOutputReportId = 0x01;
+    private const byte SubcommandPlayerLights = 0x30;
+    private const int SubcommandReplyAckOffset = 13;
+    private const int SubcommandReplyIdOffset = 14;
+    private const byte SubcommandReplyInputReportId = 0x21;
+    private const int SubcommandReplyReads = 16;
+    private const byte SubcommandSetInputReportMode = 0x03;
+    private const byte SubcommandSpiFlashRead = 0x10;
+    // Every output report, rumble or subcommand, is spaced at least this far apart: a Bluetooth pad sent them
+    // faster drops off the link (Linux joycon_enforce_subcmd_rate).
+    private const int OutputSpacingBluetoothMilliseconds = 60;
+    private const int OutputSpacingUsbMilliseconds = 20;
+    private const int UsbOutputReportLength = 64;
+    private const uint UserImuCalibrationAddress = 0x8028U;
+    private const uint UserImuMagicAddress = 0x8026U;
+    private const byte UserMagic0 = 0xB2;
+    private const byte UserMagic1 = 0xA1;
+    private const uint UserLeftStickCalibrationAddress = 0x8010U;
+    private const uint UserRightStickCalibrationAddress = 0x801BU;
+
+    // HD-rumble amplitudes, 0..1003, one per encoder step (Linux joycon_rumble_amplitudes). Step i encodes as
+    // high-band byte 2i and low-band word (i odd ? 0x8000 : 0) | (0x40 + i / 2).
+    private static ReadOnlySpan<ushort> RumbleAmplitudes => [
+        0, 10, 12, 14, 17, 20, 24, 28, 33, 40, 47, 56, 67, 80, 95, 112, 117, 123, 128, 134, 140, 146, 152, 159, 166,
+        173, 181, 189, 198, 206, 215, 225, 230, 235, 240, 245, 251, 256, 262, 268, 273, 279, 286, 292, 298, 305, 311,
+        318, 325, 332, 340, 347, 355, 362, 370, 378, 387, 395, 404, 413, 422, 431, 440, 450, 460, 470, 480, 491, 501,
+        512, 524, 535, 547, 559, 571, 584, 596, 609, 623, 636, 650, 665, 679, 694, 709, 725, 741, 757, 773, 790, 808,
+        825, 843, 862, 881, 900, 920, 940, 960, 981, 1003,
+    ];
+    // The player-indicator patterns by slot (Linux, SDL).
+    private static ReadOnlySpan<byte> PlayerLeds => [0x1, 0x3, 0x7, 0xF, 0x9, 0x5, 0xD, 0x6,];
 
     private readonly IHidDevice m_device;
-    private readonly byte[] m_requestBuffer;
+    private readonly bool m_isBluetooth;
+    private readonly long m_outputSpacingTicks;
+    private readonly TimeProvider m_time;
+    private readonly byte[] m_outputBuffer;
     private readonly byte[] m_responseBuffer;
-    private readonly byte[] m_rumbleBuffer;
+    private readonly byte[] m_rumbleData = new byte[RumbleLength];
     private readonly ImuOrientationTracker m_tracker = new();
 
-    private StickCalibration m_leftStickCalibration;   // default: IsValid = false → the nominal scale is used
-    private byte m_packetId;
+    private Vector3 m_accelerometerScale = new(value: AccelerometerNominalGPerLsb);
+    private float m_averageReportSeconds = 0.015f;
+    private Vector3 m_gyroOffset;
+    private Vector3 m_gyroScale = new(value: GyroNominalRadiansPerSecondPerLsb);
+    private byte[] m_homeLedArguments = EncodeHomeLedPattern(pattern: HomeLedPattern.Steady(intensity: 0));
+    private long m_lastKeepAliveTimestamp = long.MinValue;
+    private float m_leftStickDeadzone = StickDeadzone;
+    private float m_rightStickDeadzone = StickDeadzone;
+    private bool m_hasFullReport;
+    private bool m_homeLedPending;
+    private bool m_imuReenablePending;
+    private bool m_imuSilent;
+    private Vector3 m_lastAccelerometer;
+    private Vector3 m_lastGyro;
+    private long m_lastOutputTimestamp = long.MinValue;
+    private long m_lastReportTimestamp;
+    private StickCalibration m_leftStickCalibration;
+    private long m_nextImuReenable;
+    private byte m_packetNumber;
     private StickCalibration m_rightStickCalibration;
-    private byte m_rumblePacketId;
-    private RumbleThrottle m_rumbleThrottle;
+    private bool m_rumblePending;
 
-    private static ReadOnlySpan<byte> DefaultRumblePacket => [0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40,];
+    /// <summary>Initializes a new instance of the <see cref="NintendoSwitchController"/> class.</summary>
+    /// <param name="device">The opened HID device handle for the Switch Pro Controller.</param>
+    /// <param name="timeProvider">The clock that spaces output reports and measures the report interval, or
+    /// <see langword="null"/> for <see cref="TimeProvider.System"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
+    public NintendoSwitchController(IHidDevice device, TimeProvider? timeProvider = null) {
+        ArgumentNullException.ThrowIfNull(device);
+
+        m_device = device;
+        m_isBluetooth = (device.Transport == HidTransport.Bluetooth);
+        m_time = (timeProvider ?? TimeProvider.System);
+        m_outputSpacingTicks = (((m_isBluetooth
+            ? OutputSpacingBluetoothMilliseconds
+            : OutputSpacingUsbMilliseconds) * m_time.TimestampFrequency) / 1000L);
+        // Output reports are 64 bytes on USB and 49 over Bluetooth; Windows requires the declared length, which is
+        // floored to the documented one because composition writes at protocol offsets.
+        m_outputBuffer = new byte[Math.Max(
+            val1: device.OutputReportByteLength,
+            val2: (m_isBluetooth
+                ? BluetoothOutputReportLength
+                : UsbOutputReportLength
+            )
+        )];
+        m_responseBuffer = new byte[Math.Max(
+            val1: device.InputReportByteLength,
+            val2: UsbOutputReportLength
+        )];
+        WriteRumbleSide(
+            destination: m_rumbleData.AsSpan(
+                length: 4,
+                start: 0
+            ),
+            side: HdRumbleSide.Rest
+        );
+        m_rumbleData.AsSpan(
+            length: 4,
+            start: 0
+        ).CopyTo(destination: m_rumbleData.AsSpan(start: 4));
+    }
 
     /// <inheritdoc />
-    // The Pro Controller has a 6-axis IMU; its ZL/ZR shoulder triggers are digital, not analog.
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro;
+    /// <inheritdoc />
+    public string? PhysicalId { get; private set; }
+    /// <inheritdoc />
+    public TimeSpan RumbleRefreshInterval => TimeSpan.FromMilliseconds(value: 50);
+    /// <inheritdoc />
+    /// <remarks>The parser additionally holds every output report to its transport's spacing.</remarks>
+    public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: (m_isBluetooth
+        ? OutputSpacingBluetoothMilliseconds
+        : OutputSpacingUsbMilliseconds));
+    /// <inheritdoc />
+    /// <remarks>The full report streams every 8 to 15 ms; SDL treats three silent seconds as a lost pad.</remarks>
+    public TimeSpan StreamSilenceTimeout => TimeSpan.FromSeconds(value: 3);
     /// <inheritdoc />
     public GamepadType Type => GamepadType.SwitchPro;
 
-    public NintendoSwitchController(IHidDevice device) {
-        ArgumentNullException.ThrowIfNull(device);
+    private static GamepadButtons DecodeButtons(ReadOnlySpan<byte> report) {
+        var right = report[ButtonsRightOffset];
+        var shared = report[ButtonsSharedOffset];
+        var left = report[ButtonsLeftOffset];
+        var buttons = GamepadButtons.None;
 
-        // Every buffer is floored to the documented report size: composition and response parsing index at
-        // protocol offsets, so a smaller declared length must never shrink the allocation. A nonconforming
-        // declared length makes the oversized write a stack-rejected no-op instead of a buffer overrun.
-        var inputLength = device.InputReportByteLength;
-        var outputLength = device.OutputReportByteLength;
+        if (0 != (right & 0x04)) { buttons |= GamepadButtons.ButtonSouth; }   // B
+        if (0 != (right & 0x08)) { buttons |= GamepadButtons.ButtonEast; }    // A
+        if (0 != (right & 0x01)) { buttons |= GamepadButtons.ButtonWest; }    // Y
+        if (0 != (right & 0x02)) { buttons |= GamepadButtons.ButtonNorth; }   // X
+        if (0 != (right & 0x40)) { buttons |= GamepadButtons.RightShoulder; } // R
 
-        m_device = device;
-        m_packetId = byte.MinValue;
-        m_requestBuffer = new byte[Math.Max(
-            val1: outputLength,
-            val2: ReportSizeInBytes
-        )];
-        m_responseBuffer = new byte[Math.Max(
-            val1: inputLength,
-            val2: ReportSizeInBytes
-        )];
-        m_rumbleBuffer = new byte[Math.Max(
-            val1: outputLength,
-            val2: ReportSizeInBytes
-        )];
+        if (0 != (left & 0x02)) { buttons |= GamepadButtons.DpadUp; }
+        if (0 != (left & 0x01)) { buttons |= GamepadButtons.DpadDown; }
+        if (0 != (left & 0x08)) { buttons |= GamepadButtons.DpadLeft; }
+        if (0 != (left & 0x04)) { buttons |= GamepadButtons.DpadRight; }
+        if (0 != (left & 0x40)) { buttons |= GamepadButtons.LeftShoulder; }   // L
+
+        if (0 != (shared & 0x01)) { buttons |= GamepadButtons.Back; }         // Minus
+        if (0 != (shared & 0x02)) { buttons |= GamepadButtons.Start; }        // Plus
+        if (0 != (shared & 0x04)) { buttons |= GamepadButtons.RightStickPress; }
+        if (0 != (shared & 0x08)) { buttons |= GamepadButtons.LeftStickPress; }
+        if (0 != (shared & 0x10)) { buttons |= GamepadButtons.Guide; }        // Home
+        if (0 != (shared & 0x20)) { buttons |= GamepadButtons.Capture; }
+
+        return buttons;
     }
+    // Byte 2: the high nibble's upper three bits are the charge in quarters (0 empty .. 4 full), bit 4 is
+    // charging, and bit 0 says the pad is powered by its cable.
+    private static GamepadPower DecodePower(byte status) {
+        var level = (status >> 5);
 
-    /// <inheritdoc />
-    ValueTask IGamepadParser.InitializeAsync(int playerIndex, CancellationToken cancellationToken) {
-        return InitializeAsync(
-            playerLedState: PlayerLedPattern(playerIndex: playerIndex),
-            cancellationToken: cancellationToken
+        // Levels past 4 are not a charge the pad reports (Linux rejects them).
+        if (level > 4) {
+            return GamepadPower.Unknown;
+        }
+
+        var percent = ((byte)(level * 25));
+
+        if (0 != (status & 0x10)) {
+            return new GamepadPower(
+                Percent: percent,
+                State: GamepadPowerState.Charging
+            );
+        }
+
+        return new GamepadPower(
+            Percent: percent,
+            State: (((0 != (status & 0x01)) && (100 == percent))
+                ? GamepadPowerState.Charged
+                : GamepadPowerState.OnBattery
+            )
         );
     }
-
-    private static void EncodeRumbleSide(Span<byte> destination, float lowFrequency, float highFrequency) {
-        var high = Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: highFrequency
+    // Loads the IMU calibration (user block when its magic is present, else factory): per axis an accelerometer
+    // offset and sensitivity and a gyro offset and sensitivity. Gyro: deg/s = (raw - offset) * 936 / (sensitivity
+    // - offset). Accelerometer: g = raw * 4 / (sensitivity - offset). A block more than half away from nominal
+    // is ignored (SDL, dekuNukem).
+    private async ValueTask LoadImuCalibrationAsync(CancellationToken cancellationToken) {
+        var magic = new byte[2];
+        var data = new byte[ImuCalibrationLength];
+        var address = ((
+            await TryReadSpiFlashAsync(
+            address: UserImuMagicAddress,
+            cancellationToken: cancellationToken,
+            destination: magic
+        ) &&
+            (UserMagic0 == magic[0]) &&
+            (UserMagic1 == magic[1])
+        )
+            ? UserImuCalibrationAddress
+            : FactoryImuCalibrationAddress
         );
-        var low = Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: lowFrequency
-        );
 
-        if (
-            (0f >= high) &&
-            (0f >= low)
-        ) {
-            // Neutral (no rumble) packet.
-            destination[0] = 0x00;
-            destination[1] = 0x01;
-            destination[2] = 0x40;
-            destination[3] = 0x40;
+        if (!await TryReadSpiFlashAsync(
+            address: address,
+            cancellationToken: cancellationToken,
+            destination: data
+        )) {
+            Console.Error.WriteLine(value: "[gamepad] Switch Pro IMU calibration unavailable; using nominal scale");
 
             return;
         }
 
-        // Default carrier frequencies (encoded), with amplitude scaled from the requested intensities.
-        // Layout per the Switch HD-rumble format: high-band freq/amp in [0..1], low-band freq/amp in [2..3].
-        // Amplitude bytes must stay within the safe ceilings — HA <= 0xC8, LA <= 0x72; higher values are
-        // unsafe for the linear resonant actuators. High band peaks at 0x9C
-        // (< 0xC8); the low band maps 0..1 onto baseline 0x40 .. ceiling 0x72 so full intensity stays safe.
-        const ushort HighFrequencyEncoded = 0x0098;             // ~320 Hz
-        const byte LowFrequencyEncoded = 0x46;                  // ~160 Hz
-        const float LowAmplitudeSpan = (0x72 - 0x40);           // 0x40 baseline (rest) up to the 0x72 safe ceiling
+        var accelerometerOffset = ReadVector(
+            data: data,
+            offset: 0
+        );
+        var accelerometerSensitivity = ReadVector(
+            data: data,
+            offset: 6
+        );
+        var gyroOffset = ReadVector(
+            data: data,
+            offset: 12
+        );
+        var gyroSensitivity = ReadVector(
+            data: data,
+            offset: 18
+        );
+        var accelerometerSpan = (accelerometerSensitivity - accelerometerOffset);
+        var gyroSpan = (gyroSensitivity - gyroOffset);
 
-        var highAmplitude = ((byte)(high * 0x9C));               // high-band amplitude byte (peak 0x9C < 0xC8)
-        var lowAmplitude = ((ushort)(0x40 + (low * LowAmplitudeSpan))); // low-band amplitude (0x40 rest .. 0x72 max)
+        if (
+            (0f == accelerometerSpan.X) || (0f == accelerometerSpan.Y) || (0f == accelerometerSpan.Z) ||
+            (0f == gyroSpan.X) || (0f == gyroSpan.Y) || (0f == gyroSpan.Z)
+        ) {
+            Console.Error.WriteLine(value: "[gamepad] Switch Pro IMU calibration implausible; using nominal scale");
 
-        destination[0] = ((byte)(HighFrequencyEncoded & 0xFF));
-        destination[1] = ((byte)(highAmplitude + ((HighFrequencyEncoded >> 8) & 0xFF)));
-        destination[2] = ((byte)(LowFrequencyEncoded + ((lowAmplitude >> 8) & 0xFF)));
-        destination[3] = ((byte)(lowAmplitude & 0xFF));
+            return;
+        }
+
+        var accelerometerScale = (new Vector3(value: 4f) / accelerometerSpan);
+        var gyroScale = (new Vector3(value: (GyroCalibrationDegreesPerSecond * (MathF.PI / 180f))) / gyroSpan);
+
+        if (
+            !IsNear(
+            nominal: AccelerometerNominalGPerLsb,
+            value: accelerometerScale
+        ) ||
+            !IsNear(
+            nominal: GyroNominalRadiansPerSecondPerLsb,
+            value: gyroScale
+        )
+        ) {
+            Console.Error.WriteLine(value: "[gamepad] Switch Pro IMU calibration implausible; using nominal scale");
+
+            return;
+        }
+
+        m_accelerometerScale = accelerometerScale;
+        m_gyroOffset = gyroOffset;
+        m_gyroScale = gyroScale;
+
+        static bool IsNear(Vector3 value, float nominal) {
+            var error = Vector3.Abs(value: (Vector3.One - (value / nominal)));
+
+            return (
+                (error.X <= MaximumCalibrationScaleError) &&
+                (error.Y <= MaximumCalibrationScaleError) &&
+                (error.Z <= MaximumCalibrationScaleError)
+            );
+        }
+        static Vector3 ReadVector(byte[] data, int offset) => new(
+            x: BinaryPrimitives.ReadInt16LittleEndian(source: data.AsSpan(start: offset)),
+            y: BinaryPrimitives.ReadInt16LittleEndian(source: data.AsSpan(start: (offset + 2))),
+            z: BinaryPrimitives.ReadInt16LittleEndian(source: data.AsSpan(start: (offset + 4)))
+        );
     }
-    private async ValueTask<StickCalibration> LoadOneStickCalibrationAsync(
-        uint factoryAddress,
-        uint userAddress,
-        bool isLeftStick,
-        string stickName,
-        CancellationToken cancellationToken
-    ) {
-        // Read the 2 magic bytes + 9 data bytes at the user-calibration address; a valid magic means the user
-        // calibration is present and OVERRIDES the factory calibration.
+    // Each stick prefers its user calibration (magic 0xB2 0xA1) over the factory one and keeps the nominal scale
+    // when neither reads plausibly.
+    private async ValueTask<StickCalibration> LoadStickCalibrationAsync(uint factoryAddress, uint userAddress, bool isLeftStick, string stickName, CancellationToken cancellationToken) {
         var userBuffer = new byte[(StickCalibrationDataLength + 2)];
 
         if (
-            await TryReadSpiFlash(
+            await TryReadSpiFlashAsync(
             address: userAddress,
             cancellationToken: cancellationToken,
-            destination: userBuffer,
-            length: (StickCalibrationDataLength + 2)
+            destination: userBuffer
         ) &&
-            (UserCalibrationMagic0 == userBuffer[0]) &&
-            (UserCalibrationMagic1 == userBuffer[1]) &&
+            (UserMagic0 == userBuffer[0]) &&
+            (UserMagic1 == userBuffer[1]) &&
             TryDecodeStickCalibration(
+            calibration: out var userCalibration,
             data: userBuffer.AsSpan(
                 length: StickCalibrationDataLength,
                 start: 2
             ),
-            isLeftStick: isLeftStick,
-            calibration: out var userCalibration
+            isLeftStick: isLeftStick
         )
         ) {
-            LogCalibration(
-                calibration: in userCalibration,
-                source: "user",
-                stickName: stickName
-            );
-
             return userCalibration;
         }
 
-        // Factory calibration (9 data bytes).
         var factoryBuffer = new byte[StickCalibrationDataLength];
 
         if (
-            await TryReadSpiFlash(
+            await TryReadSpiFlashAsync(
             address: factoryAddress,
             cancellationToken: cancellationToken,
-            destination: factoryBuffer,
-            length: StickCalibrationDataLength
+            destination: factoryBuffer
         ) &&
             TryDecodeStickCalibration(
             calibration: out var factoryCalibration,
@@ -212,96 +396,60 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             isLeftStick: isLeftStick
         )
         ) {
-            LogCalibration(
-                calibration: in factoryCalibration,
-                source: "factory",
-                stickName: stickName
-            );
-
             return factoryCalibration;
         }
 
-        // A pad must never get WORSE because calibration failed: keep the nominal scale and say so exactly once.
-        Console.Error.WriteLine(value: $"[gamepad] Switch Pro {stickName} stick calibration unavailable (SPI read failed or implausible); using nominal scale");
+        Console.Error.WriteLine(value: $"[gamepad] Switch Pro {stickName} stick calibration unavailable; using nominal scale");
 
         return default;
     }
-    // Loads both sticks' calibration from SPI flash. Each stick prefers its user calibration (magic 0xB2 0xA1
-    // present) over the factory calibration, and falls back to the nominal scale on any failure.
-    private async ValueTask LoadStickCalibrationAsync(CancellationToken cancellationToken) {
-        m_leftStickCalibration = await LoadOneStickCalibrationAsync(
-            cancellationToken: cancellationToken,
-            factoryAddress: FactoryLeftStickCalibrationAddress,
-            isLeftStick: true,
-            stickName: "left",
-            userAddress: UserLeftStickCalibrationAddress
-        );
-        m_rightStickCalibration = await LoadOneStickCalibrationAsync(
-            cancellationToken: cancellationToken,
-            factoryAddress: FactoryRightStickCalibrationAddress,
-            isLeftStick: false,
-            stickName: "right",
-            userAddress: UserRightStickCalibrationAddress
-        );
+    private byte NextPacketNumber() {
+        return ((byte)(m_packetNumber++ & 0x0F));
     }
-    private static void LogCalibration(string source, string stickName, in StickCalibration calibration) {
-        Console.Error.WriteLine(value: $"[gamepad] Switch Pro {stickName} stick calibration source={source} center=({calibration.CenterX:F0},{calibration.CenterY:F0}) x[-{calibration.MinBelowX:F0},+{calibration.MaxAboveX:F0}] y[-{calibration.MinBelowY:F0},+{calibration.MaxAboveY:F0}]");
-    }
-    private static byte PlayerLedPattern(int playerIndex) {
-        // Switch convention: player N lights N solid LEDs (P1 = ●○○○, P2 = ●●○○, …). Bits 0-3 are the four
-        // solid LEDs; cap at four slots and wrap beyond.
-        var slot = playerIndex & 3;
-
-        return ((byte)((1 << (slot + 1)) - 1));
-    }
-    // Decodes the three 5 ms IMU sub-samples this report carries in one pass (each leads with accel xyz, then
-    // gyro xyz; int16 LE). The averaged outputs are the frame-rate-independent readings a consumer gets; the
-    // fused orientation advances one tracker step per sub-sample at the sensor's own fixed cadence — never a
-    // wall clock — so fusion stays correct regardless of how fast reports arrive. (Bias learning therefore runs
-    // once per sub-sample, harmless since it is a slow still-only adaptation.) Sub-samples are read raw (scale
-    // one) so the average is taken before the nominal scale is applied.
+    // Decodes the report's three IMU samples: each advances the fusion one step, and the state carries their mean.
+    // Samples are spaced a third of the measured report interval apart (Linux), since the pad reports every 8 to
+    // 15 ms depending on transport and link.
     private Quaternion ReadImu(ReadOnlySpan<byte> report, out Vector3 accelerometer, out Vector3 gyro) {
         var accelerometerSum = Vector3.Zero;
         var gyroSum = Vector3.Zero;
+        var sampleSeconds = (m_averageReportSeconds / ImuSampleCount);
 
         for (var sample = 0; (sample < ImuSampleCount); ++sample) {
             var baseOffset = (ImuOffset + (sample * ImuSampleSize));
-            var accelerometerSample = GamepadNormalization.ReadVector3Int16(
+            var accelerometerSample = ToFusionFrame(sensor: (GamepadNormalization.ReadVector3Int16(
                 offset: baseOffset,
                 scale: 1f,
                 source: report
-            );
-            var gyroSample = GamepadNormalization.ReadVector3Int16(
+            ) * m_accelerometerScale));
+            var gyroSample = ToFusionFrame(sensor: ((GamepadNormalization.ReadVector3Int16(
                 offset: (baseOffset + 6),
                 scale: 1f,
                 source: report
-            );
+            ) - m_gyroOffset) * m_gyroScale));
 
             accelerometerSum += accelerometerSample;
             gyroSum += gyroSample;
 
             _ = m_tracker.Update(
-                accelerometerG: ToFusionFrame(sensor: (accelerometerSample * AccelerometerGPerLsb)),
-                deltaSeconds: ImuSampleSeconds,
-                gyroRadiansPerSecond: ToFusionFrame(sensor: (gyroSample * GyroRadiansPerSecondPerLsb))
+                accelerometerG: accelerometerSample,
+                deltaSeconds: sampleSeconds,
+                gyroRadiansPerSecond: gyroSample
             );
         }
 
-        accelerometer = ((accelerometerSum / ImuSampleCount) * AccelerometerGPerLsb);
-        gyro = ((gyroSum / ImuSampleCount) * GyroRadiansPerSecondPerLsb);
+        accelerometer = (accelerometerSum / ImuSampleCount);
+        gyro = (gyroSum / ImuSampleCount);
 
         return m_tracker.Orientation;
     }
-    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration) {
+    private static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset, in StickCalibration calibration, float deadzone) {
         var rawX = report[offset] | ((report[(offset + 1)] & 0x0F) << 8);
         var rawY = (report[(offset + 1)] >> 4) | (report[(offset + 2)] << 4);
         float x, y;
 
         if (calibration.IsValid) {
-            // Per-axis normalization from the pad's own calibration: (raw - center) / span, where span is the
-            // above-center travel for a positive push and the below-center travel for a negative one. Because the
-            // span comes from the pad itself, a full physical deflection maps to |axis| ≈ 1 even on an asymmetric
-            // stick — the fix for a pad that could not reach ±1 under the single nominal scale.
+            // Per-axis (raw - center) / span, with the above-center travel for a positive push and the below-center
+            // travel for a negative one, so an asymmetric stick still reaches ±1 at full deflection.
             var deltaX = (rawX - calibration.CenterX);
             var deltaY = (rawY - calibration.CenterY);
 
@@ -312,148 +460,120 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
                 ? calibration.MaxAboveY
                 : calibration.MinBelowY));
         } else {
-            // Nominal fallback (no valid calibration was read) — the original single-scale path, unchanged.
             x = ((rawX - StickCenter) / StickRange);
             y = ((rawY - StickCenter) / StickRange);
         }
 
-        // Clamp each axis into the unit range (a calibrated axis can nudge just past 1 at its extreme point) before
-        // the radial deadzone/rescale.
-        var stick = new Vector2(
-            x: Math.Clamp(
-                max: 1f,
-                min: -1f,
-                value: x
-            ),
-            y: Math.Clamp(
-                max: 1f,
-                min: -1f,
-                value: y
+        return GamepadNormalization.ApplyRadialDeadzone(
+            deadzone: deadzone,
+            stick: new Vector2(
+                x: Math.Clamp(
+                    max: 1f,
+                    min: -1f,
+                    value: x
+                ),
+                y: Math.Clamp(
+                    max: 1f,
+                    min: -1f,
+                    value: y
+                )
             )
         );
-
-        return GamepadNormalization.ApplyRadialDeadzone(
-            deadzone: StickDeadzone,
-            stick: stick
-        );
     }
-    private async ValueTask<bool> SendInitCommand(
-        byte command,
-        bool waitForAck = true,
-        CancellationToken cancellationToken = default
-    ) {
-        const uint MaximumNumberOfAttempts = 64U;
-        const uint WriteAttemptInterval = 7U;
+    // Sends one USB init command (0x80 xx) and waits for its 0x81 echo, rewriting every seventh read.
+    private async ValueTask<bool> SendInitCommandAsync(byte command, bool waitForAck, CancellationToken cancellationToken) {
+        const int MaximumReads = 64;
+        const int WriteInterval = 7;
 
-        var device = m_device;
-        var requestBuffer = m_requestBuffer;
-        var response = m_responseBuffer;
-        var result = false;
+        var buffer = m_outputBuffer;
 
-        requestBuffer[0] = InitCommandOutputReportId;
-        requestBuffer[1] = command;
+        for (var read = 0; (read < MaximumReads); ++read) {
+            if (0 == (read % WriteInterval)) {
+                buffer.AsSpan().Clear();
+                buffer[0] = InitCommandOutputReportId;
+                buffer[1] = command;
 
-        response.AsSpan().Clear();
-
-        for (var attempts = uint.MinValue; (MaximumNumberOfAttempts > attempts); ++attempts) {
-            if (uint.MinValue == (attempts % WriteAttemptInterval)) {
-                await device.WriteAsync(
-                    buffer: requestBuffer,
+                await m_device.WriteAsync(
+                    buffer: buffer,
                     cancellationToken: cancellationToken
-                );
-                await Task.Delay(
-                    cancellationToken: cancellationToken,
-                    millisecondsDelay: 12
                 );
 
                 if (!waitForAck) {
-                    result = true;
-
-                    break;
+                    return true;
                 }
             }
 
-            var numberOfBytesRead = await device.ReadAsync(
-                buffer: response,
+            var count = await m_device.ReadAsync(
+                buffer: m_responseBuffer,
                 cancellationToken: cancellationToken,
                 timeoutInMilliseconds: 60
             );
 
             if (
-                (1 < numberOfBytesRead) &&
-                (InitCommandInputReportId == response[0]) &&
-                (command == response[1])
+                (count > 1) &&
+                (InitCommandInputReportId == m_responseBuffer[0]) &&
+                (command == m_responseBuffer[1])
             ) {
-                result = true;
-
-                break;
+                return true;
             }
         }
 
-        requestBuffer.AsSpan().Clear();
-
-        // A transient ACK miss (common under USB contention with several controllers initializing at once) is
-        // tolerated rather than fatal: the caller's retries cover it, and a genuine failure degrades to a
-        // controller that simply doesn't stream, not a crash.
-        return result;
+        return false;
     }
-    private async ValueTask<bool> SendSubcommand(
-        byte command,
-        CancellationToken cancellationToken = default
-    ) {
-        const uint MaximumNumberOfAttempts = 16U;
+    // Sends a subcommand (report 0x01 carrying the current rumble) and waits for its acknowledged 0x21 reply,
+    // resending up to five times (SDL). `matches` additionally checks the reply payload. Subcommands are spaced
+    // so a Bluetooth pad is never sent them faster than it accepts.
+    private async ValueTask<bool> SendSubcommandAsync(byte subcommand, ReadOnlyMemory<byte> arguments, Func<byte[], int, bool>? matches, CancellationToken cancellationToken) {
+        var buffer = m_outputBuffer;
 
-        var defaultRumblePacket = DefaultRumblePacket;
-        var device = m_device;
-        // The packet number is a 4-bit rolling counter; mask it like the rumble path so it never spills into the
-        // high nibble (which is reserved for other fields in the rumble+subcommand report).
-        var packetId = ((byte)(m_packetId++ & 0x0F));
-        var requestBuffer = m_requestBuffer;
-        var responseBuffer = m_responseBuffer;
-        var result = false;
+        for (var attempt = 0; (attempt < SubcommandAttempts); ++attempt) {
+            buffer.AsSpan().Clear();
+            buffer[0] = SubcommandOutputReportId;
+            buffer[1] = NextPacketNumber();
+            m_rumbleData.CopyTo(destination: buffer.AsSpan(start: 2));
+            buffer[SubcommandOffset] = subcommand;
+            arguments.Span.CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
 
-        requestBuffer[0] = RumbleSubcommandOutputReportId;
-        requestBuffer[1] = packetId;
-        requestBuffer[10] = command;
-
-        defaultRumblePacket.CopyTo(destination: requestBuffer.AsSpan()[2..]);
-        responseBuffer.AsSpan().Clear();
-
-        await device.WriteAsync(
-            buffer: requestBuffer,
-            cancellationToken: cancellationToken
-        );
-        await Task.Delay(
-            cancellationToken: cancellationToken,
-            millisecondsDelay: 12
-        );
-
-        for (var attempts = uint.MinValue; (MaximumNumberOfAttempts > attempts); ++attempts) {
-            var numberOfBytesRead = await device.ReadAsync(
-                buffer: responseBuffer,
-                cancellationToken: cancellationToken,
-                timeoutInMilliseconds: 60
+            await m_device.WriteAsync(
+                buffer: buffer,
+                cancellationToken: cancellationToken
             );
+            m_lastOutputTimestamp = m_time.GetTimestamp();
 
-            if (
-                (numberOfBytesRead > SubcommandReplyAckOffset) &&
-                (SubcommandReplyInputReportId == responseBuffer[0]) &&
-                (command == responseBuffer[SubcommandReplyAckOffset])
-            ) {
-                result = true;
+            for (var read = 0; (read < SubcommandReplyReads); ++read) {
+                var count = await m_device.ReadAsync(
+                    buffer: m_responseBuffer,
+                    cancellationToken: cancellationToken,
+                    timeoutInMilliseconds: 60
+                );
 
-                break;
+                if (
+                    (count > SubcommandReplyIdOffset) &&
+                    (SubcommandReplyInputReportId == m_responseBuffer[0]) &&
+                    (subcommand == m_responseBuffer[SubcommandReplyIdOffset]) &&
+                    (0 != (m_responseBuffer[SubcommandReplyAckOffset] & 0x80)) &&
+                    ((matches is null) || matches(
+                        arg1: m_responseBuffer,
+                        arg2: count
+                    ))
+                ) {
+                    await Task.Delay(
+                        cancellationToken: cancellationToken,
+                        millisecondsDelay: (m_isBluetooth
+                            ? OutputSpacingBluetoothMilliseconds
+                            : OutputSpacingUsbMilliseconds
+                        )
+                    );
+
+                    return true;
+                }
             }
         }
 
-        requestBuffer.AsSpan().Clear();
-
-        // A transient ACK miss (common under USB contention with several controllers initializing at once) is
-        // tolerated rather than fatal: the caller's retries cover it, and a genuine failure degrades to a
-        // controller that simply doesn't stream, not a crash.
-        return result;
+        return false;
     }
-    // Maps the Switch's (right-handed) IMU axes into the fusion frame (X=right, Y=up, Z=back).
+    // Maps the Switch IMU frame (X toward the triggers, Y left, Z up) into the fusion frame (X right, Y up, Z
+    // toward the player), as SDL does to match the PlayStation pads.
     private static Vector3 ToFusionFrame(Vector3 sensor) {
         return new Vector3(
             x: -sensor.Y,
@@ -461,10 +581,8 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             z: -sensor.X
         );
     }
-    // Decodes a 9-byte SPI stick-calibration block into per-axis center + below-center/above-center spans. The nine
-    // bytes hold six little-endian 12-bit values (three (x, y) triples); the LEFT and RIGHT sticks order those
-    // triples DIFFERENTLY — LEFT: above, center, below; RIGHT: center, below, above. Returns false when the decoded
-    // values are implausible so the caller keeps the nominal scale.
+    // Decodes a 9-byte SPI stick-calibration block: six 12-bit values as three (x, y) triples, ordered above,
+    // center, below for the left stick and center, below, above for the right.
     private static bool TryDecodeStickCalibration(ReadOnlySpan<byte> data, bool isLeftStick, out StickCalibration calibration) {
         Span<int> values = stackalloc int[6];
 
@@ -475,320 +593,609 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         values[4] = data[6] | ((data[7] & 0x0F) << 8);
         values[5] = (data[7] >> 4) | (data[8] << 4);
 
-        int centerX, centerY, maxAboveX, maxAboveY, minBelowX, minBelowY;
-
-        if (isLeftStick) {
-            maxAboveX = values[0]; maxAboveY = values[1];
-            centerX = values[2]; centerY = values[3];
-            minBelowX = values[4]; minBelowY = values[5];
-        } else {
-            centerX = values[0]; centerY = values[1];
-            minBelowX = values[2]; minBelowY = values[3];
-            maxAboveX = values[4]; maxAboveY = values[5];
-        }
-
-        calibration = new StickCalibration(
-            centerX: centerX,
-            centerY: centerY,
-            maxAboveX: maxAboveX,
-            maxAboveY: maxAboveY,
-            minBelowX: minBelowX,
-            minBelowY: minBelowY
+        calibration = (isLeftStick
+            ? new StickCalibration(
+                centerX: values[2],
+                centerY: values[3],
+                maxAboveX: values[0],
+                maxAboveY: values[1],
+                minBelowX: values[4],
+                minBelowY: values[5]
+            )
+            : new StickCalibration(
+                centerX: values[0],
+                centerY: values[1],
+                maxAboveX: values[4],
+                maxAboveY: values[5],
+                minBelowX: values[2],
+                minBelowY: values[3]
+            )
         );
 
         return calibration.IsValid;
     }
-    // Reads <paramref name="length"/> bytes of SPI flash at <paramref name="address"/> via subcommand 0x10, over the
-    // rumble+subcommand output report (like SendSubcommand). Matches the reply by its echoed subcommand id AND the
-    // exact address+length we requested, so an unrelated queued 0x21 reply can't be mistaken for ours. Returns false
-    // (leaving the caller on the nominal scale) if no matching reply arrives after SpiReadAttempts resends.
-    private async ValueTask<bool> TryReadSpiFlash(
-        uint address,
-        int length,
-        byte[] destination,
-        CancellationToken cancellationToken
-    ) {
-        const uint MaximumReplyReads = 16U;
+    // Reads destination.Length bytes of SPI flash with subcommand 0x10, matching the reply by its echoed address
+    // and length so an unrelated queued reply is never taken for it.
+    private async ValueTask<bool> TryReadSpiFlashAsync(uint address, byte[] destination, CancellationToken cancellationToken) {
+        var length = destination.Length;
+        var arguments = new byte[5];
 
-        var device = m_device;
-        var requestBuffer = m_requestBuffer;
-        var responseBuffer = m_responseBuffer;
-        var result = false;
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: arguments,
+            value: address
+        );
+        arguments[4] = ((byte)length);
 
-        for (var attempt = 0; ((attempt < SpiReadAttempts) && !result); ++attempt) {
-            // The packet number is a 4-bit rolling counter; mask it like the rumble/subcommand path so it never
-            // spills into the high nibble.
-            var packetId = ((byte)(m_packetId++ & 0x0F));
-
-            requestBuffer.AsSpan().Clear();
-
-            requestBuffer[0] = RumbleSubcommandOutputReportId;
-            requestBuffer[1] = packetId;
-            requestBuffer[10] = SpiFlashReadCommand;
-
-            // The neutral rumble payload occupies [2..10) on the rumble+subcommand report (span used immediately,
-            // not held across the await below).
-            DefaultRumblePacket.CopyTo(destination: requestBuffer.AsSpan()[2..]);
-            // SPI read arguments: little-endian u32 address followed by a u8 length.
-            BinaryPrimitives.WriteUInt32LittleEndian(
-                destination: requestBuffer.AsSpan(start: 11),
-                value: address
-            );
-            requestBuffer[15] = ((byte)length);
-
-            responseBuffer.AsSpan().Clear();
-
-            await device.WriteAsync(
-                buffer: requestBuffer,
-                cancellationToken: cancellationToken
-            );
-            await Task.Delay(
+        for (var attempt = 0; (attempt < SpiReadAttempts); ++attempt) {
+            if (await SendSubcommandAsync(
+                arguments: arguments,
                 cancellationToken: cancellationToken,
-                millisecondsDelay: 12
-            );
+                matches: (reply, count) => (
+                    (count >= (SpiReplyDataOffset + length)) &&
+                    (address == BinaryPrimitives.ReadUInt32LittleEndian(source: reply.AsSpan(start: SpiReplyAddressOffset))) &&
+                    (length == reply[SpiReplyLengthOffset])
+                ),
+                subcommand: SubcommandSpiFlashRead
+            )) {
+                m_responseBuffer.AsSpan(
+                    length: length,
+                    start: SpiReplyDataOffset
+                ).CopyTo(destination: destination);
 
-            for (var read = uint.MinValue; (MaximumReplyReads > read); ++read) {
-                var numberOfBytesRead = await device.ReadAsync(
-                    buffer: responseBuffer,
-                    cancellationToken: cancellationToken,
-                    timeoutInMilliseconds: 60
-                );
-
-                if (
-                    (numberOfBytesRead >= (SpiReplyDataOffset + length)) &&
-                    (SubcommandReplyInputReportId == responseBuffer[0]) &&
-                    (SpiFlashReadCommand == responseBuffer[SubcommandReplyAckOffset]) &&
-                    (address == BinaryPrimitives.ReadUInt32LittleEndian(source: responseBuffer.AsSpan(start: SpiReplyAddressOffset))) &&
-                    (length == responseBuffer[SpiReplyLengthOffset])
-                ) {
-                    responseBuffer.AsSpan(
-                        length: length,
-                        start: SpiReplyDataOffset
-                    ).CopyTo(destination: destination.AsSpan(
-                        length: length,
-                        start: 0
-                    ));
-
-                    result = true;
-
-                    break;
-                }
+                return true;
             }
         }
 
-        requestBuffer.AsSpan().Clear();
-
-        return result;
+        return false;
     }
+    // Writes one actuator's four HD-rumble bytes (Linux joycon_encode_rumble, SDL EncodeRumble): each carrier
+    // encodes as enc = round(32 * log2(f / 10)), the high band storing (enc - 0x60) * 4 in 9 bits and the low
+    // band enc - 0x40 in 7; each amplitude takes the first table step at or above it. The high-band frequency
+    // lends its top bit to byte 1, and the 9-bit low-band amplitude lends its top bit to byte 2.
+    private static void WriteRumbleSide(Span<byte> destination, HdRumbleSide side) {
+        var highCode = ((EncodeFrequency(
+            fallback: DefaultHighFrequencyHertz,
+            hertz: side.High.FrequencyHertz,
+            maximum: MaximumHighFrequencyHertz,
+            minimum: MinimumHighFrequencyHertz
+        ) - 0x60) * 4);
+        var lowCode = (EncodeFrequency(
+            fallback: DefaultLowFrequencyHertz,
+            hertz: side.Low.FrequencyHertz,
+            maximum: MaximumLowFrequencyHertz,
+            minimum: MinimumLowFrequencyHertz
+        ) - 0x40);
+        var highStep = AmplitudeStep(intensity: side.High.Amplitude);
+        var lowStep = AmplitudeStep(intensity: side.Low.Amplitude);
+        var lowAmplitude = ((((lowStep & 1) != 0)
+            ? 0x8000
+            : 0) | (0x40 + (lowStep >> 1)));
 
-    public async ValueTask InitializeAsync(
-        byte playerLedState,
-        CancellationToken cancellationToken = default
-    ) {
-        // The rolling subcommand packet number starts at 0x00 (SendSubcommand masks it to 4 bits per send).
-        m_packetId = byte.MinValue;
+        destination[0] = ((byte)(highCode & 0xFF));
+        destination[1] = ((byte)((highStep * 2) | ((highCode >> 8) & 0x01)));
+        destination[2] = ((byte)(lowCode | ((lowAmplitude >> 8) & 0x80)));
+        destination[3] = ((byte)(lowAmplitude & 0xFF));
 
-        // USB handshake: request status, handshake, raise the baud rate, handshake again, then force HID-only mode
-        // (no ACK for the last one). This is the canonical Switch Pro USB bring-up sequence.
-        _ = await SendInitCommand(
-            cancellationToken: cancellationToken,
-            command: RequestStatusCommand
-        );
-        _ = await SendInitCommand(
-            cancellationToken: cancellationToken,
-            command: HandshakeCommand
-        );
-        _ = await SendInitCommand(
-            cancellationToken: cancellationToken,
-            command: EnableFastBaudRateCommand
-        );
-        _ = await SendInitCommand(
-            cancellationToken: cancellationToken,
-            command: HandshakeCommand
-        );
-        _ = await SendInitCommand(
-            cancellationToken: cancellationToken,
-            command: DisableUsbTimeoutCommand,
-            waitForAck: false
-        );
+        static int AmplitudeStep(float intensity) {
+            // A non-positive or NaN intensity is rest; every comparison with NaN fails, so it is tested first.
+            if (!(intensity > 0f)) {
+                return 0;
+            }
 
-        var requestBuffer = m_requestBuffer;
+            var target = (intensity * RumbleAmplitudes[^1]);
+            var amplitudes = RumbleAmplitudes;
 
-        // configure player lights
-        requestBuffer[11] = playerLedState;
-        _ = await SendSubcommand(
-            cancellationToken: cancellationToken,
-            command: PlayerLightsCommand
-        );
+            for (var step = 0; (step < amplitudes.Length); ++step) {
+                if (amplitudes[step] >= target) {
+                    return step;
+                }
+            }
 
-        // enable integrated inertial measurement unit
-        requestBuffer[11] = 0x01;
-        _ = await SendSubcommand(
-            cancellationToken: cancellationToken,
-            command: InertialMeasurementUnitCommand
-        );
+            return (amplitudes.Length - 1);
+        }
+        static int EncodeFrequency(float hertz, float fallback, float minimum, float maximum) {
+            var clamped = ((float.IsFinite(f: hertz) && (hertz > 0f))
+                ? Math.Clamp(
+                    max: maximum,
+                    min: minimum,
+                    value: hertz
+                )
+                : fallback
+            );
 
-        // Read the factory (or user, when present) stick calibration from SPI flash so each axis reaches ±1 at full
-        // physical deflection — this corrects the per-device asymmetry the nominal scale cannot. Done before the pad
-        // starts flooding 0x30 full reports so the 0x21 subcommand replies are easy to pick out. A failed/implausible
-        // read leaves the nominal scale in place (see LoadStickCalibrationAsync), so a pad is never worse off.
-        await LoadStickCalibrationAsync(cancellationToken: cancellationToken);
-
-        // set standard input report mode (0x30 = full input report with IMU)
-        requestBuffer[11] = StandardFullModeArgument;
-        _ = await SendSubcommand(
-            cancellationToken: cancellationToken,
-            command: SetInputReportModeCommand
-        );
+            return ((int)MathF.Round(x: (32f * MathF.Log2(x: (clamped / 10f)))));
+        }
     }
-    /// <summary>
-    /// Sends a rumble-only output report (<c>0x10</c>) with both motors driven from the given normalized
-    /// intensities. The HD-rumble amplitude/frequency encoding is an approximation with fixed default
-    /// frequencies: perceptible and safe.
-    /// Must be called on the device's single I/O loop (it shares the device handle with reads).
-    /// </summary>
-    /// <remarks>
-    /// Writes use a >=30 ms coalescing cadence so a per-tick streamer can't flood the link: writing faster can
-    /// drop a Bluetooth controller off the link or make a USB controller miss the command. A stop (both bands at rest),
-    /// the first write, and any write that <i>raises</i> intensity are never throttled, so rumble-off and stronger
-    /// effects stay instant; only an equal-or-weaker update arriving inside the 30 ms window is dropped (a briefly
-    /// stale weaker value is imperceptible). This keeps a per-tick rumble streamer from flooding the shared I/O loop.
-    /// </remarks>
-    /// <param name="lowFrequency">The low-band intensity, 0..1.</param>
-    /// <param name="highFrequency">The high-band intensity, 0..1.</param>
-    /// <param name="cancellationToken">A token that cancels the write.</param>
-    /// <returns>A task that completes when the report has been written (or immediately if throttled).</returns>
-    public ValueTask SetRumbleAsync(
-        float lowFrequency,
-        float highFrequency,
-        CancellationToken cancellationToken = default
-    ) {
-        if (!m_rumbleThrottle.TryPrepare(
-            high: out var high,
-            highFrequency: highFrequency,
-            low: out var low,
-            lowFrequency: lowFrequency
-        )) {
+    // Writes at most one pending output report once the transport's spacing has passed since the last: a pending
+    // subcommand first (it carries the current rumble too), else the rumble.
+    private ValueTask FlushOutputAsync(CancellationToken cancellationToken) {
+        if (!m_rumblePending && !m_homeLedPending && !m_imuReenablePending) {
             return ValueTask.CompletedTask;
         }
 
-        var buffer = m_rumbleBuffer;
+        var now = m_time.GetTimestamp();
+
+        if (
+            (m_lastOutputTimestamp != long.MinValue) &&
+            ((now - m_lastOutputTimestamp) < m_outputSpacingTicks)
+        ) {
+            return ValueTask.CompletedTask;
+        }
+
+        m_lastOutputTimestamp = now;
+
+        var buffer = m_outputBuffer;
 
         buffer.AsSpan().Clear();
+        buffer[1] = NextPacketNumber();
+        m_rumbleData.CopyTo(destination: buffer.AsSpan(start: 2));
 
-        buffer[0] = RumbleOutputReportId;
-        buffer[1] = ((byte)(m_rumblePacketId++ & 0x0F));
+        if (m_homeLedPending || m_imuReenablePending) {
+            buffer[0] = SubcommandOutputReportId;
 
-        EncodeRumbleSide(
-            destination: buffer.AsSpan(
-                length: 4,
-                start: 2
-            ),
-            lowFrequency: low,
-            highFrequency: high
-        );
-        EncodeRumbleSide(
-            destination: buffer.AsSpan(
-                length: 4,
-                start: 6
-            ),
-            lowFrequency: low,
-            highFrequency: high
-        );
+            if (m_homeLedPending) {
+                m_homeLedPending = false;
+                buffer[SubcommandOffset] = SubcommandHomeLed;
+                m_homeLedArguments.CopyTo(destination: buffer.AsSpan(start: (SubcommandOffset + 1)));
+            } else {
+                m_imuReenablePending = false;
+                buffer[SubcommandOffset] = SubcommandEnableImu;
+                buffer[(SubcommandOffset + 1)] = 0x01;
+            }
+        } else {
+            buffer[0] = RumbleOutputReportId;
+        }
+
+        m_rumblePending = false;
 
         return m_device.WriteAsync(
             buffer: buffer,
             cancellationToken: cancellationToken
         );
     }
+    // Encodes subcommand 0x38's 25 bytes (dekuNukem, Set HOME Light): [0] step count (high nibble) and base step
+    // code (low), [1] start intensity (high) and repeat count (low, 0 forever), then the steps in pairs: one byte
+    // with both intensities, then a fade/hold byte for each.
+    private static byte[] EncodeHomeLedPattern(HomeLedPattern pattern) {
+        var arguments = new byte[HomeLedArgumentLength];
+        var steps = (pattern.Steps.IsDefault
+            ? []
+            : pattern.Steps
+        );
+        var count = Math.Min(
+            val1: steps.Length,
+            val2: HomeLedPattern.MaximumSteps
+        );
+        var stepCode = ((int)Math.Clamp(
+            max: 15.0,
+            min: 1.0,
+            value: (Math.Round(a: ((pattern.StepDuration.TotalMilliseconds - HomeLedMinimumStepMilliseconds) / ((HomeLedMaximumStepMilliseconds - HomeLedMinimumStepMilliseconds) / 14.0))) + 1.0)
+        ));
+
+        // With no steps the LED holds its start intensity only when the repeat count is also 0 (dekuNukem).
+        arguments[0] = ((byte)((count << 4) | stepCode));
+        arguments[1] = ((byte)((Nibble(value: pattern.StartIntensity) << 4) | ((0 == count)
+            ? 0
+            : Nibble(value: pattern.Repeat))));
+
+        for (var index = 0; (index < count); ++index) {
+            var step = steps[index];
+            var group = (2 + ((index / 2) * 3));
+            var timing = ((byte)((Nibble(value: step.FadeSteps) << 4) | Nibble(value: step.HoldSteps)));
+
+            if (0 == (index % 2)) {
+                arguments[group] = ((byte)(Nibble(value: step.Intensity) << 4));
+                arguments[(group + 1)] = timing;
+            } else {
+                arguments[group] |= Nibble(value: step.Intensity);
+                arguments[(group + 2)] = timing;
+            }
+        }
+
+        return arguments;
+
+        static byte Nibble(byte value) => Math.Min(
+            val1: value,
+            val2: ((byte)15)
+        );
+    }
+    // Reads a stick's device parameters (18 bytes at 0x6086 left, 0x6098 right) for its radial deadzone, the third
+    // packed 12-bit value (dekuNukem), and normalizes it by the stick's travel. An unreadable or implausible block
+    // keeps the default.
+    private async ValueTask<float> LoadStickDeadzoneAsync(uint address, StickCalibration calibration, CancellationToken cancellationToken) {
+        var data = new byte[StickParametersLength];
+
+        if (!await TryReadSpiFlashAsync(
+            address: address,
+            cancellationToken: cancellationToken,
+            destination: data
+        )) {
+            return StickDeadzone;
+        }
+
+        var raw = (data[3] | ((data[4] & 0x0F) << 8));
+        var travel = (calibration.IsValid
+            ? ((calibration.MaxAboveX + calibration.MaxAboveY + calibration.MinBelowX + calibration.MinBelowY) / 4f)
+            : StickRange
+        );
+        var deadzone = (raw / travel);
+
+        return (((raw > 0) && (raw < 0xFFF) && (deadzone < 0.5f))
+            ? deadzone
+            : StickDeadzone
+        );
+    }
+    // Sends a configuration subcommand the pad cannot work without, faulting initialization when it is never
+    // acknowledged so the manager reopens the pad rather than keep a half-configured one (Linux joycon_init).
+    private async ValueTask SendRequiredSubcommandAsync(byte subcommand, byte argument, string purpose, CancellationToken cancellationToken) {
+        if (!await SendSubcommandAsync(
+            arguments: new byte[] { argument, },
+            cancellationToken: cancellationToken,
+            matches: null,
+            subcommand: subcommand
+        )) {
+            throw new InvalidOperationException(message: $"The Switch Pro Controller did not acknowledge {purpose}.");
+        }
+    }
+
     /// <inheritdoc />
+    public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
+        m_packetNumber = 0;
+        m_hasFullReport = false;
+
+        if (!m_isBluetooth) {
+            // USB: request status, handshake, raise the baud rate, handshake again, then force HID-only mode (which
+            // sends no acknowledgement). Bluetooth speaks HID from the start and has no 0x80 report.
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandRequestStatus,
+                waitForAck: true
+            );
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandHandshake,
+                waitForAck: true
+            );
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandFastBaudRate,
+                waitForAck: true
+            );
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandHandshake,
+                waitForAck: true
+            );
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandDisableUsbTimeout,
+                waitForAck: false
+            );
+        }
+
+        _ = await SendSubcommandAsync(
+            arguments: ReadOnlyMemory<byte>.Empty,
+            cancellationToken: cancellationToken,
+            matches: (reply, count) => {
+                if (count >= (DeviceInfoAddressOffset + 6)) {
+                    PhysicalId = Convert.ToHexString(
+                        inArray: reply,
+                        length: 6,
+                        offset: DeviceInfoAddressOffset
+                    );
+                }
+
+                return true;
+            },
+            subcommand: SubcommandDeviceInfo
+        );
+        m_leftStickCalibration = await LoadStickCalibrationAsync(
+            cancellationToken: cancellationToken,
+            factoryAddress: FactoryLeftStickCalibrationAddress,
+            isLeftStick: true,
+            stickName: "left",
+            userAddress: UserLeftStickCalibrationAddress
+        );
+        m_rightStickCalibration = await LoadStickCalibrationAsync(
+            cancellationToken: cancellationToken,
+            factoryAddress: FactoryRightStickCalibrationAddress,
+            isLeftStick: false,
+            stickName: "right",
+            userAddress: UserRightStickCalibrationAddress
+        );
+        m_leftStickDeadzone = await LoadStickDeadzoneAsync(
+            address: LeftStickParametersAddress,
+            calibration: m_leftStickCalibration,
+            cancellationToken: cancellationToken
+        );
+        m_rightStickDeadzone = await LoadStickDeadzoneAsync(
+            address: RightStickParametersAddress,
+            calibration: m_rightStickCalibration,
+            cancellationToken: cancellationToken
+        );
+        await LoadImuCalibrationAsync(cancellationToken: cancellationToken);
+        await SendRequiredSubcommandAsync(
+            argument: 0x01,
+            cancellationToken: cancellationToken,
+            purpose: "enabling its IMU",
+            subcommand: SubcommandEnableImu
+        );
+        await SendRequiredSubcommandAsync(
+            argument: StandardInputReportId,
+            cancellationToken: cancellationToken,
+            purpose: "the full input report mode",
+            subcommand: SubcommandSetInputReportMode
+        );
+        await SendRequiredSubcommandAsync(
+            argument: 0x01,
+            cancellationToken: cancellationToken,
+            purpose: "enabling vibration",
+            subcommand: SubcommandEnableVibration
+        );
+        _ = await SendSubcommandAsync(
+            arguments: new byte[] {
+                ((playerIndex >= 0)
+                ? PlayerLeds[(playerIndex % PlayerLeds.Length)]
+                : ((byte)0)),
+            },
+            cancellationToken: cancellationToken,
+            matches: null,
+            subcommand: SubcommandPlayerLights
+        );
+        _ = await SendSubcommandAsync(
+            arguments: m_homeLedArguments,
+            cancellationToken: cancellationToken,
+            matches: null,
+            subcommand: SubcommandHomeLed
+        );
+
+        if (!m_isBluetooth) {
+            // SDL forces HID-only mode again once configured, which the pad sends no acknowledgement for.
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandDisableUsbTimeout,
+                waitForAck: false
+            );
+        }
+    }
+    /// <summary>Writes a still-pending rumble report past the output spacing, so a stop requested as the engine
+    /// releases the pad reaches it. Best-effort and bounded, while the handle is still open after the I/O loop
+    /// stopped.</summary>
+    public void Dispose() {
+        if (!m_rumblePending) {
+            return;
+        }
+
+        m_lastOutputTimestamp = long.MinValue;
+        m_homeLedPending = false;
+        m_imuReenablePending = false;
+
+        try {
+            _ = FlushOutputAsync(cancellationToken: CancellationToken.None).AsTask().Wait(millisecondsTimeout: 100);
+        } catch (AggregateException) {
+            // The pad may already be gone; there is nothing left to stop.
+        }
+    }
+    /// <inheritdoc />
+    /// <remarks>Flushes held output once its spacing passes, re-enables a silent IMU every three seconds, and on USB
+    /// resends the HID-only command when reports stop for 100 ms (SDL), since another driver such as Steam can
+    /// switch the pad back to its proprietary mode.</remarks>
+    public async ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+        if (
+            m_imuSilent &&
+            (timestamp >= m_nextImuReenable)
+        ) {
+            m_nextImuReenable = (timestamp + ((long)(ImuReenableSeconds * timestampFrequency)));
+            m_imuReenablePending = true;
+        }
+
+        await FlushOutputAsync(cancellationToken: cancellationToken);
+
+        if (
+            m_isBluetooth ||
+            !m_hasFullReport
+        ) {
+            return;
+        }
+
+        var now = m_time.GetTimestamp();
+        var keepAliveTicks = ((UsbKeepAliveMilliseconds * m_time.TimestampFrequency) / 1000L);
+
+        if (
+            ((now - m_lastReportTimestamp) < keepAliveTicks) ||
+            ((m_lastKeepAliveTimestamp != long.MinValue) && ((now - m_lastKeepAliveTimestamp) < keepAliveTicks))
+        ) {
+            return;
+        }
+
+        m_lastKeepAliveTimestamp = now;
+        m_outputBuffer.AsSpan().Clear();
+        m_outputBuffer[0] = InitCommandOutputReportId;
+        m_outputBuffer[1] = CommandDisableUsbTimeout;
+
+        await m_device.WriteAsync(
+            buffer: m_outputBuffer,
+            cancellationToken: cancellationToken
+        );
+    }
+    /// <inheritdoc />
+    /// <remarks>The Home LED has one channel: its brightness follows the brightest of the three through SDL's
+    /// perceptual curve. The write waits for the transport's output spacing.</remarks>
+    public ValueTask SetLedAsync(LedColor color, CancellationToken cancellationToken = default) {
+        var brightness = ((Math.Max(
+            val1: color.Red,
+            val2: Math.Max(
+                val1: color.Green,
+                val2: color.Blue
+            )
+        ) * 100) / 255);
+        var intensity = ((brightness <= 0)
+            ? 0
+            : ((brightness < 65)
+                ? ((brightness + 5) / 10)
+                : ((int)MathF.Ceiling(x: (15f * MathF.Pow(x: (brightness / 100f), y: 2.13f))))
+            )
+        );
+
+        return SetHomeLedPatternAsync(
+            cancellationToken: cancellationToken,
+            pattern: HomeLedPattern.Steady(intensity: ((byte)Math.Min(
+                val1: intensity,
+                val2: 15
+            )))
+        );
+    }
+    /// <inheritdoc />
+    /// <remarks>The write waits for the transport's output spacing.</remarks>
+    public ValueTask SetHomeLedPatternAsync(HomeLedPattern pattern, CancellationToken cancellationToken = default) {
+        m_homeLedArguments = EncodeHomeLedPattern(pattern: pattern);
+        m_homeLedPending = true;
+
+        return FlushOutputAsync(cancellationToken: cancellationToken);
+    }
+    /// <inheritdoc />
+    /// <remarks>The write waits for the transport's output spacing.</remarks>
+    public ValueTask SetHdRumbleAsync(HdRumbleSide left, HdRumbleSide right, CancellationToken cancellationToken = default) {
+        WriteRumbleSide(
+            destination: m_rumbleData.AsSpan(
+                length: 4,
+                start: 0
+            ),
+            side: left
+        );
+        WriteRumbleSide(
+            destination: m_rumbleData.AsSpan(
+                length: 4,
+                start: 4
+            ),
+            side: right
+        );
+        m_rumblePending = true;
+
+        return FlushOutputAsync(cancellationToken: cancellationToken);
+    }
+    /// <inheritdoc />
+    /// <remarks>Both actuators play at their default carriers: the low intensity drives the 160 Hz band and the
+    /// high intensity the 320 Hz band.</remarks>
+    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
+        var side = new HdRumbleSide(
+            High: new HdRumbleBand(Amplitude: highFrequency, FrequencyHertz: 0f),
+            Low: new HdRumbleBand(Amplitude: lowFrequency, FrequencyHertz: 0f)
+        );
+
+        return SetHdRumbleAsync(
+            cancellationToken: cancellationToken,
+            left: side,
+            right: side
+        );
+    }
+    /// <inheritdoc />
+    /// <remarks>Accepts the full report <c>0x30</c>, and once it streams the subcommand reply <c>0x21</c>, whose
+    /// leading bytes carry the same buttons, sticks and battery; a reply repeats the last motion and is not a
+    /// motion sample. A reply before the first full report is not state, so it cannot pass for streaming.</remarks>
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
 
+        if (report.Length < MinimumStateReportLength) {
+            return false;
+        }
+
+        var full = (StandardInputReportId == report[0]);
+
         if (
-            (report.Length < (ImuOffset + (ImuSampleSize * ImuSampleCount))) ||
-            (StandardInputReportId != report[0])
+            !full &&
+            ((SubcommandReplyInputReportId != report[0]) || !m_hasFullReport)
         ) {
             return false;
         }
 
-        var buttonsRight = report[ButtonsRightOffset];
-        var buttonsShared = report[ButtonsSharedOffset];
-        var buttonsLeft = report[ButtonsLeftOffset];
-        var buttons = GamepadButtons.None;
+        if (
+            full &&
+            (report.Length < StandardReportLength)
+        ) {
+            return false;
+        }
 
-        // Face buttons are mapped by physical position to the South/East/West/North convention:
-        // Switch B (bottom) → South, A (right) → East, Y (left) → West, X (top) → North.
-        if (0 != (buttonsRight & 0x04)) { buttons |= GamepadButtons.ButtonSouth; }   // B
-        if (0 != (buttonsRight & 0x08)) { buttons |= GamepadButtons.ButtonEast; }    // A
-        if (0 != (buttonsRight & 0x01)) { buttons |= GamepadButtons.ButtonWest; }    // Y
-        if (0 != (buttonsRight & 0x02)) { buttons |= GamepadButtons.ButtonNorth; }   // X
-        if (0 != (buttonsRight & 0x40)) { buttons |= GamepadButtons.RightShoulder; } // R
+        var buttons = DecodeButtons(report: report);
+        var accelerometer = m_lastAccelerometer;
+        var gyro = m_lastGyro;
+        var orientation = m_tracker.Orientation;
+        var motionSample = false;
 
-        if (0 != (buttonsLeft & 0x02)) { buttons |= GamepadButtons.DpadUp; }
-        if (0 != (buttonsLeft & 0x01)) { buttons |= GamepadButtons.DpadDown; }
-        if (0 != (buttonsLeft & 0x08)) { buttons |= GamepadButtons.DpadLeft; }
-        if (0 != (buttonsLeft & 0x04)) { buttons |= GamepadButtons.DpadRight; }
-        if (0 != (buttonsLeft & 0x40)) { buttons |= GamepadButtons.LeftShoulder; }   // L
+        if (full) {
+            var now = m_time.GetTimestamp();
 
-        if (0 != (buttonsShared & 0x01)) { buttons |= GamepadButtons.Back; }         // Minus
-        if (0 != (buttonsShared & 0x02)) { buttons |= GamepadButtons.Start; }        // Plus
-        if (0 != (buttonsShared & 0x04)) { buttons |= GamepadButtons.RightStickPress; }
-        if (0 != (buttonsShared & 0x08)) { buttons |= GamepadButtons.LeftStickPress; }
-        if (0 != (buttonsShared & 0x10)) { buttons |= GamepadButtons.Guide; }        // Home
+            m_hasFullReport = true;
 
-        // Intentionally unmapped: Capture (buttonsShared 0x20) and the SR/SL rail buttons (buttonsRight/Left 0x10
-        // /0x20) — the latter exist only on detached Joy-Cons, and neither has a GamepadButtons slot.
+            if (m_lastReportTimestamp != 0L) {
+                var interval = Math.Clamp(
+                    max: 0.05f,
+                    min: 0.002f,
+                    value: ((float)((now - m_lastReportTimestamp) / ((double)m_time.TimestampFrequency)))
+                );
 
-        var orientation = ReadImu(
-            accelerometer: out var accelerometer,
-            gyro: out var gyro,
-            report: report
-        );
+                m_averageReportSeconds += ((interval - m_averageReportSeconds) / 64f);
+            }
+
+            m_lastReportTimestamp = now;
+            m_imuSilent = (
+                (0 == BinaryPrimitives.ReadInt16LittleEndian(source: report[ImuOffset..])) &&
+                (0 == BinaryPrimitives.ReadInt16LittleEndian(source: report[(ImuOffset + 2)..])) &&
+                (0 == BinaryPrimitives.ReadInt16LittleEndian(source: report[(ImuOffset + 4)..]))
+            );
+
+            if (m_imuSilent) {
+                accelerometer = Vector3.Zero;
+                gyro = Vector3.Zero;
+            } else {
+                orientation = ReadImu(
+                    accelerometer: out accelerometer,
+                    gyro: out gyro,
+                    report: report
+                );
+                motionSample = true;
+            }
+
+            m_lastAccelerometer = accelerometer;
+            m_lastGyro = gyro;
+        }
 
         state = new GamepadState(
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
+            IsMotionSample: motionSample,
             LeftStick: ReadStick(
                 calibration: in m_leftStickCalibration,
+                deadzone: m_leftStickDeadzone,
                 offset: LeftStickOffset,
                 report: report
             ),
-            LeftTrigger: ((0 != (buttonsLeft & 0x80))
+            LeftTrigger: ((0 != (report[ButtonsLeftOffset] & 0x80))
             ? 1f
             : 0f),   // ZL is digital
             Orientation: orientation,
+            Power: DecodePower(status: report[BatteryOffset]),
             RightStick: ReadStick(
                 calibration: in m_rightStickCalibration,
+                deadzone: m_rightStickDeadzone,
                 offset: RightStickOffset,
                 report: report
             ),
-            RightTrigger: ((0 != (buttonsRight & 0x80))
+            RightTrigger: ((0 != (report[ButtonsRightOffset] & 0x80))
             ? 1f
-            : 0f)  // ZR is digital
+            : 0f)    // ZR is digital
         );
 
         return true;
     }
 
-    // Per-device stick calibration decoded from SPI flash: the raw center and the below-/above-center travel per
-    // axis. IsValid gates the whole feature — a default (all-zero) value is invalid, so an unread/failed calibration
-    // transparently keeps the nominal scale in ReadStick.
+    // Per-device stick calibration from SPI flash: the raw center and the below-/above-center travel per axis. A
+    // default value is invalid, so an unread or failed calibration keeps the nominal scale.
     private readonly struct StickCalibration {
         public StickCalibration(int centerX, int centerY, int maxAboveX, int maxAboveY, int minBelowX, int minBelowY) {
-            static bool IsCenterPlausible(int value) {
-                return (
-                    (value >= StickCalibrationMinCenter) &&
-                    (value <= StickCalibrationMaxCenter)
-                );
-            }
-            static bool IsSpanPlausible(int value) {
-                return (
-                    (value >= StickCalibrationMinSpan) &&
-                    (value <= StickCalibrationMaxSpan)
-                );
-            }
+            static bool IsCenterPlausible(int value) => ((value >= StickCalibrationMinCenter) && (value <= StickCalibrationMaxCenter));
+            static bool IsSpanPlausible(int value) => ((value >= StickCalibrationMinSpan) && (value <= StickCalibrationMaxSpan));
 
             CenterX = centerX;
             CenterY = centerY;
@@ -797,9 +1204,9 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
             MinBelowX = minBelowX;
             MinBelowY = minBelowY;
             IsValid = (
-                IsCenterPlausible(value: centerX) && IsCenterPlausible(value: centerY)
-                && IsSpanPlausible(value: maxAboveX) && IsSpanPlausible(value: maxAboveY)
-                && IsSpanPlausible(value: minBelowX) && IsSpanPlausible(value: minBelowY)
+                IsCenterPlausible(value: centerX) && IsCenterPlausible(value: centerY) &&
+                IsSpanPlausible(value: maxAboveX) && IsSpanPlausible(value: maxAboveY) &&
+                IsSpanPlausible(value: minBelowX) && IsSpanPlausible(value: minBelowY)
             );
         }
 

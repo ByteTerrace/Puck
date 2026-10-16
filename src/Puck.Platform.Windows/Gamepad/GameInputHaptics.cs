@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Puck.Platform.Windows.Gamepad;
@@ -11,8 +12,21 @@ namespace Puck.Platform.Windows.Gamepad;
 /// reading" device is global and can't distinguish controllers.
 /// </summary>
 public sealed class GameInputHaptics : IDisposable {
+    /// <summary>
+    /// How long the device topology must hold still before <see cref="BindSole"/> trusts it. GameInput enumerates
+    /// asynchronously, so a device count read right after registration or a connect may be a partial view; the
+    /// sole binding waits until no device has appeared or vanished for this long.
+    /// </summary>
+    public const int SoleSettleMilliseconds = 1500;
+
+    private const ushort SteamVirtualProductId = 0x11FF;
+    private const ushort SteamVirtualVendorId = 0x28DE;
+
+    private static readonly List<GameInputDeviceCallback> UnregisteredCallbacks = [];
+
     private readonly HashSet<IGameInputDevice> m_bound = [];
     private readonly Dictionary<nint, IGameInputDevice> m_devices = [];
+    private readonly Dictionary<IGameInputDevice, (ushort VendorId, ushort ProductId)> m_identities = [];
     private readonly Lock m_deviceLock = new();
 
     private readonly Action<string>? m_diagnostics;
@@ -20,6 +34,8 @@ public sealed class GameInputHaptics : IDisposable {
     private ulong m_callbackToken;
     private GameInputDeviceCallback? m_deviceCallback;
     private IGameInput? m_gameInput;
+    private long m_lastTopologyChange = Stopwatch.GetTimestamp();
+    private long m_topologyVersion;
 
     /// <summary>Initializes a new instance of the <see cref="GameInputHaptics"/> class.</summary>
     /// <param name="diagnostics">An optional diagnostics sink.</param>
@@ -38,8 +54,13 @@ public sealed class GameInputHaptics : IDisposable {
             lock (m_deviceLock) {
                 if (connected) {
                     if (!m_devices.ContainsKey(key: device)) {
-                        m_devices[device] = ((IGameInputDevice)Marshal.GetObjectForIUnknown(pUnk: device));
-                        m_diagnostics?.Invoke($"[gameinput] device connected (0x{device:x})");
+                        var added = ((IGameInputDevice)Marshal.GetObjectForIUnknown(pUnk: device));
+                        var identity = ReadIdentity(device: added);
+
+                        m_devices[device] = added;
+                        m_identities[added] = identity;
+                        NoteTopologyChangeLocked();
+                        m_diagnostics?.Invoke($"[gameinput] device connected (0x{device:x}, vendor=0x{identity.VendorId:x4} product=0x{identity.ProductId:x4})");
                     }
                 } else if (m_devices.Remove(
                     key: device,
@@ -48,12 +69,63 @@ public sealed class GameInputHaptics : IDisposable {
                     // Drop the reference (the GC finalizes the RCW; explicitly releasing it would separate a
                     // handle a connection may still borrow) and free any binding so a slot can rebind.
                     _ = m_bound.Remove(item: removed);
+                    _ = m_identities.Remove(key: removed);
+                    NoteTopologyChangeLocked();
                     m_diagnostics?.Invoke($"[gameinput] device disconnected (0x{device:x})");
                 }
             }
         } catch {
             // This runs on a GameInput thread; an exception must never propagate into native code.
         }
+    }
+
+    /// <summary>A counter that advances whenever a GameInput device appears or vanishes. A sole binding records it
+    /// and is dropped once it moves.</summary>
+    public long TopologyVersion {
+        get {
+            lock (m_deviceLock) {
+                return m_topologyVersion;
+            }
+        }
+    }
+
+    // Whether a GameInput device may be an XInput slot's pad: never Steam Input's virtual pad, and, when both
+    // identities are known, only a device with the slot's USB identity (GameInput also lists DualSense and Switch
+    // pads as gamepads). The caller holds m_deviceLock.
+    private bool IsCandidateLocked(IGameInputDevice device, ushort vendorId, ushort productId) {
+        var identity = m_identities.GetValueOrDefault(key: device);
+
+        if (
+            (SteamVirtualVendorId == identity.VendorId) &&
+            (SteamVirtualProductId == identity.ProductId)
+        ) {
+            return false;
+        }
+
+        return (
+            (0 == vendorId) ||
+            (0 == identity.VendorId) ||
+            ((identity.VendorId == vendorId) && (identity.ProductId == productId))
+        );
+    }
+    // GameInputDeviceInfo (v0) begins infoSize (u32), vendorId (u16), productId (u16); an unreadable info is
+    // identity unknown.
+    private static (ushort VendorId, ushort ProductId) ReadIdentity(IGameInputDevice device) {
+        try {
+            var info = device.GetDeviceInfo();
+
+            return ((info == 0)
+                ? default
+                : (((ushort)Marshal.ReadInt16(ptr: info, ofs: 4)), ((ushort)Marshal.ReadInt16(ptr: info, ofs: 6)))
+            );
+        } catch (COMException) {
+            return default;
+        }
+    }
+    // The caller holds m_deviceLock.
+    private void NoteTopologyChangeLocked() {
+        ++m_topologyVersion;
+        m_lastTopologyChange = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -64,8 +136,11 @@ public sealed class GameInputHaptics : IDisposable {
     /// this instance's dictionary; the caller borrows it and must <see cref="Unbind"/> it on release.
     /// </summary>
     /// <param name="targetButtons">The GameInput button bitmask the caller currently holds (must be non-zero).</param>
+    /// <param name="vendorId">The slot's USB vendor id, or zero when unknown; only a device with the slot's identity
+    /// is considered.</param>
+    /// <param name="productId">The slot's USB product id.</param>
     /// <returns>The reserved device, or <see langword="null"/> if there is no unambiguous match.</returns>
-    public IGameInputDevice? Bind(uint targetButtons) {
+    public IGameInputDevice? Bind(uint targetButtons, ushort vendorId = 0, ushort productId = 0) {
         var gameInput = m_gameInput;
 
         if (
@@ -80,7 +155,14 @@ public sealed class GameInputHaptics : IDisposable {
             IGameInputDevice? match = null;
 
             foreach (var device in m_devices.Values) {
-                if (m_bound.Contains(item: device)) {
+                if (
+                    m_bound.Contains(item: device) ||
+                    !IsCandidateLocked(
+                    device: device,
+                    productId: productId,
+                    vendorId: vendorId
+                )
+                ) {
                     continue;
                 }
 
@@ -120,6 +202,54 @@ public sealed class GameInputHaptics : IDisposable {
             return match;
         }
     }
+    /// <summary>Reserves the only connected GameInput gamepad, when exactly one is connected and unbound and the
+    /// device topology has held still for <see cref="SoleSettleMilliseconds"/>, for the only connected XInput slot:
+    /// with one of each there is nothing to disambiguate. The settle window keeps a partial asynchronous
+    /// enumeration (the other pad's device not yet reported) from passing for a sole device.</summary>
+    /// <param name="vendorId">The slot's USB vendor id, or zero when unknown; only devices with the slot's identity
+    /// count.</param>
+    /// <param name="productId">The slot's USB product id.</param>
+    /// <param name="topologyVersion">The <see cref="TopologyVersion"/> the reservation was made at; the caller drops
+    /// the binding when the version moves.</param>
+    /// <returns>The reserved device, or <see langword="null"/> unless exactly one candidate device is connected,
+    /// unbound and settled.</returns>
+    public IGameInputDevice? BindSole(ushort vendorId, ushort productId, out long topologyVersion) {
+        lock (m_deviceLock) {
+            topologyVersion = m_topologyVersion;
+
+            if (
+                (m_gameInput is null) ||
+                (0 != m_bound.Count) ||
+                (Stopwatch.GetElapsedTime(startingTimestamp: m_lastTopologyChange).TotalMilliseconds < SoleSettleMilliseconds)
+            ) {
+                return null;
+            }
+
+            IGameInputDevice? sole = null;
+
+            foreach (var device in m_devices.Values) {
+                if (!IsCandidateLocked(
+                    device: device,
+                    productId: productId,
+                    vendorId: vendorId
+                )) {
+                    continue;
+                }
+
+                if (sole is not null) {
+                    return null;
+                }
+
+                sole = device;
+            }
+
+            if (sole is not null) {
+                _ = m_bound.Add(item: sole);
+            }
+
+            return sole;
+        }
+    }
     public void Dispose() {
         if (!OperatingSystem.IsWindows()) {
             m_gameInput = null;
@@ -130,11 +260,19 @@ public sealed class GameInputHaptics : IDisposable {
         var gameInput = m_gameInput;
 
         if (gameInput is not null) {
-            if (m_callbackToken != 0ul) {
-                _ = gameInput.UnregisterCallback(
+            if (
+                (m_callbackToken != 0ul) &&
+                !gameInput.UnregisterCallback(
                     callbackToken: m_callbackToken,
                     timeoutInMicroseconds: 1_000_000ul
-                );
+                ) &&
+                (m_deviceCallback is not null)
+            ) {
+                // GameInput may still invoke a callback it failed to unregister, so its delegate stays rooted
+                // for the life of the process rather than being collected under native code.
+                lock (UnregisteredCallbacks) {
+                    UnregisteredCallbacks.Add(item: m_deviceCallback);
+                }
             }
 
             // Drop references and let the GC/finalizers release the COM objects. Explicitly releasing the device
@@ -142,6 +280,7 @@ public sealed class GameInputHaptics : IDisposable {
             lock (m_deviceLock) {
                 m_bound.Clear();
                 m_devices.Clear();
+                m_identities.Clear();
             }
         }
 
@@ -194,10 +333,15 @@ public sealed class GameInputHaptics : IDisposable {
         }
 
         try {
+            var created = GameInputNative.GameInputCreate(gameInput: out var gameInput);
+
             if (
-                (GameInputNative.GameInputCreate(gameInput: out var gameInput) < 0) ||
+                (created < 0) ||
                 (gameInput is null)
             ) {
+                // 0xD0000034 (object not found) means the GameInput service is not installed.
+                m_diagnostics?.Invoke($"[gameinput] GameInputCreate failed (hr=0x{created:x8})");
+
                 return false;
             }
 
@@ -223,6 +367,11 @@ public sealed class GameInputHaptics : IDisposable {
                 m_gameInput = null;
 
                 return false;
+            }
+
+            // The asynchronous enumeration is under way; the topology is unsettled until it quiets down.
+            lock (m_deviceLock) {
+                m_lastTopologyChange = Stopwatch.GetTimestamp();
             }
 
             return true;

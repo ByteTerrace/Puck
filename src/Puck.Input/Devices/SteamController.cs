@@ -1,192 +1,245 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using Puck.Input.Hid;
+using Puck.Input.Output;
 
 namespace Puck.Input.Devices;
 
 /// <summary>
-/// Parses a Valve Steam Controller — a dual-trackpad controller with one analog stick, analog triggers, rear
-/// grip paddles, and a 6-axis IMU — and drives its dual trackpad haptics over HID. The device speaks a
-/// vendor-defined HID collection rather than a standard gamepad one: on open it must be taken out of its built-in
-/// "lizard" keyboard/mouse emulation and switched into raw input via feature reports, after which it streams a
-/// 64-byte controller-state report (report type <c>0x01</c>). Its two capacitive trackpads surface through the
-/// shared <see cref="GamepadState.Touch0"/>/<see cref="GamepadState.Touch1"/> touch points (right pad → Touch0,
-/// left pad → Touch1); the right pad additionally drives the right stick, and the left analog stick drives the
-/// left stick. Feature-report control commands follow the community-documented vendor protocol for this
-/// device's feature-report command set.
+/// Parses the classic Valve Steam Controller (one analog stick, two clickable trackpads, analog triggers, two rear
+/// grip buttons and a 6-axis IMU) and drives its trackpad haptics and Steam-button LED over HID, following SDL's
+/// <c>SDL_hidapi_steam</c> and the Linux <c>hid-steam</c> driver. The controller speaks a vendor-defined collection:
+/// on open it is taken out of its keyboard-and-mouse ("lizard") emulation through feature reports, after which it
+/// streams <c>ValveInReport</c> messages: type 1 carries state, type 3 a receiver pairing event and type 4 the
+/// wireless battery status.
 /// </summary>
 /// <remarks>
-/// Wired (product <c>0x1102</c>) and the four-slot wireless receiver (product <c>0x1142</c>) share this parser;
-/// each receiver slot is opened as its own connection and only streams state while a controller is paired to it.
-/// The receiver announces pairing changes out of band (report type <c>0x03</c>), surfaced through
-/// <see cref="IWirelessSlotParser"/> so an empty slot parks dormant instead of being mistaken for a dead device.
-/// The IMU axis mapping and sensor scales are nominal (uncalibrated); gravity anchors pitch and roll regardless.
+/// Wired (product <c>0x1102</c>) and each slot of the four-slot wireless receiver (product <c>0x1142</c>) share
+/// this parser. The left trackpad and the stick share one field: the firmware reports whichever is in use, and
+/// interleaves the two while both are, so each keeps its last value between the reports that carry the other.
+/// The right trackpad doubles as the right stick, and the trackpads surface as <see cref="GamepadState.Touch0"/>
+/// (right) and <see cref="GamepadState.Touch1"/> (left).
 /// </remarks>
-internal sealed class SteamController : IGamepadParser, IRumbleParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
+public sealed class SteamController : IGamepadParser, IRumbleParser, ILedParser, ITrackpadHapticParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     private const float AccelerometerGPerLsb = (1f / 16384f);
-    private const int AccelerometerOffset = 28;               // three int16 axes
-    // ValveInReport header: unReportVersion (2 bytes, 0x0001) then ucType, ucLength; the state payload follows.
-    // Windows may or may not prepend a report-id byte, so the base is detected per report (see TryParse).
-    private const int ButtonsOffset = 8;                       // three button bytes at payload+4..6 (base+8..10)
-    // Feature-report command ids (FeatureReportMessageIDs). A feature report is [reportId=0, command, payloadLen,
-    // payload...] written at the device's declared feature-report length.
-    private const byte ClearDigitalMappingsCommand = 0x81;      // drop the keyboard emulation mappings
-    private const int FeatureReportBytes = 65;                  // report id 0 + 64-byte message body
-    private const int GyroOffset = 34;                        // three int16 axes
-    // Nominal (uncalibrated) IMU scales. Gyro: ~2000 deg/s full scale over int16 (≈16.4 LSB per deg/s). Accel:
-    // ±2 g over int16 (16384 LSB per g). The complementary filter's gravity term keeps pitch/roll correct even if
-    // these are imperfect; only gyro-only yaw depends on the gyro scale being roughly right.
-    private const float GyroRadiansPerSecondPerLsb = ((1f / 16.4f) * (MathF.PI / 180f));
-    private const ushort HapticLeftPeriodMicroseconds = 1300;  // low band → lower pitch
-    // Haptic pulse-train shape. The trackpad LRAs are driven by a square wave: amplitude is the per-pulse drive,
-    // period the pulse spacing (µs), count the number of pulses. This is a coarse buzz, not true amplitude control.
-    private const ushort HapticMaxAmplitude = 0x3F00;
-    private const ushort HapticPulseCount = 40;                // spans ~one rumble-update cadence, re-fired to sustain
-    private const ushort HapticRightPeriodMicroseconds = 900;  // high band → higher pitch
-    private const byte HapticSideLeft = 1;
-    private const byte HapticSideRight = 0;                    // pad indices are swapped for legacy reasons
-    private const ushort ImuModeRaw = ImuModeSendRawAccelerometer | ImuModeSendRawGyro;
-    // IMU mode bitmask: stream raw accelerometer + raw gyro (the fusion path consumes the raw vectors).
-    private const ushort ImuModeSendRawAccelerometer = 0x08;
-    private const ushort ImuModeSendRawGyro = 0x10;
-    // The controller streams state at a fixed cadence; the fusion integrates one fixed step per report. The pad's
-    // own free-running motion timestamp isn't decoded here (nominal fusion), so a constant per-report dt is used —
-    // matching the Switch's fixed-sub-sample cadence approach.
-    private const float ImuSampleSeconds = 0.004f;
-    private const int LeftPadOffset = 16;                      // int16 X/Y (shared with the analog stick)
-    private const int LeftTriggerOffset = 11;                  // analog left trigger, 0..255
-    private const byte LoadDefaultSettingsCommand = 0x8E;       // restore factory settings (on close)
-    private const int MinimumStatePayload = 40;               // bytes required past the base to decode gyro
-    private const int RightPadOffset = 20;                     // int16 X/Y
-    private const int RightTriggerOffset = 12;                 // analog right trigger, 0..255
-    private const byte SetDefaultDigitalMappingsCommand = 0x85; // restore the default keyboard mappings (on close)
-    private const byte SetSettingsValuesCommand = 0x87;         // apply (register, uint16 value) triples
-    private const byte SettingImuMode = 49;
-    // Settings registers written via SetSettingsValuesCommand.
+    private const int AccelerometerOffset = 28;
+    private const byte AttributeConnectionInterval = 11;
+    private const int AttributeSize = 5;                       // tag (u8) + value (u32 LE)
+    private const int ButtonsOffset = 8;
+    private const byte CommandClearDigitalMappings = 0x81;
+    private const byte CommandGetAttributes = 0x83;
+    private const byte CommandLoadDefaultSettings = 0x8E;
+    private const byte CommandSetDefaultDigitalMappings = 0x85;
+    private const byte CommandSetSettings = 0x87;
+    private const byte CommandTriggerHapticPulse = 0x8F;
+    private const uint DefaultConnectionIntervalMicroseconds = 9000;
+    private const int FeatureReportBytes = 65;                 // report id 0 + 64-byte message
+    private const int GyroOffset = 34;
+    // The gyro spans ±2000 deg/s over int16 (SDL, Linux).
+    private const float GyroRadiansPerSecondPerLsb = ((2000f / 32768f) * (MathF.PI / 180f));
+    // The trackpad actuators are driven by a pulse train: each pulse is on for a share of the period that grows
+    // with intensity, and a train spans a little more than one refresh, so refreshing sustains it seamlessly.
+    private const float HapticTrainMicroseconds = 60_000f;
+    private const ushort HapticLeftPeriodMicroseconds = 1300;  // low band, lower pitch
+    private const ushort HapticRightPeriodMicroseconds = 900;  // high band, higher pitch
+    private const byte HapticSideLeft = 1;                     // the pulse command swaps the pads for legacy reasons
+    private const byte HapticSideRight = 0;
+    private const ushort ImuModeRaw = 0x0018;                  // raw accelerometer (0x08) and raw gyro (0x10)
+    private const int LeftPadOffset = 16;                      // shared with the stick, see the remarks
+    private const int LeftTriggerOffset = 11;
+    private const int MinimumStatePayload = 40;
+    private const int PacketNumberOffset = 4;
+    private const int RightPadOffset = 20;
+    private const int RightTriggerOffset = 12;
+    private const byte SettingImuMode = 48;
     private const byte SettingLeftTrackpadMode = 7;
+    private const byte SettingLedBrightness = 45;
     private const byte SettingRightTrackpadMode = 8;
-    // A freshly opened controller (especially a wireless slot) may not accept a feature write immediately, so each
-    // setup command is retried briefly before giving up. Missing a write degrades a feature, never crashes.
-    private const byte StateReportType = 0x01;                  // ValveInReport ucType for a controller-state report
+    private const byte SettingSmoothAbsoluteMouse = 24;
+    private const byte SettingWirelessPacketVersion = 49;
+    private const byte StateReportType = 0x01;
+    private const int StatusBatteryPercentOffset = 14;
+    private const byte StatusReportType = 0x04;
     private const float StickRange = 32768f;
+    private const byte TrackpadModeAbsoluteMouse = 0;
+    private const byte TrackpadModeNone = 7;
     private const float TrackpadHalf = 32768f;
-    private const byte TrackpadModeNone = 7;                    // disables a trackpad's built-in mouse emulation
     private const float TrackpadRange = 65535f;
-    private const byte TriggerHapticPulseCommand = 0x8F;        // fire a haptic pulse train on one trackpad
-    private const float TriggerRange = 255f;
+    // The trigger byte reaches full pull near 201.55: SDL widens it to (n << 7) | n and saturates at 26000.
+    private const float TriggerRange = (26000f / 129f);
     private const byte TriggerThreshold = 8;
-    private const byte WirelessEventConnected = 2;
     private const byte WirelessEventDisconnected = 1;
-    // ValveInReport ucType for a receiver pairing event; its single payload byte is the transition below.
     private const byte WirelessEventReportType = 0x03;
+
+    // ulButtons bits (SDL STEAM_*_MASK), as a 24-bit little-endian field at ButtonsOffset.
+    private const uint MaskLeftPadAndStick = 0x00800000;
+    private const uint MaskLeftPadClicked = 0x00020000;
+    private const uint MaskLeftPadFingerDown = 0x00080000;
+    private const uint MaskRightPadFingerDown = 0x00100000;
+    private const uint MaskStickClicked = 0x00400000;
 
     private readonly IHidDevice m_device;
     private readonly byte[] m_featureBuffer;
     private readonly ImuOrientationTracker m_tracker = new();
 
-    private RumbleThrottle m_rumbleThrottle;
+    private bool m_hasPacketNumber;
+    private bool m_hasPreviousPad;
+    private uint m_lastPacketNumber;
+    private GamepadState m_lastState = GamepadState.Neutral;
+    private Vector2 m_previousLeftPad;
+    private Vector2 m_previousLeftStick;
+    private GamepadPower m_power;
+    private float m_sampleSeconds = (DefaultConnectionIntervalMicroseconds / 1_000_000f);
 
     /// <summary>Initializes a new instance of the <see cref="SteamController"/> class.</summary>
-    /// <param name="device">The opened HID device handle for the controller's vendor input interface.</param>
+    /// <param name="device">The opened HID device handle for the controller's vendor input collection.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public SteamController(IHidDevice device) {
         ArgumentNullException.ThrowIfNull(device);
 
-        var featureLength = device.FeatureReportByteLength;
-
         m_device = device;
-        // The buffer must hold the documented feature report (composition writes at protocol offsets), so the
-        // declared length is floored to it. A smaller declared length is nonconforming: the HID stack rejects
-        // the oversized feature write, which beats the composer overrunning the buffer.
+        // Composition writes at protocol offsets, so the buffer is floored to the documented feature report.
         m_featureBuffer = new byte[Math.Max(
-            val1: featureLength,
+            val1: device.FeatureReportByteLength,
             val2: FeatureReportBytes
         )];
     }
 
     /// <inheritdoc />
-    // A 6-axis IMU and pressure-sensitive analog triggers.
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro | GamepadInputCapabilities.AnalogTriggers;
+    /// <inheritdoc />
+    public TimeSpan RumbleRefreshInterval => TimeSpan.FromMilliseconds(value: 50);
+    /// <inheritdoc />
+    public TimeSpan RumbleWriteInterval => TimeSpan.FromMilliseconds(value: 30);
+    /// <inheritdoc />
+    /// <remarks>The classic pad plays pulse trains only (feature command <c>0x8F</c>).</remarks>
+    public TrackpadHapticKinds SupportedTrackpadHaptics => TrackpadHapticKinds.Pulse;
     /// <inheritdoc />
     public GamepadType Type => GamepadType.SteamController;
 
     void IGamepadStreamReset.ResetStreamState() {
-        m_rumbleThrottle.Reset();
+        m_hasPacketNumber = false;
+        m_hasPreviousPad = false;
+        m_lastState = GamepadState.Neutral;
+        m_power = GamepadPower.Unknown;
+        m_previousLeftPad = Vector2.Zero;
+        m_previousLeftStick = Vector2.Zero;
         m_tracker.Reset();
     }
 
     private bool FireHaptic(byte side, float intensity, ushort period) {
-        var amplitude = ((ushort)(Math.Clamp(
+        var on = ((ushort)(Math.Clamp(
             max: 1f,
             min: 0f,
             value: intensity
-        ) * HapticMaxAmplitude));
+        ) * period));
+        var count = ((0 == on)
+            ? ((ushort)0)
+            : ((ushort)MathF.Ceiling(x: (HapticTrainMicroseconds / period)))
+        );
+        var off = ((ushort)(period - on));
 
-        return SendFeatureSynchronously(
-            command: TriggerHapticPulseCommand,
+        return FirePulse(
+            count: count,
+            gainDecibels: 0,
+            off: off,
+            on: on,
+            side: side
+        );
+    }
+    // MsgFireHapticPulse: pad, on-time and off-time in µs, pulse count, gain in dB (Linux steam_haptic_pulse).
+    private bool FirePulse(byte side, ushort on, ushort off, ushort count, sbyte gainDecibels) {
+        return SendFeature(
+            command: CommandTriggerHapticPulse,
             payload: [
                 side,
-                ((byte)(amplitude & 0xFF)), ((byte)(amplitude >> 8)),
-                ((byte)(period & 0xFF)), ((byte)(period >> 8)),
-                ((byte)(HapticPulseCount & 0xFF)), ((byte)(HapticPulseCount >> 8)),
+                ((byte)(on & 0xFF)), ((byte)(on >> 8)),
+                ((byte)(off & 0xFF)), ((byte)(off >> 8)),
+                ((byte)(count & 0xFF)), ((byte)(count >> 8)),
+                unchecked((byte)gainDecibels),
             ]
         );
     }
-    private static Vector2 ReadPadAsStick(ReadOnlySpan<byte> report, int offset) {
-        // The absolute pad position mapped to a stick vector (no deadzone: a touch anywhere is an intentional aim).
+    // Reads the controller's attributes (feature 0x83) for its connection interval, which is the spacing of its
+    // state reports and so the IMU's sample period.
+    private void LoadConnectionInterval() {
+        if (!SendFeature(
+            command: CommandGetAttributes,
+            payload: []
+        )) {
+            return;
+        }
+
+        var reply = m_featureBuffer;
+
+        reply.AsSpan().Clear();
+
+        if (
+            !m_device.TryGetFeatureReport(buffer: reply) ||
+            (reply[1] != CommandGetAttributes)
+        ) {
+            return;
+        }
+
+        var length = Math.Min(
+            val1: reply[2],
+            val2: (reply.Length - 3)
+        );
+
+        for (var index = 0; ((index + AttributeSize) <= length); index += AttributeSize) {
+            if (reply[(3 + index)] != AttributeConnectionInterval) {
+                continue;
+            }
+
+            var microseconds = BinaryPrimitives.ReadUInt32LittleEndian(source: reply.AsSpan(start: (4 + index)));
+
+            if (
+                (microseconds > 0u) &&
+                (microseconds < 100_000u)
+            ) {
+                m_sampleSeconds = (microseconds / 1_000_000f);
+            }
+
+            return;
+        }
+    }
+    private static Vector2 ReadPad(ReadOnlySpan<byte> report, int offset) {
         return new Vector2(
-            x: Math.Clamp(
-                value: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) / StickRange),
-                max: 1f,
-                min: -1f
-            ),
-            y: Math.Clamp(
-                value: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) / StickRange),
-                max: 1f,
-                min: -1f
-            )
+            x: BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]),
+            y: BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..])
         );
     }
-    private static GamepadTouchPoint ReadTouch(ReadOnlySpan<byte> report, int offset, byte id) {
-        // int16 X (left→right) and Y (bottom→top), normalized to 0..1 with the touch-surface origin at top-left
-        // (X right, Y down) — so Y is flipped to match the shared GamepadTouchPoint convention.
-        var x = BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]);
-        var y = BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]);
-
+    private static Vector2 PadAsStick(Vector2 pad) {
+        // The absolute pad position as a stick vector, without a deadzone: a touch anywhere is a deliberate aim.
+        return Vector2.Clamp(
+            max: Vector2.One,
+            min: -Vector2.One,
+            value1: (pad / StickRange)
+        );
+    }
+    private static GamepadTouchPoint PadAsTouch(Vector2 pad, byte id) {
+        // int16 X grows right and Y grows up; the touch convention is 0..1 with the origin top-left.
         return new GamepadTouchPoint(
             Id: id,
             IsActive: true,
             Position: new Vector2(
-                x: ((x + TrackpadHalf) / TrackpadRange),
-                y: (1f - ((y + TrackpadHalf) / TrackpadRange))
+                x: ((pad.X + TrackpadHalf) / TrackpadRange),
+                y: (1f - ((pad.Y + TrackpadHalf) / TrackpadRange))
             )
         );
     }
-    // Writes one feature-report command, retrying briefly because a freshly connected (notably wireless) device
-    // may not accept the write immediately. Returns whether the write was ultimately accepted.
-    private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
+    private bool SendFeature(byte command, ReadOnlySpan<byte> payload) {
         var buffer = m_featureBuffer;
 
         buffer.AsSpan().Clear();
-        buffer[0] = 0;                       // report id (the vendor collection is written with id 0)
+        buffer[0] = 0;                       // the vendor collection is written as report id 0
         buffer[1] = command;
         buffer[2] = ((byte)payload.Length);
-        Array.Copy(
-            destinationArray: buffer,
-            destinationIndex: 3,
-            length: payload.Length,
-            sourceArray: payload,
-            sourceIndex: 0
-        );
+        payload.CopyTo(destination: buffer.AsSpan(start: 3));
 
-        return await HidFeatureWriteRetry.TryWriteAsync(
-            buffer: buffer,
-            cancellationToken: cancellationToken,
-            device: m_device
-        );
+        return m_device.TrySetFeatureReport(buffer: buffer);
     }
-    // The synchronous variant used during disposal (the async loop has already stopped, but the handle is still
-    // open) to best-effort restore lizard mode without awaiting.
-    private bool SendFeatureSynchronously(byte command, ReadOnlySpan<byte> payload) {
+    private async ValueTask<bool> SendFeatureAsync(byte command, byte[] payload, CancellationToken cancellationToken) {
         var buffer = m_featureBuffer;
 
         buffer.AsSpan().Clear();
@@ -195,19 +248,14 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         buffer[2] = ((byte)payload.Length);
         payload.CopyTo(destination: buffer.AsSpan(start: 3));
 
-        return m_device.TrySetFeatureReport(buffer: buffer);
-    }
-    // Maps the IMU axes into the fusion frame (X=right, Y=up, Z=back). Nominal/unverified: the accelerometer
-    // gravity term anchors pitch/roll regardless of the exact mapping.
-    private static Vector3 ToFusionFrame(Vector3 sensor) {
-        return new Vector3(
-            x: sensor.X,
-            y: sensor.Y,
-            z: -sensor.Z
+        return await HidFeatureWriteRetry.TryWriteAsync(
+            buffer: buffer,
+            cancellationToken: cancellationToken,
+            device: m_device
         );
     }
     // The report begins with unReportVersion (0x0001) then ucType. Windows may or may not prepend a report-id
-    // byte, so accept the version marker at offset 0 or 1 and treat the following byte as the type.
+    // byte, so the version marker is accepted at offset 0 or 1.
     private static bool TryFindReportBase(ReadOnlySpan<byte> report, out int dataStart) {
         if (
             (report.Length >= 4) &&
@@ -233,101 +281,281 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
 
         return false;
     }
+    private bool TryParseState(ReadOnlySpan<byte> report, int dataStart, out GamepadState state) {
+        var raw = (report[(dataStart + ButtonsOffset)] |
+            ((uint)report[((dataStart + ButtonsOffset) + 1)] << 8) |
+            ((uint)report[((dataStart + ButtonsOffset) + 2)] << 16));
+        var buttons = GamepadButtons.None;
+
+        if (0u != (raw & 0x000001)) { buttons |= GamepadButtons.RightTriggerClick; }
+        if (0u != (raw & 0x000002)) { buttons |= GamepadButtons.LeftTriggerClick; }
+        if (0u != (raw & 0x000080)) { buttons |= GamepadButtons.ButtonSouth; }    // A
+        if (0u != (raw & 0x000020)) { buttons |= GamepadButtons.ButtonEast; }     // B
+        if (0u != (raw & 0x000040)) { buttons |= GamepadButtons.ButtonWest; }     // X
+        if (0u != (raw & 0x000010)) { buttons |= GamepadButtons.ButtonNorth; }    // Y
+        if (0u != (raw & 0x000008)) { buttons |= GamepadButtons.LeftShoulder; }
+        if (0u != (raw & 0x000004)) { buttons |= GamepadButtons.RightShoulder; }
+        if (0u != (raw & 0x000100)) { buttons |= GamepadButtons.DpadUp; }
+        if (0u != (raw & 0x000200)) { buttons |= GamepadButtons.DpadRight; }
+        if (0u != (raw & 0x000400)) { buttons |= GamepadButtons.DpadLeft; }
+        if (0u != (raw & 0x000800)) { buttons |= GamepadButtons.DpadDown; }
+        if (0u != (raw & 0x001000)) { buttons |= GamepadButtons.Back; }           // left arrow
+        if (0u != (raw & 0x002000)) { buttons |= GamepadButtons.Guide; }          // Steam
+        if (0u != (raw & 0x004000)) { buttons |= GamepadButtons.Start; }          // right arrow
+        if (0u != (raw & 0x008000)) { buttons |= GamepadButtons.LeftGrip; }
+        if (0u != (raw & 0x010000)) { buttons |= GamepadButtons.RightGrip; }
+        if (0u != (raw & 0x040000)) { buttons |= GamepadButtons.RightStickPress; } // right pad click
+        if (0u != (raw & MaskStickClicked)) { buttons |= GamepadButtons.LeftStickPress; }
+
+        var fingerDown = (0u != (raw & MaskLeftPadFingerDown));
+        var interleaved = (0u != (raw & MaskLeftPadAndStick));
+        var shared = ReadPad(
+            offset: (dataStart + LeftPadOffset),
+            report: report
+        );
+        Vector2 leftStickRaw;
+        Vector2? leftPad;
+
+        // A cached value survives only while the firmware interleaves the two; otherwise the channel the report
+        // does not carry is at rest, and its cache is cleared so a later interleave cannot resurrect it (SDL).
+        if (fingerDown) {
+            leftPad = shared;
+            m_previousLeftPad = shared;
+            m_hasPreviousPad = true;
+
+            if (!interleaved) {
+                m_previousLeftStick = Vector2.Zero;
+            }
+
+            leftStickRaw = m_previousLeftStick;
+        } else {
+            leftStickRaw = shared;
+            m_previousLeftStick = shared;
+
+            if (!interleaved) {
+                m_hasPreviousPad = false;
+            }
+
+            leftPad = (m_hasPreviousPad
+                ? m_previousLeftPad
+                : null
+            );
+        }
+
+        if (0u != (raw & MaskLeftPadClicked)) {
+            // Older firmware reports the stick click here when no finger is on the left pad.
+            buttons |= ((fingerDown || interleaved)
+                ? GamepadButtons.TouchpadLeft
+                : GamepadButtons.LeftStickPress
+            );
+        }
+
+        var rightPadTouched = (0u != (raw & MaskRightPadFingerDown));
+        var rightPad = ReadPad(
+            offset: (dataStart + RightPadOffset),
+            report: report
+        );
+        var packetNumber = BinaryPrimitives.ReadUInt32LittleEndian(source: report[(dataStart + PacketNumberOffset)..]);
+        var repeated = (m_hasPacketNumber && (packetNumber == m_lastPacketNumber));
+        var accelerometer = ToFusionAccelerometer(sensor: GamepadNormalization.ReadVector3Int16(
+            offset: (dataStart + AccelerometerOffset),
+            scale: AccelerometerGPerLsb,
+            source: report
+        ));
+        var gyro = ToFusionGyro(sensor: GamepadNormalization.ReadVector3Int16(
+            offset: (dataStart + GyroOffset),
+            scale: GyroRadiansPerSecondPerLsb,
+            source: report
+        ));
+
+        m_hasPacketNumber = true;
+        m_lastPacketNumber = packetNumber;
+
+        state = new GamepadState(
+            Accelerometer: accelerometer,
+            Buttons: buttons,
+            Gyro: gyro,
+            IsMotionSample: !repeated,
+            LeftStick: SteamControllerInput.Deadzone(stick: (leftStickRaw / StickRange)),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(
+                raw: report[(dataStart + LeftTriggerOffset)],
+                threshold: TriggerThreshold,
+                range: TriggerRange
+            ),
+            // A repeated packet carries no new sample, so it does not advance the fusion.
+            Orientation: (repeated
+                ? m_tracker.Orientation
+                : m_tracker.Update(
+                    accelerometerG: accelerometer,
+                    deltaSeconds: m_sampleSeconds,
+                    gyroRadiansPerSecond: gyro
+                )
+            ),
+            Power: m_power,
+            RightStick: (rightPadTouched
+                ? PadAsStick(pad: rightPad)
+                : Vector2.Zero
+            ),
+            RightTrigger: GamepadNormalization.NormalizeTrigger(
+                raw: report[(dataStart + RightTriggerOffset)],
+                threshold: TriggerThreshold,
+                range: TriggerRange
+            ),
+            Touch0: (rightPadTouched
+                ? PadAsTouch(
+                    id: 0,
+                    pad: rightPad
+                )
+                : default
+            ),
+            Touch1: ((leftPad is { } pad)
+                ? PadAsTouch(
+                    id: 1,
+                    pad: pad
+                )
+                : default
+            )
+        );
+        m_lastState = state;
+
+        return true;
+    }
+    // The classic pad's IMU frame maps to the fusion frame (X right, Y up, Z toward the player) as gyro (x, z, y)
+    // and accelerometer (x, z, -y): the two differ in the sign of Y on this pad alone (SDL, Linux).
+    private static Vector3 ToFusionAccelerometer(Vector3 sensor) => new(
+        x: sensor.X,
+        y: sensor.Z,
+        z: -sensor.Y
+    );
+    private static Vector3 ToFusionGyro(Vector3 sensor) => new(
+        x: sensor.X,
+        y: sensor.Z,
+        z: sensor.Y
+    );
 
     /// <inheritdoc />
+    /// <remarks>Any event but disconnect (1) is a connection: established (2) or newly paired (3).</remarks>
     public WirelessSlotEvent ClassifySlotEvent(ReadOnlySpan<byte> report) {
-        // The pairing event shares the state report's ValveInReport framing (version, type, length); type 0x03
-        // carries a single payload byte announcing the transition.
         if (
             !TryFindReportBase(
             dataStart: out var dataStart,
             report: report
         ) ||
             (report.Length <= (dataStart + 4)) ||
-            (report[(dataStart + 2)] != WirelessEventReportType)
+            (report[(dataStart + 2)] != WirelessEventReportType) ||
+            (report[(dataStart + 3)] < 1)
         ) {
             return WirelessSlotEvent.None;
         }
 
-        return report[(dataStart + 4)] switch {
-            WirelessEventConnected => WirelessSlotEvent.Connected,
-            WirelessEventDisconnected => WirelessSlotEvent.Disconnected,
-            _ => WirelessSlotEvent.None,
-        };
+        return ((report[(dataStart + 4)] == WirelessEventDisconnected)
+            ? WirelessSlotEvent.Disconnected
+            : WirelessSlotEvent.Connected
+        );
     }
     /// <summary>
-    /// Restores the controller's built-in keyboard/mouse (lizard) emulation, so it behaves as a normal desktop
-    /// device again once the engine releases it. Best-effort and synchronous: the I/O loop has already stopped but
-    /// the handle is still open at this point.
+    /// Restores the controller's keyboard-and-mouse emulation so it behaves as a desktop device again once the
+    /// engine releases it: the default mappings, the default settings, and the right trackpad as a mouse.
+    /// Best-effort and synchronous, while the handle is still open after the I/O loop stopped.
     /// </summary>
     public void Dispose() {
-        _ = SendFeatureSynchronously(
-            command: SetDefaultDigitalMappingsCommand,
+        _ = SendFeature(
+            command: CommandSetDefaultDigitalMappings,
             payload: []
         );
-        _ = SendFeatureSynchronously(
-            command: LoadDefaultSettingsCommand,
-            payload: [0]
+        _ = SendFeature(
+            command: CommandLoadDefaultSettings,
+            payload: []
+        );
+        _ = SendFeature(
+            command: CommandSetSettings,
+            payload: [SettingRightTrackpadMode, TrackpadModeAbsoluteMouse, 0,]
         );
     }
     /// <inheritdoc />
     public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
-        // Take the controller out of lizard mode: clear the keyboard-emulation mappings and switch both trackpads
-        // out of their built-in mouse mode, then enable raw IMU streaming. Each is best-effort; a failed write
-        // simply leaves that feature at its default rather than faulting the connection.
+        // Leave lizard mode: drop the keyboard mappings, stop both trackpads emulating a mouse, use the current
+        // wireless packet format, and stream raw IMU (SDL ResetSteamController). Each write is best-effort.
         _ = await SendFeatureAsync(
             cancellationToken: cancellationToken,
-            command: ClearDigitalMappingsCommand,
+            command: CommandClearDigitalMappings,
             payload: []
         );
         _ = await SendFeatureAsync(
             cancellationToken: cancellationToken,
-            command: SetSettingsValuesCommand,
-            payload: [SettingLeftTrackpadMode, TrackpadModeNone, 0, SettingRightTrackpadMode, TrackpadModeNone, 0]
+            command: CommandSetSettings,
+            payload: [
+                SettingWirelessPacketVersion, 2, 0,
+                SettingLeftTrackpadMode, TrackpadModeNone, 0,
+                SettingRightTrackpadMode, TrackpadModeNone, 0,
+                SettingSmoothAbsoluteMouse, 0, 0,
+                SettingImuMode, ((byte)(ImuModeRaw & 0xFF)), ((byte)(ImuModeRaw >> 8)),
+            ]
         );
-        _ = await SendFeatureAsync(
-            cancellationToken: cancellationToken,
-            command: SetSettingsValuesCommand,
-            payload: [SettingImuMode, ((byte)(ImuModeRaw & 0xFF)), ((byte)(ImuModeRaw >> 8))]
-        );
+        LoadConnectionInterval();
     }
     /// <inheritdoc />
-    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
-        if (!m_rumbleThrottle.TryPrepare(
-            high: out var high,
-            highFrequency: highFrequency,
-            low: out var low,
-            lowFrequency: lowFrequency
-        )) {
+    public ValueTask PlayTrackpadHapticAsync(TrackpadHapticEffect effect, CancellationToken cancellationToken = default) {
+        if (effect.Kind != TrackpadHapticKinds.Pulse) {
             return ValueTask.CompletedTask;
         }
 
-        // Map the low band to the left pad and the high band to the right pad. A pad with no intensity is left
-        // untouched (the device has no "stop"; a finite pulse train simply lapses).
-        if (0f < low) {
-            _ = FireHaptic(
-                intensity: low,
-                period: HapticLeftPeriodMicroseconds,
-                side: HapticSideLeft
-            );
-        }
-
-        if (0f < high) {
-            _ = FireHaptic(
-                intensity: high,
-                period: HapticRightPeriodMicroseconds,
-                side: HapticSideRight
-            );
-        }
+        // The pulse command numbers the pads left 1, right 0 and both 2, swapped for legacy reasons (Linux).
+        _ = FirePulse(
+            count: effect.Repeat,
+            gainDecibels: effect.GainDecibels,
+            off: effect.OffMicroseconds,
+            on: effect.OnMicroseconds,
+            side: effect.Side switch {
+                TrackpadSide.Left => HapticSideLeft,
+                TrackpadSide.Right => HapticSideRight,
+                _ => ((byte)2),
+            }
+        );
 
         return ValueTask.CompletedTask;
     }
     /// <inheritdoc />
+    /// <remarks>The Steam-button LED has one channel, so its brightness follows the brightest of the three.</remarks>
+    public ValueTask SetLedAsync(LedColor color, CancellationToken cancellationToken = default) {
+        var brightness = ((byte)((Math.Max(
+            val1: color.Red,
+            val2: Math.Max(
+                val1: color.Green,
+                val2: color.Blue
+            )
+        ) * 100) / 255));
+
+        _ = SendFeature(
+            command: CommandSetSettings,
+            payload: [SettingLedBrightness, brightness, 0,]
+        );
+
+        return ValueTask.CompletedTask;
+    }
+    /// <inheritdoc />
+    /// <remarks>The low band drives the left trackpad's actuator and the high band the right's; intensity sets
+    /// each pulse's share of its period.</remarks>
+    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
+        _ = FireHaptic(
+            intensity: lowFrequency,
+            period: HapticLeftPeriodMicroseconds,
+            side: HapticSideLeft
+        );
+        _ = FireHaptic(
+            intensity: highFrequency,
+            period: HapticRightPeriodMicroseconds,
+            side: HapticSideRight
+        );
+
+        return ValueTask.CompletedTask;
+    }
+    /// <inheritdoc />
+    /// <remarks>A battery status report (type 4) yields the last state with the new charge, once a state has
+    /// arrived; a pairing event and anything else are not state.</remarks>
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
 
-        // Only the controller-state report (type 0x01) carries input; pairing/other reports are ignored here
-        // (pairing events are classified separately via ClassifySlotEvent).
         if (!TryFindReportBase(
             dataStart: out var dataStart,
             report: report
@@ -335,107 +563,34 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
             return false;
         }
 
+        var type = report[(dataStart + 2)];
+
         if (
-            (report[(dataStart + 2)] != StateReportType) ||
-            (report.Length < ((dataStart + MinimumStatePayload) + 6))
+            (StatusReportType == type) &&
+            m_hasPacketNumber &&
+            (report.Length > (dataStart + StatusBatteryPercentOffset))
         ) {
-            return false;
+            m_power = new GamepadPower(
+                Percent: Math.Min(
+                    val1: report[(dataStart + StatusBatteryPercentOffset)],
+                    val2: ((byte)100)
+                ),
+                State: GamepadPowerState.OnBattery
+            );
+            state = m_lastState with { IsMotionSample = false, Power = m_power, };
+            m_lastState = state;
+
+            return true;
         }
 
-        var b0 = report[(dataStart + ButtonsOffset)];
-        var b1 = report[((dataStart + ButtonsOffset) + 1)];
-        var b2 = report[((dataStart + ButtonsOffset) + 2)];
-        var buttons = GamepadButtons.None;
-
-        // Face buttons by physical position: A (bottom) → South, B (right) → East, X (left) → West, Y (top) → North.
-        if (0 != (b0 & 0x80)) { buttons |= GamepadButtons.ButtonSouth; }   // A
-        if (0 != (b0 & 0x20)) { buttons |= GamepadButtons.ButtonEast; }    // B
-        if (0 != (b0 & 0x40)) { buttons |= GamepadButtons.ButtonWest; }    // X
-        if (0 != (b0 & 0x10)) { buttons |= GamepadButtons.ButtonNorth; }   // Y
-        if (0 != (b0 & 0x08)) { buttons |= GamepadButtons.LeftShoulder; }  // left bumper
-        if (0 != (b0 & 0x04)) { buttons |= GamepadButtons.RightShoulder; } // right bumper
-
-        if (0 != (b1 & 0x01)) { buttons |= GamepadButtons.DpadUp; }
-        if (0 != (b1 & 0x02)) { buttons |= GamepadButtons.DpadRight; }
-        if (0 != (b1 & 0x04)) { buttons |= GamepadButtons.DpadLeft; }
-        if (0 != (b1 & 0x08)) { buttons |= GamepadButtons.DpadDown; }
-        if (0 != (b1 & 0x10)) { buttons |= GamepadButtons.Back; }          // left arrow (select)
-        if (0 != (b1 & 0x20)) { buttons |= GamepadButtons.Guide; }         // Steam / mode
-        if (0 != (b1 & 0x40)) { buttons |= GamepadButtons.Start; }         // right arrow
-        if (0 != (b1 & 0x80)) { buttons |= GamepadButtons.LeftGrip; }      // lower-left grip paddle
-
-        if (0 != (b2 & 0x01)) { buttons |= GamepadButtons.RightGrip; }     // lower-right grip paddle
-        if (0 != (b2 & 0x04)) { buttons |= GamepadButtons.RightStickPress; } // right pad click
-        if (0 != (b2 & 0x40)) { buttons |= GamepadButtons.LeftStickPress; }  // stick click
-
-        var leftPadTouched = (0 != (b2 & 0x08));   // when set, the shared bytes hold the left pad, not the stick
-        var leftPadAndStick = (0 != (b2 & 0x80));  // both are reported this frame
-        var rightPadTouched = (0 != (b2 & 0x10));
-
-        var accelerometer = GamepadNormalization.ReadVector3Int16(
-            offset: (dataStart + AccelerometerOffset),
-            scale: AccelerometerGPerLsb,
-            source: report
-        );
-        var gyro = GamepadNormalization.ReadVector3Int16(
-            offset: (dataStart + GyroOffset),
-            scale: GyroRadiansPerSecondPerLsb,
-            source: report
-        );
-        // The stick reads the shared bytes only when the left pad is not the sole occupant of them.
-        var leftStick = ((!leftPadTouched || leftPadAndStick)
-            ? SteamControllerInput.ReadStick(
-                offset: (dataStart + LeftPadOffset),
-                report: report
+        return (
+            (StateReportType == type) &&
+            (report.Length >= ((dataStart + MinimumStatePayload) + 6)) &&
+            TryParseState(
+                dataStart: dataStart,
+                report: report,
+                state: out state
             )
-            : Vector2.Zero
         );
-        // The right pad doubles as the right stick (absolute position while touched, recentring when released).
-        var rightStick = (rightPadTouched
-            ? ReadPadAsStick(
-                offset: (dataStart + RightPadOffset),
-                report: report
-            )
-            : Vector2.Zero
-        );
-
-        state = new GamepadState(
-            Accelerometer: accelerometer,
-            Buttons: buttons,
-            Gyro: gyro,
-            LeftStick: leftStick,
-            LeftTrigger: GamepadNormalization.NormalizeTrigger(
-                raw: report[(dataStart + LeftTriggerOffset)],
-                threshold: TriggerThreshold,
-                range: TriggerRange
-            ),
-            Orientation: m_tracker.Update(
-                gyroRadiansPerSecond: ToFusionFrame(sensor: gyro),
-                accelerometerG: ToFusionFrame(sensor: accelerometer),
-                deltaSeconds: ImuSampleSeconds
-            ),
-            RightStick: rightStick,
-            RightTrigger: GamepadNormalization.NormalizeTrigger(
-                raw: report[(dataStart + RightTriggerOffset)],
-                threshold: TriggerThreshold,
-                range: TriggerRange
-            ),
-            Touch0: (rightPadTouched
-            ? ReadTouch(
-                    id: 0,
-                    offset: (dataStart + RightPadOffset),
-                    report: report
-                )
-            : default),
-            Touch1: (leftPadTouched
-            ? ReadTouch(
-                    id: 1,
-                    offset: (dataStart + LeftPadOffset),
-                    report: report
-                )
-            : default)
-        );
-
-        return true;
     }
 }

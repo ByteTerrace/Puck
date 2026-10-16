@@ -43,18 +43,37 @@ public enum GamepadButtons : uint {
     Touchpad = (1u << 15),
     /// <summary>The microphone mute button (DualSense); no equivalent on Xbox or Switch Pro pads.</summary>
     Mute = (1u << 16),
-    /// <summary>The left rear grip paddle (Steam Controller lower-left grip / Triton L4); no equivalent on Xbox, DualSense, or Switch Pro pads.</summary>
+    /// <summary>The left rear grip paddle (Steam Controller lower-left grip, Triton L5, DualSense Edge left back button).</summary>
     LeftGrip = (1u << 17),
-    /// <summary>The right rear grip paddle (Steam Controller lower-right grip / Triton R4); no equivalent on Xbox, DualSense, or Switch Pro pads.</summary>
+    /// <summary>The right rear grip paddle (Steam Controller lower-right grip, Triton R5, DualSense Edge right back button).</summary>
     RightGrip = (1u << 18),
-    /// <summary>The second (upper) left rear grip paddle (Steam Controller Triton L5); the Triton has four rear paddles, so this pairs with <see cref="LeftGrip"/>.</summary>
+    /// <summary>The upper left rear grip paddle (Steam Controller Triton L4), the pair of <see cref="LeftGrip"/> on a pad with four rear paddles.</summary>
     LeftUpperGrip = (1u << 19),
-    /// <summary>The second (upper) right rear grip paddle (Steam Controller Triton R5); the Triton has four rear paddles, so this pairs with <see cref="RightGrip"/>.</summary>
+    /// <summary>The upper right rear grip paddle (Steam Controller Triton R4), the pair of <see cref="RightGrip"/> on a pad with four rear paddles.</summary>
     RightUpperGrip = (1u << 20),
     /// <summary>The Quick Access Menu (QAM "…") button (Steam Controller Triton); a second system button distinct from the <see cref="Guide"/> Steam/home button. No equivalent on Xbox, DualSense, or Switch Pro pads.</summary>
     QuickAccess = (1u << 21),
-    /// <summary>The left trackpad click (Steam Controller Triton); the right trackpad click reuses <see cref="Touchpad"/>, so a device with two clickable pads reports both.</summary>
-    // KEEP IN SYNC: adding a flag here requires bumping GamepadButtonEdges.Count (one press-stamp slot per
-    // bit), or the coalescer faults the device on the new button's first press.
+    /// <summary>The left trackpad click (Steam Controller and Triton); the right trackpad click reuses <see cref="Touchpad"/>, so a device with two clickable pads reports both.</summary>
     TouchpadLeft = (1u << 22),
+    /// <summary>The capture or share button (Switch Pro Capture).</summary>
+    Capture = (1u << 23),
+    /// <summary>The left function button (DualSense Edge Fn, left of the touchpad).</summary>
+    LeftFunction = (1u << 24),
+    /// <summary>The right function button (DualSense Edge Fn, right of the touchpad).</summary>
+    RightFunction = (1u << 25),
+    /// <summary>The left trigger's full-pull switch (Steam Controller and Triton), distinct from its analog travel.</summary>
+    LeftTriggerClick = (1u << 26),
+    /// <summary>The right trigger's full-pull switch (Steam Controller and Triton), distinct from its analog travel.</summary>
+    RightTriggerClick = (1u << 27),
+    /// <summary>A finger resting on the left stick's capacitive cap (Steam Controller Triton).</summary>
+    LeftStickTouch = (1u << 28),
+    /// <summary>A finger resting on the right stick's capacitive cap (Steam Controller Triton).</summary>
+    RightStickTouch = (1u << 29),
+    /// <summary>A hand on the left grip's capacitive sensor (Steam Controller Triton).</summary>
+    LeftGripTouch = (1u << 30),
+    /// <summary>A hand on the right grip's capacitive sensor (Steam Controller Triton).</summary>
+    // KEEP IN SYNC: adding a flag here requires bumping GamepadButtonEdges.Count (one press-stamp slot per
+    // bit), or the coalescer faults the device on the new button's first press. Every bit of the uint is now
+    // used, so a further flag widens the enum.
+    RightGripTouch = (1u << 31),
 }

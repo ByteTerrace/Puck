@@ -7,58 +7,89 @@ namespace Puck.Platform.Windows.Gamepad;
 /// <summary>
 /// The Windows Xbox acquisition backend. A single shared poll thread services all four XInput user slots; each
 /// connected slot becomes an <see cref="XInputGamepadConnection"/> registered with the platform-neutral
-/// <c>GamepadManager</c>, so it flows through the same coalescer → command pipeline as the HID devices. Rumble is
-/// driven through GameInput (which reaches wireless transports and the impulse-trigger motors) with an
-/// <c>XInputSetState</c> fallback. The poll thread is the sole owner of the <see cref="GameInputHaptics"/> service.
+/// <c>GamepadManager</c>, so it flows through the same coalescer and command pipeline as the HID devices. Rumble
+/// reaches the impulse triggers through GameInput once a slot is bound to its GameInput device. The poll thread is
+/// the sole owner of the <see cref="GameInputHaptics"/> service.
 /// </summary>
+/// <remarks>
+/// A slot's family comes from its USB identity (the ordinal-108 capabilities). Steam Input's virtual XInput pad
+/// is skipped: it mirrors a physical controller this engine already reads directly. Battery is read about every
+/// two seconds, since <c>XInputGetBatteryInformation</c> costs a driver round trip; the capability flags that say
+/// whether a headset is attached ride the same poll. (The headset battery query is no evidence of a headset: on a
+/// current pad it echoes the pad's own battery.) A cycle sweeps every slot first and only then services output, so the sole-connection decision never
+/// rests on a half-discovered topology, and it waits out a settle window after the last slot or GameInput device
+/// change before it lets a lone slot bind a lone device.
+/// </remarks>
 public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
+    private const int BatteryPollSeconds = 2;
+    private const int DisposeJoinMilliseconds = 2000;   // covers GameInput's one-second callback unregistration
+    private const ushort SteamVirtualProductId = 0x11FF;
+    private const ushort SteamVirtualVendorId = 0x28DE;
     private const int XInputPollHz = 250;
     private const int XInputSlotCount = 4;
 
     private readonly CancellationTokenSource m_cancellation = new();
+    private readonly IInputClock m_clock;
     private readonly Action<string>? m_diagnostics;
 
     private GameInputHaptics? m_gameInputHaptics;
     private IGamepadConnectionRegistry? m_registry;
+    private int m_disposed;
     private int m_started;
     private Thread? m_thread;
 
     /// <summary>Initializes a new instance of the <see cref="Win32XboxAcquisitionSource"/> class.</summary>
-    /// <param name="diagnostics">An optional sink for human-readable lifecycle/diagnostic messages.</param>
-    public Win32XboxAcquisitionSource(Action<string>? diagnostics = null) {
+    /// <param name="clock">The capture clock that stamps each polled state's arrival.</param>
+    /// <param name="diagnostics">The optional sink for lifecycle and diagnostic messages.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="clock"/> is <see langword="null"/>.</exception>
+    public Win32XboxAcquisitionSource(IInputClock clock, Action<string>? diagnostics = null) {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        m_clock = clock;
         m_diagnostics = diagnostics;
     }
 
-    // Unregisters a connection from the manager and disposes it (silencing motors and freeing its GameInput bind).
     private void CloseSlot(XInputGamepadConnection connection) {
         m_registry!.Unregister(connection: connection);
         connection.Dispose();
     }
-    // Atomically allocates a player slot and registers a new connection for it through the manager.
-    private XInputGamepadConnection OpenSlot(uint slot) {
+    // Opens a slot unless it is Steam Input's virtual pad, returning null for a skipped slot.
+    private XInputGamepadConnection? OpenSlot(uint slot) {
+        var type = GamepadType.XboxOne;
+        var vendorId = ((ushort)0);
+        var productId = ((ushort)0);
+
+        if (XInput.ErrorSuccess == XInput.GetCapabilitiesEx(
+            capabilities: out var capabilities,
+            flags: 0u,
+            one: 1u,
+            userIndex: slot
+        )) {
+            if (
+                (SteamVirtualVendorId == capabilities.VendorId) &&
+                (SteamVirtualProductId == capabilities.ProductId)
+            ) {
+                return null;
+            }
+
+            vendorId = capabilities.VendorId;
+            productId = capabilities.ProductId;
+            type = XInputGamepadConnection.ClassifyType(
+                productId: capabilities.ProductId,
+                vendorId: capabilities.VendorId
+            );
+        }
+
         return ((XInputGamepadConnection)m_registry!.Register(connectionFactory: playerIndex => new XInputGamepadConnection(
+            clock: m_clock,
             deviceId: InputDeviceId.FromConnectionKey(key: $"xinput:{slot}"),
             haptics: m_gameInputHaptics,
             playerIndex: playerIndex,
-            slot: slot
+            productId: productId,
+            slot: slot,
+            type: type,
+            vendorId: vendorId
         )));
-    }
-    private static void PaceTo(long deadline, CancellationToken cancellationToken) {
-        while (!cancellationToken.IsCancellationRequested) {
-            var remaining = (deadline - Stopwatch.GetTimestamp());
-
-            if (remaining <= 0L) {
-                break;
-            }
-
-            var remainingMs = ((remaining * 1000L) / Stopwatch.Frequency);
-
-            if (remainingMs > 1L) {
-                Thread.Sleep(millisecondsTimeout: ((int)(remainingMs - 1L)));
-            } else {
-                Thread.SpinWait(iterations: 64);
-            }
-        }
     }
     private void RunXInputLoop(CancellationToken cancellationToken) {
         try {
@@ -76,29 +107,38 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             return;
         }
 
-        // GameInput drives rumble that actuates over wireless (the Adapter/Bluetooth) and the trigger motors,
-        // where legacy XInputSetState is silently dropped. If it's unavailable we fall back to XInput (USB only).
         var haptics = new GameInputHaptics(diagnostics: m_diagnostics);
 
         if (haptics.TryInitialize()) {
             m_gameInputHaptics = haptics;
-            m_diagnostics?.Invoke("[gamepad] GameInput haptics ready (Xbox rumble incl. wireless)");
+            m_diagnostics?.Invoke("[gamepad] GameInput haptics ready (Xbox impulse triggers)");
         } else {
-            m_diagnostics?.Invoke("[gamepad] GameInput unavailable; Xbox rumble via XInput (USB only)");
+            m_diagnostics?.Invoke("[gamepad] GameInput unavailable; Xbox rumble via XInput (no impulse triggers)");
         }
 
         var connections = new XInputGamepadConnection?[XInputSlotCount];
+        var skipped = new bool[XInputSlotCount];
         var emptySlotRecheck = new long[XInputSlotCount];
+        var pollPeriod = TimeSpan.FromSeconds(value: (1.0 / XInputPollHz));
         var pollPeriodTicks = (Stopwatch.Frequency / XInputPollHz);
-        var recheckPeriodTicks = Stopwatch.Frequency;   // empty slots re-probed ~1/s (XInput stalls on empty polls)
-
-        // Raise the OS timer resolution so the poll cadence is accurate; restored on exit.
-        _ = XInput.TimeBeginPeriod(period: 1u);
+        var recheckPeriodTicks = Stopwatch.Frequency;   // empty slots are re-probed about once a second
+        var batteryPeriodTicks = (BatteryPollSeconds * Stopwatch.Frequency);
+        var settleTicks = ((long)(GameInputHaptics.SoleSettleMilliseconds * (Stopwatch.Frequency / 1000.0)));
+        var lastSlotChange = Stopwatch.GetTimestamp();  // the last time a slot opened or closed
+        var nextBatteryPoll = 0L;
+        using var timer = Win32HighResolutionWaitableTimer.TryCreate();
 
         try {
             while (!cancellationToken.IsCancellationRequested) {
                 var cycleStart = Stopwatch.GetTimestamp();
+                var pollBattery = (cycleStart >= nextBatteryPoll);
 
+                if (pollBattery) {
+                    nextBatteryPoll = (cycleStart + batteryPeriodTicks);
+                }
+
+                // Sweep every slot first: open, close, and feed. Output is serviced only after the sweep, once the
+                // cycle knows how many slots are connected.
                 for (var slot = 0; (slot < XInputSlotCount); ++slot) {
                     var connection = connections[slot];
 
@@ -114,60 +154,149 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                         userIndex: ((uint)slot)
                     );
 
-                    if (status == XInput.ErrorSuccess) {
-                        if (
-                            (connection is null) ||
-                            connection.IsFaulted
-                        ) {
-                            // Remove the prior (faulted) connection before re-adding, so the manager never briefly
-                            // holds two entries with the same id (which would let TryGetOutput pick the dead one).
-                            if (connection is not null) {
-                                CloseSlot(connection: connection);
-                            }
+                    // A native call can outlast a dispose; never touch a connection or the registry after one.
+                    if (cancellationToken.IsCancellationRequested) {
+                        return;
+                    }
 
-                            connection = OpenSlot(slot: ((uint)slot));
-                            connections[slot] = connection;
-                        }
-
-                        connection.Apply(pad: in state.Gamepad);
-
-                        // The connection owns its own output actuation (GameInput correlation + dual-path rumble).
-                        connection.ServiceOutput();
-                    } else {
+                    if (status != XInput.ErrorSuccess) {
                         if (connection is not null) {
                             CloseSlot(connection: connection);
                             connections[slot] = null;
+                            lastSlotChange = cycleStart;
                         }
 
+                        skipped[slot] = false;
                         emptySlotRecheck[slot] = (cycleStart + recheckPeriodTicks);
+
+                        continue;
                     }
+
+                    if (
+                        (connection is null) ||
+                        connection.IsFaulted
+                    ) {
+                        if (skipped[slot]) {
+                            emptySlotRecheck[slot] = (cycleStart + recheckPeriodTicks);
+
+                            continue;
+                        }
+
+                        // Remove the prior (faulted) connection before re-adding, so the manager never briefly holds
+                        // two entries with the same id.
+                        if (connection is not null) {
+                            CloseSlot(connection: connection);
+                        }
+
+                        connection = OpenSlot(slot: ((uint)slot));
+                        connections[slot] = connection;
+                        lastSlotChange = cycleStart;
+
+                        if (connection is null) {
+                            skipped[slot] = true;
+                            m_diagnostics?.Invoke($"[gamepad] XInput slot {slot} is Steam Input's virtual pad; skipped");
+
+                            continue;
+                        }
+
+                        pollBattery = true;
+                    }
+
+                    if (pollBattery) {
+                        if (XInput.ErrorSuccess == XInput.GetBatteryInformation(
+                            deviceType: XInput.DeviceTypeGamepad,
+                            information: out var battery,
+                            userIndex: ((uint)slot)
+                        )) {
+                            connection.ApplyBattery(information: in battery);
+                        }
+
+                        if (XInput.ErrorSuccess == XInput.GetCapabilitiesEx(
+                            capabilities: out var capabilities,
+                            flags: 0u,
+                            one: 1u,
+                            userIndex: ((uint)slot)
+                        )) {
+                            connection.ApplyCapabilities(flags: capabilities.Flags);
+                        }
+
+                        if (cancellationToken.IsCancellationRequested) {
+                            return;
+                        }
+                    }
+
+                    connection.Apply(state: in state);
                 }
 
-                PaceTo(
-                    cancellationToken: cancellationToken,
-                    deadline: (cycleStart + pollPeriodTicks)
+                var connected = 0;
+
+                foreach (var connection in connections) {
+                    connected += ((connection is null)
+                        ? 0
+                        : 1
+                    );
+                }
+
+                // One slot with one device is only a sole pair once the topology has held still; until then a
+                // partially discovered second pad (or its not-yet-reported GameInput device) could be mistaken
+                // for absence.
+                var soleConnection = (
+                    (1 == connected) &&
+                    ((cycleStart - lastSlotChange) >= settleTicks)
                 );
+
+                foreach (var connection in connections) {
+                    connection?.ServiceOutput(soleConnection: soleConnection);
+                }
+
+                var remaining = ((cycleStart + pollPeriodTicks) - Stopwatch.GetTimestamp());
+
+                if (remaining > 0L) {
+                    var due = TimeSpan.FromSeconds(value: (remaining / ((double)Stopwatch.Frequency)));
+
+                    if (timer is not null) {
+                        _ = timer.WaitOne(
+                            cancellationWaitHandle: cancellationToken.WaitHandle,
+                            dueTime: due
+                        );
+                    } else {
+                        _ = cancellationToken.WaitHandle.WaitOne(timeout: pollPeriod);
+                    }
+                }
             }
+        } catch (ObjectDisposedException) {
+            // The manager (or this source) was disposed while the loop ran; there is nobody left to feed.
+            m_diagnostics?.Invoke("[gamepad] XInput poll loop stopped: the connection registry was disposed");
         } catch (Exception exception) {
             // This runs on a dedicated thread, where an unhandled exception would terminate the process. Fail
             // soft: drop Xbox support for this session rather than take the app down.
             m_diagnostics?.Invoke($"[gamepad] XInput poll loop stopped: {exception.GetType().Name}: {exception.Message}");
         } finally {
-            _ = XInput.TimeEndPeriod(period: 1u);
-
-            // The poll thread is the sole owner of the haptics service, so dispose it here, keeping ownership off
-            // any other thread. The connections still registered with the manager are disposed by the manager on
-            // shutdown; their borrowed device handles survive haptics disposal (handles are never released).
+            // The poll thread solely owns the haptics service. Connections still registered are disposed by the
+            // manager; their borrowed device handles survive haptics disposal (handles are never released).
             m_gameInputHaptics?.Dispose();
         }
     }
 
     /// <inheritdoc />
     public void Dispose() {
+        if (0 != Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        )) {
+            return;
+        }
+
         m_cancellation.Cancel();
 
-        // Join the poll thread, whose finally disposes the GameInput haptics it solely owns.
-        _ = (m_thread?.Join(millisecondsTimeout: 500));
+        // Join the poll thread, whose finally disposes the GameInput haptics it solely owns. A thread that does not
+        // stop in time may still be inside a native call and read the token afterwards, so its cancellation source is
+        // left to finalization rather than disposed under it.
+        if (m_thread?.Join(millisecondsTimeout: DisposeJoinMilliseconds) == false) {
+            m_diagnostics?.Invoke("[gamepad] XInput poll thread did not stop within its teardown bound; continuing shutdown");
+
+            return;
+        }
 
         m_cancellation.Dispose();
     }
@@ -175,8 +304,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
     public void Start(IGamepadConnectionRegistry registry) {
         ArgumentNullException.ThrowIfNull(registry);
 
-        // Idempotent: only the first Start spins the poll thread.
-        if (uint.MinValue != Interlocked.CompareExchange(
+        if (0 != Interlocked.CompareExchange(
             comparand: 0,
             location1: ref m_started,
             value: 1
@@ -184,7 +312,7 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             return;
         }
 
-        // XInput ships on Windows 8+; do nothing (no Xbox support) elsewhere.
+        // XInput 1.4 ships with Windows 8 and later.
         if (!OperatingSystem.IsWindowsVersionAtLeast(
             major: 6,
             minor: 2,

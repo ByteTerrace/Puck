@@ -14,6 +14,17 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
     public IEnumerable<HidDeviceInfo> EnumerateInterfaces() => [];
     public IHidDevice? Open(string devicePath) => null;
 }
+/// <summary>A HID source over fixed in-memory devices, each opened by its path.</summary>
+internal sealed class TestHidDeviceSource(params TestHidDevice[] devices) : IHidDeviceSource {
+    public IEnumerable<HidDeviceInfo> EnumerateInterfaces() =>
+        devices.Select(device => new HidDeviceInfo(
+            Path: device.DevicePath,
+            ProductId: device.ProductId,
+            Transport: device.Transport,
+            VendorId: device.VendorId
+        ));
+    public IHidDevice? Open(string devicePath) => devices.FirstOrDefault(device => (device.DevicePath == devicePath));
+}
 /// <summary>
 /// An in-memory HID transport. Reads honor the <see cref="IHidDevice"/> contract: a report enqueued while a
 /// read is pending completes that read, and a timed read returns zero only once its timeout elapses on
@@ -153,7 +164,26 @@ internal sealed class TestHidDevice : IHidDevice {
         cancellationToken: cancellationToken,
         timeoutInMilliseconds: timeoutInMilliseconds
     );
-    public bool TryGetFeatureReport(Span<byte> buffer) => false;
+    /// <summary>Gets the feature reports the device answers, by report id; an id it maps to null is unanswered.</summary>
+    public Func<byte, byte[]?>? FeatureReports { get; init; }
+    /// <summary>Gets the replies the device sends to output writes: each write's replies, if any, are queued as input.</summary>
+    public Func<byte[], IReadOnlyList<byte[]>?>? Responder { get; init; }
+
+    public bool TryGetFeatureReport(Span<byte> buffer) {
+        if (FeatureReports?.Invoke(arg: buffer[0]) is not { } report) {
+            return false;
+        }
+
+        report.AsSpan(
+            length: Math.Min(
+                val1: report.Length,
+                val2: buffer.Length
+            ),
+            start: 0
+        ).CopyTo(destination: buffer);
+
+        return true;
+    }
     public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
         lock (FeatureWrites) {
             FeatureWrites.Add(item: buffer.ToArray());
@@ -177,14 +207,22 @@ internal sealed class TestHidDevice : IHidDevice {
         return signal.Task.WaitAsync(cancellationToken: cancellationToken);
     }
     public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
+        var written = buffer.ToArray();
+
         lock (Writes) {
-            Writes.Add(item: buffer.ToArray());
+            Writes.Add(item: written);
+        }
+
+        if (Responder?.Invoke(arg: written) is { } replies) {
+            foreach (var reply in replies) {
+                EnqueueReport(report: reply);
+            }
         }
 
         return ValueTask.CompletedTask;
     }
 }
-internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
+internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IServicedGamepadParser, IStreamingParser, IDisposable {
     private readonly Lock m_gate = new();
 
     public List<(float Low, float High)> RumbleWrites { get; } = [];
@@ -194,6 +232,9 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public int InitializeCount { get; private set; }
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
     public int ResetCount { get; private set; }
+    public TimeSpan RumbleRefreshInterval { get; init; }
+    public TimeSpan StreamSilenceTimeout { get; init; }
+    public TimeSpan RumbleWriteInterval { get; init; }
     public GamepadType Type => GamepadType.Unknown;
 
     public WirelessSlotEvent ClassifySlotEvent(ReadOnlySpan<byte> report) =>
@@ -211,6 +252,15 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
         lock (m_gate) {
             ++InitializeCount;
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public int ServiceCount { get; private set; }
+
+    public ValueTask ServiceAsync(long timestamp, long timestampFrequency, CancellationToken cancellationToken) {
+        lock (m_gate) {
+            ++ServiceCount;
         }
 
         return ValueTask.CompletedTask;
@@ -251,5 +301,48 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
         state = GamepadState.Neutral;
 
         return false;
+    }
+}
+/// <summary>A parser for the typed output forms: HD rumble, Home LED patterns and trackpad haptics.</summary>
+internal sealed class TestHdParser : IGamepadParser, IRumbleParser, IHdRumbleParser, IHomeLedPatternParser, ITrackpadHapticParser {
+    private readonly Lock m_gate = new();
+
+    public List<(HdRumbleSide Left, HdRumbleSide Right)> HdWrites { get; } = [];
+    public List<TrackpadHapticEffect> Haptics { get; } = [];
+    public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
+    public List<HomeLedPattern> Patterns { get; } = [];
+    public TimeSpan RumbleRefreshInterval => TimeSpan.Zero;
+    public TimeSpan RumbleWriteInterval => TimeSpan.Zero;
+    public TrackpadHapticKinds SupportedTrackpadHaptics => TrackpadHapticKinds.Tone;
+    public GamepadType Type => GamepadType.Unknown;
+
+    public ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    public ValueTask PlayTrackpadHapticAsync(TrackpadHapticEffect effect, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            Haptics.Add(item: effect);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetHdRumbleAsync(HdRumbleSide left, HdRumbleSide right, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            HdWrites.Add(item: (left, right));
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetHomeLedPatternAsync(HomeLedPattern pattern, CancellationToken cancellationToken = default) {
+        lock (m_gate) {
+            Patterns.Add(item: pattern);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException(message: "An HD-rumble parser receives every rumble as HD rumble.");
+    public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
+        state = GamepadState.Neutral;
+
+        return (!report.IsEmpty && (report[0] == 1));
     }
 }

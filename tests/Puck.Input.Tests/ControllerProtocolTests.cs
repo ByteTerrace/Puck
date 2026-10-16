@@ -1,0 +1,754 @@
+using System.Buffers.Binary;
+using System.IO.Hashing;
+using System.Numerics;
+using Puck.Input.Devices;
+using Puck.Input.Hid;
+using Puck.Input.Output;
+using Puck.Platform.Windows.Gamepad;
+
+namespace Puck.Input.Tests;
+
+/// <summary>Pins each controller's wire protocol to the byte layouts of the Linux and SDL drivers it follows:
+/// report shapes, button bits, calibration arithmetic, power decoding and output framing. Running a parser
+/// cannot show these without the physical pad.</summary>
+public sealed class ControllerProtocolTests {
+    private static uint Crc(byte seed, ReadOnlySpan<byte> data) {
+        var crc = new Crc32();
+
+        crc.Append(source: [seed]);
+        crc.Append(source: data);
+
+        return crc.GetCurrentHashAsUInt32();
+    }
+    private static byte[] DualSenseBluetoothReport(Action<Span<byte>> fill) {
+        var report = new byte[78];
+
+        report[0] = 0x31;
+        report[(2 + 7)] = 0x08;   // neutral hat
+        fill(obj: report.AsSpan(start: 2));
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: report.AsSpan(start: 74),
+            value: Crc(
+                data: report.AsSpan(
+                    length: 74,
+                    start: 0
+                ),
+                seed: 0xA1
+            )
+        );
+
+        return report;
+    }
+    private static byte[] DualSenseCalibration() {
+        var report = new byte[41];
+
+        report[0] = 0x05;
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 1), value: 100);    // pitch bias
+        for (var axis = 0; (axis < 3); ++axis) {
+            BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: (7 + (axis * 4))), value: 6144);
+            BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: (9 + (axis * 4))), value: -6144);
+            BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: (23 + (axis * 4))), value: 8192);
+            BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: (25 + (axis * 4))), value: -8192);
+        }
+
+        // Speed+ and speed- of 512 each over a 12288-count span: 1/12 deg/s per count.
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 19), value: 512);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 21), value: 512);
+
+        return report;
+    }
+    private static byte[] DualSenseFirmware(ushort version) {
+        var report = new byte[64];
+
+        report[0] = 0x20;
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: report.AsSpan(start: 44),
+            value: version
+        );
+
+        return report;
+    }
+    private static byte[] DualSenseUsbReport(Action<Span<byte>> fill) {
+        var report = new byte[64];
+
+        report[0] = 0x01;
+        report[(1 + 7)] = 0x08;   // neutral hat
+        fill(obj: report.AsSpan(start: 1));
+
+        return report;
+    }
+    private static byte[] SteamState(uint packet, uint buttons, (short X, short Y) shared, (short X, short Y, short Z) accelerometer = default, (short X, short Y, short Z) gyro = default) {
+        var report = new byte[64];
+
+        report[0] = 0x01;
+        report[2] = 0x01;
+        report[3] = 60;
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: report.AsSpan(start: 4), value: packet);
+        report[8] = ((byte)buttons);
+        report[9] = ((byte)(buttons >> 8));
+        report[10] = ((byte)(buttons >> 16));
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 16), value: shared.X);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 18), value: shared.Y);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 28), value: accelerometer.X);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 30), value: accelerometer.Y);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 32), value: accelerometer.Z);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 34), value: gyro.X);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 36), value: gyro.Y);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: 38), value: gyro.Z);
+
+        return report;
+    }
+    private static byte[] SwitchSubcommandReply(byte[] request) {
+        var reply = new byte[64];
+
+        reply[0] = 0x21;
+        reply[13] = 0x80;
+        reply[14] = request[10];
+        // An SPI read echoes its address and length; the flash reads as erased (0xFF), so calibration falls back.
+        request.AsSpan(
+            length: 5,
+            start: 11
+        ).CopyTo(destination: reply.AsSpan(start: 15));
+        reply.AsSpan(start: 20).Fill(value: 0xFF);
+
+        return reply;
+    }
+    private static byte[] TritonState(byte id, uint buttons, int padShift = 0, ushort rightPressure = 0) {
+        var report = new byte[64];
+
+        report[0] = id;
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: report.AsSpan(start: 2), value: buttons);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination: report.AsSpan(start: (28 + padShift)), value: rightPressure);
+        BinaryPrimitives.WriteInt16LittleEndian(destination: report.AsSpan(start: (24 + padShift)), value: 16384);  // right pad X
+
+        return report;
+    }
+
+    [Fact]
+    public void DualSense_usb_report_decodes_buttons_power_and_touch() {
+        using var hid = new TestHidDevice();
+        var parser = new DualSenseController(device: hid);
+        var report = DualSenseUsbReport(fill: block => {
+            block[7] = 0x28;      // Cross, neutral hat
+            block[8] = 0x20;      // Options
+            block[9] = 0xF4;      // mute, plus the Edge-only bits a standard pad must ignore
+            block[32] = 0x80;     // touch 0 lifted
+            block[36] = 0x05;     // touch 1 down, id 5, at (1919, 1079)
+            block[37] = 0x7F;
+            block[38] = 0x77;
+            block[39] = 0x43;
+            block[52] = 0x15;     // charging, 55 %
+        });
+
+        Assert.True(condition: parser.TryParse(report: report, state: out var state));
+        Assert.Equal(expected: GamepadButtons.ButtonSouth | GamepadButtons.Start | GamepadButtons.Mute, actual: state.Buttons);
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.Charging, Percent: 55), actual: state.Power);
+        Assert.False(condition: state.Touch0.IsActive);
+        Assert.Equal(expected: new GamepadTouchPoint(IsActive: true, Id: 5, Position: Vector2.One), actual: state.Touch1);
+        Assert.False(condition: parser.TryParse(report: report[..10], state: out _));
+    }
+    [Fact]
+    public void DualSense_edge_reports_its_function_buttons_and_back_paddles() {
+        using var hid = new TestHidDevice { ProductId = 0x0DF2, };
+        var parser = new DualSenseController(device: hid);
+
+        Assert.True(condition: parser.TryParse(report: DualSenseUsbReport(fill: block => block[9] = 0xF0), state: out var state));
+        Assert.Equal(
+            expected: GamepadButtons.LeftFunction | GamepadButtons.RightFunction | GamepadButtons.LeftGrip | GamepadButtons.RightGrip,
+            actual: state.Buttons
+        );
+    }
+    [Fact]
+    public void DualSense_bluetooth_accepts_a_checked_full_report_and_the_simple_report_and_drops_a_corrupt_one() {
+        using var hid = new TestHidDevice { Transport = HidTransport.Bluetooth, };
+        var parser = new DualSenseController(device: hid);
+        var full = DualSenseBluetoothReport(fill: block => block[52] = 0x2A);
+        var simple = new byte[] { 0x01, 0x80, 0x80, 0x80, 0x80, 0x88, 0x00, 0x00, 0xFF, 0x00, };
+
+        Assert.True(condition: parser.TryParse(report: full, state: out var state));
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.Charged, Percent: 100), actual: state.Power);
+
+        full[10] ^= 0x01;
+        Assert.False(condition: parser.TryParse(report: full, state: out _));
+
+        Assert.True(condition: parser.TryParse(report: simple, state: out var simpleState));
+        Assert.Equal(expected: GamepadButtons.ButtonNorth, actual: simpleState.Buttons);
+        Assert.Equal(expected: 1f, actual: simpleState.LeftTrigger);
+    }
+    [Fact]
+    public async Task DualSense_applies_factory_calibration_and_picks_rumble_emulation_by_firmware() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var current = new TestHidDevice { FeatureReports = id => id switch { 0x05 => DualSenseCalibration(), 0x20 => DualSenseFirmware(version: 0x0224), _ => null, }, };
+        using var legacy = new TestHidDevice { FeatureReports = id => id switch { 0x20 => DualSenseFirmware(version: 0x0215), _ => null, }, };
+        var currentParser = new DualSenseController(device: current);
+        var legacyParser = new DualSenseController(device: legacy);
+
+        await currentParser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+        await legacyParser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+        await currentParser.SetRumbleAsync(lowFrequency: 1f, highFrequency: 1f, cancellationToken: cancellationToken);
+        await legacyParser.SetRumbleAsync(lowFrequency: 1f, highFrequency: 1f, cancellationToken: cancellationToken);
+
+        // Initialization releases the connection light animation in its own report, then writes the state.
+        Assert.Equal(expected: 0x08, actual: current.Writes[0][2]);
+        Assert.Equal(expected: 0x24, actual: current.Writes[1][(1 + 43)]);   // player 1, instant
+        Assert.Equal(expected: 0x05, actual: current.Writes[1][(1 + 10)]);   // the official trigger-off mode
+
+        var currentRumble = current.Writes[^1];
+        var legacyRumble = legacy.Writes[^1];
+
+        Assert.Equal(expected: 0x04, actual: currentRumble[(1 + 38)]);
+        Assert.Equal(expected: 0, actual: (currentRumble[1] & 0x01));
+        Assert.Equal(expected: 255, actual: currentRumble[(1 + 3)]);
+        Assert.Equal(expected: 0x01, actual: (legacyRumble[1] & 0x01));
+        Assert.Equal(expected: 127, actual: legacyRumble[(1 + 3)]);
+
+        // Pitch reads (1300 - 100) counts at 1/12 deg/s each.
+        Assert.True(condition: currentParser.TryParse(
+            report: DualSenseUsbReport(fill: block => BinaryPrimitives.WriteInt16LittleEndian(destination: block[15..], value: 1300)),
+            state: out var state
+        ));
+        Assert.Equal(expected: (100f * (MathF.PI / 180f)), actual: state.Gyro.X, tolerance: 1e-4f);
+    }
+    [Fact]
+    public async Task DualSense_mute_press_toggles_the_microphone_and_its_light_once_per_press() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new DualSenseController(device: hid);
+        var held = DualSenseUsbReport(fill: block => block[9] = 0x04);
+
+        Assert.True(condition: parser.TryParse(report: held, state: out _));
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+        Assert.True(condition: parser.TryParse(report: held, state: out _));
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+
+        var write = Assert.Single(collection: hid.Writes);
+
+        Assert.Equal(expected: 0x01, actual: write[(1 + 8)]);
+        Assert.Equal(expected: 0x10, actual: write[(1 + 9)]);
+    }
+    [Fact]
+    public async Task Switch_encodes_hd_rumble_through_the_amplitude_table_and_spaces_every_output_report() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new NintendoSwitchController(device: hid, timeProvider: hid.Time);
+        var spacing = TimeSpan.FromMilliseconds(value: 20);
+
+        await parser.SetRumbleAsync(lowFrequency: 0f, highFrequency: 0f, cancellationToken: cancellationToken);
+        await parser.SetRumbleAsync(lowFrequency: 1f, highFrequency: 1f, cancellationToken: cancellationToken);
+        Assert.Single(collection: hid.Writes);
+
+        // The held rumble goes out once the USB spacing has passed, carried by the service hook.
+        hid.Time.Advance(by: spacing);
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+        hid.Time.Advance(by: spacing);
+        await parser.SetRumbleAsync(lowFrequency: (9.5f / 1003f), highFrequency: (9.5f / 1003f), cancellationToken: cancellationToken);
+
+        Assert.Equal(expected: [0x10, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40,], actual: hid.Writes[0][..10]);
+        Assert.Equal(expected: [0x00, 0xC9, 0x40, 0x72,], actual: hid.Writes[1][2..6]);
+        Assert.Equal(expected: [0x00, 0x03, 0xC0, 0x40,], actual: hid.Writes[2][2..6]);
+        Assert.Equal(expected: [0x00, 0x01, 0x02,], actual: hid.Writes.Select(write => write[1]).ToArray());
+    }
+    [Fact]
+    public void Switch_full_report_decodes_capture_home_battery_and_digital_triggers() {
+        using var hid = new TestHidDevice();
+        var parser = new NintendoSwitchController(device: hid);
+        var report = new byte[49];
+
+        report[0] = 0x30;
+        report[2] = 0x91;     // full and charging, cable powered
+        report[3] = 0x80;     // ZR
+        report[4] = 0x30;     // Home, Capture
+        report[5] = 0x02;     // up
+
+        Assert.True(condition: parser.TryParse(report: report, state: out var state));
+        Assert.Equal(expected: GamepadButtons.Capture | GamepadButtons.Guide | GamepadButtons.DpadUp, actual: state.Buttons);
+        Assert.Equal(expected: 1f, actual: state.RightTrigger);
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.Charging, Percent: 100), actual: state.Power);
+        Assert.Equal(expected: Quaternion.Identity, actual: state.Orientation);
+
+        report[0] = 0x21;
+        report[2] = 0x81;     // full, cable powered, not charging
+        Assert.True(condition: parser.TryParse(report: report[..13], state: out var reply));
+        Assert.Equal(expected: GamepadPowerState.Charged, actual: reply.Power.State);
+        Assert.False(condition: parser.TryParse(report: report[..12], state: out _));
+    }
+    [Fact]
+    public async Task Switch_bluetooth_initialization_skips_the_usb_handshake_and_enables_imu_report_mode_and_vibration() {
+        using var hid = new TestHidDevice {
+            OutputReportByteLength = 49,
+            Responder = request => ((request[0] == 0x01) ? [SwitchSubcommandReply(request: request)] : null),
+            Transport = HidTransport.Bluetooth,
+        };
+        var parser = new NintendoSwitchController(device: hid);
+
+        await parser.InitializeAsync(playerIndex: 1, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.All(collection: hid.Writes, action: write => Assert.Equal(expected: 49, actual: write.Length));
+        Assert.DoesNotContain(collection: hid.Writes, filter: write => (write[0] == 0x80));
+
+        var subcommands = hid.Writes.Select(write => (write[10], write[11])).ToArray();
+
+        Assert.Contains(expected: ((byte)0x40, (byte)0x01), collection: subcommands);
+        Assert.Contains(expected: ((byte)0x03, (byte)0x30), collection: subcommands);
+        Assert.Contains(expected: ((byte)0x48, (byte)0x01), collection: subcommands);
+        Assert.Contains(expected: ((byte)0x30, (byte)0x03), collection: subcommands);
+    }
+    [Fact]
+    public void Steam_decodes_the_shared_pad_and_stick_field_and_maps_its_imu() {
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        // Finger on the left pad: the shared field is the pad.
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 1, buttons: 0x080000, shared: (0, 0)), state: out var pad));
+        Assert.True(condition: pad.Touch1.IsActive);
+        Assert.Equal(expected: Vector2.Zero, actual: pad.LeftStick);
+
+        // Interleaved: the shared field is now the stick, and the pad keeps its last position.
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 2, buttons: 0x800000, shared: (32767, 0)), state: out var both));
+        Assert.Equal(expected: 1f, actual: both.LeftStick.X, tolerance: 1e-3f);
+        Assert.Equal(expected: pad.Touch1, actual: both.Touch1);
+
+        // No finger and no interleave: a left-pad click is the stick click on older firmware.
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 3, buttons: 0x020000, shared: (0, 0)), state: out var click));
+        Assert.Equal(expected: GamepadButtons.LeftStickPress, actual: click.Buttons);
+        Assert.False(condition: click.Touch1.IsActive);
+
+        Assert.True(condition: parser.TryParse(
+            report: SteamState(packet: 4, buttons: 0, shared: (0, 0), accelerometer: (0, 0, 16384), gyro: (1000, 2000, 3000)),
+            state: out var motion
+        ));
+        Assert.Equal(expected: new Vector3(x: 0f, y: 1f, z: 0f), actual: motion.Accelerometer);
+        Assert.Equal(expected: (motion.Gyro.Y / 3000f), actual: (motion.Gyro.Z / 2000f), tolerance: 1e-6f);
+
+        // A repeated packet carries no new sample, so the pose does not move.
+        Assert.True(condition: parser.TryParse(
+            report: SteamState(packet: 4, buttons: 0, shared: (0, 0), accelerometer: (0, 0, 16384), gyro: (30000, 0, 0)),
+            state: out var repeated
+        ));
+        Assert.Equal(expected: motion.Orientation, actual: repeated.Orientation);
+    }
+    [Fact]
+    public void Steam_classifies_receiver_events_and_reports_wireless_battery() {
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        Assert.Equal(expected: WirelessSlotEvent.Connected, actual: parser.ClassifySlotEvent(report: [0x01, 0x00, 0x03, 0x01, 0x02,]));
+        Assert.Equal(expected: WirelessSlotEvent.Connected, actual: parser.ClassifySlotEvent(report: [0x01, 0x00, 0x03, 0x01, 0x03,]));
+        Assert.Equal(expected: WirelessSlotEvent.Disconnected, actual: parser.ClassifySlotEvent(report: [0x01, 0x00, 0x03, 0x01, 0x01,]));
+        Assert.Equal(expected: WirelessSlotEvent.None, actual: parser.ClassifySlotEvent(report: [0x01, 0x00, 0x03, 0x00, 0x02,]));
+
+        var status = new byte[64];
+
+        status[0] = 0x01;
+        status[2] = 0x04;
+        status[14] = 77;
+
+        Assert.False(condition: parser.TryParse(report: status, state: out _));
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 1, buttons: 0x80, shared: (0, 0)), state: out _));
+        Assert.True(condition: parser.TryParse(report: status, state: out var state));
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.OnBattery, Percent: 77), actual: state.Power);
+        Assert.Equal(expected: GamepadButtons.ButtonSouth, actual: state.Buttons);
+    }
+    [Fact]
+    public async Task Steam_initialization_enables_raw_imu_and_rumble_sets_pulse_duty_per_pad() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+        await parser.SetRumbleAsync(lowFrequency: 0.5f, highFrequency: 0f, cancellationToken: cancellationToken);
+
+        var settings = hid.FeatureWrites[1];
+
+        Assert.Equal(expected: 0x87, actual: settings[1]);
+        Assert.Equal(expected: [48, 0x18, 0x00,], actual: settings[15..18]);
+
+        var left = hid.FeatureWrites[^2];
+        var right = hid.FeatureWrites[^1];
+
+        Assert.Equal(expected: [0x8F, 8, 1,], actual: left[1..4]);
+        Assert.Equal(expected: 650, actual: BinaryPrimitives.ReadUInt16LittleEndian(source: left.AsSpan(start: 4)));
+        Assert.Equal(expected: 650, actual: BinaryPrimitives.ReadUInt16LittleEndian(source: left.AsSpan(start: 6)));
+        Assert.Equal(expected: 47, actual: BinaryPrimitives.ReadUInt16LittleEndian(source: left.AsSpan(start: 8)));
+        Assert.Equal(expected: 0, actual: BinaryPrimitives.ReadUInt16LittleEndian(source: right.AsSpan(start: 8)));
+    }
+    [Fact]
+    public void Triton_reads_pad_pressure_in_both_layouts_and_reports_battery_and_pairing() {
+        using var hid = new TestHidDevice();
+        using var parser = new SteamControllerTriton(device: hid);
+        const uint RightPadTouch = (1u << 21);
+
+        Assert.False(condition: parser.TryParse(report: [0x43, 0x02, 60,], state: out _));
+        Assert.True(condition: parser.TryParse(report: TritonState(id: 0x42, buttons: RightPadTouch, rightPressure: 16384), state: out var state));
+        Assert.Equal(expected: 0.5f, actual: state.Touch0.Pressure);
+        Assert.Equal(expected: 0.75f, actual: state.Touch0.Position.X);
+        Assert.True(condition: parser.TryParse(report: TritonState(id: 0x47, buttons: RightPadTouch, padShift: 2, rightPressure: 32768), state: out var shifted));
+        Assert.Equal(expected: 1f, actual: shifted.Touch0.Pressure);
+        Assert.Equal(expected: 0.75f, actual: shifted.Touch0.Position.X);
+        Assert.True(condition: parser.TryParse(report: [0x43, 0x02, 60,], state: out var charging));
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.Charging, Percent: 60), actual: charging.Power);
+
+        Assert.Equal(expected: WirelessSlotEvent.Disconnected, actual: parser.ClassifySlotEvent(report: [0x79, 0x01,]));
+        Assert.Equal(expected: WirelessSlotEvent.Connected, actual: parser.ClassifySlotEvent(report: [0x79, 0x03,]));
+        Assert.Equal(expected: WirelessSlotEvent.Connected, actual: parser.ClassifySlotEvent(report: [0x46, 0x02,]));
+        Assert.Equal(expected: WirelessSlotEvent.None, actual: parser.ClassifySlotEvent(report: [0x79, 0x09,]));
+    }
+    [Fact]
+    public async Task Triton_turns_lizard_mode_and_its_watchdog_off_together_and_restores_the_defaults_on_release() {
+        var hid = new TestHidDevice();
+        var parser = new SteamControllerTriton(device: hid);
+
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: TestContext.Current.CancellationToken);
+        parser.Dispose();
+
+        Assert.Equal(expected: [0x01, 0x81, 0x00,], actual: hid.FeatureWrites[0][..3]);
+        Assert.Equal(expected: [0x01, 0x87, 9, 9, 0, 0, 71, 0, 0, 48, 0x18, 0x00,], actual: hid.FeatureWrites[1][..12]);
+        Assert.Equal(expected: [0x01, 0x85, 0x00,], actual: hid.FeatureWrites[2][..3]);
+        Assert.Equal(expected: [0x01, 0x8E, 0x00,], actual: hid.FeatureWrites[3][..3]);
+        hid.Dispose();
+    }
+    [Fact]
+    public async Task Triton_encodes_every_trackpad_haptic_as_valve_lays_it_out() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice { OutputReportByteLength = 64, };
+        using var parser = new SteamControllerTriton(device: hid);
+
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Left, onMicroseconds: 400, offMicroseconds: 100, repeat: 3), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Builtin(side: TrackpadSide.Right, command: TrackpadHapticCommand.Click, gainDecibels: -6), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Both, frequencyHertz: 200, durationMilliseconds: 500, lfoFrequencyHertz: 4, lfoDepthPercent: 150), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.LogSweep(side: TrackpadSide.Left, startHertz: 100, endHertz: 800, durationMilliseconds: 300, gainDecibels: 3), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.StoredScript(side: TrackpadSide.Right, scriptId: 5), cancellationToken: cancellationToken);
+        await parser.PlayTrackpadHapticAsync(effect: default, cancellationToken: cancellationToken);
+
+        Assert.Equal(expected: 5, actual: hid.Writes.Count);
+        Assert.All(collection: hid.Writes, action: write => Assert.Equal(expected: 64, actual: write.Length));
+        Assert.Equal(expected: [0x81, 1, 0x90, 0x01, 100, 0, 3, 0,], actual: hid.Writes[0][..8]);
+        Assert.Equal(expected: [0x82, 2, 2, 0xFA,], actual: hid.Writes[1][..4]);
+        Assert.Equal(expected: [0x83, 3, 0, 200, 0, 0xF4, 0x01, 4, 0, 100,], actual: hid.Writes[2][..10]);
+        Assert.Equal(expected: [0x84, 1, 3, 0x2C, 0x01, 100, 0, 0x20, 0x03,], actual: hid.Writes[3][..9]);
+        Assert.Equal(expected: [0x85, 2, 5, 0,], actual: hid.Writes[4][..4]);
+    }
+    [Fact]
+    public void Steam_plays_pulse_haptics_only() {
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        Assert.Equal(expected: TrackpadHapticKinds.Pulse, actual: parser.SupportedTrackpadHaptics);
+        Assert.True(condition: parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Both, onMicroseconds: 300, offMicroseconds: 200, repeat: 2, gainDecibels: -3), cancellationToken: TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+        Assert.True(condition: parser.PlayTrackpadHapticAsync(effect: TrackpadHapticEffect.Builtin(side: TrackpadSide.Left, command: TrackpadHapticCommand.Tick), cancellationToken: TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+
+        Assert.Equal(expected: [0x00, 0x8F, 8, 2, 0x2C, 0x01, 0xC8, 0x00, 2, 0, 0xFD,], actual: Assert.Single(collection: hid.FeatureWrites)[..11]);
+    }
+    [Fact]
+    public async Task Switch_encodes_hd_rumble_carriers_and_home_led_patterns() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new NintendoSwitchController(device: hid, timeProvider: hid.Time);
+        var spacing = TimeSpan.FromMilliseconds(value: 20);
+        var left = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 1f, FrequencyHertz: 1253f), Low: new HdRumbleBand(Amplitude: 1f, FrequencyHertz: 41f));
+        var right = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 0f, FrequencyHertz: 5000f), Low: new HdRumbleBand(Amplitude: 0f, FrequencyHertz: 1f));
+
+        await parser.SetHdRumbleAsync(left: left, right: right, cancellationToken: cancellationToken);
+        // 1253 Hz is the 9-bit high code 0x1FC and 41 Hz the low code 0x01; the right side clamps to 1253 Hz and 41 Hz.
+        Assert.Equal(expected: [0xFC, 0xC9, 0x01, 0x72, 0xFC, 0x01, 0x01, 0x40,], actual: hid.Writes[0][2..10]);
+
+        hid.Time.Advance(by: spacing);
+        await parser.SetHomeLedPatternAsync(
+            pattern: new HomeLedPattern(
+                Repeat: 2,
+                StartIntensity: 3,
+                StepDuration: TimeSpan.FromMilliseconds(value: 175),
+                Steps: [
+                    new HomeLedStep(FadeSteps: 4, HoldSteps: 5, Intensity: 15),
+                    new HomeLedStep(FadeSteps: 6, HoldSteps: 7, Intensity: 0),
+                    new HomeLedStep(FadeSteps: 1, HoldSteps: 2, Intensity: 9),
+                ]
+            ),
+            cancellationToken: cancellationToken
+        );
+        // Three steps at the 175 ms base (code 15), start 3, twice; then the steps paired: intensities, timings.
+        Assert.Equal(expected: 0x01, actual: hid.Writes[1][0]);
+        Assert.Equal(expected: [0x38, 0x3F, 0x32, 0xF0, 0x45, 0x67, 0x90, 0x12,], actual: hid.Writes[1][10..18]);
+
+        hid.Time.Advance(by: spacing);
+        await parser.SetLedAsync(color: new LedColor(Red: 255, Green: 0, Blue: 0), cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x38, 0x11, 0xF0, 0xF0, 0x01,], actual: hid.Writes[2][10..15]);
+
+        // No steps: the start intensity holds, so the repeat nibble is cleared.
+        hid.Time.Advance(by: spacing);
+        await parser.SetHomeLedPatternAsync(pattern: new HomeLedPattern(Repeat: 5, StartIntensity: 7, StepDuration: TimeSpan.FromMilliseconds(value: 8), Steps: []), cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x38, 0x01, 0x70,], actual: hid.Writes[3][10..13]);
+
+        // A NaN amplitude is rest, never full strength.
+        hid.Time.Advance(by: spacing);
+        await parser.SetHdRumbleAsync(left: new HdRumbleSide(High: new HdRumbleBand(Amplitude: float.NaN, FrequencyHertz: 0f), Low: new HdRumbleBand(Amplitude: -1f, FrequencyHertz: 0f)), right: HdRumbleSide.Rest, cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x00, 0x01, 0x40, 0x40,], actual: hid.Writes[4][2..6]);
+    }
+    [Fact]
+    public async Task Switch_reads_its_stick_deadzone_from_flash_and_keeps_usb_alive_when_reports_stop() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        static byte[] Reply(byte[] request) {
+            var reply = SwitchSubcommandReply(request: request);
+
+            if ((request[10] == 0x10) && (BinaryPrimitives.ReadUInt32LittleEndian(source: request.AsSpan(start: 11)) is 0x6086U or 0x6098U)) {
+                reply.AsSpan(start: 20).Clear();
+                reply[(20 + 3)] = 0xB4;   // deadzone 180 counts, against the nominal 1800-count travel
+            }
+
+            return reply;
+        }
+        using var hid = new TestHidDevice {
+            Responder = request => request[0] switch {
+                0x80 => [[0x81, request[1],]],
+                0x01 => [Reply(request: request)],
+                _ => null,
+            },
+        };
+        var parser = new NintendoSwitchController(device: hid, timeProvider: hid.Time);
+        var full = new byte[49];
+
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+
+        // Left stick x at 2048 + 198 (0.11 of the nominal travel), y centred at 2048: past the pad's 0.1 deadzone but
+        // inside the 0.12 default, so only the deadzone read from flash lets it through.
+        full[0] = 0x30;
+        full[6] = 0xC6;
+        full[7] = 0x08;
+        full[8] = 0x80;
+        BinaryPrimitives.WriteInt16LittleEndian(destination: full.AsSpan(start: 13), value: 4096);
+
+        Assert.True(condition: parser.TryParse(report: full, state: out var state));
+        Assert.True(condition: (state.LeftStick.X > 0f));
+
+        var writes = hid.Writes.Count;
+
+        hid.Time.Advance(by: TimeSpan.FromMilliseconds(value: 100));
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+
+        Assert.Equal(expected: (writes + 1), actual: hid.Writes.Count);
+        Assert.Equal(expected: [0x80, 0x04,], actual: hid.Writes[^1][..2]);
+    }
+    [Fact]
+    public void Xbox_identity_and_battery_map_to_the_family_and_power_vocabulary() {
+        Assert.Equal(expected: GamepadType.XboxSeries, actual: XInputGamepadConnection.ClassifyType(vendorId: 0x045E, productId: 0x0B12));
+        Assert.Equal(expected: GamepadType.XboxOne, actual: XInputGamepadConnection.ClassifyType(vendorId: 0x045E, productId: 0x0B00));
+        Assert.Equal(expected: GamepadType.XboxOne, actual: XInputGamepadConnection.ClassifyType(vendorId: 0x0E6F, productId: 0x0B12));
+        Assert.Equal(
+            expected: new GamepadPower(State: GamepadPowerState.NoBattery, Percent: 0),
+            actual: XInputGamepadConnection.ToPower(information: new XInputBatteryInformation { BatteryType = XInput.BatteryTypeWired, })
+        );
+        Assert.Equal(
+            expected: new GamepadPower(State: GamepadPowerState.OnBattery, Percent: 70),
+            actual: XInputGamepadConnection.ToPower(information: new XInputBatteryInformation { BatteryLevel = 2, BatteryType = XInput.BatteryTypeAlkaline, })
+        );
+        Assert.Equal(
+            expected: GamepadPower.Unknown,
+            actual: XInputGamepadConnection.ToPower(information: new XInputBatteryInformation { BatteryType = 0xFF, })
+        );
+    }
+    [Fact]
+    public void Xbox_feeds_a_state_once_per_packet_and_stamps_its_arrival() {
+        var clock = new ManualInputClock { NowTicks = 42UL, };
+        using var connection = new XInputGamepadConnection(
+            clock: clock,
+            deviceId: Puck.Commands.InputDeviceId.New(),
+            haptics: null,
+            playerIndex: 0,
+            slot: 0u,
+            type: GamepadType.XboxSeries
+        );
+        var state = new XInputState { PacketNumber = 7, Gamepad = new XInputGamepad { Buttons = 0x1000, }, };
+
+        connection.Apply(state: in state);
+        clock.NowTicks = 43UL;
+        connection.Apply(state: in state);
+
+        Assert.Equal(expected: 42UL, actual: connection.Coalescer.Latest.ArrivalTicks);
+        Assert.Equal(expected: 1UL, actual: connection.Coalescer.Latest.SequenceNumber);
+
+        connection.ApplyBattery(information: new XInputBatteryInformation { BatteryLevel = 3, BatteryType = XInput.BatteryTypeNickelMetalHydride, });
+        connection.Apply(state: in state);
+
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.OnBattery, Percent: 100), actual: connection.Coalescer.Latest.Power);
+        Assert.Equal(expected: GamepadButtons.ButtonSouth, actual: connection.Coalescer.Latest.Buttons);
+    }
+
+    [Fact]
+    public async Task Switch_initialization_faults_when_vibration_is_never_acknowledged() {
+        using var hid = new TestHidDevice {
+            Responder = request => request[0] switch {
+                0x80 => [[0x81, request[1],]],
+                // Sixteen refusals per attempt: every reply read sees the vibration subcommand unacknowledged.
+                0x01 when (request[10] == 0x48) => Enumerable.Range(start: 0, count: 16).Select(_ => {
+                    var reply = SwitchSubcommandReply(request: request);
+
+                    reply[13] = 0x00;
+
+                    return reply;
+                }).ToArray(),
+                0x01 => [SwitchSubcommandReply(request: request)],
+                _ => null,
+            },
+        };
+        var parser = new NintendoSwitchController(device: hid);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(testCode: async () => await parser.InitializeAsync(playerIndex: 0, cancellationToken: TestContext.Current.CancellationToken));
+    }
+    [Fact]
+    public void Switch_replies_and_silent_imu_reports_are_not_motion_samples_and_bad_battery_levels_are_unknown() {
+        using var hid = new TestHidDevice();
+        var parser = new NintendoSwitchController(device: hid);
+        var reply = new byte[13];
+        var full = new byte[49];
+
+        reply[0] = 0x21;
+        full[0] = 0x30;
+        full[2] = 0xE0;       // level 7 is not a charge the pad reports
+        BinaryPrimitives.WriteInt16LittleEndian(destination: full.AsSpan(start: 13), value: 4096);
+
+        Assert.False(condition: parser.TryParse(report: reply, state: out _));
+        Assert.True(condition: parser.TryParse(report: full, state: out var sample));
+        Assert.True(condition: sample.IsMotionSample);
+        Assert.Equal(expected: GamepadPower.Unknown, actual: sample.Power);
+        Assert.True(condition: parser.TryParse(report: reply, state: out var control));
+        Assert.False(condition: control.IsMotionSample);
+        Assert.Equal(expected: sample.Accelerometer, actual: control.Accelerometer);
+
+        full.AsSpan(start: 13).Clear();
+        Assert.True(condition: parser.TryParse(report: full, state: out var silent));
+        Assert.False(condition: silent.IsMotionSample);
+    }
+    [Fact]
+    public void Steam_reports_trigger_detents_and_drops_a_stale_stick_when_the_pad_takes_over() {
+        using var hid = new TestHidDevice();
+        var parser = new SteamController(device: hid);
+
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 1, buttons: 0x000003, shared: (32767, 0)), state: out var detents));
+        Assert.Equal(expected: GamepadButtons.LeftTriggerClick | GamepadButtons.RightTriggerClick, actual: detents.Buttons);
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 2, buttons: 0x080000, shared: (0, 0)), state: out _));
+        Assert.True(condition: parser.TryParse(report: SteamState(packet: 3, buttons: 0x880000, shared: (0, 0)), state: out var interleaved));
+        Assert.Equal(expected: Vector2.Zero, actual: interleaved.LeftStick);
+    }
+    [Fact]
+    public void Triton_reports_capacitive_sense_and_trigger_clicks_and_an_unvalidated_charger_as_unknown() {
+        using var hid = new TestHidDevice();
+        using var parser = new SteamControllerTriton(device: hid);
+        const uint Sense = ((1u << 20) | (1u << 23) | (1u << 24) | (1u << 27) | (1u << 28) | (1u << 29));
+
+        Assert.True(condition: parser.TryParse(report: TritonState(id: 0x45, buttons: Sense), state: out var state));
+        Assert.Equal(
+            expected: GamepadButtons.LeftStickTouch | GamepadButtons.RightStickTouch | GamepadButtons.LeftTriggerClick |
+                GamepadButtons.RightTriggerClick | GamepadButtons.LeftGripTouch | GamepadButtons.RightGripTouch,
+            actual: state.Buttons
+        );
+        Assert.True(condition: parser.TryParse(report: [0x43, 0x03, 50,], state: out var validating));
+        Assert.Equal(expected: GamepadPower.Unknown, actual: validating.Power);
+        Assert.False(condition: validating.IsMotionSample);
+    }
+    [Fact]
+    public void DualSense_reports_jack_presence_and_a_charger_fault() {
+        using var hid = new TestHidDevice();
+        var parser = new DualSenseController(device: hid);
+
+        Assert.True(condition: parser.TryParse(report: DualSenseUsbReport(fill: block => {
+            block[52] = 0xA4;
+            block[53] = 0x03;
+        }), state: out var state));
+        Assert.Equal(expected: new GamepadPower(State: GamepadPowerState.NotCharging, Percent: 45), actual: state.Power);
+        Assert.Equal(expected: GamepadAccessories.Headphones | GamepadAccessories.Microphone, actual: state.Accessories);
+    }
+    [Fact]
+    public async Task DualSense_bluetooth_checks_feature_crcs_reads_its_address_and_releases_the_light_bar_after_the_connection_animation() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        static byte[] Sealed(byte[] report) {
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                destination: report.AsSpan(start: (report.Length - 4)),
+                value: Crc(data: report.AsSpan(length: (report.Length - 4), start: 0), seed: 0xA3)
+            );
+
+            return report;
+        }
+        var pairing = new byte[20];
+
+        pairing[0] = 0x09;
+        pairing[1] = 0x4B;
+        pairing[6] = 0x48;
+
+        using var corrupt = new TestHidDevice { FeatureReports = id => ((id == 0x05) ? DualSenseCalibration() : null), Transport = HidTransport.Bluetooth, };
+        using var hid = new TestHidDevice {
+            FeatureReports = id => id switch { 0x05 => Sealed(report: DualSenseCalibration()), 0x09 => Sealed(report: pairing), _ => null, },
+            Transport = HidTransport.Bluetooth,
+        };
+        var corruptParser = new DualSenseController(device: corrupt);
+        var parser = new DualSenseController(device: hid);
+        var gyro = DualSenseBluetoothReport(fill: block => BinaryPrimitives.WriteInt16LittleEndian(destination: block[15..], value: 1300));
+
+        await corruptParser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+        await parser.InitializeAsync(playerIndex: 0, cancellationToken: cancellationToken);
+
+        Assert.True(condition: corruptParser.TryParse(report: gyro, state: out var nominal));
+        Assert.True(condition: parser.TryParse(report: gyro, state: out var calibrated));
+        Assert.Equal(expected: (1300f / 16f) * (MathF.PI / 180f), actual: nominal.Gyro.X, tolerance: 1e-4f);
+        Assert.Equal(expected: (100f * (MathF.PI / 180f)), actual: calibrated.Gyro.X, tolerance: 1e-4f);
+        Assert.Equal(expected: "48000000004B", actual: parser.PhysicalId);
+        Assert.Null(corruptParser.PhysicalId);
+
+        var writes = hid.Writes.Count;
+
+        Assert.True(condition: parser.TryParse(
+            report: DualSenseBluetoothReport(fill: block => BinaryPrimitives.WriteUInt32LittleEndian(destination: block[27..], value: 10_200_000u)),
+            state: out _
+        ));
+        await parser.ServiceAsync(timestamp: 0L, timestampFrequency: 1L, cancellationToken: cancellationToken);
+
+        Assert.Equal(expected: (writes + 2), actual: hid.Writes.Count);
+        Assert.Equal(expected: 0x08, actual: hid.Writes[writes][(3 + 1)]);
+        Assert.Equal(expected: 0x14, actual: hid.Writes[(writes + 1)][(3 + 1)] & 0x14);
+    }
+    [Fact]
+    public async Task One_dualsense_on_usb_and_bluetooth_at_once_counts_once() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        static byte[] Pairing(bool bluetooth) {
+            var report = new byte[20];
+
+            report[0] = 0x09;
+            report[1] = 0x4B;
+
+            if (bluetooth) {
+                BinaryPrimitives.WriteUInt32LittleEndian(
+                    destination: report.AsSpan(start: 16),
+                    value: Crc(data: report.AsSpan(length: 16, start: 0), seed: 0xA3)
+                );
+            }
+
+            return report;
+        }
+        using var usb = new TestHidDevice { DevicePath = "test:usb", FeatureReports = id => ((id == 0x09) ? Pairing(bluetooth: false) : null), ProductId = 0x0CE6, VendorId = 0x054C, };
+        using var bluetooth = new TestHidDevice { DevicePath = "test:bt", FeatureReports = id => ((id == 0x09) ? Pairing(bluetooth: true) : null), ProductId = 0x0CE6, Transport = HidTransport.Bluetooth, VendorId = 0x054C, };
+
+        bluetooth.EnqueueReport(report: DualSenseBluetoothReport(fill: _ => { }));
+        usb.EnqueueReport(report: DualSenseUsbReport(fill: _ => { }));
+
+        using var manager = new GamepadManager(
+            clock: new ManualInputClock(),
+            hidSource: new TestHidDeviceSource(usb, bluetooth)
+        );
+        var drains = new List<GamepadDrain>();
+
+        manager.Start();
+
+        // Both connections initialize on their own I/O loops (each retries an unanswered calibration read for
+        // about a third of a second); poll until the Bluetooth twin is held back.
+        for (var attempt = 0; ((attempt < 200) && (manager.ConnectedDevices().Count != 1 || drains.Count != 1)); ++attempt) {
+            await Task.Delay(millisecondsDelay: 20, cancellationToken: cancellationToken);
+            manager.Drain(buffer: drains);
+        }
+
+        var device = Assert.Single(collection: manager.ConnectedDevices());
+
+        Assert.True(condition: manager.TryGetType(deviceId: device, type: out var type));
+        Assert.Equal(expected: GamepadType.PlayStation5, actual: type);
+        _ = Assert.Single(collection: drains);
+    }
+}

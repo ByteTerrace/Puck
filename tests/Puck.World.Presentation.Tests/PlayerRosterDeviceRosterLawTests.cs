@@ -1,6 +1,7 @@
 using Xunit;
 
 using Puck.Commands;
+using Puck.Input.Devices;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -275,6 +276,75 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         Assert.Contains(
             expectedSubstring: "p2 empty",
             actualString: roster.Describe()
+        );
+    }
+    [Theory]
+    [InlineData(GamepadPowerState.OnBattery, 94, GamepadAccessories.None, "battery 94%")]
+    [InlineData(GamepadPowerState.Charging, 55, GamepadAccessories.Headphones, "charging 55% headphones")]
+    [InlineData(GamepadPowerState.NotCharging, 45, GamepadAccessories.Microphone, "not charging 45% microphone")]
+    [InlineData(GamepadPowerState.Charged, 100, GamepadAccessories.Headphones | GamepadAccessories.Microphone, "charged headset")]
+    [InlineData(GamepadPowerState.NoBattery, 0, GamepadAccessories.None, "wired")]
+    [InlineData(GamepadPowerState.Unknown, 0, GamepadAccessories.Microphone, "microphone")]
+    [InlineData(GamepadPowerState.Unknown, 0, GamepadAccessories.None, null)]
+    public void GamepadStatusText_SpellsPowerThenAccessories(GamepadPowerState state, byte percent, GamepadAccessories accessories, string? expected) =>
+        Assert.Equal(
+            expected: expected,
+            actual: GamepadStatusText.Describe(
+                accessories: accessories,
+                power: new GamepadPower(
+                    Percent: percent,
+                    State: state
+                )
+            )
+        );
+    [Fact]
+    public void DescribeDevices_AppendsTheGamepadStatus_AndLeavesEveryOtherKindBare() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var keyboard = InputDeviceId.FromKey(key: "keyboard:1");
+        var pad = InputDeviceId.FromKey(key: "gamepad:1");
+        var bare = InputDeviceId.FromKey(key: "gamepad:2");
+        var asked = new List<InputDeviceId>();
+
+        foreach (var (device, kind) in new[] { (keyboard, InputDeviceKind.Keyboard), (pad, InputDeviceKind.Gamepad), (bare, InputDeviceKind.Gamepad) }) {
+            roster.ObserveDeviceKind(
+                device: device,
+                kind: kind
+            );
+            _ = roster.Confirm(
+                device: device,
+                actingPrincipal: Principal.Console
+            );
+        }
+
+        var line = roster.DescribeDevices(gamepadStatus: device => {
+            asked.Add(item: device);
+
+            return ((device == pad)
+                ? "battery 94% headset"
+                : null
+            );
+        });
+
+        Assert.Equal(
+            expected: [pad, bare],
+            actual: asked
+        );
+        Assert.Contains(
+            actualString: line,
+            expectedSubstring: "gamepad1=p1* battery 94% headset"
+        );
+        Assert.Contains(
+            actualString: line,
+            expectedSubstring: "keyboard1=p1* |"
+        );
+        Assert.EndsWith(
+            actualString: line,
+            expectedEndString: "gamepad2=p2*]"
+        );
+        Assert.DoesNotContain(
+            actualString: roster.DescribeDevices(),
+            expectedSubstring: "battery"
         );
     }
     [Fact]

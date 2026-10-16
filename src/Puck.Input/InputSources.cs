@@ -208,6 +208,9 @@ public static class InputSources {
         /// <summary>The back, select, or create button.</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string Back = "gamepad.back";
+        /// <summary>The capture or share button.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string Capture = "gamepad.capture";
         /// <summary>The east face button.</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string ButtonEast = "gamepad.buttonEast";
@@ -242,7 +245,19 @@ public static class InputSources {
         /// </summary>
         [InputSourceValue(kind: CommandValueKind.Axis3D)]
         public const string Gyro = "gamepad.gyro";
-        /// <summary>The left rear grip paddle (Steam Controller lower-left grip / Triton L5).</summary>
+        /// <summary>A hand on the left grip's capacitive sensor (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftGripTouch = "gamepad.leftGripTouch";
+        /// <summary>A finger resting on the left stick's capacitive cap (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftStickTouch = "gamepad.leftStickTouch";
+        /// <summary>The left trigger's full-pull switch (Steam Controller and Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftTriggerClick = "gamepad.leftTriggerClick";
+        /// <summary>The left function button (DualSense Edge).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftFunction = "gamepad.leftFunction";
+        /// <summary>The left rear grip paddle (Steam Controller lower-left grip, Triton L5, DualSense Edge left back button).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string LeftGrip = "gamepad.leftGrip";
         /// <summary>The left shoulder button.</summary>
@@ -270,7 +285,19 @@ public static class InputSources {
         /// <summary>The Quick Access Menu (QAM) button (Steam Controller Triton).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string QuickAccess = "gamepad.quickAccess";
-        /// <summary>The right rear grip paddle (Steam Controller lower-right grip / Triton R5).</summary>
+        /// <summary>A hand on the right grip's capacitive sensor (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightGripTouch = "gamepad.rightGripTouch";
+        /// <summary>A finger resting on the right stick's capacitive cap (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightStickTouch = "gamepad.rightStickTouch";
+        /// <summary>The right trigger's full-pull switch (Steam Controller and Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightTriggerClick = "gamepad.rightTriggerClick";
+        /// <summary>The right function button (DualSense Edge).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightFunction = "gamepad.rightFunction";
+        /// <summary>The right rear grip paddle (Steam Controller lower-right grip, Triton R5, DualSense Edge right back button).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string RightGrip = "gamepad.rightGrip";
         /// <summary>The right shoulder button.</summary>
@@ -300,7 +327,7 @@ public static class InputSources {
         /// <summary>The second touch contact on the touchpad.</summary>
         [InputSourceValue(kind: CommandValueKind.Axis2D)]
         public const string Touchpad1 = "gamepad.touchpad1";
-        /// <summary>The left trackpad click (Steam Controller Triton); the right trackpad click reuses <see cref="Touchpad"/>.</summary>
+        /// <summary>The left trackpad click (Steam Controller and Triton); the right trackpad click reuses <see cref="Touchpad"/>.</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string TouchpadLeft = "gamepad.touchpadLeft";
     }

@@ -16,7 +16,7 @@ namespace Puck.Input.Output;
 public static class DualSenseAdaptiveTrigger {
     private const int FrequencyParameterIndex = 8; // Vibration's frequency byte, after the 6-byte zone field
     private const byte ModeFeedback = 0x21;
-    private const byte ModeOff = 0x00;
+    private const byte ModeOff = 0x05;   // the official "no resistance" mode; 0x00 is not one
     private const byte ModeVibration = 0x26;
     private const byte ModeWeapon = 0x25;
 

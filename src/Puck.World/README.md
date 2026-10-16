@@ -1624,7 +1624,9 @@ A headless or offscreen boot has no window and no such verb.
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
 (`InputDeviceId.FromKey` over the platform's device id) and a roster token
 (`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`)—
-`world.devices` lists every device and the seat it drives; `player.assign
+`world.devices` lists every device and the seat it drives (a gamepad's entry also
+ends with its battery and plugged-in accessories, e.g. `gamepad1=p2* battery 94%
+headset`); `player.assign
 camera<N> <slot>` moves one between occupied seats, but refuses an empty target
 because a passive sensor cannot create player presence. A newly seen camera
 attaches to the lowest occupied, camera-less slot by default (seat 1 first); it

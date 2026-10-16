@@ -19,10 +19,28 @@ public interface IGamepadOutput {
     /// <param name="effect">The rumble intensities and duration.</param>
     /// <returns><see langword="true"/> if the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool Rumble(in RumbleEffect effect);
+    /// <summary>Gets the trackpad haptic forms this device plays (<see cref="TrackpadHapticKinds.None"/> without
+    /// <see cref="GamepadOutputCapabilities.TrackpadHaptics"/>).</summary>
+    TrackpadHapticKinds TrackpadHaptics { get; }
+
+    /// <summary>Plays a trackpad haptic on a Steam controller.</summary>
+    /// <param name="effect">The haptic; its <see cref="TrackpadHapticEffect.Kind"/> must be one the device plays.</param>
+    /// <returns><see langword="true"/> if the device plays that form and the haptic was accepted; otherwise <see langword="false"/>.</returns>
+    bool PlayTrackpadHaptic(in TrackpadHapticEffect effect);
+    /// <summary>Requests HD rumble: per-actuator bands with their own carrier frequency and amplitude. On a device
+    /// with <see cref="GamepadOutputCapabilities.Rumble"/> but not <see cref="GamepadOutputCapabilities.HdRumble"/>,
+    /// each band's amplitude drives the matching ordinary motor.</summary>
+    /// <param name="effect">The bands and duration.</param>
+    /// <returns><see langword="true"/> if the effect was accepted; otherwise <see langword="false"/>.</returns>
+    bool RumbleHd(in HdRumbleEffect effect);
     /// <summary>Requests trigger (impulse) rumble.</summary>
     /// <param name="effect">The per-trigger intensities and duration.</param>
     /// <returns><see langword="true"/> if the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool RumbleTriggers(in TriggerRumbleEffect effect);
+    /// <summary>Plays a brightness pattern on the controller's Home LED, which the controller runs itself.</summary>
+    /// <param name="pattern">The pattern.</param>
+    /// <returns><see langword="true"/> if the device has a patterned Home LED and the pattern was accepted; otherwise <see langword="false"/>.</returns>
+    bool SetHomeLedPattern(in HomeLedPattern pattern);
     /// <summary>Sets the controller's RGB indicator.</summary>
     /// <param name="color">The color to display.</param>
     /// <returns><see langword="true"/> if accepted; otherwise <see langword="false"/>.</returns>
@@ -47,8 +65,8 @@ public interface IGamepadOutput {
     /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick);
     /// <summary>
-    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
-    /// Switch HD-rumble waveforms).
+    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as a
+    /// vendor report this engine does not model).
     /// </summary>
     /// <param name="data">The raw report payload, in the device's report format.</param>
     /// <returns><see langword="true"/> if the device has a raw channel and the payload was accepted; otherwise <see langword="false"/>.</returns>

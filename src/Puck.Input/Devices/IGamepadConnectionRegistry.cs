@@ -15,6 +15,7 @@ public interface IGamepadConnectionRegistry {
     /// </summary>
     /// <param name="connectionFactory">Builds the connection from its allocated zero-based player index.</param>
     /// <returns>The registered connection.</returns>
+    /// <exception cref="ObjectDisposedException">The manager that owns the registry has been disposed.</exception>
     IGamepadConnection Register(Func<int, IGamepadConnection> connectionFactory);
     /// <summary>Removes a previously registered connection from the tracked set (the caller disposes it).</summary>
     /// <param name="connection">The connection to stop tracking.</param>

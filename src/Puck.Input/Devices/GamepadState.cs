@@ -21,6 +21,9 @@ namespace Puck.Input.Devices;
 /// <param name="SensorTimestamp">The device's own motion-sensor timestamp, in the device's native units (DualSense: 1/3 µs; zero on devices that report none). Carried as data for sub-frame rhythm timing; the parser sets it.</param>
 /// <param name="ArrivalTicks">The engine-tick instant the report arrived, stamped on the device I/O thread right after parsing (zero until stamped). The authority for attributing input to a fixed-step tick at sub-frame precision.</param>
 /// <param name="SequenceNumber">A per-device monotonic report counter, stamped on the I/O thread (zero until stamped); orders reports a coalesced drain folded together.</param>
+/// <param name="Power">The controller's power source and battery charge, as its latest report describes them (<see cref="GamepadPower.Unknown"/> on a family that reports none). Device status, not a bindable control.</param>
+/// <param name="Accessories">The accessories plugged into the controller, as its latest report describes them. Device status, not a bindable control.</param>
+/// <param name="IsMotionSample">Whether this report carries a fresh motion sample. A control-only report (a subcommand reply, a battery report, a repeated packet) repeats the last <see cref="Gyro"/>, <see cref="Accelerometer"/> and <see cref="Orientation"/> and is not counted as a sample.</param>
 public readonly record struct GamepadState(
     GamepadButtons Buttons,
     Vector2 LeftStick,
@@ -34,7 +37,10 @@ public readonly record struct GamepadState(
     Vector3 Accelerometer = default,
     uint SensorTimestamp = 0u,
     ulong ArrivalTicks = 0UL,
-    ulong SequenceNumber = 0UL
+    ulong SequenceNumber = 0UL,
+    GamepadPower Power = default,
+    GamepadAccessories Accessories = GamepadAccessories.None,
+    bool IsMotionSample = true
 ) {
     /// <summary>Gets a neutral state: no buttons, centered sticks, released triggers, no motion, identity pose.</summary>
     public static GamepadState Neutral => new(

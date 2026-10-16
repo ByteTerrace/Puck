@@ -185,6 +185,230 @@ public sealed class GamepadDeviceTests {
         );
     }
     [Fact]
+    public async Task A_weaker_rumble_inside_the_write_interval_is_held_until_the_interval_passes() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { RumbleWriteInterval = TimeSpan.FromMilliseconds(value: 30), };
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 0.5f, HighFrequency: 0.5f, DurationMilliseconds: 10_000u)));
+        // Written at t = 16 ms, so the weaker update dequeued at t = 32 ms waits for t = 46 ms.
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 4
+        );
+        Assert.Equal(
+            expected: [(1f, 1f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: hid.Time.Armed(dueTime: TimeSpan.FromMilliseconds(value: 14))
+        );
+
+        hid.Time.Advance(by: TimeSpan.FromMilliseconds(value: 14));
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 5
+        );
+        Assert.Equal(
+            expected: [(1f, 1f), (0.5f, 0.5f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.True(condition: (parser.ServiceCount > 0));
+    }
+    [Fact]
+    public async Task A_refreshed_controller_hears_its_rumble_every_interval_and_its_stop_three_more_times() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { RumbleRefreshInterval = TimeSpan.FromMilliseconds(value: 40), };
+        var ordinal = 2;
+        var shortStep = TimeSpan.FromMilliseconds(value: 8);
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        async Task Step(TimeSpan by) {
+            hid.Time.Advance(by: by);
+            await hid.WhenReadAsync(
+                cancellationToken: cancellationToken,
+                ordinal: ++ordinal
+            );
+        }
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: ordinal
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        await Step(by: SteadyStatePoll);    // t = 16: written
+        await Step(by: SteadyStatePoll);    // t = 32
+        await Step(by: SteadyStatePoll);    // t = 48
+        await Step(by: shortStep);          // t = 56: refreshed
+        Assert.Equal(
+            expected: [(1f, 1f), (1f, 1f)],
+            actual: parser.RumbleWrites
+        );
+
+        Assert.True(condition: device.Output.Rumble(effect: RumbleEffect.Off));
+        await Step(by: SteadyStatePoll);    // t = 72: stopped
+
+        // The stop is rewritten at t = 112, 152 and 192 ms; after that the loop polls at its steady rate.
+        for (var repeat = 0; (repeat < 3); ++repeat) {
+            await Step(by: SteadyStatePoll);
+            await Step(by: SteadyStatePoll);
+            await Step(by: shortStep);
+        }
+
+        await Step(by: SteadyStatePoll);
+        await Step(by: SteadyStatePoll);
+        await Step(by: SteadyStatePoll);
+
+        Assert.Equal(
+            expected: [(1f, 1f), (1f, 1f), (0f, 0f), (0f, 0f), (0f, 0f), (0f, 0f)],
+            actual: parser.RumbleWrites
+        );
+    }
+    [Fact]
+    public async Task A_streaming_controller_that_falls_silent_faults() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser { StreamSilenceTimeout = TimeSpan.FromMilliseconds(value: 32), };
+
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+        Assert.False(condition: device.IsFaulted);
+
+        hid.Time.Advance(by: SteadyStatePoll);
+
+        for (var attempt = 0; ((attempt < 200) && !device.IsFaulted); ++attempt) {
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                millisecondsDelay: 5
+            );
+        }
+
+        Assert.True(condition: device.IsFaulted);
+    }
+    [Fact]
+    public async Task Disposal_stops_running_motors_and_releases_adaptive_triggers() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        var parser = new TestParser();
+
+        hid.EnqueueReport(1);
+
+        var device = CreateDevice(
+            hid: hid,
+            parser: parser
+        );
+        var effect = TriggerEffectSpec.Feedback(
+            position: 2,
+            strength: 3
+        );
+
+        device.Start();
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 2
+        );
+        Assert.True(condition: device.Output.Rumble(effect: new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 10_000u)));
+        Assert.True(condition: device.Output.SetTriggerEffect(left: in effect, right: in effect));
+        hid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(
+            cancellationToken: cancellationToken,
+            ordinal: 3
+        );
+
+        await DisposeOnItsOwnThread(device: device);
+
+        Assert.Equal(
+            expected: [(1f, 1f), (0f, 0f)],
+            actual: parser.RumbleWrites
+        );
+        Assert.Equal(
+            expected: (TriggerEffectSpec.Off, TriggerEffectSpec.Off),
+            actual: parser.TriggerWrites[^1]
+        );
+    }
+    [Fact]
+    public async Task Typed_output_reaches_an_hd_parser_and_a_plain_parser_gets_band_amplitudes() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var hid = new TestHidDevice();
+        using var plainHid = new TestHidDevice();
+        var parser = new TestHdParser();
+        var plain = new TestParser();
+        var band = new HdRumbleSide(High: new HdRumbleBand(Amplitude: 0.25f, FrequencyHertz: 900f), Low: new HdRumbleBand(Amplitude: 2f, FrequencyHertz: 60f));
+        var effect = new HdRumbleEffect(DurationMilliseconds: 10_000u, Left: band, Right: HdRumbleSide.Rest);
+
+        hid.EnqueueReport(1);
+        plainHid.EnqueueReport(1);
+        using var device = new GamepadDevice(clock: new ManualInputClock(), deviceId: InputDeviceId.New(), hid: hid, parser: parser, playerIndex: 0, timeProvider: hid.Time);
+        using var plainDevice = CreateDevice(hid: plainHid, parser: plain);
+
+        device.Start();
+        plainDevice.Start();
+        await hid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 2);
+        await plainHid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 2);
+
+        Assert.True(condition: device.Output.Capabilities.HasFlag(flag: GamepadOutputCapabilities.HdRumble | GamepadOutputCapabilities.HomeLedPattern | GamepadOutputCapabilities.TrackpadHaptics));
+        Assert.True(condition: device.Output.RumbleHd(effect: in effect));
+        Assert.True(condition: device.Output.SetHomeLedPattern(pattern: HomeLedPattern.Breathing(intensity: 15, period: TimeSpan.FromSeconds(value: 2))));
+        Assert.True(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Left, frequencyHertz: 200, durationMilliseconds: 100)));
+        Assert.False(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Left, onMicroseconds: 1, offMicroseconds: 1, repeat: 1)));
+        Assert.False(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Left, frequencyHertz: 200, durationMilliseconds: 100) with { Kind = TrackpadHapticKinds.Tone | TrackpadHapticKinds.Pulse, }));
+        Assert.True(condition: plainDevice.Output.RumbleHd(effect: in effect));
+        Assert.False(condition: plainDevice.Output.SetHomeLedPattern(pattern: HomeLedPattern.Steady(intensity: 1)));
+        hid.Time.Advance(by: SteadyStatePoll);
+        plainHid.Time.Advance(by: SteadyStatePoll);
+        await hid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 3);
+        await plainHid.WhenReadAsync(cancellationToken: cancellationToken, ordinal: 3);
+
+        var (left, right) = Assert.Single(collection: parser.HdWrites);
+
+        Assert.Equal(expected: 1f, actual: left.Low.Amplitude);
+        Assert.Equal(expected: 900f, actual: left.High.FrequencyHertz);
+        Assert.Equal(expected: HdRumbleSide.Rest, actual: right);
+        Assert.Equal(expected: 2, actual: Assert.Single(collection: parser.Patterns).Steps.Length);
+        Assert.Single(collection: parser.Haptics);
+        Assert.Equal(expected: [(1f, 0.25f)], actual: plain.RumbleWrites);
+    }
+    [Fact]
     public async Task Scheduled_trigger_effect_is_held_until_its_tick_and_fires_without_another_input_report() {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var hid = new TestHidDevice();
