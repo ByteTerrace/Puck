@@ -650,7 +650,7 @@ dispatches, samples, triangles, vertices and wall time on stderr when it
 finishes. It counts a batch as work when a bake pass records it: a frame that
 takes a batch no pass records, as while the boot's pipelines build, dispatches
 nothing, and its lattices go to the next frame. A recorded batch whose readback
-never arrives is dispatched again, and the line reports those samples as
+never arrives, as when the view's graph rebuilds mid-bake, is dispatched again, and the line reports those samples as
 `discarded`, so `samples` less `discarded` is the same on every run of one
 build. Until a group's first mesh lands, the group draws nothing.
 
