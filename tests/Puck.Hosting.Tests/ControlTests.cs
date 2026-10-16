@@ -338,20 +338,35 @@ public sealed class ControlTests {
             source,
             path => armed = new(path: path)
         );
+        // The holding line answers when its hold ends, so the call waits out the hold while human input answers.
         var hold = session.ExecuteAsync(
             new(
                 Command: "hold",
                 Id: 1,
                 Operation: "exec",
-                TimeoutMilliseconds: 1000
+                TimeoutMilliseconds: ControlLimits.TimeoutMilliseconds
             ),
             Token
         );
+        var humanReply = new TaskCompletionSource<CommandResult>();
+        using var human = source.CreateSession(
+            Principal.Console,
+            onResult: (_, result) => humanReply.SetResult(result: result)
+        );
 
         source.Collect();
+        human.Enqueue(line: "probe");
+        source.Collect();
         Assert.Equal(
-            "completed",
-            (await hold).Status
+            "operator",
+            (await humanReply.Task).Output
+        );
+        Assert.False(condition: hold.IsCompleted);
+        held = false;
+        source.Collect();
+        Assert.Equal(
+            ("completed", "holding"),
+            ((await hold).Status, (await hold).Output)
         );
         var capture = session.ExecuteAsync(
             new(
@@ -362,20 +377,8 @@ public sealed class ControlTests {
             ),
             Token
         );
-        var humanReply = new TaskCompletionSource<CommandResult>();
-        using var human = source.CreateSession(
-            Principal.Console,
-            onResult: (_, result) => humanReply.SetResult(result: result)
-        );
 
-        human.Enqueue(line: "probe");
-        source.Collect();
-        Assert.Equal(
-            "operator",
-            (await humanReply.Task).Output
-        );
         Assert.Null(@object: armed);
-        held = false;
         source.Collect();
         Assert.NotNull(@object: armed);
         Assert.False(condition: capture.IsCompleted);

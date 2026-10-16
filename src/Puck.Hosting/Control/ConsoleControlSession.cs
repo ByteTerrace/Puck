@@ -34,11 +34,28 @@ public sealed class ConsoleControlSession : IControlSession {
             slot: slot,
             scope: scope,
             authorize: authorize,
+            // A scripted ingress like stdin: its simulation lines land in the next step that takes input, whatever the
+            // wall-clock capture stamp would say on a host running behind.
+            dueNextTick: true,
             // The settled result, never the submit-time one: a simulation-routed line answers nothing until its tick
-            // applies, and an edit answers nothing until the authority decides it.
+            // applies, an edit answers nothing until the authority decides it, and a line that holds the session
+            // answers when its hold ends.
             onSettled: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result)
         );
     }
+
+    /// <summary>The longest margin <see cref="AnswerBudget"/> keeps back from a call's deadline.</summary>
+    public static readonly TimeSpan AnswerMargin = TimeSpan.FromSeconds(seconds: 2);
+
+    /// <summary>Returns the time a call's line may take before it must answer: the call's deadline less a tenth of it,
+    /// at most <see cref="AnswerMargin"/>, left for the answer to reach the pump's next drain and travel back. A hold
+    /// the line arms ends at this point with an answer, so the caller's own deadline does not close the attachment.</summary>
+    /// <param name="timeout">The call's deadline; not negative.</param>
+    /// <returns>The answer budget.</returns>
+    public static TimeSpan AnswerBudget(TimeSpan timeout) => (timeout - TimeSpan.FromTicks(value: Math.Min(
+        val1: (timeout.Ticks / 10),
+        val2: AnswerMargin.Ticks
+    )));
 
     private async Task<ControlResponse> CaptureAsync(long id, CancellationToken token) {
         var directory = Path.Combine(
@@ -177,6 +194,11 @@ public sealed class ConsoleControlSession : IControlSession {
             state: m_session
         );
 
+        m_session.AnswerDeadline = new TextAnswerDeadline(
+            budget: AnswerBudget(timeout: TimeSpan.FromMilliseconds(value: request.TimeoutMilliseconds)),
+            clock: m_clock
+        );
+
         try {
             if (request.Operation == "capture") {
                 return await CaptureAsync(
@@ -214,6 +236,7 @@ public sealed class ConsoleControlSession : IControlSession {
                 true
             );
         } finally {
+            m_session.AnswerDeadline = null;
             Volatile.Write(
                 location: ref m_result,
                 value: null

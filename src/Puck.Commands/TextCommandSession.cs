@@ -21,9 +21,13 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     private readonly Action<string, CommandResult>? m_onSettled;
     private readonly TextCommandSource m_source;
 
-    private bool m_disposed;
+    private volatile TextAnswerDeadline? m_answerDeadline;
+    private volatile bool m_disposed;
+    private SessionHold? m_heldBySubmit;
     private int m_resultCallbackFaults;
-    private Func<bool>? m_wait;
+    private bool m_submitting;
+    private bool m_tracked;
+    private SessionHold? m_wait;
 
     internal TextCommandSession(
         TextCommandSource source,
@@ -86,17 +90,107 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
             m_pending.Enqueue(item: work);
         }
     }
+    // Reads this session's holds on the pump. The armed hold ends when its predicate releases it or when the answer
+    // deadline it was armed under passes first; either way its release report runs once, and a line that armed it in a
+    // settling session answers with that report.
     internal bool IsHolding() {
         if (Hold?.Invoke() ?? false) {
             return true;
         }
 
-        if (m_wait?.Invoke() ?? false) {
-            return true;
+        if (m_wait is not { } wait) {
+            return false;
+        }
+
+        if (m_disposed) {
+            m_wait = null;
+
+            return false;
+        }
+
+        var deadlinePassed = false;
+
+        if (wait.Predicate()) {
+            if (!(wait.Deadline?.HasPassed ?? false)) {
+                return true;
+            }
+
+            deadlinePassed = true;
         }
 
         m_wait = null;
+        Release(
+            deadlinePassed: deadlinePassed,
+            hold: wait
+        );
+
         return false;
+    }
+    // Whether the pump must keep polling this session for a hold no queued line will read.
+    internal bool PollHold() {
+        var holding = IsHolding();
+
+        m_tracked = holding;
+
+        return holding;
+    }
+
+    private void Release(SessionHold hold, bool deadlinePassed) {
+        CommandResult? report;
+
+        try {
+            report = hold.Released?.Invoke(arg: deadlinePassed);
+        } catch (Exception error) {
+            Interlocked.Increment(location: ref m_resultCallbackFaults);
+            report = CommandResult.Error(output: $"[wire.hold: the hold's release report failed ({error.Message}); inspect state before any retry]");
+        }
+
+        if (hold.Line is not { } line) {
+            return;
+        }
+
+        Publish(
+            callback: m_onSettled,
+            line: line,
+            result: (report ?? (deadlinePassed
+                ? CommandResult.Error(output: $"[wire.hold: '{line}' still held its session when this call's answer was due; the session no longer waits for it, so inspect state before any retry]")
+                : hold.Armed))
+        );
+    }
+    internal void BeginSubmit() {
+        m_submitting = true;
+        m_heldBySubmit = null;
+    }
+    // Ends a submit and reports its line's result, or nothing for a line queued into the simulation lane, which settles
+    // when its tick applies. A line that armed a hold in a settling session and handed no settlement of its own answers
+    // when the hold ends instead, so a caller awaiting the answer waits out the hold.
+    internal void SettleSubmitted(string line, CommandResult? submitted) {
+        var held = m_heldBySubmit;
+
+        m_submitting = false;
+        m_heldBySubmit = null;
+
+        if (submitted is not { } result) {
+            return;
+        }
+
+        if (
+            SettlesResults &&
+            (held is not null) &&
+            ReferenceEquals(objA: held, objB: m_wait) &&
+            (result.Settlement is null) &&
+            !result.IsError
+        ) {
+            held.Line = line;
+            held.Armed = result;
+
+            return;
+        }
+
+        Settle(
+            line: line,
+            result: result
+        );
     }
 
     // The line the registry queued into the simulation lane during the submit in flight, so the source can tell a
@@ -159,12 +253,50 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
             session: this
         );
     }
+    /// <summary>Gets or sets the deadline by which the line this session submits next owes its caller an answer, or
+    /// <see langword="null"/> when nothing bounds it, as for a piped script. A control attachment sets it for each
+    /// call; a hold armed while it is set ends when it passes (<see cref="HoldWhile(Func{bool}, Func{bool, CommandResult?})"/>).</summary>
+    public TextAnswerDeadline? AnswerDeadline {
+        get => m_answerDeadline;
+        set => m_answerDeadline = value;
+    }
+
     /// <summary>Holds subsequent work in this session while the predicate returns true. Call only from the host
     /// pump, normally through an immediate handler's <see cref="CommandContext.TextSession"/>.</summary>
     /// <param name="hold">A short pump-thread predicate. A new hold replaces the previous session wait.</param>
-    public void HoldWhile(Func<bool> hold) {
+    public void HoldWhile(Func<bool> hold) => HoldWhile(
+        hold: hold,
+        released: null
+    );
+    /// <summary>Holds subsequent work in this session while the predicate returns true, or until the
+    /// <see cref="AnswerDeadline"/> current when the hold is armed passes, and reports the release. The pump reads the
+    /// hold every drain, whether or not a line waits behind it, so <paramref name="released"/> runs as the hold ends.
+    /// In a session that settles results, the line whose handler arms the hold answers only when the hold ends, with
+    /// the report, or with the handler's own result when the report is <see langword="null"/>; a line ended by the
+    /// deadline with no report answers with a refusal. Call only from the host pump, normally through an immediate
+    /// handler's <see cref="CommandContext.TextSession"/>.</summary>
+    /// <param name="hold">A short pump-thread predicate. A new hold replaces the previous session wait.</param>
+    /// <param name="released">The release report, run once on the pump as the hold ends; its argument is
+    /// <see langword="true"/> when the answer deadline ended the hold while the predicate still held. <see langword="null"/>
+    /// reports nothing. A disposed session's hold ends without a report.</param>
+    public void HoldWhile(Func<bool> hold, Func<bool, CommandResult?>? released) {
         ArgumentNullException.ThrowIfNull(argument: hold);
-        m_wait = hold;
+        var armed = new SessionHold(
+            deadline: m_answerDeadline,
+            predicate: hold,
+            released: released
+        );
+
+        m_wait = armed;
+
+        if (m_submitting) {
+            m_heldBySubmit = armed;
+        }
+
+        if (!m_tracked) {
+            m_tracked = true;
+            m_source.TrackHold(session: this);
+        }
     }
     /// <summary>Queues a short host operation behind this session's preceding commands, mutation barriers and
     /// waits. The delegate runs on the command pump, never on the calling worker. It must not block on I/O or
@@ -191,6 +323,16 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         }
         return new ValueTask<TResult>(task: work.Task);
     }
+}
+
+// One armed session hold: the line whose handler armed it and that line's own result, once the source has reported
+// the line as held rather than settled.
+internal sealed class SessionHold(Func<bool> predicate, Func<bool, CommandResult?>? released, TextAnswerDeadline? deadline) {
+    public CommandResult Armed { get; set; }
+    public TextAnswerDeadline? Deadline { get; } = deadline;
+    public string? Line { get; set; }
+    public Func<bool> Predicate { get; } = predicate;
+    public Func<bool, CommandResult?>? Released { get; } = released;
 }
 
 // Process-local coordination only: the reference rides a live snapshot entry so applying that exact submission

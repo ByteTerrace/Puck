@@ -651,6 +651,19 @@ or unexpected operation failure reports `unknown`, with no automatic retry.
 Direct `ConsoleControlSession` callers also get one-operation admission and
 deadlines; disposing it cancels an accepted capture wait promptly.
 
+A `ConsoleControlSession` settles each line, and its simulation lines are due
+in the next step that takes input, as stdin's are. A line that holds the
+session (`world.wait`, a shader reload, a pipeline wait) answers when its hold
+ends, so the call waits out the hold and the next call runs at once. Each call
+sets the session's `AnswerDeadline` to the request deadline less a tenth of
+it, at most `ConsoleControlSession.AnswerMargin` (two seconds), which leaves
+the answer time to travel back. A verb can refuse a hold that cannot end by
+then (`world.wait <ticks>` compares its ticks at the world's rate), and a hold
+still standing when it passes ends with a refusal that names it. Either way
+the answer arrives inside the request deadline and the attachment stays open.
+The margin cannot cover a pump stalled for longer than it, such as a frame that
+takes seconds; that call still ends at its deadline with an unknown outcome.
+
 Captures arm through `TextCommandSession.InvokeAsync`, then await the exact
 `FrameCaptureRequest.Completion` off the pump. Cancellation after arming leaves
 the capture alive, with a cleanup continuation owning its unique, user-only temporary directory

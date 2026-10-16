@@ -1,3 +1,4 @@
+using System.Globalization;
 using Puck.Commands;
 
 namespace Puck.World;
@@ -19,19 +20,44 @@ public sealed class WorldConsoleWaitGate {
     /// <summary>Gets the last completed host-work tick published to this gate.</summary>
     public ulong Tick { get; private set; }
 
-    /// <summary>Holds only <paramref name="session"/> until this clock has completed the requested ticks.</summary>
+    /// <summary>Holds only <paramref name="session"/> until this clock has completed the requested ticks. A session
+    /// that settles results answers the arming line as the hold ends: with the release tick, or with a refusal when
+    /// the clock was reset, the row stopped stepping (<see cref="ReleaseStalled"/>) or the session's answer deadline
+    /// passed first.</summary>
     /// <param name="session">The issuing text session. Other sessions keep draining.</param>
     /// <param name="ticks">The number of ticks to wait, counted from the last completed tick.</param>
     /// <returns>The earliest host-work tick that releases the session.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The tick count is zero.</exception>
     /// <exception cref="OverflowException">The release tick exceeds the clock range.</exception>
     public ulong Arm(TextCommandSession session, ulong ticks) {
         ArgumentNullException.ThrowIfNull(argument: session);
         ArgumentOutOfRangeException.ThrowIfZero(ticks);
-        var release = checked((Tick + ticks));
+        var from = Tick;
+        var release = checked((from + ticks));
         var epoch = m_epoch;
 
-        session.HoldWhile(hold: () => ((m_epoch == epoch) && (Tick < release)));
+        session.HoldWhile(
+            hold: () => ((m_epoch == epoch) && (Tick < release)),
+            released: deadlinePassed => {
+                if (deadlinePassed) {
+                    return CommandResult.Error(output: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[world.wait: this call's answer was due at tick {Tick}, before release tick {release}, so the session stopped waiting; the world is completing ticks slower than its rate — wait in shorter steps or give the call a longer deadline]"
+                    ));
+                }
+
+                return ((m_epoch == epoch)
+                    ? new CommandResult(Output: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[world.wait: {ticks} ticks from {from} — released at tick {Tick}]"
+                    ))
+                    : CommandResult.Error(output: string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"[world.wait: released at tick {Tick}, before release tick {release} — the world stopped stepping or its clock was reset]"
+                    )));
+            }
+        );
         m_armed = true;
         m_releaseTick = Math.Max(
             val1: m_releaseTick,

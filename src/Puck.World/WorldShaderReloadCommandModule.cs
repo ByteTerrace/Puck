@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.SdfVm;
 using Puck.Shaders;
 
 namespace Puck.World;
@@ -23,7 +24,7 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shaders.reload",
-            description: "Reloads SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the kernels the tree's passes directory carries and keeps the rest: a kernel's sdf-*.comp.hlsl source compiles to the running backend alone, through the per-user shader cache the build shares (an unchanged source is a cache hit), and a kernel carried only as bytecode loads as it stands. Defaults to the deployed Assets/Shaders/Sdf, which carries bytecode; a source checkout names src/Puck.SdfVm/Assets/Shaders/Sdf, so editing a kernel and reloading is one step. Uses the current backend. Kernels install as they compile, quickest first, so a light kernel's change shows while a heavy kernel still compiles, and each installed batch prints '[shaders.reload: request=N installed pipelines=K]'. Replaces changed pipelines while retaining world state, GPU buffers and textures; a compile error (reported with its file and line), a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the kernels installed before it; DXIL kernels are checked through the dxcompiler beside dxc. The request completes off the frame thread and reports its outcome on stderr ('[shaders.reload: request=N applied|unchanged|failed ...]'); a text session's later lines wait for it, and world.shaders.status reports it too. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
+            description: "Reloads SDF kernels on the next produced frame: world.shaders.reload [tree]. Reads the kernels the tree's passes directory carries and keeps the rest: a kernel's sdf-*.comp.hlsl source compiles to the running backend alone, through the per-user shader cache the build shares (an unchanged source is a cache hit), and a kernel carried only as bytecode loads as it stands. Defaults to the deployed Assets/Shaders/Sdf, which carries bytecode; a source checkout names src/Puck.SdfVm/Assets/Shaders/Sdf, so editing a kernel and reloading is one step. Uses the current backend. Kernels install as they compile, quickest first, so a light kernel's change shows while a heavy kernel still compiles, and each installed batch prints '[shaders.reload: request=N installed pipelines=K]'. Replaces changed pipelines while retaining world state, GPU buffers and textures; a compile error (reported with its file and line), a failed load or pipeline build, or kernels that do not read this host's interface (compiled against another SDF instruction set, or binding what the host does not place there), keeps the kernels installed before it; DXIL kernels are checked through the dxcompiler beside dxc. The request completes off the frame thread and reports its outcome on stderr ('[shaders.reload: request=N applied|unchanged|failed ...]'); a text session's later lines wait for it, a session that settles its results (an operator attachment's call) answers with the outcome in world.shaders.status's form, and world.shaders.status reports it too. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
             handler: (context, args) => {
                 if (renderProbe.Residency is not { } node) {
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
@@ -40,7 +41,12 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                     // The issuing text session's later lines wait for the outcome, so a script reads what the reload did
                     // rather than racing the compile and pipeline build; the reload always settles, failing on a device
                     // loss or a released residency.
-                    context.TextSession?.HoldWhile(hold: () => ((node.ShaderReloadStatus is { State: "pending" } pending) && (pending.RequestId == request)));
+                    context.TextSession?.HoldWhile(
+                        hold: () => ((node.ShaderReloadStatus is { State: "pending" } pending) && (pending.RequestId == request)),
+                        released: deadlinePassed => (deadlinePassed
+                            ? null
+                            : Describe(status: node.ShaderReloadStatus, verb: "world.shaders.reload") with { IsError = (node.ShaderReloadStatus.State == "failed") })
+                    );
 
                     return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
                 } catch (Exception exception) when ((exception is ArgumentException or IOException or UnauthorizedAccessException)) {
@@ -59,12 +65,16 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                 if (renderProbe.Residency is not { } node) {
                     return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
                 }
-                var status = node.ShaderReloadStatus;
-
-                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
-                    ? $" error={error}"
-                    : "")}]");
+                return Describe(
+                    status: node.ShaderReloadStatus,
+                    verb: "world.shaders.status"
+                );
             }
         );
     }
+
+    // The status line world.shaders.status answers, and a settling session's world.shaders.reload answers as its hold ends.
+    private static CommandResult Describe(SdfShaderReloadStatus status, string verb) => new(Output: $"[{verb}: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
+        ? $" error={error}"
+        : "")}]");
 }

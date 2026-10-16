@@ -515,7 +515,8 @@ administrative session, the one that reads process stdin, marks its
 `Simulation` lines as due in the next step that takes input
 (`TextCommandSession.DueNextTick`). Otherwise the capture clock would decide:
 that clock is wall time, and a host that is running behind would pick up the
-line a varying number of steps later. A session created without
+line a varying number of steps later. A control attachment's session
+(`ConsoleControlSession`) is scripted the same way and sets it too. A session created without
 `dueNextTick`, such as a seat's own text session, keeps capture-clock timing.
 
 A launcher host (`FixedStepPump.CreateHosted`) also holds its first step while
@@ -548,7 +549,9 @@ The drain skips blank lines and lines whose first non-whitespace character
 is `#`, so scripts can carry comments. An immediate handler receives its
 issuing `CommandContext.TextSession` on both text parsing paths. It can call
 `HoldWhile` to hold only that session's later work; other sessions continue
-draining. Direct registry calls and replayed snapshots have no text session.
+draining. The drain reads every armed hold once per drain, whether or not a
+line waits behind it, so a hold's release report runs as the hold ends.
+Direct registry calls and replayed snapshots have no text session.
 The optional `TextCommandSource.HoldGate` remains a host-wide stop and must
 not be used for one caller's wait.
 
@@ -779,8 +782,14 @@ Text sessions can supply `onSettled` to receive the final result of each command
 A simulation command answers when its snapshot applies; a handler that returns
 `CommandResult.Settling` answers when its authority supplies the verdict. Such a
 session holds every subsequent command and host operation until that verdict,
-while other sessions keep draining. Sessions using only `onResult` retain their
-submit-time batching. Quiet acknowledgements suppress text without discarding
+while other sessions keep draining. A line whose handler holds the session
+(`HoldWhile`) answers when the hold ends, with the hold's release report, so
+a caller awaiting the answer waits out the hold rather than finding it in front
+of its next command. A session's `AnswerDeadline`, which a control attachment
+sets from each call's deadline, bounds a hold armed under it: a verb can refuse
+a hold that cannot end in time, and a hold still standing when the deadline
+passes ends with a refusal instead of with the caller's transport. Sessions
+using only `onResult` retain their submit-time batching. Quiet acknowledgements suppress text without discarding
 pending settlements. Result callback failures are isolated and counted by
 `TextCommandSession.ResultCallbackFaults`.
 
