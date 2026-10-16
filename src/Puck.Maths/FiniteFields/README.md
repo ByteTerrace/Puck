@@ -957,8 +957,19 @@ Methods A and A* give the same Lucas and strong Lucas results for values coprime
 to ten. Even composites are rejected directly; composite multiples of five meet a
 proper factor at the first discriminant. This establishes the match to the
 implemented Method A, including its parameter choice and acceptance conditions.
-The full-domain guarantee relies on that published computation; the repository
-does not repeat a sweep of all `ulong` values.
+The strong Lucas test as implemented, Method A, rejects every base-two strong
+pseudoprime below `2⁶⁴`, and `IsPrime(ulong)` rejects every base-two Fermat
+pseudoprime below `2⁶⁴`, all 118,968,378 of them in Feitsma and Galway's
+[list](https://www.cecm.sfu.ca/Pseudoprimes/) and so the 31,894,014 strong ones.
+A harness outside the repository reproduces the check: it streams the
+decompressed list, decides each entry's base-two strong verdict with plain
+128-bit modular exponentiation and compares it with
+`PrimeKernels.PassesBaseTwoBatch` on four entries at a time, asserts that
+`IsStrongLucasProbablePrime` and `IsPrime` return false for the entry, and
+compares the entry count, the strong count and the counts per bit length with
+the published ones (OEIS A208276 and A108797). The full-domain guarantee still
+relies on the published computation; the repository does not repeat a sweep of
+all `ulong` values.
 
 The law suite compares production with independent ordinary sieving and a
 BigInteger multi-witness decision. `prime-field.baillie-psw-exhaustive` checks
