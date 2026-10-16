@@ -36,8 +36,8 @@ RUN setcap -r /usr/bin/caddy
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0-resolute AS runtime
 COPY --from=tls /usr/bin/caddy /usr/bin/caddy
-ADD https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
-RUN echo 'c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
+ADD https://packages.microsoft.com/config/ubuntu/26.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
+RUN echo 'b2e7c6b9328e0c6a68bfe5d0045be90ceb192b32e0ca906c6c529b9012726f39  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
     && dpkg -i /tmp/packages-microsoft-prod.deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends libmsquic \
