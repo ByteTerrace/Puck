@@ -1,7 +1,7 @@
 {
   "version": 1,
   "dependencies": {
-    "net10.0": {
+    "net11.0": {
       "Azure.Extensions.AspNetCore.DataProtection.Blobs": {
         "type": "Direct",
         "requested": "[1.*, 2.0.0)",
@@ -72,10 +72,7 @@
         "type": "Direct",
         "requested": "[10.0.13, 11.0.0)",
         "resolved": "10.0.13",
-        "contentHash": "v6/GHhLaHkuN/ISgbKzBeyC7TP7S6Qm/dVyKA+p0ay9nlJyLif+spozjAGclY/FRIv2TC+KNQCo7dSNmupvWtQ==",
-        "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.13"
-        }
+        "contentHash": "v6/GHhLaHkuN/ISgbKzBeyC7TP7S6Qm/dVyKA+p0ay9nlJyLif+spozjAGclY/FRIv2TC+KNQCo7dSNmupvWtQ=="
       },
       "Apache.Arrow": {
         "type": "Transitive",

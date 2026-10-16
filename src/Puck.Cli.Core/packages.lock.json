@@ -1,7 +1,7 @@
 {
   "version": 1,
   "dependencies": {
-    "net10.0": {
+    "net11.0": {
       "FSharp.Core": {
         "type": "Direct",
         "requested": "[11.*, )",
@@ -20,11 +20,6 @@
         "resolved": "2.0.13",
         "contentHash": "TIO2lMV+sSP7WW7pD/oCRHD9ENWY+jqwXmYzgks3R46cEdDzwjQOAhsiBn+M3EegfGjgTpa2h+eIrcU+AM2k6A=="
       },
-      "Microsoft.Extensions.DependencyInjection.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "G2GrGWNAPZBsii2F6AU8n+JT2tC1/I0Ml/e9ZyNCgPjf3hZqronP7o0X91aAynCmVeae8KkSIUNXXeXCNRmdVQ=="
-      },
       "System.Formats.Cbor": {
         "type": "Transitive",
         "resolved": "10.0.13",
@@ -38,8 +33,7 @@
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Assets": {

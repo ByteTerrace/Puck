@@ -1,23 +1,7 @@
 {
   "version": 1,
   "dependencies": {
-    "net10.0": {
-      "Microsoft.Extensions.DependencyInjection.Abstractions": {
-        "type": "Direct",
-        "requested": "[10.*, )",
-        "resolved": "10.0.13",
-        "contentHash": "G2GrGWNAPZBsii2F6AU8n+JT2tC1/I0Ml/e9ZyNCgPjf3hZqronP7o0X91aAynCmVeae8KkSIUNXXeXCNRmdVQ=="
-      },
-      "Microsoft.Extensions.Options": {
-        "type": "Direct",
-        "requested": "[10.*, )",
-        "resolved": "10.0.13",
-        "contentHash": "tmMJgdrE4uhf1JcNs9CV9moAHW+hmDuvgMiPpnQxarKaUxqI2eN33sYK5S4l9Uw+rG9PJvlm4qPxMhvolTDTaQ==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.13",
-          "Microsoft.Extensions.Primitives": "10.0.13"
-        }
-      },
+    "net11.0": {
       "Microsoft.Windows.CsWin32": {
         "type": "Direct",
         "requested": "[0.3.183, 0.3.183]",
@@ -28,11 +12,6 @@
           "Microsoft.Windows.SDK.Win32Metadata": "61.0.15-preview",
           "Microsoft.Windows.WDK.Win32Metadata": "0.12.8-experimental"
         }
-      },
-      "Microsoft.Extensions.Primitives": {
-        "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "ZjTwxzhiw2TMEzIbUDkMF0dfDB2I4NQgIfKD0ELu9/5Mk+SRGdKZcD0/lvBrRCAPo6KN2r0BW86MRancoyJkoA=="
       },
       "Microsoft.Windows.SDK.Win32Docs": {
         "type": "Transitive",
@@ -65,8 +44,7 @@
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Assets": {
@@ -102,9 +80,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
-          "Microsoft.Extensions.Options": "[10.*, )"
+          "ByteTerrace.Puck.Input": "[0.1.0-alpha, )"
         }
       }
     }
