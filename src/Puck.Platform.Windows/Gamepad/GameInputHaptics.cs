@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Puck.Platform.Windows.Gamepad;
@@ -11,6 +12,13 @@ namespace Puck.Platform.Windows.Gamepad;
 /// reading" device is global and can't distinguish controllers.
 /// </summary>
 public sealed class GameInputHaptics : IDisposable {
+    /// <summary>
+    /// How long the device topology must hold still before <see cref="BindSole"/> trusts it. GameInput enumerates
+    /// asynchronously, so a device count read right after registration or a connect may be a partial view; the
+    /// sole binding waits until no device has appeared or vanished for this long.
+    /// </summary>
+    public const int SoleSettleMilliseconds = 1500;
+
     private static readonly List<GameInputDeviceCallback> UnregisteredCallbacks = [];
 
     private readonly HashSet<IGameInputDevice> m_bound = [];
@@ -22,6 +30,8 @@ public sealed class GameInputHaptics : IDisposable {
     private ulong m_callbackToken;
     private GameInputDeviceCallback? m_deviceCallback;
     private IGameInput? m_gameInput;
+    private long m_lastTopologyChange = Stopwatch.GetTimestamp();
+    private long m_topologyVersion;
 
     /// <summary>Initializes a new instance of the <see cref="GameInputHaptics"/> class.</summary>
     /// <param name="diagnostics">An optional diagnostics sink.</param>
@@ -41,6 +51,7 @@ public sealed class GameInputHaptics : IDisposable {
                 if (connected) {
                     if (!m_devices.ContainsKey(key: device)) {
                         m_devices[device] = ((IGameInputDevice)Marshal.GetObjectForIUnknown(pUnk: device));
+                        NoteTopologyChangeLocked();
                         m_diagnostics?.Invoke($"[gameinput] device connected (0x{device:x})");
                     }
                 } else if (m_devices.Remove(
@@ -50,12 +61,29 @@ public sealed class GameInputHaptics : IDisposable {
                     // Drop the reference (the GC finalizes the RCW; explicitly releasing it would separate a
                     // handle a connection may still borrow) and free any binding so a slot can rebind.
                     _ = m_bound.Remove(item: removed);
+                    NoteTopologyChangeLocked();
                     m_diagnostics?.Invoke($"[gameinput] device disconnected (0x{device:x})");
                 }
             }
         } catch {
             // This runs on a GameInput thread; an exception must never propagate into native code.
         }
+    }
+
+    /// <summary>A counter that advances whenever a GameInput device appears or vanishes. A sole binding records it
+    /// and is dropped once it moves.</summary>
+    public long TopologyVersion {
+        get {
+            lock (m_deviceLock) {
+                return m_topologyVersion;
+            }
+        }
+    }
+
+    // The caller holds m_deviceLock.
+    private void NoteTopologyChangeLocked() {
+        ++m_topologyVersion;
+        m_lastTopologyChange = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -122,15 +150,23 @@ public sealed class GameInputHaptics : IDisposable {
             return match;
         }
     }
-    /// <summary>Reserves the only connected GameInput gamepad, when exactly one is connected and unbound, for the
-    /// only connected XInput slot: with one of each there is nothing to disambiguate.</summary>
-    /// <returns>The reserved device, or <see langword="null"/> unless exactly one device is connected and unbound.</returns>
-    public IGameInputDevice? BindSole() {
+    /// <summary>Reserves the only connected GameInput gamepad, when exactly one is connected and unbound and the
+    /// device topology has held still for <see cref="SoleSettleMilliseconds"/>, for the only connected XInput slot:
+    /// with one of each there is nothing to disambiguate. The settle window keeps a partial asynchronous
+    /// enumeration (the other pad's device not yet reported) from passing for a sole device.</summary>
+    /// <param name="topologyVersion">The <see cref="TopologyVersion"/> the reservation was made at; the caller drops
+    /// the binding when the version moves.</param>
+    /// <returns>The reserved device, or <see langword="null"/> unless exactly one device is connected, unbound and
+    /// settled.</returns>
+    public IGameInputDevice? BindSole(out long topologyVersion) {
         lock (m_deviceLock) {
+            topologyVersion = m_topologyVersion;
+
             if (
                 (m_gameInput is null) ||
                 (1 != m_devices.Count) ||
-                (0 != m_bound.Count)
+                (0 != m_bound.Count) ||
+                (Stopwatch.GetElapsedTime(startingTimestamp: m_lastTopologyChange).TotalMilliseconds < SoleSettleMilliseconds)
             ) {
                 return null;
             }
@@ -255,6 +291,11 @@ public sealed class GameInputHaptics : IDisposable {
                 m_gameInput = null;
 
                 return false;
+            }
+
+            // The asynchronous enumeration is under way; the topology is unsettled until it quiets down.
+            lock (m_deviceLock) {
+                m_lastTopologyChange = Stopwatch.GetTimestamp();
             }
 
             return true;

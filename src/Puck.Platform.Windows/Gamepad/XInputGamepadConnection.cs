@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Commands;
@@ -16,8 +15,9 @@ namespace Puck.Platform.Windows.Gamepad;
 /// </summary>
 /// <remarks>
 /// Rumble takes one path per write: the four GameInput motors (body and impulse triggers) once the slot is bound
-/// to its GameInput device, and the two XInput body motors until then. The Share button and Elite paddles are not
-/// reachable through XInput.
+/// to its GameInput device, and the two XInput body motors until then. The body pair and the trigger pair expire
+/// independently, and a zero-duration effect stops only its own pair. The Share button and Elite paddles are not
+/// reachable through XInput; a plugged-in headset reads through the headset battery report.
 /// </remarks>
 public sealed class XInputGamepadConnection : IGamepadConnection {
     private const int CorrelationIntervalTicks = 12; // ~48 ms at 250 Hz between GameInput bind attempts
@@ -32,12 +32,17 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
 
     private readonly IInputClock m_clock;
     private readonly GamepadCoalescer m_coalescer = new();
+    private readonly Lock m_gate = new();
     private readonly GameInputHaptics? m_haptics;
     private readonly GamepadOutput m_output;
     private readonly GamepadOutputQueue m_outputQueue = new();
     private readonly uint m_slot;
+    private readonly TimeProvider m_time;
 
+    private GamepadAccessories m_accessories;
+    private long m_bodyExpiry = long.MaxValue;
     private int m_correlationCountdown;
+    private volatile bool m_disposed;
     private volatile bool m_faulted;
     private bool m_hasPacket;
     private float m_highFrequency;
@@ -47,8 +52,10 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     private float m_lowFrequency;
     private GamepadPower m_power;
     private float m_rightTrigger;
-    private bool m_rumbleActive;
-    private long m_rumbleExpiry = long.MaxValue;
+    private bool m_soleBound;
+    private long m_soleTopologyVersion;
+    private IGameInputDevice? m_stateDevice;
+    private long m_triggerExpiry = long.MaxValue;
     private ulong m_sequence;
 
     /// <summary>Initializes a new instance of the <see cref="XInputGamepadConnection"/> class.</summary>
@@ -58,8 +65,9 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     /// <param name="haptics">The GameInput rumble service, or <see langword="null"/> where GameInput is unavailable.</param>
     /// <param name="clock">The capture clock that stamps each polled state's arrival.</param>
     /// <param name="type">The controller family the slot's product id identifies.</param>
+    /// <param name="timeProvider">The time source rumble durations expire on; <see langword="null"/> reads the system clock.</param>
     /// <exception cref="ArgumentNullException"><paramref name="clock"/> is <see langword="null"/>.</exception>
-    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics, IInputClock clock, GamepadType type) {
+    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics, IInputClock clock, GamepadType type, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(clock);
 
         DeviceId = deviceId;
@@ -76,6 +84,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             queue: m_outputQueue
         );
         m_slot = slot;
+        m_time = (timeProvider ?? TimeProvider.System);
     }
 
     /// <inheritdoc />
@@ -107,25 +116,31 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
 
     private void ApplyRumble(RumbleEffect effect) {
         if (effect.DurationMilliseconds == 0u) {
-            StopRumble();
+            StopBody();
 
             return;
         }
 
         m_highFrequency = NormalizeIntensity(intensity: effect.HighFrequency);
         m_lowFrequency = NormalizeIntensity(intensity: effect.LowFrequency);
-        ScheduleExpiry(durationMilliseconds: effect.DurationMilliseconds);
+        m_bodyExpiry = ScheduleExpiry(
+            active: ((m_lowFrequency > 0f) || (m_highFrequency > 0f)),
+            durationMilliseconds: effect.DurationMilliseconds
+        );
     }
     private void ApplyTriggerRumble(TriggerRumbleEffect effect) {
         if (effect.DurationMilliseconds == 0u) {
-            StopRumble();
+            StopTriggers();
 
             return;
         }
 
         m_leftTrigger = NormalizeIntensity(intensity: effect.Left);
         m_rightTrigger = NormalizeIntensity(intensity: effect.Right);
-        ScheduleExpiry(durationMilliseconds: effect.DurationMilliseconds);
+        m_triggerExpiry = ScheduleExpiry(
+            active: ((m_leftTrigger > 0f) || (m_rightTrigger > 0f)),
+            durationMilliseconds: effect.DurationMilliseconds
+        );
     }
     private static GamepadState Convert(in XInputGamepad pad) {
         var raw = pad.Buttons;
@@ -198,27 +213,56 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             stick: stick
         );
     }
-    private void ScheduleExpiry(uint durationMilliseconds) {
+    private GameInputRumbleParams CurrentRumble() =>
+        new() {
+            HighFrequency = m_highFrequency,
+            LeftTrigger = m_leftTrigger,
+            LowFrequency = m_lowFrequency,
+            RightTrigger = m_rightTrigger,
+        };
+    private bool HasMotionOn() =>
+        ((m_lowFrequency > 0f) || (m_highFrequency > 0f) || (m_leftTrigger > 0f) || (m_rightTrigger > 0f));
+    // Drops a sole binding the moment the topology that justified it changes: a second slot connected, or a second
+    // GameInput device appeared, so the only-device assumption no longer holds.
+    private void DropSoleBindingIfStale(bool soleConnection) {
         if (
-            (0f >= m_lowFrequency) &&
-            (0f >= m_highFrequency) &&
-            (0f >= m_leftTrigger) &&
-            (0f >= m_rightTrigger)
+            !m_soleBound ||
+            (m_haptics is null)
         ) {
-            m_rumbleActive = false;
-            m_rumbleExpiry = long.MaxValue;
-        } else {
-            m_rumbleActive = true;
-            m_rumbleExpiry = (Stopwatch.GetTimestamp() + ((long)(durationMilliseconds * (Stopwatch.Frequency / 1000.0))));
+            return;
         }
+
+        if (
+            soleConnection &&
+            (m_haptics.TopologyVersion == m_soleTopologyVersion)
+        ) {
+            return;
+        }
+
+        var device = GameInputDevice;
+
+        if (device is not null) {
+            m_haptics.Unbind(device: device);
+        }
+
+        GameInputDevice = null;
+        m_soleBound = false;
+        m_stateDevice = null;
     }
-    private void StopRumble() {
+    private long ScheduleExpiry(bool active, uint durationMilliseconds) =>
+        (active
+            ? (m_time.GetTimestamp() + ((long)(durationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
+            : long.MaxValue
+        );
+    private void StopBody() {
+        m_bodyExpiry = long.MaxValue;
         m_highFrequency = 0f;
-        m_leftTrigger = 0f;
         m_lowFrequency = 0f;
+    }
+    private void StopTriggers() {
+        m_leftTrigger = 0f;
         m_rightTrigger = 0f;
-        m_rumbleActive = false;
-        m_rumbleExpiry = long.MaxValue;
+        m_triggerExpiry = long.MaxValue;
     }
     // Maps XInput's button bitmask to GameInput's, so a slot's held buttons can be matched against a GameInput
     // device's reading to correlate the two identity spaces.
@@ -274,120 +318,222 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             _ => GamepadPower.Unknown,
         };
     }
+    /// <summary>Converts an XInput headset battery report into the accessories it implies.</summary>
+    /// <param name="information">The headset battery report of <c>XInputGetBatteryInformation</c>.</param>
+    /// <returns>Headphones and microphone when a headset is plugged in (any battery type but disconnected);
+    /// otherwise none. XInput reports one headset device, so it cannot tell the two apart.</returns>
+    public static GamepadAccessories ToAccessories(in XInputBatteryInformation information) =>
+        ((XInput.BatteryTypeDisconnected == information.BatteryType)
+            ? GamepadAccessories.None
+            : (GamepadAccessories.Headphones | GamepadAccessories.Microphone)
+        );
     /// <summary>Feeds a freshly polled XInput state into the coalescer (called on the poll thread). A state whose
-    /// packet number has not changed is the same report again and is not fed.</summary>
+    /// packet number has not changed is the same report again and is not fed. Does nothing once disposed.</summary>
     /// <param name="state">The polled state.</param>
     public void Apply(in XInputState state) {
-        if (
-            m_hasPacket &&
-            (state.PacketNumber == m_lastPacketNumber)
-        ) {
-            return;
-        }
-
-        m_hasPacket = true;
-        m_lastPacketNumber = state.PacketNumber;
-        m_latestGameInputButtons = ToGameInputButtons(xinputButtons: state.Gamepad.Buttons);
-
-        var converted = Convert(pad: in state.Gamepad) with {
-            ArrivalTicks = m_clock.NowTicks,
-            Power = m_power,
-            SequenceNumber = ++m_sequence,
-        };
-
-        m_coalescer.Update(state: in converted);
-    }
-    /// <summary>Records a fresh battery report; the next fed state carries it.</summary>
-    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c>.</param>
-    public void ApplyBattery(in XInputBatteryInformation information) {
-        var power = ToPower(information: in information);
-
-        if (power == m_power) {
-            return;
-        }
-
-        m_power = power;
-        m_hasPacket = false;    // the next poll re-feeds its state so the new charge reaches the coalescer
-    }
-    public void Dispose() {
-        m_faulted = true;
-        m_output.Kill();
-
-        var device = GameInputDevice;
-
-        if (device is not null) {
-            // Silence the motors so a disconnect mid-rumble can't latch a controller on, then release the
-            // binding. The handle itself is owned by the haptics dictionary; we only drop our borrow.
-            if (OperatingSystem.IsWindows()) {
-                var off = default(GameInputRumbleParams);
-
-                try {
-                    device.SetRumbleState(rumbleParams: in off);
-                } catch (COMException) {
-                    // The device is already gone; nothing to silence.
-                } catch (InvalidComObjectException) {
-                    // The RCW was torn down; nothing to silence.
-                }
+        lock (m_gate) {
+            if (
+                m_disposed ||
+                (m_hasPacket && (state.PacketNumber == m_lastPacketNumber))
+            ) {
+                return;
             }
 
-            m_haptics?.Unbind(device: device);
-            GameInputDevice = null;
+            m_hasPacket = true;
+            m_lastPacketNumber = state.PacketNumber;
+            m_latestGameInputButtons = ToGameInputButtons(xinputButtons: state.Gamepad.Buttons);
+
+            var converted = Convert(pad: in state.Gamepad) with {
+                Accessories = m_accessories,
+                ArrivalTicks = m_clock.NowTicks,
+                Power = m_power,
+                SequenceNumber = ++m_sequence,
+            };
+
+            m_coalescer.Update(state: in converted);
+        }
+    }
+    /// <summary>Records a fresh battery report; the next fed state carries it. Does nothing once disposed.</summary>
+    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c> for the gamepad.</param>
+    public void ApplyBattery(in XInputBatteryInformation information) {
+        lock (m_gate) {
+            var power = ToPower(information: in information);
+
+            if (
+                m_disposed ||
+                (power == m_power)
+            ) {
+                return;
+            }
+
+            m_power = power;
+            m_hasPacket = false;    // the next poll re-feeds its state so the new charge reaches the coalescer
+        }
+    }
+    /// <summary>Records a fresh headset report; the next fed state carries it. Does nothing once disposed.</summary>
+    /// <param name="information">The battery report of <c>XInputGetBatteryInformation</c> for the headset device:
+    /// any battery type but disconnected means a headset (earpieces and microphone) is plugged in.</param>
+    public void ApplyHeadset(in XInputBatteryInformation information) {
+        lock (m_gate) {
+            var accessories = ToAccessories(information: in information);
+
+            if (
+                m_disposed ||
+                (accessories == m_accessories)
+            ) {
+                return;
+            }
+
+            m_accessories = accessories;
+            m_hasPacket = false;    // the next poll re-feeds its state so the new accessory reaches the coalescer
+        }
+    }
+    /// <inheritdoc />
+    public void Dispose() {
+        lock (m_gate) {
+            if (m_disposed) {
+                return;
+            }
+
+            m_disposed = true;
+            m_faulted = true;
+            m_output.Kill();
+
+            var device = GameInputDevice;
+
+            if (device is not null) {
+                // Silence the motors so a disconnect mid-rumble can't latch a controller on, then release the
+                // binding. The handle itself is owned by the haptics dictionary; we only drop our borrow.
+                if (OperatingSystem.IsWindows()) {
+                    var off = default(GameInputRumbleParams);
+
+                    try {
+                        device.SetRumbleState(rumbleParams: in off);
+                    } catch (COMException) {
+                        // The device is already gone; nothing to silence.
+                    } catch (InvalidComObjectException) {
+                        // The RCW was torn down; nothing to silence.
+                    }
+                }
+
+                m_haptics?.Unbind(device: device);
+                GameInputDevice = null;
+            }
+
+            m_soleBound = false;
+            m_stateDevice = null;
+
+            // The XInput-only path (and a pad whose GameInput device never bound) stops here: a disconnect must
+            // never leave the body motors latched on.
+            var silence = default(XInputVibration);
+
+            try {
+                _ = XInput.SetState(
+                    userIndex: m_slot,
+                    vibration: in silence
+                );
+            } catch (DllNotFoundException) {
+                // XInput is unavailable; there is nothing to silence.
+            } catch (EntryPointNotFoundException) {
+                // XInput is unavailable; there is nothing to silence.
+            }
         }
     }
     /// <summary>
     /// Actuates this connection's pending output on the poll thread: correlates its GameInput device and writes
     /// any changed rumble through exactly one path, the bound GameInput device (all four motors) or else XInput
-    /// (the two body motors). Called once per polled tick, after <see cref="Apply"/>.
+    /// (the two body motors). Called once per polled tick, after <see cref="Apply"/>. A device bound or replaced
+    /// while motors are running receives the current unexpired state at once, without restarting any duration.
+    /// Does nothing once disposed.
     /// </summary>
-    /// <param name="soleConnection">Whether this is the only connected XInput slot, which lets it bind the only
-    /// GameInput gamepad without waiting for a held button to disambiguate.</param>
+    /// <param name="soleConnection">Whether this is the only connected XInput slot and that topology has held
+    /// through the source's settle window, which lets it bind the only GameInput gamepad without waiting for a held
+    /// button to disambiguate. A sole binding is dropped as soon as this turns <see langword="false"/> or a second
+    /// GameInput device appears.</param>
     public void ServiceOutput(bool soleConnection) {
-        if (
-            (m_haptics is not null) &&
-            (GameInputDevice is null)
-        ) {
-            if (m_correlationCountdown > 0) {
-                --m_correlationCountdown;
-            } else {
-                m_correlationCountdown = CorrelationIntervalTicks;
-                GameInputDevice = (soleConnection
-                    ? m_haptics.BindSole()
-                    : null
-                ) ?? m_haptics.Bind(targetButtons: m_latestGameInputButtons);
-            }
-        }
-
-        if (!TryTakeRumble(rumble: out var rumble)) {
-            return;
-        }
-
-        var device = GameInputDevice;
-
-        if (
-            (m_haptics is not null) &&
-            (device is not null)
-        ) {
-            if (m_haptics.RumbleDevice(
-                device: device,
-                rumbleParams: in rumble
-            )) {
+        lock (m_gate) {
+            if (m_disposed) {
                 return;
             }
 
-            // The bound device disconnected; drop the stale binding and fall back to XInput for this write.
-            m_haptics.Unbind(device: device);
-            GameInputDevice = null;
+            DropSoleBindingIfStale(soleConnection: soleConnection);
+
+            if (
+                (m_haptics is not null) &&
+                (GameInputDevice is null)
+            ) {
+                if (m_correlationCountdown > 0) {
+                    --m_correlationCountdown;
+                } else {
+                    m_correlationCountdown = CorrelationIntervalTicks;
+
+                    var version = 0L;
+                    var sole = (soleConnection
+                        ? m_haptics.BindSole(topologyVersion: out version)
+                        : null
+                    );
+
+                    if (sole is not null) {
+                        GameInputDevice = sole;
+                        m_soleBound = true;
+                        m_soleTopologyVersion = version;
+                    } else {
+                        GameInputDevice = m_haptics.Bind(targetButtons: m_latestGameInputButtons);
+                    }
+                }
+            }
+
+            var changed = TryTakeRumble(rumble: out var rumble);
+            var device = GameInputDevice;
+
+            if (!ReferenceEquals(
+                objA: device,
+                objB: m_stateDevice
+            )) {
+                if (
+                    (device is not null) &&
+                    HasMotionOn()
+                ) {
+                    changed = true;     // a device just bound: hand it the state already running
+                } else {
+                    m_stateDevice = device;
+                }
+            }
+
+            if (!changed) {
+                return;
+            }
+
+            if (
+                (m_haptics is not null) &&
+                (device is not null)
+            ) {
+                if (m_haptics.RumbleDevice(
+                    device: device,
+                    rumbleParams: in rumble
+                )) {
+                    m_stateDevice = device;
+
+                    return;
+                }
+
+                // The bound device disconnected; drop the stale binding and fall back to XInput for this write.
+                m_haptics.Unbind(device: device);
+                GameInputDevice = null;
+                m_soleBound = false;
+                m_stateDevice = null;
+            }
+
+            var vibration = new XInputVibration {
+                LeftMotorSpeed = ((ushort)(rumble.LowFrequency * ushort.MaxValue)),
+                RightMotorSpeed = ((ushort)(rumble.HighFrequency * ushort.MaxValue)),
+            };
+
+            _ = XInput.SetState(
+                userIndex: m_slot,
+                vibration: in vibration
+            );
         }
-
-        var vibration = new XInputVibration {
-            LeftMotorSpeed = ((ushort)(rumble.LowFrequency * ushort.MaxValue)),
-            RightMotorSpeed = ((ushort)(rumble.HighFrequency * ushort.MaxValue)),
-        };
-
-        _ = XInput.SetState(
-            userIndex: m_slot,
-            vibration: in vibration
-        );
     }
     /// <inheritdoc />
     public void Start() {
@@ -395,45 +541,54 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     }
     /// <summary>
     /// Drains queued rumble and trigger-rumble requests and honors finite-duration expiry, returning the
-    /// four-motor state to apply this tick (called on the poll thread).
+    /// four-motor state to apply this tick (called on the poll thread). The body pair and the trigger pair expire
+    /// independently: one pair's expiry or zero-duration stop leaves the other pair running.
     /// </summary>
     /// <param name="rumble">The four motor intensities to apply when a write is needed.</param>
-    /// <returns><see langword="true"/> if the motors changed and a write should be issued.</returns>
+    /// <returns><see langword="true"/> if the motors changed and a write should be issued; always
+    /// <see langword="false"/> once disposed.</returns>
     public bool TryTakeRumble(out GameInputRumbleParams rumble) {
-        var changed = false;
+        lock (m_gate) {
+            if (m_disposed) {
+                rumble = default;
 
-        while (m_outputQueue.TryDequeue(command: out var command)) {
-            switch (command.Kind) {
-                case GamepadOutputKind.Rumble:
-                    ApplyRumble(effect: command.Rumble);
-                    changed = true;
-
-                    break;
-                case GamepadOutputKind.TriggerRumble:
-                    ApplyTriggerRumble(effect: command.TriggerRumble);
-                    changed = true;
-
-                    break;
-                default:
-                    break;
+                return false;
             }
+
+            var changed = false;
+
+            while (m_outputQueue.TryDequeue(command: out var command)) {
+                switch (command.Kind) {
+                    case GamepadOutputKind.Rumble:
+                        ApplyRumble(effect: command.Rumble);
+                        changed = true;
+
+                        break;
+                    case GamepadOutputKind.TriggerRumble:
+                        ApplyTriggerRumble(effect: command.TriggerRumble);
+                        changed = true;
+
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            var now = m_time.GetTimestamp();
+
+            if (now >= m_bodyExpiry) {
+                StopBody();
+                changed = true;
+            }
+
+            if (now >= m_triggerExpiry) {
+                StopTriggers();
+                changed = true;
+            }
+
+            rumble = CurrentRumble();
+
+            return changed;
         }
-
-        if (
-            m_rumbleActive &&
-            (Stopwatch.GetTimestamp() >= m_rumbleExpiry)
-        ) {
-            StopRumble();
-            changed = true;
-        }
-
-        rumble = new GameInputRumbleParams {
-            HighFrequency = m_highFrequency,
-            LeftTrigger = m_leftTrigger,
-            LowFrequency = m_lowFrequency,
-            RightTrigger = m_rightTrigger,
-        };
-
-        return changed;
     }
 }
