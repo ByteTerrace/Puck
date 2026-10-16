@@ -6,6 +6,8 @@ starting work, and tick or remove an item in the same change that closes it.
 
 ## Standalone
 
+- [ ] Owner decision: whether the engine ships or requires the GameInput redistributable (the `Microsoft.GameInput` package's runtime). Without it the Xbox path cannot see the Series X|S Share button or the Elite paddles, cannot identify a pad by device rather than XInput slot, and is capped at four pads; the inbox GameInput v0 runtime, where `GameInputCreate` accepts it, reaches only the impulse-trigger motors. See [device input](../reference/input.md#limits-and-hardware-evidence).
+- [ ] Run every controller path the protocol tests pin on its hardware: DualSense calibration, improved rumble, battery, mute and Edge buttons over USB and Bluetooth; Switch Pro over Bluetooth with IMU calibration and HD rumble; the classic Steam Controller; Triton pairing, battery, pad pressure and reports `0x45`/`0x47`; Xbox identity, battery and single-path rumble. Note what each run shows in its commit. See [device input](../reference/input.md#limits-and-hardware-evidence).
 These items belong to no single programme.
 
 - [ ] Two console verbs break the operator MCP attachment (`puck mcp --profile operator` against a World that ran `world.control start`). `world.wait <ticks>` answers at once (`releasing at tick N`) and the attachment's next call fails with "Host disconnected; dispatched outcome is unknown"; `world.reload` on a World booted from `.puck` source never answers, and the call ends at its deadline. Both work from stdin. Until they are fixed, an MCP session restarts the World to pick up a source edit and fences on a log line or a capture instead of `world.wait`. See [`Puck.Mcp`](../../src/Puck.Mcp/README.md).

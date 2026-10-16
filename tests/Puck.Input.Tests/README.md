@@ -21,8 +21,13 @@ dotnet test tests/Puck.Input.Tests/Puck.Input.Tests.csproj -c Release
 
 ## Coverage and integration checks
 
+`ControllerProtocolTests` pins each controller's wire protocol to the byte
+layouts of the Linux and SDL drivers it follows: report shapes, button bits,
+calibration arithmetic, power decoding and output framing.
+
 The suite also checks parser report bounds and output-buffer floors, bounded
-output, rumble stop and expiry, scheduled effects during input silence, receiver
+output, rumble cadence (held weaker updates, refresh, repeated stops), rumble
+stop and expiry, scheduled effects during input silence, receiver
 parking and state reset, disposal ordering, touch release, deterministic player
 ordering, and empty LampArray behavior.
 
