@@ -65,8 +65,8 @@ public interface IGamepadOutput {
     /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick);
     /// <summary>
-    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
-    /// Switch HD-rumble waveforms).
+    /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as a
+    /// vendor report this engine does not model).
     /// </summary>
     /// <param name="data">The raw report payload, in the device's report format.</param>
     /// <returns><see langword="true"/> if the device has a raw channel and the payload was accepted; otherwise <see langword="false"/>.</returns>

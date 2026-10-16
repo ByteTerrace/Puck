@@ -391,6 +391,7 @@ public sealed class GamepadDeviceTests {
         Assert.True(condition: device.Output.SetHomeLedPattern(pattern: HomeLedPattern.Breathing(intensity: 15, period: TimeSpan.FromSeconds(value: 2))));
         Assert.True(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Left, frequencyHertz: 200, durationMilliseconds: 100)));
         Assert.False(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.Pulse(side: TrackpadSide.Left, onMicroseconds: 1, offMicroseconds: 1, repeat: 1)));
+        Assert.False(condition: device.Output.PlayTrackpadHaptic(effect: TrackpadHapticEffect.LfoTone(side: TrackpadSide.Left, frequencyHertz: 200, durationMilliseconds: 100) with { Kind = TrackpadHapticKinds.Tone | TrackpadHapticKinds.Pulse, }));
         Assert.True(condition: plainDevice.Output.RumbleHd(effect: in effect));
         Assert.False(condition: plainDevice.Output.SetHomeLedPattern(pattern: HomeLedPattern.Steady(intensity: 1)));
         hid.Time.Advance(by: SteadyStatePoll);

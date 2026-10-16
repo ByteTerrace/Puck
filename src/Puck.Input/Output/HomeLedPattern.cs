@@ -18,8 +18,9 @@ public readonly record struct HomeLedStep(byte Intensity, byte FadeSteps, byte H
 /// steps; the controller rounds to the nearest it supports.</param>
 /// <param name="StartIntensity">The brightness before the first step, and the steady brightness of a pattern with
 /// no steps, 0 through 15.</param>
-/// <param name="Repeat">How many times the sequence plays, 1 through 15, or 0 to repeat until replaced.</param>
-/// <param name="Steps">The steps, at most 15; empty holds <paramref name="StartIntensity"/>.</param>
+/// <param name="Repeat">How many times the sequence plays, 1 through 15, or 0 to repeat until replaced; ignored
+/// without steps.</param>
+/// <param name="Steps">The steps, at most 15; empty holds <paramref name="StartIntensity"/> until replaced.</param>
 public readonly record struct HomeLedPattern(TimeSpan StepDuration, byte StartIntensity, byte Repeat, ImmutableArray<HomeLedStep> Steps) {
     /// <summary>The most steps a pattern can carry.</summary>
     public const int MaximumSteps = 15;

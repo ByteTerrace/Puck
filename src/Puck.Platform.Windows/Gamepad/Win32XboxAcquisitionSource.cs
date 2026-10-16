@@ -56,6 +56,8 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
     // Opens a slot unless it is Steam Input's virtual pad, returning null for a skipped slot.
     private XInputGamepadConnection? OpenSlot(uint slot) {
         var type = GamepadType.XboxOne;
+        var vendorId = ((ushort)0);
+        var productId = ((ushort)0);
 
         if (XInput.ErrorSuccess == XInput.GetCapabilitiesEx(
             capabilities: out var capabilities,
@@ -70,6 +72,8 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
                 return null;
             }
 
+            vendorId = capabilities.VendorId;
+            productId = capabilities.ProductId;
             type = XInputGamepadConnection.ClassifyType(
                 productId: capabilities.ProductId,
                 vendorId: capabilities.VendorId
@@ -81,8 +85,10 @@ public sealed class Win32XboxAcquisitionSource : IGamepadAcquisitionSource {
             deviceId: InputDeviceId.FromConnectionKey(key: $"xinput:{slot}"),
             haptics: m_gameInputHaptics,
             playerIndex: playerIndex,
+            productId: productId,
             slot: slot,
-            type: type
+            type: type,
+            vendorId: vendorId
         )));
     }
     private void RunXInputLoop(CancellationToken cancellationToken) {

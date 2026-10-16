@@ -543,10 +543,12 @@ public sealed class GamepadDevice : IGamepadConnection {
             (m_parser is IRumbleParser rumbleParser) &&
             (m_rumbleActive || RumbleSent)
         ) {
-            await rumbleParser.SetRumbleAsync(
+            await WriteRumbleAsync(
                 cancellationToken: cancellationToken,
-                highFrequency: 0f,
-                lowFrequency: 0f
+                left: HdRumbleSide.Rest,
+                parser: rumbleParser,
+                right: HdRumbleSide.Rest,
+                timestamp: m_time.GetTimestamp()
             );
         }
 

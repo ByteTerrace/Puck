@@ -76,7 +76,7 @@ Registered arbiter lanes provide alternate views without draining again:
 | **DualSense** and **DualSense Edge** | HID over USB or Bluetooth | buttons, sticks, analog triggers, two touches; Edge Fn buttons and back paddles | calibrated gyro and accelerometer, fused orientation | rumble, RGB light bar, player LEDs, microphone-mute LED, adaptive triggers | battery and charging; headphone and microphone jacks |
 | **Switch Pro** | HID over USB or Bluetooth | buttons including Home and Capture, calibrated sticks, digital triggers | calibrated gyro and accelerometer, fused orientation | HD rumble, player LEDs, Home LED | battery and charging |
 | **Steam Controller** | HID over USB or the classic receiver | buttons, analog triggers and their full-pull switches, stick, two trackpads, grip buttons | gyro and accelerometer, fused orientation | trackpad haptic pulses, Steam-button LED | wireless battery |
-| **Steam Controller Triton** | HID over USB, Bluetooth LE, the puck receiver or the Nereid dongle | buttons, four paddles, analog triggers and their full-pull switches, two sticks, two pressure-sensing trackpads, stick and grip capacitive sense | gyro and accelerometer, fused orientation | dual-motor rumble | battery and charging |
+| **Steam Controller Triton** | HID over USB, Bluetooth LE, the puck receiver or the Nereid dongle | buttons, four paddles, analog triggers and their full-pull switches, two sticks, two pressure-sensing trackpads, stick and grip capacitive sense | gyro and accelerometer, fused orientation | dual-motor rumble, trackpad haptics (pulse, built-in effect, tone, sweep, script) | battery and charging |
 | **Xbox** | XInput, with GameInput for the trigger motors | buttons including Guide, sticks, analog triggers | — | body rumble; impulse triggers once bound to GameInput | battery; headset |
 
 Each parser follows the reference drivers for its family: Linux `hid-playstation`,
@@ -289,9 +289,11 @@ is serviced on its device loop after every read.
 
 `GamepadDevice` owns rumble cadence. A parser declares the shortest spacing its
 controller accepts between writes and, when the controller drops its motors
-without fresh writes, a refresh period: 30 ms spacing for every HID family, and
-refreshes every 50 ms on the Switch and the classic Steam Controller and every
-40 ms on the Triton (whose firmware stops its motors after about 50 ms). A
+without fresh writes, a refresh period: 30 ms spacing on the DualSense and both
+Steam families and the Switch's own transport spacing (20 ms on USB, 60 ms over
+Bluetooth), and refreshes every 50 ms on the Switch and the classic Steam
+Controller and every 40 ms on the Triton (whose firmware stops its motors after
+about 50 ms). A
 weaker update inside the spacing is held and written when it passes; a stop or a
 stronger update is written at once, and a refreshed controller hears a stop
 three more times.
@@ -390,7 +392,8 @@ drivers' layouts (`ControllerProtocolTests`). Hardware observation is separate:
   haptics and the watchdog setting await a hardware run; the side codes of
   reports `0x82` to `0x85` (left 1, right 2, both 3, from Valve's
   `MsgTriggerHaptic`) are unconfirmed, while the pulse report's (left 1, right
-  0) follow Linux.
+  0) follow Linux. A built-in click on the right pad settles it: under these codes
+  only the right pad clicks, under the pulse report's numbering both do.
 - **Observed on hardware, Xbox Series X|S:** every button including Guide, sticks,
   triggers, its family from the ordinal-108 identity, battery and body rumble.
 - **Motion agrees across families on hardware:** on the DualSense, the Switch

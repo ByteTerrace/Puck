@@ -36,7 +36,9 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     private readonly GameInputHaptics? m_haptics;
     private readonly GamepadOutput m_output;
     private readonly GamepadOutputQueue m_outputQueue = new();
+    private readonly ushort m_productId;
     private readonly uint m_slot;
+    private readonly ushort m_vendorId;
     private readonly TimeProvider m_time;
 
     private GamepadAccessories m_accessories;
@@ -66,10 +68,14 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     /// <param name="clock">The capture clock that stamps each polled state's arrival.</param>
     /// <param name="type">The controller family the slot's product id identifies.</param>
     /// <param name="timeProvider">The time source rumble durations expire on; <see langword="null"/> reads the system clock.</param>
+    /// <param name="vendorId">The slot's USB vendor id from its extended capabilities, or zero when unknown.</param>
+    /// <param name="productId">The slot's USB product id, or zero when unknown.</param>
     /// <exception cref="ArgumentNullException"><paramref name="clock"/> is <see langword="null"/>.</exception>
-    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics, IInputClock clock, GamepadType type, TimeProvider? timeProvider = null) {
+    public XInputGamepadConnection(uint slot, InputDeviceId deviceId, int playerIndex, GameInputHaptics? haptics, IInputClock clock, GamepadType type, TimeProvider? timeProvider = null, ushort vendorId = 0, ushort productId = 0) {
         ArgumentNullException.ThrowIfNull(clock);
 
+        m_productId = productId;
+        m_vendorId = vendorId;
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
         Type = type;
@@ -242,6 +248,17 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
         var device = GameInputDevice;
 
         if (device is not null) {
+            // Silence the device before letting it go: once unbound, nothing writes to it again, so a running
+            // trigger rumble would latch on (XInput cannot reach the trigger motors to stop it).
+            if (HasMotionOn()) {
+                var rest = default(GameInputRumbleParams);
+
+                _ = m_haptics.RumbleDevice(
+                    device: device,
+                    rumbleParams: in rest
+                );
+            }
+
             m_haptics.Unbind(device: device);
         }
 
@@ -469,7 +486,11 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
 
                     var version = 0L;
                     var sole = (soleConnection
-                        ? m_haptics.BindSole(topologyVersion: out version)
+                        ? m_haptics.BindSole(
+                            productId: m_productId,
+                            topologyVersion: out version,
+                            vendorId: m_vendorId
+                        )
                         : null
                     );
 
@@ -478,7 +499,11 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
                         m_soleBound = true;
                         m_soleTopologyVersion = version;
                     } else {
-                        GameInputDevice = m_haptics.Bind(targetButtons: m_latestGameInputButtons);
+                        GameInputDevice = m_haptics.Bind(
+                            productId: m_productId,
+                            targetButtons: m_latestGameInputButtons,
+                            vendorId: m_vendorId
+                        );
                     }
                 }
             }
@@ -486,17 +511,16 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             var changed = TryTakeRumble(rumble: out var rumble);
             var device = GameInputDevice;
 
+            // A device just bound receives the current state once, at rest included, so whatever it last played
+            // cannot outlive the binding.
             if (!ReferenceEquals(
                 objA: device,
                 objB: m_stateDevice
             )) {
-                if (
-                    (device is not null) &&
-                    HasMotionOn()
-                ) {
-                    changed = true;     // a device just bound: hand it the state already running
+                if (device is not null) {
+                    changed = true;
                 } else {
-                    m_stateDevice = device;
+                    m_stateDevice = null;
                 }
             }
 

@@ -51,7 +51,8 @@ public enum TrackpadHapticCommand : byte {
 /// </summary>
 /// <param name="Kind">The haptic form, one flag.</param>
 /// <param name="Side">The actuator or actuators to drive.</param>
-/// <param name="GainDecibels">The gain, in dB; the firmware limits it (about -24 to +6).</param>
+/// <param name="GainDecibels">The gain, in dB; the firmware limits it (about -24 to +6). The Triton's pulse report
+/// has no gain field, so a pulse plays at its default level there.</param>
 /// <param name="OnMicroseconds">A pulse's on-time, in µs.</param>
 /// <param name="OffMicroseconds">A pulse's off-time, in µs.</param>
 /// <param name="Repeat">A pulse train's pulse count.</param>
@@ -89,7 +90,8 @@ public readonly record struct TrackpadHapticEffect(
     /// <param name="onMicroseconds">Each pulse's on-time, in µs.</param>
     /// <param name="offMicroseconds">The gap after each pulse, in µs.</param>
     /// <param name="repeat">The number of pulses.</param>
-    /// <param name="gainDecibels">The gain, in dB.</param>
+    /// <param name="gainDecibels">The gain, in dB; the classic Steam Controller applies it, the Triton's pulse report
+    /// has no gain field.</param>
     /// <returns>The effect.</returns>
     public static TrackpadHapticEffect Pulse(TrackpadSide side, ushort onMicroseconds, ushort offMicroseconds, ushort repeat, sbyte gainDecibels = 0) =>
         new(GainDecibels: gainDecibels, Kind: TrackpadHapticKinds.Pulse, OffMicroseconds: offMicroseconds, OnMicroseconds: onMicroseconds, Repeat: repeat, Side: side);

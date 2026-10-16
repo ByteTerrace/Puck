@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Commands;
 
 namespace Puck.Input.Output;
@@ -104,7 +105,11 @@ public sealed class GamepadOutput : IGamepadOutput {
     }
     /// <inheritdoc />
     public bool PlayTrackpadHaptic(in TrackpadHapticEffect effect) {
-        if ((effect.Kind == TrackpadHapticKinds.None) || ((TrackpadHaptics & effect.Kind) != effect.Kind)) {
+        // One form per haptic: a combined Kind names no single report.
+        if (
+            (1 != BitOperations.PopCount(value: ((uint)effect.Kind))) ||
+            ((TrackpadHaptics & effect.Kind) != effect.Kind)
+        ) {
             return false;
         }
 

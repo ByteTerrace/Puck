@@ -473,6 +473,16 @@ public sealed class ControllerProtocolTests {
         hid.Time.Advance(by: spacing);
         await parser.SetLedAsync(color: new LedColor(Red: 255, Green: 0, Blue: 0), cancellationToken: cancellationToken);
         Assert.Equal(expected: [0x38, 0x11, 0xF0, 0xF0, 0x01,], actual: hid.Writes[2][10..15]);
+
+        // No steps: the start intensity holds, so the repeat nibble is cleared.
+        hid.Time.Advance(by: spacing);
+        await parser.SetHomeLedPatternAsync(pattern: new HomeLedPattern(Repeat: 5, StartIntensity: 7, StepDuration: TimeSpan.FromMilliseconds(value: 8), Steps: []), cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x38, 0x01, 0x70,], actual: hid.Writes[3][10..13]);
+
+        // A NaN amplitude is rest, never full strength.
+        hid.Time.Advance(by: spacing);
+        await parser.SetHdRumbleAsync(left: new HdRumbleSide(High: new HdRumbleBand(Amplitude: float.NaN, FrequencyHertz: 0f), Low: new HdRumbleBand(Amplitude: -1f, FrequencyHertz: 0f)), right: HdRumbleSide.Rest, cancellationToken: cancellationToken);
+        Assert.Equal(expected: [0x00, 0x01, 0x40, 0x40,], actual: hid.Writes[4][2..6]);
     }
     [Fact]
     public async Task Switch_reads_its_stick_deadzone_from_flash_and_keeps_usb_alive_when_reports_stop() {

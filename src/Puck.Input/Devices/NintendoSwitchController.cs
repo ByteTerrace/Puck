@@ -677,6 +677,11 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         destination[3] = ((byte)(lowAmplitude & 0xFF));
 
         static int AmplitudeStep(float intensity) {
+            // A non-positive or NaN intensity is rest; every comparison with NaN fails, so it is tested first.
+            if (!(intensity > 0f)) {
+                return 0;
+            }
+
             var target = (intensity * RumbleAmplitudes[^1]);
             var amplitudes = RumbleAmplitudes;
 
@@ -767,8 +772,11 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             value: (Math.Round(a: ((pattern.StepDuration.TotalMilliseconds - HomeLedMinimumStepMilliseconds) / ((HomeLedMaximumStepMilliseconds - HomeLedMinimumStepMilliseconds) / 14.0))) + 1.0)
         ));
 
+        // With no steps the LED holds its start intensity only when the repeat count is also 0 (dekuNukem).
         arguments[0] = ((byte)((count << 4) | stepCode));
-        arguments[1] = ((byte)((Nibble(value: pattern.StartIntensity) << 4) | Nibble(value: pattern.Repeat)));
+        arguments[1] = ((byte)((Nibble(value: pattern.StartIntensity) << 4) | ((0 == count)
+            ? 0
+            : Nibble(value: pattern.Repeat))));
 
         for (var index = 0; (index < count); ++index) {
             var step = steps[index];
@@ -940,6 +948,15 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
             matches: null,
             subcommand: SubcommandHomeLed
         );
+
+        if (!m_isBluetooth) {
+            // SDL forces HID-only mode again once configured, which the pad sends no acknowledgement for.
+            _ = await SendInitCommandAsync(
+                cancellationToken: cancellationToken,
+                command: CommandDisableUsbTimeout,
+                waitForAck: false
+            );
+        }
     }
     /// <summary>Writes a still-pending rumble report past the output spacing, so a stop requested as the engine
     /// releases the pad reaches it. Best-effort and bounded, while the handle is still open after the I/O loop
