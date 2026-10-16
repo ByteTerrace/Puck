@@ -462,6 +462,28 @@ The [Input test suite](../../tests/Puck.Input.Tests/README.md) owns the test
 coverage and run instructions. Live hardware checks use the [Quick start](#quick-start)
 inspection path, stderr diagnostics, and physical output observation.
 
+A hardware run drives a `GamepadManager` from `WindowsInputTransports` in a
+small program, or a parser over `Win32HidDeviceSource` directly, and logs each
+drained state. Only one process can hold a pad's HID handle at a time, so run no
+second probe or `Puck.World` beside it. What each check expects:
+
+- **Inputs:** every button reaches its `GamepadButtons` flag, sticks reach ±1,
+  triggers sweep 0 to 1, touch position (and Triton pressure) tracks, and
+  `TryGetPower` and `TryGetAccessories` agree with the pad.
+- **Motion:** integrate the drained gyro between two presses. A quarter turn to
+  the left, flat on a table, reads about +90° about Y; lifting the far edge reads
+  a positive rotation about X; the fused orientation agrees.
+- **Outputs:** low and high rumble on every pad, the DualSense light bar,
+  adaptive triggers and mute LED, the Switch Home LED (steady and a
+  `HomeLedPattern`), Switch `RumbleHd` sweeps across each band's range (the
+  pitch should rise), and each Triton `TrackpadHapticEffect` form on each side.
+  `Builtin(Right, Click)` settles the side codes of reports `0x82` to `0x85`:
+  only the right pad clicking confirms them, both pads clicking means they take
+  the pulse report's numbering.
+- **Lizard mode:** some seconds after a Triton initializes, a finger on its
+  right trackpad must not move the cursor. A probe stopped without disposing
+  leaves the pad out of lizard mode until it is power-cycled.
+
 ## Further reading
 
 - [Commands and input](commands.md) — bindings, dispatch, and fixed-step snapshots.
