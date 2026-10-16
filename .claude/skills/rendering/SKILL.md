@@ -190,6 +190,11 @@ owns the explanation.
   writes a light slice so the mesh stages take their orthographic form, with the
   view cameras' handedness; `surface/sdf-mesh-path.hlsli` mirrors that
   projection.
+- **A dynamic group bakes in its slot's frame.** Its box, lattices and points
+  are slot-local, and `sdf-mesh-bake` carries every sample through the slot's
+  transform of the dispatching frame (a non-negative selector names the slot):
+  a box fixed in world space at the bake's start misses a body that moves
+  while it bakes. The contour is the mesh, already in that frame.
 - **Materials are point-sampled, not taken from the lattice.** Each final quad's
   quarters are sampled through `sdfMeshBakePoints` (a staged World table the
   residency writes before the upload) and a disagreeing quad splits; the draw

@@ -1,8 +1,11 @@
 // The mesh bake's field sampler: one invocation per sample of the dispatch's batch of lattices (the pass block's
 // meshBakeLattices, each sample x fastest within its lattice, the lattices back to back), evaluating the instances its
 // lattice's tile mask selects (sdf-mesh-bake-mask.comp.hlsl) at the sample and, when the lattice asks for gradients, at
-// four tetrahedral taps around it, through the kernel's one interpreter call site. The host meshes the samples
-// (SdfMeshPathBake). This is bake-time work: the mesh path's frame dispatches it only while a bake is pending.
+// four tetrahedral taps around it, through the kernel's one interpreter call site. A lattice whose selector names a
+// dynamic-transform slot lies in that slot's frame: each sample and tap is carried to world space through the slot's
+// transform in this frame, so a body that moves while it bakes is sampled where it is, and its gradient comes back in
+// the slot's frame. The host meshes the samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame
+// dispatches it only while a bake is pending.
 //
 // The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the unnormalized
 // tetrahedral gradient (zero without gradients). KEEP IN SYNC with SdfMeshPathBake's reader and SdfFrameBlock.WriteMeshBake.
@@ -53,6 +56,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * cell)));
         float spacing = (0.125 * min(cell.x, min(cell.y, cell.z)));
         uint maskBase = worldInstanceMaskBase(lattice);
+        int selector = asint(row1.w);
+        float3 slotPosition = float3(0.0, 0.0, 0.0);
+        float4 slotOrientation = float4(0.0, 0.0, 0.0, 1.0);
+
+        if (selector >= 0) {
+            slotPosition = sdfDynamicTransformRow(3u * (uint)selector).xyz;
+            slotOrientation = sdfDynamicTransformRow((3u * (uint)selector) + 1u);
+        }
         // The segments no instance owns form a group of their own (the selector SdfMeshPathBake.WorldSelector, whose
         // mask selects no instance); every other group samples its instances without them.
         sdfMapOmitWorldSegments = (asuint(row1.w) != 0x80000000u);
@@ -67,7 +78,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         [loop]
         for (uint tap = 0u; (tap < taps); tap++) {
             float3 at = ((tap == 0u) ? position : (position + (SdfBakeTaps[tap - 1u] * spacing)));
-            SdfHit hit = mapCore(at, maskBase, (tap == 0u));
+            SdfHit hit = mapCore((rotatePointByQuaternion(at, slotOrientation) + slotPosition), maskBase, (tap == 0u));
 
             if (tap == 0u) {
                 value = hit.distance;

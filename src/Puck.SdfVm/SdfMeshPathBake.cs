@@ -8,7 +8,8 @@ using Puck.SignedDistance.Baking;
 namespace Puck.SdfVm;
 
 /// <summary>One dispatch of the mesh bake's field sampler: the lattice it samples and the instances it selects.</summary>
-/// <param name="Origin">The world position of the lattice's first sample.</param>
+/// <param name="Origin">The position of the lattice's first sample: in world space, or in the slot's frame for a
+/// non-negative <paramref name="Selector"/>.</param>
 /// <param name="Cell">The spacing between samples along each axis, in world units.</param>
 /// <param name="Dims">The samples along each axis.</param>
 /// <param name="Selector">A dynamic-transform slot whose instances the bake samples when non-negative, the one instance
@@ -24,8 +25,8 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// <summary>Gets the first plane along Z of its group's final lattice that a slab of it samples, or -1 for any other
     /// lattice.</summary>
     public int Slab { get; init; } = -1;
-    /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid; empty for a grid
-    /// lattice.</summary>
+    /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid, in the frame
+    /// <see cref="Origin"/> is in; empty for a grid lattice.</summary>
     public ReadOnlyMemory<Vector4> Points { get; init; }
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
@@ -67,8 +68,10 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions, sampled in slabs of whole planes, values alone, and then gradients
 /// at the corners of the cells whose corners disagree in sign alone, the only samples a contour reads one at. The final
-/// samples contour on the thread pool (<see cref="SdfSampledLattice"/>). A dynamic group's vertices are stored in its
-/// slot's frame at bake time, so its draw follows the slot's live transform; a static group's are in world space.</para>
+/// samples contour on the thread pool (<see cref="SdfSampledLattice"/>). A dynamic group bakes in its slot's frame: its
+/// box, lattices and points are in that frame, and the kernel carries every sample through the slot's transform in the
+/// frame that dispatches it, so a body moving while it bakes is sampled where it is. Its vertices stay in that frame, and
+/// its draw follows the slot's live transform; a static group's are in world space.</para>
 /// <para>A new program restarts the bake; the meshes of the last finished bake keep drawing until each group's new mesh
 /// lands. The bake reports its counted work and the wall time it took (<see cref="Describe"/>).</para>
 /// </summary>
@@ -375,13 +378,13 @@ public sealed class SdfMeshPathBake {
             }
 
             if (instance.IsDynamic) {
-                var transform = ((instance.Slot < frame.DynamicTransforms.Count) ? frame.DynamicTransforms[instance.Slot] : default);
-                var center = (transform.Position + instance.Center);
+                // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin
+                // in its own frame, its center is that offset turned back by the slot's orientation in this frame.
+                var orientation = ((instance.Slot < frame.DynamicTransforms.Count) ? frame.DynamicTransforms[instance.Slot].Orientation : default);
+                var center = Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation)));
 
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out var group)) {
                     group = new Group(selector: instance.Slot, dynamic: true) {
-                        BakeOrientation = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation),
-                        BakePosition = transform.Position,
                         Low = (center - new Vector3(value: radius)),
                         High = (center + new Vector3(value: radius)),
                     };
@@ -397,7 +400,6 @@ public sealed class SdfMeshPathBake {
                 var group = new Group(selector: -(index + 1), dynamic: false) {
                     Low = (instance.Center - new Vector3(value: radius)),
                     High = (instance.Center + new Vector3(value: radius)),
-                    BakeOrientation = Quaternion.Identity,
                     Key = key,
                 };
 
@@ -410,7 +412,6 @@ public sealed class SdfMeshPathBake {
         // cube the frame's far distance wide about the origin.
         if (WorldInstructions(program: frame.Program) is { } worldKey) {
             m_groups.Add(item: new Group(selector: WorldSelector, dynamic: false) {
-                BakeOrientation = Quaternion.Identity,
                 High = new Vector3(value: reach),
                 Key = worldKey,
                 Low = new Vector3(value: -reach),
@@ -523,6 +524,7 @@ public sealed class SdfMeshPathBake {
         }
 
         if (!(low.X <= high.X)) {
+            group.Outcome = $"no surface after {group.Refinements} refinements";
             group.Next = null;
             group.Done = true;
             group.Mesh = null;
@@ -579,6 +581,7 @@ public sealed class SdfMeshPathBake {
 
         final.FindCorners();
         if (final.Corners.Length == 0) {
+            group.Outcome = "no crossed cell in the final lattice";
             group.Final = null;
             group.Next = null;
             group.Done = true;
@@ -644,6 +647,7 @@ public sealed class SdfMeshPathBake {
         lock (m_gate) {
             group.Contouring = false;
             if ((contour is null) || (contour.QuadCount == 0)) {
+                group.Outcome = ((contour is null) ? "contour refused" : "contour empty");
                 group.Done = true;
                 group.Mesh = null;
                 Finish();
@@ -682,7 +686,7 @@ public sealed class SdfMeshPathBake {
         SdfMesh? mesh = null;
 
         try {
-            mesh = MeshOf(contour: group.Contour!, dynamic: group.Dynamic, materials: group.PointMaterials, orientation: group.BakeOrientation, owns: group.Materials, position: group.BakePosition);
+            mesh = MeshOf(contour: group.Contour!, materials: group.PointMaterials, owns: group.Materials);
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
@@ -691,6 +695,7 @@ public sealed class SdfMeshPathBake {
             group.Contouring = false;
             group.Done = true;
             group.Mesh = mesh;
+            group.Outcome = ((mesh is null) ? "mesh refused" : null);
             group.Contour = null;
             group.Points = null;
             group.PointMaterials = [];
@@ -712,7 +717,10 @@ public sealed class SdfMeshPathBake {
         var triangles = m_groups.Sum(selector: static group => (long)(group.Mesh?.TriangleCount ?? 0));
         var vertices = m_groups.Sum(selector: static group => (long)(group.Mesh?.Positions.Length ?? 0));
 
-        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} taps={m_taps} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}";
+        // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
+        var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
+
+        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} taps={m_taps} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
@@ -724,7 +732,7 @@ public sealed class SdfMeshPathBake {
     private static Vector3 VertexOf(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     private static Vector3 Bilinear(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 at) =>
         Vector3.Lerp(value1: Vector3.Lerp(value1: a, value2: b, amount: at.X), value2: Vector3.Lerp(value1: d, value2: c, amount: at.X), amount: at.Y);
-    // Four points a quad, at its quarters' centers, lifted along the interpolated normal, in world space at bake time.
+    // Four points a quad, at its quarters' centers, lifted along the interpolated normal, in the frame its group bakes in.
     private static Vector4[] MaterialPoints(SdfContour contour) {
         var points = new Vector4[(4 * contour.QuadCount)];
 
@@ -744,22 +752,21 @@ public sealed class SdfMeshPathBake {
         return points;
     }
 
-    // A contour as a mesh, positions and normals carried into the slot's frame at bake time for a dynamic group. A quad
+    // A contour as a mesh, in the frame its group baked in. A quad
     // whose quarters all report one material stays one quad of that material; any other splits into its four quarters,
     // each its own material, so a material boundary is resolved at half a cell. A quarter whose material the group owns
     // no shape of takes its quad's contour material.
-    private static SdfMesh? MeshOf(SdfContour contour, bool dynamic, int[] materials, HashSet<int> owns, Quaternion orientation, Vector3 position) {
+    private static SdfMesh? MeshOf(SdfContour contour, int[] materials, HashSet<int> owns) {
         if (contour.QuadCount == 0) { return null; }
 
-        var inverse = Quaternion.Inverse(value: orientation);
         var positions = new List<Vector3>(capacity: contour.VertexCount);
         var normals = new List<Vector3>(capacity: contour.VertexCount);
         var indices = new List<uint>(capacity: (6 * contour.QuadCount));
         var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
 
         uint Add(Vector3 point, Vector3 normal) {
-            positions.Add(item: (dynamic ? Vector3.Transform(value: (point - position), rotation: inverse) : point));
-            normals.Add(item: (dynamic ? Vector3.Transform(value: normal, rotation: inverse) : normal));
+            positions.Add(item: point);
+            normals.Add(item: normal);
 
             return (uint)(positions.Count - 1);
         }
@@ -831,8 +838,6 @@ public sealed class SdfMeshPathBake {
         public int Key { get; set; }
         // The materials the group's shapes carry.
         public HashSet<int> Materials { get; } = [];
-        public Vector3 BakePosition { get; init; }
-        public Quaternion BakeOrientation { get; init; }
         public Vector3 Low { get; set; }
         public Vector3 High { get; set; }
         public SdfMeshBakeRequest? Next { get; set; }
@@ -850,6 +855,8 @@ public sealed class SdfMeshPathBake {
         public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
         // The final lattice while its slabs and corner gradients are sampled.
         public FinalLattice? Final { get; set; }
+        // Why a finished group has no mesh, or null.
+        public string? Outcome { get; set; }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the corners of the cells whose
     // corners disagree in sign, the samples a contour reads a gradient at, and their gradients.

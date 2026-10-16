@@ -748,8 +748,12 @@ and the parts that run change their kernels:
   A quad whose quarters agree keeps one material; any other splits into its
   quarters, so a material boundary, a painted iris or pupil included, resolves
   at half a cell even where its shape is thinner than the mesh. A dynamic
-  group's mesh is stored in its slot's frame at bake time and drawn at the
-  slot's live transform, and its draw names that slot (`SdfMeshDraw.FrameSlot`,
+  group bakes in its slot's frame: its box, lattices and points are in that
+  frame, and `sdf-mesh-bake` carries each sample through the slot's transform
+  in the frame that dispatches it, so a body that moves while it bakes is
+  sampled where it is rather than where it stood when the bake began. Its mesh
+  stays in that frame and draws at the slot's live transform, and its draw
+  names that slot (`SdfMeshDraw.FrameSlot`,
   the draw record's word 41), which the surface pass writes into the L row so
   views places material layers in the body's frame and reads its lanes; a
   static group's mesh is in world space. The tables keep each mesh at the words
