@@ -23687,6 +23687,20 @@
       "CoveredBy": [
         "prime-field.montgomery-reduction-vs-big-integer"
       ],
+      "Id": "Puck.Maths.ScaledResidueRing64.RadixEstimateFloor",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
+      "Id": "Puck.Maths.ScaledResidueRing64.RadixFoldFloor",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "prime-field.montgomery-reduction-vs-big-integer"
+      ],
       "Id": "Puck.Maths.ScaledResidueRing64.RadixResidue(System.UInt64)",
       "State": "covered"
     },

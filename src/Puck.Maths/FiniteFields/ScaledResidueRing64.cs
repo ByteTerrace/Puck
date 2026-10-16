@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
@@ -51,6 +52,12 @@ public readonly struct ScaledResidueRing64 {
     /// representative plus the modulus under its sign.
     /// </remarks>
     public const ulong SignedModulusCeiling = (1UL << 63);
+    /// <summary>The inclusive bound from which <see cref="RadixResidue(ulong)"/> reduces the radix as the carrier's negation of twice the modulus and one fold, the radix being two or three times the modulus there.</summary>
+    public const ulong RadixFoldFloor = (1UL << 62);
+    /// <summary>The inclusive bound from which <see cref="RadixResidue(ulong)"/> reduces the radix by a binary64 quotient estimate and one exact fold, below which the quotient outgrows the estimate's accuracy and the hardware divide runs.</summary>
+    public const ulong RadixEstimateFloor = (1UL << 15);
+    /// <summary>The dividend of the quotient estimate, <c>2^64 - 2^14</c>, exact in binary64: the radix biased down by four times the estimate's error bound, so that the truncated quotient never exceeds the exact one.</summary>
+    private const double RadixEstimateDividend = 18446744073709535232.0;
 
     /// <summary>Creates the ring over an odd modulus.</summary>
     /// <param name="modulus">The modulus, which must be odd and greater than one. The precondition is not enforced.</param>
@@ -211,15 +218,68 @@ public readonly struct ScaledResidueRing64 {
     /// <param name="modulus">The odd modulus, greater than one.</param>
     /// <returns><c>2^64 mod modulus</c>.</returns>
     /// <remarks>
-    /// Above <c>2^63</c> the radix lies between the modulus and twice it, so the remainder is the carrier's own negation
-    /// of the modulus and no division runs. Below, the radix is reduced as <c>R - 1</c> and lifted afterwards; an odd
-    /// modulus never divides the radix, so the reduced value is never zero and the lift cannot carry out of range.
+    /// <para>
+    /// No hardware division runs from <see cref="RadixEstimateFloor"/> up, which is every modulus the word prime
+    /// decision and the selection path reach. Above <c>2^63</c> the radix lies between the modulus and twice it, so
+    /// the remainder is the carrier's own negation of the modulus. From <see cref="RadixFoldFloor"/> up it lies
+    /// between twice the modulus and four times it, so the remainder is the carrier's negation of twice the modulus,
+    /// which is below <c>2n</c>, less the modulus where that is still at or past it: one fold, no quotient and no
+    /// divider, on the band the selection and decision kernels spend the longest in.
+    /// </para>
+    /// <para>
+    /// Between the two floors the quotient <c>Q = 2^64 / n</c> is estimated in binary64 and settled by one exact
+    /// integer fold, the pattern the leaf-quotient rungs and the square root follow. The dividend is
+    /// <c>N = 2^64 - 2^14</c>, exact in binary64, so the exact quotient <c>N / n</c> is <c>Q - 2^14 / n</c>. The
+    /// modulus rounds to a binary64 value within a relative <c>2^-53</c> (exactly below <c>2^53</c>), and the quotient
+    /// of <c>N</c> by it rounds once more, so the estimate lies within <c>Q * 2^-52 * (1 + 2^-52)</c>, at most
+    /// <c>(2^12 / n) * (1 + 2^-52)</c>, of <c>N / n</c>: between <c>Q - (5 * 2^12 + 1) / n</c> and
+    /// <c>Q - 3 * 2^12 / n</c>, strictly inside <c>(Q - 1, Q)</c> for every <c>n</c> above <c>5 * 2^12</c>, which the
+    /// floor <c>2^15</c> clears. Its truncation is therefore <c>floor(Q)</c> or one less, so <c>2^64</c> less its
+    /// product with the modulus is the residue or the residue plus the modulus, in <c>[0, 2n)</c>, which the carrier
+    /// holds below <c>2^63</c> and the wrapping negation of the product forms exactly; one fold ends it, a select,
+    /// since <c>residue - n</c> wraps past <c>residue</c> exactly when no fold is due. The bias sits in the dividend
+    /// rather than being subtracted from the quotient so that no instruction follows the divide but the truncation.
+    /// The modulus is converted through <see cref="long"/> and the quotient back through it, one instruction each,
+    /// both in range as the modulus is below <c>2^62</c> and the quotient in <c>(3, 2^49]</c>.
+    /// </para>
+    /// <para>
+    /// Below <see cref="RadixEstimateFloor"/> the quotient outgrows the estimate's accuracy, so the radix is reduced as
+    /// <c>R - 1</c> by the hardware divide and lifted afterwards; an odd modulus never divides the radix, so the
+    /// reduced value is never zero and the lift cannot carry out of range. No prime kernel reaches that path: the
+    /// narrow decision trial-divides below <c>733^2</c>. The law <c>prime-field.montgomery-reduction-vs-big-integer</c>
+    /// compares every path with <c>2^64 mod n</c> at the floors, at every power of two's neighbours and at the moduli
+    /// whose quotient is nearest an integer, where the estimate's truncation is decided by its last bit.
+    /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong RadixResidue(ulong modulus) =>
-        ((modulus > (1UL << 63))
-            ? unchecked((0UL - modulus))
-            : ((ulong.MaxValue % modulus) + 1UL));
+    public static ulong RadixResidue(ulong modulus) {
+        if (modulus > (1UL << 63)) { return unchecked((0UL - modulus)); }
+        if (modulus >= RadixFoldFloor) {
+            var residue = unchecked((0UL - (modulus << 1)));
+
+            return Math.Min(val1: residue, val2: (residue - modulus));
+        }
+        if (modulus >= RadixEstimateFloor) {
+            // The raw conversions: the managed ones saturate, which costs a NaN mask and an overflow select on a value
+            // that is in range by the proof above.
+            var quotient = (Sse2.X64.IsSupported
+                ? ((ulong)Sse2.X64.ConvertToInt64WithTruncation(value: Sse2.DivideScalar(
+                    left: Vector128.CreateScalarUnsafe(value: RadixEstimateDividend),
+                    right: Sse2.X64.ConvertScalarToVector128Double(upper: Vector128<double>.Zero, value: ((long)modulus))
+                )))
+                : ((ulong)((long)(RadixEstimateDividend / ((double)((long)modulus))))));
+            var residue = unchecked((0UL - (quotient * modulus)));
+
+            return Math.Min(val1: residue, val2: (residue - modulus));
+        }
+
+        return RadixResidueByDivision(modulus: modulus);
+    }
+    /// <summary>Returns the radix reduced modulo an odd modulus below <see cref="RadixEstimateFloor"/> by the hardware divide, out of line so that the kernels inlining <see cref="RadixResidue(ulong)"/> carry no divide.</summary>
+    /// <param name="modulus">The odd modulus, greater than one.</param>
+    /// <returns><c>2^64 mod modulus</c>.</returns>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ulong RadixResidueByDivision(ulong modulus) => ((ulong.MaxValue % modulus) + 1UL);
     /// <summary>Multiplies two Montgomery-form residues and reduces the product by REDC.</summary>
     /// <param name="left">The first factor.</param>
     /// <param name="right">The second factor.</param>
