@@ -102,6 +102,36 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   selection above 2^63 (23 to 28% faster per ladder in isolation, but selection
   needs only the first base-two survivor's ladder, so a pair costs about 1.7
   ladders' time for one answer).
+- No hardware 64-bit divide runs per candidate on the selection or decision
+  path, and each removal was bit-identical to the divide it replaced:
+  `ScaledResidueRing64.RadixResidue` takes `2^64 mod n` as the carrier's
+  negation of `n` above 2^63, of `2n` with one fold from 2^62, and from 2^15
+  as a binary64 estimate of `(2^64 - 2^14) / n` truncated by the raw
+  CVTTSD2SI, multiplied back and folded once by a select (its remarks carry
+  the bound; the divide survives only below 2^15, out of line, where no prime
+  kernel goes); Selfridge's search reads the residues modulo 5, 7, 11, 13 and
+  15 from one constant-divisor remainder by 15015 and skips `D = 9`, whose
+  symbol is never -1 (`PrimeKernels.SelfridgeDiscriminant` exposes the chosen
+  `D`, which a prime's verdict cannot show); and `BoundedRandomSampling.Range64`
+  derives Lemire's threshold on the first draw whose low product is below the
+  bound. Per selected prime below 2^63 that is about 9.3 DIV r64 down to about
+  0.5: the reciprocal digit's two remainders by the odd part of `Q` (about 0.4,
+  from `D = -11` on) and the search loop from 19 (one search in sixteen) are
+  what remains. On the 7800X3D, whose divider is fast, the three removals
+  together measure 0.4 to 1.3% slower per selected prime at every band from
+  2^33 to 2^64 (ten-round round-robin of the base and each step's build,
+  paired medians; the three builds sit within 0.5% of one another), inside
+  the 1 to 3% that code layout alone moves; llvm-mca models
+  the four-lane radix setup at 170 cycles with four divides against 61 with
+  the estimate on znver2, 116 against 52 on skylake and 84 against 47 on
+  alderlake. Dead ends measured on the way: a doubling loop from `2^b - n`
+  (four doublings cost what the estimate costs, one what the fold costs), the
+  managed saturating conversions (a NaN mask, an overflow select and two spills
+  in the batch core, 1.5 to 2.5% per selected prime from 2^33 to 2^60), and a
+  bias subtracted from the quotient after the divide instead of folded into
+  the dividend. AMDuProfPcm's per-interval instruction counts on a loaded host
+  differed 6% between intervals of one run, so counts are read from the JIT
+  listings, not the counters.
 - Signed Montgomery reduction is the arithmetic of the single base-two round,
   the Lucas ladder and the base-two batch below 2^63 (the batch from 2^60);
   `ScaledResidueRing64`'s `ReduceSigned`, `ReduceSignedSquareSubtract` and
