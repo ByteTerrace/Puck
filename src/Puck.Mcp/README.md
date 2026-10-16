@@ -269,13 +269,22 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 Mutation commands that provide an authority settlement wait for its applied or
 refused verdict. This is console output, not a durable persistence receipt.
-Local rebuild and undo commands wait for their tick-boundary echo. A transport
+Local rebuild and undo commands (`world.reload`, `world.load`, `world.reset`,
+`world.undo`) wait for their tick-boundary echo and answer with it. A command
+that holds its session answers when the hold ends: `world.wait <ticks>` with
+its release tick, and `world.wait ready|bakes|captures` with the release
+report, a refusal unless the condition came true. A wait the call's deadline
+cannot cover is refused before it arms (`world.wait <ticks>` at the world's
+rate), and a hold still standing shortly before the deadline ends with a
+refusal that names it, so the attachment stays open and the next call runs at
+once ([local console attachment](../../docs/reference/hosting.md#local-console-attachment)).
+Give a long wait a longer `timeoutMs` or wait in shorter steps. A transport
 without a local verdict reports that the outcome is unknown.
 
 For HTTP, add the required `attachmentId` to these arguments. Call serially per
 attachment; concurrent calls return busy. Capture enters this session's
-ordering and simulation barrier, including its `world.wait`, then returns one
-completed image without polling. Completion proves the writer closed a PNG; it
+ordering and simulation barrier, then returns one completed image without
+polling. Completion proves the writer closed a PNG; it
 does not establish an exact simulation tick or acceptance of a prior mutation.
 Human edits may also enter that frame. Human console input remains independent
 while this attachment waits.
@@ -344,7 +353,10 @@ diagnostics use stderr.
 The process tests launch the real CLI and connect the official C# SDK client
 over its stdio, pinned to a World and through `--attach latest`: listing,
 exec, images and argument errors, plus EOF and oversized-input exits that leave
-the World serving. Each gives the child a private temporary directory, so
+the World serving. One boots a real headless World on a copy of the debug
+world's `.puck` source and holds one attachment through a `world.wait` that
+answers at its release tick, a wait refused for outlasting its call, and a
+`world.reload` after a source edit that answers and installs the edit. Each gives the child a private temporary directory, so
 `latest` can only find that test's World. Each connection ends as the stdio
 transport specifies: the client closes the adapter's stdin and the adapter must
 exit with code 0. The SDK's own `StdioClientTransport` never closes that stdin,
@@ -376,7 +388,7 @@ automated check covers a physical device-loss event or a live Entra deployment.
 Run `dotnet test --project tests/Puck.Mcp.Tests -c Release` and the `McpInteropTests` in `tests/Puck.Cli.Tests` for SDK interop and the
 [Hosting tests](../../tests/Puck.Hosting.Tests/README.md) for engine attachment contracts.
 For a live smoke, edit a parameter through MCP and decode the captured PNG; hold
-this attachment with `world.wait` and confirm human input still answers. Close
+this attachment's call with `world.wait` and confirm human input still answers. Close
 the adapter during the wait, reconnect with the same file, then capture again.
 Stopping control must remove discovery without stopping World; headless hosts
 must refuse capture. These checks run the ordinary engine, with no alternate

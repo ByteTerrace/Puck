@@ -21,6 +21,7 @@ public sealed class TextCommandSource : ITextCommandSink {
     // One queue token per submitted work item, while the work itself lives in its session's FIFO. Rotating a blocked
     // session therefore cannot move that session's oldest line behind a concurrently appended later line.
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
+    private readonly List<TextCommandSession> m_holding = [];
     private readonly CommandRegistry m_registry;
 
     // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
@@ -29,6 +30,18 @@ public sealed class TextCommandSource : ITextCommandSink {
     internal void EnqueueSession(TextCommandSession session, TextSessionWork work) {
         session.EnqueuePending(work: work);
         m_pending.Enqueue(item: session);
+    }
+    // Pump thread only, as HoldWhile is.
+    internal void TrackHold(TextCommandSession session) => m_holding.Add(item: session);
+
+    // Reads every armed hold once per drain, so a hold ends, reports and answers its line when it releases, whether
+    // or not a line waits behind it.
+    private void PollHolds() {
+        for (var index = (m_holding.Count - 1); (index >= 0); index--) {
+            if (!m_holding[index].PollHold()) {
+                m_holding.RemoveAt(index: index);
+            }
+        }
     }
 
     /// <summary>Submits the lines present at entry in per-session arrival order. A session waiting for one of its
@@ -45,6 +58,8 @@ public sealed class TextCommandSource : ITextCommandSink {
         // Scan only the lines present at entry. A session whose read-after-write barrier is closed rotates to the
         // tail as one intact FIFO stream, allowing another seat's independent session to keep draining without
         // letting later lines from the blocked session overtake its read-back.
+        PollHolds();
+
         var scanBudget = m_pending.Count;
         HashSet<TextCommandSession>? blockedSessions = null;
 
@@ -118,10 +133,11 @@ public sealed class TextCommandSource : ITextCommandSink {
 
                 CommandResult result;
 
+                session.BeginSubmit();
                 try {
                     result = m_registry.SubmitSession(line: commandLine, session: session);
                 } catch (OperationCanceledException) {
-                    session.Settle(line: commandLine, result: CommandResult.Error(output: "[wire.reject: the host cancelled this command; inspect state before any retry]"));
+                    session.SettleSubmitted(line: commandLine, submitted: CommandResult.Error(output: "[wire.reject: the host cancelled this command; inspect state before any retry]"));
                     throw;
                 }
                 var queued = ReferenceEquals(
@@ -136,14 +152,14 @@ public sealed class TextCommandSource : ITextCommandSink {
                 );
 
                 // A queued line's result does not exist yet: it settles when its tick applies.
-                if (!queued) {
-                    session.Settle(
-                        line: commandLine,
-                        result: result
-                    );
-                }
+                session.SettleSubmitted(
+                    line: commandLine,
+                    submitted: (queued ? null : result)
+                );
             }
         }
+
+        PollHolds();
     }
 
     /// <summary>Gets a value indicating whether the administrative session can make no further progress until a fixed
@@ -265,7 +281,7 @@ public sealed class TextCommandSource : ITextCommandSink {
     }
 
     /// <summary>Gets or sets a source-wide hold gate. While it returns true, no session drains; a handler that
-    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile"/> for a wait that belongs
+    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile(Func{bool})"/> for a wait that belongs
     /// to only one session. Null leaves all ready sessions eligible to drain.</summary>
     /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
     /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain

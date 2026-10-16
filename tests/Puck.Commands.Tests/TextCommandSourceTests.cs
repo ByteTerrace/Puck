@@ -425,7 +425,96 @@ public sealed class TextCommandSourceTests {
             expected: ["probe two", "probe three"]
         );
     }
+    // Law: in a session that settles results, a line that holds its session answers when the hold ends, with its
+    // release report or else its own result, even with no line queued behind it; a session that reports at submit
+    // time answers at once. A hold still standing when the session's answer is due ends with a refusal.
+    [Fact]
+    public void AHoldingLineInASettlingSessionAnswersWhenItsHoldEnds() {
+        var held = true;
+        var settled = new List<(string Line, CommandResult Result)>();
+        var submitted = new List<(string Line, CommandResult Result)>();
+        var source = new TextCommandSource(registry: new CommandRegistry(modules: [new ProbeModule(), new HoldModule(held: () => held)]));
+        using var settling = source.CreateSession(
+            onSettled: (line, result) => settled.Add(item: (line, result)),
+            principal: Principal.Console
+        );
+        using var immediate = source.CreateSession(
+            onResult: (line, result) => submitted.Add(item: (line, result)),
+            principal: Principal.Console
+        );
 
+        settling.Enqueue(line: "hold report");
+        settling.Enqueue(line: "probe after");
+        immediate.Enqueue(line: "hold plain");
+        source.Collect();
+        source.Collect();
+        Assert.Empty(collection: settled);
+        Assert.Equal(
+            actual: submitted.Select(selector: static answer => answer.Line),
+            expected: ["hold plain"]
+        );
+
+        held = false;
+        source.Collect();
+        Assert.Equal(
+            actual: settled.Select(selector: static answer => (answer.Line, answer.Result.Output)),
+            expected: [("hold report", "[hold: released]"), ("probe after", "")]
+        );
+
+        // A hold with no report answers with the line's own result, and with no line behind it the drain still reads it.
+        settled.Clear();
+        held = true;
+        settling.Enqueue(line: "hold plain");
+        source.Collect();
+        Assert.Empty(collection: settled);
+        held = false;
+        source.Collect();
+        Assert.Equal(
+            actual: settled.Select(selector: static answer => (answer.Line, answer.Result.Output)),
+            expected: [("hold plain", "[hold: armed]")]
+        );
+
+        // An answer already due ends the hold at the next drain: the report learns why, and a hold with no report
+        // refuses by name.
+        settled.Clear();
+        held = true;
+        settling.AnswerDeadline = new TextAnswerDeadline(
+            budget: TimeSpan.Zero,
+            clock: TimeProvider.System
+        );
+        settling.Enqueue(line: "hold report");
+        settling.Enqueue(line: "hold plain");
+        source.Collect();
+        source.Collect();
+        Assert.Equal(
+            actual: settled.Select(selector: static answer => (answer.Line, answer.Result.IsError, answer.Result.Output)),
+            expected: [
+                ("hold report", true, "[hold: answer due]"),
+                ("hold plain", true, "[wire.hold: 'hold plain' still held its session when this call's answer was due; the session no longer waits for it, so inspect state before any retry]"),
+            ]
+        );
+    }
+
+    // hold report arms a hold that reports its release; hold plain arms one with no report.
+    private sealed class HoldModule(Func<bool> held) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "hold",
+                description: "Holds the issuing session while the law's flag is set.",
+                bindability: CommandBindability.Unbindable,
+                handler: (context, args) => {
+                    context.TextSession!.HoldWhile(
+                        hold: held,
+                        released: (args[0].ToString() == "report")
+                            ? static deadlinePassed => (deadlinePassed ? CommandResult.Error(output: "[hold: answer due]") : new CommandResult(Output: "[hold: released]"))
+                            : null
+                    );
+
+                    return new CommandResult(Output: "[hold: armed]");
+                }
+            );
+        }
+    }
     private sealed class IdentityModule(Action<CommandContext> observe) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(

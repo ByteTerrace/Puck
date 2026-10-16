@@ -881,7 +881,9 @@ Facts a script needs:
   `[captures: settled at tick T]` on standard error. A script that takes one
   capture after another waits on it between them, since `world.screenshot`
   refuses while a capture is still pending and frames can trail ticks on a busy
-  machine.
+  machine. Over an operator attachment every form answers when its hold ends,
+  not as it arms, and a wait the call's deadline cannot cover is refused
+  ([`Puck.Mcp`](../Puck.Mcp/README.md#tools-and-results)).
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The

@@ -199,6 +199,108 @@ public sealed class McpInteropTests {
             )).Output
         );
     }
+    // Law: over one attachment to a real headless World booted from the debug world's .puck source, world.wait holds
+    // its own call until its release tick and the next call runs at once, a wait the call's deadline cannot cover is
+    // refused while the attachment survives, and world.reload after a source edit answers with its outcome and installs
+    // the edit. The World runs from its own build output beside this suite's, on a copy of the source tree.
+    [Fact]
+    public async Task AWaitHoldsItsOwnCallAndAReloadAnswersOverOneAttachment() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        using var directory = new TemporaryDirectory();
+        var root = RepositoryPaths.RequireRoot();
+        var worlds = directory.PathOf(name: "worlds");
+
+        CopyTree(
+            source: Path.Combine(path1: root, path2: "src/Puck.World/Assets/worlds"),
+            target: worlds
+        );
+        var source = Path.Combine(path1: worlds, path2: "debug.puck");
+        var output = new DirectoryInfo(path: AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var world = new ProcessStartInfo(fileName: "dotnet") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true, RedirectStandardOutput = true, StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), UseShellExecute = false, WorkingDirectory = directory.RootPath };
+
+        foreach (var argument in new[] {
+            Path.Combine(path1: root, path2: $"src/Puck.World/bin/{output.Parent!.Name}/{output.Name}/Puck.World.dll"),
+            "--world", source,
+            "--headless", "true",
+            "--state-dir", directory.PathOf(name: "state"),
+            "--control",
+        }) { world.ArgumentList.Add(item: argument); }
+        world.Environment["TEMP"] = directory.RootPath;
+        world.Environment["TMP"] = directory.RootPath;
+        using var host = Process.Start(startInfo: world)!;
+        var announced = new TaskCompletionSource<string>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        var stderr = new System.Text.StringBuilder();
+
+        host.ErrorDataReceived += (_, line) => {
+            if (line.Data is not { } data) { _ = announced.TrySetException(exception: new InvalidOperationException(message: $"World closed standard error before announcing control:{Environment.NewLine}{stderr}")); return; }
+            lock (stderr) { _ = stderr.AppendLine(value: data); }
+            if (data.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.control: operator attachment ")) { _ = announced.TrySetResult(result: data); }
+        };
+        host.OutputDataReceived += static (_, _) => { };
+        host.BeginErrorReadLine();
+        host.BeginOutputReadLine();
+
+        try {
+            _ = await announced.Task.WaitAsync(timeout: TimeSpan.FromMinutes(minutes: 5), cancellationToken: Token);
+            await using (var adapter = await ConnectAsync(
+                attach: "latest",
+                directory: directory,
+                revision: "2026-07-28"
+            )) {
+                async Task<(string Status, string Output)> ExecAsync(string command, int timeoutMs) {
+                    var result = (await adapter.Client.CallToolAsync(
+                        "puck_exec",
+                        new Dictionary<string, object?> { ["command"] = command, ["timeoutMs"] = timeoutMs },
+                        cancellationToken: Token
+                    )).StructuredContent!.Value;
+
+                    return (result.GetProperty(propertyName: "status").GetString()!, result.GetProperty(propertyName: "output").GetString()!);
+                }
+
+                var wait = await ExecAsync(command: "world.wait 15", timeoutMs: 30000);
+                var released = System.Text.RegularExpressions.Regex.Match(input: wait.Output, pattern: @"^\[world\.wait: 15 ticks from (\d+) — released at tick (\d+)\]$");
+
+                Assert.True(condition: ((wait.Status == "completed") && released.Success), userMessage: $"{wait.Status}: {wait.Output}");
+                Assert.True(condition: (ulong.Parse(s: released.Groups[2].Value, provider: System.Globalization.CultureInfo.InvariantCulture) >= (ulong.Parse(s: released.Groups[1].Value, provider: System.Globalization.CultureInfo.InvariantCulture) + 15UL)), userMessage: wait.Output);
+
+                var refused = await ExecAsync(command: "world.wait 3000", timeoutMs: 30000);
+
+                Assert.Equal(expected: "refused", actual: refused.Status);
+                Assert.StartsWith(expectedStartString: "[world.wait: refused (3000 ticks at 30 Hz take 100 s", actualString: refused.Output);
+
+                var before = await ExecAsync(command: "world.status", timeoutMs: 30000);
+
+                Assert.Contains(expectedSubstring: " placements 8 ", actualString: before.Output);
+
+                var text = File.ReadAllText(path: source);
+                var edited = text.Replace(oldValue: "placements {\n", newValue: "placements {\n  placement \"mcp-reload\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", comparisonType: StringComparison.Ordinal);
+
+                Assert.NotEqual(expected: text, actual: edited);
+                File.WriteAllText(path: source, contents: edited);
+
+                var reload = await ExecAsync(command: "world.reload", timeoutMs: 120000);
+
+                Assert.Equal(expected: "completed", actual: reload.Status);
+                Assert.StartsWith(expectedStartString: "[world.reload: world.reload applied", actualString: reload.Output);
+                Assert.Contains(expectedSubstring: " placements 9 ", actualString: (await ExecAsync(command: "world.status", timeoutMs: 30000)).Output);
+            }
+            await host.StandardInput.WriteAsync(buffer: "quit\n".AsMemory(), cancellationToken: Token);
+            await host.StandardInput.FlushAsync(cancellationToken: Token);
+            host.StandardInput.Close();
+            await host.WaitForExitAsync(cancellationToken: Token).WaitAsync(HangGuard, Token);
+            Assert.Equal(0, host.ExitCode);
+        } finally {
+            if (!host.HasExited) { host.Kill(entireProcessTree: true); }
+        }
+    }
+    private static void CopyTree(string source, string target) {
+        foreach (var file in Directory.EnumerateFiles(path: source, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {
+            var copy = Path.Combine(path1: target, path2: Path.GetRelativePath(relativeTo: source, path: file));
+
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: copy)!);
+            File.Copy(sourceFileName: file, destFileName: copy);
+        }
+    }
     private static Process Start(string attach, TemporaryDirectory directory) {
         // The adapter runs outside any checkout, so its revision check reads nothing and its standard error is its own.
         var start = new ProcessStartInfo(fileName: "dotnet") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true, RedirectStandardOutput = true, StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), UseShellExecute = false, WorkingDirectory = directory.RootPath };

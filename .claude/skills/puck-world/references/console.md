@@ -266,6 +266,17 @@ barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
 read-after-write across ticks (e.g. asserting motion after input).
 
+A session that settles results (an operator attachment's
+`ConsoleControlSession`) answers a holding line when its hold ends, not as it
+arms: `TextCommandSession.HoldWhile(hold, released)` takes the release report,
+and `TextCommandSource.Collect` reads every armed hold each drain, so the
+report runs even with no line behind it. The tick form answers
+`[world.wait: N ticks from T — released at tick R]`. The session's
+`AnswerDeadline` (each call's deadline less a margin) bounds the hold: the tick
+form refuses a wait its `rateHz` cannot finish in time, and a hold still
+standing at the deadline ends with a refusal. A new holding verb passes its
+report to `HoldWhile` rather than printing at release from its predicate.
+
 **The release is exact.** `FixedStepPump` runs the host's console drain
 (`TextCommandSource.Collect`, then the buffered-output flush) before EVERY
 step, including each step of a windowed or headless catch-up burst
