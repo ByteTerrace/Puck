@@ -687,6 +687,11 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
+  a few hundred MHz) through a whole windowed run, so `host.frames` and
+  `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
+  `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run, and
+  take a timing on a console session.
 - In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
   Store alias, which waits on standard input until the command times out. Use
   the repository's own tools, or `sed`, `awk` or `perl`, instead.

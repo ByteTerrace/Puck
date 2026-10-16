@@ -262,7 +262,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - Run it and look: `dotnet run --project src/Puck.World -c Release --
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at.
+  looked at. Every boot bakes the mesh path (15 to 20 s on the debug world on an
+  RTX 4070, longer on a slower card) and then traces the irradiance volume (about
+  2 s): a script that captures the finished image waits on `world.wait 2400` or
+  longer and checks for `[sdf.mesh-gi] done` in the log before the capture line.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
   (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. `puck parity
   --world <file>` compares Vulkan and Direct3D 12 on one world.
