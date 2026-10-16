@@ -174,8 +174,8 @@ public sealed partial class SdfWorldTables {
         // change invalidates the signature.
         m_decalRevision++;
     }
-    /// <summary>Sets whether the screen's acquired image emits light. Its GPU reduction supplies both direct lighting
-    /// and indirect face emission; a camera of the same world is excluded to prevent self illumination.</summary>
+    /// <summary>Sets whether the screen's acquired image emits light. Its GPU reduction supplies direct lighting; a camera
+    /// of the same world is excluded to prevent self illumination.</summary>
     /// <param name="screenIndex">The screen slot (0..31, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
     /// <param name="emits">Whether the source is an independent image or a view of another world.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..31</c>.</exception>

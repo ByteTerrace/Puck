@@ -191,7 +191,6 @@ void sdfMeshPathStage(SdfPixel p) {
     coverage.blendWeight = 0.0;
     coverage.blendOther = 0;
     sdfStoreVisibility(record, visibility);
-    sdfVisibilityStoreWord(record + SdfVisibilityRowI + 7u, 0u);
     sdfStoreVisibilityCoverage(record, coverage);
     sdfStoreVisibilityMeshTriangle(record, (hit ? meshHit.triangleIndex : 0u));
     // The draw's frame slot, which views places a material's layers in and reads lanes from (sdfVisibilityFrameSlot).

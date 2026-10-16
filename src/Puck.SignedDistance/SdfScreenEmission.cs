@@ -1,16 +1,12 @@
 namespace Puck.SignedDistance;
 
-/// <summary>The GPU reduction of one acquired screen image: sixteen linear RGB cell averages followed by its
-/// pixel-weighted whole-image average. Direct screen lighting and indirect face emission read the same allocation.</summary>
+/// <summary>The GPU reduction of one acquired screen image: its pixel-weighted linear RGB average, one float4 a screen,
+/// which direct screen lighting reads.</summary>
 public static class SdfScreenEmission {
-    /// <summary>The image cells along each axis.</summary>
+    /// <summary>The image cells along each axis the reduction sums in a fixed order before it totals them.</summary>
     public const int Edge = 4;
-    /// <summary>The record containing the whole-image average.</summary>
-    public const int Mean = (Edge * Edge);
-    /// <summary>The float4 records per screen. A cell's fourth component is its validity; the mean carries the direct gain.</summary>
-    public const int Records = (Mean + 1);
-    /// <summary>The direct room-glow gain. Face emission retains the image's physical linear radiance.</summary>
+    /// <summary>The direct room-glow gain, carried in the average's fourth component.</summary>
     public const float DirectGain = 2.5f;
     /// <summary>The bytes shared by every view of one residency, including unbound screen slots.</summary>
-    public const int Bytes = (((SdfProgramBuilder.MaxScreenSurfaces * Records) * sizeof(float)) * 4);
+    public const int Bytes = ((SdfProgramBuilder.MaxScreenSurfaces * sizeof(float)) * 4);
 }

@@ -23,8 +23,6 @@ public sealed partial class SdfWorldTables {
     private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
     private long m_meshDrawsRevision;
 
-    private bool m_meshIndirectInstancesComposable = true;
-
     private GpuRegion m_meshRegion;
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
     // renders.
@@ -50,9 +48,8 @@ public sealed partial class SdfWorldTables {
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
     // One more for every new draw list the region packs, which the view's cadence signature follows.
     internal long MeshRevision => m_meshRevision;
-    internal bool MeshIndirectInstancesComposable => m_meshIndirectInstancesComposable;
 
-    // Packs new draws, a new revision or changed field participation, growing the region when the list needs more
+    // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (
@@ -60,8 +57,7 @@ public sealed partial class SdfWorldTables {
                 objA: draws,
                 objB: m_meshDraws
             ) ||
-            (revision != m_meshDrawsRevision) ||
-            (m_meshIndirectInstancesComposable != m_liveProgram.IndirectInstancesComposable)
+            (revision != m_meshDrawsRevision)
         ) {
             var atlas = StageMeshAtlas(draws: draws);
             var impostors = StageImpostorAtlas(draws: draws);
@@ -81,7 +77,6 @@ public sealed partial class SdfWorldTables {
                 destination: records,
                 draws: draws,
                 impostors: impostors,
-                indirectInstancesComposable: m_liveProgram.IndirectInstancesComposable,
                 meshes: m_meshArena.Placements
             );
             StageMeshMotion(
@@ -107,12 +102,10 @@ public sealed partial class SdfWorldTables {
 
             m_meshDraws = draws;
             m_meshDrawsRevision = revision;
-            m_meshIndirectInstancesComposable = m_liveProgram.IndirectInstancesComposable;
             m_meshRevision++;
         }
 
         m_meshDrawCount = ((uint)draws.Count);
-        StageIndirectMeshes(draws: draws);
     }
     // Writes one placed mesh's words into the region.
     private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement, SdfMeshAtlas? atlas) {

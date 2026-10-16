@@ -109,14 +109,10 @@ public sealed partial class SdfProgram {
     /// <summary>The low byte of a segment's bound-mode word, which holds the bound mode beside
     /// <see cref="SegmentRigidPlanFlag"/> (<c>SDF_SEGMENT_BOUND_MASK</c>).</summary>
     public const uint SegmentBoundModeMask = 0xFFu;
-    /// <summary>The bits of an instance record's segmentEnd lane that hold the segment range's end; the four high bits are
-    /// <see cref="ShadowTransparentInstanceFlag"/>, <see cref="CameraHiddenInstanceFlag"/> and <see cref="IndirectInstanceMask"/>
+    /// <summary>The bits of an instance record's segmentEnd lane that hold the segment range's end; the two high bits are
+    /// <see cref="ShadowTransparentInstanceFlag"/> and <see cref="CameraHiddenInstanceFlag"/>
     /// (<c>SDF_INSTANCE_SEGMENT_END_MASK</c>).</summary>
-    public const uint SegmentEndMask = 0x0FFFFFFFu;
-    /// <summary>The first bit of the packed <see cref="SdfInstanceRange.Indirect"/> policy in the segment-end word.</summary>
-    public const int IndirectInstanceShift = 28;
-    /// <summary>The two packed <see cref="SdfInstanceRange.Indirect"/> bits, separate from the segment index and other flags.</summary>
-    public const uint IndirectInstanceMask = 0x30000000u;
+    public const uint SegmentEndMask = 0x3FFFFFFFu;
     /// <summary>The per-instance camera-hidden flag, OR'd into the second-highest bit of the instance meta's segmentEnd
     /// lane (i1.w) for an instance declared <see cref="SdfInstanceRange.CameraHidden"/>: the tile cull leaves it out of
     /// every camera mask, and mapCore masks it off with <see cref="SegmentEndMask"/>. Segment-directory indices are far
@@ -186,8 +182,7 @@ public sealed partial class SdfProgram {
 
     // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes
     // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the
-    // pre-carve union hull), camera-hidden when declared so, and indirect participation. Coupled root operands
-    // cast as one complete field; their per-instance exclusions cannot remove only one side of an operation.
+    // pre-carve union hull), and camera-hidden when declared so.
     private uint InstanceFlagsOf(SdfInstanceRange instance) =>
         (IsShadowTransparentInstance(
             first: instance.First,
@@ -196,5 +191,5 @@ public sealed partial class SdfProgram {
             ? ShadowTransparentInstanceFlag
             : 0u) | (instance.CameraHidden
             ? CameraHiddenInstanceFlag
-            : 0u) | (((uint)(IndirectInstancesComposable ? instance.Indirect : SdfIndirectParticipation.Cast)) << IndirectInstanceShift);
+            : 0u);
 }

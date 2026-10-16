@@ -146,7 +146,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 /// <param name="SkyQuality">The sky's boot quality tier (<c>world.sky-quality</c>): a layer below it writes no entry, and
 /// below <see cref="WorldSkyTier.High"/> each kind draws its reduced form.</param>
-/// <param name="Indirect">The world's diffuse indirect-light participation defaults.</param>
+/// <param name="Indirect">The world's diffuse indirect-light tier, sources and application.</param>
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
@@ -204,24 +204,21 @@ public sealed record WorldRenderDefaults(
         });
     }
 }
-/// <summary>Authored sources, finite solve depth and receiver application for the residency's indirect light cache.</summary>
-/// <param name="Bodies">Default makes moving bodies receive at medium and cast and receive at high. Receive omits
-/// their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.</param>
+/// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
-/// <param name="Apply">Bindable receiver-only controls. They do not change cached radiance.</param>
-/// <param name="Tier">The boot cache tier, Medium by default. The live session lever and selected quality preset override it.</param>
+/// <param name="Apply">Bindable receiver-only controls. They do not change the traced radiance.</param>
+/// <param name="Tier">The boot tier, Medium by default. The live session lever and selected quality preset override it.</param>
 public sealed record WorldRenderIndirect(
-    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>))] SdfIndirectParticipation Bodies = SdfIndirectParticipation.Default,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectSources? Sources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium);
-/// <summary>Gains applied once where each source enters transport; continuation never applies them a second time.</summary>
+/// <summary>Gains applied once where each source enters the traced light.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>
 /// <param name="Emission">Material emission gain.</param>
 /// <param name="Screens">Acquired screen-face emission gain.</param>
-/// <param name="Sky">Physical radiance at certified world exits.</param>
+/// <param name="Sky">Physical sky radiance at world exits.</param>
 /// <param name="Feedback">Reflected preceding-sweep radiance gain, once per bounce.</param>
 public sealed record WorldRenderIndirectSources(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Lights = null,
@@ -287,7 +284,7 @@ public abstract record WorldRenderLight {
     }
 
     /// <summary>Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport.
-    /// Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and
+    /// Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and
     /// attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BindableScalar? Bounce { get; init; }

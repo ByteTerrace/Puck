@@ -21,12 +21,12 @@ public sealed partial class WorldFramePresenter {
     }
 
     /// <summary>Dresses one view's allocation ceiling and grid using its saved quality and live pin, and stamps the
-    /// live indirect method and sky field fraction without lifting its shading restrictions. Repeated frames and pin sweeps reuse the view's controller and load.</summary>
+    /// live sky field fraction without lifting its shading restrictions. Repeated frames and pin sweeps reuse the view's controller and load.</summary>
     /// <param name="view">The consuming view and its existing shading restrictions.</param>
     /// <param name="name">The registered view name whose resolution policy applies.</param>
     /// <param name="width">The allocated view width.</param>
     /// <param name="height">The allocated view height.</param>
-    /// <returns>The same view with its live resolution, indirect-method and sky-field presentation overrides.</returns>
+    /// <returns>The same view with its live resolution and sky-field presentation overrides.</returns>
     public SdfViewSnapshot DressResolution(SdfViewSnapshot view, string name, uint width, uint height) {
         var state = m_settings.Resolution(view: name);
         var ceiling = m_settings.Ceiling(view: name);
@@ -47,7 +47,7 @@ public sealed partial class WorldFramePresenter {
             RenderScale = ceiling,
             ResolvedRenderScale = scale,
             UpscaleSharpness = m_settings.UpscaleSharpness,
-            Quality = view.Quality with { IndirectMethod = m_settings.IndirectMethod, SkyFieldScale = m_settings.SkyFieldScale },
+            Quality = view.Quality with { SkyFieldScale = m_settings.SkyFieldScale },
         };
     }
 }

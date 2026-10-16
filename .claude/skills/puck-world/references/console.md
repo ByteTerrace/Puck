@@ -45,15 +45,12 @@ safe only because the desktop's authority always resolves boot.
 `world.explain` is an Immediate observational one-shot request on the acting
 seat or pane's existing GPU picker. It suspends that picker's ordinary hover
 demand until the exact surfaced answer's fence completes, and settles on route
-loss, supersession or shutdown. It evaluates the captured publication's CPU
-reference once. Windowed and offscreen hosts tick the same feed after camera
+loss, supersession or shutdown, answering the pixel's material.
+Windowed and offscreen hosts tick the same feed after camera
 and pane composition. A Console `world.view.pointer <x> <y>` override also
 selects a published whole-display view without a seat or visible HUD cursor;
 it never injects a hardware press. True headless presentation still refuses.
-Inspector and echo use the same cached indirect formatter;
-the HUD never evaluates a reference. `world.lighting` qualifies the retained
-fenced census separately from its live host allocation inventory. None of these
-reads infers GPU classifications from host schedule counts. The application
+The application
 README's presentation inspection section owns the user contract.
 
 Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
@@ -235,17 +232,6 @@ on every failure — that is what makes quiet safe. `wire.errors [reset]`
 reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
-
-`world.wait indirect` uses the existing session hold to await a newer produced
-frame and every active shared indirect cache's current-source fence. It takes no
-deadline: produced frames bound it (`SdfIndirectCache.FinishFrameBound`), a solve
-that cannot finish refuses at once by name, and a seconds argument is refused.
-Its stderr settlement names the actual residency/allocation/epoch/generation/
-stamp/source identities once. It proves shared-cache completion, not each
-view's independent receiver admission. Pause simulation while warming, then
-resume for fixed input ticks; never replace the fence with guessed warm ticks.
-A not-settled verdict past the frame bound, or a refusal, is diagnostic evidence
-and cannot qualify a counter observation.
 
 Silo row retirement disposes its `TextCommandSession`, refusing work still
 queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`

@@ -54,12 +54,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Engine.RequestBrickBake(0, request with { DimX = Dim, DimY = Dim, DimZ = Dim });
         queued = Signature();
         rig.Render(time: 0f);
-        Assert.True(condition: rig.Engine.LightGeometryMutable);
         var firstSlice = Signature();
 
         Assert.NotEqual(actual: firstSlice, expected: queued);
         rig.Render(time: 0f);
-        Assert.False(condition: rig.Engine.LightGeometryMutable);
         Assert.Equal(BrickBakeState.Ready, rig.Engine.GetBrickState(slot: 0).State);
         Assert.NotEqual(firstSlice, Signature());
         Stands();

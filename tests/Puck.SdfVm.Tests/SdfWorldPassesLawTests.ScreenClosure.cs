@@ -16,7 +16,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void OwnWorldAndUnrelatedCamerasDoNotEnterScreenLightingClosure() {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
-        var source = Frame() with { IndirectTier = SdfIndirectTier.Off };
+        var source = Frame();
         var captures = 0;
         using var own = new SdfWorldResidency(pipelines, new FixedFrameSource(frame: source), SdfTestPipelines.Kernels(),
             "own", Extent, Extent, screenSources: new ClosureScreens("own"), brickPoolVoxelCapacity: 0);
@@ -43,60 +43,19 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         Assert.Equal(actual: captures, expected: (before + 4));
     }
-    [Fact]
-    public void AColdScreenClosureRefusesAFrozenParticipantWithoutResettingItsCache() {
-        var gpu = new FakeGpuDevice();
-        var pipelines = SdfTestPipelines.Cache();
-        var source = Frame() with { IndirectTier = SdfIndirectTier.Medium, FarDistance = 12f };
-        using var left = new SdfWorldResidency(pipelines, new FixedFrameSource(frame: source), SdfTestPipelines.Kernels(),
-            "left", Extent, Extent, screenSources: new ClosureScreens("right"), brickPoolVoxelCapacity: 0);
-        using var right = new SdfWorldResidency(pipelines, new FixedFrameSource(frame: source with { IndirectTier = SdfIndirectTier.Off }),
-            SdfTestPipelines.Kernels(), "right", Extent, Extent, brickPoolVoxelCapacity: 0);
-        var views = new SdfWorldPasses(name => new SdfWorldView(Residency: ((name == "left") ? left : right), View: 0));
-        using var environment = new SdfSkyEnvironmentPasses(views: views);
-
-        environment.Register(name: "left-env", residency: left, view: 0);
-        environment.Register(name: "right-env", residency: right, view: 0);
-        views.ObserveViews(instances: ["left", "right"]);
-        _ = views.ViewOf(instance: "left");
-        _ = views.ViewOf(instance: "right");
-        var context = ContextOf(gpu: gpu);
-
-        left.ProduceFirstFrame(context: context);
-        right.ProduceFirstFrame(context: context);
-        var cache = left.Tables!.Indirect!;
-        var history = cache.History;
-
-        left.IndirectFrozen = true;
-        views.BeginConvergence("left", new RenderGraphConvergence(request: new FrameCaptureRequest("unused-frozen-closure.png")));
-        views.BeginFrame(context: context);
-        Assert.Equal(FrameCompletion.Refused, views.CaptureReadinessOf(instance: "left").Completion);
-        Assert.Equal(history, cache.History);
-        Assert.Same(cache, left.Tables.Indirect);
-    }
-    [InlineData(SdfIndirectTier.Off, false)]
-    [InlineData(SdfIndirectTier.Medium, false)]
-    [InlineData(SdfIndirectTier.Off, true)]
-    [Theory]
-    public void MutualScreenLightingClosesTwiceAndDerivedFramesDoNotRestartIt(SdfIndirectTier tier, bool taintedPanorama) =>
-        CompleteClosure(tier, taintedPanorama, derivedPanorama: false);
-    [InlineData(SdfIndirectTier.Off)]
-    [InlineData(SdfIndirectTier.Medium)]
-    [Theory]
-    public void WorldDerivedPanoramasJoinTwoFencedLightingRounds(SdfIndirectTier tier) =>
-        CompleteClosure(tier, taintedPanorama: false, derivedPanorama: true);
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void ZeroReaderScreenClosuresCompleteTheirImageFencesWithoutAnIndirectSolve(bool derivedPanorama) =>
-        CompleteClosure(SdfIndirectTier.Medium, taintedPanorama: false, derivedPanorama: derivedPanorama, readers: false);
+    public void MutualScreenLightingClosesTwiceAndDerivedFramesDoNotRestartIt(bool taintedPanorama) =>
+        CompleteClosure(taintedPanorama, derivedPanorama: false);
+    [Fact]
+    public void WorldDerivedPanoramasJoinTwoFencedLightingRounds() =>
+        CompleteClosure(taintedPanorama: false, derivedPanorama: true);
 
-    private static void CompleteClosure(SdfIndirectTier tier, bool taintedPanorama, bool derivedPanorama, bool readers = true) {
+    private static void CompleteClosure(bool taintedPanorama, bool derivedPanorama) {
         var gpu = new FakeGpuDevice(holdFences: true) { DistinctImages = true };
-
-        if (!readers) { gpu.WriteReadback = (name, bytes) => { if (name.Detail == "indirect-deferred") { bytes.Clear(); } }; }
         var pipelines = SdfTestPipelines.Cache();
-        var leftFrame = Frame() with { IndirectTier = tier, FarDistance = 12f, IndirectSources = SdfIndirectSources.Screens };
+        var leftFrame = Frame() with { FarDistance = 12f, IndirectSources = SdfIndirectSources.Screens };
 
         if (derivedPanorama) {
             leftFrame = leftFrame with { IndirectSources = SdfIndirectSources.Sky };
@@ -108,7 +67,7 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         // The taint control has one derived edge: the left world sees a clean right camera and independently sees
         // a lighting-only external Panorama. Its screen reduction can stay clean while its sky retains old taint.
-        var rightFrame = (taintedPanorama ? Frame() with { IndirectTier = tier, FarDistance = 12f, IndirectSources = SdfIndirectSources.Screens } : leftFrame);
+        var rightFrame = (taintedPanorama ? Frame() with { FarDistance = 12f, IndirectSources = SdfIndirectSources.Screens } : leftFrame);
         using var left = new SdfWorldResidency(pipelines, new CapturingFrameSource(capture: () => leftFrame), SdfTestPipelines.Kernels(),
             "left", Extent, Extent, screenSources: new ClosureScreens("right", taintedPanorama, emits: !derivedPanorama), brickPoolVoxelCapacity: 0);
         using var right = new SdfWorldResidency(pipelines, new CapturingFrameSource(capture: () => rightFrame), SdfTestPipelines.Kernels(),
@@ -120,17 +79,10 @@ public sealed partial class SdfWorldPassesLawTests {
 
         environment.Register(name: "left-env", residency: left, view: 0);
         environment.Register(name: "right-env", residency: right, view: 0);
-        using var indirect = new SdfIndirectPasses(views: views);
-
-        if (tier != SdfIndirectTier.Off) {
-            indirect.Register(name: left.IndirectInstanceName, residency: left);
-            indirect.Register(name: right.IndirectInstanceName, residency: right);
-        }
         var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
 
         packages.Register(factory: views, package: RenderGraphPackageCatalog.SdfWorld);
         packages.Register(factory: environment, package: RenderGraphPackageCatalog.SkyEnvironment);
-        packages.Register(factory: indirect, package: RenderGraphPackageCatalog.Indirect);
         using var panorama = new ClosurePanoramaFeed(gpu: gpu);
 
         packages.RegisterProducer(factory: _ => panorama, package: "closure-panorama");
@@ -142,11 +94,6 @@ public sealed partial class SdfWorldPassesLawTests {
             World(environment: "left-env", name: "left", other: "right"), World(environment: "right-env", name: "right", other: "left"),
             Environment(name: "left-env", other: "right"), Environment(name: "right-env", other: "left"),
         ];
-
-        if (tier != SdfIndirectTier.Off) {
-            instances.Add(item: Indirect(environment: "left-env", residency: left));
-            instances.Add(item: Indirect(environment: "right-env", residency: right));
-        }
         var graphCount = instances.Count;
 
         if (taintedPanorama) {
@@ -177,28 +124,12 @@ public sealed partial class SdfWorldPassesLawTests {
         Until(() => ((Sequence(residency: left) == 3) && (Sequence(residency: right) == RightSequence(epoch: 1))));
         foreach (var fence in gpu.SubmittedFences) { fence.Completed = true; }
         Produce(complete: false);
-        // Even Off must render the final reduced source into its destination image. Its unsignaled image submission
+        // The final reduced source must render into its destination image. Its unsignaled image submission
         // cannot complete the epoch merely because the second reduction's fence was already signaled.
         Assert.False(condition: views.CaptureReadinessOf(instance: "left").IsRendered);
         Until(() => views.CaptureReadinessOf(instance: "left").IsRendered);
         Assert.Equal(RightSequence(epoch: 1), Sequence(residency: right));
         Assert.NotNull(@object: right.Tables);
-        if (tier == SdfIndirectTier.Off) {
-            Assert.Null(@object: left.Tables.Indirect);
-            Assert.Null(@object: right.Tables.Indirect);
-        } else if (readers) {
-            Assert.True(condition: left.IsIndirectReady);
-            Assert.True(condition: right.IsIndirectReady);
-            if (!derivedPanorama) {
-                Assert.Equal(left.Tables.SubmittedScreenEmission!.Value.Publication, left.Tables.Indirect!.PublishedLightingSource!.Screens);
-                Assert.Equal(right.Tables!.SubmittedScreenEmission!.Value.Publication, right.Tables.Indirect!.PublishedLightingSource!.Screens);
-            }
-        } else {
-            Assert.False(condition: views.HasIndirectReaders(instance: "left"));
-            Assert.False(condition: views.HasIndirectReaders(instance: "right"));
-            Assert.Null(@object: left.Tables.Indirect!.PublishedLightingSource);
-            Assert.Null(@object: right.Tables.Indirect!.PublishedLightingSource);
-        }
         var leftPublication = left.Tables.SubmittedScreenEmission!.Value.Publication;
         var rightPublication = right.Tables!.SubmittedScreenEmission!.Value.Publication;
         var leftEnvironment = left.Tables.SubmittedSkyEnvironment!.Value.Publication;
@@ -207,10 +138,6 @@ public sealed partial class SdfWorldPassesLawTests {
         if (derivedPanorama) {
             Assert.Equal(1, left.Tables.SubmittedScreenEmission.Value.Sequence);
             Assert.Equal(1, right.Tables.SubmittedScreenEmission.Value.Sequence);
-            if ((tier != SdfIndirectTier.Off) && readers) {
-                Assert.Equal(leftEnvironment, left.Tables.Indirect!.PublishedLightingSource!.Environment);
-                Assert.Equal(rightEnvironment, right.Tables.Indirect!.PublishedLightingSource!.Environment);
-            }
         }
         for (var repeat = 0; (repeat < 12); repeat++) { Produce(); }
         Assert.Equal(leftPublication, left.Tables.SubmittedScreenEmission!.Value.Publication);
@@ -225,36 +152,17 @@ public sealed partial class SdfWorldPassesLawTests {
             Views = [leftFrame.Views[0] with { Camera = new CameraSnapshot(
             (camera.Position + Vector3.UnitX), camera.Right, camera.Up, camera.Forward, camera.TanHalfFieldOfView, camera.AspectRatio) }],
         };
-        if ((tier != SdfIndirectTier.Off) && readers) {
-            var cache = left.Tables.Indirect!;
-            var heldSource = cache.PublishedLightingSource;
-            var history = cache.History;
-
-            left.IndirectFrozen = true;
-            Produce();
-            Produce();
-            Assert.Same(heldSource, cache.PublishedLightingSource);
-            Assert.Equal(history, cache.History);
-            Assert.Equal(leftPublication, left.Tables.SubmittedScreenEmission!.Value.Publication);
-            Assert.Equal(FrameCompletion.Refused, views.CaptureReadinessOf(instance: "left").Completion);
-            left.IndirectFrozen = false;
-        }
         Until(() => ((Sequence(residency: left) == 6) && views.CaptureReadinessOf(instance: "left").IsRendered));
         Assert.Equal(RightSequence(epoch: 2), Sequence(residency: right));
 
         // Even a zero-convergence capture starts from a new dark-derived boundary and completes both rounds.
         var capture = new RenderGraphConvergence(request: new FrameCaptureRequest("unused-closure-capture.png"));
 
-        if (!readers) { left.IndirectFrozen = true; right.IndirectFrozen = true; }
         views.BeginConvergence(convergence: capture, instance: "left");
         Produce();
         Assert.False(condition: views.CaptureReadinessOf(instance: "left").IsRendered);
         Until(() => ((Sequence(residency: left) == 9) && views.CaptureReadinessOf(instance: "left").IsRendered));
         Assert.Equal(RightSequence(epoch: 3), Sequence(residency: right));
-        if (!readers) {
-            Assert.Null(@object: left.Tables.Indirect!.PublishedLightingSource);
-            Assert.Null(@object: right.Tables.Indirect!.PublishedLightingSource);
-        }
         if (taintedPanorama) {
             var independent = views.ReadEpochOf(instance: "left", producer: "panorama-feed");
 
@@ -279,13 +187,8 @@ public sealed partial class SdfWorldPassesLawTests {
             ExternalPackage: RenderGraphPackageCatalog.SdfWorld, Passes: SdfWorldPackage.NativeFragment.Passes.Count,
             Reads: [new(environment, Kind: ShaderPipelineResourceKind.Buffer),
                 .. ((taintedPanorama && (name == "right")) ? Array.Empty<RenderGraphRead>() : [new(other, PreviousFrame: true)]),
-                .. ((taintedPanorama && (name == "left")) ? new RenderGraphRead[] { new("panorama-feed") } : []),
-                .. ((tier == SdfIndirectTier.Off) ? Array.Empty<RenderGraphRead>() :
-                    [new RenderGraphRead(((name == "left") ? left : right).IndirectInstanceName, Kind: ShaderPipelineResourceKind.Buffer)])],
+                .. ((taintedPanorama && (name == "left")) ? new RenderGraphRead[] { new("panorama-feed") } : [])],
             Refresh: RenderGraphRefresh.EveryFrame);
-        RenderGraphInstance Indirect(SdfWorldResidency residency, string environment) => new(Name: residency.IndirectInstanceName,
-            ExternalPackage: RenderGraphPackageCatalog.Indirect, Passes: indirect.FragmentOf(instance: residency.IndirectInstanceName)!.Passes.Count,
-            Output: ShaderPipelineResourceKind.Buffer, Reads: [new(environment, Kind: ShaderPipelineResourceKind.Buffer)], Refresh: RenderGraphRefresh.EveryFrame);
         RenderGraphInstance Environment(string name, string other) => new(Name: name,
             ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count,
             Output: ShaderPipelineResourceKind.Buffer, Reads: [

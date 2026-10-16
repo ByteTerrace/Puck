@@ -1,8 +1,7 @@
 // The views pass's stage over the pixel's visibility record. Each hit pass compiles its own stage after
 // sdf-hit-pass.hlsli: primary marches and writes its V, C and L rows (march/sdf-primary.hlsli), surface its N and S rows
-// and ambient its occlusion (surface/sdf-surface.hlsli), shadow its K row (surface/sdf-shadow.hlsli), the receiver its
-// indirect certificate and answer (indirect/sdf-indirect-receiver.hlsli), and views shades the record (sdfViewsStage
-// below).
+// and ambient its occlusion (surface/sdf-surface.hlsli), shadow its K row (surface/sdf-shadow.hlsli), and views shades
+// the record (sdfViewsStage below).
 #ifndef PASSES_SDF_VIEWS_STAGE_HLSLI
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
 #include "sdf-views-field.hlsli"
@@ -36,7 +35,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     // Every field read of the stage runs through one loop (sdfViewsFieldReads) ahead of the shading that uses it: the
     // light stage's detail re-resolve and probes for a hit it shades with a material below the screen range, and the
     // debug views' reads.
-    bool useFinalShading = worldFinalShadingMode(p.viewMode) || p.viewMode == DebugViewModeIndirect;
+    bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool curvatureShading = worldCurvatureShadingEnabled();
     precise float3 rayTravel = p.rayDirection * s.t;
     precise float3 surfacePoint = p.rayOrigin + rayTravel;

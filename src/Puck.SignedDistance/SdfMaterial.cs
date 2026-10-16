@@ -44,7 +44,7 @@ namespace Puck.SignedDistance;
 /// constant). Black (the default) contributes exactly 0.</param>
 /// <param name="Inset">Optional refractive radial paint layer.</param>
 /// <param name="Bleed">The finite, nonnegative tint multiplying diffuse reflectance and emission sent into the
-/// indirect cache. Null means white; this does not change the directly viewed surface color.</param>
+/// irradiance volume. Null means white; this does not change the directly viewed surface color.</param>
 /// <param name="Receive">The finite, nonnegative gain applied to indirect irradiance received by the surface.</param>
 public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see

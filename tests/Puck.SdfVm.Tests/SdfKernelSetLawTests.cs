@@ -21,8 +21,7 @@ public sealed class SdfKernelSetLawTests {
         "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky-runs", "sdf-world-surface", "sdf-world-views",
         "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
         "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission",
-        "sdf-indirect-classify", "sdf-indirect-trace", "sdf-indirect-shade", "sdf-light-primary", "sdf-light-depth",
-        "sdf-world-receiver", "sdf-world-receiver-comparison", "sdf-world-mesh-surface", "sdf-mesh-bake-mask", "sdf-mesh-bake",
+        "sdf-world-mesh-surface", "sdf-mesh-bake-mask", "sdf-mesh-bake",
         "sdf-world-views-mesh",
     ];
 
@@ -135,7 +134,7 @@ public sealed class SdfKernelSetLawTests {
     // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
-        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout, SdfWorldInterfaces.IndirectParameters.Layout])) {
+        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
             Assert.Equal(expected: SdfWorldInterfaces.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
                 expected: ("passGroup" + SdfWorldInterfaces.Stamp),

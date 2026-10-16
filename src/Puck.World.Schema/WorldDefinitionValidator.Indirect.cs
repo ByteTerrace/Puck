@@ -11,9 +11,8 @@ public static partial class WorldDefinitionValidator {
         }
         if (definition.Render.Indirect is not { } indirect) { return; }
         if (!Enum.IsDefined(value: indirect.Tier)) { errors.Add(item: "render.indirect.tier must be off, medium or high."); }
-        if (!Enum.IsDefined(value: indirect.Bodies)) { errors.Add(item: "render.indirect.bodies must be default, cast, receive or off."); }
-        if ((indirect.Bounces is { } bounces) && ((bounces < 0) || (bounces > SdfIndirectLayout.MaximumBounces))) {
-            errors.Add(item: $"render.indirect.bounces must be an integer from 0 to {SdfIndirectLayout.MaximumBounces}; the selected tier caps its actual depth.");
+        if ((indirect.Bounces is { } bounces) && ((bounces < 0) || (bounces > SdfIndirectGains.MaximumBounces))) {
+            errors.Add(item: $"render.indirect.bounces must be an integer from 0 to {SdfIndirectGains.MaximumBounces}; the selected tier caps its actual depth.");
         }
         var sources = indirect.Sources;
 

@@ -519,8 +519,6 @@ public sealed class ShaderInterfaceLawTests {
                 }
                 void puckCountShapes(uint shapes, uint gradients) {
                 }
-                void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
-                }
                 void puckCountShadowDecision(uint detail, uint slot, uint steps) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
@@ -575,8 +573,6 @@ public sealed class ShaderInterfaceLawTests {
                 void puckCountShadow(uint slot, uint steps) {
                 }
                 void puckCountShapes(uint shapes, uint gradients) {
-                }
-                void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
                 }
                 void puckCountShadowDecision(uint detail, uint slot, uint steps) {
                 }

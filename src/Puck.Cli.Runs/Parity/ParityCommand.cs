@@ -391,7 +391,7 @@ public static class ParityCommand {
             // A SAFETY NET, not the leg length: the script closes with quit, so a healthy leg ends as soon as its
             // wait releases. This backstop bounds the whole leg independently of each capture's own readiness-based
             // hold budgets. An offscreen leg paces one produced frame per tick and can hold that tick for a cold
-            // pipeline build or the captured source's finite solve.
+            // pipeline build.
             exitAfterSeconds: 300,
             process: out var process,
             runDirectory: runDirectory,

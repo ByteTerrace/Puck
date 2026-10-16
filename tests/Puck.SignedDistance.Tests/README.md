@@ -14,24 +14,6 @@ BC7, BC5 and BC6H textures of one real bake with a probe texel per level;
 `BakeSamplingDeviceLawTests` in `tests/Puck.World.Tests` samples its probes on
 Vulkan, Direct3D 12 and WARP.
 
-The `Irradiance*LawTests` hold the radiance cache's CPU reference and CPU model
-(`Puck.SignedDistance.Illumination`) to the cache's contract. Two properties are
-required exactly: no light through sealed geometry (sealed rooms dark through
-0.05 m walls, a sealed pocket inside one cell, a slab inside a launch interval,
-a slab thinner than the accept threshold beneath a launch's first sample,
-receiver proofs and their reuse) and conserved energy (the furnace's finite-bounce series
-on one level and two, with unresolved grazing rays present). Every other error
-is a number held against the reference: interpolation within a cell,
-continuation merging, light-view sampling, grazing rays and the proof
-allowance. The lattice, the schedule and the evaluator's own hit points have
-laws of their own. `IrradianceAdversarialLawTests` also exercises conservative
-gauges, failed-proof reuse, the swept depth range and unresolved light-view
-texels. A gauge's small field value needs a nearby zero certificate before a
-GI hit is accepted; unresolved light-view texels require a shadow ray. The
-grazing bound checks a fully resolved reference sample set and the analytic
-open-floor answer. Each law's red leg is a model mutation shown failing; the
-CPU laws are the GPU cache's reference, not a check of it.
-
 ## Verification
 
 ```powershell

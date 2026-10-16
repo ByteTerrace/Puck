@@ -555,7 +555,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
-        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldLightingCommandModule(authority: sp.GetRequiredService<IWorldConsoleAuthority>(), shadowReport: definition => sp.GetService<WorldFramePresenter>()?.DescribeShadowSlots(definition: definition), indirectReport: definition => (ReferenceEquals(objA: definition, objB: sp.GetRequiredService<WorldServer>().Definition) ? WorldIndirectDiagnosticText.Describe(sp.GetService<WorldRenderProbe>(), sp.GetService<WorldCursorFeed>()?.Explanation.Captured?.Indirect, sp.GetService<WorldCursorFeed>()?.Explanation.CapturedResidency) : null)));
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldLightingCommandModule(authority: sp.GetRequiredService<IWorldConsoleAuthority>(), shadowReport: definition => sp.GetService<WorldFramePresenter>()?.DescribeShadowSlots(definition: definition)));
         // world.timeline reads the clocks off the authority and the keyed resolutions off the client's state mirror.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTimelineCommandModule(
             authority: sp.GetRequiredService<IWorldConsoleAuthority>(),
@@ -1208,9 +1208,7 @@ public static class WorldBootComposition {
         // The render probe, and the plain per-frame state a bare world render (no overlay) still composes through:
         // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
         // and the SDF document intake itself. None of these touch a window or the GPU.
-        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe {
-            IndirectSubmissionLog = ((sp.GetService<GpuDeviceOptions>()?.DebugLayers == true) ? Console.Error.WriteLine : null),
-        });
+        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe());
         // The capture world.screenshot <path> crossing arms for the first frame a seat presents after its route moves.
         services.AddSingleton(implementationFactory: static sp => new WorldCrossingCapture(
             captureTarget: () => sp.GetRequiredService<WorldRenderProbe>().Root,
@@ -1221,9 +1219,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
-        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
         AddWorldInspection(services: services);
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
@@ -1560,15 +1556,11 @@ public static class WorldBootComposition {
 
         // The render probe the world.debug-view verb and world.counters' gpu section read the live render nodes
         // through — a mutable holder the render-root factory below fills in once the world's residency exists.
-        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe {
-            IndirectSubmissionLog = ((sp.GetService<GpuDeviceOptions>()?.DebugLayers == true) ? Console.Error.WriteLine : null),
-        });
+        services.AddSingleton(implementationFactory: static sp => new WorldRenderProbe());
         services.AddSingleton<IGpuWorkRegistry>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
-        services.AddSingleton<IWorldIndirectReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Indirect);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.

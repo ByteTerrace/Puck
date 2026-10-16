@@ -283,7 +283,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel is not (SdfKernel.Resolve or SdfKernel.ReceiverComparison or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade or SdfKernel.LightPrimary or SdfKernel.LightDepth))) {
+                if ((slot is null) && (kernel is not SdfKernel.Resolve)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];
@@ -301,7 +301,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                     (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
                 }
 
-                if ((slot is not null) || (kernel is SdfKernel.Resolve or SdfKernel.ReceiverComparison or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade)) {
+                if ((slot is not null) || (kernel is SdfKernel.Resolve)) {
                     changed.Add(item: (index, slot, bytecode));
                 }
             }
@@ -372,7 +372,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipeline).
     internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds));
     // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
-    // slots are a set's, in kernel order. Without viewsRequired, a views variant or the comparison receiver still building
+    // slots are a set's, in kernel order. Without viewsRequired, a views variant still building
     // or refused leaves the set ready: the frame waits for those itself (SdfWorldTables.FrameWaiting).
     internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
         var ready = true;
@@ -384,7 +384,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             // A kernel the tables do without is refused as IsBuilt refuses it, never thrown.
-            if (!viewsRequired && (IsViews(kernel: ((SdfKernel)index)) || (((SdfKernel)index) == SdfKernel.ReceiverComparison))) {
+            if (!viewsRequired && IsViews(kernel: ((SdfKernel)index))) {
                 _ = slot.PollRefusing();
 
                 continue;

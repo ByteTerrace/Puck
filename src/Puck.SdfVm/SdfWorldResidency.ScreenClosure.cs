@@ -24,7 +24,6 @@ public sealed partial class SdfWorldResidency {
     }
     internal void ReleaseScreenClosure() => m_screenClosureFrame = null;
     internal void ResetScreenClosureLighting() {
-        m_tables?.Indirect?.ResetLightingForCapture();
         Array.Clear(array: m_renderedSignatures);
     }
 }

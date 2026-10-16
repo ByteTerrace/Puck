@@ -166,7 +166,6 @@ public sealed partial class SdfProgramBuilder {
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
     private bool m_openInstanceCameraHidden;
-    private SdfIndirectParticipation m_openInstanceIndirect;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
@@ -260,8 +259,7 @@ public sealed partial class SdfProgramBuilder {
         // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
-    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
-        if (!Enum.IsDefined(value: indirect)) { throw new ArgumentOutOfRangeException(paramName: nameof(indirect)); }
+    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false) {
         if (
             isDynamic &&
             ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))
@@ -284,7 +282,6 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceIsDynamic = isDynamic;
         m_openInstanceActive = active;
         m_openInstanceCameraHidden = cameraHidden;
-        m_openInstanceIndirect = indirect;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;
@@ -1005,7 +1002,7 @@ public sealed partial class SdfProgramBuilder {
             ),
             op: op
         );
-    private void ScopedInstance(bool isDynamic, Vector3 center, float radius, int slot, Action<SdfProgramBuilder> emit, SdfIndirectParticipation indirect) {
+    private void ScopedInstance(bool isDynamic, Vector3 center, float radius, int slot, Action<SdfProgramBuilder> emit) {
         ArgumentNullException.ThrowIfNull(emit);
 
         var instanceCount = m_instances.Count;
@@ -1014,8 +1011,7 @@ public sealed partial class SdfProgramBuilder {
             isDynamic: isDynamic,
             center: center,
             radius: radius,
-            slot: slot,
-            indirect: indirect
+            slot: slot
         );
         emit(this);
 

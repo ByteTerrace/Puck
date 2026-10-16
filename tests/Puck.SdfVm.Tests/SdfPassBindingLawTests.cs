@@ -12,18 +12,18 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfPassBindingLawTests {
     // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
-    // the curvature shading, temporal history, indirect controls, 84 light-map rows, and the mesh path's render path,
+    // the curvature shading, temporal history, indirect controls, the light-camera flag, and the mesh path's render path,
     // twelve cascade rows, shadow parameters, 48 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 3056;
+    private const uint PassBlockBytes = 1648;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.ViewsMesh];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.Receiver, SdfKernel.ReceiverComparison, SdfKernel.IndirectShade, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.SkyEnvironment, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.ReceiverComparison, SdfKernel.IndirectShade, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, SdfKernel.SkyEnvironmentReduce, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

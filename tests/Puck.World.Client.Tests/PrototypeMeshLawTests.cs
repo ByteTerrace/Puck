@@ -243,7 +243,6 @@ public sealed class PrototypeMeshLawTests {
         var draws = Draws(definition: With(mesh: Quad()));
         var draw = Assert.Single(collection: draws);
 
-        Assert.False(condition: draw.FieldBacked);
         Assert.False(condition: draw.IsDynamic);
 
         Assert.Equal(expected: 2, actual: draw.Mesh.TriangleCount);

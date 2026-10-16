@@ -4,8 +4,7 @@ namespace Puck.SignedDistance;
 /// The work-counter detail rows the views, sky, composite and environment passes count into: the field
 /// runs' rows (<c>run0</c>, the lowest field run, then <c>run1</c> and <c>run2</c>, the upper ones), the composite's
 /// <c>atmosphere</c> row (<see cref="AtmosphereRow"/>), where it counts one evaluation for each atmosphere kind it
-/// evaluates at a pixel, the view's <c>indirect</c> diagnostic row (<see cref="IndirectRow"/>), its bounded incoming
-/// <c>indirect-near</c> row (<see cref="IndirectNearRow"/>), then one row a layer label,
+/// evaluates at a pixel, then one row a layer label,
 /// in the order labels are first packed. A layer's record names its row (<see cref="SdfSkyLayer.Detail"/>). The
 /// rows only grow, so a node's detail identities never move while its graph lives: a label a sky stops drawing keeps its
 /// row and counts zero. Every distinct label keeps its own row for the composition's lifetime; buffer slots grow after
@@ -21,16 +20,8 @@ public sealed class SdfSkyDetails {
     public const int AtmosphereRow = Runs;
     /// <summary>The label of <see cref="AtmosphereRow"/>.</summary>
     public const string Atmosphere = "atmosphere";
-    /// <summary>The row the view counts indirect-cache diagnostic lookups in, after the atmosphere's.</summary>
-    public const int IndirectRow = (AtmosphereRow + 1);
-    /// <summary>The label of <see cref="IndirectRow"/>.</summary>
-    public const string Indirect = "indirect";
-    /// <summary>The rows every set holds ahead of the layers': the runs', atmosphere's, indirect diagnostics' and incoming Near work's.</summary>
-    public const int Fixed = (IndirectNearRow + 1);
-    /// <summary>The row counting High's bounded incoming Near sample.</summary>
-    public const int IndirectNearRow = (IndirectRow + 1);
-    /// <summary>The reserved label of the incoming Near row.</summary>
-    public const string IndirectNear = "indirect-near";
+    /// <summary>The rows every set holds ahead of the layers': the runs' and the atmosphere's.</summary>
+    public const int Fixed = (AtmosphereRow + 1);
     /// <summary>The initial fixed and layer row allocation for standalone sky counter buffers. A composition may retain
     /// more identities; its completed buffer slots grow to hold them.</summary>
     public const int InitialCapacity = 32;
@@ -41,9 +32,9 @@ public sealed class SdfSkyDetails {
     private string[] m_labels;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSkyDetails"/> class holding the fixed rows alone: the
-    /// runs', atmosphere's, indirect diagnostics' and bounded incoming Near work's.</summary>
+    /// runs' and the atmosphere's.</summary>
     public SdfSkyDetails() {
-        m_labels = [.. Enumerable.Range(count: Runs, start: 0).Select(selector: static run => RunLabel(run: run)), Atmosphere, Indirect, IndirectNear];
+        m_labels = [.. Enumerable.Range(count: Runs, start: 0).Select(selector: static run => RunLabel(run: run)), Atmosphere];
 
         for (var row = 0; (row < Fixed); row++) {
             m_rows.Add(key: m_labels[row], value: ((uint)row));
@@ -57,14 +48,12 @@ public sealed class SdfSkyDetails {
     /// <param name="run">The run's row: zero for the lowest field run, then the upper runs.</param>
     /// <returns>The label, <c>run</c> and the row.</returns>
     public static string RunLabel(int run) => $"run{run}";
-    /// <summary>Returns whether a label names a fixed row: a field run, atmosphere, indirect diagnostics or incoming Near work,
+    /// <summary>Returns whether a label names a fixed row, a field run or the atmosphere,
     /// which no layer may take.</summary>
     /// <param name="label">The label.</param>
     /// <returns>Whether it is a fixed row's label.</returns>
     public static bool IsFixed(string label) {
-        if (string.Equals(a: label, b: Atmosphere, comparisonType: StringComparison.Ordinal)
-            || string.Equals(a: label, b: Indirect, comparisonType: StringComparison.Ordinal)
-            || string.Equals(a: label, b: IndirectNear, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(a: label, b: Atmosphere, comparisonType: StringComparison.Ordinal)) {
             return true;
         }
 
@@ -86,7 +75,7 @@ public sealed class SdfSkyDetails {
         lock (m_gate) {
             if (m_rows.TryGetValue(key: label, value: out var row)) {
                 if (row < Fixed) {
-                    throw new ArgumentException(message: $"The sky's detail label '{label}' names a fixed row: a field run's, the atmosphere's, indirect diagnostics' or incoming Near work's.", paramName: nameof(label));
+                    throw new ArgumentException(message: $"The sky's detail label '{label}' names a fixed row: a field run's or the atmosphere's.", paramName: nameof(label));
                 }
 
                 return row;

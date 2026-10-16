@@ -355,10 +355,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
     /// the frame is scheduled.</summary>
     public void BeginFrame() {
-        if (m_tables?.Indirect is { } cache) { cache.CaptureHold = (m_convergence is { Completion.IsCompleted: false }); }
-        IndirectFrameBudget.BeginFrame(deviceLimit: (m_tables?.Indirect?.FrameDeviceLimit ?? SdfIndirectCost.SubmissionCostLimit));
-        m_tables?.Indirect?.BeginFrame();
-        m_receiverBudgetLogged = false;
         m_captured = false;
         m_packed = false;
         m_submitted = false;
@@ -425,12 +421,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var tables = m_tables!;
 
-        RefuseIndirect(frame: frame);
-        if (frame.IndirectTier != IndirectTier) { frame = frame with { IndirectTier = IndirectTier }; }
-        PrepareIndirect(frame: frame, tables: tables);
+        if ((IndirectTierOverride is { } tier) && (frame.IndirectTier != tier)) { frame = frame with { IndirectTier = tier }; }
 
         ApplyPendingShaderReload();
-        tables.RequireComparison(cache: m_pipelines.Catalog.Pipelines, device: device, required: SelectsComparison(frame: frame));
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
@@ -516,7 +509,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The mesh path's bake takes its batch before the upload, which carries the batch's surface points.
         if ((m_frame is { Views.Count: > 0 } meshFrame) && (meshFrame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh)) {
             MeshPathBake.Stage(frame: PackageFrame, tables: tables);
-            MeshIrradianceParameters = MeshIrradiance.Stage(frame: meshFrame, tables: tables, tier: RequestedIndirectTier, bakePending: MeshPathBake.Pending);
+            MeshIrradianceParameters = MeshIrradiance.Stage(frame: meshFrame, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
         } else {
             MeshIrradianceParameters = default;
         }
@@ -530,7 +523,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return false;
         }
 
-        ApplyIndirectReset(tables: tables);
         _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;
@@ -575,7 +567,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (!m_submitted) {
             m_submitted = true;
-            if (m_frame is { } frame) { tables.PlanIndirect(frame: frame); }
             tables.SubmitUpload();
         }
 
@@ -708,10 +699,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled off the mesh path or with
     /// indirect light off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
-    /// <summary>Gets whether the latest captured frame's first view takes the baked-mesh path, where no view walks the field
-    /// and the irradiance volume (<see cref="MeshIrradiance"/>) stands in for the indirect cache, which would.</summary>
-    public bool UsesMeshPath => TakesMeshPath(frame: m_frame);
-    private static bool TakesMeshPath(SdfFrame? frame) => (frame is { Views.Count: > 0 } && (frame.Views[0].Quality.RenderPath == SdfRenderPath.Mesh));
 
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
@@ -722,14 +709,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
-    /// <summary>Freezes the presentation source for a capture, retaining an exact completed finite answer or restarting radiance with reusable transport.</summary>
+    /// <summary>Freezes the presentation source for a capture.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         if (!ReferenceEquals(objA: m_convergence, objB: request)) {
             m_convergence = request;
             m_frozenFrame = null;
-            m_captureLightingReset = !IndirectFrozen;
             m_frameSource.BeginConvergence(request: request);
         }
     }
@@ -791,14 +777,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             value: frame.MeshDraws.Count
         );
     }
-    // Whether a view of the frame selects a comparison method, which only the comparison receiver answers.
-    private bool SelectsComparison(SdfFrame frame) {
-        if ((IndirectTierOverride ?? frame.IndirectTier) == SdfIndirectTier.Off) { return false; }
-        foreach (var view in frame.Views) {
-            if (view.Quality.IndirectMethod != SdfIndirectMethod.Cache) { return true; }
-        }
-        return false;
-    }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until
     // it completes this returns false and no view renders, so a cold driver cache delays the first frame rather than
     // freezing the pump. A refused build has no previous tables to fall back to: NotReadyReason names the refusal, which
@@ -846,7 +824,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         return true;
     }
     private static string KernelRole(SdfKernel kernel) => kernel switch {
-        SdfKernel.ReceiverComparison => "comparison receiver its view's indirect method selects",
         _ when SdfWorldPipelines.IsViews(kernel: kernel) => "views kernel its program selects",
         _ => "shadow kernel its policy selects",
     };

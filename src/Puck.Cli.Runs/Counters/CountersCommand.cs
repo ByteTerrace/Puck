@@ -13,9 +13,7 @@ namespace Puck.Cli.Counters;
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
 /// shader toolchain, the GC mode, and every count tagged with its class. The deterministic counts and the passes'
-/// states must agree across the two backends. <c>puck counters compare</c> holds two reports to each other.
-/// <c>--batch</c> reads ordered named observations through one boot per group/backend, retaining the same report format
-/// and each actual transcript, script and completion identity.</summary>
+/// states must agree across the two backends. <c>puck counters compare</c> holds two reports to each other.</summary>
 public static partial class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/shadow.script.txt";
@@ -265,9 +263,6 @@ public static partial class CountersCommand {
     }
 
     public static Command Create() {
-        var batchOption = new Option<string>(name: "--batch") {
-            Description = "An ordered counters batch manifest: one serial boot per group and backend, paired reports per observation, bounded to fifteen minutes including build resolution.",
-        };
         var outputOption = CliOptions.Output(description: "Where the report is written; the run's scratch directory when omitted.");
         var worldOption = new Option<string>(name: "--world") {
             Description = $"The authored workload world; {WorldPath} when omitted.",
@@ -278,7 +273,7 @@ public static partial class CountersCommand {
         var command = new Command(
             description: "Collect the counters workload's work counts offscreen once per backend and check the two agree.",
             name: Verb
-        ) { outputOption, worldOption, scriptOption, batchOption };
+        ) { outputOption, worldOption, scriptOption };
 
         command.Detail(detail: $"""
             Boots {WorldPath} offscreen once per backend (vulkan, then directx; no window
@@ -295,32 +290,17 @@ public static partial class CountersCommand {
             workload (avatar.world.json, run by avatar.script.txt). The report carries both paths. To judge a
             change, collect a report before and after it and compare them with 'puck counters compare'.
 
-            --batch <manifest> runs each ordered group once on Vulkan then DirectX, keeping its cache alive
-            between observations. Each observation names its actual script, comparison method and report.
-            --output names the batch product directory; otherwise its retained run directory holds the products.
-            --world and --script refuse beside --batch. Every observation must produce exactly
-            one JSON counters answer after its method echo, paused current-source indirect fence and resumed
-            120-tick input wait. The entire phase, build resolution
-            included, is bounded to fifteen minutes. Products retain the actual script hash, ordinal, release tick and
-            transcript line; incomplete or refused legs cannot create paired reports.
-
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 
             Exit codes: 0 the backends agree, 1 a deterministic count or pass state differs, 2 a build, leg or
             reading refusal (a missing device or shader tool included).
             """);
         command.Subcommands.Add(item: CreateCompare());
-        command.SetAction(action: parseResult => ((parseResult.GetValue(option: batchOption) is { } batch)
-            ? RunBatch(
-                manifestPath: batch,
-                output: parseResult.GetValue(option: outputOption),
-                conflicts: [parseResult.GetValue(option: worldOption), parseResult.GetValue(option: scriptOption)]
-            )
-            : Run(
+        command.SetAction(action: parseResult => Run(
             output: parseResult.GetValue(option: outputOption),
             scriptPath: parseResult.GetValue(option: scriptOption),
             world: parseResult.GetValue(option: worldOption)
-        )));
+        ));
 
         return command;
     }

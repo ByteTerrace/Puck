@@ -1,17 +1,17 @@
-// The hit passes' common head. Primary, surface, ambient, shadow, the indirect receiver and views each define their pass
+// The hit passes' common head. Primary, surface, ambient, shadow, the mesh surface and views each define their pass
 // macro, include this head, then their own stage, then the entry point (sdf-hit-entry.hlsli), so a hit kernel's include
 // set is the world modules (sdf-world.hlsli) and the stage it compiles: an edit to another pass's stage recompiles
 // nothing here. Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources,
 // and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface, ambient and shadow write
-// the visibility records through sdfVisibilityRecordsRW; the receiver publishes its certificate through a declared
-// preserving output, and views reads the records through sdfVisibilityRecords (sdf-visibility.hlsli).
+// the visibility records through sdfVisibilityRecordsRW, and views reads them through sdfVisibilityRecords
+// (sdf-visibility.hlsli).
 #ifndef PASSES_SDF_HIT_PASS_HLSLI
 #define PASSES_SDF_HIT_PASS_HLSLI
 // Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #ifndef SDF_PRIMARY_PASS
 #define SDF_PRIMARY_READ
-#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS) && !defined(SDF_RECEIVER_PASS) && !defined(SDF_MESH_SURFACE_PASS)
+#if !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS) && !defined(SDF_SHADOW_PASS) && !defined(SDF_MESH_SURFACE_PASS)
 #define SDF_VIEWS_PASS
 #endif
 #endif
@@ -37,9 +37,9 @@
 #ifdef SDF_SHADOW_PASS
 #define SDF_QUERY_REJECTION_BOUND
 #endif
-// One shadow kernel, the receiver and one kernel per views variant serve every fade capacity: each compiles both fade
+// One shadow kernel and one kernel per views variant serve every fade capacity: each compiles both fade
 // slots and reads the active fade count from the pass block, which a graph without the incoming image writes as zero.
-#if defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_VIEWS_PASS)
+#if defined(SDF_SHADOW_PASS) || defined(SDF_VIEWS_PASS)
 #define SDF_SHADOW_FADE_SLOTS 2
 #endif
 #define SDF_PART_RAY_BOUNDS

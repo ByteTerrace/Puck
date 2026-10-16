@@ -68,7 +68,6 @@ public sealed partial class SdfWorldTables {
         if (geometryChanged) { m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame; }
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
-        m_indirectPolicyProgram = null;
         m_rebuildInstanceGridPerFrame = rebuildInstanceGridPerFrame;
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
         // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.
@@ -79,7 +78,6 @@ public sealed partial class SdfWorldTables {
         if (programChanged) { m_programRevision++; }
         if (geometryChanged) {
             m_programGeometryRevision++;
-            ResetIndirect();
             // Changed instructions or bindings may give a dynamic slot another owner.
             m_seedDynamicHistory = true;
         }

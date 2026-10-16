@@ -159,9 +159,6 @@ public sealed class WorkCountingLawTests {
                 "gpu.environment.projections",
                 "gpu.environment.projection-texels",
                 "gpu.environment.skipped",
-                "gpu.indirect.hits",
-                "gpu.indirect.samples",
-                "gpu.indirect.unresolved",
                 "gpu.shapes.evaluated",
                 "gpu.shapes.gradients",
             ],
@@ -183,7 +180,7 @@ public sealed class WorkCountingLawTests {
         Assert.Same(expected: GpuWork.ShapeGradients, actual: GpuWork.SubmissionKinds[^1]);
         Assert.Equal(
             expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, .. GpuWork.ShadowSteps,
-                GpuWork.ShadowPixels, GpuWork.IndirectHits, GpuWork.IndirectSamples, GpuWork.IndirectUnresolved, GpuWork.ShapesEvaluated, GpuWork.ShapeGradients],
+                GpuWork.ShadowPixels, GpuWork.ShapesEvaluated, GpuWork.ShapeGradients],
             actual: GpuWork.KernelKinds.ToArray()
         );
     }

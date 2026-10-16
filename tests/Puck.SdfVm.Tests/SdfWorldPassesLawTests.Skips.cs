@@ -57,10 +57,9 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
 
-        // The views, sky and composite share the fixed rows and the default look's gradient, whose evaluations stay
-        // distinct from indirect diagnostics even when both kinds of work run in the views pass.
+        // The views, sky and composite share the fixed rows and the default look's gradient.
         string[] skyRows = [.. Enumerable.Range(count: SdfSkyDetails.Runs, start: 0).Select(selector: SdfSkyDetails.RunLabel),
-            SdfSkyDetails.Atmosphere, SdfSkyDetails.Indirect, SdfSky.DefaultGradientLabel];
+            SdfSkyDetails.Atmosphere, SdfSky.DefaultGradientLabel];
 
         foreach (var part in new[] { SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }) {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");

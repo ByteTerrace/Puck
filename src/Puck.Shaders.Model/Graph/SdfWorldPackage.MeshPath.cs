@@ -7,6 +7,9 @@ public static partial class SdfWorldPackage {
     /// program per pixel, one the baked-mesh path, which rasterizes the program's baked meshes and reads no field
     /// (<c>uint</c>).</summary>
     public const string RenderPath = "renderPath";
+    /// <summary>The pass-block value naming a mesh-path shadow cascade's orthographic light camera, which only the mesh
+    /// pass's stages draw from: nonzero puts them in their orthographic form (<c>uint</c>).</summary>
+    public const string LightCamera = "lightCamera";
     /// <summary>The pass-block value holding the shadow cascades' orthographic light cameras, four rows each: position and
     /// half height, right and aspect, up and near distance, forward and far distance (<c>float4[12]</c>): the key light's
     /// near and far cascades, then the second shadow slot's.</summary>

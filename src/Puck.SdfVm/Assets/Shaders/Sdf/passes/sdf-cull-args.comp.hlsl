@@ -2,8 +2,8 @@
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
 // margins (e.g. the sky above the scene) are never dispatched, and every pixel outside the box reads as uncovered to
-// the sky and composite passes. Mesh draws and the probe debug view cover the whole grid instead: meshes and probe
-// spheres can occupy tiles the beam proved empty. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
+// the sky and composite passes. Mesh draws cover the whole grid instead: meshes can occupy tiles the beam proved empty.
+// Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.
 //
@@ -38,10 +38,9 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
         return;
     }
     uint groupsPerTile = WorldTileSize / SDF_VISIBILITY_BOX_EDGE;
-    uint3 slice = sdfIndirectLightSlice(passGroup.lightSlice);
     uint2 tileGrid = passGroup.imageExtent / WorldTileSize + uint2(passGroup.imageExtent % WorldTileSize != 0u);
     bool valid = all(tileGrid > 0u) && all(tileGrid <= SDF_MAX_DISPATCH_GROUPS / groupsPerTile) &&
-        all(passGroup.tileGrid == tileGrid) && (passGroup.lightSlice == 0u || slice.x != 0u);
+        all(passGroup.tileGrid == tileGrid);
     uint total = 0u;
     uint v = worldViewOf(0u);
     if (valid) {
@@ -90,19 +89,14 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
         return;
     }
 
-    // Empty beam tiles retain TileEmpty, so primary skips their field march while the debug view can draw probes there.
-    uint4 box = sdfViewDispatchBox(uint4(minTileX, minTileY, maxTileX, maxTileY), tileGrid,
-        passGroup.meshDraws, (int)passGroup.debugMode);
+    // Empty beam tiles retain TileEmpty, so primary skips their field march; mesh draws dispatch the whole grid. With no
+    // surviving tile, one degenerate tile keeps the indirect dispatch valid.
+    uint4 box = uint4(0u, 0u, tileGrid.x - 1u, tileGrid.y - 1u);
+    if (passGroup.meshDraws == 0u) {
+        box = ((minTileX == 0xFFFFFFFFu) ? uint4(0u, 0u, 0u, 0u) : uint4(minTileX, minTileY, maxTileX, maxTileY));
+    }
     uint2 firstGroup = box.xy * groupsPerTile;
     uint2 endGroup = (box.zw + 1u) * groupsPerTile;
-    if (slice.x != 0u) {
-        uint2 columns = sdfIndirectLightColumns(passGroup.lightSlice);
-        firstGroup.x = max(firstGroup.x, columns.x);
-        endGroup.x = min(endGroup.x, columns.x + columns.y);
-        firstGroup.y = max(firstGroup.y, slice.y);
-        endGroup.y = min(endGroup.y, slice.y + slice.z);
-    }
-    if (any(endGroup <= firstGroup)) { firstGroup = 0u; endGroup = 0u; }
 
     // A tile is WorldTileSize px, (WorldTileSize / SDF_VISIBILITY_BOX_EDGE) groups of the hit passes' workgroup on each
     // axis. The dispatch is origin-anchored (0,0); the hit passes add cullBounds as their pixel-group origin to land on

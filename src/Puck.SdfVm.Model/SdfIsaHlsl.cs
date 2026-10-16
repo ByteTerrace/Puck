@@ -102,8 +102,7 @@ public static class SdfIsaHlsl {
 
         declarations.Members<SdfOp>(prefix: "SDF_OP");
         declarations.Members<SdfShadowDecision>(prefix: "SDF_SHADOW_DECISION");
-        declarations.Members<SdfIndirectParticipation>(prefix: "SDF_INDIRECT_PARTICIPATION");
-        declarations.Members<SdfIndirectTier>(prefix: "SDF_INDIRECT_TIER");
+        declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Count(name: "SDF_SHADOW_HISTORY_WORDS", value: ((int)SdfWorldPackage.ShadowHistoryWords));
         declarations.Members<SdfShapeType>(prefix: "SDF_SHAPE");
         declarations.Members<SdfBlendOp>(prefix: "SDF_BLEND");
@@ -214,8 +213,6 @@ public static class SdfIsaHlsl {
             name: "SDF_INSTANCE_SEGMENT_END_MASK",
             value: SdfProgram.SegmentEndMask
         );
-        declarations.Count(name: "SDF_INSTANCE_INDIRECT_SHIFT", value: SdfProgram.IndirectInstanceShift);
-        declarations.Bits(name: "SDF_INSTANCE_INDIRECT_MASK", value: SdfProgram.IndirectInstanceMask);
         declarations.Bits(
             name: "SDF_NO_DETAIL_SHAPES_FLAG",
             value: SdfProgram.NoDetailShapesFlag
@@ -287,8 +284,6 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MAX_CONVEX_VERTICES", value: SdfPrismProfile.MaxConvexVertices);
         declarations.Count(name: "SDF_MAX_PATH_EDGES", value: SdfPathProfile.MaxEdges);
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
-        declarations.Count(name: "SDF_SCREEN_EMISSION_MEAN", value: SdfScreenEmission.Mean);
-        declarations.Count(name: "SDF_SCREEN_EMISSION_RECORDS", value: SdfScreenEmission.Records);
         declarations.Real(name: "SDF_SCREEN_EMISSION_DIRECT_GAIN", value: SdfScreenEmission.DirectGain);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",

@@ -10,9 +10,6 @@ public static partial class SdfFrameBlock {
     private static readonly int MeshShadowParametersOffset = Offset(member: SdfWorldPackage.MeshShadowParameters);
     private static readonly int MeshBakeLatticesOffset = Offset(member: SdfWorldPackage.MeshBakeLattices);
     private static readonly int MeshBakeCountOffset = Offset(member: SdfWorldPackage.MeshBakeCount);
-    // A light slice naming one map of one row and one column: any slice sdfIndirectLightSlice accepts puts the mesh pass's
-    // stages in their orthographic light-camera form, which the mesh path's cascades draw through.
-    private const uint OrthographicSlice = (1u | (1u << SdfIndirectLightLayout.SliceCountShift) | (1u << SdfIndirectLightLayout.SliceColumnCountShift));
 
     /// <summary>Writes the render path the pass's graph runs: one on the baked-mesh path, whose surface pass writes a mesh
     /// pixel's shadow row, zero on the interpreter path.</summary>
@@ -41,7 +38,7 @@ public static partial class SdfFrameBlock {
         }
     }
     /// <summary>Writes one cascade's orthographic light camera as the view a mesh-path shadow raster pass draws from: the
-    /// view rows the mesh pass's stages read, a light slice that puts them in their orthographic form, the cascade target's
+    /// view rows the mesh pass's stages read, the light-camera flag that puts them in their orthographic form, the cascade target's
     /// extent, and no jitter.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="camera">The cascade's light camera.</param>
@@ -58,7 +55,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: FarDistance, value: camera.Far);
         WriteUInt32(block: block, offset: ImageExtent, value: SdfWorldPackage.MeshShadowResolution);
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: SdfWorldPackage.MeshShadowResolution);
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightSlice), value: OrthographicSlice);
+        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightCamera), value: 1u);
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
     /// <summary>Writes the lattices one bake dispatch samples and the instances each selects, three rows a lattice

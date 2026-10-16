@@ -10,7 +10,6 @@ namespace Puck.Cli.Shaders.Tests;
 public sealed class ShadersInterfaceEchoLawTests {
     private static readonly (string Echo, string Package)[] Families = [
         ("sdf-world", RenderGraphPackageCatalog.SdfWorld),
-        ("indirect", RenderGraphPackageCatalog.Indirect),
     ];
 
     private static JsonObject Manifest() {
@@ -110,7 +109,7 @@ public sealed class ShadersInterfaceEchoLawTests {
         root.WriteText(name: "canary.json", text: Manifest().ToJsonString());
         Assert.Equal(expected: (0, ""), actual: Run(directory: root.RootPath, check: false));
         Assert.Equal(expected: (0, ""), actual: Run(directory: root.RootPath, check: true));
-        var names = new[] { "sdf-world.graph.json", "indirect-perturbed.echo.hlsl", "canary.json" };
+        var names = new[] { "sdf-world.graph.json", "sdf-world-perturbed.echo.hlsl", "canary.json" };
         var texts = names.ToDictionary(keySelector: static name => name,
             elementSelector: name => File.ReadAllText(path: Path.Combine(path1: root.RootPath, path2: name)), comparer: StringComparer.Ordinal);
 

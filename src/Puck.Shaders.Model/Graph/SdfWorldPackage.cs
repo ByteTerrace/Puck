@@ -201,8 +201,8 @@ public static partial class SdfWorldPackage {
     /// publishes (<c>SourceMapping.Draw</c>), which the screen shading draws its face from, and the screen's state,
     /// whether its source is bound, the sampler it reads through, and whether it emits into the consuming world.</summary>
     public const string ScreenMappings = "screenMappings";
-    /// <summary>The acquired-image reduction: sixteen float4 cell means followed by the pixel-weighted whole-image
-    /// mean and direct-light gain for each screen slot. Finite solves read an immutable copy of these records.</summary>
+    /// <summary>The acquired-image reduction: one float4 a screen slot, its pixel-weighted whole-image mean and the
+    /// direct-light gain.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
     public const string DecalCells = "sdfDecalCells";
@@ -261,9 +261,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The edge of one screen tile in pixels, the unit the beam, the instance masks and the cull buffer count in.
     /// KEEP IN SYNC with <c>WorldTileSize</c> in <c>frame/sdf-tile.hlsli</c>.</summary>
     public const uint TileSize = 16;
-    /// <summary>The bytes of one visibility record: the twenty-four words in its V, C, L, N, S, K and I rows that
+    /// <summary>The bytes of one visibility record: the sixteen words in its V, C, L, N, S and K rows that
     /// <c>sdf-visibility.hlsli</c> lays out (<c>SdfVisibilityWords</c>).</summary>
-    public const int VisibilityRecordByteLength = (24 * sizeof(uint));
+    public const int VisibilityRecordByteLength = (16 * sizeof(uint));
     /// <summary>The planes the cull buffer holds per tile: the march start, the first exit, the second entry and the far
     /// bound. KEEP IN SYNC with <c>WorldTilePlaneCount</c> in <c>frame/sdf-frame.hlsli</c>.</summary>
     public const uint TilePlaneCount = 4;
@@ -300,18 +300,11 @@ public static partial class SdfWorldPackage {
     /// and shadow slot table, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
     /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
-        Value(name: LightSweepRadius, type: ShaderValueType.Float),
-        Value(name: LightSlice, type: ShaderValueType.Uint),
-        Value(name: LightMapCount, type: ShaderValueType.Uint),
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (SdfIndirectLightLayout.MaxMaps * SdfIndirectLightLayout.MetadataRows), name: LightMaps, type: ShaderValueType.Float4),
-        Value(name: IndirectTier, type: ShaderValueType.Uint),
+        Value(name: LightCamera, type: ShaderValueType.Uint),
         Value(name: IndirectSources, type: ShaderValueType.Uint),
         Value(name: IndirectSourceGains, type: ShaderValueType.Float4),
-        Value(name: IndirectFeedbackGain, type: ShaderValueType.Float),
         Value(name: IndirectApply, type: ShaderValueType.Float4),
         Value(name: IndirectContact, type: ShaderValueType.Float),
-        Value(name: IndirectBodies, type: ShaderValueType.Uint),
-        Value(name: IndirectMethod, type: ShaderValueType.Uint),
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
         Value(name: MeshDraws, type: ShaderValueType.Uint),
@@ -423,16 +416,6 @@ public static partial class SdfWorldPackage {
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
-        .. WorldIndirectValues,
-        Read(element: ShaderValueType.Float, name: IndirectLightDepth),
-        Written(element: ShaderValueType.Float, name: IndirectLightDepthWritten),
-        Read(element: ShaderValueType.Uint, name: IndirectCache),
-        Written(element: ShaderValueType.Uint, name: IndirectCacheWritten),
-        Written(element: ShaderValueType.Uint, name: IndirectPickWritten),
-        Written(element: ShaderValueType.Uint, name: IndirectDeferredWritten),
-        Read(element: ShaderValueType.Int4, name: IndirectBricks),
-        Read(element: ShaderValueType.Float4, name: IndirectDirections),
-        Read(element: ShaderValueType.Uint, name: IndirectTraceStates),
         Read(element: ShaderValueType.Uint, name: InstanceMasks),
         Written(element: ShaderValueType.Uint, name: InstanceMasksWritten),
         Read(element: ShaderValueType.Uint, name: SegmentTapes),
@@ -471,8 +454,6 @@ public static partial class SdfWorldPackage {
         ShaderWorkCounters.BufferMember,
         .. Tables,
         .. IncomingMembers,
-        Read(element: ShaderValueType.Uint4, name: IndirectAnswer),
-        Written(element: ShaderValueType.Uint4, name: IndirectAnswerWritten),
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates
@@ -657,9 +638,6 @@ public static partial class SdfWorldPackage {
         public const string Shadow = "shadow";
         /// <summary>Shading the hits into the lit image.</summary>
         public const string Views = "views";
-        /// <summary>The indirect receiver between shadow and views, present only with the residency's cache: each shaded
-        /// pixel's proof, certificate and replacing answer (<see cref="WithIndirect"/>).</summary>
-        public const string Receiver = "receiver";
         /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
         public const string Sky = "sky";
         /// <summary>The composite: the sky's runs in their authored order, the lit image over them by its coverage, then

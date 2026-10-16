@@ -3,7 +3,7 @@
 // and writer goes through the typed load and store functions below and holds only a record address. KEEP IN SYNC with
 // SdfWorldPackage.VisibilityRecordByteLength.
 //
-// A record is twenty-four words in seven rows:
+// A record is sixteen words in six rows:
 // V (4 words): the ray parameter t (Euclidean distance along the normalized camera ray), the identity, the material,
 //    and the march flags (steps in bits 0..7, the saturated query count in bits 8..30).
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
@@ -19,21 +19,18 @@
 //    only kind the ambient pass occludes.
 // K (1 word): four eight-bit stable-slot visibilities, 1 where no shadow was marched. The shadow stage writes it
 //    only when soft shadows are on and K is nonzero; views reads it only then.
-// I (8 words): the receiver's full float3 launch and clearance, full allocation identity (two words), exact transport
-//    certificate revision, then level/mask and completed-valid bit. Primary clears validity when replacing the surface;
-//    views alone fills this row, preserving the traversal and shading rows. A completed unresolved answer has mask zero.
 // V and the identity in it are exact; the packed fields round only presentation values.
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
-// writes K and its query word. Views reads the surface sample and publishes I after completing its receiver proof.
+// writes K and its query word. Views reads the surface sample.
 //
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
 // source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
 // is identity 0. An SDF hit's source is the winning instance's program ordinal plus one, so source 0 is
 // geometry outside any instance. A mesh hit's source is its draw.
 //
-// Each writing stage reads and writes the one buffer through sdfVisibilityRecordsRW. Views declares its preserving
-// output at every tier, including Off, and writes only I. Resolve and composite use the read-only binding after the
-// planned transition. One dispatch never aliases SRV reads with UAV writes to the same allocation.
+// Each writing stage reads and writes the one buffer through sdfVisibilityRecordsRW. Views, resolve and composite use
+// the read-only binding after the planned transition. One dispatch never aliases SRV reads with UAV writes to the same
+// allocation.
 #ifndef SDF_VISIBILITY_HLSLI
 #define SDF_VISIBILITY_HLSLI
 
@@ -41,21 +38,20 @@
 #include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
-#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_MESH_SURFACE_PASS)
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS) || defined(SDF_MESH_SURFACE_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
 #define SDF_VISIBILITY_WRITABLE
 #else
 #define sdfVisibilityRecordBuffer sdfVisibilityRecords
 #endif
 
-static const uint SdfVisibilityWords = 24u;
+static const uint SdfVisibilityWords = 16u;
 static const uint SdfVisibilityRowV = 0u;
 static const uint SdfVisibilityRowC = 4u;
 static const uint SdfVisibilityRowL = 7u;
 static const uint SdfVisibilityRowN = 11u;
 static const uint SdfVisibilityRowS = 13u;
 static const uint SdfVisibilityRowK = 15u;
-static const uint SdfVisibilityRowI = 16u;
 static const float SdfVisibilityBlendScale = 32767.0;
 static const uint SdfVisibilityBlendMask = 0x7FFFu;
 static const uint SdfVisibilityBlendOtherShift = 15u;

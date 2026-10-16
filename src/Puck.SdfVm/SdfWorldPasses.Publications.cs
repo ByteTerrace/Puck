@@ -3,9 +3,9 @@ using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
-// Captured by the actual Views recording, then committed only after that recording submits. A later cache
-// publication cannot relabel the source that this image used. The closure epoch qualifies direct-only views too.
-internal readonly record struct SdfViewLightingSource(SdfIndirectLightingSnapshot? Source, uint Stamp, long Closure,
+// Captured by the actual Views recording, then committed only after that recording submits. The closure epoch
+// and the environment and screen publications name the lighting the image used.
+internal readonly record struct SdfViewLightingSource(long Closure,
     GpuImagePublication Environment, GpuImagePublication Screens);
 
 public sealed partial class SdfWorldPasses {
@@ -16,7 +16,7 @@ public sealed partial class SdfWorldPasses {
     public void OutputPublished(string instance, GpuImagePublication publication) {
         var entry = Refresh(instance: instance);
 
-        if ((entry.View is not { LightView: false }) || !publication.IsKnown ||
+        if ((entry.View is null) || !publication.IsKnown ||
             (publication == entry.ImagePublication)) { return; }
         var source = entry.SubmittedLighting;
 

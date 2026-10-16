@@ -63,8 +63,6 @@ public static partial class SdfFrameBlock {
     private static readonly int ShadowOwnershipReject = Offset(member: SdfWorldPackage.ShadowOwnershipReject);
     private static readonly int ShadowLightReject = Offset(member: SdfWorldPackage.ShadowLightReject);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
-    private static readonly int IndirectTier = Offset(member: SdfWorldPackage.IndirectTier);
-    private static readonly int IndirectMethod = Offset(member: SdfWorldPackage.IndirectMethod);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
@@ -180,8 +178,7 @@ public static partial class SdfFrameBlock {
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
         WriteShadowHistory(block: block, enabled: false, lightMotion: 0, ownership: 0);
         WritePreviousView(block: block, valid: false, view: default);
-        WriteLightViews(block: block, views: null, depthCamera: false);
-        WriteIndirect(block: block, cache: null);
+        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightCamera), value: 0u);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;
@@ -207,11 +204,7 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
-        WriteUInt32(block: block, offset: IndirectTier, value: ((uint)frame.IndirectTier));
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectSources), value: ((uint)frame.IndirectSources));
         WriteIndirectControls(block: block, frame: frame);
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.IndirectBodies), value: ((uint)frame.IndirectBodies));
-        WriteUInt32(block: block, offset: IndirectMethod, value: ((uint)quality.IndirectMethod));
         var lights = frame.Lights;
         var curvature = lights.Curvature;
 

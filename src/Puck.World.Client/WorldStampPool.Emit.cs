@@ -8,7 +8,7 @@ namespace Puck.World.Client;
 public sealed partial class WorldStampPool {
     // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
     // Groups with independent motion or followers retain the conservative creation-root bound.
-    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, SdfIndirectParticipation indirect, bool ownInstance) {
+    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -19,8 +19,7 @@ public sealed partial class WorldStampPool {
             _ = builder.BeginInstanceDynamic(
             slot: boundSlot,
             boundOffset: Vector3.Zero,
-            boundRadius: boundRadius,
-            indirect: indirect
+            boundRadius: boundRadius
         );
         }
 
@@ -89,10 +88,9 @@ public sealed partial class WorldStampPool {
     }
     // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs. Text and its host shapes share one scoped instance so engraving cannot consume another
-    // placement's accumulator, and excluding this placement from indirect queries removes all its operands together.
+    // placement's accumulator.
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
         var document = live?.Creation.EngineDocument;
-        var indirect = (live?.Row?.Indirect ?? (live?.Indirect ?? SdfIndirectParticipation.Default));
         var shapes = (document?.Shapes ?? []);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
         // registers its creation's real palette, an unused one a single placeholder entry — both within the probe.
@@ -170,7 +168,7 @@ public sealed partial class WorldStampPool {
         var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
 
         if (hasText) {
-            _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin), indirect: indirect)
+            _ = builder.BeginInstanceDynamic(rootSlot, Vector3.Zero, ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin))
                 .PushField(compose: SdfBlendOp.Union);
         }
 
@@ -259,8 +257,7 @@ public sealed partial class WorldStampPool {
                 slot: slot,
                 boundOffset: Vector3.Zero,
                 boundRadius: boundRadius,
-                active: active,
-                indirect: indirect
+                active: active
             );
             }
             EmitShape(
@@ -342,7 +339,6 @@ public sealed partial class WorldStampPool {
                 builder: builder,
                 fromIndex: index,
                 groupId: groupId,
-                indirect: indirect,
                 ownInstance: !hasText,
                 paletteIds: paletteIds,
                 placementScale: placementScale,

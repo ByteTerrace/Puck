@@ -23,7 +23,7 @@ public sealed class WorldTextAuthoringLawTests {
         var pool = new WorldStampPool();
 
         pool.Reconcile(placements: [], creations: [creation], dynamics: [], bodyStamps: [
-            new WorldStampPool.BodyStamp(0, creation, 1f, WorldLook.Implicit, SdfIndirectParticipation.Receive),
+            new WorldStampPool.BodyStamp(0, creation, 1f, WorldLook.Implicit),
         ]);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
@@ -34,8 +34,7 @@ public sealed class WorldTextAuthoringLawTests {
         var instance = Assert.Single(collection: program.Instances);
 
         Assert.True(condition: instance.IsDynamic);
-        Assert.Equal(SdfIndirectParticipation.Receive, instance.Indirect);
-        Assert.True(condition: program.IndirectInstancesComposable);
+        Assert.True(condition: program.InstancesComposable);
         Assert.Equal(3, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.Contains(collection: program.Instructions, filter: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == ((uint)SdfBlendOp.Subtraction))));
     }

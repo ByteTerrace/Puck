@@ -22,7 +22,7 @@ public sealed class SdfShadowVisibilityLawTests {
             instances: [new SdfInstanceRange(First: 0, End: instructions.Length, IsDynamic: false, Center: Vector3.Zero, Radius: 1f, Slot: 0)],
             screenSurfaces: null);
 
-        Assert.True(condition: program.IndirectInstancesComposable);
+        Assert.True(condition: program.InstancesComposable);
         var evaluator = new SdfFieldEvaluator(program: program);
 
         Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 1.04f, y: 0f, z: 0f))), out var field, out _));

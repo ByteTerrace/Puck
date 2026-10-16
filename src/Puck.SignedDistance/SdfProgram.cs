@@ -227,7 +227,7 @@ public sealed partial class SdfProgram {
             screenSurfacesParamName: nameof(screenSurfaces)
         );
 
-        IndirectInstancesComposable = CanTracePartsIndependently();
+        InstancesComposable = CanTracePartsIndependently();
 
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
             instances: m_instances,

@@ -25,10 +25,6 @@ public static class WorldViewNames {
     /// <param name="residency">The residency's complete name.</param>
     /// <returns>The name with its environment part.</returns>
     public static string Environment(string residency) => GeneratedName.Append(name: residency, part: "environment");
-    /// <summary>Returns the one depth-camera name belonging to a residency's indirect producer.</summary>
-    /// <param name="cache">The producer's complete generated name.</param>
-    /// <returns>The name with its final light-camera part.</returns>
-    public static string IndirectLight(string cache) => GeneratedName.Append(name: cache, part: "indirect-light");
 
     /// <summary>The first part of a session screen's view name.</summary>
     public const string SessionHead = "session";

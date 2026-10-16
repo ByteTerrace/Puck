@@ -21,9 +21,9 @@ public sealed class SdfWorldPipelineCatalogLawTests {
     // One shadow kernel and three views kernels serve every fade capacity; the receiver and the three environment kernels
     // join the thirteen base kernels, and so do the mesh path's surface, bake mask, bake and mesh views kernels. The fake
     // brick baker is empty and resolve is acquired on demand.
-    private const long KernelPipelines = 21L;
+    private const long KernelPipelines = 20L;
     // The kernels, the region copy, the mesh pass and its impostor card pass.
-    private const int ResidencyPipelines = 24;
+    private const int ResidencyPipelines = 23;
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {

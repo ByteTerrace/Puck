@@ -23,7 +23,7 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, its `Bounds`, `Cull` and `Certificates` partials, `BakedWorldQuery`) | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakedTexture`); codecs in `src/Puck.Assets/Textures`; `CreationBaker` in `src/Puck.World.Authoring`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter: `mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`, the part walk in `sdf-parts.hlsli`), `march/`, `surface/`, `shade/`, `sky/`, `indirect/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [kernels](references/kernels.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter: `mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`, the part walk in `sdf-parts.hlsli`), `march/`, `surface/`, `shade/`, `sky/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [kernels](references/kernels.md) |
 | Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
@@ -40,9 +40,9 @@ A view is a chain of separate dispatches; the hit passes share one entry point
 (`passes/sdf-hit-entry.hlsli`) and each compiles its own stage through a pass
 macro: `mask` → `beam` → `tape` →
 `cull-args` → `mesh` (graphics) → `primary` (`sdfPrimaryStage`) → `surface`
-(normals and curvature, `sdfResolveSurface`) → `ambient` (AO) → `shadow` →
-`receiver` (indirect light, with the cache only) → `views` (materials and
-lighting) → `resolve` (reduced or temporal views) → `sky` → `composite`. The
+(normals and curvature, `sdfResolveSurface`) → `ambient` (AO) → `shadow` → `views`
+(materials and lighting) → `resolve` (reduced or temporal views) → `sky` →
+`composite`. The
 table in [kernels](references/kernels.md#the-frame) says what each writes.
 
 - **AO is its own dispatch.** It lives in `surface/sdf-occlusion.hlsli`
@@ -63,8 +63,7 @@ table in [kernels](references/kernels.md#the-frame) says what each writes.
   driver translation on every cold boot. Reuse the kernel's existing site
   through a rolled loop (`[loop]`): surface probes share `sdfProbeField`, AO
   shares `calcAO`'s loop, the views stage reads the field through
-  `sdfViewsFieldReads`, and indirect work runs as resumable procedures behind
-  one `sdfIndirectServe` call. Never add `[noinline]`: a real SPIR-V call loses
+  `sdfViewsFieldReads`. Never add `[noinline]`: a real SPIR-V call loses
   the device on NVIDIA's Vulkan driver.
 - **Keep each hit kernel's include closure its own.** A hit kernel includes the
   common head (`passes/sdf-hit-pass.hlsli`), only its own stage module, then the
@@ -187,7 +186,7 @@ owns the explanation.
   their own group. The pass block's lattice rows are a sync pair with
   `SdfFrameBlock.WriteMeshBake`.
 - **Cascades draw through the mesh pipeline**: `SdfFrameBlock.WriteShadowCamera`
-  writes a light slice so the mesh stages take their orthographic form, with the
+  writes the `lightCamera` flag so the mesh stages take their orthographic form, with the
   view cameras' handedness; `surface/sdf-mesh-path.hlsli` mirrors that
   projection.
 - **A dynamic group bakes in its slot's frame.** Its box, lattices and points
@@ -220,11 +219,9 @@ owns the explanation.
   cells whose corners disagree in sign, the samples `SdfDualContouring` reads a
   normal at; a cell's normal reads its own eight corners, so no other sample
   needs one.
-- **Indirect light is the irradiance volume, never the cache.** A residency
-  whose first view takes the path (`SdfWorldResidency.UsesMeshPath`) keeps
-  `IndirectTier` at Off, and the World composes no cache instance for it
-  (`WorldViewGraphHost.Indirect.cs`); `RequestedIndirectTier` drives
-  `SdfMeshIrradiance`, staged before the upload into the staged World table
+- **Indirect light is the irradiance volume.** `SdfWorldResidency.IndirectTier`
+  (the host lever, else the frame's tier) drives `SdfMeshIrradiance` while the
+  first view takes the mesh path, staged before the upload into the staged World table
   `sdfMeshIrradiance` and described by the pass-block values
   `meshIrradianceVolume` and `meshIrradianceLow`. The probe layout, key,
   toroidal slot, normal bias and probe weights are a sync pair between
@@ -233,7 +230,7 @@ owns the explanation.
   The trace reads static mesh draws through `SdfMeshIrradianceScene`; never
   route it through the field interpreter. The
   [handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
-  owns the technique and its limits.
+  owns the technique and its limits. The interpreter path draws no indirect light.
 
 ## Performance and cost
 

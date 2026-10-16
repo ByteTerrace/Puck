@@ -42,15 +42,8 @@ uses the panel's ordinary wrapping and elision.
 existing pointer picker. It holds only the issuing console session's next line
 until the sample completes or names its cancellation, and reports that verdict
 once through the terminal, operator transcript and refusal count. It waits for
-that sample's fence and evaluates its
-captured cache publication with the independent CPU irradiance reference once.
-The echo and inspector share the actual receiver, corner weights and stamps,
-source categories, allocation, epoch, published sweep depth and fenced probe
-census. These rows take priority over optional presentation rows within the
-panel's fixed reservation. Steady inspection reuses their text and reference;
-it does not run another estimator. Unsupported screen/cone sources, dynamic
-field operations and unresolved paths name their refusal and show no numeric
-divergence. A missing pixel or a current route that has not rendered refuses immediately;
+that sample's fence and reports the pixel's material. A missing pixel or a
+current route that has not rendered refuses immediately;
 registering its picker does not establish a rendered view. Changing seat or pane, a newer
 pixel request or closing presentation settles an outstanding explanation.
 Point and normal read `unavailable` until an inspector surface sample completes;
@@ -889,15 +882,7 @@ Facts a script needs:
   `[captures: settled at tick T]` on standard error. A script that takes one
   capture after another waits on it between them, since `world.screenshot`
   refuses while a capture is still pending and frames can trail ticks on a busy
-  machine. `world.wait indirect` instead waits for a frame produced
-  after arming and every active shared indirect cache's actual current-source
-  completion fence. Its settled stderr verdict retains each residency's
-  allocation, epoch, generation, publication stamp and source sequence. This
-  proves shared-cache convergence, not every view's receiver admission. It
-  takes no deadline: produced frames bound it, a solve that cannot finish refuses
-  by name at once, a cache selected just before arming is awaited, and with no
-  cache active a few frames after arming it refuses.
-  Pause simulation through that warm-up, then resume before a fixed tick wait.
+  machine.
 - **Timing.** The console drains before every fixed step. A piped script's
   lines up to its first `world.wait` run before the first tick, and the line
   after a `world.wait` that releases at tick R runs before tick R+1. The
@@ -2026,45 +2011,13 @@ resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
-`world.indirect off|medium|high` selects the session's residency-owned traced
-and partitioned cache. It boots at `render.indirect.tier`, Medium when absent;
-an explicit `off` disables it. The shared quality presets select Off at Low,
-Medium at Medium and High at High, and a preset can author an `indirect` override.
-`world.save` folds the live tier back into its authored home. Enabled views of one residency share one
-cache, and a completed cache schedules no more rays until demand or geometry
-changes. `world.debug-view indirect-probes` shows probe
-classes across the whole view, including empty sky, with scene hits occluding
-the spheres. `world.debug-view indirect-cells` colours each hit by the stored
-partition component of its nearest cell corner, with no field evaluation.
-`world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
-reports the actual cache slices, upload regions, retiring caches and light-view
-fragment allocations. The cache total includes the depth banks it lends to light
-graphs; the fragment total counts graph-owned scratch and regions. Each bank is
-counted once, including while a retiring graph's readers still hold it.
-
-`world.indirect-method [cache|screen|cone]` reads or selects the live indirect
-comparison method for every consuming view. It starts at `cache`; `screen` and
-`cone` select the engine's comparison paths with the residency cache as their
-fallback. The first selection builds the comparison receiver kernel, and the view
-waits for it. This operator presentation override changes no cache tier, saved
-document or authoritative session state. Camera and session views keep the
-method while applying their quality restrictions, and infinity views retain
-each consuming camera's method alongside the layer's own shading levers.
-
-`world.lighting` appends that same host inventory, including exact allocation,
-epoch, submission and lighting-publication identities, each level's allocated
-and placed bricks and submitted strata, pending host work and valid light maps.
-GPU probe classifications and solve results require a fenced readback. The last
-explicit `world.explain` census is appended separately with its captured
-residency, allocation, epoch and publication, even after live host inventory
-changes. Host schedule counts never stand in for those GPU classifications.
-`world.indirect-freeze [on|off]` pauses new update admission in every active
-residency while views retain its cache. An already admitted frame may finish.
-`world.indirect-reset` queues their reset for the next renderable frame; while
-frozen it withdraws the old publication without admitting replacement work.
-These two operator-only controls affect presentation objects, change no
-authoritative document or replay state, and refuse when no indirect residency
-is active. Headless `world.lighting` names the absent renderer.
+`world.indirect off|medium|high` selects the indirect-light tier the baked-mesh
+path's irradiance volume traces at. It boots at `render.indirect.tier`, Medium
+when absent; an explicit `off` disables it. The shared quality presets select
+Off at Low, Medium at Medium and High at High, and a preset can author an
+`indirect` override. `world.save` folds the live tier back into its authored
+home. The interpreter path (`world.render-path interpreter`) draws no indirect
+light at any tier.
 `world.render-scale [view]` echoes the selected view's ceiling, saved quality
 floor, grid, budget and signal. With no target it echoes the primary view;
 ceiling and floor changes write the defaults that named rows inherit, while

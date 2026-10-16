@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 // keeps the transform table of the frame its copy recorded, the rows that frame's upload staged, so a winning slot
 // resolves against the table the record was rendered with. Its view's picker polls only signaled submissions; changing
 // demand never replaces an in-flight buffer.
-internal sealed partial class SdfWorldPickReadback : IDisposable {
+internal sealed class SdfWorldPickReadback : IDisposable {
     // V (4 words), C (3) and L.x: the identity, the ray parameter, the material, the flags and the transform slot.
     private const int PickBytes = 32;
     // V through N: an inspector's surface normal too.
@@ -38,8 +38,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         picker.Attach(readback: this);
     }
 
-    // With a receiver pass (armedOnly), a surface request records only once the receiver armed it this frame.
-    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, string box, SdfReprojectionView sample, long cut, bool armedOnly) {
+    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, string box, SdfReprojectionView sample, long cut) {
         Poll();
         var target = m_slots[slot];
 
@@ -49,7 +48,7 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
             target.Submit = false;
             m_picker.Complete(readback: this, result: null);
         }
-        if (!m_picker.Take(armedOnly: armedOnly, cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
+        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
             return;
         }
         if (request.Sample is not null) {
@@ -65,18 +64,12 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         target.Box = box;
         target.Record = true;
     }
+    public ulong ReadbackBytes => m_slots.Aggregate(0UL, static (bytes, slot) => checked(((bytes
+        + (slot.IdentityBuffer?.SizeBytes ?? 0UL)) + (slot.SurfaceBuffer?.SizeBytes ?? 0UL))));
+
     public bool Take(int slot, int index, out RenderGraphBufferReadback readback) {
         var target = m_slots[slot];
 
-        if (target.ReceiverRecord) {
-            if (index == 0) {
-                target.ReceiverSubmit = true;
-                readback = new RenderGraphBufferReadback(Version: target.ReceiverVersion!, SourceOffsetBytes: target.ReceiverOffset,
-                    SizeBytes: (2 * sizeof(uint)), Destination: target.ReceiverBuffer!);
-                return true;
-            }
-            index--;
-        }
         if (!target.Record) {
             readback = default;
             return false;
@@ -94,14 +87,6 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
                 readback = new RenderGraphBufferReadback(Version: target.Box!, SourceOffsetBytes: 0, SizeBytes: BoxBytes,
                     Destination: target.Buffer!, DestinationOffsetBytes: ((ulong)target.RecordBytes));
                 return true;
-            case 2 when (target.Cache is not null):
-                readback = new RenderGraphBufferReadback(Version: target.IndirectVersion!, SourceOffsetBytes: 0,
-                    SizeBytes: IndirectBytes, Destination: target.IndirectBuffer!);
-                return true;
-            case 3 when (target.Cache is not null):
-                readback = new RenderGraphBufferReadback(Version: target.CacheVersion!, SourceOffsetBytes: 0,
-                    SizeBytes: target.ProbeBuffer!.SizeBytes, Destination: target.ProbeBuffer);
-                return true;
             default:
                 target.Record = false;
                 readback = default;
@@ -111,11 +96,6 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
     public void Submitted(int slot, IGpuSubmissionFence fence) {
         var target = m_slots[slot];
 
-        if (target.ReceiverSubmit) {
-            target.ReceiverRecord = false;
-            target.ReceiverSubmit = false;
-            target.ReceiverFence = fence;
-        }
         if (!target.Submit) {
             return;
         }
@@ -123,7 +103,6 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         target.Fence = fence;
     }
     public void Poll() {
-        PollReceivers();
         foreach (var slot in m_slots) {
             if ((slot.Fence is not { } fence) || !fence.IsSignaled) {
                 continue;
@@ -141,9 +120,6 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
         foreach (var slot in m_slots) {
             slot.IdentityBuffer?.Dispose();
             slot.SurfaceBuffer?.Dispose();
-            slot.IndirectBuffer?.Dispose();
-            slot.ProbeBuffer?.Dispose();
-            slot.ReceiverBuffer?.Dispose();
         }
     }
 
@@ -177,11 +153,10 @@ internal sealed partial class SdfWorldPickReadback : IDisposable {
             Flags = BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[12..]),
             TransformSlot = transformSlot,
             Transform = ((transformSlot is { } index) ? slot.TransformAt(slot: index) : null),
-            Indirect = AnswerIndirect(slot: slot),
         };
     }
 
-    private sealed partial class Slot {
+    private sealed class Slot {
         private DynamicTransform[] m_transforms = [];
         private int m_transformCount;
 

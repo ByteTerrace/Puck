@@ -158,19 +158,6 @@ public static class WorldRenderRoot {
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
         host.Environment = new SdfSkyEnvironmentPasses(views: host.Pickers);
         packages.Register(factory: host.Environment, package: RenderGraphPackageCatalog.SkyEnvironment);
-        host.Indirect = new SdfIndirectPasses(views: host.Pickers);
-        host.ReadIndirectTier = () => sp.GetRequiredService<WorldRenderSettings>().IndirectTier;
-        host.IndirectResidencyChanged = (cacheResidency, added) => {
-            var indirectProbe = sp.GetRequiredService<WorldRenderProbe>();
-
-            if (added) {
-                indirectProbe.Indirect.Attach(instance: cacheResidency.IndirectWork);
-            } else {
-                indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
-            }
-            indirectProbe.RegisterIndirectResidency(active: added, residency: cacheResidency);
-        };
-        packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),
@@ -294,7 +281,7 @@ public static class WorldRenderRoot {
             // its constructor takes.
             Footprints = host.Footprints,
             Named = host.Named,
-            // The graph host's environment and indirect registrations retain residencies. Release those registrations
+            // The graph host's environment registrations retain residencies. Release those registrations
             // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
             // These services can predate the device context, so their later container disposal is too late for GPU owners.
             Holdings = [compareCapture, host, binder, residency],

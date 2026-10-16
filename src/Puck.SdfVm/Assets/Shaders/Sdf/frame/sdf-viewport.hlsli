@@ -5,9 +5,10 @@
 #ifndef SDF_VIEWPORT_HLSLI
 #define SDF_VIEWPORT_HLSLI
 #include "../isa/sdf-isa.hlsli"
-#include "../isa/sdf-indirect-layout.hlsli"
 
-bool sdfLightCamera() { return sdfIndirectLightSlice(passGroup.lightSlice).x != 0u; }
+// Whether the view is a mesh-path shadow cascade's orthographic light camera (SdfFrameBlock.WriteShadowCamera), which
+// only the mesh pass's stages draw from.
+bool sdfLightCamera() { return (passGroup.lightCamera != 0u); }
 
 // The view the pass renders, gathered from the pass block into the rows the march, the shading and the mesh projection
 // read it through.
@@ -44,7 +45,6 @@ ViewportData worldView() {
 // the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
 // branch not taken needs to prove byte-identity against a build without it at all.
 float3 cameraRayDirection(ViewportData view, float2 localUv) {
-    if (sdfLightCamera()) { return view.forward.xyz; }
     float2 ndc = ((localUv * 2.0) - 1.0);
 
     ndc.y = -ndc.y;
@@ -69,14 +69,6 @@ float3 cameraRayDirection(ViewportData view, float2 localUv) {
     return normalize(direction);
 }
 
-// Only the residency light camera is orthographic. Its nearby plane avoids the subtraction of a distant virtual
-// eye from world-space geometry; ordinary cameras retain their exact eye and ray arithmetic.
-float3 cameraRayOrigin(ViewportData view, float2 localUv) {
-    if (!sdfLightCamera()) { return view.position.xyz; }
-    float2 plane = (localUv * 2.0 - 1.0) * float2(view.up.w, -1.0) * view.right.w;
-    return view.position.xyz + view.right.xyz * plane.x + view.up.xyz * plane.y;
-}
-
 // The view camera's own near distance (CameraSnapshot.Near): the forward distance of the plane its image begins on,
 // zero for a camera whose image begins at its eye. A border window's plane is its aperture, so nothing between its eye
 // and the glass is seen. The bounded volumes composite from it. The host writes a finite, non-negative value.
@@ -84,9 +76,9 @@ float worldNearDistance(ViewportData view) {
     return view.lens.x;
 }
 
-// Perspective surfaces keep SDF_MINIMUM_NEAR for their infinite reversed-Z projection. The scoped light camera has a
+// Perspective surfaces keep SDF_MINIMUM_NEAR for their infinite reversed-Z projection. A shadow cascade's light camera has a
 // finite orthographic depth interval and starts at its positive authored near plane: raising that plane can clip a
-// caster the finite projection placed just beyond it. Beam, primary and mesh must use the same plane.
+// caster the finite projection placed just beyond it.
 float worldSurfaceNearDistance(ViewportData view) {
     return sdfLightCamera() ? worldNearDistance(view) : max(worldNearDistance(view), SDF_MINIMUM_NEAR);
 }

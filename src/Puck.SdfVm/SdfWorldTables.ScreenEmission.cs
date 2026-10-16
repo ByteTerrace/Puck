@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     private readonly ScreenEmissionPass m_screenEmission;
 
-    /// <summary>Gets the one GPU image reduction shared by every direct screen light and finite solve.</summary>
+    /// <summary>Gets the one GPU image reduction every direct screen light reads.</summary>
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Submitted;

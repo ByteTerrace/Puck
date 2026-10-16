@@ -149,9 +149,15 @@ public sealed partial class SdfFieldDeviceLawTests {
                 : [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer), new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer)]),
             ordinal: WorldGroup
         );
+        // A probe that reads visibility records also reads the pass block (a record's frame slot reads its render path);
+        // a zeroed block is the interpreter path.
+        var passLayout = SdfWorldInterfaces.WorldLayout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
+        var passBlockBinding = passLayout.Bindings.Single(predicate: static binding => ((binding.Kind == GpuBindingKind.ConstantBuffer) && !binding.Pushed)).Binding;
         var passGroup = new GpuGroupLayoutDescription(
             bindings: [
-                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: visibilityBinding, kind: GpuBindingKind.ReadWriteBuffer)]),
+                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [
+                    new GpuGroupBinding(binding: visibilityBinding, kind: GpuBindingKind.ReadWriteBuffer),
+                    new GpuGroupBinding(binding: passBlockBinding, kind: GpuBindingKind.ConstantBuffer)]),
                 .. ((instanceMasks is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: instanceMaskBinding, kind: GpuBindingKind.ReadOnlyBuffer)]),
                 .. ((tapeWordsPerCase == 0) ? Array.Empty<GpuGroupBinding>() : [
                     new GpuGroupBinding(binding: tapeReadBinding, kind: GpuBindingKind.ReadOnlyBuffer),
@@ -220,6 +226,8 @@ public sealed partial class SdfFieldDeviceLawTests {
         // records out of range, which Direct3D 12 drops on store and reads back as zero.
         using var visibility = ((transforms is null) ? null : services.BufferFactory.CreateDeviceLocal(
             name: default, sizeBytes: (((ulong)caseCount) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage));
+        using var passBlock = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
+            data: new byte[((passLayout.BlockSizeBytes + 255U) & ~255U)], name: default, usage: GpuBufferUsage.Uniform));
         using var tapes = ((tapeWordsPerCase == 0) ? null : services.BufferFactory.CreateDeviceLocal(
             name: default, sizeBytes: checked(((((ulong)tapeWordsPerCase) * ((ulong)caseCount)) * sizeof(uint))), usage: GpuBufferUsage.Storage));
         using var masks = ((instanceMasks is null) ? null : services.BufferFactory.CreateHostVisible(
@@ -256,6 +264,10 @@ public sealed partial class SdfFieldDeviceLawTests {
             if (visibility is not null) {
                 bindings.WriteBuffer(binding: visibilityBinding, bufferHandle: visibility.BufferHandle, bufferSize: visibility.SizeBytes,
                     descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
+            }
+            if (passBlock is not null) {
+                bindings.WriteConstantBuffer(arrayElement: 0, binding: passBlockBinding, bufferHandle: passBlock.BufferHandle,
+                    bufferSize: passBlock.SizeBytes, descriptorSetHandle: passSet);
             }
             if (tapes is not null) {
                 bindings.WriteBuffer(binding: tapeReadBinding, bufferHandle: tapes.BufferHandle, bufferSize: tapes.SizeBytes,

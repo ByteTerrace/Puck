@@ -16,14 +16,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         view.Fragment = view.Fragment with {
             Passes = [.. view.Fragment.Passes.Select(selector: pass => ((pass.Name == SdfWorldPackage.Parts.Views) ? pass with {
-                InputAccesses = [.. pass.Inputs.Select(selector: (input, index) => ((input.Name == SdfWorldPackage.IndirectCache)
+                InputAccesses = [.. pass.Inputs.Select(selector: (input, index) => ((input.Name == CacheVersion)
                     ? RenderGraphPortAccess.ComputeReadWrite : pass.InputAccesses[index]))],
             } : pass))],
         };
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
         var set = Set(PackageInstance() with { Reads = [new("cache", Kind: ShaderPipelineResourceKind.Buffer)] },
-            new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+            new RenderGraphInstance(Name: "cache", ExternalPackage: BufferPackage,
                 Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
         using var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2]);
         var frame = 0L;
@@ -51,7 +51,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(4096, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
         var recorders = new Recorders("cache.update", Over);
 
-        recorders.Registry.Register(factory: new BorrowedPackage(buffer: buffer) { OwnsAllocation = borrowed }, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: new BorrowedPackage(buffer: buffer) { OwnsAllocation = borrowed }, package: BufferPackage);
         var set = MutableBufferInstances(previous: previous);
 
         Assert.False(condition: RenderGraphRuntime.TryCreate(set, [MutableBufferGraph(), null], PackageView, recorders.Registry,
@@ -66,7 +66,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders("cache.update", Over);
         var producer = new BorrowedPackage(buffer: buffer);
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         using var runtime = Runtime(gpu, recorders, MutableBufferInstances(), PackageView, MutableBufferGraph(), null!);
         var frame = 0L;
 
@@ -102,11 +102,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         recorders.ByInstance.Add(key: "main", value: reader);
         recorders.ByInstance.Add(key: "mutator", value: writer);
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = Set(
             new RenderGraphInstance(Name: "main", Passes: 2, Reads: [new("cache", Kind: ShaderPipelineResourceKind.Buffer), new("mutator")], Refresh: RenderGraphRefresh.EveryFrame),
             new RenderGraphInstance(Name: "mutator", Passes: 2, Reads: [new("cache", Kind: ShaderPipelineResourceKind.Buffer)], Refresh: RenderGraphRefresh.EveryFrame),
-            new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+            new RenderGraphInstance(Name: "cache", ExternalPackage: BufferPackage,
                 Output: ShaderPipelineResourceKind.Buffer, Passes: 3, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
         using var runtime = Runtime(gpu, recorders, set, "main",
             MutableBufferGraph(bytes: PoolBytes, mutable: false, output: "secondary"),
@@ -206,7 +206,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     private static RenderGraphInstanceSet MutableBufferInstances(bool previous = false) => Set(
         new RenderGraphInstance(Name: PackageView, Passes: 2, Reads: [new("cache", Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: previous)], Refresh: RenderGraphRefresh.EveryFrame),
-        new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+        new RenderGraphInstance(Name: "cache", ExternalPackage: BufferPackage,
             Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
     private static RenderGraphRuntimeGraph MutableBufferGraph(bool mutable = true, string? output = null, ulong bytes = 4096) {
         var package = new RenderGraphPackage(Id: (mutable ? "cache.update" : "cache.read"), Members: [], Summary: "Accesses shared proofs.",

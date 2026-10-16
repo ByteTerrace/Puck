@@ -110,11 +110,10 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="cameraHidden">Whether the camera never sees the instance, while shadows and ambient occlusion still
     /// read it (<see cref="SdfInstanceRange.CameraHidden"/>).</param>
-    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
-    /// <paramref name="boundRadius"/> is not finite and non-negative, or <paramref name="indirect"/> is undefined.</exception>
+    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -126,8 +125,7 @@ public sealed partial class SdfProgramBuilder {
             isDynamic: false,
             center: boundCenter,
             radius: boundRadius,
-            slot: 0,
-            indirect: indirect
+            slot: 0
         );
 
         return this;
@@ -145,12 +143,11 @@ public sealed partial class SdfProgramBuilder {
     /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
     /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
     /// almost nothing. Its mask bit is always 0 — Stage 1 never marches it.</param>
-    /// <param name="indirect">The whole instance's indirect-light participation; Default follows the frame's body policy.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
-    /// non-negative, or <paramref name="indirect"/> is undefined.</exception>
+    /// non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
+    public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -162,8 +159,7 @@ public sealed partial class SdfProgramBuilder {
             center: boundOffset,
             isDynamic: true,
             radius: boundRadius,
-            slot: slot,
-            indirect: indirect
+            slot: slot
         );
 
         return this;
@@ -194,12 +190,11 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
-    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
-    /// non-negative, or <paramref name="indirect"/> is undefined.</exception>
-    public SdfProgramBuilder DynamicInstance(int slot, Vector3 boundOffset, float boundRadius, Action<SdfProgramBuilder> emit, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
+    /// non-negative.</exception>
+    public SdfProgramBuilder DynamicInstance(int slot, Vector3 boundOffset, float boundRadius, Action<SdfProgramBuilder> emit) {
         RequireInstanceBound(
             center: boundOffset,
             centerParamName: nameof(boundOffset),
@@ -209,7 +204,6 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundOffset,
             emit: emit,
-            indirect: indirect,
             isDynamic: true,
             radius: boundRadius,
             slot: slot
@@ -244,8 +238,7 @@ public sealed partial class SdfProgramBuilder {
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
             Active: m_openInstanceActive,
-            CameraHidden: m_openInstanceCameraHidden,
-            Indirect: m_openInstanceIndirect
+            CameraHidden: m_openInstanceCameraHidden
         ));
 
         m_openInstanceFirst = -1;
@@ -258,11 +251,10 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="emit">The instructions that belong to the instance.</param>
-    /// <param name="indirect">The whole instance's indirect-light participation.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
-    /// <paramref name="boundRadius"/> is not finite and non-negative, or <paramref name="indirect"/> is undefined.</exception>
-    public SdfProgramBuilder Instance(Vector3 boundCenter, float boundRadius, Action<SdfProgramBuilder> emit, SdfIndirectParticipation indirect = SdfIndirectParticipation.Default) {
+    /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
+    public SdfProgramBuilder Instance(Vector3 boundCenter, float boundRadius, Action<SdfProgramBuilder> emit) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -272,7 +264,6 @@ public sealed partial class SdfProgramBuilder {
         ScopedInstance(
             center: boundCenter,
             emit: emit,
-            indirect: indirect,
             isDynamic: false,
             radius: boundRadius,
             slot: 0

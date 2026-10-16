@@ -4,16 +4,6 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfKernelSet.StemOf"/>), pipeline, build order and loaded bytecode (<see cref="SdfKernelSet"/>) derive
 /// from.</summary>
 public enum SdfKernel {
-    /// <summary>Conservative swept primary traversal for a residency light camera.</summary>
-    LightPrimary,
-    /// <summary>Publication of one light camera region into the retained depth bank.</summary>
-    LightDepth,
-    /// <summary>Residency probe placement and cell partitioning.</summary>
-    IndirectClassify,
-    /// <summary>Residency transport records and visibility proofs.</summary>
-    IndirectTrace,
-    /// <summary>Finite lighting of stored transport records into the other radiance and irradiance generation.</summary>
-    IndirectShade,
     /// <summary>The tile prepass, cone-marching each tile's field into its march planes and part bounds.</summary>
     Beam,
     /// <summary>The certified per-tile live-segment mask.</summary>
@@ -31,12 +21,6 @@ public enum SdfKernel {
     /// <summary>The stable and incoming soft shadows, writing the record's K row and, at a nonzero fade capacity, the
     /// incoming visibility image; one kernel serves every capacity.</summary>
     Shadow,
-    /// <summary>The indirect receiver: each shaded pixel's proof against the residency's cache, its certificate and the
-    /// near-field answer that replaces its cache sample, which views reads. Full instruction set.</summary>
-    Receiver,
-    /// <summary>The indirect receiver with the screen-space and cone comparison methods instead of the near-field sample, whose
-    /// pipeline is acquired once a view first selects a comparison method.</summary>
-    ReceiverComparison,
     /// <summary>Shading, the full-instruction-set variant.</summary>
     Views,
     /// <summary>Shading with the exotic ops and shapes compiled out.</summary>
@@ -52,7 +36,7 @@ public enum SdfKernel {
     SkyEnvironment,
     /// <summary>The environment map's reduction to its spherical-harmonic coefficients, dispatched after the map.</summary>
     SkyEnvironmentReduce,
-    /// <summary>One acquired-image reduction per bound screen, shared by direct lighting and indirect face emission.</summary>
+    /// <summary>One acquired-image reduction per bound screen, which direct lighting reads.</summary>
     ScreenEmission,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,

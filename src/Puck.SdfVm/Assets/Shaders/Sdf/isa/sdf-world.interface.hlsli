@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/6cb032631db2df381e1870c11821dbb6c2f5444a4cff787f6dcb51e8a6fd470d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/743e9485169ed1ceb118a73b31beace6db80d47ff2b36119671aace1e581e237). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -187,124 +187,100 @@ struct SdfWorldPass {
     [[vk::offset(224)]] float3 gridWorldPitch;
     [[vk::offset(236)]] uint historyFrames;
     [[vk::offset(240)]] uint2 imageExtent;
-    [[vk::offset(248)]] uint2 indirectAllocation;
+    [[vk::offset(248)]] uint _pad248;
+    [[vk::offset(252)]] uint _pad252;
     [[vk::offset(256)]] float4 indirectApply;
-    [[vk::offset(272)]] uint indirectBodies;
-    [[vk::offset(276)]] uint indirectCertificateRevision;
-    [[vk::offset(280)]] float indirectContact;
-    [[vk::offset(284)]] uint indirectEpoch;
-    [[vk::offset(288)]] float indirectFeedbackGain;
-    [[vk::offset(292)]] uint indirectFrame;
-    [[vk::offset(296)]] uint indirectMethod;
-    [[vk::offset(300)]] uint indirectNearEnabled;
-    [[vk::offset(304)]] uint4 indirectPickPixel;
-    [[vk::offset(320)]] uint indirectPreviousPublication;
-    [[vk::offset(324)]] uint indirectReadGeneration;
-    [[vk::offset(328)]] uint indirectReadPublication;
-    [[vk::offset(332)]] uint indirectReceiverProofs;
-    [[vk::offset(336)]] float4 indirectSourceGains;
-    [[vk::offset(352)]] uint indirectSources;
-    [[vk::offset(356)]] uint indirectTier;
-    [[vk::offset(360)]] uint instanceMaskWordCount;
-    [[vk::offset(364)]] uint _pad364;
-    [[vk::offset(368)]] float2 jitter;
-    [[vk::offset(376)]] uint lightCount;
-    [[vk::offset(380)]] uint lightMapCount;
-    [[vk::offset(384)]] float4 lightMaps[84];
-    [[vk::offset(1728)]] uint lightSlice;
-    [[vk::offset(1732)]] float lightSweepRadius;
-    [[vk::offset(1736)]] uint meshBakeCount;
-    [[vk::offset(1740)]] uint _pad1740;
-    [[vk::offset(1744)]] float4 meshBakeLattices[48];
-    [[vk::offset(2512)]] uint meshDraws;
-    [[vk::offset(2516)]] uint _pad2516;
-    [[vk::offset(2520)]] uint _pad2520;
-    [[vk::offset(2524)]] uint _pad2524;
-    [[vk::offset(2528)]] int4 meshIrradianceLow;
-    [[vk::offset(2544)]] uint4 meshIrradianceVolume;
-    [[vk::offset(2560)]] float4 meshShadowCascades[12];
-    [[vk::offset(2752)]] uint meshShadowCount;
-    [[vk::offset(2756)]] uint _pad2756;
-    [[vk::offset(2760)]] uint _pad2760;
-    [[vk::offset(2764)]] uint _pad2764;
-    [[vk::offset(2768)]] float4 meshShadowParameters;
-    [[vk::offset(2784)]] float nearDistance;
-    [[vk::offset(2788)]] uint preserveIndirectReceivers;
-    [[vk::offset(2792)]] uint _pad2792;
-    [[vk::offset(2796)]] uint _pad2796;
-    [[vk::offset(2800)]] float4 previousView[6];
-    [[vk::offset(2896)]] uint renderPath;
-    [[vk::offset(2900)]] uint screenCount;
-    [[vk::offset(2904)]] uint shadowAmortize;
-    [[vk::offset(2908)]] float shadowDistanceScale;
-    [[vk::offset(2912)]] uint shadowFadeCount;
-    [[vk::offset(2916)]] uint shadowLightReject;
-    [[vk::offset(2920)]] uint shadowOwnershipReject;
-    [[vk::offset(2924)]] uint shadowSlotCount;
-    [[vk::offset(2928)]] int4 shadowSlots;
-    [[vk::offset(2944)]] float tanHalfFieldOfView;
-    [[vk::offset(2948)]] uint temporal;
-    [[vk::offset(2952)]] uint2 tileGrid;
-    [[vk::offset(2960)]] uint viewBase;
-    [[vk::offset(2964)]] uint _pad2964;
-    [[vk::offset(2968)]] uint _pad2968;
-    [[vk::offset(2972)]] uint _pad2972;
-    [[vk::offset(2976)]] float3 viewForward;
-    [[vk::offset(2988)]] uint _pad2988;
-    [[vk::offset(2992)]] float3 viewPosition;
-    [[vk::offset(3004)]] uint _pad3004;
-    [[vk::offset(3008)]] float3 viewRight;
-    [[vk::offset(3020)]] uint _pad3020;
-    [[vk::offset(3024)]] float3 viewUp;
-    [[vk::offset(3036)]] uint viewportCount;
-    [[vk::offset(3040)]] uint workCounterRow;
-    [[vk::offset(3044)]] uint workCounterRowDetail;
+    [[vk::offset(272)]] float indirectContact;
+    [[vk::offset(276)]] uint _pad276;
+    [[vk::offset(280)]] uint _pad280;
+    [[vk::offset(284)]] uint _pad284;
+    [[vk::offset(288)]] float4 indirectSourceGains;
+    [[vk::offset(304)]] uint indirectSources;
+    [[vk::offset(308)]] uint instanceMaskWordCount;
+    [[vk::offset(312)]] float2 jitter;
+    [[vk::offset(320)]] uint lightCamera;
+    [[vk::offset(324)]] uint lightCount;
+    [[vk::offset(328)]] uint meshBakeCount;
+    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(336)]] float4 meshBakeLattices[48];
+    [[vk::offset(1104)]] uint meshDraws;
+    [[vk::offset(1108)]] uint _pad1108;
+    [[vk::offset(1112)]] uint _pad1112;
+    [[vk::offset(1116)]] uint _pad1116;
+    [[vk::offset(1120)]] int4 meshIrradianceLow;
+    [[vk::offset(1136)]] uint4 meshIrradianceVolume;
+    [[vk::offset(1152)]] float4 meshShadowCascades[12];
+    [[vk::offset(1344)]] uint meshShadowCount;
+    [[vk::offset(1348)]] uint _pad1348;
+    [[vk::offset(1352)]] uint _pad1352;
+    [[vk::offset(1356)]] uint _pad1356;
+    [[vk::offset(1360)]] float4 meshShadowParameters;
+    [[vk::offset(1376)]] float nearDistance;
+    [[vk::offset(1380)]] uint _pad1380;
+    [[vk::offset(1384)]] uint _pad1384;
+    [[vk::offset(1388)]] uint _pad1388;
+    [[vk::offset(1392)]] float4 previousView[6];
+    [[vk::offset(1488)]] uint renderPath;
+    [[vk::offset(1492)]] uint screenCount;
+    [[vk::offset(1496)]] uint shadowAmortize;
+    [[vk::offset(1500)]] float shadowDistanceScale;
+    [[vk::offset(1504)]] uint shadowFadeCount;
+    [[vk::offset(1508)]] uint shadowLightReject;
+    [[vk::offset(1512)]] uint shadowOwnershipReject;
+    [[vk::offset(1516)]] uint shadowSlotCount;
+    [[vk::offset(1520)]] int4 shadowSlots;
+    [[vk::offset(1536)]] float tanHalfFieldOfView;
+    [[vk::offset(1540)]] uint temporal;
+    [[vk::offset(1544)]] uint2 tileGrid;
+    [[vk::offset(1552)]] uint viewBase;
+    [[vk::offset(1556)]] uint _pad1556;
+    [[vk::offset(1560)]] uint _pad1560;
+    [[vk::offset(1564)]] uint _pad1564;
+    [[vk::offset(1568)]] float3 viewForward;
+    [[vk::offset(1580)]] uint _pad1580;
+    [[vk::offset(1584)]] float3 viewPosition;
+    [[vk::offset(1596)]] uint _pad1596;
+    [[vk::offset(1600)]] float3 viewRight;
+    [[vk::offset(1612)]] uint _pad1612;
+    [[vk::offset(1616)]] float3 viewUp;
+    [[vk::offset(1628)]] uint viewportCount;
+    [[vk::offset(1632)]] uint workCounterRow;
+    [[vk::offset(1636)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa70CA0752 : register(b0, space3);
-#define passGroup passGroupIsa70CA0752
-[[vk::binding(1, 3)]] StructuredBuffer<float> indirectLightDepth : register(t1, space3);
-[[vk::binding(2, 3)]] RWStructuredBuffer<float> indirectLightDepthRW : register(u2, space3);
-[[vk::binding(3, 3)]] StructuredBuffer<uint> indirectCache : register(t3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u4, space3);
-[[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectPickRW : register(u5, space3);
-[[vk::binding(6, 3)]] RWStructuredBuffer<uint> indirectDeferredRW : register(u6, space3);
-[[vk::binding(7, 3)]] StructuredBuffer<int4> indirectBricks : register(t7, space3);
-[[vk::binding(8, 3)]] StructuredBuffer<float4> indirectDirections : register(t8, space3);
-[[vk::binding(9, 3)]] StructuredBuffer<uint> indirectTraceStates : register(t9, space3);
-[[vk::binding(10, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t10, space3);
-[[vk::binding(11, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u11, space3);
-[[vk::binding(12, 3)]] StructuredBuffer<uint> sdfSegmentTapes : register(t12, space3);
-[[vk::binding(13, 3)]] RWStructuredBuffer<uint> sdfSegmentTapesRW : register(u13, space3);
-[[vk::binding(14, 3)]] StructuredBuffer<float> tiles : register(t14, space3);
-[[vk::binding(15, 3)]] RWStructuredBuffer<float> tilesRW : register(u15, space3);
-[[vk::binding(16, 3)]] StructuredBuffer<uint> cullBounds : register(t16, space3);
-[[vk::binding(17, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u17, space3);
-[[vk::binding(18, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u18, space3);
-[[vk::binding(19, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t19, space3);
-[[vk::binding(20, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u20, space3);
-[[vk::binding(21, 3)]] RWStructuredBuffer<float> reactivityRW : register(u21, space3);
-[[vk::binding(22, 3)]] StructuredBuffer<uint> shadowHistory : register(t22, space3);
-[[vk::binding(23, 3)]] RWStructuredBuffer<uint> shadowHistoryRW : register(u23, space3);
-[[vk::binding(24, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u24, space3);
-[[vk::binding(25, 3)]] Texture2D<float4> screenSources[32] : register(t25, space3);
-[[vk::binding(57, 3)]] Texture2D<float4> meshVisibility : register(t57, space3);
-[[vk::binding(58, 3)]] Texture2D<float4> meshShadowNear : register(t58, space3);
-[[vk::binding(59, 3)]] Texture2D<float4> meshShadowFar : register(t59, space3);
-[[vk::binding(60, 3)]] Texture2D<float4> meshShadowSecond : register(t60, space3);
-[[vk::binding(61, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u61, space3);
-[[vk::binding(62, 3)]] RWStructuredBuffer<uint> workCounters : register(u62, space3);
-[[vk::binding(63, 3)]] Texture2D<float2> incomingVisibility : register(t63, space3);
-[[vk::binding(64, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u64, space3);
-[[vk::binding(65, 3)]] StructuredBuffer<uint4> indirectAnswer : register(t65, space3);
-[[vk::binding(66, 3)]] RWStructuredBuffer<uint4> indirectAnswerRW : register(u66, space3);
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa9BD3B105 : register(b0, space3);
+#define passGroup passGroupIsa9BD3B105
+[[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
+[[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
+[[vk::binding(3, 3)]] StructuredBuffer<uint> sdfSegmentTapes : register(t3, space3);
+[[vk::binding(4, 3)]] RWStructuredBuffer<uint> sdfSegmentTapesRW : register(u4, space3);
+[[vk::binding(5, 3)]] StructuredBuffer<float> tiles : register(t5, space3);
+[[vk::binding(6, 3)]] RWStructuredBuffer<float> tilesRW : register(u6, space3);
+[[vk::binding(7, 3)]] StructuredBuffer<uint> cullBounds : register(t7, space3);
+[[vk::binding(8, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u8, space3);
+[[vk::binding(9, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u9, space3);
+[[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u11, space3);
+[[vk::binding(12, 3)]] RWStructuredBuffer<float> reactivityRW : register(u12, space3);
+[[vk::binding(13, 3)]] StructuredBuffer<uint> shadowHistory : register(t13, space3);
+[[vk::binding(14, 3)]] RWStructuredBuffer<uint> shadowHistoryRW : register(u14, space3);
+[[vk::binding(15, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u15, space3);
+[[vk::binding(16, 3)]] Texture2D<float4> screenSources[32] : register(t16, space3);
+[[vk::binding(48, 3)]] Texture2D<float4> meshVisibility : register(t48, space3);
+[[vk::binding(49, 3)]] Texture2D<float4> meshShadowNear : register(t49, space3);
+[[vk::binding(50, 3)]] Texture2D<float4> meshShadowFar : register(t50, space3);
+[[vk::binding(51, 3)]] Texture2D<float4> meshShadowSecond : register(t51, space3);
+[[vk::binding(52, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u52, space3);
+[[vk::binding(53, 3)]] RWStructuredBuffer<uint> workCounters : register(u53, space3);
+[[vk::binding(54, 3)]] Texture2D<float2> incomingVisibility : register(t54, space3);
+[[vk::binding(55, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u55, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels, indirect hits, samples and unresolved work,
+// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels,
 // followed by shape evaluations and shape gradients, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 34u;
+static const uint PuckWorkRowWords = 28u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -313,9 +289,8 @@ static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
 static const uint PuckWorkShadowPixelsWord = 22u;
-static const uint PuckWorkIndirectWord = 24u;
-static const uint PuckWorkShapesWord = 30u;
-static const uint PuckWorkGradientsWord = 32u;
+static const uint PuckWorkShapesWord = 24u;
+static const uint PuckWorkGradientsWord = 26u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -364,15 +339,6 @@ void puckCountShapes(uint shapes, uint gradients) {
         puckAddWork(row + PuckWorkShapesWord, waveShapes);
         puckAddWork(row + PuckWorkGradientsWord, waveGradients);
     }
-}
-// Each invocation names its level or proof detail; those rows sum into the pass once at readback.
-void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
-    uint row = ((passGroup.workCounterRowDetail == 0u)
-        ? passGroup.workCounterRow
-        : (passGroup.workCounterRowDetail + detail)) * PuckWorkRowWords;
-    puckAddWork((row + PuckWorkIndirectWord), hits);
-    puckAddWork((row + PuckWorkIndirectWord + 2u), samples);
-    puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);
 }
 // Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
 // reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).

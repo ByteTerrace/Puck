@@ -138,7 +138,7 @@ internal sealed partial class WorldScreenBinder {
             var extent = view.OutputExtent!.Value;
 
             entry.Views[index] = new SdfViewSnapshot(Camera: (frame.Visible ? frame.Camera : consumer.Viewer.Camera), Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) {
-                Quality = WorldInfinityViewScene.QualityOf(levers: planned.Spec.Levers) with { IndirectMethod = consumer.Viewer.Quality.IndirectMethod },
+                Quality = WorldInfinityViewScene.QualityOf(levers: planned.Spec.Levers),
                 SkyViews = fit.BindingsOf(planned.Name, frame.Camera, ((uint)extent.Width), ((uint)extent.Height), entry.Tier),
             };
             m_infinityOutputs[view.Name] = new InfinityOutput(Entry: entry, Index: index);

@@ -59,7 +59,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var buffer = (edge == "buffer");
         var package = new CaptureDemandPackage(buffer: buffer);
 
-        recorders.Registry.Register(factory: package, package: (buffer ? RenderGraphPackageCatalog.Indirect : RenderGraphPackageCatalog.SdfWorld));
+        recorders.Registry.Register(factory: package, package: (buffer ? BufferPackage : RenderGraphPackageCatalog.SdfWorld));
         using var runtime = (buffer
             ? Runtime(gpu, recorders, NamedBufferInstances(), "main", null!, NamedBufferReader(null))
             : Runtime(gpu, recorders, Set(PackageInstance(), PackageInstance() with { Name = Inactive },

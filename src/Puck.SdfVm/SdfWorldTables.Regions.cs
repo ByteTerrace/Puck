@@ -122,12 +122,6 @@ public sealed partial class SdfWorldTables {
             }
         }
 
-        if (m_indirect is { } indirect) {
-            foreach (var region in indirect.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
-            if (indirect.Lighting is { } lighting) {
-                foreach (var region in lighting.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
-            }
-        }
         var commandBuffer = m_regionCopies.Finish();
 
         if (commandBuffer != 0) {
@@ -151,7 +145,7 @@ public sealed partial class SdfWorldTables {
     /// pool. Read at the time asked, since a region grows by being replaced.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0) + IndirectBytes);
+            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {

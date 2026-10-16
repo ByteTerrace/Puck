@@ -38,7 +38,6 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("medium", false)]
     [InlineData("light-color", false)]
     [InlineData("palette", false)]
-    [InlineData("indirect-method", false)]
     [InlineData("geometry-only", false)]
     [InlineData("sky-field-scale", false)]
     [InlineData("indirect-sources", false)]
@@ -50,7 +49,6 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("medium", true)]
     [InlineData("light-color", true)]
     [InlineData("palette", true)]
-    [InlineData("indirect-method", true)]
     [InlineData("geometry-only", true)]
     [InlineData("sky-field-scale", true)]
     [InlineData("indirect-sources", true)]
@@ -92,9 +90,6 @@ public sealed partial class SdfWorldPassesLawTests {
                     ProgramChanged = true,
                 };
                 goto case "lighting";
-            case "indirect-method":
-                frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { IndirectMethod = SdfIndirectMethod.Screen } }] };
-                goto case "lighting";
             case "indirect-sources":
                 frame = frame with { IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Emission };
                 goto case "lighting";
@@ -124,12 +119,6 @@ public sealed partial class SdfWorldPassesLawTests {
                 _ = work.TryGetPassCount(column: dispatches, pass: pass, value: out var directCount);
                 _ = work.TryGetPassCount(column: indirect, pass: pass, value: out var indirectCount);
                 Assert.Equal(actual: (directCount + indirectCount), expected: 1L);
-                if (work.PassLabels[pass].EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Parts.Receiver}")) {
-                    var transition = (work.TryGetPassCount(column: barriers, pass: pass, value: out var count) && (count > 0));
-
-                    // The receiver publishes receiver certificates even when its geometry predecessors stand.
-                    Assert.True(condition: transition);
-                }
             } else {
                 Assert.False(condition: work.TryGetPassCount(column: barriers, pass: pass, value: out _));
                 Assert.False(condition: work.TryGetPassCount(column: dispatches, pass: pass, value: out _));

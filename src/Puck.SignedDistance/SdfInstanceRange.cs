@@ -28,8 +28,6 @@ namespace Puck.SignedDistance;
 /// mask, so primary never marches it, while shadows and ambient occlusion, which gather their own occluders, still
 /// read it. A placement whose baked mesh draws in its place keeps its field this way, so its shadows and occlusion
 /// stay (<see cref="SdfProgram.CameraHiddenInstanceFlag"/>).</param>
-/// <param name="Indirect">The whole instance's indirect-light participation. An explicit value overrides the
-/// frame's dynamic-body default without changing camera visibility, direct shadows or authoritative collision.</param>
 public readonly record struct SdfInstanceRange(
     int First,
     int End,
@@ -38,6 +36,5 @@ public readonly record struct SdfInstanceRange(
     float Radius,
     int Slot,
     bool Active = true,
-    bool CameraHidden = false,
-    SdfIndirectParticipation Indirect = SdfIndirectParticipation.Default
+    bool CameraHidden = false
 );

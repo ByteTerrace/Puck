@@ -60,7 +60,7 @@ only as bytecode loads as it stands, and a source wins over bytecode beside it.
 Compiles run one per processor, shortest recorded compile first, and each frame
 installs the kernels compiled since the last batch as a reload of its own, so a
 views-only edit renders after the views kernels' DXIL (seconds) while the
-receiver's (minutes) still runs. Kernels of one batch may briefly pair with
+heavier kernels' still run. Kernels of one batch may briefly pair with
 older kernels of another; an edit to an HLSL-only contract between passes looks
 wrong until the request settles. A tree may carry one kernel.
 Without a directory, the command reads the bytecode deployed beside the running
@@ -148,7 +148,6 @@ of its passes. The upload and the view's passes, in order:
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
 | `shadow` | `sdf-world-shadow.comp` | One gather and march for each occupied stable slot and active incoming slot, bounded by K + F. Four 8-bit stable visibilities pack into the K row; incoming visibilities use the policy's retained R8G8 image. Skips when soft shadows are off or the slot table contains no marched light (`Skips`). |
-| `receiver` | `sdf-world-receiver.comp` | Only with the residency's cache (`SdfWorldPackage.WithIndirect`), after the `indirectReceiverReset` transfer clear of the deferred census: each shaded pixel's indirect receiver, proved against the cache with every field query of indirect light, its certificate in the record's I row (the `indirectVisibility` version), and its four-word answer (`indirectAnswer`) that views reads. Executes exactly when views does. A view selecting a comparison method (`world.indirect-method` `screen` or `cone`) records the comparison receiver, `sdf-world-receiver-comparison.comp` (`SDF_INDIRECT_COMPARISON`), in its place: the same pass, layout and bindings, with the comparison methods instead of the near-field sample, leased only once a view selects one. |
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the stack's lowest field run's offset, then each upper field run's scale and offset, the base's alpha marking an evaluated texel. Each layer counts `gpu.sky.evaluations` in its own detail row (`SdfSkyDetails`). Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
@@ -175,15 +174,15 @@ scheduled extent equals the rect's pixels. No output-sized surface is written
 until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
 module supplies both kernels' filter and has no SDF-layer dependency.
 
-Primary, surface, ambient, shadow, the receiver and views share one entry point
+Primary, surface, ambient, shadow, the mesh surface and views share one entry point
 (`passes/sdf-hit-entry.hlsli`) through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
-`SDF_SHADOW_PASS`, `SDF_RECEIVER_PASS` (with `SDF_INDIRECT_COMPARISON` for the comparison receiver) and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments.
+`SDF_SHADOW_PASS`, `SDF_MESH_SURFACE_PASS` and `SDF_PRIMARY_READ`, each dispatched indirectly from the cull arguments.
 Each wrapper defines its pass macro, includes the common head
 (`passes/sdf-hit-pass.hlsli`), its own stage module and the entry, so its include
 closure holds no other pass's stage. The head defines `SDF_PRIMARY_READ` for every pass except primary,
 `SDF_VIEWS_PASS` for the views kernels and `SDF_QUERY_REJECTION_BOUND` for shadow, and each kernel compiles only its own
 stage over the pixel the entry point gathers (`sdfPixelAt`): `sdfPrimaryStage`,
-`sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage`, `sdfReceiverStage` or `sdfViewsStage`. Only
+`sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage`, `sdfMeshPathStage` or `sdfViewsStage`. Only
 the ambient and shadow kernels define `SDF_GROUP_SHADOW_GATHER` and hold a
 groupshared candidate mask. Before primary, the
 `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
@@ -204,25 +203,25 @@ leave settled lit history and its ring standing. `world.cadence off` disables
 both gates for measurement. Retained inputs use their last queued writes, and
 standing passes use the existing tracker without recording their planned accesses.
 
-The visibility record is 96 bytes per pixel of the view's render ceiling
+The visibility record is 64 bytes per pixel of the view's render ceiling
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
 `visibility` buffer, allocated as the render extent times one viewport and forwarded
-through primary's, surface's, ambient's, shadow's and the receiver's versions;
+through primary's, surface's, ambient's and shadow's versions;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
-twenty-four words in seven rows: V (t, identity, material, march flags), exact; C
+sixteen words in six rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
 packed with its other material plus one); L (the exact winning dynamic frame slot
-in its first word, -1 for static, or a mesh hit's triangle; then the indirect
-approach's two halves; words 9 and 10 hold replaceable AO and shadow query
+in its first word, -1 for static, or a mesh hit's triangle; then a spare word;
+words 9 and 10 hold replaceable AO and shadow query
 tallies, generated from `SdfVisibility`); N (a 16-bit octahedral geometric normal and the gradient magnitude);
 S (curvature and raw AO as halves, then the surface flags packed with the
 saturated surface query count); K (four stable visibilities
-packed as 8-bit lanes, current only on a frame the shadow pass runs); and I (the
-indirect receiver's eight-word certificate). The packing moves presentation pixels by at
+packed as 8-bit lanes, current only on a frame the shadow pass runs).
+The packing moves presentation pixels by at
 most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
 surface writes N and S; ambient updates S and its own tally, shadow K and its
-own tally, and the receiver I. Views sums the enabled stages' tallies. A repeated shadow write
+own tally. Views sums the enabled stages' tallies. A repeated shadow write
 does not accumulate queries in retained surface data. Each forwarding version
 declares predecessor preservation. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
@@ -279,7 +278,7 @@ read-write binding would keep the buffer in `UNORDERED_ACCESS` on Direct3D 12
 and cost a transition before every reader. The beam alone writes the cull
 buffer (`SDF_TILES_READ_WRITE` compiles its writer); the interface binds the
 visibility records twice, read-write for primary, surface, ambient, shadow and the
-receiver, and read-only for views. A new pass, a new scratch resource, or a binding-kind
+mesh surface, and read-only for views. A new pass, a new scratch resource, or a binding-kind
 change edits the fragment, and `SdfPassPlanLawTests` holds the planned order,
 the between-pass buffer transitions, each buffer's size at every capacity and
 the mesh pass's attachments to its own tables, so the law moves in the same
@@ -296,7 +295,7 @@ by walking Full → Folds → CoreOps:
   and simple shapes, strips the `SDF_STRIP_HEAVY` family.
 - `sdf-world-views-core.comp` — also strips the `SDF_STRIP_ALL_EXOTIC` family.
 
-Every hit kernel but views (primary, surface, ambient, shadow and both receivers) keeps the full ISA. Membership of the strip
+Every hit kernel but views (primary, surface, ambient and shadow) keeps the full ISA. Membership of the strip
 families is defined by the `#if` gates in the field modules (`field/`) and mirrored by
 `SdfViewsKernelVariants`; read both rather than trusting a list, and change them
 together. `SdfViewsKernelVariantLawTests` pins the host half.
@@ -336,7 +335,7 @@ including grazing rays and separated bands.
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion|sky-cost|indirect-probes|indirect-cells|indirect-light|indirect`
+`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion|sky-cost`
 selects a diagnostic image (`DebugViewModes.Names` is the list); `depth` isolates the march. To see what a shadow
 ray sees, place a camera at the shaded point looking along the sun direction
 under `material-id`.

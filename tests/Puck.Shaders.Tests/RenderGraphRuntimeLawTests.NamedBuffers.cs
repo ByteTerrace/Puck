@@ -13,7 +13,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders();
         var producer = new NamedBufferPackage();
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = NamedBufferInstances();
         var reader = NamedBufferReader(selected);
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
@@ -87,7 +87,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders();
         var producer = new NamedBufferPackage();
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = NamedBufferInstances();
         var reader = NamedBufferReader(selected);
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
@@ -164,7 +164,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders();
         var producer = new NamedBufferPackage { BuildOwnsBuffers = true };
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = NamedBufferInstances();
         var reader = NamedBufferReader("secondary");
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
@@ -235,7 +235,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         };
         var recorders = new Recorders();
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = NamedBufferInstances();
         var reader = NamedBufferReader("secondary");
         using var runtime = Runtime(gpu, recorders, set, "main", null!, reader);
@@ -285,7 +285,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders("named.read");
 
-        recorders.Registry.Register(factory: new NamedBufferPackage(), package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: new NamedBufferPackage(), package: BufferPackage);
         Assert.False(condition: RenderGraphRuntime.TryCreate(NamedBufferInstances(), [null, NamedBufferReader(output, bytes, stride)], "main",
             recorders.Registry, new GpuPassPipelineCache(), gpu, false, out var runtime, out var refusal));
         Assert.Null(@object: runtime);
@@ -297,7 +297,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var recorders = new Recorders();
         var producer = new NamedBufferPackage();
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         var set = NamedBufferInstances();
         using var runtime = Runtime(gpu, recorders, set, "main", null!, NamedBufferReader("secondary"));
         var frames = new Frames(runtime, [new RenderGraphRoot(Height: 1, Instance: "main", Width: 1)], []);
@@ -319,7 +319,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders("named.read");
 
-        recorders.Registry.Register(factory: new NamedBufferPackage(), package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: new NamedBufferPackage(), package: BufferPackage);
         var instances = NamedBufferInstances().Instances.ToArray();
 
         instances[1] = instances[1] with { Reads = [new("pool", Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true)] };
@@ -345,7 +345,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         };
         var recorders = new Recorders();
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         using var runtime = Runtime(gpu, recorders, NamedBufferInstances(), "main", null!, NamedBufferReader("secondary"));
         var frames = new Frames(runtime, [new RenderGraphRoot(Height: 1, Instance: "main", Width: 1)], []);
 
@@ -357,7 +357,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     }
 
     private static RenderGraphInstanceSet NamedBufferInstances() => Set(
-        new RenderGraphInstance(Name: "pool", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+        new RenderGraphInstance(Name: "pool", ExternalPackage: BufferPackage,
             Output: ShaderPipelineResourceKind.Buffer, Passes: 3, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
         Instance("main", reads: new RenderGraphRead("pool", Kind: ShaderPipelineResourceKind.Buffer)));
     private static RenderGraphRuntimeGraph NamedBufferReader(string? output, ulong bytes = PoolBytes, uint? stride = null, bool transfer = false) {

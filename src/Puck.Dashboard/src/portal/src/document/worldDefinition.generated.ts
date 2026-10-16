@@ -1985,11 +1985,6 @@ export type RulePoolIteration = {
 
 export type SafeName = string;
 
-/**
- * An independently composable instance's participation in diffuse indirect lighting.
- */
-export type SdfIndirectParticipation = "Default" | "Cast" | "Receive" | "Off";
-
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
 export type SearchMethod = "Negamax" | "MonteCarlo";
@@ -7051,10 +7046,6 @@ export type WorldPlacement = {
    * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it; the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
    */
   holding?: number;
-  /**
-   * The whole placement's indirect-light policy. Default follows static casting or the world's moving-body default; Receive receives without casting, Cast does both, and Off does neither.
-   */
-  indirect?: SdfIndirectParticipation;
 };
 
 /**
@@ -9102,7 +9093,7 @@ export type WorldRenderDefaults = {
    */
   skyQuality?: WorldSkyTier;
   /**
-   * The world's diffuse indirect-light participation defaults.
+   * The world's diffuse indirect-light tier, sources and application.
    */
   indirect?: WorldRenderIndirect | null;
   /**
@@ -9154,10 +9145,6 @@ export type WorldRenderHaze = {
 
 export type WorldRenderIndirect = {
   /**
-   * Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.
-   */
-  bodies?: SdfIndirectParticipation;
-  /**
    * Bindable source gains in [0, 1]; absent gains are one.
    */
   sources?: WorldRenderIndirectSources | null;
@@ -9166,11 +9153,11 @@ export type WorldRenderIndirect = {
    */
   bounces?: number | null;
   /**
-   * Bindable receiver-only controls. They do not change cached radiance.
+   * Bindable receiver-only controls. They do not change the traced radiance.
    */
   apply?: WorldRenderIndirectApply | null;
   /**
-   * The boot cache tier, Medium by default. The live session lever and selected quality preset override it.
+   * The boot tier, Medium by default. The live session lever and selected quality preset override it.
    */
   tier?: SdfIndirectTier;
 };
@@ -9204,7 +9191,7 @@ export type WorldRenderIndirectSources = {
    */
   screens?: BindableScalar;
   /**
-   * Physical radiance at certified world exits.
+   * Physical sky radiance at world exits.
    */
   sky?: BindableScalar;
   /**
@@ -9249,7 +9236,7 @@ export type WorldRenderLightDirectional = {
   name?: string | null;
   lightName?: string | null;
   /**
-   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
 };
@@ -9281,7 +9268,7 @@ export type WorldRenderLightOccluder = {
   name?: string | null;
   lightName?: string | null;
   /**
-   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
 };
@@ -9317,7 +9304,7 @@ export type WorldRenderLightPoint = {
   name?: string | null;
   lightName?: string | null;
   /**
-   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
 };
@@ -9345,7 +9332,7 @@ export type WorldRenderLightRim = {
   name?: string | null;
   lightName?: string | null;
   /**
-   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
 };

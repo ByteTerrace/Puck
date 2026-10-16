@@ -3,6 +3,9 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
+    /// <summary>Gets whether root field operands are independently unioned, so omitting a whole instance cannot remove an
+    /// operand of another instance's subtraction, intersection or modifier. Internal scoped CSG is allowed.</summary>
+    public bool InstancesComposable { get; }
     // Header .x packs the count in bits 0..30 and whole-root tracing admission in bit 31.
     // KEEP IN SYNC with sdfTracePrimary in sdf-primary.hlsli.
     private const uint IndependentPartTracingFlag = 0x80000000u;
@@ -257,7 +260,7 @@ public sealed partial class SdfProgram {
         m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
-        m_words[header] = ((uint)plan.CompiledCount) | (IndirectInstancesComposable
+        m_words[header] = ((uint)plan.CompiledCount) | (InstancesComposable
             ? IndependentPartTracingFlag
             : 0u
         );

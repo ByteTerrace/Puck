@@ -45,8 +45,7 @@ public static class WorldValueFields {
     public static WorldValueField LightBounce { get; } = new(typeof(WorldRenderLight), nameof(WorldRenderLight.Bounce), WorldValueDomain.NonNegative);
     /// <summary>A directional light's weight.</summary>
     public static WorldValueField DirectionalWeight { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Weight), WorldValueDomain.NonNegative);
-    /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.
-    /// The light-view contract requires a positive penumbra even though its parallel projection has zero divergence.</summary>
+    /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.</summary>
     public static WorldValueField DirectionalAngularRadius { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.AngularRadius), new WorldValueDomain(
         Maximum: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
         Minimum: 0f,

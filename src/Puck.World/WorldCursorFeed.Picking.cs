@@ -15,8 +15,6 @@ internal sealed partial class WorldCursorFeed : IDisposable {
 
     private readonly WorldExplainPick m_explain = new();
 
-    private WorldIndirectReferenceResult? m_explanationReference;
-
     /// <summary>The optional demand shared with the editor inspector.</summary>
     public WorldEditorSeats? EditorSeats { get; init; }
     /// <summary>The last completed pixel sampled for the pointer's seat, with its captured identities.</summary>
@@ -28,11 +26,6 @@ internal sealed partial class WorldCursorFeed : IDisposable {
     /// <summary>The latest explicit explanation, retaining its fenced census even after the pointer moves.</summary>
     public WorldExplainPick Explanation => m_explain;
 
-    /// <summary>The retained CPU reference only when the inspector displays the same immutable receiver answer.</summary>
-    public WorldIndirectReferenceResult? ReferenceOf(SdfPickResult? pick) =>
-        (((pick?.Indirect is { } indirect) && ReferenceEquals(objA: indirect, objB: m_explain.Captured?.Indirect)) ? m_explanationReference : null);
-    /// <summary>Stores the once-evaluated reference beside the explanation's completed immutable answer.</summary>
-    public void RetainReference(WorldIndirectReferenceResult? reference) => m_explanationReference = reference;
 
     private bool HoldsCapturedView => ((m_explain.CapturedSlot == m_pointerSlot) && (m_pointerPicker?.View is { } view) && (view == m_explain.CapturedView));
 

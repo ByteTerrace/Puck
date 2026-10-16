@@ -18,8 +18,6 @@ public static class SdfWorldInterfaces {
     public static string Stamp => Recorded.Stamp;
     /// <summary>Gets <see cref="SdfKernelInterfaces.WorldParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout WorldParameters => Recorded.WorldParameters;
-    /// <summary>Gets the residency cache's generated interface.</summary>
-    public static ShaderPipelineParameterLayout IndirectParameters => Recorded.IndirectParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.ResolveParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout ResolveParameters => Recorded.ResolveParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.SkyParameters"/> for this build's instruction set.</summary>

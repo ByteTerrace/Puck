@@ -786,9 +786,6 @@ public sealed partial class SdfProgram {
         }
 
         foreach (var instance in m_instances) {
-            if (!Enum.IsDefined(value: instance.Indirect)) {
-                throw new ArgumentOutOfRangeException(message: "An instance's indirect participation must be Default, Cast, Receive or Off.", paramName: instancesParamName);
-            }
             if (
                 (instance.First < 0) ||
                 (instance.End > m_instructions.Length) ||

@@ -1677,7 +1677,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
             IndirectTier = m_settings.IndirectTier,
-            IndirectBodies = (m_client.Definition.Render.Indirect?.Bodies ?? SdfIndirectParticipation.Default),
             IndirectSources = lighting.Indirect.Gains.Sources,
             IndirectGains = lighting.Indirect.Gains,
             IndirectBounces = lighting.Indirect.Bounces,

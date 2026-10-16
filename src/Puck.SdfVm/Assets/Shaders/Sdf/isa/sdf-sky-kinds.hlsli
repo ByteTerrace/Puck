@@ -9,8 +9,6 @@
 #define SDF_SKY_MAX_UPPER_FIELD_RUNS 2u
 #define SDF_SKY_DETAIL_RUNS 3u
 #define SDF_SKY_DETAIL_ATMOSPHERE 3u
-#define SDF_SKY_DETAIL_INDIRECT 4u
-#define SDF_SKY_DETAIL_INDIRECT_NEAR 5u
 
 // Puck.SignedDistance.SdfSkyBlend.
 #define SDF_SKY_BLEND_OVER 0u

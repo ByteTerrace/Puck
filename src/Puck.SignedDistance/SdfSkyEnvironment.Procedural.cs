@@ -144,7 +144,7 @@ public static partial class SdfSkyEnvironment {
         if ((d.Y <= 0f) || (stars.Brightness <= 0f)) { return Vector4.Zero; }
         var density = MathF.Max(x: stars.Density, y: 1f);
 
-        var (u, v) = IrradianceLattice.Encode(direction: new Double3(X: d.X, Y: d.Z, Z: d.Y));
+        var (u, v) = SdfOctahedral.Encode(direction: new Double3(X: d.X, Y: d.Z, Z: d.Y));
         var x = MathF.Floor(x: (((float)u) * density)); var y = MathF.Floor(x: (((float)v) * density));
         var h = Pcg3dLatticeNoise.Pcg3d(x: BitConverter.SingleToUInt32Bits(value: x), y: BitConverter.SingleToUInt32Bits(value: y), z: stars.Seed);
         const float Unit = (1f / 4294967296f);
@@ -165,7 +165,7 @@ public static partial class SdfSkyEnvironment {
 
             luminosity *= (1f - (stars.TwinkleDepth * flicker));
         }
-        var star = IrradianceLattice.Decode(u: ((x + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Y * Unit))) / density), v: ((y + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Z * Unit))) / density));
+        var star = SdfOctahedral.Decode(u: ((x + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Y * Unit))) / density), v: ((y + Mix(a: stars.Inset, b: (1f - stars.Inset), t: (h.Z * Unit))) / density));
         var starDirection = new Vector3(x: ((float)star.X), y: ((float)star.Z), z: ((float)star.Y));
         var radius = (((stars.RadiusFraction * 3.14159265f) / density) * Mix(a: 0.6f, b: 1f, t: MathF.Sqrt(x: luminosity)));
         // Half the squared chord equals 1 - cos(angle), without subtracting a rounded dot product from one.

@@ -3,18 +3,6 @@
 #define FIELD_SDF_PROGRAM_HLSLI
 static uint sdfWorkShapes = 0u;
 static uint sdfWorkGradients = 0u;
-// The field walk's visits: one per instance it reads, one per directory segment it tests, and every instruction of each
-// segment it does not cull and part leaf it composes. The indirect kernels report them so the cache admits its work at
-// its measured price (SdfIndirectCost).
-static uint sdfFieldVisits = 0u;
-// A point query's sparse instance mask (indirect/sdf-indirect-field.hlsli, sdfIndirectGridBlock): the instances binned in
-// the query's block of grid cells and the always-list, as distinct 32-instance mask words and their bits. While active,
-// the visible-instance walk enumerates these words in ascending order instead of every instance.
-#define SDF_GRID_SPARSE_WORDS 16u
-static bool sdfGridSparseActive = false;
-static uint sdfGridSparseCount = 0u;
-static uint sdfGridSparseWords[SDF_GRID_SPARSE_WORDS];
-static uint sdfGridSparseBits[SDF_GRID_SPARSE_WORDS];
 uint sdfProgramVectorCount() {
     uint count;
     uint stride;
@@ -132,26 +120,9 @@ static bool sdfAmbientMaskActive = false;
 // Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). passes/sdf-light-stage.hlsli
 // flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
-// Indirect queries and their conservative light camera use their own instance policy. Ordinary camera/AO/coverage
-// enumerations leave it false, so their participation is unchanged.
+// Ordinary camera/AO/coverage enumerations leave it false, so their participation is unchanged.
 static bool sdfShadowParticipationActive = false;
 #endif
-
-// Indirect queries use their own whole-instance policy; direct shadow suppression does not override it.
-static bool sdfIndirectParticipationActive = false;
-// The static far field: a probe's transport past its level's near reach, and every query of the coarsest level, sees the
-// field without its moving casters, so a moving body only reaches the transport of probes near it
-// (SdfIndirectCache.MarkGeometry). Set only for a program whose root operands are independently unioned.
-static bool sdfIndirectStaticField = false;
-uint sdfIndirectPolicy(uint policy, bool isDynamic) {
-    if (policy != SDF_INDIRECT_PARTICIPATION_DEFAULT) { return policy; }
-    if (!isDynamic) { return SDF_INDIRECT_PARTICIPATION_CAST; }
-    return passGroup.indirectBodies != SDF_INDIRECT_PARTICIPATION_DEFAULT ? passGroup.indirectBodies :
-        passGroup.indirectTier == SDF_INDIRECT_TIER_HIGH ? SDF_INDIRECT_PARTICIPATION_CAST : SDF_INDIRECT_PARTICIPATION_RECEIVE;
-}
-uint sdfInstanceIndirectPolicy(uint4 meta) {
-    return sdfIndirectPolicy((meta.w & SDF_INSTANCE_INDIRECT_MASK) >> SDF_INSTANCE_INDIRECT_SHIFT, meta.x == SDF_BOUND_DYNAMIC);
-}
 
 // The per-tile mask width in uints for a program: ceil(instanceCount/32), never below 1 (a zero-instance program
 // keeps one all-zero word so the mask buffer indexing stays uniform). Used ONLY for the reader's inner word

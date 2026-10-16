@@ -7,10 +7,7 @@ namespace Puck.SdfVm;
 /// <summary>The residency and the view of its frame one <c>sdf.world</c> instance renders.</summary>
 /// <param name="Residency">The residency whose tables the instance's passes read.</param>
 /// <param name="View">The view's index in the residency's frames (<see cref="SdfFrame.Views"/>).</param>
-public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View) {
-    /// <summary>Gets whether the instance films the residency's scheduled conservative light camera.</summary>
-    public bool LightView { get; init; }
-}
+public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View);
 /// <summary>
 /// The <c>sdf.world</c> package's recorders: each instance of the package is a view of a residency's frame, run as the
 /// package's fragment (<see cref="SdfWorldPackage.Fragment"/>) — the sky, the instance masks, the beam, the cull
@@ -103,31 +100,18 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         view.Residency.Retain();
-        SdfIndirectCache.LightViewBank? lightBank = null;
 
         try {
             await view.Residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-            if (view.LightView) {
-                await view.Residency.Tables!.Pipelines.BuildLightViewsAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                if (context.Part == SdfWorldPackage.LightDepth) {
-                    using var cache = (view.Residency.Tables.RetainIndirect()
-                        ?? throw new InvalidOperationException(message: "A light camera requires its residency's indirect cache."));
-                    var output = context.Outputs.Single();
-
-                    lightBank = cache.CreateLightViewBank(buffers: context.Services.BufferFactory, bytes: output.SizeBytes!.Value,
-                        name: new GpuObjectName(owner: context.Instance, part: SdfWorldPackage.IndirectLightDepth));
-                }
-            }
             if (context.Part == SdfWorldPackage.Resolve) {
                 Volatile.Write(location: ref m_resolveSource, value: new ResolveSource(Cache: context.Pipelines, Device: context.Device));
                 await view.Residency.Tables!.Pipelines.BuildResolveAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch {
-            lightBank?.Dispose();
             view.Residency.Release();
             throw;
         }
-        return new Built(lightBank: lightBank, view: view);
+        return new Built(view: view);
     }
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
@@ -150,11 +134,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 context: context,
                 groups: groups,
                 owner: this,
-                view: view,
-                lightBank: objects.LightBank
+                view: view
             );
         } catch {
-            objects.LightBank?.Dispose();
             Unhold(residency: view.Residency);
             view.Residency.Release();
 
@@ -185,25 +167,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
 
         entry.UnreadFrames = unreadFrames;
-        if (entry.View is { LightView: true } light) {
-            if (!light.Residency.Prepare(context: in context)) { return false; }
-            if (!HasIndirectReaders(residency: light.Residency)) { return true; }
-            light.Residency.PlanLightView(context: in context);
-            return (light.Residency.IndirectLightViews.Pending < 0);
-        }
-        var readsIndirect = HasIndirectReaders(entry: entry);
-
-        if (readsIndirect && (entry.View is { } indirectView) && (LightViewName(residency: indirectView.Residency) is not null)) {
-            indirectView.Residency.PlanLightView(context: in context);
-            if (indirectView.Residency.IndirectLightViews.Pending >= 0) { return false; }
-        }
         if ((entry.View is { } current) && (current.Residency.Tables is { } packed)) {
             UpdateSurfaceInputs(entry: entry, tables: packed, view: current);
         }
 
         if (
             (entry.View is not { } view) ||
-            (readsIndirect && (view.Residency.Tables?.Indirect is { IsComplete: false })) ||
             !view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
@@ -214,12 +183,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         return (
-            !ReceiversPending(entry: entry) &&
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
             (entry.RenderedShadowFadeCapacity == entry.CurrentShadowFadeCapacity) &&
-            (!readsIndirect || (LightViewName(residency: view.Residency) is null) || (entry.RenderedLightRevision == view.Residency.IndirectLightViews.Revision)) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
             entry.Temporal.Stands(
@@ -245,7 +212,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
 
         entry.Convergence = convergence;
-        entry.ConvergenceInvalidations = (entry.Residency?.Tables?.Indirect?.Invalidations ?? 0L);
         // An ordinary capture observes the next normal temporal sample. Explicit convergence starts a new sequence,
         // and retained tainted history must be discarded before a filled source can serve any capture.
         if (convergence.IsActive || entry.HistoryTainted) {
@@ -274,8 +240,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.TemporalFrame = m_frame;
             entry.InstalledTemporal = temporal;
             var tables = view.Residency.Tables!;
-
-            if (entry.Temporal.Epoch.Indirect != (tables.Indirect?.History ?? default)) { entry.Temporal.Changed(); }
 
             entry.Temporal.Prepare(
                 camera: SnapshotOf(view: view).Camera,
@@ -319,7 +283,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Temporal: temporal,
             Unread: unread,
             Width: width
-        ) { Indirect = (view.Residency.Tables?.Indirect?.History ?? default) };
+        );
     }
 
     // A residency's signature may belong to another instance. This instance can stand only after its own passes
@@ -336,7 +300,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.RenderedScale = entry.CurrentScale;
             entry.RenderedSharpness = entry.CurrentSharpness;
             entry.RenderedShadowFadeCapacity = entry.CurrentShadowFadeCapacity;
-            entry.RenderedLightRevision = view.Residency.IndirectLightViews.Revision;
             if (entry.SampleRenderedFrame == m_frame) { entry.Temporal.Rendered(); }
         }
     }
@@ -360,13 +323,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public SdfWorldView? ViewOf(string instance) => Refresh(instance: instance).View;
     /// <inheritdoc/>
     public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) {
-        if (ViewOf(instance: instance) is not { LightView: false } view) { return []; }
+        if (ViewOf(instance: instance) is not { } view) { return []; }
         var residency = view.Residency;
 
         return [
-            .. ((residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off)
-                ? (RenderGraphRuntimeInput[])[new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
-                    .. ((LightViewName(residency: residency) is { } light) ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : [])] : []),
             .. ((EnvironmentName(residency: residency) is { } environment)
                 ? new RenderGraphRuntimeInput[] {
                     new(Output: SdfSkyEnvironmentGraph.Coefficients, Producer: environment, Version: SdfSkyEnvironmentGraph.Input),
@@ -377,14 +337,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     public void OnGraphReleased(string instance) {
-        if (m_lightViews.TryGetValue(key: instance, value: out var light)) { light.IndirectLightViews.InvalidateStorage(); }
         if (m_entries.TryGetValue(key: instance, value: out var entry)) {
             entry.Picker.Clear();
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.RenderedBindings = -1;
-            entry.ReceiverRecordedSurface = null;
-            entry.ReceiverSubmittedSurface = null;
             entry.ImagePublication = default;
             entry.ImageLightingFence = null;
             entry.SubmittedLightingFence = null;
@@ -396,8 +353,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var entry in m_entries.Values) {
             entry.Picker.Clear();
             entry.Temporal.Reset();
-            entry.ReceiverRecordedSurface = null;
-            entry.ReceiverSubmittedSurface = null;
             entry.ImagePublication = default;
             entry.ImageLightingFence = null;
             entry.SubmittedLightingFence = null;
@@ -528,7 +483,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         entry.Frame = m_frame;
 
-        var view = (m_lightViews.TryGetValue(key: instance, value: out var light) ? new SdfWorldView(Residency: light, View: 0) { LightView = true } : m_resolve(arg: instance));
+        var view = m_resolve(arg: instance);
 
         if (view is { Residency.IsReleased: true }) {
             view = null;
@@ -590,15 +545,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // Where a resolve pass's pipeline came from.
     private sealed record ResolveSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
-    private sealed class Built(SdfWorldView view, SdfIndirectCache.LightViewBank? lightBank) : IDisposable {
+    private sealed class Built(SdfWorldView view) : IDisposable {
         private bool m_taken;
-
-        public SdfIndirectCache.LightViewBank? LightBank { get; } = lightBank;
 
         public void Dispose() {
             if (!m_taken) {
                 m_taken = true;
-                LightBank?.Dispose();
                 view.Residency.Release();
             }
         }
@@ -618,8 +570,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         private long m_revision;
         private long m_revisionCapacity;
         private long m_revisionSwitches;
-        private int m_revisionLightMaps;
-        private SdfIndirectCache? m_revisionLightCache;
         private SdfWorldView? m_view;
 
         // The frame the entry was last resolved in.
@@ -631,8 +581,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // Whether the installed graph's passes run the temporal fragment, as the latest prepared render's recorders said.
         public bool InstalledTemporal { get; set; }
         public RenderGraphConvergence? Convergence { get; set; }
-        // The indirect cache's invalidation count when the capture began, against which it judges whether its solve can finish.
-        public long ConvergenceInvalidations { get; set; }
         // The residency last resolved.
         public SdfWorldResidency? Residency { get; set; }
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which
@@ -642,16 +590,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             get {
                 lock (m_gate) {
                     var capacity = (Residency?.CapacityRevision ?? 0L);
-                    var maps = LightMapCount(residency: Residency);
-                    // A light bank retains its allocating cache; even an equal-size replacement must hand it off.
-                    var lightCache = ((m_view is { LightView: true }) ? Residency?.Tables?.Indirect : null);
 
-                    if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches) || (m_revisionLightMaps != maps)
-                        || !ReferenceEquals(objA: m_revisionLightCache, objB: lightCache)) {
+                    if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches)) {
                         m_revisionCapacity = capacity;
                         m_revisionSwitches = Switches;
-                        m_revisionLightMaps = maps;
-                        m_revisionLightCache = lightCache;
                         m_revision++;
                     }
                     return m_revision;
@@ -664,7 +606,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         public long RenderedBindings { get; set; } = -1;
 
-        public ulong RenderedLightRevision { get; set; }
         public SdfWorldView? View {
             get {
                 lock (m_gate) {

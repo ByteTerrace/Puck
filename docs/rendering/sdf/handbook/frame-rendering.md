@@ -33,7 +33,7 @@ between them. `world.counters gpu` reports the upload under the residency
 `sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the five per-pixel passes share: one per pixel
-of each view's render grid, 96 bytes. A view whose render-scale ceiling is below
+of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
 native puts the full-output `resolve` pass described under
 [render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
 and the sky, and a view that reconstructs over time does so at any scale
@@ -123,10 +123,8 @@ packing four 8-bit stable visibilities into the record's K word. Each active
 handoff adds one incoming march, bounded by K + F; its visibility uses a
 retained two-byte-per-pixel texture whenever the policy allows fades, absent at
 F = 0. One shadow kernel and one kernel per views variant serve every F, reading
-the active fade count from the pass block. With indirect lighting on, the
-**receiver** proves each shaded pixel against the indirect cache, makes every field
-query of its indirect light and publishes its certificate and a short answer.
-**views** reads those visibilities and answers and computes materials, lighting and
+the active fade count from the pass block.
+**views** reads those visibilities and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
 render at different cost. Compare all six passes when measuring per-pixel field cost: moving
@@ -470,13 +468,7 @@ its lighting consumers. It acquires the canonical observed view's panorama
 images through the existing graph reads. Independent image feeds remain current;
 world-derived images, including postprocessing chains, use their previous
 publication to break feedback through the environment. The usual view reads
-still demand those producers. Map and coefficients are separate named exports,
-so a finite lighting solve declares both transfer reads when pinning them. Its
-existing indirect producer copies the pair into two cache-owned buffer outputs,
-then admits the solve only after that copy submits. The pair costs 65,680
-device-local bytes once per retained cache. Shading reads the pinned versions
-throughout the finite solve; a refreshed live environment invalidates desired-source
-readiness without changing the visible completed bank's source identity.
+still demand those producers. Map and coefficients are separate named exports.
 The source identity is the producer's owner and completed sequence acquired
 with its image lease and fence. A changed publication or sampling map refreshes
 a lit panorama even when its packed sky parameters are unchanged. The CPU
@@ -670,9 +662,7 @@ a new epoch while a spatial view's still output stands without a render.
 A plain capture (`converge: 0`) observes the next normal temporal sample and
 keeps clean color and shadow history. An explicit converging capture starts its
 sample sequence at zero; any capture also discards retained tainted history
-before recording filled inputs. Every capture still starts the existing cold
-indirect solve and source epoch. A changed indirect publication invalidates
-temporal history through the usual history epoch comparison.
+before recording filled inputs.
 
 The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
 checks this through the real World's GPU counters. A camera pan starts another
@@ -716,7 +706,7 @@ shadow-cascade raster passes and keeps everything else:
    upload → mask → bake → cull-args → shadow-near → shadow-far → mesh → primary → views → resolve → sky → composite
 ```
 
-On this path the beam, tape, surface, ambient, shadow and receiver passes skip,
+On this path the beam, tape, surface, ambient and shadow passes skip,
 and the parts that run change their kernels:
 
 - **The bake.** `SdfMeshPathBake`, one per residency, bakes the residency's
@@ -772,7 +762,7 @@ and the parts that run change their kernels:
   far distance, each a bounding sphere of its slice snapped to whole texels. The
   `shadow-near` and `shadow-far` passes draw every mesh draw from their camera
   through the mesh pass's own pipeline, whose stages take their orthographic
-  form under a light slice, into 2048-texel targets of the mesh target's format.
+  form under the pass block's `lightCamera` flag, into 2048-texel targets of the mesh target's format.
   The second shadow slot's light, when one holds it, gets one cascade over the
   first 40 metres, drawn by `shadow-second` and written into K's second slot.
 - **The surface pass.** Primary records `sdf-world-mesh-surface`, which calls
@@ -789,12 +779,11 @@ and the parts that run change their kernels:
   interpreter; it shades the records as it shades any mesh pixel, and the pass
   block's `renderPath` lets it read a mesh pixel's K row and frame slot. The
   resolve, the sky and the composite are the interpreter path's.
-- **Indirect light.** The indirect cache walks the field, so the mesh path runs
-  none: a residency whose first view takes the path keeps its cache tier at Off
-  (`SdfWorldResidency.IndirectTier`), and the World composes no cache instance
-  for it. Its views read the irradiance volume instead
-  ([the mesh path's irradiance volume](lighting-and-shading.md#the-mesh-paths-irradiance-volume)),
-  at the tier `world.indirect` and the quality preset ask for.
+- **Indirect light.** Views read the irradiance volume
+  ([the mesh path's irradiance volume](lighting-and-shading.md#the-mesh-paths-irradiance-volume))
+  at the tier `world.indirect` and the quality preset ask for
+  (`SdfWorldResidency.IndirectTier`). The interpreter path draws no indirect
+  light.
 
 The cascade targets carry the mesh target's four floats a texel, which reuses
 the mesh pipeline at 16 bytes a texel more than a depth-only pipeline needs.
@@ -1004,16 +993,15 @@ its own frame wrote, and a pixel outside it answers nothing, as sky. The kernels
 read the same rule through the generated `SDF_VISIBILITY_CURRENT`, and the
 identity's kind and source fields through `SdfVisibility` too.
 
-The 96-byte visibility record keeps the winning shape's exact transform slot in
+The 64-byte visibility record keeps the winning shape's exact transform slot in
 L.x, or `SDF_TRANSFORM_SLOT_NONE` (`SdfProgram.NoDynamicTransformSlot`) for
 static geometry. This slot can differ from an articulated instance's bound slot.
 A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the
 transform table of the frame the record was rendered from, the rows that frame's
 upload staged, captured when the copy records, as `SdfPickResult.Transform`.
 Surface shading reads the four anonymous lanes from the existing dynamic
-transform row; static hits read zero. L.y carries an indirect receiver's approach:
-the distance back along its camera ray and the certified clearance, packed as
-two half floats. L.z and L.w carry the ambient and shadow query counts. A slot
+transform row; static hits read zero. L.y is spare.
+L.z and L.w carry the ambient and shadow query counts. A slot
 fits every lane that carries it: `SdfProgram.DynamicTransformSlotBits` is the
 float data lane's exact range, and a program naming a larger slot is refused.
 

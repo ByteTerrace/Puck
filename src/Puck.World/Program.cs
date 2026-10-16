@@ -82,7 +82,7 @@ var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
 // hosts on. `puck canary --debug-layers` and `puck qualify` (its profile's debugLayers) pass it to the Worlds they start.
 var debugLayersOption = new Option<bool>(name: "--debug-layers") {
     DefaultValueFactory = static _ => false,
-    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Also writes synchronous [sdf-indirect] submission cost diagnostics to stderr. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
+    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
 };
 var unpacedOption = new Option<bool>(name: "--unpaced") {
     DefaultValueFactory = static _ => false,

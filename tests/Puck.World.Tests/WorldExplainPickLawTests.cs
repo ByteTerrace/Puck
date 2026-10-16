@@ -53,7 +53,7 @@ public sealed class WorldExplainPickLawTests {
         Assert.Equal("fenced answer", CommandResult.Settling(settlement).Output);
         Assert.False(condition: explanation.Holds(picker: picker));
         Assert.Equal(answer, explanation.Captured);
-        Assert.Same(residency, explanation.CapturedResidency);
+        Assert.Same(residency, explanation.CapturedView?.Residency);
         Assert.Equal(2, explanation.CapturedSlot);
         picker.Clear();
         Assert.Equal(answer, explanation.Captured);

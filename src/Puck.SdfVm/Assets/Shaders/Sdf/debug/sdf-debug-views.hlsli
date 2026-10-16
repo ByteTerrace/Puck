@@ -6,8 +6,6 @@
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
-#include "../indirect/sdf-indirect-read.hlsli"
-#include "../indirect/sdf-indirect-light.hlsli"
 #include "sdf-debug-reads.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
@@ -25,10 +23,6 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color, SdfDebugSlice 
     float planeT = slice.planeT;
 
     switch (p.viewMode) {
-        case DebugViewModeIndirect: {
-            viewColor = sdfIndirectReceiverTotal;
-            break;
-        }
         case 1: { // depth
             float depth = saturate(s.t / p.farDistance);
             viewColor = float3(depth, depth, depth);
@@ -183,26 +177,6 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color, SdfDebugSlice 
             float evalRamp = saturate(sdfEvalCount / EvalHeatmapCeiling);
             float3 coldBand = lerp(float3(0.02, 0.04, 0.20), float3(0.14, 0.85, 0.30), saturate(evalRamp * 2.0));
             viewColor = lerp(coldBand, float3(0.95, 0.16, 0.10), saturate((evalRamp - 0.5) * 2.0));
-            break;
-        }
-        case DebugViewModeIndirectProbes: {
-            viewColor = sdfIndirectDebugProbes(p.rayOrigin, p.rayDirection, sdfIndirectDebugMaximum(s.hit, s.t, p.farDistance), color);
-            break;
-        }
-        case DebugViewModeIndirectCells: {
-            if (s.hit) {
-                viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t);
-            }
-            break;
-        }
-        case DebugViewModeIndirectLight: {
-            if (s.hit && passGroup.shadowSlotCount > 0u && passGroup.shadowSlots.x >= 0) {
-                uint lightIndex = (uint)passGroup.shadowSlots.x;
-                uint region;
-                float visible;
-                bool fallback = !sdfIndirectLightLookup(lightIndex, p.rayOrigin + p.rayDirection * s.t, s.normal, visible, region);
-                viewColor = fallback ? float3(visible, 0.0, 0.75) : float3(0.0, visible, 0.25 + 0.25 * (region % 2u));
-            }
             break;
         }
         case 12: { // MOTION: red/green encode previous minus current pixel position at 1/32 per pixel;

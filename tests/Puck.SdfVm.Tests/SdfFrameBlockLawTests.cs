@@ -12,18 +12,7 @@ namespace Puck.SdfVm.Tests;
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
     [Fact]
-    public void ComparisonBoundsEmitTypedShaderConstantsWithoutAnotherPolicyTable() {
-        var generated = SdfIndirectHlsl.Generate();
-
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeRays = 4u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeScreenSteps = 12u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativeConeSteps = 24u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const uint SdfIndirectAlternativePhases = 4u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeReach = 4;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "static const float SdfIndirectAlternativeConeSlope = 0.25;");
-    }
-    [Fact]
-    public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
+    public void IndirectSourceBitsReachThePassBlock() {
         var block = new byte[SdfFrameBlock.SizeBytes];
         var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectSources));
 
@@ -34,21 +23,13 @@ public sealed class SdfFrameBlockLawTests {
 
         SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
         Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: offset)));
-        var generated = SdfIndirectHlsl.Generate();
-
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesSky = 8u;");
-        Assert.Contains(actualString: generated, comparisonType: StringComparison.Ordinal, expectedSubstring: "SdfIndirectSourcesScreens = 16u;");
     }
 
     // The values the writer leaves as their zero default on every frame: the extent, which the node writes, the view
     // base, since each instance renders its one view at row zero, and the mesh path's values, which the pass recorder
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
-        SdfWorldPackage.LightSlice, SdfWorldPackage.LightMapCount, SdfWorldPackage.LightMaps, SdfWorldPackage.LightSweepRadius,
-        SdfWorldPackage.IndirectAllocation, SdfWorldPackage.IndirectCertificateRevision, SdfWorldPackage.IndirectEpoch,
-        SdfWorldPackage.IndirectFrame, SdfWorldPackage.IndirectNearEnabled, SdfWorldPackage.IndirectPickPixel,
-        SdfWorldPackage.IndirectPreviousPublication, SdfWorldPackage.IndirectReadGeneration, SdfWorldPackage.IndirectReadPublication,
-        SdfWorldPackage.IndirectReceiverProofs, SdfWorldPackage.PreserveIndirectReceivers, SdfWorldPackage.RenderPath,
+        SdfWorldPackage.LightCamera, SdfWorldPackage.RenderPath,
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters,
         SdfWorldPackage.MeshBakeLattices, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshIrradianceVolume, SdfWorldPackage.MeshIrradianceLow];
     // A camera basis none of whose components is zero.
@@ -72,7 +53,6 @@ public sealed class SdfFrameBlockLawTests {
         DisableFarBound = true,
         DisableSoftShadows = true,
         GeometryOnly = true,
-        IndirectMethod = SdfIndirectMethod.Screen,
         ShadowAmortize = true,
         ShadowDistanceScale = 0.5f,
         UseCameraTileShadowMask = true,
@@ -80,8 +60,6 @@ public sealed class SdfFrameBlockLawTests {
         UseFastSoftShadowMarch = true,
     };
     private static readonly (string Member, SdfViewQuality Quality, uint Bits)[] QualityValues = [
-        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Screen }, 1u),
-        (SdfWorldPackage.IndirectMethod, new() { IndirectMethod = SdfIndirectMethod.Cone }, 2u),
         (SdfWorldPackage.GeometryOnly, new() { GeometryOnly = true }, 1u),
         (SdfWorldPackage.CameraTileShadowMask, new() { UseCameraTileShadowMask = true }, 1u),
         (SdfWorldPackage.DisableAmbientOcclusion, new() { DisableAmbientOcclusion = true }, 1u),
@@ -133,7 +111,6 @@ public sealed class SdfFrameBlockLawTests {
             EnableShadowProxy = true,
             FarDistance = 30f,
             IndirectTier = SdfIndirectTier.High,
-            IndirectBodies = SdfIndirectParticipation.Cast,
             Lights = Lights(),
             UseFiniteDifferenceNormals = true,
         };
@@ -158,16 +135,6 @@ public sealed class SdfFrameBlockLawTests {
         return lights;
     }
 
-    [InlineData(SdfIndirectTier.Off)]
-    [InlineData(SdfIndirectTier.Medium)]
-    [InlineData(SdfIndirectTier.High)]
-    [Theory]
-    public void IndirectTierReachesTheGeneratedPassBlock(SdfIndirectTier tier) {
-        var block = new byte[SdfFrameBlock.SizeBytes];
-
-        SdfFrameBlock.Write(block: block, frame: Frame() with { IndirectTier = tier }, height: 16, tables: default, view: 0, width: 16);
-        Assert.Equal(((uint)tier), BitConverter.ToUInt32(block, ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.IndirectTier))));
-    }
     [Fact]
     public void EveryStableSlotAndBothActiveCountsReachTheFrameBlock() {
         var frame = Frame();

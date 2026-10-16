@@ -42,7 +42,6 @@
         <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
-        <Compile Include="../Shared/IrradianceLightFixture.cs" Link="IrradianceLightFixture.cs" />
         <Compile Include="../Shared/RefusalDeclaringProjects.cs" Link="RefusalDeclaringProjects.cs" />
         <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />

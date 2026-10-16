@@ -61,7 +61,7 @@ public sealed partial class SdfProgram {
     /// gain. The camera, surface, views and indirect walks read the field itself.</summary>
     /// <param name="index">The instance index.</param>
     /// <returns><see langword="true"/> when the program's root is a hard union of independent operands
-    /// (<see cref="IndirectInstancesComposable"/>) and the instance is live, maskable, and drops no clipping operand in
+    /// (<see cref="InstancesComposable"/>) and the instance is live, maskable, and drops no clipping operand in
     /// those walks, so the surface they see lies inside the sphere; <see langword="false"/> otherwise.</returns>
     /// <remarks>The sphere contains the instance's surface and its blends' influence, so outside it the distance to the
     /// sphere is at most the true distance to the surface, and inside it the reading is unchanged wherever the field is
@@ -74,7 +74,7 @@ public sealed partial class SdfProgram {
     public bool InstanceBoundsSecondaryField(int index) {
         var instance = m_instances[index];
 
-        if (!IndirectInstancesComposable || !instance.Active || IsUnmaskable(instance: instance) ||
+        if (!InstancesComposable || !instance.Active || IsUnmaskable(instance: instance) ||
             !float.IsFinite(f: m_instanceBinning[index].Radius) || (m_instanceBinning[index].Radius < 0f)) {
             return false;
         }

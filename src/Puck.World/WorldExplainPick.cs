@@ -14,8 +14,6 @@ public sealed class WorldExplainPick : IDisposable {
 
     /// <summary>The last completed explanation's immutable pixel, retained independently of later hover answers.</summary>
     public SdfPickResult? Captured { get; private set; }
-    /// <summary>The exact residency that rendered <see cref="Captured"/>, never a later routed seat.</summary>
-    public SdfWorldResidency? CapturedResidency { get; private set; }
     /// <summary>The view that rendered the retained answer, including its ordinal within that residency.</summary>
     public SdfWorldView? CapturedView { get; private set; }
     /// <summary>The seat that requested the retained explanation, or null before any completes.</summary>
@@ -79,7 +77,6 @@ public sealed class WorldExplainPick : IDisposable {
             }
             m_pending = null;
             Captured = answer;
-            CapturedResidency = pending.View.Residency;
             CapturedView = pending.View;
             CapturedSlot = pending.Slot;
             var verdict = Refuse(reason: "the captured answer could not be evaluated");

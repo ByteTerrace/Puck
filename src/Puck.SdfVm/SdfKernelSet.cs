@@ -76,11 +76,6 @@ public sealed class SdfKernelSet {
     /// <returns>The stem, such as <c>sdf-world-primary</c>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
-        SdfKernel.LightPrimary => "sdf-light-primary",
-        SdfKernel.LightDepth => "sdf-light-depth",
-        SdfKernel.IndirectClassify => "sdf-indirect-classify",
-        SdfKernel.IndirectTrace => "sdf-indirect-trace",
-        SdfKernel.IndirectShade => "sdf-indirect-shade",
         SdfKernel.Beam => "sdf-beam",
         SdfKernel.Tape => "sdf-tape",
         SdfKernel.InstanceCull => "sdf-instance-cull",
@@ -89,8 +84,6 @@ public sealed class SdfKernelSet {
         SdfKernel.Surface => "sdf-world-surface",
         SdfKernel.Ambient => "sdf-world-ambient",
         SdfKernel.Shadow => "sdf-world-shadow",
-        SdfKernel.Receiver => "sdf-world-receiver",
-        SdfKernel.ReceiverComparison => "sdf-world-receiver-comparison",
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsCore => "sdf-world-views-core",
         SdfKernel.ViewsFolds => "sdf-world-views-folds",
@@ -117,7 +110,6 @@ public sealed class SdfKernelSet {
     /// <returns>The layout.</returns>
     public static ShaderInterfaceLayout LayoutOf(SdfKernel kernel) =>
         kernel switch {
-            SdfKernel.IndirectClassify or SdfKernel.IndirectTrace or SdfKernel.IndirectShade => SdfWorldInterfaces.IndirectParameters.Layout,
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,

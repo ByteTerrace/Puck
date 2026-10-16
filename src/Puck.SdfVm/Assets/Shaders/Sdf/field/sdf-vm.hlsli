@@ -13,11 +13,7 @@
 #ifndef SDF_SHADOW_FADE_SLOTS
 #define SDF_SHADOW_FADE_SLOTS 0
 #endif
-#ifdef SDF_INDIRECT_PASS
-#include "../isa/indirect.interface.hlsli"
-#else
 #include "../isa/sdf-world.interface.hlsli"
-#endif
 
 // The field modules, in the order the interpreter declares them: each reads only what the modules before it declare.
 #include "sdf-program.hlsli"

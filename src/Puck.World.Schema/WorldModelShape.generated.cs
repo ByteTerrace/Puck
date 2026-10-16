@@ -4014,7 +4014,6 @@ public static partial class WorldModelShape {
                 M("dealSlot", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldPlacement), "DealSlot", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).DealSlot),
                 M("spatial", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldPlacementSpatialVolume>), typeof(global::Puck.World.WorldPlacement), "Spatial", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Spatial),
                 M("holding", typeof(global::System.Int32), typeof(global::Puck.World.WorldPlacement), "Holding", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Holding),
-                M("indirect", typeof(global::Puck.SignedDistance.SdfIndirectParticipation), typeof(global::Puck.World.WorldPlacement), "Indirect", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Indirect),
                 M("shownPrototypeId", typeof(global::System.String), typeof(global::Puck.World.WorldPlacement), "ShownPrototypeId", None),
             ],
             []),
@@ -4535,7 +4534,6 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldRenderIndirect), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("bodies", typeof(global::Puck.SignedDistance.SdfIndirectParticipation), typeof(global::Puck.World.WorldRenderIndirect), "Bodies", Read | Write, static value => ((global::Puck.World.WorldRenderIndirect)value).Bodies),
                 M("sources", typeof(global::Puck.World.WorldRenderIndirectSources), typeof(global::Puck.World.WorldRenderIndirect), "Sources", Read | Write, static value => ((global::Puck.World.WorldRenderIndirect)value).Sources),
                 M("bounces", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirect), "Bounces", Read | Write, static value => ((global::Puck.World.WorldRenderIndirect)value).Bounces),
                 M("apply", typeof(global::Puck.World.WorldRenderIndirectApply), typeof(global::Puck.World.WorldRenderIndirect), "Apply", Read | Write, static value => ((global::Puck.World.WorldRenderIndirect)value).Apply),

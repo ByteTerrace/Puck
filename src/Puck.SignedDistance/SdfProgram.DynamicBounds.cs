@@ -6,12 +6,9 @@ public sealed partial class SdfProgram {
     /// <summary>Collects the existing packed geometry bounds influenced by each dynamic-transform slot. The caller
     /// owns the result; build it once per program upload, not for every posed row. A null entry influences no live
     /// segment; an infinite radius explicitly represents a dependency without a finite conservative bound.</summary>
-    /// <param name="indirectTier">When supplied, collect only the tier's indirect casters; null collects every live dependency.</param>
-    /// <param name="bodies">The dynamic-body override used with <paramref name="indirectTier"/>.</param>
     /// <returns>One optional sphere per required dynamic slot. Finite centers are offsets added to the slot position;
     /// their radii cover every orientation and lane allowed by the program's declared instance or segment bound.</returns>
-    public SdfSkipSphere?[] BuildDynamicTransformBounds(SdfIndirectTier? indirectTier = null,
-        SdfIndirectParticipation bodies = SdfIndirectParticipation.Default) {
+    public SdfSkipSphere?[] BuildDynamicTransformBounds() {
         var bounds = new SdfSkipSphere?[RequiredDynamicTransformCapacity];
         var instance = 0;
 
@@ -24,8 +21,6 @@ public sealed partial class SdfProgram {
             var owner = (((instance < m_instances.Length) && (m_instances[instance].First <= first)) ? instance : -1);
 
             if ((owner >= 0) && !m_instances[owner].Active) { continue; }
-            if (IndirectInstancesComposable && (owner >= 0) && (indirectTier is { } tier) && (SdfIndirectPolicy.Resolve(m_instances[owner].Indirect,
-                m_instances[owner].IsDynamic, tier, bodies) != SdfIndirectParticipation.Cast)) { continue; }
             var sphere = SegmentSkipSphere(segment: segment);
 
             if (sphere.Mode == BoundModeDynamic) {

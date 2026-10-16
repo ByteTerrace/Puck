@@ -711,7 +711,7 @@ engine package, compiled at build, checks in, and `--echo` also generates each
 interface's echo pass as `<interface>.echo.hlsl`.
 
 `interface <canary-directory> --echo-fixtures --write` synchronizes the
-`interface-echo` canary as one family. It rebuilds the `sdf-world` and `indirect`
+`interface-echo` canary as one family. It rebuilds the `sdf-world`
 graph blocks from the current engine packages, generates every declared echo
 and its deliberate last-member, next-word sentinel discriminator, and updates
 graph widths and capture extents, including the region before the last pixel.
@@ -2023,8 +2023,6 @@ run, so a performance change can be judged by counted work rather than by time.
 ```text
 puck counters [--world <file>] [--script <file>] [--output <file>]
                                            run the workload on both backends and write the report
-puck counters --batch <manifest> [--output <directory>]
-                                           collect ordered observations once per group/backend
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -2108,56 +2106,6 @@ and pacing counts are ignored. A count or pass one side lacks, a pass state that
 moved, or a class that moved is a difference. It prints one line per
 difference, naming the backend, class, kind, pass and node. When the reports ran
 different sources, a note on standard error says so.
-
-### Named counter batches
-
-`--batch` reads a `puck.counters.batch.v1` manifest with `world` and ordered
-`groups`. Each group names a `prelude` script, ordered `observations` and its
-`completion` (`indirect` by default, or `engine` for sky-only work). Each
-observation names its `name`, `method` (`cache`, `screen` or `cone`), `script`
-and `report`. Input paths are relative to the manifest.
-Report paths are relative to the output directory, must stay within it and
-cannot overwrite inputs, group transcript directories, the retained World build
-log or the reserved provenance products. Names use filesystem identity where
-they name stored evidence. Names, scripts and
-report paths are distinct. Unknown manifest fields refuse.
-
-The collector launches Vulkan then Direct3D 12 for each group, serially, with
-that prelude followed by its observation scripts in the same World session.
-Each script selects its declared method, pauses simulation through one
-`world.wait indirect`, resumes, advances `world.wait 120` and ends
-with its only `world.counters --json` read. The indirect wait requires a newer
-produced frame and the actual current shared-cache source fence; it does not
-promise admission of every view's receiver. Keeping simulation paused through
-warm-up preserves fixed input ticks for the existing backend comparisons.
-An `engine` group instead uses the existing `world.wait ready <seconds>` verdict
-and must explicitly select `cache` and `world.indirect off` in each observation.
-It establishes installed pipelines and completed initial frames; it makes no
-indirect-source convergence claim. Its prelude contains no ready wait, so each
-retained ready verdict belongs to exactly one observation. An indirect group's
-prelude likewise contains no indirect wait. Both forms retain 120 active input
-ticks, exact completion ticks and diagnostic transcript lines; a missing,
-malformed, wrong-kind or deadline verdict refuses the collection.
-The complete resolve, boot and collection phase has a fifteen-minute cap.
-
-Every observation produces an ordinary paired `puck.counters.report.v1` report;
-`observations/` also retains each backend's actual single-reading product.
-`batch.observations.json` records the manifest hash, revision, group, method,
-ordinal, input release tick, workload, prelude and script paths and hashes,
-and exact stdout and completion-verdict transcript lines. The run directory
-stays available because those transcripts are part of the evidence. Each
-ordinary report keeps its observation's script identity; the sidecar retains
-the prelude and earlier observations that preceded it in the shared session.
-Readings retain the counter source's scope: GPU work is each node's newest
-completed submission, while cumulative host counters include the prelude and
-earlier observations. The collector does not subtract readings or turn them
-into costs for an isolated 120-tick interval.
-
-Missing, extra, malformed, refused or mismatched observations fail collection,
-and every paired report must agree under the backend rules. `--batch` refuses
-beside `--world` or `--script`. The [indirect comparison workload](../../experimental/tests/Puck.Counters/indirect-comparison/README.md)
-uses two tier groups to collect sixty actual backend observations in four
-serial boots, yielding thirty paired reports.
 
 ### Judging a change by counted work
 

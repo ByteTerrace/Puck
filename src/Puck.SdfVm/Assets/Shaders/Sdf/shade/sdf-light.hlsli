@@ -4,7 +4,7 @@
 // terms after the shade, and the attenuations into one factor on the reflected light.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#if defined(SDF_VIEWS_PASS) || defined(SDF_RECEIVER_PASS) || defined(SDF_INDIRECT_SHADE)
+#ifdef SDF_VIEWS_PASS
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
@@ -17,8 +17,6 @@ struct SdfLightSource {
     float3 color;
     // A screen's glow strength (its screen-light row's alpha).
     float weight;
-    // Only indirect diffuse transport uses this gain; direct shading does not.
-    float bounce;
     // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position.
     float3 position;
     // A rim's exponent, a point's falloff radius or an occluder's radius.
@@ -112,7 +110,6 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
         light.kind = record.Kind;
         light.color = record.Color;
         light.weight = record.Weight;
-        light.bounce = record.Bounce;
         light.position = (((record.Kind == SDF_LIGHT_POINT) || (record.Kind == SDF_LIGHT_OCCLUDER))
             ? worldPointLightPosition(record)
             : record.Direction);
@@ -134,7 +131,7 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     if (screenIndex >= min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES)
         || screenIndex >= surfaceRows / WorldScreenSurfaceRows
         || screenIndex >= mappingRows / WorldScreenMappingRows
-        || screenIndex >= emissionRows / SDF_SCREEN_EMISSION_RECORDS) { return false; }
+        || screenIndex >= emissionRows) { return false; }
 
     if (!screenSourceBound(screenIndex)) {
         return false;
@@ -144,10 +141,9 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     ScreenSurfaceData surface = worldScreenSurface(screenIndex);
 
     light.kind = SdfLightScreen;
-    float4 emission = sdfScreenLights[screenIndex * SDF_SCREEN_EMISSION_RECORDS + SDF_SCREEN_EMISSION_MEAN];
+    float4 emission = sdfScreenLights[screenIndex];
     light.color = emission.rgb;
     light.weight = emission.a;
-    light.bounce = 1.0;
     light.position = surface.origin.xyz;
     light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
 

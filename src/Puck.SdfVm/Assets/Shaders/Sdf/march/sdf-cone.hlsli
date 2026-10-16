@@ -4,7 +4,6 @@
 #include "sdf-grid-walk.hlsli"
 struct TileCone {
     float3 origin;
-    float radius; // orthographic tile half-diagonal; zero for perspective cameras
     float3 centerDirection;
     float chord;
     float inverseAperture; // 1/sqrt(1 - chord^2), the exact sphere-vs-cone bound's correction (see collectInstanceMaskWord)
@@ -12,9 +11,7 @@ struct TileCone {
 
 TileCone buildTileCone(ViewportData view, float2 localUvMin, float2 localUvMax) {
     TileCone cone;
-    cone.origin = cameraRayOrigin(view, (0.5 * (localUvMin + localUvMax)));
-    cone.radius = sdfLightCamera()
-        ? length((localUvMax - localUvMin) * float2(view.up.w, 1.0) * view.right.w) : 0.0;
+    cone.origin = view.position.xyz;
     cone.centerDirection = cameraRayDirection(view, (0.5 * (localUvMin + localUvMax)));
     cone.chord = 0.0;
     cone.chord = max(cone.chord, length(cameraRayDirection(view, localUvMin) - cone.centerDirection));
@@ -152,8 +149,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         // Stopped at the nearest published fold wall it is an honest unbounding sphere of the TRUE field, so entry,
         // TileEmpty, the gap and the far bound stay sound; a fold-free program publishes no wall and this is the field
         // itself. A wallpaper fold has no wall: it folds only through a continuous group.
-        // A light camera sweeps a complete texel column; every tile proof encloses that additional radius too.
-        float field = sdfMapBallClearance(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase)) - (cone.radius + passGroup.lightSweepRadius);
+        float field = sdfMapBallClearance(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase));
         sdfWorkSteps += 1u;
         steps++;
 
@@ -285,7 +281,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 // content this rebuild) packs a negative-radius sentinel host-side (SdfProgram.ParkedBoundRadius): reject it with the
 // single leading branch — no sqrt, no dot, mask bit left 0. A real bound radius is always non-negative, so this never
 // misfires.
-uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceCount, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture, float radius) {
+uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceCount, float3 rayOrigin, float3 centerDirection, float chord, float inverseAperture) {
     uint bits = 0u;
     uint first = (wordIndex << 5u);
     uint end = min((first + 32u), instanceCount);
@@ -293,10 +289,9 @@ uint collectInstanceMaskWord(uint instanceOffset, uint wordIndex, uint instanceC
     [loop]
     for (uint i = first; (i < end); i++) {
         float4 bound = sdfInstanceBoundAt(instanceOffset, i);
-        if (bound.w >= 0.0) { bound.w += radius; }
 
         if (sdfInstancePassesTileCone(bound, rayOrigin, centerDirection, chord, inverseAperture) &&
-            (sdfLightCamera() || !sdfInstanceCameraHidden(instanceOffset, i))) {
+            !sdfInstanceCameraHidden(instanceOffset, i)) {
             bits |= (1u << (i - first));
         }
     }

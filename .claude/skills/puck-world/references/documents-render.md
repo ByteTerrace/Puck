@@ -15,11 +15,11 @@ shipped `quality.puck` table authors all three explicitly.
 `render.indirect.sources` carries bindable `lights`, `emission`, `screens`, `sky`
 and `feedback` gains in [0, 1], each default one. Explicit screens=0 stays off
 even when an emitting image is bound. Structural `bounces` requests zero through
-four feedback sweeps after direct, capped by the active tier. `apply` holds bindable
-unit `intensity`, `tint` and `contact`; those receiver-only controls do not restart
-the solved cache. The ordinary generated document shape, scalar domains and
+four bounces after direct, capped by the active tier. `apply` holds bindable
+unit `intensity`, `tint` and `contact`; those receiver-only controls do not retrace
+the irradiance volume. The ordinary generated document shape, scalar domains and
 environment binding path own validation, keys and state reads; add no separate
-indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+indirect binding walker. The [lighting handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#indirect-light-controls)
 owns source and receiver semantics.
 
 `WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` carries the

@@ -31,7 +31,7 @@ public static partial class WorldSessionLevers {
     public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
-    /// <summary>The residency's indirect-cache tier (<c>world.indirect</c>).</summary>
+    /// <summary>The indirect-light tier the irradiance volume traces at (<c>world.indirect</c>).</summary>
     public const string Indirect = "indirect";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";

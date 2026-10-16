@@ -35,7 +35,7 @@ public sealed partial class WorldViewGraphHost {
             var view = Pickers.ViewOf(instance: instance.Name);
 
             m_environmentViews.Add(key: instance.Name, value: view?.Residency);
-            if (view is not { LightView: false } resolved) { continue; }
+            if (view is not { } resolved) { continue; }
             var name = WorldViewNames.Environment(residency: resolved.Residency.Name);
 
             byView.Add(key: instance.Name, value: name);

@@ -1,6 +1,5 @@
 using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using System.Runtime.InteropServices;
 
 namespace Puck.SdfVm;
@@ -27,7 +26,7 @@ public sealed partial class SdfWorldPasses {
 
     /// <inheritdoc/>
     public RenderGraphReadEpoch? ReadEpochOf(string instance, string producer) =>
-        ((Refresh(instance: instance).View is { LightView: false } view) ? ReadEpochOf(view.Residency, producer) : null);
+        ((Refresh(instance: instance).View is { } view) ? ReadEpochOf(view.Residency, producer) : null);
 
     internal RenderGraphReadEpoch? ReadEpochOf(SdfWorldResidency residency, string producer) {
         // Own-world cameras are excluded from lighting feedback. A cold self-read must not wait on the image whose
@@ -59,7 +58,7 @@ public sealed partial class SdfWorldPasses {
                 var panorama = ((residency.Tables is { SkyEnvironmentDemand: true } tables) && tables.SkyEnvironmentUsesScreen(screen: screen));
 
                 if ((!emits && !panorama) || (sources.ReadOf(screen: screen, view: registration.View) is not { } producer) ||
-                    !m_observedViews.Contains(item: producer) || (Refresh(instance: producer).View is not { LightView: false } view) ||
+                    !m_observedViews.Contains(item: producer) || (Refresh(instance: producer).View is not { } view) ||
                     ReferenceEquals(objA: view.Residency, objB: residency)) { continue; }
                 edges.Add(item: new(residency, screen, view.Residency, producer, emits, panorama));
             }
@@ -104,7 +103,7 @@ public sealed partial class SdfWorldPasses {
     }
     private void ResetClosureHistory(ScreenClosure closure) {
         foreach (var entry in m_entries.Values) {
-            if ((entry.View is not { LightView: false } view) || !closure.Contains(residency: view.Residency)) { continue; }
+            if ((entry.View is not { } view) || !closure.Contains(residency: view.Residency)) { continue; }
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.HistoryTainted = false;
@@ -147,10 +146,6 @@ public sealed partial class SdfWorldPasses {
             m_owner.m_entries.TryGetValue(key: instance, value: out var entry) && (entry.View is { } view) &&
             m_expected.TryGetValue(key: view.Residency, value: out var expected) && entry.ImagePublication.IsKnown && (entry.ImageLighting == expected));
 
-        private bool ReadsIndirect(SdfScreenClosureMember member) => ((member.Residency.IndirectTier != SdfIndirectTier.Off) &&
-            m_owner.HasIndirectReaders(residency: member.Residency));
-
-        private bool CanStart => !Members.Any(predicate: member => (member.Residency.IndirectFrozen && ReadsIndirect(member: member)));
 
         public void Release() {
             m_reads?.Dispose();
@@ -164,7 +159,6 @@ public sealed partial class SdfWorldPasses {
         public void Advance(bool restart) {
             if (Members.Any(predicate: member => (!member.Residency.IsReady || (member.Residency.Frame is null) || (member.Residency.Tables is null)))) { return; }
             if (restart || !m_started || (m_reads is { IsActive: true, IsValid: false }) || Members.Any(predicate: member => !ReferenceEquals(objA: member.Tables, objB: member.Residency.Tables))) {
-                if (!CanStart) { return; }
                 Start();
             }
             if (Complete) {
@@ -173,20 +167,17 @@ public sealed partial class SdfWorldPasses {
                 var capturing = Members.Any(predicate: member => (m_owner.ConvergenceOf(residency: member.Residency) is not null));
 
                 if (!capturing) { m_reads?.Dispose(); }
-                if (CanStart && Members.Any(predicate: member => ((member.HasChanged(readsIndirect: ReadsIndirect(member: member)) || (m_reads?.Changed == true)) &&
-                    (!capturing || SourceTainted(member.Tables, member.Residency.Frame, readsIndirect: ReadsIndirect(member: member)))))) { Start(); }
+                if (Members.Any(predicate: member => ((member.HasChanged() || (m_reads?.Changed == true)) &&
+                    (!capturing || SourceTainted(member.Tables, member.Residency.Frame))))) { Start(); }
                 return;
             }
             if (!m_reducing) {
-                if (Members.Any(predicate: member => (!member.InitialReductionComplete ||
-                    (ReadsIndirect(member: member) && !member.Residency.IsIndirectReady)))) { return; }
+                if (Members.Any(predicate: member => !member.InitialReductionComplete)) { return; }
                 Epoch = ++m_owner.m_screenEpoch;
                 m_expected.Clear();
                 foreach (var member in Members) {
-                    var cache = member.Tables!.Indirect;
-
-                    m_expected.Add(key: member.Residency, value: new(cache?.PublishedLightingSource, (cache?.PublishedStamp ?? 0u), Epoch,
-                        (member.Tables.SubmittedSkyEnvironment?.Publication ?? default), (member.Tables.SubmittedScreenEmission?.Publication ?? default)));
+                    m_expected.Add(key: member.Residency, value: new(Epoch,
+                        (member.Tables!.SubmittedSkyEnvironment?.Publication ?? default), (member.Tables.SubmittedScreenEmission?.Publication ?? default)));
                     member.HoldsLighting = true;
                 }
                 m_owner.ResetClosureHistory(closure: this);
@@ -264,9 +255,8 @@ internal sealed class SdfScreenClosureMember(SdfWorldResidency residency, uint d
     public uint DerivedMask { get; } = derivedMask;
     public uint DerivedSkyMask { get; } = derivedSkyMask;
 
-    public bool HasChanged(bool readsIndirect) => ((Tables is { } tables) && (tables.ScreenClosureInputsChanged || tables.SkyClosureInputsChanged ||
-        (tables.ClosureSceneSignature != m_scene) || CamerasChanged() ||
-        (readsIndirect && (tables.Indirect?.Lighting is { } lighting) && !lighting.MatchesScene(frame: Residency.Frame!))));
+    public bool HasChanged() => ((Tables is { } tables) && (tables.ScreenClosureInputsChanged || tables.SkyClosureInputsChanged ||
+        (tables.ClosureSceneSignature != m_scene) || CamerasChanged()));
 
     public bool HoldsLighting { get; set; }
     public bool InitialReductionComplete => ((Tables is { } tables) && tables.CompletedScreenEmission.IsKnown &&

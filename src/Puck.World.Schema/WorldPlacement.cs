@@ -7,7 +7,6 @@ using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
-using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -470,8 +469,6 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <paramref name="Respond"/> and with a bit at or past its entry count. A reader whose disclosure withholds a cell an
 /// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
 /// from the wire when 0.</param>
-/// <param name="Indirect">The whole placement's indirect-light policy. Default follows static casting or the world's
-/// moving-body default; Receive receives without casting, Cast does both, and Off does neither.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -494,8 +491,7 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0,
-    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectParticipation>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] SdfIndirectParticipation Indirect = SdfIndirectParticipation.Default
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0
 ) {
     /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
     /// may be named it.</summary>

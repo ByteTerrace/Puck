@@ -40,8 +40,7 @@ public sealed class SdfMeshRegionArena {
     /// the arena's end, unless the plan relocates every mesh.</summary>
     /// <param name="draws">The draws.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The list holds more than <see cref="SdfMeshRegion.MaxDraws"/> draws or a draw
-    /// whose indirect policy names no member.</exception>
+    /// <exception cref="ArgumentException">The list holds more than <see cref="SdfMeshRegion.MaxDraws"/> draws.</exception>
     /// <exception cref="OverflowException">The region holds more words than an <see cref="int"/> counts.</exception>
     public void Plan(IReadOnlyList<SdfMeshDraw> draws) {
         ArgumentNullException.ThrowIfNull(draws);
@@ -55,7 +54,6 @@ public sealed class SdfMeshRegionArena {
         m_dropped.Clear();
 
         foreach (var draw in draws) {
-            SdfMeshRegion.RequireIndirect(draw: draw);
             _ = m_named.Add(item: draw.Mesh);
         }
         foreach (var mesh in m_placements.Keys) {

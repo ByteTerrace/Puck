@@ -28,9 +28,8 @@ ScreenSurfaceData worldScreenSurface(uint screenIndex) {
 // its row names. A screen with no source bound this frame holds a valid filler view; the shader never samples an unbound
 // screen (screenSourceBound gates it), so the filler's content never reaches the image. Every screen index is bounded
 // by the generated SDF_MAX_SCREEN_SURFACES before it indexes a per-screen table.
-// The acquired-image reduction (sdfScreenLights) has SDF_SCREEN_EMISSION_RECORDS per screen: sixteen cell means and
-// the pixel-weighted whole-image mean. Direct area lighting reads the last row; indirect rays sample the face's grid.
-// Geometry remains screenSurfaces[i]; the finite solve binds the reduction and surface/mapping snapshot together.
+// The acquired-image reduction (sdfScreenLights) holds each screen's pixel-weighted whole-image mean, which direct area
+// lighting reads. Geometry remains screenSurfaces[i].
 
 bool screenSourceBound(uint screenIndex) {
     return (worldScreenMapping(screenIndex).state.x != 0.0);

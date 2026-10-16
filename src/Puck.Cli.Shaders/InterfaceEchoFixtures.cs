@@ -10,7 +10,6 @@ public static class InterfaceEchoFixtures {
     private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", WriteIndented = true };
     private static readonly (string Echo, string Package)[] ModelEchoes = [
         ("sdf-world", RenderGraphPackageCatalog.SdfWorld),
-        ("indirect", RenderGraphPackageCatalog.Indirect),
     ];
 
     private static string Serialize(JsonNode node) => (node.ToJsonString(options: JsonOptions) + "\n");

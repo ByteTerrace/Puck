@@ -221,8 +221,6 @@ public sealed class RenderGraphPackageCatalog {
     /// read. It is world-scoped, one instance for the world, and its output is a buffer, so the views reach it over
     /// buffer edges.</summary>
     public const string SdfBricks = "sdf.bricks";
-    /// <summary>The residency's traced and partitioned indirect cache.</summary>
-    public const string Indirect = "indirect";
     /// <summary>The residency's shared sky environment producer. Its SDF host supplies the typed two-pass fragment.</summary>
     public const string SkyEnvironment = "sdf.environment";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
@@ -584,15 +582,7 @@ public sealed class RenderGraphPackageCatalog {
             Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: (sizeof(float) * 4)),
                 RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: (sizeof(uint) * 2))],
             Members: [],
-            Summary: "One residency's sky environment map and radiance coefficients, shared by its views and lighting solve."
-        ),
-        new RenderGraphPackage(
-            Id: Indirect,
-            Inputs: [],
-            Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(uint))],
-            Members: SdfWorldPackage.IndirectMembers,
-            Fragment: SdfWorldPackage.IndirectFragment(bytes: sizeof(uint)),
-            Summary: "One residency's classified probes, cell partitions and traced transport."
+            Summary: "One residency's sky environment map and radiance coefficients, shared by its views."
         ),
         new RenderGraphPackage(
             Fragment: SdfWorldPackage.NativeFragment,

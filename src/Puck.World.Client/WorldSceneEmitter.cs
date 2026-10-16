@@ -314,8 +314,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             scaleFor: (probeWorstCase
             ? null
             : index => m_emittedAvatarScales[index]),
-            picks: (probeWorstCase ? null : m_picks),
-            indirectFor: (probeWorstCase ? null : index => WorldIndirectParticipation.ForPlacement(definition: client.Definition, placementId: client.PlacementId(index: index)))
+            picks: (probeWorstCase ? null : m_picks)
         );
     }
     // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot

@@ -20,7 +20,7 @@ It intentionally omits implementation chronology and review provenance.
 | Analytic forward-mode normals | Shipped default; four-tap comparison remains available | [Gradients and normals](gradients-and-normals.md) |
 | Normal-ladder AO | Shipped three-tap ambient-only path | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Cone AO and bent normals | Optional quality tier; open | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| World-space radiance cache traced through the field | The CPU reference, GPU directional cache, depth-only light views, finite lighting and Cache/Screen/Cone comparison paths are implemented. Physical qualification remains open, including G10's actual RTX 4070 measurements and default choice, and RTX 2060 qualification | [Finite lighting](../handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
+| Irradiance volume traced on the CPU against the baked meshes | Shipped on the baked-mesh path; the field-traced radiance cache it replaced is deleted | [The mesh path's irradiance volume](../handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination) |
 | Penumbra soft shadows | Shipped with a workgroup grid gather | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
@@ -42,4 +42,4 @@ It intentionally omits implementation chronology and review provenance.
 | Coverage rasterizers as SDF geometry | Not applicable; they produce coverage, not a marchable distance | [Text and glyphs](text-and-glyphs.md) |
 
 The detail links distinguish implemented behavior from remaining work. The
-P6-GI plan tracks the cache's physical qualification and counted default choice.
+P6-GI plan tracks the irradiance volume's open work.

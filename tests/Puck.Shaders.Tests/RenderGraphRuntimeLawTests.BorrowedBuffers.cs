@@ -15,10 +15,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var producer = new BorrowedPackage(buffer: buffer);
         var view = new BufferViewPackage(bytes: Bytes);
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
         var set = Set(PackageInstance() with { Reads = [new RenderGraphRead("cache", Kind: ShaderPipelineResourceKind.Buffer)] },
-            new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+            new RenderGraphInstance(Name: "cache", ExternalPackage: BufferPackage,
                 Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
 
         using (var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2])) {
@@ -49,13 +49,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakeGpuDevice();
         using var buffer = gpu.Services.BufferFactory.CreateDeviceLocal(Bytes, GpuBufferUsage.Storage, new GpuObjectName("test", "cache"));
         var recorders = new Recorders();
-        var producer = new BorrowedPackage(buffer: buffer) { Fragment = SdfWorldPackage.IndirectFragment(bytes: InitialBytes) };
+        var producer = new BorrowedPackage(buffer: buffer) { Fragment = ProducerFragment(bytes: InitialBytes) };
         var view = new BufferViewPackage(bytes: InitialBytes);
 
-        recorders.Registry.Register(factory: producer, package: RenderGraphPackageCatalog.Indirect);
+        recorders.Registry.Register(factory: producer, package: BufferPackage);
         recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
         var set = Set(PackageInstance() with { Reads = [new RenderGraphRead("cache", Kind: ShaderPipelineResourceKind.Buffer)] },
-            new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
+            new RenderGraphInstance(Name: "cache", ExternalPackage: BufferPackage,
                 Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
         using var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2]);
         var frame = 0L;
@@ -63,25 +63,25 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(step: () => { ProducePackageFrame(runtime, frame++); return (runtime.Node(instance: 0).FrameCounter > 1); });
         var rendered = runtime.Node(instance: 0).FrameCounter;
 
-        producer.Fragment = SdfWorldPackage.IndirectFragment(bytes: Bytes);
-        view.Fragment = SdfWorldPackage.WithIndirect(SdfWorldPackage.NativeFragment, Bytes);
+        producer.Fragment = ProducerFragment(bytes: Bytes);
+        view.Fragment = ReaderFragment(SdfWorldPackage.NativeFragment, Bytes);
         TestLiveness.Until(step: () => { ProducePackageFrame(runtime, frame++); return (runtime.Node(instance: 0).FrameCounter > (rendered + 2)); });
         Assert.All(producer.Outputs, output => Assert.Same(actual: output, expected: buffer));
     }
 
     private sealed class BufferViewPackage(ulong bytes) : IRenderGraphPackageFactory {
         public ViewPackage Inner { get; } = new();
-        public RenderGraphPackageFragment Fragment { get; set; } = SdfWorldPackage.WithIndirect(SdfWorldPackage.NativeFragment, bytes);
+        public RenderGraphPackageFragment Fragment { get; set; } = ReaderFragment(SdfWorldPackage.NativeFragment, bytes);
 
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;
-        public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) => [new(Producer: "cache", Version: SdfWorldPackage.IndirectCache)];
+        public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) => [new(Producer: "cache", Version: CacheVersion)];
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => Inner.BuildAsync(cancellationToken: cancellationToken, context: context);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Inner.Create(built: built, context: context, groups: groups);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => Inner;
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => Inner.Unchanged;
     }
     private sealed class BorrowedPackage(IGpuBuffer buffer) : IRenderGraphPackageFactory {
-        public RenderGraphPackageFragment Fragment { get; set; } = SdfWorldPackage.IndirectFragment(bytes: buffer.SizeBytes);
+        public RenderGraphPackageFragment Fragment { get; set; } = ProducerFragment(bytes: buffer.SizeBytes);
         public bool OwnsAllocation { get; set; } = true;
 
         public bool OwnsBuffer(string? part) => OwnsAllocation;
@@ -99,7 +99,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         private sealed class Recorder(BorrowedPackage owner, string? part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
-            public bool Skips(in FrameContext context) => (owner.SkipPlacement && (part == SdfWorldPackage.IndirectPlace));
+            public bool Skips(in FrameContext context) => (owner.SkipPlacement && (part == PlacePass));
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Outputs.Add(item: recording.Outputs[0].Buffer!);
                 return RenderGraphPackageOutcome.Drew;

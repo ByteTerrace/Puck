@@ -1,6 +1,5 @@
 using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -20,44 +19,22 @@ public sealed partial class SdfWorldPasses {
     public bool TaintedOf(string instance) {
         var entry = Refresh(instance: instance);
 
-        return ((entry.View is { LightView: false } view) &&
-            (entry.HistoryTainted || SourceTainted(view.Residency.Tables, view.Residency.Frame, readsIndirect: HasIndirectReaders(entry: entry))));
+        return ((entry.View is { } view) && (entry.HistoryTainted || SourceTainted(view.Residency.Tables, view.Residency.Frame)));
     }
     /// <inheritdoc/>
     public FrameRender CaptureReadinessOf(string instance) {
         var entry = Refresh(instance: instance);
 
-        if (entry.View is not { LightView: false } view) {
-            return FrameRender.Rendered;
-        }
-        if (ClosureOf(residency: view.Residency) is { Complete: false } closure) {
-            if (closure.Members.Any(predicate: member => ((member.Residency.IndirectTier != SdfIndirectTier.Off) && member.Residency.IndirectFrozen &&
-                HasIndirectReaders(residency: member.Residency)))) {
-                return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete its screen-lighting closure while a participating residency is frozen");
-            }
+        if ((entry.View is { } view) && (ClosureOf(residency: view.Residency) is { Complete: false })) {
             return FrameRender.Waiting(reason: $"the instance '{instance}' awaits its two complete screen-lighting rounds");
         }
-        if ((view.Residency.IndirectTier == SdfIndirectTier.Off) || !HasIndirectReaders(instance: instance)) { return FrameRender.Rendered; }
-        if (view.Residency.IndirectFrozen) {
-            return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete a cold capture solve while indirect updates are frozen");
-        }
-        if (!view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } solving) &&
-            (solving.CannotFinishReason(since: entry.ConvergenceInvalidations) is { } unfinishable)) {
-            return FrameRender.Refused(reason: $"the instance '{instance}' cannot complete its capture's indirect solve: {unfinishable}");
-        }
-        // A converging capture's sample admits every receiver and never defers one (SdfFrameBlock.UnboundedReceiverProofs),
-        // so each render of a sample completes its receivers by construction and counts. Waiting for a sample's fenced
-        // census would render it again uncounted, and its temporal history would take the sample as many more times as
-        // the fence took frames.
-        var converging = (entry.Convergence is { IsActive: true });
-
-        return ((view.Residency.IsIndirectReady && (view.Residency.Tables?.Indirect is { } cache) && (converging || ReceiversComplete(cache: cache, entry: entry)) &&
-            (cache.PublishedLightingSource is { Tainted: false }))
-            ? FrameRender.Rendered
-            : FrameRender.Waiting(reason: $"the instance '{instance}' awaits its capture source's complete fenced indirect solve and receiver certificates"));
+        return FrameRender.Rendered;
     }
 
-    internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame) => SourceTainted(tables, frame, readsIndirect: true);
+    // Whether a frame's lighting sources are tainted: a demanded sky environment or the screen emission it lights by.
+    internal static bool SourceTainted(SdfWorldTables? tables, SdfFrame? frame) => ((tables is not null) && (frame is not null) &&
+        ((tables.SkyEnvironmentDemand && (tables.SubmittedSkyEnvironment is { Tainted: true })) ||
+            (!frame.DisableScreenLights && (tables.SubmittedScreenEmission is { Tainted: true }))));
     internal void SubmittedTaint(string instance, bool tainted, bool readsHistory) {
         var entry = Refresh(instance: instance);
 

@@ -52,7 +52,7 @@ float3 sdfSkyEnvironmentUnpack(uint2 words) {
     return float3(f16tof32(words.x & 0xFFFFu), f16tof32(words.x >> 16u), f16tof32(words.y & 0xFFFFu));
 }
 // The texel a filter tap at most one texel past the map reads: inside, itself; past an edge, the texel the octahedral fold
-// puts there, mirrored along that edge, and past a corner the opposite corner (IrradianceLattice.BorderSource).
+// puts there, mirrored along that edge, and past a corner the opposite corner (SdfOctahedral.BorderSource).
 uint sdfSkyEnvironmentTap(int2 tap) {
     int last = (SdfSkyEnvironmentSize - 1);
     bool mirrorX = ((tap.x < 0) || (tap.x > last));

@@ -7,14 +7,14 @@ namespace Puck.SignedDistance;
 /// The CPU reference for procedural sky environments; device panoramas require their actual acquired images. The map and
 /// its coefficients are rendered once per change of the
 /// layers its lighting sees, which the composite reads the fog's in-scattered colour from. The map is <see cref="Size"/>
-/// by <see cref="Size"/> texels over the octahedral projection the radiance cache's maps use, the pole at world +y
-/// (<see cref="IrradianceLattice.Encode"/>), so the upper hemisphere is the inner diamond and the lower one folds into
+/// by <see cref="Size"/> texels over an octahedral projection, the pole at world +y
+/// (<see cref="SdfOctahedral.Encode"/>), so the upper hemisphere is the inner diamond and the lower one folds into
 /// the corners; each texel holds the layers the lighting sees at its centre's direction (<see cref="Evaluate"/>), as four
 /// half floats (<see cref="Quantize"/>). No disc enters it, so a bright body never smears into the fog around it, and a
 /// layer only the camera sees (stars and clouds by default) is left out. A lookup (<see cref="Sample"/>) filters the
 /// four texels about a
 /// direction bilinearly, a tap one texel past an edge read from the texel the octahedral fold puts there
-/// (<see cref="IrradianceLattice.BorderSource(int, int, int)"/>), so the filter is continuous across every edge. The
+/// (<see cref="SdfOctahedral.BorderSource(int, int, int)"/>), so the filter is continuous across every edge. The
 /// coefficients are the nine real second-order spherical harmonics of the map per colour channel (<see cref="Basis"/>),
 /// each texel weighted by its solid angle (<see cref="SolidAngle"/>) and the sum scaled so the weights total 4π
 /// (<see cref="Project"/>), so a constant sky projects to its colour times √(4π) in the first coefficient and zero in
@@ -52,7 +52,7 @@ public static partial class SdfSkyEnvironment {
     /// <param name="y">The texel's row, in [0, <see cref="Size"/>).</param>
     /// <returns>The direction.</returns>
     public static Vector3 Direction(int x, int y) {
-        var direction = IrradianceLattice.Decode(
+        var direction = SdfOctahedral.Decode(
             u: ((x + 0.5) / Size),
             v: ((y + 0.5) / Size)
         );
@@ -66,7 +66,7 @@ public static partial class SdfSkyEnvironment {
     /// <param name="y">The texel's row.</param>
     /// <returns>The solid angle.</returns>
     public static double SolidAngle(int x, int y) {
-        var direction = IrradianceLattice.Decode(
+        var direction = SdfOctahedral.Decode(
             u: ((x + 0.5) / Size),
             v: ((y + 0.5) / Size)
         );
@@ -142,7 +142,7 @@ public static partial class SdfSkyEnvironment {
     /// <param name="direction">The unit direction.</param>
     /// <returns>The colour.</returns>
     public static Vector3 Sample(ReadOnlySpan<Vector3> map, Vector3 direction) {
-        var (u, v) = IrradianceLattice.Encode(direction: new Double3(X: direction.X, Y: direction.Y, Z: direction.Z));
+        var (u, v) = SdfOctahedral.Encode(direction: new Double3(X: direction.X, Y: direction.Y, Z: direction.Z));
         var positionX = ((u * Size) - 0.5);
         var positionY = ((v * Size) - 0.5);
         var originX = ((int)Math.Floor(d: positionX));
@@ -156,7 +156,7 @@ public static partial class SdfSkyEnvironment {
             var dy = (corner >> 1);
             var weight = (((dx == 0) ? (1f - fractionX) : fractionX) * ((dy == 0) ? (1f - fractionY) : fractionY));
 
-            var (x, y) = IrradianceLattice.BorderSource(
+            var (x, y) = SdfOctahedral.BorderSource(
                 borderedX: ((originX + dx) + 1),
                 borderedY: ((originY + dy) + 1),
                 interiorTexels: Size

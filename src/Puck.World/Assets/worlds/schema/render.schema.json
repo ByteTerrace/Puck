@@ -406,17 +406,12 @@
       "title": "WorldSkyTier"
     },
     "indirect": {
-      "description": "The world\u0027s diffuse indirect-light participation defaults.",
+      "description": "The world\u0027s diffuse indirect-light tier, sources and application.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "bodies": {
-          "$ref": "./common.schema.json#/$defs/SdfIndirectParticipation",
-          "description": "Default makes moving bodies receive at medium and cast and receive at high. Receive omits their casting, Cast enables both, and Off disables both. An explicit placement policy takes precedence.",
-          "default": "Default"
-        },
         "sources": {
           "description": "Bindable source gains in [0, 1]; absent gains are one.",
           "type": [
@@ -441,7 +436,7 @@
             },
             "sky": {
               "$ref": "./common.schema.json#/$defs/BindableScalar",
-              "description": "Physical radiance at certified world exits.",
+              "description": "Physical sky radiance at world exits.",
               "default": null
             },
             "feedback": {
@@ -463,7 +458,7 @@
           "default": null
         },
         "apply": {
-          "description": "Bindable receiver-only controls. They do not change cached radiance.",
+          "description": "Bindable receiver-only controls. They do not change the traced radiance.",
           "type": [
             "object",
             "null"
@@ -490,7 +485,7 @@
           "title": "WorldRenderIndirectApply"
         },
         "tier": {
-          "description": "The boot cache tier, Medium by default. The live session lever and selected quality preset override it.",
+          "description": "The boot tier, Medium by default. The live session lever and selected quality preset override it.",
           "enum": [
             "Off",
             "Medium",

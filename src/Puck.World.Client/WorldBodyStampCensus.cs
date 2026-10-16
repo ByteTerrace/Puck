@@ -76,7 +76,6 @@ public sealed class WorldBodyStampCensus {
                     BodyIndex: index,
                     Creation: creation,
                     Scale: ((placement.Scale * look.Scale) * liveScale),
-                    Indirect: WorldIndirectParticipation.ForPlacement(definition: definition, placementId: placementId),
                     Look: look
                 )
                 : null
@@ -92,7 +91,6 @@ public sealed class WorldBodyStampCensus {
                     BodyIndex: index,
                     Creation: creation,
                     Scale: (look.Scale * liveScale),
-                    Indirect: WorldIndirectParticipation.ForPlacement(definition: definition, placementId: null),
                     Look: look
                 )
                 : null

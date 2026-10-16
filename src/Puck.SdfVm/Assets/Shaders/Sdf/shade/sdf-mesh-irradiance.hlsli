@@ -110,8 +110,8 @@ void sdfMeshIrradianceAt(float3 position, float3 normal, out float skyVisibility
     skyVisibility = lerp(1.0, (sky / total), fade);
     radiance = ((reflected / total) * fade);
 }
-// The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance the
-// indirect cache's bank holds): the live sky's irradiance over pi under the volume's sky visibility, when the sky source is
+// The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance about
+// the normal): the live sky's irradiance over pi under the volume's sky visibility, when the sky source is
 // on, and the reflected radiance, whose sources the CPU trace already gated and scaled.
 float3 sdfMeshIndirect(float3 position, float3 normal) {
     float skyVisibility;
@@ -119,7 +119,7 @@ float3 sdfMeshIndirect(float3 position, float3 normal) {
     sdfMeshIrradianceAt(position, normal, skyVisibility, radiance);
 
     float3 sky = 0.0;
-    if ((passGroup.indirectSources & SdfIndirectSourcesSky) != 0u) {
+    if ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u) {
         sky = (sdfSkyPhysicalIrradiance(normal) * ((skyVisibility * passGroup.indirectSourceGains.w) / 3.141592653589793));
     }
     return (sky + radiance);

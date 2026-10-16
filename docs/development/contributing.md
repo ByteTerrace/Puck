@@ -280,11 +280,10 @@ Each kernel installs as soon as its DXIL compiles, quickest first, and prints
 `[shaders.reload: request=N installed pipelines=K kernels=…]`. A kernel
 recompiles only when a file in its include closure changed, and each hit
 kernel's closure is its own stage: an edit to `passes/sdf-light-stage.hlsli`
-recompiles the three views kernels and nothing else, an edit to
-`indirect/sdf-indirect-receiver.hlsli` the two receivers, and every other
+recompiles the views kernels and nothing else, and every other
 kernel is a cache hit. An edit to a module every kernel reads (the
 interpreter under `field/`, or `passes/sdf-world.hlsli`'s modules) recompiles
-them all, and the receiver's DXIL, minutes of DXC time, then decides when the
+them all, and the slowest kernel's DXIL then decides when the
 request settles. The reload writes into the build's shader cache, so the next
 build publishes those kernels without compiling them. A change to a C# struct,
 buffer layout or binding needs the C# loop instead.

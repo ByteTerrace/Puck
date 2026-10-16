@@ -47,15 +47,14 @@ public sealed partial class WorldWaitReadyLawTests {
         }
     }
 
-    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness, IWorldBakeReadiness? bakes = null, IWorldIndirectReadiness? indirect = null) {
+    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness, IWorldBakeReadiness? bakes = null) {
         var answered = new List<(string Line, CommandResult Result)>();
         var source = new TextCommandSource(registry: new CommandRegistry(modules: [
             new WorldWaitCommandModule(
                 authority: new FixedAuthority(instance: row.Instance),
                 gates: new FixedGate(gate: new WorldConsoleWaitGate()),
                 readiness: readiness,
-                bakes: bakes,
-                indirect: indirect
+                bakes: bakes
             ),
             new ProbeModule(),
         ]));

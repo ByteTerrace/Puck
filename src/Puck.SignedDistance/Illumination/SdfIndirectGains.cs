@@ -6,9 +6,12 @@ namespace Puck.SignedDistance;
 /// <param name="Lights">Explicit diffuse lights.</param>
 /// <param name="Emission">Material emission.</param>
 /// <param name="Screens">Acquired screen-face emission.</param>
-/// <param name="Sky">Certified world-exit radiance.</param>
-/// <param name="Feedback">Previous complete-bank reflection.</param>
+/// <param name="Sky">Sky radiance at world exits.</param>
+/// <param name="Feedback">Light reflected again on each bounce.</param>
 public readonly record struct SdfIndirectGains(float Lights, float Emission, float Screens, float Sky, float Feedback) {
+    /// <summary>The greatest feedback depth a frame may request after its direct sweep; the tier caps its actual depth.</summary>
+    public const int MaximumBounces = 4;
+
     /// <summary>Gets the physical unit source gains.</summary>
     public static SdfIndirectGains One { get; } = new(Emission: 1f, Feedback: 1f, Lights: 1f, Screens: 1f, Sky: 1f);
     /// <summary>Gets the enabled categories. A zero gain is explicitly disabled.</summary>
@@ -27,7 +30,7 @@ public readonly record struct SdfIndirectGains(float Lights, float Emission, flo
         if (!float.IsFinite(f: value) || (value < 0f) || (value > 1f)) { throw new ArgumentOutOfRangeException(actualValue: value, message: "Indirect gains lie in [0, 1].", paramName: name); }
     }
 }
-/// <summary>Receiver-only indirect controls; they never alter cached incoming source contributions.</summary>
+/// <summary>Receiver-only indirect controls; they never alter the traced incoming light.</summary>
 /// <param name="Intensity">Final indirect diffuse gain in [0, 1].</param>
 /// <param name="Tint">Final indirect diffuse color, each channel in [0, 1].</param>
 /// <param name="Contact">Existing ambient-occlusion attenuation from none at zero to full at one.</param>

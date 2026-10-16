@@ -83,11 +83,6 @@ public sealed class SdfKernelInterfaces {
         ArgumentException.ThrowIfNullOrEmpty(argument: stamp);
 
         Stamp = stamp;
-        IndirectParameters = ShaderPipelineParameterLayout.ForPackage(
-            config: null,
-            package: RenderGraphPackageCatalog.Indirect,
-            members: [.. SdfWorldPackage.IndirectMembers, .. LightAndSkyTables]
-        ).Stamped(stamp: stamp);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
@@ -141,7 +136,6 @@ public sealed class SdfKernelInterfaces {
         );
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
-            (IncludePath(shaderInterface: IndirectParameters.Interface), IndirectParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
@@ -190,8 +184,6 @@ public sealed class SdfKernelInterfaces {
     /// the view's own resources. Its frame block is written through
     /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
     public ShaderPipelineParameterLayout WorldParameters { get; }
-    /// <summary>Gets the residency cache's classify and trace interface.</summary>
-    public ShaderPipelineParameterLayout IndirectParameters { get; }
     /// <summary>Gets the reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
     public ShaderPipelineParameterLayout ResolveParameters { get; }
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes

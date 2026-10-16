@@ -1,5 +1,5 @@
-// The hit passes' shared entry point: primary, surface, ambient, shadow, the indirect receiver and views each compile
-// their own stage over the pixel the entry point gathers. All six use an 8x8 workgroup over the one indirect tile box, and
+// The hit passes' shared entry point: primary, surface, ambient, shadow, the mesh surface and views each compile
+// their own stage over the pixel the entry point gathers. All six use an 8x8 workgroup over the one tile box, and
 // the same camera, masks and active-pixel test. Primary also reads the mesh pass's target (sdf-mesh.hlsli). A hit kernel
 // includes it last, after sdf-hit-pass.hlsli and its stage.
 #ifndef PASSES_SDF_HIT_ENTRY_HLSLI
@@ -33,16 +33,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfAmbientStage(p);
 #elif defined(SDF_SHADOW_PASS)
     sdfShadowStage(p);
-#elif defined(SDF_RECEIVER_PASS)
-    sdfReceiverStage(p);
 #elif defined(SDF_MESH_SURFACE_PASS)
     sdfMeshPathStage(p);
 #else
     float coverage;
     float reactivity;
-    sdfIndirectPickBegin(p);
     float3 color = sdfViewsStage(p, coverage, reactivity);
-    sdfIndirectPickFinish();
 
     if (p.active) {
         // The lit image: the float working color premultiplied by the pixel's coverage, the coverage in its alpha, which

@@ -66,9 +66,6 @@ public readonly record struct SdfSkyViewBinding(string Layer, SdfSkyView Paramet
 /// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature
 /// folds it, so a change renders the view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
 public readonly record struct SdfViewQuality {
-    /// <summary>The per-view method used by the counted indirect comparison. The default uses the residency cache.
-    /// Quality restrictions retain the consumer's method; this selector changes no simulation or cache geometry.</summary>
-    public SdfIndirectMethod IndirectMethod { get; init; }
     /// <summary>The sky field's grid fraction: one or one half; zero selects the full default.
     /// It changes neither the scene render grid nor retained field allocation capacity.</summary>
     public float SkyFieldScale { get; init; }
@@ -127,7 +124,6 @@ public readonly record struct SdfViewQuality {
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
-        IndirectMethod = IndirectMethod,
         SkyFieldScale = MathF.Min(x: SkyFieldFraction, y: other.SkyFieldFraction),
         GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
@@ -249,22 +245,19 @@ public sealed record SdfFrame(
     /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
     /// unaffected.</summary>
     public bool EnableCadenceGate { get; init; }
-    /// <summary>The residency's indirect-cache demand. Off allocates and schedules no cache work.</summary>
+    /// <summary>The indirect-light tier the frame asks for, which sizes the mesh path's irradiance volume
+    /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
-    /// <summary>The dynamic-instance default. Default receives at Medium and casts and receives at High; a placement's
-    /// explicit policy wins. Static instances retain their normal casting and receiving policy.</summary>
-    public SdfIndirectParticipation IndirectBodies { get; init; }
 
-    /// <summary>The independent origins admitted to the finite solve and receiver output. Sky and screen transport
-    /// require their captured source publications; the default admits all five categories.</summary>
+    /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
-    /// <summary>Gets the source gains captured by a finite solve. Zero also disables that category in authored frames.</summary>
+    /// <summary>Gets the source gains the irradiance volume traces under. Zero also disables that category in authored frames.</summary>
     public SdfIndirectGains IndirectGains { get; init; } = SdfIndirectGains.One;
 
-    /// <summary>Gets requested feedback sweeps after direct, capped by the actual tier. Null uses its layout limit.</summary>
+    /// <summary>Gets requested feedback sweeps after direct, capped by the tier. Null uses its layout limit.</summary>
     public int? IndirectBounces { get; init; }
 
-    /// <summary>Gets receiver-only application controls, independent of the finite lighting source.</summary>
+    /// <summary>Gets receiver-only application controls, independent of the traced lighting.</summary>
     public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
 
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips

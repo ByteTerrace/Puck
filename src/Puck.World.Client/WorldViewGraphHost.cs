@@ -550,7 +550,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         ArgumentNullException.ThrowIfNull(argument: scene);
 
         m_compose = compose;
-        ResetIndirect();
         ResetEnvironment();
         m_lastSources = null;
         m_lastRendered = null;
@@ -863,9 +862,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        ResetIndirect();
         ResetEnvironment();
-        Indirect?.Dispose();
         Environment?.Dispose();
         foreach (var entry in m_entries.Values) {
             CancelPending(entry: entry);
@@ -1156,7 +1153,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (
                 (m_lastTonemap == curve) &&
                 (m_lastSharpens == sharpens) &&
-                !IndirectChanged() &&
                 !EnvironmentChanged() &&
                 (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
@@ -1239,7 +1235,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         AppendEnvironment(graphs: ref graphs, set: ref set);
-        AppendIndirect(graphs: ref graphs, set: ref set);
 
         // A synthesized root this host already runs keeps the graph it has installed.
         if (ReferenceEquals(

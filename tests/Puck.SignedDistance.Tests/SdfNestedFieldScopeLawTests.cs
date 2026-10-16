@@ -46,6 +46,6 @@ public sealed class SdfNestedFieldScopeLawTests {
         var program = builder.PopField().PopField().Build(buildInstanceGrid: false);
 
         Assert.Equal(2, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
-        Assert.True(condition: program.IndirectInstancesComposable);
+        Assert.True(condition: program.InstancesComposable);
     }
 }

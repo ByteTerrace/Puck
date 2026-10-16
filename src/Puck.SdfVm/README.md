@@ -80,14 +80,6 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-The indirect residency also owns a depth-only orthographic light-camera fragment
-with retained maps, one region published per frame and no work for unchanged
-regions. Its visibility contract and geometry limits are described in
-[the light-view section](../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view).
-Its finite lighting pass pins the source tables and publishes whole submitted
-sweeps; [the solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
-describes the two lighting generations and their actual source snapshots.
-
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
 [what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))
@@ -136,7 +128,7 @@ variant that supports its operations, reducing shader size and register pressure
 
 The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
-`SdfWorldPackage.VisibilityRecordByteLength`, 96 bytes). Primary traversal preserves
+`SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes and primary iteration/evaluation counts, and keeps
 a spare L.y word. Surface adds
@@ -147,19 +139,11 @@ and write retained R8G8 visibility storage at every nonzero F, absent at F = 0,
 where the passes bind the tables' fillers; one shadow kernel and one kernel per
 views variant serve every F. Each light shades from its own visibility and each
 handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
-record writes before its consumer. With indirect enabled, the receiver pass between shadow and
-views makes every field query of indirect light and publishes a preserving version
-containing its eight-word receiver certificate, beside a four-word answer per pixel;
-views reads both and the lighting bank, and makes no field query.
-The comparison methods compile into a separate comparison receiver kernel, leased only
-once a view selects one, so the default receiver stays small.
-The certificate retains the launch, clearance, complete allocation identity,
-certificate revision (advanced by placement, never by traced rays) and resolved or
-unresolved outcome. Every hit pass binds the
-beam's tile planes read-only. These dispatches share indirect bounds and live view
+record writes before its consumer. Every hit pass binds the
+beam's tile planes read-only. These dispatches share the indirect dispatch bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `renderWidth × renderHeight × 96` bytes at the view's render ceiling, and the
+The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
 changes. It is retained: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
@@ -262,9 +246,8 @@ probe is read for those capacities alone, so it is measured from its emission
 (`SdfProgramBuilder.MeasureCapacity`) and never built: the measurement bounds
 the built program's capacity through the one packed layout
 (`SdfProgramCapacityProbeLawTests`).
-An upload changing only existing material values keeps geometry passes and
-indirect transport. It advances lighting and the next immutable solve source;
-material IDs, palette size and field/layout changes still invalidate geometry.
+An upload changing only existing material values keeps geometry passes and advances
+lighting; material IDs, palette size and field/layout changes still invalidate geometry.
 `SdfWorldResidency` builds its tables once its pipeline set is ready, captures
 its frame source's frame once a frame (`Prepare`), and owns device-loss
 recovery: `OnDeviceLost` releases its tables and forwards `NotifyDeviceLost` to
@@ -432,7 +415,7 @@ next build publishes what the reload compiled; a kernel carried only as
 bytecode loads as it stands. Compiles run one per processor, shortest recorded
 compile first, and each frame installs the kernels that have compiled since
 the last batch (`[shaders.reload: request=N installed pipelines=K kernels=…]`),
-so an edit the views kernels show renders while the receiver and indirect
+so an edit the views kernels show renders while the other
 kernels still compile. Omit the directory to read the deployed bytecode. The
 request stays pending until its last batch is installed; status then reports
 `applied`, `unchanged`, or `failed`, with a generation and changed pipeline
@@ -577,18 +560,15 @@ and must change together.
 
 ## Indirect controls
 
-Indirect frames carry immutable source gains and requested finite bounce depth,
-with receiver-only application controls. World authors bind these through
-`render.indirect.sources`, `bounces` and `apply`; the existing environment resolver
-and generated common block deliver them to both solve and view passes. The
-[finite-solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
-owns their ranges, source accounting, tier limits and captured reference semantics.
-
-The existing brick region keeps stable pool records and a sorted directory of
-their slot indices. `SdfIndirectBrickTable` and the shader lookup share the exact
-level/Z/Y/X ordering; planning publishes one completed table without transient
-empty writes. [The lighting handbook](../../docs/rendering/sdf/handbook/lighting-and-shading.md)
-owns its lookup bounds and region byte accounting.
+Frames carry the indirect tier, the source gains, the requested bounce depth and
+the receiver-only application controls. World authors bind these through
+`render.indirect.tier`, `sources`, `bounces` and `apply`; the existing
+environment resolver delivers them to the frame. The tier sizes the baked-mesh
+path's irradiance volume (`SdfMeshIrradiance`), which traces the gains and
+bounces on the CPU; the sources mask, sky gain and application controls reach
+the mesh views kernel through the pass block. The
+[lighting handbook](../../docs/rendering/sdf/handbook/lighting-and-shading.md#indirect-light-controls)
+owns their ranges and tier limits.
 
 ## Capture completion
 
@@ -601,14 +581,9 @@ instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
 A capture freezes its dependency closure even when it requests no additional
-convergence samples. Each participating residency retains an exact complete,
-fenced, untainted finite answer or starts a fresh solve with reusable transport.
-The runtime waits for the required source's completed view fence before
-forwarding the capture or counting samples. An exact completed census proving
-that a view has no indirect readers removes its indirect demand and cache wait.
-Unknown demand and changed camera, geometry, extent, binding or mode invalidate
-that shortcut. A frozen indirect control refuses a required cold solve by name
-without thawing or changing its retained bank; an off tier needs no lighting fence.
+convergence samples, and waits while a screen-lighting closure it belongs to
+has not completed its two rounds. The runtime waits for the required source's
+completed view fence before forwarding the capture or counting samples.
 Retained source and temporal-history taint remain independent of newer clean
 graph inputs.
 
@@ -652,32 +627,9 @@ travels with the request. SDF identity names a program instance ordinal plus one
 mesh identity a draw ordinal; the winning shape's exact transform slot stays in
 L.x, separate from its instance's conservative bound slot. L.y is spare,
 and anonymous lanes read the existing transform row. The record
-has a 64-byte surface prefix and a 32-byte retained indirect receiver certificate,
-for 96 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
-authority.
-
-With an active indirect cache, the same surface request captures `SdfPickResult.Indirect`:
-a 288-byte GPU answer and the probe-state range for a census of the snapshot's
-allocated bricks. It uses the visibility submission's fence and retains its own
-cache epoch, completed lighting source, selected method and final receiver
-source-enable mask. That mask may differ from the held solve's recursive source
-mask while the replacement solve is incomplete. Source RGB values
-and corner weights are the actual shader results. An answered Near replacement
-also captures its sampled direction and exact predecessor. Its current immutable
-source is retained only when the fenced High cache method and publication
-identities agree, so the independent reference follows that exact first ray.
-Classifications come from the
-copied probe states. No CPU schedule count stands for a GPU classification.
-The view fragment owns the answer buffer; `IRenderGraphPackageReadback.ReadbackBytes`
-accounts for the actual lazy readback rings until their recorder retires.
-
-`SdfWorldResidency.IsIndirectReady` describes the current desired shared cache.
-Transport and the finite lighting solve must be submitted, the pinned source
-must match the latest packed frame, and an existing view's deferred-word
-readback fence must complete that exact allocation, epoch, publication and
-source sequence. A stale completed sweep cannot release a wait after a light
-edit or reset. This shares the eight-byte receiver census readback. Per-view receiver certificates keep their separate topology scope;
-shared-cache readiness does not claim that every view has admitted every receiver.
+is 64 bytes per render pixel. Nothing in this picker enters simulation input or grants edit
+authority. `IRenderGraphPackageReadback.ReadbackBytes` accounts for the lazy
+readback rings until their recorder retires.
 
 ## Documentation
 

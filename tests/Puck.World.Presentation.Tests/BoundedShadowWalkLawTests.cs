@@ -18,7 +18,7 @@ public sealed class BoundedShadowWalkLawTests {
         var uncertified = 0;
         var slowed = 0;
 
-        Assert.True(condition: program.IndirectInstancesComposable);
+        Assert.True(condition: program.InstancesComposable);
         for (var index = 0; (index < program.Instances.Count); index++) {
             var shapes = program.InspectInstance(index: index).Shapes;
             var gain = program.InstanceDistanceGain(index: index);

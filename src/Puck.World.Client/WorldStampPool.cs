@@ -72,9 +72,7 @@ public sealed partial class WorldStampPool {
     /// <param name="Look">The look the body wears, whose motion carries the cues, timeline replay, and the root/part
     /// second-order followers (<see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>), and
     /// whose state reads the registration's lease acquires when the body arrives.</param>
-    /// <param name="Indirect">The inhabited placement's override, or Default for a crowd body's tier policy.</param>
-    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLook Look,
-        SdfIndirectParticipation Indirect = SdfIndirectParticipation.Default);
+    public readonly record struct BodyStamp(int BodyIndex, WorldPrototype Creation, float Scale, WorldLook Look);
 
     // One live registration: the resolved creation, its root source (a placement row — static or attached — OR a body
     // index), and the replay cursor state.
@@ -144,7 +142,6 @@ public sealed partial class WorldStampPool {
         public required AuthoredPartTable Parts;
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
         public WorldPlacement? Row;
-        public SdfIndirectParticipation Indirect;
 
         public float Scale = 1f;
 
@@ -678,7 +675,6 @@ public sealed partial class WorldStampPool {
     private static Registration RegisterBody(BodyStamp stamp) {
         var registration = new Registration {
             BodyIndex = stamp.BodyIndex,
-            Indirect = stamp.Indirect,
             Creation = stamp.Creation,
             Look = stamp.Look,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
@@ -1157,7 +1153,6 @@ public sealed partial class WorldStampPool {
                         entry.Creation = stamp.Creation;
                         entry.Look = stamp.Look;
                         entry.Scale = stamp.Scale;
-                        entry.Indirect = stamp.Indirect;
                         ApplyMotion(
                             live: entry,
                             motion: stamp.Look.Motion,
