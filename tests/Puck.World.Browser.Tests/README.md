@@ -1,8 +1,8 @@
 # Puck.World.Browser.Tests
 
-This xUnit v3 suite targets `net11.0` and checks the browser-hosted world engine. `BrowserEngineTests` covers the engine core over inline documents; `ValidatorMessagePathRatchetTests` preserves validator diagnostics paths; and `BrowserWorkspaceTests` covers the `.puck` workspace's path refusals and source provenance.
+This xUnit v3 suite targets `net11.0` and checks the browser-hosted world engine. `BrowserEngineTests` covers the engine core over inline documents; `ValidatorMessagePathRatchetTests` preserves validator diagnostics paths; `BrowserWorkspaceTests` covers the `.puck` workspace's path refusals and source provenance; and `BrowserParityRecordingTests` prices `Fixtures/browser-parity/presentation.world.json` and compares the result with the committed `Fixtures/browser-parity/expected.json`, the file the Node harness (`src/Puck.Dashboard/src/portal/tests/engine-wasm.test.cjs`) reads against the published engine, so the two runtimes are held to the identical report. `puck baselines browser-parity` re-records it.
 
-Quarantined: the laws that composed the shipped island or `standard.puck` with the tictactoe module (`BrowserHostlessIslandTests`, `BrowserHostOwnedRowLawTests`, `BrowserGateReadsTruthLawTests`, `BrowserParityRecordingTests`, and the island and tictactoe laws of `BrowserEngineTests` and `ValidatorMessagePathRatchetTests`), the `BrowserWorkspaceTests` laws over the sources in `Fixtures/sources`, and the Node suite `wasm/sources.test.mjs` live under [`experimental/tests/Puck.World.Browser.Tests`](../../experimental/tests/Puck.World.Browser.Tests) with the fixtures they read.
+Quarantined: the laws that composed the shipped island or `standard.puck` with the tictactoe module (`BrowserHostlessIslandTests`, `BrowserHostOwnedRowLawTests`, `BrowserGateReadsTruthLawTests`, the state-hash half of `BrowserParityRecordingTests`, and the island and tictactoe laws of `BrowserEngineTests` and `ValidatorMessagePathRatchetTests`), the `BrowserWorkspaceTests` laws over the sources in `Fixtures/sources`, and the Node suite `wasm/sources.test.mjs` live under [`experimental/tests/Puck.World.Browser.Tests`](../../experimental/tests/Puck.World.Browser.Tests) with the fixtures they read.
 
 ## Verification
 
@@ -15,7 +15,7 @@ Run the focused suite from the repository root:
 dotnet test tests/Puck.World.Browser.Tests/Puck.World.Browser.Tests.csproj -c Release
 ```
 
-The project references `Puck.State`, `Puck.State.Rules`, `Puck.World.Schema` and `Puck.World.Transpiler`. Browser publishing and AppBundle checks belong to `Puck.World.Browser` itself.
+The project references `Puck.State`, `Puck.State.Rules`, `Puck.World.Schema` and `Puck.World.Transpiler`. Browser publishing and payload checks belong to `Puck.World.Browser` itself.
 
 ## Documentation
 

@@ -19,7 +19,7 @@ function repositoryRoot() {
 }
 
 const root = repositoryRoot();
-const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'browser-wasm', 'AppBundle');
+const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'publish', 'wwwroot');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
 const { officialTreeMissing, officialSchemaBundle } = require('./support/officialTree.cjs');
 // A test that needs a compiled world skips itself by name when no official tree has been built.
@@ -27,9 +27,9 @@ const needsTree = (t) => { const missing = officialTreeMissing(); if (missing) t
 const parityFixturePath = path.join(root, 'tests', 'Puck.World.Browser.Tests', 'Fixtures', 'browser-parity', 'expected.json');
 
 if (!fs.existsSync(mainMjs)) {
-  // A named skip, never a silent pass: `dotnet publish src/Puck.World.Browser -c Release -r browser-wasm`
+  // A named skip, never a silent pass: `dotnet publish src/Puck.World.Browser -c Release`
   // generates the AppBundle these tests load; without it there is nothing to load and nothing to prove.
-  test(`engine-wasm (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release -r browser-wasm')`, { skip: true }, () => {});
+  test(`engine-wasm (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release')`, { skip: true }, () => {});
 } else {
   const engineReady = (async () => {
     const { createEngine } = await import(pathToFileURL(mainMjs).href);

@@ -595,10 +595,11 @@ node --test tests/Puck.World.Browser.Tests/wasm/sources.test.mjs
 That harness and its fixtures are quarantined at the same paths under
 `experimental/` while the debug world is the one live world.
 
-Both harnesses skip themselves by name (never silently pass) when the AppBundle
-is absent. The determinism-canary baseline both used to compare against, and
-its `browser-parity` registration, are quarantined under `experimental/` with
-the worlds it recorded.
+Both harnesses skip themselves by name (never silently pass) when the payload
+(`src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot`) is absent. The
+`browser-parity` baseline the live harness compares against prices one fixture
+document; the state hashes it also recorded are quarantined under
+`experimental/` with the worlds they need.
 
 See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
 and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the

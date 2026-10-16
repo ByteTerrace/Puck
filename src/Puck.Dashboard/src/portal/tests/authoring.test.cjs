@@ -37,7 +37,7 @@ function repositoryRoot() {
 }
 
 const root = repositoryRoot();
-const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'browser-wasm', 'AppBundle');
+const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net11.0', 'publish', 'wwwroot');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
 
 // ---------------------------------------------------------------------------------------------

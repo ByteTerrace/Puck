@@ -43,7 +43,7 @@ test('large irregular projections retain ordinal identity without argument-count
   assert.ok(projected.bounds.max.every(Number.isFinite));
 });
 
-const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle');
+const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/publish/wwwroot');
 const hasBundle = fs.existsSync(path.join(bundle, 'main.mjs'));
 const composed = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'cleanup-fixture', state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] } });
 let engine;

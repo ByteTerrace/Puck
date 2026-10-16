@@ -3,7 +3,7 @@
 The engine embedded in a browser tab: a `browser-wasm` publish of `Puck.World.Schema` +
 `Puck.State`, and the `.puck` authoring toolchain (`Puck.World.Transpiler`: compiler,
 composer, diagnostics and language server), behind a JSON-string `[JSExport]` surface. The studio
-(`src/Puck.Dashboard`) loads this AppBundle as its native validator and rule tick,
+(`src/Puck.Dashboard`) loads the published payload as its native validator and rule tick,
 replacing its TypeScript twin, through the TypeScript facade at
 `src/Puck.Dashboard/src/portal/src/native/` (`engineTypes.ts`/`engineHost.ts`/
 `inlineHost.ts`/`engine.worker.ts`—see that directory's own remarks).
@@ -11,16 +11,17 @@ replacing its TypeScript twin, through the TypeScript facade at
 ## Layout
 
 ```text
-Engine/       Pure C# core — no [JSExport], no JS-interop attribute. Linked as
-              source into tests/Puck.World.Browser.Tests (a browser-wasm exe
-              cannot be referenced as an ordinary assembly). BrowserParser.cs is
-              the shared parse-validate pipeline. BrowserWorkspace.cs and
-              BrowserLanguageServer.cs are the .puck authoring surface.
-Exports/      The [JSExport] marshalling shim alone (BrowserExports + the JSON
-              envelope types/converters it serializes through).
-main.mjs      The one entry point the studio and the Node harness both import:
-              createEngine(options) boots the Mono runtime from this AppBundle's
-              own _framework/dotnet.js and resolves the Exports surface.
+Engine/           Pure C# core — no [JSExport], no JS-interop attribute. Linked as
+                  source into tests/Puck.World.Browser.Tests (a browser-wasm exe
+                  cannot be referenced as an ordinary assembly). BrowserParser.cs is
+                  the shared parse-validate pipeline. BrowserWorkspace.cs and
+                  BrowserLanguageServer.cs are the .puck authoring surface.
+Exports/          The [JSExport] marshalling shim alone (BrowserExports + the JSON
+                  envelope types/converters it serializes through).
+wwwroot/main.mjs  The one entry point the studio and the Node harness both import,
+                  published beside _framework/: createEngine(options) boots the Mono
+                  runtime from the payload's own _framework/dotnet.js and resolves
+                  the Exports surface.
 ```
 
 ## Build and publish
@@ -30,9 +31,21 @@ dotnet build src/Puck.World.Browser -c Release
 dotnet publish src/Puck.World.Browser -c Release
 ```
 
-The project already declares `browser-wasm`. Do not add a command-line `-r`:
-that global property reaches every referenced library and changes its NuGet
-lock graph, breaking the next ordinary desktop restore.
+The project uses `Microsoft.NET.Sdk.WebAssembly`, the one SDK on .NET 11 that
+lays out a bootable browser payload: it converts the trimmed assemblies to
+webcil, writes the boot configuration into `_framework/dotnet.js`, and publishes
+the lot under `bin/Release/net11.0/publish/wwwroot/` (the plain
+`Microsoft.NET.Sdk` with `WasmMainJSPath` builds, relinks the runtime and then
+writes no bundle at all on this SDK, on either runtime flavour). The runtime is
+Mono's (`UseMonoRuntime=true`), compiled ahead of time; `Performance` below
+records why. `_framework` file names carry no fingerprint and no `.br`/`.gz`
+twin: the payload is content-addressed and compressed downstream (`puck official
+build`, the website publisher), and the official boot path finds
+`dotnet.native.wasm` by name.
+
+The SDK sets the project's `browser-wasm` runtime identifier. Do not add a
+command-line `-r`: that global property reaches every referenced library and
+changes its NuGet lock graph, breaking the next ordinary desktop restore.
 
 Both commands fail on a machine whose `C_INCLUDE_PATH` environment variable
 names a Cosmocc toolchain's include directory: that path leaks into every
@@ -48,75 +61,71 @@ assembly, inside the checkout. When that file's full path would pass Windows'
 it. The only error comes later and names a missing `*_compiled_methods.txt`,
 which points away from the cause. Assemblies with the longest names hit the
 limit first. A worktree under `.claude/worktrees/` is already deep enough, so
-publish from a checkout with a short path, such as one near a drive root.
+publish from a checkout with a short path, such as one near a drive root, or
+map the worktree to a drive letter first (`subst P: <worktree>`) and publish
+from there.
 
-## AppBundle—real layout, recorded from an actual publish
+## The payload—real layout, recorded from an actual publish
 
-The publish command writes `bin/Release/net11.0/browser-wasm/AppBundle/`. Its sizes:
+The publish command writes `bin/Release/net11.0/publish/wwwroot/`. Its sizes:
 
 ```text
-AppBundle/
-  Puck.World.Browser.runtimeconfig.json     2,421 B
-  main.mjs                                  1,430 B
-  package.json                                 19 B
-  .stamp                                        0 B
+wwwroot/
+  main.mjs                                  1,508 B
   _framework/
-    dotnet.native.wasm                   45,754,760 B   <- AOT'd native code for every assembly in the closure
-    Puck.World.Schema.wasm                5,659,401 B   <- the document model + validator, IL (rooted, unstripped)
-    System.Private.CoreLib.wasm           1,828,117 B
-    Puck.State.wasm                         901,893 B
-    Puck.World.Transpiler.wasm              613,637 B   <- the .puck compiler, composer, diagnostics, language server
-    System.Private.Xml.wasm                 472,853 B
-    Parlot.wasm                             462,101 B   <- Puck.Transpiler's scanner package
-    System.Text.Json.wasm                   437,013 B
-    Puck.Transpiler.wasm                    411,397 B   <- the .puck language core
-    System.Linq.Expressions.wasm            364,309 B   <- reached through Parlot
-    Puck.State.Rules.wasm                   351,493 B
-    Puck.World.Authoring.wasm               310,533 B   <- rooted, unstripped (see "Trim baseline" below)
-    Puck.World.Browser.wasm                 290,069 B
-    Puck.Maths.wasm                         242,949 B
-    dotnet.native.js                        242,796 B
-    dotnet.runtime.js                       198,480 B
-    Puck.Commands.wasm                      112,901 B
-    Puck.Assets.wasm                        101,637 B   <- rooted, unstripped
-    (+ ~60 more BCL/Puck.* assemblies and source maps, mostly metadata-only stubs post-AOT)
+    dotnet.native.wasm                   55,001,557 B   <- AOT'd native code for every assembly in the closure
+    Puck.World.Schema.wasm                7,321,869 B   <- the document model + validator, IL (rooted, unstripped)
+    System.Private.CoreLib.wasm           2,066,201 B
+    Puck.State.wasm                         912,649 B
+    Puck.World.Authoring.wasm               692,489 B   <- rooted, unstripped (see "Trim baseline" below)
+    Puck.World.Transpiler.wasm              638,217 B   <- the .puck compiler, composer, diagnostics, language server
+    System.Private.Xml.wasm                 549,657 B
+    System.Text.Json.wasm                   502,041 B
+    Parlot.wasm                             463,129 B   <- Puck.Transpiler's scanner package
+    Puck.Transpiler.wasm                    438,025 B   <- the .puck language core
+    Puck.SignedDistance.wasm                377,609 B
+    System.Linq.Expressions.wasm            364,825 B   <- reached through Parlot
+    Puck.State.Rules.wasm                   353,545 B
+    Puck.World.Browser.wasm                 345,881 B
+    Puck.Maths.wasm                         271,113 B
+    dotnet.native.js                        212,145 B
+    dotnet.runtime.js                       197,560 B
+    Puck.Assets.wasm                        178,953 B   <- rooted, unstripped
+    (+ 50 more BCL/Puck.* assemblies, dotnet.js and its boot configuration, dotnet.d.ts)
 ```
 
-**Total AppBundle size: 60,636,449 bytes (57.83 MiB), uncompressed.** The
-two transpiler assemblies, Parlot and the `System.Linq.Expressions` Parlot
-reaches account for about 10.6 MB of it. The same engine without
-`RunAOTCompilation` publishes far smaller; see "Performance" below for why the
-switch is on despite the size. No mimalloc native binary lands in the
-AppBundle (see "mimalloc" below). The native WebAssembly module alone (43.7
-MiB, 75% of the payload) is every assembly's AOT-compiled native code; the
-Schema assembly module (5.4 MiB) and its two `TrimmerRootAssembly` siblings
-still ship their full IL
-on top of that native code—`WasmStripILAfterAOT` (the SDK default, on)
-strips a trimming-eligible method's IL body once AOT has compiled it
-natively, but a `TrimmerRootAssembly`-rooted assembly is kept out of trimming
-entirely (see "Trim baseline" below), so ILLink never marks its methods
-eligible to strip and their IL survives untouched alongside the native code
-that supersedes it at runtime—the dominant cost this switch carries, not
-something a stripping flag can claw back without giving up the reflection
-that rooting exists to keep real.
+**Total payload size: 72,605,895 bytes (69.2 MiB), uncompressed**, 69 files
+under `_framework`. The native WebAssembly module alone (52.5 MiB, 76% of the
+payload) is every assembly's AOT-compiled native code; the Schema assembly
+module (7.0 MiB) and its two `TrimmerRootAssembly` siblings still ship their
+full IL on top of that native code—`WasmStripILAfterAOT` (the SDK default, on)
+strips a trimming-eligible method's IL body once AOT has compiled it natively,
+but a `TrimmerRootAssembly`-rooted assembly is kept out of trimming entirely
+(see "Trim baseline" below), so ILLink never marks its methods eligible to
+strip and their IL survives untouched alongside the native code that
+supersedes it at runtime—the dominant cost AOT carries, not something a
+stripping flag can claw back without giving up the reflection that rooting
+exists to keep real. The same engine without `RunAOTCompilation` publishes at
+19.2 MB; see "Performance" below for why the switch is on despite the size. No
+mimalloc native binary lands in the payload (see "mimalloc" below).
 
 What a visitor downloads is smaller. `puck`'s website publisher stores every
 official object Brotli-compressed at its highest quality, served with
 `Content-Encoding: br`, whenever that saves at least a tenth of its size
 (`AzureWebsite`); on that rule the `_framework` files of this publish transfer
-as 10,918,600 bytes, the native module 45,754,760 → 8,073,955. `puck official
-serve`, the local development server, serves them uncompressed.
+as 12,884,989 bytes, the native module 55,001,557 → 9,599,282. `puck
+official serve`, the local development server, serves them uncompressed.
 
 ### Cold-start time
 
 Loading `main.mjs` under Node and calling `createEngine()` to a ready
-`[JSExport]` surface: **~110-150 ms** on this machine under AOT (measured via
-the Node harness's own per-test timings; a browser tab's first load also
-pays one-time `WebAssembly.compile`/`instantiate` cost over a ~3.4x larger
-binary, which this Node measurement does not isolate—a browser network
-fetch's own cost is a separate, unmeasured concern here). `Version()` itself
-(a call into an already-booted engine) answers in single-digit milliseconds
-either way.
+`[JSExport]` surface: **about 160 ms** on this machine under AOT, and
+about 95 ms under the interpreter (a browser tab's first load also pays
+one-time `WebAssembly.compile`/`instantiate` cost over the 52.5 MiB native
+module, which this Node measurement does not isolate—a browser network fetch's
+own cost is a separate, unmeasured concern here). `Version()` itself (a call
+into an already-booted engine) answers in single-digit milliseconds either
+way.
 
 ## `[JSExport]` API surface (as actually exported)
 
@@ -255,7 +264,7 @@ no row of the session addresses the read at all (`found: false`).
 `main.mjs`'s `createEngine(options)` forwards:
 
 - `options.resourceLoader` &rarr; `DotnetHostBuilder.withResourceLoader(loadBootResource?: LoadBootResourceCallback)`,
-  as the AppBundle's own `_framework/dotnet.d.ts` names it. The
+  as the payload's own `_framework/dotnet.d.ts` names it. The
   callback signature is `(type, name, defaultUri, integrity, behavior) =>
   string | Promise<Response> | Promise<BootModule> | null | undefined`;
   returning `null`/`undefined` falls back to the default fetch. The studio
@@ -263,40 +272,35 @@ no row of the session addresses the read at all (`found: false`).
   fetch (see `docs/architecture/worlds.md`'s remote-worlds default).
 - `options.runtimeConfig` &rarr; `DotnetHostBuilder.withConfig(config: MonoConfig)`,
   for a caller booting against a relocated `_framework` (an official-content
-  CDN path rather than this AppBundle's own).
+  CDN path rather than this payload's own).
 
 No Node-specific API exists in `dotnet.d.ts`—`dotnet.js` detects a Node host
 at runtime on its own (verified: `node --test` and a plain `node script.mjs`
 both boot the engine with no special flags or globals).
 
-## Determinism canary
+## Cross-runtime parity
 
-`Puck.State.StateArena.ComputeHash()` folds every stored column of the session's
-arena through one FNV-1a accumulator—the shared comparator between a native run
-and a wasm run of the identical document, ticks, and writes. The two scripted
-sequences below currently fold to the same hash: the row they write already
-holds the value they write, and neither judged tick moves the arena.
-`experimental/tests/Puck.World.Browser.Tests/BrowserParityRecordingTests.cs` runs two fixed
-scripted sequences (write a scalar row then judge tick 1; judge tick 1 then
-tick 2 with no write) over `games/tictactoe.puck` composed under
-`standard.puck`, and compares the resulting hash against
+`BrowserParityRecordingTests` (`tests/Puck.World.Browser.Tests`) prices the
+presentation dimension of `Fixtures/browser-parity/presentation.world.json`
+through `BrowserCostAnalyzer`, exactly as the `AnalyzeCosts` export spells it,
+and compares the result with the committed
 `Fixtures/browser-parity/expected.json`; `puck baselines browser-parity`
-re-records that baseline from a fresh run. `src/Puck.Dashboard/src/portal/tests/engine-wasm.test.cjs` runs
-the identical two sequences through the wasm build under Node and asserts the
-same two hashes—this is the actual cross-runtime proof, not merely a native
-self-check: both runs matched on the AppBundle this README's own numbers came
+re-records that baseline from a fresh run.
+`src/Puck.Dashboard/src/portal/tests/engine-wasm.test.cjs` sends the same
+document through the published engine's `AnalyzeCosts` under Node and asserts
+the same report, so the native and wasm engines are held to the identical
+bytes in and report out—the actual cross-runtime proof, not a native
+self-check. Both halves hold on the payload this README's own numbers came
 from.
 
-Only `games/tictactoe.puck` composes standalone under
-`standard.puck` among the sampled fragments (`bowling`,
-`billiards`, `poker`, `dominoes`, `freecell`, `hexlines`, `klondike`, and
-`mancala` all refuse—each names a host register, a look, or a body motion
-program that only the island's own body supplies, never the bare basis
-alone); the two canary fixtures are two scripted-write cases over that one
-document rather than two different fragments. The flagship `experimental/src/Puck.World/Assets/worlds/puck.world.json`
-parses and validates too (see "Verified scope boundary" below) but stays
-outside the canary fixtures above, which are scoped to the one document pair
-both runtimes already cross-check.
+The canary's other half, `Puck.State.StateArena.ComputeHash()` (every stored
+column of a session's arena folded through one FNV-1a accumulator) over two
+scripted sequences of `games/tictactoe.puck` composed under `standard.puck`, is
+quarantined with those worlds under
+`experimental/tests/Puck.World.Browser.Tests` while the debug world is the one
+live world; it returns when the live tree authors a fragment and a basis. The
+flagship island parses and validates too (see "Verified scope boundary" below)
+but stays outside the fixtures.
 
 ## Verified scope boundary: no emulator core, no shader catalog, no probe kinds
 
@@ -407,89 +411,84 @@ the switch and 327,445 bytes without it (+30%, +96 KiB).
 
 ## Performance
 
-The table below records every call an editing loop makes against this
-AppBundle under Node, over the island (`experimental/src/Puck.World/Assets/worlds/puck.world.json` + `standard.puck` + its imports,
-`~2.4 MB` of source JSON, composing to a `~428 KB` standalone document); the
-native columns are a recorded measurement of the identical calls under the JIT,
-for comparison. Medians of three runs each, one machine. No test re-measures
-them: the browser tests assert behavior, never elapsed time.
+The tables below record the calls an editing loop makes against this payload
+under Node, for the three runtime flavours this SDK can publish: Mono compiled
+ahead of time (the shipped flavour), Mono's interpreter (the same project
+without `RunAOTCompilation`) and CoreCLR's interpreter (`UseMonoRuntime=false`,
+.NET 11's default flavour for `browser-wasm`, published with
+`WasmBuildNative=false` because this SDK's CoreCLR relink fails in `wasm-ld`
+with an undefined `SystemJS_ExecuteTimerCallback`). Two documents: the island
+(`experimental/src/Puck.World/Assets/worlds/puck.world.json` with
+`standard.puck` and its imports, mounted together with the live tree it still
+imports from, composing to a 1.14 MB standalone document) and the debug world
+(`src/Puck.World/Assets/worlds/debug.puck`, the one live world, composing to
+286 KB). "Cold" is the first call in a fresh process and "warm" the median of
+the next two, one machine. No test re-measures them: the browser tests assert
+behavior, never elapsed time.
 
-| Call | wasm interpreter (Node) | native (JIT), cold | native (JIT), warm |
-|---|---:|---:|---:|
-| `Parse` (tictactoe under basis) | 1,235 ms | 1,135 ms | 11 ms |
-| Composing the full island | 12,733 ms | 2,605 ms | 1,996 ms |
-| `Compile` (composed island) | 9,911 ms | 1,683 ms | 1,710 ms |
-| `Judge` (tick 1, tictactoe) | 35 ms |—|—|
-| `StateHash` (tictactoe) | 1 ms |—|—|
-| `Cells` (chessBoard, 64 cells) | 7 ms |—|—|
+The island:
 
-Two things follow from the native cold/warm split. `Parse`'s huge cold-run
-cost (1,135 ms) is almost entirely one-time JIT/static-init—it drops to
-11 ms once the same process has already paid that cost once. Composing
-and `Compile` do **not** drop the same way (2,605 ms → 1,996 ms; 1,683 ms →
-1,710 ms)—that time is real per-call work, not warm-up, and it lives in
-`Puck.World.Schema` (the `WorldDefinitionFileSource`/`WorldDocumentBasis`
-`JsonNode` tree merge composition runs, and the
-parse/migrate/validate/rule-compile pipeline `BrowserParser.TryParseAndValidate`
-runs three times over the same ~428 KB document across one composition and
-validation plus one `Compile` call) and `Puck.State.Rules` (the rule compiler `WorldFactsCompiler` runs)—
-outside this project's own `Engine`/`Exports` boundary. The wasm interpreter
-is roughly 5-6x slower than native-warm on both (composition 12,733 ms vs
-1,996 ms; `Compile` 9,911 ms vs 1,710 ms), consistent with Mono's
-interpreter-tier overhead relative to JIT, not a wasm-specific pathology.
+| Call | Mono AOT, cold | Mono AOT, warm | Mono interpreter, cold | Mono interpreter, warm | CoreCLR interpreter, cold | CoreCLR interpreter, warm |
+|---|---:|---:|---:|---:|---:|---:|
+| `ComposeSource` | 3,078 ms | 767 ms | 10,417 ms | 2,557 ms | 188,474 ms | 49,411 ms |
+| `Compile` (the composed island) | 203 ms | 153 ms | 715 ms | 564 ms | 5,357 ms | 5,439 ms |
+| `Judge` (tick 1) | 31 ms | 6 ms | 54 ms | 22 ms | 112 ms | 91 ms |
+| `StateHash` | 4 ms | 2 ms | 32 ms | 24 ms | 99 ms | 97 ms |
 
-**`RunAOTCompilation` is on.** With it (`WasmStripILAfterAOT` at its SDK
-default of `true`—see "AppBundle" above for why it cannot strip the three
-rooted assemblies), the wasm interpreter numbers above become:
+The debug world:
 
-| Call | AOT (Node) | vs. interpreter |
-|---|---:|---:|
-| `Parse` (tictactoe under basis) | 753 ms | 1.6x |
-| Composing the full island | 2,347 ms | 5.4x |
-| `Compile` (composed island) | 1,969 ms | 5.0x |
-| `Judge` (tick 1, tictactoe) | 17 ms | 2.1x |
-| `StateHash` (tictactoe) | 2 ms | ~1x |
-| `Cells` (chessBoard, 64 cells) | 5 ms | 1.5x |
+| Call | Mono AOT, cold | Mono AOT, warm | Mono interpreter, cold | Mono interpreter, warm | CoreCLR interpreter, cold | CoreCLR interpreter, warm |
+|---|---:|---:|---:|---:|---:|---:|
+| `ComposeSource` | 1,376 ms | 65 ms | 2,684 ms | 229 ms | 15,859 ms | 5,214 ms |
+| `Compile` | 50 ms | 31 ms | 335 ms | 108 ms | 1,446 ms | 1,423 ms |
+| `Judge` (tick 1) | 24 ms | 0 ms | 23 ms | 2 ms | 25 ms | 2 ms |
 
-Composition and `Compile` together—the pair an edit-and-preview cycle pays—
-take ~4.3 s under AOT against ~22.6 s under the interpreter, and the browser
-tests and harnesses (`dotnet test tests/Puck.World.Browser.Tests`,
-`engine-wasm.test.cjs`, `native.test.cjs`, `engineBoot.test.cjs`), including
-the parity-hash assertions, hold under both. The cost is the AppBundle's size:
-57.83 MiB with the `.puck` toolchain, over this package's own "~40 MB
+| Flavour | Payload, uncompressed |
+|---|---:|
+| Mono AOT (this publish) | 72,605,895 B |
+| Mono interpreter (the same closure, `RunAOTCompilation` off) | 19,243,674 B |
+| CoreCLR interpreter (the same closure, `UseMonoRuntime=false`) | 22,436,268 B |
+
+**`RunAOTCompilation` is on, and the runtime is Mono's.** Composition and
+`Compile` together—the pair an edit-and-preview cycle pays—take about 0.9 s
+warm on the island under AOT, about 3.1 s under Mono's interpreter and about
+55 s under CoreCLR's, whose interpreter also pays 15 s before the first
+composition of the debug world. The cost is the payload's size: 69.2 MiB
+against 18.4 MiB for the interpreter, over this package's own "~40 MB
 uncompressed" guidance on either reading. A stricter reading of that ceiling
-would argue for turning the switch off.
+would argue for turning the switch off; the editing loop argues for keeping
+it. The browser tests and harnesses (`dotnet test
+tests/Puck.World.Browser.Tests`, `engine-wasm.test.cjs`, `native.test.cjs`,
+`engineBoot.test.cjs`), the parity assertion included, hold on every flavour.
 
-`WasmEnableSIMD` is not set, and its effect is unmeasured: measuring it needs
-a clean rebuild (`rm -rf obj bin` first), because the SDK's incremental AOT
-cache treats a SIMD and a non-SIMD build as equivalent. The bottleneck this
-section explains—`JsonNode` tree merging and rule-table interpretation, not
-numeric vector loops—makes SIMD an unlikely win regardless.
+CoreCLR's equivalent of AOT, ReadyToRun for `browser-wasm`, is implemented in
+dotnet/runtime for .NET 12 (dotnet/runtime#132339 and its follow-up #133378,
+both in the 12.0 milestone) and is absent from this SDK: its CoreCLR targets
+(`BrowserWasmApp.CoreCLR.targets`) carry no ReadyToRun or crossgen handling,
+the CoreCLR runtime pack ships IL-only framework assemblies, and
+`RunAOTCompilation` on that flavour only switches native symbol stripping on
+for CI builds. The CoreCLR flavour comes back into consideration when an SDK
+ships ReadyToRun for `browser-wasm`; its interpreter cannot serve the editing
+loop.
 
-There is no separate interpreter-tiering/PGO MSBuild property in this SDK
-(`Microsoft.NET.Runtime.WebAssembly.Sdk`)—`RunAOTCompilation` is the
-only lever `BrowserWasmApp.targets`/`WasmApp.Common.targets` expose for
-interpreter speed. `EventSourceSupport` already defaults to `false` for a
-browser-wasm publish (the SDK's own default, unrelated to this project's
-`<NoWarn>`); `DebuggerSupport`/`UseSystemResourceKeys` are general SDK
-feature switches over diagnostics infrastructure and exception-message
-strings, neither of which sits in composition's or `Compile`'s own call graph—
-not tried, on that reading of the SDK source rather than a measurement.
+SIMD is on (this SDK links `libmono-wasm-simd.a` when exception handling is
+on, its default), and its effect is unmeasured: the bottleneck this section
+explains—`JsonNode` tree merging and rule-table interpretation, not numeric
+vector loops—makes it an unlikely lever. There is no separate
+interpreter-tiering/PGO MSBuild property in this SDK; `RunAOTCompilation` is
+the only lever the Mono targets expose for interpreter speed.
 
-Composition and `Compile` still cost ~2 s each on the full island even AOT'd and
-native-warm (see the cold/warm table above)—real per-call work in
-`Puck.World.Schema`'s `JsonNode` tree merge and `Puck.State`'s rule compilation,
-outside this project's own boundary. A preview pays validation twice over the same
-bytes: `ComposeSource` validates the world it composes, and `Compile` of that composed
-text parses and validates it again before it installs a session. The studio runs
-`CompileSource`/`ComposeSource` on a lazily started world engine and the language server
-on a separate language engine, so neither blocks the other.
+A preview pays validation twice over the same bytes: `ComposeSource` validates
+the world it composes, and `Compile` of that composed text parses and validates
+it again before it installs a session. The studio runs
+`CompileSource`/`ComposeSource` on a lazily started world engine and the
+language server on a separate language engine, so neither blocks the other.
 
 ### What one diagnosis costs
 
 A unit of `LspIdle` work is one tier of one document's diagnosis
 (`WorldSourceDiagnostics.DiagnoseSource` or `DiagnoseSemantic`). Measured
-through throwaway timing builds of this AppBundle under Node (AOT),
+through throwaway timing builds of this payload under Node (AOT),
 warm (third of three runs), over copies of shipped sources mounted as a
 workspace. The source tier is all a language engine at `"source"` depth runs;
 full depth adds the semantic tier as a following unit.
@@ -520,8 +519,8 @@ into this project's `bin`/`publish` directories through ordinary
 cross-project `CopyToOutputDirectory` propagation. This project's own
 `PuckRemoveNativeMimallocFromWasmOutput` target deletes the stray copies
 after every `Build`/`Publish` rather than intercepting the flow at each
-dependency's own item list. None of this ever reaches the AppBundle itself
-(which only ever collects `_framework/*.wasm`)—`mimalloc.dll`/
+dependency's own item list. None of this ever reaches the payload itself
+(`publish/wwwroot` collects static web assets alone)—`mimalloc.dll`/
 `mimalloc-redirect.dll`/`libmimalloc.so` are litter in the sibling output
 folders, never part of the shipped payload.
 

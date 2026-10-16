@@ -1,6 +1,7 @@
 // The one entry point the studio (Puck.Dashboard, its own engineHost.ts) and this repository's Node harness both
-// import: `createEngine(options)` boots the Mono runtime from this AppBundle's own `_framework/dotnet.js` and
-// resolves the `[JSExport]` surface, without ever calling `runMain` — nothing here has a `Main` worth running.
+// import: `createEngine(options)` boots the Mono runtime from the published payload's own `_framework/dotnet.js` (this
+// file publishes beside that directory, under publish/wwwroot/) and resolves the `[JSExport]` surface, without ever
+// calling `runMain` — nothing here has a `Main` worth running.
 import { dotnet } from "./_framework/dotnet.js";
 
 // options.resourceLoader: dotnet.js' own resource-loader hook, dotnet.d.ts' LoadBootResourceCallback

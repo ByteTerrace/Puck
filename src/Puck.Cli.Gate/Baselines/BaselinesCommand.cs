@@ -42,6 +42,18 @@ public static class BaselinesCommand {
             RunArguments: [],
             Runs: 1
         ),
+        // The wasm harness (engine-wasm.test.cjs) reads the same file to prove the published engine prices the fixture
+        // document exactly as the native engine does.
+        new(
+            CheckedFiles: null,
+            CommittedDirectory: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity",
+            Description: "The browser cost-report parity baseline: the presentation dimension the native engine prices for the fixture document, which the wasm harness also reads.",
+            Inputs: [],
+            Name: "browser-parity",
+            Project: "Puck.World.Browser.Tests",
+            RunArguments: CliTestRun.Class(fullName: "Puck.World.Browser.Tests.BrowserParityRecordingTests"),
+            Runs: 1
+        ),
     ];
 
     public static Command Create() {

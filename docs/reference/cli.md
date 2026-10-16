@@ -972,16 +972,17 @@ against the merge base of `HEAD` and `--merge-base` (default
 11. `vocabulary`: `puck vocabulary --check`.
 12. `shaders generate`: `puck shaders generate --check`.
 13. `branding`: `puck branding --check`.
-14. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-15. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
-16. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-17. `parity`: `puck parity` when selected, only with `--gpu`.
-18. `Puck.World.Tests`: device suite, only with `--gpu`.
-19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-22. `docs citations`: `puck docs citations`, only with `--gpu`.
-23. `affected record`: `puck affected --record`, only with `--gpu --record`
+14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+15. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+16. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+17. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+18. `parity`: `puck parity` when selected, only with `--gpu`.
+19. `Puck.World.Tests`: device suite, only with `--gpu`.
+20. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+21. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+22. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+23. `docs citations`: `puck docs citations`, only with `--gpu`.
+24. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -3609,10 +3610,13 @@ baseline is what a recording replaces; a run that does not write its records, or
 | Artifact | Committed files | Owning tests |
 |---|---|---|
 | `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
+| `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 | `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier (Smoke and Default) |
 
-The `state` and `browser-parity` baselines and their tests are quarantined with
-the worlds they recorded, under `experimental/tests`.
+The `state` baseline and its tests, and the tictactoe state hashes `browser-parity`
+also recorded, are quarantined with the worlds they need, under `experimental/tests`;
+`browser-parity` stays live over its fixture document alone, the file the WebAssembly
+harness (`engine-wasm.test.cjs`) also reads.
 
 ```text
 puck baselines <artifact>           build, run, and promote the fresh records over the committed files

@@ -31,7 +31,7 @@ the local content tree and start its server. Leave the server running:
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 dotnet publish src/Puck.World.Browser -c Release
 src/Puck.Cli/publish/puck.exe official build --tree artifacts/official --channel dev \
-  --engine src/Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle --allow-dirty
+  --engine src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot --allow-dirty
 src/Puck.Cli/publish/puck.exe official serve --tree artifacts/official --port 61102
 ```
 
@@ -526,8 +526,8 @@ reports its error without crashing the editor or overwriting stored data.
 
 ## Limitations
 
-- Wasm engine payload: the AOT `Puck.World.Browser` AppBundle is roughly
-  50 MB, most of it `dotnet.native.wasm`. A first boot downloads and verifies
+- Wasm engine payload: the AOT `Puck.World.Browser` payload is roughly
+  70 MB uncompressed, most of it `dotnet.native.wasm`. A first boot downloads and verifies
   it in full; later boots read the smaller files from the byte store and the
   wasm through the browser's HTTP cache. Whether the wasm code cache answers a
   later page load depends on the browser and on the object server's caching

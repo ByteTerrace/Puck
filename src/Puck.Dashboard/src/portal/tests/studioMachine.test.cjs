@@ -19,7 +19,7 @@ const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
 const { LocalDraftStore } = require('../src/document/localDrafts.ts');
 const { sourceUri } = require('../src/document/sourcePaths.ts');
 
-const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle');
+const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/publish/wwwroot');
 
 if (!fs.existsSync(path.join(bundle, 'main.mjs'))) {
   test(`studioMachine (SKIPPED: no AppBundle at ${bundle} — run 'dotnet publish src/Puck.World.Browser -c Release')`, { skip: true }, () => {});

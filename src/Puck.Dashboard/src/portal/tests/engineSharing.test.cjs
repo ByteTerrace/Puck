@@ -11,7 +11,7 @@ const { Worker } = require('node:worker_threads');
 require('./support/register.cjs');
 const { bootEngineFromOfficialFiles, engineWasmResponse, integrityFor } = require('../src/native/workerBoot.ts');
 
-const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle');
+const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net11.0/publish/wwwroot');
 
 test('an integrity value is the manifest hash in SRI form', () => {
   const bytes = Buffer.from('engine bytes');
