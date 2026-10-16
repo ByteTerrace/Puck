@@ -19022,6 +19022,14 @@
     },
     {
       "CoveredBy": [
+        "deep.prime-field-lucas-trace-ladder-vs-recurrence",
+        "prime-field.lucas-trace-ladder-vs-recurrence"
+      ],
+      "Id": "Puck.Maths.PrimeKernels.SelfridgeDiscriminant(System.UInt64)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "prime-field.selfridge-symbols-vs-reciprocity",
         "prime-selection.kernel-shells-refuse-violations"
       ],

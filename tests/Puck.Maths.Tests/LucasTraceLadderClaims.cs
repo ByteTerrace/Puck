@@ -23,8 +23,84 @@ internal static partial class Subjects {
 
     private static string? LucasTraceLadderMatchesRecurrence(bool full) =>
         (LucasTraceSelfridgeSurface(full: full)
+        ?? (LucasTraceSelfridgeSearchSurface(full: full)
         ?? (LucasTraceParameterSurface(full: full)
-        ?? LucasTraceRefusals()));
+        ?? LucasTraceRefusals())));
+    // Selfridge's search alone, the discriminant it chooses or the rejection it returns, against the oracle's own
+    // search: the constant-divisor residues and the skipped square discriminant cannot be seen through the test's
+    // verdict on a prime, which accepts at every discriminant of symbol -1.
+    private static string? LucasTraceSelfridgeSearchSurface(bool full) {
+        var generator = Pcg32XshRr.Create(state: 2073, stream: 23);
+        var pastTable = 0;
+        var rejected = 0;
+
+        ulong NextWord() => (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
+
+        string? Check(ulong value) {
+            if ((value < 3UL) || (0UL == (value & 1UL))) { return null; }
+
+            var expected = Oracles.SelfridgeDiscriminant(value: value);
+            var actual = PrimeKernels.SelfridgeDiscriminant(value: value);
+
+            if (actual != expected) { return $"SelfridgeDiscriminant({value}) = {actual} where the oracle's search chooses {expected}"; }
+            if (0L == expected) { ++rejected; } else if (long.Abs(value: expected) > 63L) { ++pastTable; }
+
+            return null;
+        }
+
+        // Every odd value of a contiguous band, which holds the values that share a factor with each tabulated
+        // candidate, the squares, and the values whose search leaves the table.
+        var band = (full ? (1UL << 23) : (1UL << 21));
+
+        for (var value = 3UL; (value < band); value += 2UL) {
+            if (Check(value: value) is { } failure) { return failure; }
+        }
+        if (rejected < 1000) { return $"the band held {rejected} rejected values"; }
+
+        // Values whose search passes every tabulated discriminant: one modulo every odd prime through 31, so that every
+        // symbol through 31 is one, with the symbols at 37 through 61 left to the draw, which one value in 128 passes.
+        const ulong Residues = (3UL * 5UL * 7UL * 11UL * 13UL * 17UL * 19UL * 23UL * 29UL * 31UL);
+        var draws = (full ? 2_000 : 200);
+
+        for (var count = 0; (count < (draws * 10)); ++count) {
+            if (Check(value: (1UL + (Residues * ((NextWord() % (ulong.MaxValue / (Residues << 1))) << 1)))) is { } failure) { return failure; }
+        }
+        if (pastTable < 8) { return $"only {pastTable} values passed the tabulated discriminants, so the descent went unexercised"; }
+
+        // Drawn odd words at every width, their odd multiples of each tabulated candidate's prime factors, and squares.
+
+        for (var width = 5; (width <= 64); ++width) {
+            for (var count = 0; (count < draws); ++count) {
+                var word = ((NextWord() >> (64 - width)) | 1UL);
+
+                if (Check(value: word) is { } failure) { return failure; }
+                foreach (var factor in (ulong[])[3UL, 5UL, 7UL, 9UL, 11UL, 13UL, 15UL]) {
+                    if (Check(value: (((word / factor) | 1UL) * factor)) is { } multiple) { return multiple; }
+                }
+            }
+        }
+        for (var root = 3UL; (root < (full ? (1UL << 17) : (1UL << 15))); root += 2UL) {
+            if (Check(value: (root * root)) is { } failure) { return failure; }
+        }
+        for (var count = 0; (count < draws); ++count) {
+            var root = ((NextWord() >> 32) | 1UL);
+
+            if (Check(value: (root * root)) is { } failure) { return failure; }
+        }
+        // The top of the carrier and the neighbours of every ladder boundary.
+        for (var offset = 0UL; (offset < 512UL); offset += 2UL) {
+            if (Check(value: (ulong.MaxValue - offset)) is { } failure) { return failure; }
+        }
+        foreach (var boundary in LucasTraceBoundaries) {
+            for (var offset = 1UL; (offset < 512UL); offset += 2UL) {
+                if (Check(value: (boundary - offset)) is { } failure) { return failure; }
+                if (Check(value: (boundary + offset)) is { } above) { return above; }
+            }
+        }
+
+        return (Refuses(action: () => _ = PrimeKernels.SelfridgeDiscriminant(value: 10UL), type: typeof(ArgumentOutOfRangeException), parameterName: "value", what: "a Selfridge search over an even value")
+            ?? Refuses(action: () => _ = PrimeKernels.SelfridgeDiscriminant(value: 1UL), type: typeof(ArgumentOutOfRangeException), parameterName: "value", what: "a Selfridge search below three"));
+    }
     // The whole test, Selfridge's search included, against the recurrence oracle with its own search.
     private static string? LucasTraceSelfridgeSurface(bool full) {
         var generator = Pcg32XshRr.Create(state: 2071, stream: 17);

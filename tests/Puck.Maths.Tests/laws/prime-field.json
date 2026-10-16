@@ -1131,6 +1131,10 @@
       {
         "Type": "Puck.Maths.PrimeKernels",
         "Name": "PassesStrongLucasRound"
+      },
+      {
+        "Type": "Puck.Maths.PrimeKernels",
+        "Name": "SelfridgeDiscriminant"
       }
     ],
     "Legs": [
@@ -1148,6 +1152,15 @@
         "Flavor": "None",
         "Subject": "PrimeKernels.PassesStrongLucasRound at every parameter Q from -40 through 40, which covers every |Q| that Selfridge's tabulated discriminants reach, odd parts past the tabulated reciprocal digits, zero and the non-units, over every odd value below 2,000, every value 2^s - 1 for s from 2 through 64, eight drawn values in each arithmetic region and at the top of the carrier, and, for every Q with an odd prime factor, eight values in [2^61, 2^62) that the factor divides, where Q is not a unit; and at Q = +-(2^61 - 1), +-(2^61 - 3), +-2^60, +-3*2^58, +-65537 and 64 drawn parameters of magnitude below 2^61, each at six values from narrow words to ulong.MaxValue; wherever the discriminant 1 - 4Q is a unit",
         "Against": "Oracles.StrongLucasRecurrence at the same value and Q. The recurrence is the Lucas sequences' own definition at every Q, so it needs neither Q nor D to be a unit, and it decides the non-unit parameters by the definition rather than by the subject's exact rejection",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimeKernels.SelfridgeDiscriminant, Selfridge's search alone \u2014 the residues modulo 5, 7, 11, 13 and 15 read from one constant-divisor remainder of the value modulo 15015, the square discriminant 9 skipped with its shared-factor rejection kept, then the tabulated symbols from 17 and the descent past the table \u2014 at every odd value below 2^21, at 2,000 values one modulo every odd prime through 31 (of which at least eight pass every tabulated discriminant, so the square test and the descent run), at 200 drawn odd words at every width from 5 through 64 bits with their odd multiples of 3, 5, 7, 9, 11, 13 and 15, at the squares of every odd root below 2^15 and of 200 drawn roots, and at the odd neighbours of every ladder boundary and the top of the carrier; the shell refuses an even value and one below three",
+        "Against": "Oracles.SelfridgeDiscriminant: the search spelled as Method A states it, every candidate in turn with its sign carried as a sign and its symbol from Oracles.JacobiSymbolWord, a square rejected before the search and a shared factor rejected unless the value divides the candidate. The chosen discriminant and the rejection must agree value for value: a prime accepts at every discriminant of symbol -1, so the test's verdict cannot see which one the search chose, and only this comparison pins it",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
