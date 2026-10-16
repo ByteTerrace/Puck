@@ -37,6 +37,10 @@
              change, and its update option takes newer packages within the floating ranges; both pass
              RestoreLockedMode=false, the one way to restore unlocked. -->
         <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>
+        <!-- An installed workload adds the SDK's library-packs folder as a restore source, and NuGet records a different
+             content hash for a package restored from it than for the same package from nuget.org, so a lock file would
+             depend on which source a machine's first restore reached. nuget.org (nuget.config) is the only source. -->
+        <DisableImplicitLibraryPacksFolder>true</DisableImplicitLibraryPacksFolder>
         <TargetFramework>net11.0</TargetFramework>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <!-- Build output is hard-linked rather than copied wherever the copy's source is replaced, never rewritten, when it
