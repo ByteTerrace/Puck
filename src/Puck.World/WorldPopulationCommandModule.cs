@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
+using Puck.Input;
 using Puck.Maths;
 using Puck.Shaders;
 using Puck.World.Client;
@@ -23,7 +24,9 @@ namespace Puck.World;
 /// <param name="server">The authority whose current definition and cost report are read.</param>
 /// <param name="link">The existing query route to that authority.</param>
 /// <param name="renderProbe">The optional live presentation inventory; absent in a headless host.</param>
-public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
+/// <param name="gamepads">The optional hardware manager <c>world.devices</c> reads each gamepad's battery and
+/// accessories from; absent in a headless host or off Windows.</param>
+public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
     // The live budget's reader and its text, reused by every world.budget.
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
@@ -35,6 +38,23 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 separator: ",",
                 values: assignment.Rows
             ))}]";
+    // A gamepad's battery and accessories text for world.devices, or null without a manager or a report.
+    private string? DescribeGamepadStatus(InputDeviceId device) =>
+        ((gamepads is not null) &&
+            gamepads.TryGetPower(
+                deviceId: device,
+                power: out var power
+            ) &&
+            gamepads.TryGetAccessories(
+                deviceId: device,
+                accessories: out var accessories
+            )
+        )
+            ? GamepadStatusText.Describe(
+                accessories: accessories,
+                power: power
+            )
+            : null;
     // What the render graph runtime scheduled in its latest frame, read from that schedule and each instance's work
     // ledger (RenderGraphLiveBudget), or why there is none.
     private string DescribeLiveBudget() {
@@ -601,9 +621,9 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.devices",
-            description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
+            description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). A gamepad's entry ends with its power then its accessories when it reports them: 'battery N%' (unplugged), 'charging N%', 'not charging N%', 'charged', 'wired' (cable only, no battery), then 'headset' | 'headphones' | 'microphone'; power says nothing while unknown, and a keyboard, mouse or camera has no suffix. The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => new CommandResult(Output: roster.DescribeDevices())
+            handler: _ => new CommandResult(Output: roster.DescribeDevices(gamepadStatus: DescribeGamepadStatus))
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,

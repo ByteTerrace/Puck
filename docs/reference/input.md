@@ -95,7 +95,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 30
 ```
 
 While the host runs, `world.devices` and `world.players` show the connected set
-and seat assignments. Controller diagnostics use `[gamepad]` or `[gameinput]`
+and seat assignments. `world.devices` also ends each gamepad's entry with its
+power then its accessories when it reports them: `battery N%`, `charging N%`,
+`not charging N%`, `charged` or `wired`, then `headset`, `headphones` or
+`microphone` (for example `gamepad1=p2* battery 94% headset`). Controller diagnostics use `[gamepad]` or `[gameinput]`
 lines on stderr. Bindings are data in `Puck.World`; they are not hard-coded in
 this project.
 
