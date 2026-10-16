@@ -245,6 +245,15 @@ public static class InputSources {
         /// </summary>
         [InputSourceValue(kind: CommandValueKind.Axis3D)]
         public const string Gyro = "gamepad.gyro";
+        /// <summary>A hand on the left grip's capacitive sensor (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftGripTouch = "gamepad.leftGripTouch";
+        /// <summary>A finger resting on the left stick's capacitive cap (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftStickTouch = "gamepad.leftStickTouch";
+        /// <summary>The left trigger's full-pull switch (Steam Controller and Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftTriggerClick = "gamepad.leftTriggerClick";
         /// <summary>The left function button (DualSense Edge).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string LeftFunction = "gamepad.leftFunction";
@@ -276,6 +285,15 @@ public static class InputSources {
         /// <summary>The Quick Access Menu (QAM) button (Steam Controller Triton).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string QuickAccess = "gamepad.quickAccess";
+        /// <summary>A hand on the right grip's capacitive sensor (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightGripTouch = "gamepad.rightGripTouch";
+        /// <summary>A finger resting on the right stick's capacitive cap (Steam Controller Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightStickTouch = "gamepad.rightStickTouch";
+        /// <summary>The right trigger's full-pull switch (Steam Controller and Triton).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightTriggerClick = "gamepad.rightTriggerClick";
         /// <summary>The right function button (DualSense Edge).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string RightFunction = "gamepad.rightFunction";

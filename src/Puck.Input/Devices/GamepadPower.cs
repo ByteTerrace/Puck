@@ -12,6 +12,8 @@ public enum GamepadPowerState : byte {
     Charging = 3,
     /// <summary>Plugged in with its battery full.</summary>
     Charged = 4,
+    /// <summary>Plugged in but not charging, because the charger reports a fault or a temperature or voltage limit.</summary>
+    NotCharging = 5,
 }
 /// <summary>A controller's power report: its <see cref="GamepadPowerState"/> and battery charge.</summary>
 /// <param name="State">Where the controller draws power from.</param>

@@ -60,7 +60,20 @@ public enum GamepadButtons : uint {
     /// <summary>The left function button (DualSense Edge Fn, left of the touchpad).</summary>
     LeftFunction = (1u << 24),
     /// <summary>The right function button (DualSense Edge Fn, right of the touchpad).</summary>
-    // KEEP IN SYNC: adding a flag here requires bumping GamepadButtonEdges.Count (one press-stamp slot per
-    // bit), or the coalescer faults the device on the new button's first press.
     RightFunction = (1u << 25),
+    /// <summary>The left trigger's full-pull switch (Steam Controller and Triton), distinct from its analog travel.</summary>
+    LeftTriggerClick = (1u << 26),
+    /// <summary>The right trigger's full-pull switch (Steam Controller and Triton), distinct from its analog travel.</summary>
+    RightTriggerClick = (1u << 27),
+    /// <summary>A finger resting on the left stick's capacitive cap (Steam Controller Triton).</summary>
+    LeftStickTouch = (1u << 28),
+    /// <summary>A finger resting on the right stick's capacitive cap (Steam Controller Triton).</summary>
+    RightStickTouch = (1u << 29),
+    /// <summary>A hand on the left grip's capacitive sensor (Steam Controller Triton).</summary>
+    LeftGripTouch = (1u << 30),
+    /// <summary>A hand on the right grip's capacitive sensor (Steam Controller Triton).</summary>
+    // KEEP IN SYNC: adding a flag here requires bumping GamepadButtonEdges.Count (one press-stamp slot per
+    // bit), or the coalescer faults the device on the new button's first press. Every bit of the uint is now
+    // used, so a further flag widens the enum.
+    RightGripTouch = (1u << 31),
 }

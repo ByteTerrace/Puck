@@ -665,6 +665,17 @@ public sealed class GamepadManager : IDisposable {
             selector: static connection => connection.Output,
             value: out output
         );
+    /// <summary>Resolves the accessories plugged into a connected device, as it last reported them.</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="accessories">The device's plugged-in accessories when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetAccessories(InputDeviceId deviceId, out GamepadAccessories accessories) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: GamepadAccessories.None,
+            selector: static connection => connection.Coalescer.Latest.Accessories,
+            value: out accessories
+        );
     /// <summary>Resolves the power source and battery charge a connected device last reported.</summary>
     /// <param name="deviceId">The device to resolve.</param>
     /// <param name="power">The device's latest power report when found; <see cref="GamepadPower.Unknown"/> before its

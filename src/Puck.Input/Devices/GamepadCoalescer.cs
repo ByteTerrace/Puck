@@ -118,8 +118,12 @@ public sealed class GamepadCoalescer {
             }
 
             m_previousButtons = state.Buttons;
-            m_gyro += state.Gyro;
-            ++m_gyroSamples;
+
+            if (state.IsMotionSample) {
+                m_gyro += state.Gyro;
+                ++m_gyroSamples;
+            }
+
             m_latest = state;
             m_hasSample = true;
         }
