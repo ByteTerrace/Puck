@@ -229,14 +229,17 @@ public static partial class PrimeExploration {
     /// Draws continue past an undecided survivor until <see cref="PrimeKernels.BaseTwoBatchWidth"/> survivors are
     /// pending, a narrow or exceptional candidate arrives, or the budget runs out; each survivor keeps a copy of the
     /// generator taken right after its draw. The pending survivors are then decided in draw order — a full batch with
-    /// one interleaved base-two kernel, a partial one survivor by survivor — and the first prime wins with its copy
+    /// one interleaved base-two kernel whose Montgomery constants its Lucas confirmations reuse, a partial one survivor
+    /// by survivor — and the first prime wins with its copy
     /// restored, discarding every later draw. Only when none is prime is the narrow candidate decided, with the
     /// generator where its own draw left it, and only then does the budget's exhaustion end the request. That is
     /// exactly the sequential order's outcome, prime, final state and failure alike.
     /// </para>
     /// <para>
     /// The generator lives in a local for the whole request, so its state stays in registers between draws instead of
-    /// round-tripping through the caller's storage, and is written back on every exit.
+    /// round-tripping through the caller's storage, and is written back on every exit. The pending values and the
+    /// batch block are left unzeroed: a request writes every entry it reads, the values below the pending count and
+    /// the whole block in the base-two kernel.
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
@@ -246,6 +249,7 @@ public static partial class PrimeExploration {
         var state = generator;
         var snapshots = new SpeculativeSnapshots<TGenerator>();
         Span<ulong> pending = stackalloc ulong[PrimeKernels.BaseTwoBatchWidth];
+        Span<ulong> block = stackalloc ulong[PrimeKernels.BatchBlockLength];
 
         while (true) {
             var count = 0;
@@ -272,14 +276,14 @@ public static partial class PrimeExploration {
             }
 
             var passes = ((PrimeKernels.BaseTwoBatchWidth == count)
-                ? PrimeKernels.PassesBaseTwoBatchCore(values: pending)
+                ? PrimeKernels.PassesBaseTwoBatchCore(block: block, values: pending)
                 : -1);
 
             for (var i = 0; (i < count); ++i) {
                 if (
                     (0 != ((passes >>> i) & 1)) &&
                     ((PrimeKernels.BaseTwoBatchWidth == count)
-                        ? PrimeField64.IsStrongLucasProbablePrime(value: pending[i])
+                        ? PrimeKernels.PassesBatchStrongLucas(block: block, lane: i)
                         : PrimeKernels.IsBaillieOddWord(value: pending[i]))
                 ) {
                     generator = snapshots[i];

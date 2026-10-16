@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Puck.Maths;
 
@@ -83,10 +85,12 @@ public static partial class PrimeKernels {
     private const int BatchInverses = (BatchModuli + BaseTwoBatchWidth);
     /// <summary>The offset of the exponents in a batch block, one per chain, each walked over its low bits.</summary>
     private const int BatchExponents = (BatchInverses + BaseTwoBatchWidth);
-    /// <summary>The offset of the step count, the exponent bits every chain walks, in a batch block, its last entry.</summary>
+    /// <summary>The offset of the step count, the exponent bits every chain walks, in a batch block.</summary>
     private const int BatchSteps = (BatchExponents + BaseTwoBatchWidth);
-    /// <summary>The length of a batch block.</summary>
-    private const int BatchBlockLength = (BatchSteps + 1);
+    /// <summary>The offset of the radix residues in a batch block, one per chain, after every entry the walk reads.</summary>
+    private const int BatchOnes = (BatchSteps + 1);
+    /// <summary>The length of a batch block: the span <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> fills and <see cref="PassesBatchStrongLucas(ReadOnlySpan{ulong}, int)"/> reads.</summary>
+    internal const int BatchBlockLength = (BatchOnes + BaseTwoBatchWidth);
     /// <summary>The leading exponent bits a base-two seed absorbs, in a batch and in the single round below <see cref="ScaledResidueRing64.SignedModulusCeiling"/>, so that every chain walks that many fewer steps.</summary>
     /// <remarks>
     /// <para>
@@ -471,7 +475,7 @@ public static partial class PrimeKernels {
     /// <returns>Whether the round passes.</returns>
     /// <remarks>
     /// <para>
-    /// The walk of <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong})"/> on one value: two raised to the negated
+    /// The walk of <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> on one value: two raised to the negated
     /// odd part <c>-d</c>, which accepts at the same round as <c>2^d</c>, from the seed <c>2^-a</c> of the prefix
     /// <c>a = ceil(d / 2^k)</c>, over the low <c>k</c> bits of <c>0 - d</c>, where <c>k</c> is this odd part's bit
     /// length less <see cref="BaseTwoSeedWindow"/>. The walk is most significant bit first, so a step is one square
@@ -596,11 +600,12 @@ public static partial class PrimeKernels {
             }
         }
 
-        return PassesBaseTwoBatchCore(values: values);
+        return PassesBaseTwoBatchCore(block: stackalloc ulong[BatchBlockLength], values: values);
     }
 
     /// <summary>Runs the base-two strong-probable-prime round on <see cref="BaseTwoBatchWidth"/> odd values at once.</summary>
     /// <param name="values">The odd values, each at least three; exactly <see cref="BaseTwoBatchWidth"/> of them.</param>
+    /// <param name="block">The batch block, <see cref="BatchBlockLength"/> words; it receives each value's Montgomery constants, which <see cref="PassesBatchStrongLucas(ReadOnlySpan{ulong}, int)"/> reads afterwards.</param>
     /// <returns>A mask whose bit <c>i</c> is set when the <c>i</c>-th value passes; each bit equals <see cref="PassesBaseTwoCore(ulong, ulong, ulong)"/> on its value.</returns>
     /// <remarks>
     /// <para>
@@ -634,9 +639,9 @@ public static partial class PrimeKernels {
     /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static int PassesBaseTwoBatchCore(ReadOnlySpan<ulong> values) {
-        Span<ulong> block = stackalloc ulong[BatchBlockLength];
-        // The highest index is read first, which proves every lower one in range.
+    internal static int PassesBaseTwoBatchCore(ReadOnlySpan<ulong> values, Span<ulong> block) {
+        // The highest indices are read first, which proves every lower one in range.
+        _ = block[(BatchBlockLength - 1)];
         var fourth = values[3];
         var first = values[0];
         var second = values[1];
@@ -667,6 +672,10 @@ public static partial class PrimeKernels {
         block[(BatchExponents + 1)] = unchecked((0UL - secondOddPart));
         block[(BatchExponents + 2)] = unchecked((0UL - thirdOddPart));
         block[(BatchExponents + 3)] = unchecked((0UL - fourthOddPart));
+        block[BatchOnes] = firstOne;
+        block[(BatchOnes + 1)] = secondOne;
+        block[(BatchOnes + 2)] = thirdOne;
+        block[(BatchOnes + 3)] = fourthOne;
 
         var steps = Math.Max(val1: (length - BaseTwoSeedWindow), val2: 0);
         var largest = (first | second) | (third | fourth);
@@ -791,6 +800,22 @@ public static partial class PrimeKernels {
         );
     }
 
+    /// <summary>Runs the strong Lucas probable-prime test with Selfridge's Method A parameters on one value of a decided batch, inside the Montgomery constants its base-two round prepared.</summary>
+    /// <param name="block">The batch block <see cref="PassesBaseTwoBatchCore(ReadOnlySpan{ulong}, Span{ulong})"/> filled.</param>
+    /// <param name="lane">The value's index in the batch, below <see cref="BaseTwoBatchWidth"/>.</param>
+    /// <returns><see cref="PassesStrongLucas(ulong, ulong, ulong)"/> on that value: the inverse and radix residue are functions of the value alone, so reading them back decides exactly as recomputing them.</returns>
+    /// <remarks>The reads are unchecked: a checked read inside the selector's decision loop makes the JIT clone that loop.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool PassesBatchStrongLucas(ReadOnlySpan<ulong> block, int lane) {
+        Debug.Assert(((BatchBlockLength <= block.Length) && (((uint)lane) < BaseTwoBatchWidth)));
+        ref var column = ref Unsafe.Add(elementOffset: lane, source: ref MemoryMarshal.GetReference(span: block));
+
+        return PassesStrongLucas(
+            inverse: Unsafe.Add(elementOffset: BatchInverses, source: ref column),
+            one: Unsafe.Add(elementOffset: BatchOnes, source: ref column),
+            value: Unsafe.Add(elementOffset: BatchModuli, source: ref column)
+        );
+    }
     /// <summary>Runs the strong Lucas probable-prime test with Selfridge's Method A parameters on an odd value, inside Montgomery constants the caller already holds.</summary>
     /// <param name="value">The odd value, at least three.</param>
     /// <param name="one">The radix reduced modulo the value.</param>

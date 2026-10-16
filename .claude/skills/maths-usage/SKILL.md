@@ -101,7 +101,9 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   alone; it moves with code layout); and two exact ladders interleaved for
   selection above 2^63 (23 to 28% faster per ladder in isolation, but selection
   needs only the first base-two survivor's ladder, so a pair costs about 1.7
-  ladders' time for one answer).
+  ladders' time for one answer); and `[SkipLocalsInit]` on the speculative
+  selector (it drops the prologue's zeroing of the batch block, yet selection
+  measures 1 to 3% slower in every band).
 - No hardware 64-bit divide runs per candidate on the selection or decision
   path, and each removal was bit-identical to the divide it replaced:
   `ScaledResidueRing64.RadixResidue` takes `2^64 mod n` as the carrier's
@@ -132,6 +134,10 @@ the kernels under them ([prime exploration](../../../docs/reference/prime-explor
   the dividend. AMDuProfPcm's per-interval instruction counts on a loaded host
   differed 6% between intervals of one run, so counts are read from the JIT
   listings, not the counters.
+- The speculative selector's Lucas confirmations read each survivor's inverse
+  and radix residue from the batch block the base-two kernel filled, unchecked:
+  a checked read there makes the JIT clone the decision loop, which measured
+  up to 0.6% slower at the top of the carrier.
 - Signed Montgomery reduction is the arithmetic of the single base-two round,
   the Lucas ladder and the base-two batch below 2^63 (the batch from 2^60);
   `ScaledResidueRing64`'s `ReduceSigned`, `ReduceSignedSquareSubtract` and

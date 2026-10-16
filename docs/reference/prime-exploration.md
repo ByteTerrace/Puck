@@ -264,7 +264,8 @@ When the generator type holds no references, the selector treats it as a pure
 value: a copy taken after a draw restores the stream exactly. It then keeps
 drawing past an undecided wide survivor until four survivors are pending, runs
 their base-two rounds as four interleaved Montgomery chains, and confirms them
-with the strong Lucas test in draw order. The first prime wins and the generator
+with the strong Lucas test in draw order, reusing each survivor's inverse and
+radix residue from its chain. The first prime wins and the generator
 is restored to the copy taken after its draw. A narrow or exceptional candidate
 ends the batch and is decided after the pending survivors; budget expiry
 decides a partial batch survivor by survivor. The result, the final generator
