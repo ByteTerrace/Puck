@@ -1,6 +1,6 @@
-# .NET 10 JIT & Code Generation
+# .NET 11 JIT & Code Generation
 
-**TL;DR for this domain.** The .NET 10 JIT flattens abstraction through a compounding pipeline: dynamic PGO → guarded devirtualization → inlining → (conditional) escape analysis → stack allocation → range/assertion analysis → dead-check elimination. Inlining is the gateway — nearly every win below requires the relevant callee to be inlined so the JIT can see through it. Safety checks (bounds, null, GC write barriers, covariance, EH scaffolding) are now "pay only when unprovable." Practical consequence: idiomatic C# — interfaces, `foreach`, lambdas, spans, `params`, `^1`, switch-on-length, `is 'a' or 'b'` — is increasingly the fast path, and most .NET 9-era hand-optimizations are now dead weight to delete. Almost everything here is FREE on retarget to .NET 10 with tiered compilation + dynamic PGO left at their defaults.
+**TL;DR for this domain.** The .NET 11 JIT flattens abstraction through a compounding pipeline: dynamic PGO → guarded devirtualization → inlining → (conditional) escape analysis → stack allocation → range/assertion analysis → dead-check elimination. Inlining is the gateway — nearly every win below requires the relevant callee to be inlined so the JIT can see through it. Safety checks (bounds, null, GC write barriers, covariance, EH scaffolding) are now "pay only when unprovable." Practical consequence: idiomatic C# — interfaces, `foreach`, lambdas, spans, `params`, `^1`, switch-on-length, `is 'a' or 'b'` — is increasingly the fast path, and most .NET 9-era hand-optimizations are now dead weight to delete. Almost everything here is FREE on retarget to .NET 11 with tiered compilation + dynamic PGO left at their defaults.
 
 ## Contents
 1. [Eliminating allocations via escape analysis](#1-eliminating-allocations-via-escape-analysis)
@@ -112,7 +112,7 @@ Bounds-check elimination has moved from "recognize special shapes" to "propagate
 ```csharp
 // .NET 9 folklore: write highest index first so one check dominates
 arr[7] = 55; arr[0] = 2; /* ... */
-// .NET 10: natural order IS the fast path
+// .NET 11: natural order IS the fast path
 arr[0] = 2; arr[1] = 3; /* ... */ arr[7] = 55;
 ```
 - Caveat: cloning duplicates code (114 → 179 B in the example); a size heuristic gates it.
@@ -150,7 +150,7 @@ Also: try/finally inlining (§3), try/finally cloning (§4).
 ```csharp
 // .NET 9-era folklore: dodge write barriers on struct returns
 void GetPerson(out Person p) { p = new(...); }
-// .NET 10: idiomatic by-value return is barrier-free
+// .NET 11: idiomatic by-value return is barrier-free
 Person GetPerson() => new(_firstName, _lastName, _address, _city);
 ```
 - Applies to the return-buffer path (structs too big for register return); callers wanting the value on the heap pay an explicit copy after the call.
@@ -210,7 +210,7 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 - **AVX10.2** (dotnet/runtime#111209; #112535 FP min/max; #111775 FP conversions): single-instruction FP min/max with proper NaN semantics and conversions. FREE + API for the new intrinsics.
 - **GFNI intrinsics** (dotnet/runtime#109537) — API. GF(2^8) hardware ops for Reed-Solomon/erasure coding/AES-adjacent transforms; check these before table-based implementations.
 - **VPCLMULQDQ intrinsics** (dotnet/runtime#109137) — API. Vectorized carry-less multiply — the core CRC/GHASH primitive.
-- **Arm SVE build-out** (dotnet/runtime#115775 `BitwiseSelect`, #117711 `MaxPairwise`/`MinPairwise`, #117051 `VectorTableLookup`) — API, **still experimental** in .NET 10; portable vector code remains the safe default.
+- **Arm SVE build-out** (dotnet/runtime#115775 `BitwiseSelect`, #117711 `MaxPairwise`/`MinPairwise`, #117051 `VectorTableLookup`) — API, **still experimental** in 10.0; portable vector code remains the safe default.
 - **Arm64 compound instructions** (dotnet/runtime#111893, #111904, #111452, #112235, #111797): compare+branch fused into e.g. `cbz`; denser codegen for ordinary `if (x == 0)` code.
 
 ## 10. Runtime plumbing with codegen effects
@@ -221,11 +221,16 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 **Shared read-only template page for runtime stubs** (dotnet/runtime#114462) — FREE
 - Jump stubs / call counters / trampolines now alias one physical read-only code page (per-stub data on its own writable page) instead of regenerating identical instructions per allocation. Lower memory footprint, faster startup, better i-cache — grows with app size (many types / virtual dispatch sites).
 
+
+## 11. Codegen facts the repository relies on in .NET 11
+
+`Math.BigMul(ulong, ulong, out ulong)` and the signed overload now lower to one `MUL`/`IMUL` that returns both halves in registers (dotnet/runtime#117261), so the 128-bit product needs no `UInt128` detour or hand-split halves. RyuJIT still if-converts a select only outside loops (dotnet/runtime#96380, milestone 12.0), so an in-loop `CMOV` still needs the `NoInlining` leaf pattern the [`maths-usage`](../../maths-usage/SKILL.md) skill describes.
+
 ---
 
 ## Folklore to delete
 
-Hand-optimizations .NET 10 makes obsolete (or actively harmful — they add unsafety and obscure code for zero or negative gain). Confirm with disassembly when it matters, but the default is: delete.
+Hand-optimizations .NET 11 makes obsolete (or actively harmful — they add unsafety and obscure code for zero or negative gain). Confirm with disassembly when it matters, but the default is: delete.
 
 - **"Use `Unsafe.Add`/pointers to skip bounds checks on masked/shifted or `Log2`-bounded table indices."** The JIT proves these in range; the BCL deleted its own unsafe versions (`Log2SoftwareFallback`, `CountDigits`) and got simpler *and* faster.
 - **"Lambdas/`Func<>` in hot paths always cost a 64 B delegate allocation."** Non-escaping delegates with inlined consumers are elided. (Captured-state display classes still allocate — that half survives.)

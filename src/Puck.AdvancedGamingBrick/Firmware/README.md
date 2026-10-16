@@ -23,7 +23,7 @@ report a difference that is codegen, not source. For example, from the
 repository root with that LLVM installed:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe" --verify
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe" --verify
 ```
 
 Omit `--verify` to regenerate the image. Verification compiles independently and

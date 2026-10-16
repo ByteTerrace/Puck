@@ -108,7 +108,7 @@ Run the focused laws, then the architecture gate:
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll architecture --check
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll architecture --check
 ```
 
 The focused suite checks principal stamping, coordinate translation, live

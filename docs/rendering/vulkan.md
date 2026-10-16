@@ -15,7 +15,7 @@ or on `Puck.Platform`**. The composition root binds the concrete (e.g. `services
 
 ```text
 namespaces  Puck.Vulkan (+ .Bindings, .Interop, .Interfaces, .Apis, .Factories, .Messages)
-target      net10.0
+target      net11.0
 deps        Puck.Abstractions (display / surface kinds, IAllocator), Puck.Shaders (shader stage info)
 ```
 
@@ -652,7 +652,7 @@ world:
 ```powershell
 dotnet test tests/Puck.Vulkan.Tests/Puck.Vulkan.Tests.csproj -c Release
 dotnet build Puck.slnx -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll parity
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll parity
 ```
 
 ## Packaging

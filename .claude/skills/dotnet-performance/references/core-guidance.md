@@ -1,4 +1,4 @@
-# .NET 10 performance core guidance
+# .NET 11 performance core guidance
 
 This file holds the cross-domain mental model, pattern changes, API shortlist,
 and folklore corrections; domain detail lives in the sibling references.
@@ -11,7 +11,7 @@ and folklore corrections; domain detail lives in the sibling references.
 - [New APIs](#new-apis-worth-adopting)
 - [Folklore](#folklore-to-delete)
 
-This skill is **factual only**: it describes how .NET 10 actually behaves. It
+This skill is **factual only**: it describes how .NET 11 actually behaves. It
 does not govern architecture, design, or style, and the user's current
 instruction outranks it — if it ever argues against a requested change, treat
 the skill as stale, update it in the same change, and say so.
@@ -31,7 +31,7 @@ each is self-contained.
 
 When reviewing code, scan **Folklore to delete** below — flagging obsolete hand-optimizations is as valuable as finding bugs. When writing new code, follow **Pattern changes**.
 
-## The .NET 10 performance mental model
+## The .NET 11 performance mental model
 
 - **Idiomatic C# is the fast path.** The JIT flattens abstraction for you (devirtualize → inline → escape-analyze → stack-allocate → range-analyze): interfaces, `foreach`, lambdas, `params` arrays, `^1`, guard-then-index, switch-on-length all compile to what hand-tuned code used to. Write for clarity; delete contortions.
 - **Inlining is the gateway; escape analysis is the payoff.** Delegates, temporary arrays, spans-over-arrays, enumerators, even `Stopwatch` instances get stack-allocated — but only if *every* use of the object inlines. One opaque virtual call (even a no-op `Dispose`) makes the whole object escape to the heap. Keep hot members small and whole.
@@ -40,9 +40,9 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **UTF-8 and spans are the first-class shape.** `Guid`/`Version`/`Char`/`Rune` now implement `IUtf8SpanParsable`, and `IPAddress`/`IPNetwork` gained UTF-8 span parse overloads; new APIs (PQC crypto, hex, PEM, JSON marshal) are span-first with arrays as the convenience layer. Data born as bytes should stay bytes end-to-end — transcoding to UTF-16 first is now slower *and* unidiomatic.
 - **The framework absorbs degenerate cases and hand-optimizations.** Single-task `WhenAll`, channel-cancellation buildup, local-queue starvation, `ValueStopwatch`, shuffle helpers, single-`Contains` LINQ pipelines — delete defensive special-casing. Delegating to primitives (`SearchValues`, `TensorPrimitives`, `MemoryExtensions`) means inheriting every future SIMD/algorithm improvement; a manual loop inherits none.
 - **Optimization is work elimination, not faster work.** Regex auto-atomicity, LINQ cross-operator algebra (`OrderBy().Contains()` skips the sort), double-lookup elimination, one-fewer-delegate-layer. In your own hot paths, hunt single layers of indirection and redundant lookups.
-- **The TFM is fixed at net10.0.** The release is hundreds of compounding small wins, and benchmark folklore ages fast: check an old workaround against current codegen (disassembly through `puck bench kernels`) before keeping it.
+- **The TFM is fixed at net11.0.** The release is hundreds of compounding small wins, and benchmark folklore ages fast: check an old workaround against current codegen (disassembly through `puck bench kernels`) before keeping it.
 
-## Free wins (just target net10.0)
+## Free wins (just target net11.0)
 
 - **JIT/escape analysis:** `foreach` over `IEnumerable<T>`-typed arrays/`List<T>` alloc-free and ~2-3x; non-escaping delegates ~3x; temp `new T[]{...}`/`params` arrays stack-allocated ~3x; array→`AsSpan`→`CopyTo` chains ~11x; `Stopwatch.StartNew` alloc-free.
 - **Devirtualization:** array interface methods devirtualize (`ReadOnlyCollection` for-loop ~3x, array-backed LINQ `Skip/Take/Sum` ~2x); `static readonly` interface-typed fields get exact-typed without PGO (~8x); `EqualityComparer<T>.Default` in shared generics ~2x.
@@ -136,7 +136,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 | `OrderedDictionary.TryAdd/TryGetValue(..., out int index)` | Index-returning lookups + `GetAt`/`SetAt` | Read-modify-write without double hashing |
 | `CollectionsMarshal.AsBytes(BitArray)` | `Span<byte>` over live bit storage | Vectorized whole-array bit math |
 | `ImmutableCollectionsMarshal.AsMemory(builder)` | `Memory<T>` over `ImmutableArray<T>.Builder` storage | Bulk populate/transform builders |
-| `InlineArray2<T>`..`InlineArrayN<T>` | Shared public inline-buffer types | Named fixed-size buffers instead of hand-rolled `[InlineArray]` (compiler codegen didn't switch to them in .NET 10 — use them directly) |
+| `InlineArray2<T>`..`InlineArrayN<T>` | Shared public inline-buffer types | Named fixed-size buffers instead of hand-rolled `[InlineArray]` (compiler codegen did not switch to them in 10.0 — use them directly) |
 | `MemoryExtensions` comparer overloads, `CountAny`, `ReplaceAny` | Span search without `IEquatable<T>` constraint | Unconstrained generic code; stays vectorized w/ default comparer |
 | `TensorPrimitives` (+70 ops; stable `Tensor<T>`/`TensorSpan<T>`) | Vectorized elementwise/reduction math incl. `Half`, int, `nint` | Any numeric-buffer loop |
 | `Random.GetString` / `GetHexString`; `GetItems` (newly fast) | Bulk random selection, rejection sampling | Token/ID generation, incl. crypto `RandomNumberGenerator` |

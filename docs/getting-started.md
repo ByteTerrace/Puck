@@ -7,7 +7,7 @@ and find a small content-editing workflow.
 ## Prerequisites
 
 Install the .NET SDK version selected by [global.json](../global.json). The
-repository disables automatic SDK roll-forward, so having a different .NET 10
+repository disables automatic SDK roll-forward, so having a different .NET 11
 SDK installed is not sufficient. Package restore requires access to the feeds
 listed in [nuget.config](../nuget.config).
 

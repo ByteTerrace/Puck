@@ -288,4 +288,4 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 | `puck-world` | What world-document sections mean and console verbs' semantics. |
 | `puck-dsl` | `.puck` grammar and the compile/lint verbs. |
 | `maths-usage` | Fixed-point primitives for the query evaluator. |
-| `dotnet10-performance` | Host-side C# hot paths. |
+| `dotnet-performance` | Host-side C# hot paths. |

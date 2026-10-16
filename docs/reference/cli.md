@@ -881,9 +881,9 @@ The plan names each choice and prints the catalog's build and check commands:
 suite Puck.World.Tests
 test src/Puck.World/Assets/worlds/games/reversi.puck
 canary pipeline-ink
-catalog src/Puck.World/bin/Release/net10.0/Assets/worlds
+catalog src/Puck.World/bin/Release/net11.0/Assets/worlds
 dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -nodeReuse:false -v q -nologo
-puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net10.0/Assets/worlds --check
+puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net11.0/Assets/worlds --check
 parity
 ```
 
@@ -1042,7 +1042,7 @@ host capacity names what holds it back: the process holding the GPU, named again
 when it changes, or the CPU and memory reading.
 
 Run from a CLI copy outside the checkout, because the build rewrites
-`src/Puck.Cli/bin/Release/net10.0`. GPU work runs serially on a machine with no
+`src/Puck.Cli/bin/Release/net11.0`. GPU work runs serially on a machine with no
 competing GPU work.
 
 Exit codes: 0 every step passed, 1 a step failed, 2 refused (invalid record,
@@ -1668,7 +1668,7 @@ build goes to the store, a branch can run these verbs from its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 ```
 
 ---
@@ -2657,7 +2657,7 @@ select another corpus:
 ```sh
 puck bench startup --samples 3
 puck bench startup worlds/parlor/chess.puck --samples 3 --width 640 --height 360
-puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net10.0/Puck.World.dll
+puck bench startup --headless --world-artifact src/Puck.World/bin/Release/net11.0/Puck.World.dll
 ```
 
 The default windowed run uses 1280×720. Each sample receives a new persistence

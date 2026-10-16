@@ -22,7 +22,7 @@ dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/
 With an existing Release build:
 
 ```powershell
-dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 The initial view is the native model's three-quarter inspection. In the running
@@ -144,7 +144,7 @@ a directional ground gait or a dedicated impact-and-recovery animation.
 Check document admission and the stamp budget:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.puck --prototype moth
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.puck --prototype moth
 ```
 
 Then inspect the live front, rear and face views. Exercise takeoff and landing:

@@ -41,7 +41,7 @@ The target hooks the pinned SDK's dependency selection, so an SDK update must
 verify a real launch of this no-build artifact, including its runtime libraries.
 CI boots chess headlessly from the published artifact and requires a clean
 console verdict before uploading it. This checks host packaging, not GPU rendering.
-The download requires .NET 10 and suitable graphics hardware to run. A build
+The download requires .NET 11 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
 implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
@@ -50,6 +50,12 @@ with `puck locks --update`:
 unchanged consumer locks can pass restore while retaining older assemblies than
 their project dependencies, which fails compilation. Update container SDK pins
 in the same change.
+Every workflow installs the SDK through the `setup-dotnet` action's `global-json-file`, so the pin
+`global.json` names, a .NET 11 release candidate until general availability, is the only SDK version a
+runner installs. The container builds pin the matching SDK image tag in each Dockerfile and track the
+`11.0` runtime image, whose base is Ubuntu 26.04. The Functions app builds with the `Azure.Functions.Sdk`
+MSBuild SDK, which supports .NET 11 where the `Microsoft.Azure.Functions.Worker.Sdk` package does not,
+and the Flex plan's runtime version names `11.0`.
 The producer enables `PuckCaptureTestArtifacts`: MSBuild records each evaluated
 test project's output and optional run settings, and the archive carries that
 manifest alongside its source identity. Missing test outputs fail artifact production.
@@ -449,7 +455,7 @@ whatever `puck nuget pin` has adopted; no job installs the CLI from it.
 
 The one job without an installed CLI is the artifact producer, which invokes the
 assembly its solution build just compiled
-(`dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll`) for every verb it runs,
+(`dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll`) for every verb it runs,
 `shaders generate --check` and `nuget pack` among them. A release run therefore
 compiles the CLI once, in that build, and packs it once, into `nuget-packages`;
 every other job that runs `puck` installs that package through `setup-puck`.

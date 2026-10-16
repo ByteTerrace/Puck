@@ -39,7 +39,7 @@ tools to use when they pay for themselves, never preconditions.
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy
-`src/Puck.Cli/bin/Release/net10.0/` to a directory only your lane uses
+`src/Puck.Cli/bin/Release/net11.0/` to a directory only your lane uses
 (`<scratchpad>/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
 the worktree root. Never run the globally installed `puck`: it lags the head.
 Refresh the copy after a change the CLI reaches. A generator or ledger verb run

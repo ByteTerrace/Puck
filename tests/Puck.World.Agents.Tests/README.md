@@ -1,6 +1,6 @@
 # Puck.World.Agents.Tests
 
-This xUnit v3 suite targets `net10.0` and exercises the world agent boundary. It covers `WorldAgentBridge` principal stamping, typed observations and actions, channel refresh, receipts, bounded mailbox dispatch, cancellation, shutdown, and the `WorldAgentHarness` tool policy.
+This xUnit v3 suite targets `net11.0` and exercises the world agent boundary. It covers `WorldAgentBridge` principal stamping, typed observations and actions, channel refresh, receipts, bounded mailbox dispatch, cancellation, shutdown, and the `WorldAgentHarness` tool policy.
 
 ## Verification
 

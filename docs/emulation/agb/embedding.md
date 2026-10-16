@@ -81,7 +81,7 @@ A forced flush persists the current save even when its emulated flag is clean.
 
 ## Quick start
 
-For a .NET 10 application with its own update loop, reference
+For a .NET 11 application with its own update loop, reference
 `ByteTerrace.Puck.AdvancedGamingBrick` and construct the synchronous core.
 NuGet supplies its managed dependencies; no Puck application, DI registration,
 window, GPU backend, worker thread, or environment configuration is required.

@@ -22,7 +22,7 @@ re-run the relevant command against the current tree before relying on them.
 
 Run from the repository root with the checkout's own CLI build, never a
 published copy or the global `puck` tool, both of which lag the head. Copy
-`src/Puck.Cli/bin/Release/net10.0/` to a scratch directory and run the copy, so
+`src/Puck.Cli/bin/Release/net11.0/` to a scratch directory and run the copy, so
 the running tool never locks the build output another build needs:
 
 ```text

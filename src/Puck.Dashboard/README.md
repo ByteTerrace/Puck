@@ -31,7 +31,7 @@ the local content tree and start its server. Leave the server running:
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 dotnet publish src/Puck.World.Browser -c Release
 src/Puck.Cli/publish/puck.exe official build --tree artifacts/official --channel dev \
-  --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle --allow-dirty
+  --engine src/Puck.World.Browser/bin/Release/net11.0/browser-wasm/AppBundle --allow-dirty
 src/Puck.Cli/publish/puck.exe official serve --tree artifacts/official --port 61102
 ```
 

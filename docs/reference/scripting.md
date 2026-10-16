@@ -25,7 +25,7 @@ test host that runs a guest and then raises a division fault on other threads.
 
 ```text
 namespace Puck.Scripting
-target     net10.0
+target     net11.0
 deps       Puck.Assets, Puck.Maths + Wasmtime (exact pin in Puck.Scripting.csproj)
 ```
 

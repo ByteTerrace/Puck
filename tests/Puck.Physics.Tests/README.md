@@ -103,7 +103,7 @@ walk or cell-translation pass from an accidentally quadratic implementation.
 dotnet test tests/Puck.Physics.Tests/Puck.Physics.Tests.csproj -c Release
 ```
 
-The measurement file lands at `bin/<configuration>/net10.0/physics-measurements.txt`.
+The measurement file lands at `bin/<configuration>/net11.0/physics-measurements.txt`.
 
 ## Documentation
 

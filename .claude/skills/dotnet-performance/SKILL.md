@@ -1,9 +1,9 @@
 ---
-name: dotnet10-performance
-description: Applies .NET 10 performance behavior when writing, reviewing, refactoring, or optimizing this repository's C# code. Use for hot paths, regressions, benchmarks, micro-optimization, collection, string, JSON, SIMD, interop, allocation, code-generation, Native AOT, or trimming questions and claims that a C# pattern is slow. Prefers measurement and idiomatic net10.0 code while preserving semantics. Determinism outranks throughput on simulation value paths, where maths-usage owns primitive choice; subsystem skills own their verification gates.
+name: dotnet-performance
+description: Applies .NET 11 performance behavior when writing, reviewing, refactoring, or optimizing this repository's C# code. Use for hot paths, regressions, benchmarks, micro-optimization, collection, string, JSON, SIMD, interop, allocation, code-generation, Native AOT, or trimming questions and claims that a C# pattern is slow. Prefers measurement and idiomatic net11.0 code while preserving semantics. Determinism outranks throughput on simulation value paths, where maths-usage owns primitive choice; subsystem skills own their verification gates.
 ---
 
-# .NET 10 performance
+# .NET 11 performance
 
 This skill is factual, not an architecture or style mandate. Judge a change by
 code, disassembly and load-independent counts (allocations, operation counts);
@@ -26,13 +26,15 @@ Read only the files relevant to the code under review.
 
 ## Apply repository constraints
 
-The references describe .NET 10 in general. Resolve their advice through the
-current [`Directory.Build.props`](../../../Directory.Build.props) and the
-affected project file before changing code.
+The references describe .NET 11 in general; their measurements and magnitudes
+were taken on 10.0, which .NET 11 keeps unless a section says otherwise.
+Resolve their advice through the current
+[`Directory.Build.props`](../../../Directory.Build.props) and the affected
+project file before changing code.
 
-- **`net10.0` is the repository default.** `Puck.Analyzers` deliberately targets
+- **`net11.0` is the repository default.** `Puck.Analyzers` deliberately targets
   `netstandard2.0`; inspect the affected project rather than assuming every
-  project inherits the default. A reference that compares net9.0 with net10.0
+  project inherits the default. A reference that compares net9.0 with 10.0
   describes an upgrade decision this tree has already made.
 - **`InvariantGlobalization` is on.** Culture-sensitive comparison and formatting
   guidance collapses to the invariant case, and there is no ICU behavior to tune.
@@ -112,7 +114,7 @@ outside this contract and takes the references as written.
   dispatcher above several kernels stays tiered so first use compiles only the
   path taken. Check the tiers with `DOTNET_JitDisasmSummary` in a scratch process
   pinned to one CPU, and record first-call cost beside the steady state.
-- Prefer idiomatic code the .NET 10 JIT and libraries recognize.
+- Prefer idiomatic code the .NET 11 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;
   performance evidence does not silently authorize changing them.

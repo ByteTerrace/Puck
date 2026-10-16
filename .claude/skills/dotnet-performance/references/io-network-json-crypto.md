@@ -1,4 +1,4 @@
-# .NET 10 Performance: I/O, Networking, JSON & Cryptography
+# .NET 11 Performance: I/O, Networking, JSON & Cryptography
 
 **TL;DR for this domain:** The convenience API is increasingly the fast path — `HttpClient` helpers, validated header adds, sync `JsonSerializer.Serialize(Stream, ...)`, `Uri` construction, and compression streams all got materially cheaper with zero caller changes, so hand-rolled "optimized" alternatives keep losing their justification. The dominant mechanisms are allocation removal (caching helper objects, span-based paths, right-sized lazy buffers), algorithmic fixes (O(N²)→O(N)), and UTF8-first API surface (parse bytes as bytes; never transcode to `string` just to parse). Streaming beats buffering for large payloads (`Utf8JsonWriter` segments). New crypto APIs are span-first by design. Quadratic paths on untrusted input are security bugs, not just perf smells.
 
@@ -45,7 +45,7 @@ Anonymous (non-file-backed) MMFs on Linux now use the kernel's `memfd_create` in
 ## Compressing, decompressing, and zip archives
 
 ### zlib-ng updated 2.2.1 → 2.2.5 — FREE
-`DeflateStream`/`GZipStream`/`ZLibStream` inherit upstream improvements: better AVX2/AVX512 usage, and a revert of a 2.2.0 "cleanup" that had caused a throughput regression on long, highly compressible data. ~2.9x (202.79 µs → 70.45 µs) compressing highly compressible text via `ZLibStream`. If you benchmarked .NET 9 compression and found it regressed on compressible data, re-measure on .NET 10. Gains vary by compressibility and SIMD hardware.
+`DeflateStream`/`GZipStream`/`ZLibStream` inherit upstream improvements: better AVX2/AVX512 usage, and a revert of a 2.2.0 "cleanup" that had caused a throughput regression on long, highly compressible data. ~2.9x (202.79 µs → 70.45 µs) compressing highly compressible text via `ZLibStream`. If you benchmarked .NET 9 compression and found it regressed on compressible data, re-measure on 10.0 or later. Gains vary by compressibility and SIMD hardware.
 
 ### GZipStream: reset instead of recreate across concatenated gzip members — FREE
 Decompressing back-to-back gzip members from one stream now uses zlib's reset capability at member boundaries instead of freeing/re-creating native inflate state per member. ~3.2x (331.3 µs → 104.3 µs) on the pathological case (1000 one-byte members); real gains scale with member-boundary density. No need to hand-split concatenated-gzip streams (log shipping, HTTP) anymore.
@@ -136,7 +136,7 @@ Caveat: for strictly **scoped** use, `using (JsonDocument doc = JsonDocument.Par
 ## Building and mutating JSON DOM (JsonObject/JsonArray/JsonElement)
 
 ### JsonObject indexer setter: double dictionary lookup eliminated — FREE
-The setter did two key-based lookups into the backing `OrderedDictionary<,>`; it now uses .NET 10's index-returning `OrderedDictionary` overloads so the second access is by index. `_obj["key"] = "value"`: 40.56 ns → 16.96 ns (>2x). Hash lookup dominates the setter's cost; halving the lookups roughly halves the setter.
+The setter did two key-based lookups into the backing `OrderedDictionary<,>`; it now uses the 10.0 index-returning `OrderedDictionary` overloads so the second access is by index. `_obj["key"] = "value"`: 40.56 ns → 16.96 ns (>2x). Hash lookup dominates the setter's cost; halving the lookups roughly halves the setter.
 
 ### JsonObject.TryAdd + index-returning overloads — new API
 `TryAdd` (single lookup instead of `ContainsKey`+`Add` = two hashes), plus `TryAdd`/`TryGetPropertyValue` overloads returning the property's index so subsequent accesses skip hashing entirely.
@@ -186,7 +186,7 @@ Remember the final `isFinalSegment: true` call to terminate the property.
 ## Cryptography
 
 ### Post-quantum crypto: ML-DSA, Composite ML-DSA, SLH-DSA, ML-KEM — span-first by design — new API
-.NET 10 adds NIST PQC signatures (ML-DSA, SLH-DSA), draft-IETF Composite ML-DSA (ML-DSA + a classical algorithm like RSA), and ML-KEM key encapsulation. Unlike the array-centric `AsymmetricAlgorithm`-era types with spans bolted on later, these are designed spans-first; arrays are the convenience layer — no forced allocations on core paths. Prefer the span overloads; treat these as the model for modern crypto API shape. ("Harvest now, decrypt later" makes migration planning urgent.) Caveat: Linux PQC requires OpenSSL 3.5+.
+The 10.0 release added NIST PQC signatures (ML-DSA, SLH-DSA), draft-IETF Composite ML-DSA (ML-DSA + a classical algorithm like RSA), and ML-KEM key encapsulation. Unlike the array-centric `AsymmetricAlgorithm`-era types with spans bolted on later, these are designed spans-first; arrays are the convenience layer — no forced allocations on core paths. Prefer the span overloads; treat these as the model for modern crypto API shape. ("Harvest now, decrypt later" makes migration planning urgent.) Caveat: Linux PQC requires OpenSSL 3.5+.
 
 ### OpenSSL 3 digests: explicit EVP_MD_fetch + cache — FREE (Linux/OpenSSL)
 OpenSSL 3.x turned the 1.x cheap getters (`EVP_sha256()`) into compat shims that trigger an "implicit fetch" inside *each* operation (`EVP_DigestInit_ex`). .NET now does the recommended explicit `EVP_MD_fetch` once and caches it — hoisting per-operation provider resolution out of every hash/sign/**TLS handshake**. `SHA256.HashData` of 1 KB: 1,206.8 ns → 960.6 ns (~20%). Generalizable: "fetch once, cache, reuse" applies to native handles too.

@@ -1,4 +1,4 @@
-# Strings, Text & Searching — .NET 10 Performance Reference
+# Strings, Text & Searching — .NET 11 Performance Reference
 
 **TL;DR for this domain.** Searching is a solved primitive: funnel every "find char/byte/substring" through `SearchValues` / `IndexOfAny*` / `ContainsAny*` and it inherits each release's growing algorithm repertoire for free; hand-rolled scan loops inherit nothing. The regex optimizer now converts what you naturally write into what an expert would write (auto-atomicity, dead-construct elimination, anchor exploitation) — most regex micro-syntax folklore is dead, but timeouts on untrusted input are not. UTF-8 is a first-class parsing citizen (`IUtf8SpanParsable` on `Guid`/`Version`/`Char`/`Rune`): parse bytes directly, never transcode to UTF-16 first. The dominant optimization shape everywhere is *work elimination* — skip the index you never read, the capture nobody observes, the string you never mutate, the allocation the span version avoids.
 
@@ -86,7 +86,7 @@ static bool Has<T>(ReadOnlySpan<T> span, T value, IEqualityComparer<T>? cmp)
     foreach (T item in span) if (cmp.Equals(item, value)) return true;
     return false;
 }
-// After (.NET 10 — vectorized when comparer is default):
+// After (.NET 11 — vectorized when comparer is default):
 static bool Has<T>(ReadOnlySpan<T> span, T value, IEqualityComparer<T>? cmp) =>
     span.Contains(value, cmp);
 ```
@@ -97,9 +97,9 @@ static bool Has<T>(ReadOnlySpan<T> span, T value, IEqualityComparer<T>? cmp) =>
 
 ## 4. Regex: pattern authoring — what the optimizer does for you now
 
-Background: the backtracking engines (interpreter, `RegexOptions.Compiled`, `[GeneratedRegex]`) all share one node-tree optimizer. Since .NET 5 it auto-converts provably-safe loops to atomic ("auto-atomicity": `a*b` → `(?>a*)b` when disjoint). .NET 10 widens the proofs dramatically. All items below are FREE on all three backtracking engines. Verify what the optimizer did by inspecting the source generator's emitted C#/XML comments ("greedily" vs "atomically").
+Background: the backtracking engines (interpreter, `RegexOptions.Compiled`, `[GeneratedRegex]`) all share one node-tree optimizer. Since .NET 5 it auto-converts provably-safe loops to atomic ("auto-atomicity": `a*b` → `(?>a*)b` when disjoint). The 10.0 release widened the proofs dramatically. All items below are FREE on all three backtracking engines. Verify what the optimizer did by inspecting the source generator's emitted C#/XML comments ("greedily" vs "atomically").
 
-Of ~20,000 real-world nuget-sourced patterns, only ~100 hand-write an atomic group, yet on .NET 10 over 70% of those patterns get at least one construct auto-upgraded to atomic.
+Of ~20,000 real-world nuget-sourced patterns, only ~100 hand-write an atomic group, yet on 10.0 and later over 70% of those patterns get at least one construct auto-upgraded to atomic.
 
 ### Auto-atomicity learns Unicode categories
 - **What:** dotnet/runtime#117869 — disjointness proofs now cover category-based classes (`\d`, `\w`, `\p{...}`), not just explicit chars/ranges. `\w*\p{Sm}`: `\w` is eight Unicode categories, none `Sm`, so the loop goes atomic.
@@ -160,7 +160,7 @@ Of ~20,000 real-world nuget-sourced patterns, only ~100 hand-write an atomic gro
 
 ## 5. Regex: call the right API (CA1874/CA1875)
 
-- **What:** analyzers in the .NET 10 SDK (dotnet/roslyn-analyzers#7547), both with fixers. CA1874: `Regex.Match(...).Success` → `Regex.IsMatch(...)`. CA1875: `Regex.Matches(...).Count` → `Regex.Count(...)`.
+- **What:** analyzers in the 10.0 SDK and later (dotnet/roslyn-analyzers#7547), both with fixers. CA1874: `Regex.Match(...).Success` → `Regex.IsMatch(...)`. CA1875: `Regex.Matches(...).Count` → `Regex.Count(...)`.
 - **Mechanism:** `Match` allocates a `Match` + supporting structures on success and computes full extents/captures; `IsMatch` reuses an internal `Match` and — especially under `RegexOptions.NonBacktracking` — exploits pay-for-play: *whether* a match exists is cheaper than *where*, which is cheaper than *all captures*. `Matches(...).Count` allocates every `Match` just to count.
 - **Magnitude:** `\b\w+\b` (NonBacktracking) over Twain: `Matches(...).Count` 680.4 ms / ~665.5 MB alloc vs `Count(...)` 219.0 ms / 0 B (~3.1x, alloc-free).
 - **Adoption:** PATTERN (call-site change; analyzers automate discovery).
@@ -215,7 +215,7 @@ Byte-oriented pipelines (JSON, HTTP headers, wire formats) should parse primitiv
 Span<char> scratch = stackalloc char[64];
 Encoding.UTF8.TryGetChars(utf8, scratch, out int n);
 Guid g = Guid.Parse(scratch[..n]);
-// After (.NET 10):
+// After (.NET 11):
 Guid g = Guid.Parse(utf8); // ReadOnlySpan<byte> overload
 ```
 

@@ -34,7 +34,7 @@ dotnet <scratch-copy>/Puck.Cli.dll search <pattern> [path] [options]
 ```
 
 Run it from the repo root; every path below is repo-relative. `<scratch-copy>`
-is a copy of the checkout's own `src/Puck.Cli/bin/Release/net10.0/` build (see
+is a copy of the checkout's own `src/Puck.Cli/bin/Release/net11.0/` build (see
 `SKILL.md`); a published copy or the global tool lags the head. If that build is
 absent, bootstrap from the tracked project:
 

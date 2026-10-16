@@ -1,6 +1,6 @@
 # Puck.World.Transpiler.Tests
 
-This xUnit v3 suite targets `net10.0` and checks the `.puck` world vocabulary pipeline. Parser, lowering, emitter, formatter, decompiler, linter, diagnostics, LSP, lambda, machine, shape, sugar, source-position, and round-trip tests cover canonical source fidelity and compiled world output; shipped-world tests compare committed sources with their generated JSON. A build-only CLI dependency generates those documents before the tests run; see [generated assets](../../build/README.md).
+This xUnit v3 suite targets `net11.0` and checks the `.puck` world vocabulary pipeline. Parser, lowering, emitter, formatter, decompiler, linter, diagnostics, LSP, lambda, machine, shape, sugar, source-position, and round-trip tests cover canonical source fidelity and compiled world output; shipped-world tests compare committed sources with their generated JSON. A build-only CLI dependency generates those documents before the tests run; see [generated assets](../../build/README.md).
 
 `ModuleExpansionTests` covers typed source modules, aliased and nested `use` expansion, export requirements,
 recursive namespace rewriting, collision refusals, bounded recursion, source origins, and formatter preservation.

@@ -12,7 +12,7 @@ Read the relevant section when `SKILL.md` routes here.
 
 Two verbs of the consolidated `puck` developer CLI (`src/Puck.Cli`) are
 invoked from the repository root, through a copy of the checkout's own
-`src/Puck.Cli/bin/Release/net10.0/` build (see `SKILL.md`):
+`src/Puck.Cli/bin/Release/net11.0/` build (see `SKILL.md`):
 
 ```text
 dotnet <scratch-copy>/Puck.Cli.dll <verb>
@@ -164,7 +164,7 @@ tree — the two walk one identical file set, see the walk contract below;
   `--allow-partial` turns the same run into exit 0 with the partial answer.
   `Puck.slnx` itself loads with no diagnostics at all (verified, repeatedly).
 - **Loading is not a pure read.** It runs a design-time build, which creates
-  `obj/<Configuration>/net10.0/` and writes `AssemblyInfo.cs`,
+  `obj/<Configuration>/net11.0/` and writes `AssemblyInfo.cs`,
   `AssemblyInfoInputs.cache` and `GeneratedMSBuildEditorConfig.editorconfig`
   there (verified on a throwaway project outside the repo that had no `obj/`
   before the run). The default Configuration is Release, the one every verb's

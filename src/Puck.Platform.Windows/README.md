@@ -118,10 +118,10 @@ choice; it never lives inside this project.
 
 ## Build
 
-Stays `net10.0` (not `net10.0-windows...`)—the same neutral TFM
+Stays `net11.0` (not `net11.0-windows...`)—the same neutral TFM
 `Puck.Platform` uses, so `[SupportedOSPlatform]` surface annotations keep
 firing under CA1416 exactly as they do in `Puck.DirectX`. Referencing this
-project on a non-Windows build is legal (it is plain net10.0 IL); running the
+project on a non-Windows build is legal (it is plain net11.0 IL); running the
 Windows-only code paths it contains is not.
 
 ## `WindowsCaptureProjection.targets`

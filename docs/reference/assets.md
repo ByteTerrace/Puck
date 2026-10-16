@@ -37,7 +37,7 @@ their canonicalizers). Puck.Assets does not decode fonts or shaders, and it does
 not mount archives, layer sources, or normalize paths.
 
 `dotnet pack` produces `ByteTerrace.Puck.Assets`; the first NuGet.org release
-has not been published yet. The package targets .NET 10, depends on the
+has not been published yet. The package targets .NET 11, depends on the
 `System.IO.Hashing` package (CRC-32 for the PNG codec), and references
 `Puck.Maths` (the QR encoder's Reed–Solomon error correction) and
 `Puck.Abstractions` (the `GpuPixelFormat` vocabulary the texture codecs share

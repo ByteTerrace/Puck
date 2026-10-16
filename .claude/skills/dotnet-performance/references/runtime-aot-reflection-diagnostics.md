@@ -1,4 +1,4 @@
-# .NET 10 — Runtime, Native AOT, Reflection & Diagnostics
+# .NET 11 — Runtime, Native AOT, Reflection & Diagnostics
 
 **TL;DR for this domain.** The runtime keeps absorbing hand-optimizations: native C helpers become inlinable C# IL, FCALLs become plain QCALLs, funclet scaffolding gets cheaper, stubs share one physical code page — ordinary constructs (`try/finally`, casts, exceptions-adjacent paths) tax you less for free. Reflection splits into two jobs: *discovery* stays on `System.Reflection`; *access* moves to `[UnsafeAccessor]`/`[UnsafeAccessorType]`, which the runtime fixes up to direct member access (~3.6x faster than cached `FieldInfo`, zero boxing) — the BCL itself now does this. Native AOT's fight is binary size, won by removing artificial reflection roots, folding identical generic bodies, and letting the build-time interpreter preinitialize more idiomatic static constructors. Diagnostics primitives (`Stopwatch`, `EventSource`, `ActivitySource`, logging) shed allocations and locks so instrumented code costs closer to uninstrumented code. Judge anything below by disassembly and counts before hand-tuning it.
 
@@ -17,7 +17,7 @@
 
 ## Shrinking and speeding Native AOT binaries
 
-All items in this section: **FREE** (recompile with the .NET 10 Native AOT toolchain), Native AOT only.
+All items in this section: **FREE** (recompile with the .NET 11 Native AOT toolchain), Native AOT only.
 
 ### Build-time preinitialization accepts idiomatic static constructors
 - **What:** The AOT toolchain interprets (allow-listed) static-constructor code at build time and bakes resulting `static readonly` contents into the binary. dotnet/runtime#107575 lets it handle spans sourced from arrays (`.AsSpan()` no longer bails out); #114374 adds access to *other* types' static fields, calls to methods on types with their own cctors, and pointer dereferences.
@@ -61,7 +61,7 @@ All items in this section: **FREE** (recompile with the .NET 10 Native AOT toolc
   }
   int[] items = Accessors<int>.GetItems(list);
 
-  // .NET 10: invisible target types / static members
+  // .NET 11: invisible target types / static members
   [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "SomeMethod")]
   static extern void Call([UnsafeAccessorType("Some.Internal.Type, SomeAssembly")] object target);
   ```
@@ -141,7 +141,7 @@ All FREE unless noted.
 ### DATAS tuned; re-measure if you opted out
 - **What:** dotnet/runtime#105545 tunes DATAS (Dynamic Adaptation To Application Sizes, default since .NET 9): cuts unnecessary work, smooths pauses under high allocation rates, fixes fragmentation accounting that caused extra gen1 collections. #118762 adds config knobs, notably Gen0 growth behavior.
 - **Adoption:** FREE (tuning) + config knobs.
-- **Guidance:** If you disabled DATAS on .NET 9 for pause/throughput regressions, **re-measure on .NET 10 before keeping the opt-out**.
+- **Guidance:** If you disabled DATAS on .NET 9 for pause/throughput regressions, **re-measure on the current runtime before keeping the opt-out**.
 
 ### Strongly-typed GC handles: `GCHandle<T>`, `PinnedGCHandle<T>`, `WeakGCHandle<T>`
 - **What:** dotnet/runtime#111307 introduces typed handle structs replacing untyped `GCHandle` — safer by construction and lower overhead.
@@ -170,7 +170,7 @@ All FREE unless noted.
   long start = Stopwatch.GetTimestamp();
   DoWork();
   TimeSpan elapsed = Stopwatch.GetElapsedTime(start, Stopwatch.GetTimestamp());
-  // .NET 10 — same performance, zero alloc:
+  // .NET 11 — same performance, zero alloc:
   Stopwatch sw = Stopwatch.StartNew();
   DoWork();
   sw.Stop();
@@ -245,9 +245,9 @@ dotnet/runtime#112171 exposes the already-formatted buffered text as `ReadOnlySp
 
 ## Folklore to delete
 
-- **"Cached `FieldInfo`/`MethodInfo` is the best you can do for private-member access."** Obsolete. `[UnsafeAccessor]` is ~3.6x faster than cached `FieldInfo.GetValue`, allocation/boxing-free, and with .NET 10's `[UnsafeAccessorType]` also covers static members and types invisible to your assembly. Delete reflection-based private-access shims on hot paths.
+- **"Cached `FieldInfo`/`MethodInfo` is the best you can do for private-member access."** Obsolete. `[UnsafeAccessor]` is ~3.6x faster than cached `FieldInfo.GetValue`, allocation/boxing-free, and with the 10.0 `[UnsafeAccessorType]` also covers static members and types invisible to your assembly. Delete reflection-based private-access shims on hot paths.
 - **"Reflection is the only way to call across an assembly-reference cycle."** The BCL itself now uses `[UnsafeAccessor]`/`[UnsafeAccessorType]` for exactly this (crypto→HTTP OCSP). Do the same.
-- **Custom `ValueStopwatch` structs.** Dead. `Stopwatch.StartNew()`/`Stop()`/`Elapsed` is allocation-free on .NET 10 via escape analysis; even the `GetTimestamp`/`GetElapsedTime` workaround is no longer required for zero-alloc timing.
+- **Custom `ValueStopwatch` structs.** Dead. `Stopwatch.StartNew()`/`Stop()`/`Elapsed` is allocation-free since 10.0 via escape analysis; even the `GetTimestamp`/`GetElapsedTime` workaround is no longer required for zero-alloc timing.
 - **Manually memoizing `Type.AssemblyQualifiedName`.** The runtime caches it (132 ns + 712 B → ~1 ns + 0 B).
 - **"Keep `EventSource` event IDs small/dense to avoid huge lookup arrays."** The dense array is gone; a `Dictionary` handles sparse IDs. (One static instance per EventSource type still stands.)
 - **"Keep static constructors trivial — spans/cross-type access defeat Native AOT preinitialization."** Increasingly false: `.AsSpan()`, other types' static fields, methods on types with their own cctors, and pointer dereferences all preinitialize now.

@@ -8,7 +8,7 @@ opens with; remote HTTP serves 2026-07-28 alone.
 It depends only on Puck.Hosting and its substrate. Local attachment supports
 Windows and Linux x64 under the host's OS user; in-process hosting uses the
 neutral `IControlSessionHost` interface. Clients may run on other platforms.
-The CLI requires the .NET 10 ASP.NET Core runtime.
+The CLI requires the .NET 11 ASP.NET Core runtime.
 
 ## Host extension
 
@@ -319,7 +319,7 @@ ModelContextProtocol.AspNetCore** packages and ASP.NET Core JWT bearer
 authentication, at the version ranges `Puck.Mcp.csproj` declares, with explicit
 schemas and low-level handlers. It installs no Harness or model provider.
 Result metadata uses a typed, source-generated serializer; standalone schemas use
-.NET 10's `JsonElement.Parse`. The SDK owns the asynchronous message channel.
+the framework's `JsonElement.Parse`. The SDK owns the asynchronous message channel.
 Admission counters bound that transport without adding another queue; a single
 console result uses a completion source, and the ordinary engine pump keeps its
 synchronous drain and session barriers.

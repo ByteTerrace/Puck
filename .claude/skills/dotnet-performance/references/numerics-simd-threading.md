@@ -1,8 +1,8 @@
-# .NET 10 Performance — Numerics, SIMD & Threading
+# .NET 11 Performance — Numerics, SIMD & Threading
 
 **TL;DR for this domain:**
 - Any elementwise or reduction math over a numeric span defaults to `TensorPrimitives` — its one optimized SIMD driver loop beats hand-written scalar and most hand-written vector code, and now covers types with no hardware SIMD (int division, `Half`, `nint`) via emulation.
-- Where hardware support is missing, .NET 10 vectorizes by *smuggling*: int SIMD division via exact double round-trip, `Half` via reinterpret-to-short + float round-trip, `nint`/`nuint` via platform-width aliasing. "This type can't be vectorized" is dead.
+- Where hardware support is missing, .NET 11 vectorizes by *smuggling*: int SIMD division via exact double round-trip, `Half` via reinterpret-to-short + float round-trip, `nint`/`nuint` via platform-width aliasing. "This type can't be vectorized" is dead.
 - The framework absorbs degenerate cases: thread-pool sync-over-async local-queue starvation, channel cancellation working-set blowup, single-task `WhenAll`. Delete defensive guards around these calls.
 - Ask randomness sources — especially crypto ones — for bytes in bulk (`GetItems`/`GetString`/`GetHexString`), never one integer per element.
 - C# 14 user-defined compound operators break the `a += b` ≡ `a = a + b` identity so large structures can mutate in place — a language-level allocation-removal tool (and a correctness review item).
@@ -56,7 +56,7 @@ TensorPrimitives.Decrement(src, dest);
 
 ## 2. Vectorization by emulation: int division, Half, nint, ConvertTruncating
 
-The unifying mechanism: when the hardware lacks an instruction, .NET 10 routes lanes through a type the hardware *does* support, exactly.
+The unifying mechanism: when the hardware lacks an instruction, .NET 11 routes lanes through a type the hardware *does* support, exactly.
 
 ### SIMD integer division (double round-trip)
 
@@ -87,7 +87,7 @@ The unifying mechanism: when the hardware lacks an instruction, .NET 10 routes l
 
 ## 3. Writing manual SIMD code
 
-Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128/256/512` if you must go lower, per-ISA intrinsics only when profiling proves it. .NET 10 reinforces this ordering:
+Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128/256/512` if you must go lower, per-ISA intrinsics only when profiling proves it. .NET 11 reinforces this ordering:
 
 ### New element-wise vector APIs
 
@@ -107,7 +107,7 @@ Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128
 - **GFNI** (dotnet/runtime#109537): hardware GF(2^8) instructions. Implementing Reed-Solomon, erasure coding, AES-adjacent transforms? Check the GFNI intrinsic classes before table-based implementations. New API; GFNI hardware required.
 - **VPCLMULQDQ** (dotnet/runtime#109137): vectorized carry-less 64-bit multiply — the core primitive of CRC and GHASH/GCM. Custom CRC/GHASH kernels can now be vector-width. New API; hardware required.
 - **AVX10.2** (dotnet/runtime#111209 + follow-ups): FP min/max with proper NaN semantics and FP conversions as single instructions. FREE on AVX10.2 hardware; nothing to do.
-- **Arm SVE**: `BitwiseSelect`, `MaxPairwise`/`MinPairwise`, `VectorTableLookup` added, but SVE remains **experimental** in .NET 10 — portable `Vector<T>`/`Vector128<T>` code stays the safe default on Arm.
+- **Arm SVE**: `BitwiseSelect`, `MaxPairwise`/`MinPairwise`, `VectorTableLookup` added, but SVE was still **experimental** in 10.0 — portable `Vector<T>`/`Vector128<T>` code stays the safe default on Arm.
 - **Intel APX**: JIT groundwork (32 GPRs, `ccmp`) — existing binaries speed up automatically when APX CPUs arrive. Nothing to do.
 
 ---
@@ -183,7 +183,7 @@ public sealed class C(int value)
 
 - **What changed:** When a pool thread is about to block — in particular on a `Task` (`task.Wait()`, `.Result`) — it first dumps its entire thread-local work-item queue into the global queue (dotnet/runtime#109841, on by default via #112796).
 - **Mechanism:** The pool drains local-first, then global, then steals. Under sync-over-async, a blocked thread's local queue holds exactly the items its unblocking depends on — but other threads only steal after the global queue is exhausted. With a steady stream of incoming global work, the logically highest-priority items become effectively lowest priority → deadlock-like starvation. Dumping the local queue gives those items a fair chance on other threads.
-- **Magnitude:** A crafted repro (saturated global queue + N blocked items each waiting on 4 local sub-items) hangs on .NET 9 (20,002 ms timeout) and completes in ~4 ms on .NET 10. FREE.
+- **Magnitude:** A crafted repro (saturated global queue + N blocked items each waiting on 4 local sub-items) hangs on .NET 9 (20,002 ms timeout) and completes in ~4 ms on 10.0 and later. FREE.
 - **Guidance:** Sync-over-async is still an anti-pattern — it still burns a thread and still risks starvation under thread-injection limits — but the worst degenerate hard-hang (a blocked thread's own continuations stranded in its local queue) is gone. Treat mysterious .NET ≤9 pool hangs under sync-over-async as likely fixed by upgrading; do not treat this as license to block.
 - **Caveat:** Only fixes the local-queue starvation shape; pool-thread exhaustion from mass blocking is unchanged.
 
@@ -199,7 +199,7 @@ public sealed class C(int value)
 
 - **What changed:** dotnet/runtime#116021 switches channels' internal queues of pending `AsyncOperation` waiters from array-backed queues to linked lists (the waiter objects are the nodes), so canceled operations are removed promptly instead of lingering until dequeued. To offset the two node fields, `AsyncOperation` was shrunk (merged `ExecutionContext` with `TaskScheduler`/`SynchronizationContext` field; removed the stored `CancellationToken`); net object size *decreased*.
 - **Mechanism:** Array-backed queues can't cheaply remove from the middle, so canceled waiters were skipped only at dequeue time — fine at balanced steady state, but when cancellations dominate completions (many readers timing out with no writers) canceled entries accumulated without bound.
-- **Magnitude:** Degenerate repro (loop: `ReadAsync(cts.Token)` then cancel, unbounded channel, no writers): .NET 9 working set grows unbounded past ~1.5 GB; .NET 10 plateaus ~46 MB. FREE.
+- **Magnitude:** Degenerate repro (loop: `ReadAsync(cts.Token)` then cancel, unbounded channel, no writers): .NET 9 working set grows unbounded past ~1.5 GB; 10.0 plateaus ~46 MB. FREE.
 - **Guidance:** Channel reads/writes with timeouts/cancellation (routine in server code) no longer risk working-set growth. Delete workarounds: periodic dummy writes to flush canceled readers, channel recreation. (Rare edge: an awaiter needing both a captured `ExecutionContext` and a non-default scheduler now costs one extra allocation — irrelevant in practice.)
 
 ### Unbuffered (rendezvous) channel
@@ -218,7 +218,7 @@ public sealed class C(int value)
 ```csharp
 // Before (.NET ≤9 hand-optimization) — delete this:
 Task combined = tasks.Count == 1 ? tasks[0] : Task.WhenAll(tasks);
-// After (.NET 10):
+// After (.NET 11):
 Task combined = Task.WhenAll(tasks);
 ```
 
@@ -250,7 +250,7 @@ Task combined = Task.WhenAll(tasks);
 - **"Pre-check for a single task before calling Task.WhenAll."** Dead. `WhenAll` returns the lone task directly.
 - **"Materialize your `IEnumerable<Task>` to an array before WhenAll to avoid allocs."** Dead. The enumerable path no longer allocates a temporary buffer.
 - **"Channels leak memory if readers cancel a lot — recycle the channel / inject dummy writes."** Dead. Canceled waiters are unlinked at cancellation time.
-- **"Mysterious thread-pool hang under sync-over-async — restructure everything immediately."** The hard-hang shape (continuations stranded in a blocked thread's local queue) is fixed in .NET 10. Sync-over-async remains an anti-pattern for thread-consumption reasons — but diagnose ≤9 hangs as this bug first.
+- **"Mysterious thread-pool hang under sync-over-async — restructure everything immediately."** The hard-hang shape (continuations stranded in a blocked thread's local queue) was fixed in 10.0. Sync-over-async remains an anti-pattern for thread-consumption reasons — but diagnose ≤9 hangs as this bug first.
 - **"You need a full `Thread.MemoryBarrier()` when a half fence would do."** `Volatile.ReadBarrier`/`WriteBarrier` express standalone acquire/release fences precisely (low-lock experts only).
 - **"`a += b` is just sugar for `a = a + b`."** No longer necessarily true in C# 14. On types with user-defined compound operators (like `Tensor<T>`), `+=` mutates in place — a perf opportunity on your own types and a correctness review item on others'.
 - **"Cast `uint` to `long`/`double` first when converting to `float` to avoid the slow path."** Dead. Direct unsigned conversions are emitted (single `vcvtusi2ss` on AVX512; double-hop removed elsewhere).

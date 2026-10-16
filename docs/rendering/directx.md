@@ -10,7 +10,7 @@ zero-marshaling code in the same shape as the rest of the codebase.
 
 ```text
 namespaces  Puck.DirectX (+ .Interfaces, .Apis, .Interop, .Messages)
-target      net10.0  (Windows-only at runtime; surface annotated [SupportedOSPlatform("windows8.1")])
+target      net11.0  (Windows-only at runtime; surface annotated [SupportedOSPlatform("windows8.1")])
 deps        Microsoft.Windows.CsWin32 (build-only, PrivateAssets=all — no runtime dependency)
 ```
 
@@ -480,7 +480,7 @@ the world:
 ```powershell
 dotnet test tests/Puck.DirectX.Tests/Puck.DirectX.Tests.csproj -c Release
 dotnet build Puck.slnx -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll parity
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll parity
 ```
 
 ## Packaging

@@ -571,7 +571,7 @@ dotnet publish src/Puck.World.Browser -c Release
 ```
 
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
-the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
+the ordinary net11.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
 package declares no `engines` requirement, and CI runs it on the Node version
@@ -957,7 +957,7 @@ meant to establish.
   `puck registry` rewrites the table.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
-- .NET 10 is the only target. Verify runtime behavior and measure before preserving a hand optimization or making a performance claim.
+- .NET 11 is the only target. Verify runtime behavior and measure before preserving a hand optimization or making a performance claim.
 
 ## Documentation policy
 

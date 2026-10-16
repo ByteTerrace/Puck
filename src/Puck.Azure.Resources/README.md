@@ -88,7 +88,7 @@ and access setup described in the [checklist](./CHECKLIST.md) and bootstrap belo
 #### 📦 *.NET*
 
 The identity team runs [bootstrap.cs](./bootstrap.cs) from this directory with
-.NET 10 and its operator credentials. It creates the CI identity and federation,
+.NET 11 and its operator credentials. It creates the CI identity and federation,
 authors its constrained Owner delegation and Graph grants, and prepares the
 groups, custom roles, Azure DevOps connection and Template Specs. Application CI
 consumes this setup. See the [deployment access contract](../../docs/development/ci.md#azure-production-deployment).

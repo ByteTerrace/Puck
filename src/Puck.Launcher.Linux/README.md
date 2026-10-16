@@ -37,7 +37,7 @@ slower and occasionally denies permissions NTFS never would):
 
 ```bash
 git clone <repo-url> ~/src/Puck && cd ~/src/Puck
-# .NET 10 SDK installed inside the WSL2 distro (not the Windows host install).
+# .NET 11 SDK installed inside the WSL2 distro (not the Windows host install).
 dotnet restore Puck.slnx
 dotnet build Puck.slnx -c Release
 dotnet build src/Puck.Platform.Linux/Puck.Platform.Linux.csproj -c Release

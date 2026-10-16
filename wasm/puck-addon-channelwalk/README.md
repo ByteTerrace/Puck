@@ -58,7 +58,7 @@ directory, so a repo-relative path works there and only there:
 
 ```bash
 dotnet build src/Puck.World -c Release
-dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll \
+dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll \
   --world wasm/puck-addon-channelwalk/worlds/channel-walk-world.json \
   --exit-after-seconds 30 < wasm/puck-addon-channelwalk/scripts/<name>.txt > <name>.log 2>&1
 ```

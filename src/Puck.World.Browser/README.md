@@ -52,7 +52,7 @@ publish from a checkout with a short path, such as one near a drive root.
 
 ## AppBundle—real layout, recorded from an actual publish
 
-The publish command writes `bin/Release/net10.0/browser-wasm/AppBundle/`. Its sizes:
+The publish command writes `bin/Release/net11.0/browser-wasm/AppBundle/`. Its sizes:
 
 ```text
 AppBundle/

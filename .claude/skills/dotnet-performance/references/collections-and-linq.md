@@ -1,4 +1,4 @@
-# .NET 10 Performance — Collections & LINQ
+# .NET 11 Performance — Collections & LINQ
 
 **TL;DR for this domain.** The boxed-enumerator tax on `IEnumerable<T>`-typed enumeration is dying: dynamic PGO → guarded devirtualization → inlining → escape analysis → stack allocation now routinely makes interface-typed `foreach` alloc-free, and the BCL rewrote its enumerators (`List`, `Stack`, `Queue`, `PriorityQueue`, `ConcurrentDictionary`) specifically so their members are small enough for that pipeline to fire. Inlineability is the gateway optimization — one non-inlined virtual call (even a nop `Dispose`) makes the whole enumerator escape to the heap, so micro-structure (branch count, code size, reducible control flow) now has macro consequences. LINQ operators increasingly see through each other: terminal operators (`Contains`, `First`, `Count`, `Take`) replace entire pipelines with algorithmically superior equivalents, so composed declarative LINQ can beat hand-rolled loops asymptotically. `(uint)i < (uint)len` remains the lingua franca for merging state checks and proving bounds. Zero-copy `CollectionsMarshal`/`ImmutableCollectionsMarshal` escape hatches turn per-element loops into vectorized one-liners.
 
@@ -46,7 +46,7 @@
 - **Adoption:** FREE.
 
 ### `Queue<T>` enumerator: wraparound restructured so the wrap test proves bounds
-- **What changed:** dotnet/runtime#117341. .NET 9 wrote `if (index >= array.Length) index -= array.Length; _current = array[index];` — two branches per element (wrap check + un-eliminable bounds check). .NET 10 inverts it:
+- **What changed:** dotnet/runtime#117341. .NET 9 wrote `if (index >= array.Length) index -= array.Length; _current = array[index];` — two branches per element (wrap check + un-eliminable bounds check). 10.0 inverts it:
   ```csharp
   if ((uint)index < (uint)array.Length) { _current = array[index]; }        // compare doubles as bounds proof
   else { index -= array.Length; _current = array[index]; }
@@ -242,14 +242,14 @@ The design underneath all of these: LINQ's internal concrete iterator types (`Ar
 ### Size-optimized LINQ regains the high-value specializations
 - **What changed:** dotnet/runtime#118156. The original size build removed ALL specialized overrides indiscriminately; many removals saved almost no size while costing large throughput. The impactful specializations are reinstated where throughput gains significantly outweigh minimal size cost.
 - **Adoption:** FREE for Native AOT users.
-- **Guidance:** Default .NET 10 Native AOT LINQ is much closer to coreclr LINQ; try the default before reaching for the switch.
+- **Guidance:** Default .NET 11 Native AOT LINQ is much closer to coreclr LINQ; try the default before reaching for the switch.
 - **Caveats:** Still not the complete set; the switch remains for full speed.
 
 ---
 
 ### Folklore to delete
 
-- **"Never take/return `IEnumerable<T>` in hot paths — the enumerator allocates."** On .NET 10, for arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ConcurrentDictionary<,>` and friends in tiered/PGO'd code, the enumerator is devirtualized and stack-allocated. Stop distorting API shapes over this (exposing struct enumerators is still fine; just stop fearing the interface).
+- **"Never take/return `IEnumerable<T>` in hot paths — the enumerator allocates."** On .NET 11, for arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ConcurrentDictionary<,>` and friends in tiered/PGO'd code, the enumerator is devirtualized and stack-allocated. Stop distorting API shapes over this (exposing struct enumerators is still fine; just stop fearing the interface).
 - **"Split the cold tail into a separate method so the hot method stays inlineable" (the `MoveNextRare` pattern).** Under dynamic PGO this backfires: the split-out method is classified cold, not inlined, and blocks escape analysis. The runtime itself deleted this pattern from `List<T>` and `PriorityQueue<,>`.
 - **"Hand-rolled switch/goto state machines are faster than plain loops."** Opposite: `goto case` webs create irreducible loops the JIT can't optimize or inline. `ConcurrentDictionary`'s enumerator got ~6x faster by becoming a boring `while` loop.
 - **"Rewrite `query.OrderBy(...).Contains(x)` / `Distinct().Contains(x)` manually or LINQ will sort/dedup first."** `Contains` is specialized behind ~30 iterator types; the composed form is ~50–350x faster than before and near raw-scan cost.

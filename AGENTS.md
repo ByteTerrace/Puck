@@ -140,7 +140,7 @@ settles a question, decide by that principle and say why.
 7. **Find the system before building one.** A "new" mechanism here is usually an
    existing one under another name. Load the owning skill (`puck-world`,
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
-   `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
+   `gaming-bricks`, `rom-forge`, `dotnet-performance`, `symbol-analysis`,
    `content-search`, `boy-scout`, `verification`,
    `review-passes`, `orchestration`), then ask the code with `puck references`,
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
