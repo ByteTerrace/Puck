@@ -84,6 +84,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   signed remainder (`OpSRem`, which DXC emits for `%` on `int`) of a negative operand
   wrongly where Direct3D 12 answers it right: lift the value to non-negative and
   wrap it as `uint`, as `sdfMeshIrradianceSlot` does.
+- **One walk in `mapCore`.** NVIDIA's Direct3D 12 driver on Turing (the RTX 2060)
+  takes a second walk chosen by a program-uniform flag (a linear all-segment walk
+  beside the instance merge) for instanced programs too, so every bake group
+  samples the whole program; Vulkan on the same card does not. A program with no
+  instance lists every segment as a world segment, so the merge covers it. When
+  one backend's bake disagrees, compare `[sdf.mesh-bake] done` on both: a group
+  that empties on one backend alone (an axis line under the floor) is the walk
+  ignoring its mask.
 - **Bindings are generated.** No kernel declares a binding or register by hand;
   a new resource is a member of `SdfKernelInterfaces`.
 
