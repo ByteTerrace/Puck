@@ -707,7 +707,7 @@ require a GPU and run in the merge selection on Vulkan and Direct3D 12.
 ## The baked-mesh path
 
 A view whose quality names the baked-mesh path (`SdfViewQuality.RenderPath`,
-the `world.render-path mesh` session lever in `Puck.World`) renders without
+the world's own views by default in `Puck.World`, whose `world.render-path interpreter` session lever returns them to the interpreter) renders without
 walking the field in the frame. It runs its interpreter fragment's mesh-path
 form (`SdfWorldPackage.MeshPathFragmentOf`), which adds a bake pass and two
 shadow-cascade raster passes and keeps everything else:

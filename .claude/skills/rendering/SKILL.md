@@ -172,7 +172,7 @@ drifted.
 
 ## The baked-mesh path
 
-`world.render-path mesh` (`SdfViewQuality.RenderPath`) renders a residency's
+The world's own views take the mesh path by default (`SdfViewQuality.RenderPath`; `world.render-path interpreter` returns them), which renders a residency's
 views from meshes its program is baked into, with no field walk in the frame;
 [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-baked-mesh-path)
 owns the explanation.

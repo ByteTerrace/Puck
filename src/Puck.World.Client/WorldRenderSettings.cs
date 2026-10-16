@@ -49,7 +49,7 @@ public sealed partial class WorldRenderSettings {
     private float m_shadowReach;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
-    private Puck.SdfVm.SdfRenderPath m_renderPath;
+    private Puck.SdfVm.SdfRenderPath m_renderPath = Puck.SdfVm.SdfRenderPath.Mesh;
     private bool m_shadowAmortize;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
@@ -128,13 +128,15 @@ public sealed partial class WorldRenderSettings {
         set { m_bakes = value switch { true => 1, false => 2, null => 0 }; m_revision++; }
     }
 
-    /// <summary>Returns whether the presentation draws its ready bakes: as <see cref="Bakes"/> says when it is set, and
+    /// <summary>Returns whether the presentation draws its ready bakes: never on the baked-mesh path
+    /// (<see cref="RenderPath"/>), whose frame bakes every static placement from its field at a finer, adaptive
+    /// resolution than a prototype bake's fixed grid; otherwise as <see cref="Bakes"/> says when it is set, and
     /// otherwise when the schedule's last reconcile found the loaded world's pack supplied every bake
     /// (<see cref="Client.WorldBakeSchedule.Ships"/>).</summary>
     /// <param name="schedule">The presentation's bake schedule, or <see langword="null"/> when it has none.</param>
     /// <returns><see langword="true"/> when ready bakes draw.</returns>
     public bool DrawsBakes(Client.WorldBakeSchedule? schedule) =>
-        (Bakes ?? (schedule?.Ships ?? false));
+        ((RenderPath != Puck.SdfVm.SdfRenderPath.Mesh) && (Bakes ?? (schedule?.Ships ?? false)));
 
     /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
     /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
@@ -187,7 +189,7 @@ public sealed partial class WorldRenderSettings {
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
     /// <summary>How the world's own views turn the program into pixels (<c>world.render-path</c>), through each view's
-    /// <see cref="Puck.SdfVm.SdfViewQuality.RenderPath"/> lane: the interpreter by default, or the baked-mesh path. A
+    /// <see cref="Puck.SdfVm.SdfViewQuality.RenderPath"/> lane: the baked-mesh path by default, or the interpreter. A
     /// change rebuilds each view's graph beside the installed one. A session lever only: no document saves it.</summary>
     public Puck.SdfVm.SdfRenderPath RenderPath { get => m_renderPath; set { m_renderPath = value; m_revision++; } }
     /// <summary>Whether secondary stable shadow slots reuse valid history when reconstruction is on. The

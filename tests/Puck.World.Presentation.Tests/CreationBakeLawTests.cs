@@ -439,7 +439,7 @@ public sealed class CreationBakeLawTests {
     [Fact]
     public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {
         using var schedule = new WorldBakeSchedule(store: new WorldBakeStore());
-        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderPath = Puck.SdfVm.SdfRenderPath.Interpreter };
 
         foreach (var lever in new bool?[] { null, true, false }) {
             settings.Bakes = lever;
@@ -457,6 +457,13 @@ public sealed class CreationBakeLawTests {
             Assert.True(condition: schedule.IsReadyForDrawing(bakes: settings.Bakes));
             Assert.Equal(expected: (lever ?? false), actual: settings.DrawsBakes(schedule: schedule));
         }
+
+        // The baked-mesh path bakes static placements in its own frame and draws no prototype bake, whatever the lever.
+        settings.RenderPath = Puck.SdfVm.SdfRenderPath.Mesh;
+        foreach (var lever in new bool?[] { null, true, false }) {
+            settings.Bakes = lever;
+            Assert.False(condition: settings.DrawsBakes(schedule: schedule));
+        }
     }
     [Fact]
     public void APackLoadedForOneWorldDoesNotShipASourceWorldWithTheSameKeys() {
@@ -468,7 +475,7 @@ public sealed class CreationBakeLawTests {
         var store = new WorldBakeStore();
         var boot = CompiledWorldFixtures.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
         using var schedule = new WorldBakeSchedule(store: store);
-        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderPath = Puck.SdfVm.SdfRenderPath.Interpreter };
 
         schedule.Pump(definition: boot.Admission.Definition);
         Assert.True(condition: settings.DrawsBakes(schedule: schedule));
