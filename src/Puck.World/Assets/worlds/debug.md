@@ -75,8 +75,8 @@ turning round and walking back into the counterpart's front fires the way back.
 ## What to try
 
 The crossings below work in every boot shape, headless included; a presenting
-boot draws each of them at the display rate on the RTX 2060, Direct3D 12 and
-Vulkan alike, with the chase camera on (`view.override layout play`), and a
+boot draws each of them on the RTX 2060, Direct3D 12 and Vulkan alike, with the
+chase camera on (`view.override layout play`), and a
 body that crosses takes the meshes its first world baked, in the world it
 arrives in and the world it returns to. On the RTX 2060 under Direct3D 12, a
 warm crossing's frames run 13 to 23 ms, the programs it rebuilds building off
@@ -84,7 +84,9 @@ the frame thread, and a window growing across an octave on the approach at
 most one of about 26 to 29 ms; the first crossing of a boot still costs about
 81 ms, mostly the runtime compiling the transfer path (49 ms on the ReadyToRun
 publish), and a frame of 50 to 56 ms after it while the garden's mesh region
-grows to take the body ([open item](../../../../docs/plans/open-items.md#rendering)).
+grows to take the body. Under Vulkan a warm crossing still costs 21 to 36 ms back
+to the debug world and 34 to 143 ms into the garden, its upload submission
+blocking in the driver at worst ([open item](../../../../docs/plans/open-items.md#rendering)).
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
   `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
