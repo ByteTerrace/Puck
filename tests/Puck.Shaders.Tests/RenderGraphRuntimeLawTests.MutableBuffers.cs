@@ -169,11 +169,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 frames.Next();
                 return ((runtime.Node(instance: 2).FrameCounter > 1) && (runtime.Node(instance: 1).PublishedBinding == "world"));
             });
-        var image = recorders.Publications["mixed"];
         var records = reader.Records;
 
         frames.Next(count: 3);
-        Assert.Equal(expected: image, actual: recorders.Publications["mixed"]);
         Assert.Equal(actual: reader.Records, expected: (records + 6));
 
         // Only the image-forwarding pass keeps submitting once the buffer's own content signature stands.
@@ -185,7 +183,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         frames.Next(count: 3);
         Assert.Equal(actual: producer.Writes, expected: writes);
         Assert.Equal(actual: reader.Records, expected: (records + 3));
-        Assert.Equal(expected: image, actual: recorders.Publications["mixed"]);
     }
 
     private sealed class PublicationBufferWriter(IGpuBuffer buffer) : IRenderGraphPackageFactory {

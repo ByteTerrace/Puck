@@ -94,29 +94,5 @@ public sealed partial class RenderGraphRuntime {
         ((m_convergence is { IsActive: true }) && m_convergenceInstances.Contains(item: index));
 
     private bool CanServeConvergence =>
-        (CaptureReadiness.IsRendered &&
-        ((m_convergence is not { Request.Converge: > 0 } convergence) || (convergence.Samples >= (convergence.Request.Converge - 1))));
-    private Puck.Hosting.FrameRender CaptureReadiness {
-        get {
-            if (m_convergence is not { Request.Completion.IsCompleted: false }) { return Puck.Hosting.FrameRender.Rendered; }
-            var result = Puck.Hosting.FrameRender.Rendered;
-
-            foreach (var index in m_convergenceInstances) {
-                if (m_graphs[index] is not { } graph) { continue; }
-                var name = m_set.Instances[index].Name;
-                var passes = graph.Pipeline.Plan.Passes;
-
-                for (var position = 0; (position < passes.Count); position++) {
-                    var pass = passes[position];
-
-                    if ((pass.Package is not { } step) || !m_packages.TryGetFactory(step.Package, out var factory)) { continue; }
-                    var readiness = factory.CaptureReadinessOf(instance: name);
-
-                    if (readiness.Completion == Puck.Hosting.FrameCompletion.Refused) { return readiness; }
-                    if (!readiness.IsRendered) { result = readiness; }
-                }
-            }
-            return result;
-        }
-    }
+        ((m_convergence is not { Request.Converge: > 0 } convergence) || (convergence.Samples >= (convergence.Request.Converge - 1)));
 }

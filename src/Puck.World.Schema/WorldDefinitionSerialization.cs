@@ -477,6 +477,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => Get<WorldSeatCameraFeel>();
     /// <summary>Gets the type info for <see cref="WorldSeatViewControl"/>.</summary>
     public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
+    /// <summary>Gets the type info for <see cref="WorldViewDefaults"/>.</summary>
+    public JsonTypeInfo<WorldViewDefaults> WorldViewDefaults => Get<WorldViewDefaults>();
     /// <summary>Gets the type info for <see cref="WorldCountersReport"/>.</summary>
     public JsonTypeInfo<WorldCountersReport> WorldCountersReport => Get<WorldCountersReport>();
     /// <summary>Gets the type info for <see cref="GpuDeviceIdentity"/>, as a counters report and <c>world.counters</c>

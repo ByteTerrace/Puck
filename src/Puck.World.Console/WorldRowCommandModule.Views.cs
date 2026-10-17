@@ -14,8 +14,24 @@ public sealed partial class WorldRowCommandModule {
 
         return sections;
     }
-    // The views section's rows: its keyed layouts and graphs, and its keyless seat rig, seat control and post passes.
+    // The views section's rows: the whole section (its literal-field form sets one scalar live, such as nestingDepth),
+    // its keyed layouts and graphs, and its keyless seat rig, seat control and post passes.
     private static Dictionary<string, RowSection> ViewSections() => new(comparer: StringComparer.Ordinal) {
+        ["views"] = new RowSection(
+        RowType: typeof(WorldViewDefaults),
+        Upsert: Upsert(
+            info: WorldJsonContext.Default.WorldViewDefaults,
+            toMutation: static (principal, views) => new WorldMutation.SetViewDefaults(
+                Principal: principal,
+                Views: views
+            )
+        ),
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldViewDefaults,
+            select: static definition => definition.Views
+        )
+    ),
         ["views.layouts"] = new RowSection(
         RowType: typeof(WorldViewLayout),
         Upsert: Upsert(

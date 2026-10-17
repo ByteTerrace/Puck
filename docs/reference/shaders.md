@@ -927,24 +927,13 @@ buffer sources. Each participating package is notified once per request through
 `BeginConvergence`, including a request with no extra convergence samples;
 changing demand does not restart samples or finite source epochs. Once the runtime
 forwards the request to a graph node or external producer, its contributing closure
-stays held until that target completes the capture. A package's
-`CaptureReadinessOf` keeps forwarding and sample counting behind its actual
-finite-source completion; a refusal fails the request by name. `TaintedOf`
-also joins the graph's acquired-input taint, so an older retained result or
+stays held until that target completes the capture. `TaintedOf` joins the graph's
+acquired-input taint, so an older retained result or
 history cannot become clean merely because a newer input is clean.
 Before rendering, retained package taint prevents forwarding a capture. After a
 successful submission, the new output carries that submitted package state and
 its acquired-input taint. A clean render that replaces tainted history counts
 as the first clean sample; the previous output's taint does not delay it again.
-After retaining an image output, `OutputPublished` reports that same publication
-to its package factories. A forwarded image keeps its acquired producer and
-sequence. An owner can associate already-submitted source state with that image;
-looking up a newer source during the callback would mislabel the pixels.
-For a finite operation, every package in an image instance can agree to
-`HoldsOutput` for that exact own publication. The runtime then keeps its image
-and submission fence without binding newer inputs or submitting the node, even
-during convergence. Capture readiness still waits for the operation to finish.
-Ordinary `IsUnchanged` cadence and individual pass skips do not provide this hold.
 
 ### The default root graph
 

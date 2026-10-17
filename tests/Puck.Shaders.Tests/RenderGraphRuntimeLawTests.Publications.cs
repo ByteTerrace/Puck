@@ -32,13 +32,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var node = runtime.NodeOf(instance: ReadSource)!;
 
         Assert.Same(expected: node, actual: original.Owner);
-        Assert.Equal(original, recorders.Publications[ReadSource]);
         Assert.True(condition: original.IsKnown);
         node.Paused = true;
         for (var held = 0; (held < 4); held++) {
             Next();
             Assert.Equal(expected: original, actual: Assert.Single(collection: world.Publications));
-            Assert.Equal(original, recorders.Publications[ReadSource]);
         }
 
         node.Reset();
@@ -46,7 +44,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Next();
         Assert.True(condition: (Assert.Single(collection: world.Publications).Sequence > original.Sequence));
         Assert.Same(expected: original.Owner, actual: Assert.Single(collection: world.Publications).Owner);
-        Assert.Equal(Assert.Single(collection: world.Publications), recorders.Publications[ReadSource]);
     }
     [Fact]
     public void AForwardedExternalImageKeepsItsAcquiredPublicationThroughRepeatedReads() {
@@ -95,7 +92,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Same(expected: source, actual: original.Owner);
         Assert.True(condition: original.IsKnown);
         Assert.Equal(expected: source.Produced, actual: original.Sequence);
-        Assert.Equal(original, recorders.Publications["mid"]);
         for (var read = 0; (read < 4); read++) {
             Next();
             Assert.Equal(expected: original, actual: Assert.Single(collection: world.Publications));
@@ -107,7 +103,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         Assert.Same(expected: source, actual: changed.Owner);
         Assert.Equal(expected: (original.Sequence + 1L), actual: changed.Sequence);
-        Assert.Equal(changed, recorders.Publications["mid"]);
         Assert.Equal(expected: source.ImageView, actual: Assert.Single(collection: world.Seen).ImageView);
     }
 }
