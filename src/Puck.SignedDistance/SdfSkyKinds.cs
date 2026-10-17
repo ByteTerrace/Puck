@@ -115,10 +115,11 @@ public record struct SdfSkyStars : ISdfSkyKind {
     public static string Name => "stars";
 }
 /// <summary>The <see cref="SdfSkyLayerKind.Clouds"/> kind's parameters: a heightfield of cloud on a dome, a domain-warped
-/// fractal sum of the periodic lattice noise thresholded by coverage, lit against the light it names. Its constants of
-/// shape (the warp, the heightfield's rise, the self-shadow, the silver lining, the extinction, the dome and the
-/// horizon fade) are parameters with the defaults the kind has always drawn with.</summary>
-[StructLayout(LayoutKind.Explicit, Size = 112)]
+/// fractal sum of the periodic lattice noise thresholded by coverage, lit against the light it names, with forward
+/// scattering toward the light and aerial perspective toward the horizon. Its constants of shape (the warp, the
+/// heightfield's rise, the unlit floor, the self-shadow, the forward scattering, the silver lining, the extinction, the
+/// dome, the aerial depth and the horizon fade) are parameters with the kind's defaults.</summary>
+[StructLayout(LayoutKind.Explicit, Size = 128)]
 public record struct SdfSkyClouds : ISdfSkyKind {
     /// <summary>The default cloud cell scale.</summary>
     public const float DefaultScale = 2f;
@@ -169,6 +170,17 @@ public record struct SdfSkyClouds : ISdfSkyKind {
     [FieldOffset(104)] public float NormalTap;
     /// <summary>The fractal sum's octaves at <see cref="SdfSkyTier.High"/>, one to eight.</summary>
     [FieldOffset(108)] public uint Octaves;
+    /// <summary>The share of the cloud's colour its side facing away from the light keeps, in <c>[0, 1]</c>: the
+    /// heightfield's diffuse term rises from it to the whole colour.</summary>
+    [FieldOffset(112)] public float Ambient;
+    /// <summary>How strongly light scattered forward through the cloud lights it as the view turns toward the light: a
+    /// cloud seen against the light reads lit, its unlit underside and self-shadow fading as the squared cosine between
+    /// the view and the light rises.</summary>
+    [FieldOffset(116)] public float ForwardScatter;
+    /// <summary>The aerial perspective's strength: the cloud's opacity falls by <c>exp(−AerialDepth·(t − 1)²)</c>, where
+    /// <c>t</c> is the path to the layer in layer units (1 overhead, <c>sqrt(2R + 1)</c> at the horizon), so a cloud
+    /// overhead keeps its opacity and a distant, low one fades into the horizon's haze behind it.</summary>
+    [FieldOffset(120)] public float AerialDepth;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSkyClouds"/> struct with the default shape, uncovered.</summary>
     public SdfSkyClouds() {
@@ -179,12 +191,15 @@ public record struct SdfSkyClouds : ISdfSkyKind {
         Warp = 0.6f;
         Height = 0.7f;
         Extinction = 3.5f;
-        SelfShadow = 0.6f;
+        SelfShadow = 0.45f;
         SilverLining = 0.5f;
         DomeRadius = 6f;
         HorizonFade = 0.05f;
         NormalTap = 0.18f;
         Octaves = DefaultOctaves;
+        Ambient = 0.65f;
+        ForwardScatter = 1f;
+        AerialDepth = 0.25f;
     }
 
     /// <inheritdoc/>

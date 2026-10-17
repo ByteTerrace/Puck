@@ -8,11 +8,14 @@
 // bends the second's domain by Warp), the shaping sum read at its own host-integrated shear offset, thresholded at
 // (1 − coverage) over the softness. At SDF_SKY_TIER_HIGH the sums take Octaves octaves and below it three. Above
 // SDF_SKY_TIER_LOW volume is read from that heightfield with four thickness taps: the centre and two offset taps give a
-// surface normal (Height tall per unit thickness) lit against the light; a fourth tap toward the light finds a taller
-// neighbour shadowing this point (SelfShadow); the light seen through a thin edge lines it (SilverLining). At
-// SDF_SKY_TIER_LOW the one centre tap shades the cloud flat. The thickness sets the opacity through Beer's law
-// (1 − exp(−t·Extinction)), and the layer fades to nothing in the last HorizonFade of height and is never drawn below the
-// horizon. Each fractal octave hashes four lattice corners, which count.
+// surface normal (Height tall per unit thickness) lit against the light down to the Ambient share of the colour; a fourth
+// tap toward the light finds a taller neighbour shadowing this point (SelfShadow); light scattered forward through the
+// cloud lights it as the view turns toward the light (ForwardScatter, on the squared cosine), lifting the unlit side
+// and the self-shadow; the light seen through a thin edge lines it (SilverLining). At SDF_SKY_TIER_LOW the one centre
+// tap shades the cloud flat. The thickness sets the opacity through Beer's law (1 − exp(−t·Extinction)); aerial
+// perspective thins it by exp(−AerialDepth·(t − 1)²) over the path t to the layer, so a cloud overhead keeps its opacity
+// and a distant, low one fades into the horizon's haze behind it; and the layer fades to nothing in the last HorizonFade
+// of height and is never drawn below the horizon. Each fractal octave hashes four lattice corners, which count.
 #ifndef SKY_KINDS_CLOUDS_HLSLI
 #define SKY_KINDS_CLOUDS_HLSLI
 
@@ -53,7 +56,8 @@ float4 sdfSkyCloudsLayer(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkySample sa
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    float alpha = ((1.0 - exp(-(thickness * clouds.Extinction))) * smoothstep(0.0, clouds.HorizonFade, direction.y));
+    float haze = (t - 1.0);
+    float alpha = (((1.0 - exp(-(thickness * clouds.Extinction))) * smoothstep(0.0, clouds.HorizonFade, direction.y)) * exp(-(clouds.AerialDepth * (haze * haze))));
 
     if (sample.tier == SDF_SKY_TIER_LOW) {
         return float4(clouds.Color, alpha);
@@ -68,9 +72,11 @@ float4 sdfSkyCloudsLayer(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkySample sa
     float thicknessSunward = sdfSkyCloudThickness(clouds, layer, (p + (clouds.NormalTap * 2.0 * normalize(sunTurned + 1e-5))), threshold, octaves);
     float3 normal = normalize(float3(-((thicknessX - thickness) / clouds.NormalTap) * clouds.Height, 1.0, -((thicknessY - thickness) / clouds.NormalTap) * clouds.Height));
     float diffuse = saturate(dot(normal, normalize(float3(sunTurned.x, sun.y, sunTurned.y))));
-    float shadow = (1.0 - (clouds.SelfShadow * saturate(thicknessSunward - thickness)));
-    float lining = ((clouds.SilverLining * pow(saturate(dot(direction, sun)), 8.0)) * (1.0 - thickness));
-    float3 shade = ((clouds.Color * (lerp(0.45, 1.0, diffuse) * shadow)) + (clouds.LightColor * lining));
+    float towardLight = saturate(dot(direction, sun));
+    float forward = saturate(clouds.ForwardScatter * (towardLight * towardLight));
+    float shadow = lerp((1.0 - (clouds.SelfShadow * saturate(thicknessSunward - thickness))), 1.0, forward);
+    float lining = ((clouds.SilverLining * pow(towardLight, 8.0)) * (1.0 - thickness));
+    float3 shade = ((clouds.Color * (lerp(clouds.Ambient, 1.0, max(diffuse, forward)) * shadow)) + (clouds.LightColor * lining));
 
     return float4(shade, alpha);
 }

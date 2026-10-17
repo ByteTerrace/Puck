@@ -125,7 +125,8 @@ public static partial class SdfSkyEnvironment {
         var thickness = Thickness(at: p);
 
         if (thickness <= 0f) { return Vector4.Zero; }
-        var alpha = ((1f - MathF.Exp(x: (-thickness * clouds.Extinction))) * Smooth(a: 0f, b: clouds.HorizonFade, x: d.Y));
+        var haze = (t - 1f);
+        var alpha = (((1f - MathF.Exp(x: (-thickness * clouds.Extinction))) * Smooth(a: 0f, b: clouds.HorizonFade, x: d.Y)) * MathF.Exp(x: (-clouds.AerialDepth * (haze * haze))));
 
         if (block.Quality == SdfSkyTier.Low) { return new Vector4(value: clouds.Color, w: alpha); }
         var sun = Rotate(direction: FrameDirection(block: block, direction: clouds.LightDirection), rotation: layer.Rotation);
@@ -135,10 +136,12 @@ public static partial class SdfSkyEnvironment {
         var ts = Thickness(at: (p + ((clouds.NormalTap * 2f) * Vector2.Normalize(value: (sunTurned + new Vector2(value: 1e-5f))))));
         var normal = Vector3.Normalize(value: new Vector3(x: ((-(tx - thickness) / clouds.NormalTap) * clouds.Height), y: 1f, z: ((-(ty - thickness) / clouds.NormalTap) * clouds.Height)));
         var diffuse = Saturate(value: Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: new Vector3(x: sunTurned.X, y: sun.Y, z: sunTurned.Y))));
-        var shadow = (1f - (clouds.SelfShadow * Saturate(value: (ts - thickness))));
-        var lining = ((clouds.SilverLining * MathF.Pow(x: Saturate(value: Vector3.Dot(vector1: d, vector2: sun)), y: 8f)) * (1f - thickness));
+        var towardLight = Saturate(value: Vector3.Dot(vector1: d, vector2: sun));
+        var forward = Saturate(value: (clouds.ForwardScatter * (towardLight * towardLight)));
+        var shadow = Mix(a: (1f - (clouds.SelfShadow * Saturate(value: (ts - thickness)))), b: 1f, t: forward);
+        var lining = ((clouds.SilverLining * MathF.Pow(x: towardLight, y: 8f)) * (1f - thickness));
 
-        return new Vector4(value: ((clouds.Color * (Mix(a: 0.45f, b: 1f, t: diffuse) * shadow)) + (clouds.LightColor * lining)), w: alpha);
+        return new Vector4(value: ((clouds.Color * (Mix(a: clouds.Ambient, b: 1f, t: MathF.Max(x: diffuse, y: forward)) * shadow)) + (clouds.LightColor * lining)), w: alpha);
     }
     private static Vector4 Stars(SdfSkyStars stars, SdfSkyTier tier, Vector3 d) {
         if ((d.Y <= 0f) || (stars.Brightness <= 0f)) { return Vector4.Zero; }

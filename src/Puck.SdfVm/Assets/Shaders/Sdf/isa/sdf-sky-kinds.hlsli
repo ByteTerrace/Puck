@@ -145,6 +145,9 @@ struct SdfSkyClouds {
     float HorizonFade;
     float NormalTap;
     uint Octaves;
+    float Ambient;
+    float ForwardScatter;
+    float AerialDepth;
 };
 SdfSkyClouds sdfSkyCloudsOf(SdfSkyLayer layer) {
     SdfSkyClouds parameters;
@@ -168,6 +171,9 @@ SdfSkyClouds sdfSkyCloudsOf(SdfSkyLayer layer) {
     parameters.HorizonFade = layer.P6.y;
     parameters.NormalTap = layer.P6.z;
     parameters.Octaves = asuint(layer.P6.w);
+    parameters.Ambient = layer.P7.x;
+    parameters.ForwardScatter = layer.P7.y;
+    parameters.AerialDepth = layer.P7.z;
     return parameters;
 }
 
