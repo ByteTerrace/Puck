@@ -16,7 +16,8 @@ static const float SdfMeshAoStrength = 2.5;
 static const float SdfMeshAoBias = 0.1;
 static const float SdfMeshAoLift = 2.0;
 static const float SdfMeshAoMaxPixels = 128.0;
-// The shadow filter's taps: a blocker search and the percentage-closer filter, each over a rotated Vogel disk.
+// The shadow filter's taps: a blocker search and the percentage-closer filter, each over a Vogel disk the pixel's
+// pattern turns and spaces.
 static const uint SdfMeshShadowSearchTaps = 12u;
 static const uint SdfMeshShadowFilterTaps = 16u;
 static const float SdfMeshShadowMaxTexels = 14.0;
@@ -24,18 +25,13 @@ static const float SdfGoldenAngle = 2.39996323;
 // The texels along each side of a cascade target. KEEP IN SYNC with SdfWorldPackage.MeshShadowResolution.
 #define SDF_MESH_SHADOW_RESOLUTION 2048
 
-// Interleaved gradient noise, rotated each temporal sample, so the resolve averages the shadow disks' rotations.
-float sdfMeshNoise(uint2 pixel) {
-    float2 shifted = (float2(pixel) + (5.588238 * float(passGroup.historyFrames & 7u)));
-    return frac(52.9829189 * frac(dot(shifted, float2(0.06711056, 0.00583715))));
-}
-// The occlusion's pixel pattern: a tap rotation and a radial offset, each in [0, 1). Each pixel takes its cell of a 4x4
-// ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen patterns exactly once, and views
-// averages such a window (sdfViewsAmbient in sdf-views-stage.hlsli, KEEP IN SYNC with its 4x4 window): on any surface
-// the per-pixel noise cancels to the same sixteen-pattern estimate, leaving no screen-locked structure. A temporal view
-// also steps the pattern within its sixteenth by the sample index of its eight-sample period, so a converged history
-// averages 128 patterns.
-float2 sdfMeshAmbientPattern(uint2 pixel) {
+// The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
+// pixel takes its cell of a 4x4 ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen
+// patterns exactly once, and views averages such a window (sdfViewsFilter in sdf-views-stage.hlsli, KEEP IN SYNC with
+// its 4x4 window): on any surface the per-pixel noise cancels to the same sixteen-pattern estimate, leaving no
+// screen-locked structure. A temporal view also steps the pattern within its sixteenth by the sample index of its
+// eight-sample period, so a converged history averages 128 patterns.
+float2 sdfMeshPattern(uint2 pixel) {
     uint x = (pixel.x & 3u);
     uint y = (pixel.y & 3u);
     uint a = (x ^ y);
@@ -52,7 +48,7 @@ float2 sdfMeshAmbientPattern(uint2 pixel) {
 // the world radius projects to, turned and spaced by the pixel's pattern. Each tap rebuilds the point its pixel's own ray
 // reached, so a tap on the pixel's plane lies on it and occludes nothing however the disk falls on the pixel grid; a tap
 // above the tangent plane occludes by the cosine of its elevation past the bias, fading to nothing at the radius, so a
-// surface farther than the radius in front casts no halo. Unfiltered: views averages it (sdfViewsAmbient).
+// surface farther than the radius in front casts no halo. Unfiltered: views averages it (sdfViewsFilter).
 float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
     float forward = (t * dot(p.rayDirection, p.view.forward.xyz));
     float footprint = (p.pixelFootprint * forward);
@@ -64,7 +60,7 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
 
     float radius = (pixels * footprint);
     float inverseRadius2 = (1.0 / (radius * radius));
-    float2 pattern = sdfMeshAmbientPattern(p.pixel);
+    float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
     float2 dims = float2(worldViewDims(p.view));
     float occlusion = 0.0;
@@ -129,9 +125,11 @@ float sdfMeshShadowDepth(uint cascade, int2 texel, float far) {
 }
 // A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
 // search sizes the penumbra from the light's penumbra slope and the gap to the average blocker, and a percentage-closer
-// filter of that width answers.
+// filter of that width answers. Both disks follow the pixel's pattern (sdfMeshPattern), and views averages the answer
+// over the pattern's window (sdfViewsFilter).
 float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, uint end, float slope) {
-    float noise = (sdfMeshNoise(p.pixel) * 6.2831853);
+    float2 pattern = sdfMeshPattern(p.pixel);
+    float rotation = (pattern.x * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
 
     [loop]
@@ -154,8 +152,8 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
 
         [loop]
         for (uint tap = 0u; (tap < SdfMeshShadowSearchTaps); tap++) {
-            float r = sqrt((float(tap) + 0.5) / float(SdfMeshShadowSearchTaps));
-            float angle = ((float(tap) * SdfGoldenAngle) + noise);
+            float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowSearchTaps));
+            float angle = ((float(tap) * SdfGoldenAngle) + rotation);
             float depth = sdfMeshShadowDepth(cascade, int2(texel + (float2(cos(angle), sin(angle)) * (r * searchTexels))), c.far);
             if (depth < receiver) {
                 blockers += 1.0;
@@ -175,8 +173,8 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
 
         [loop]
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
-            float r = sqrt((float(tap) + 0.5) / float(SdfMeshShadowFilterTaps));
-            float angle = ((float(tap) * SdfGoldenAngle) + noise);
+            float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
+            float angle = ((float(tap) * SdfGoldenAngle) + rotation);
             float depth = sdfMeshShadowDepth(cascade, int2(texel + (float2(cos(angle), sin(angle)) * (r * filterTexels))), c.far);
             lit += ((depth >= receiver) ? 1.0 : 0.0);
         }

@@ -6,22 +6,24 @@
 #include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
 
-// The occlusion filter's tile: the group's pixels with two pixels of apron before them and one after on each axis, each
-// as its surface point and the surface pass's occlusion, a negative occlusion where it holds no hit.
-#define SDF_VIEWS_AMBIENT_TILE_EDGE (SDF_VISIBILITY_GROUP_EDGE + 3u)
-groupshared float4 sdfViewsAmbientTile[SDF_VIEWS_AMBIENT_TILE_EDGE * SDF_VIEWS_AMBIENT_TILE_EDGE];
+// The pattern filter's tile: the group's pixels with two pixels of apron before them and one after on each axis, each as
+// its surface point and the surface pass's occlusion, a negative occlusion where it holds no hit, beside its K word.
+#define SDF_VIEWS_FILTER_TILE_EDGE (SDF_VISIBILITY_GROUP_EDGE + 3u)
+groupshared float4 sdfViewsFilterTile[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
+groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
 
-// Loads the group's occlusion tile from the visibility records. Every lane of the group calls it, a lane past the render
+// Loads the group's filter tile from the visibility records. Every lane of the group calls it, a lane past the render
 // extent included, since it ends at the group's barrier.
-void sdfViewsGatherAmbient(SdfPixel p) {
+void sdfViewsGatherFilter(SdfPixel p) {
     uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
     int2 origin = (int2(p.pixel - lane) - 2);
     int2 dims = int2(worldViewDims(p.view));
 
-    for (uint index = ((lane.y * SDF_VISIBILITY_GROUP_EDGE) + lane.x); (index < (SDF_VIEWS_AMBIENT_TILE_EDGE * SDF_VIEWS_AMBIENT_TILE_EDGE));
+    for (uint index = ((lane.y * SDF_VISIBILITY_GROUP_EDGE) + lane.x); (index < (SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE));
         index += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
-        int2 pixel = (origin + int2((index % SDF_VIEWS_AMBIENT_TILE_EDGE), (index / SDF_VIEWS_AMBIENT_TILE_EDGE)));
+        int2 pixel = (origin + int2((index % SDF_VIEWS_FILTER_TILE_EDGE), (index / SDF_VIEWS_FILTER_TILE_EDGE)));
         float4 entry = float4(0.0, 0.0, 0.0, -1.0);
+        uint shadows = 0u;
 
         if (all(pixel >= 0) && all(pixel < dims)) {
             uint record = worldVisibilityRecord(uint2(pixel), p.viewIndex);
@@ -31,37 +33,44 @@ void sdfViewsGatherAmbient(SdfPixel p) {
             if (t < p.farDistance) {
                 float3 direction = cameraRayDirection(p.view, ((float2(pixel) + 0.5) / float2(dims)));
                 entry = float4((p.rayOrigin + (direction * t)), f16tof32(sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] >> 16u));
+                shadows = sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord];
             }
         }
 
-        sdfViewsAmbientTile[index] = entry;
+        sdfViewsFilterTile[index] = entry;
+        sdfViewsFilterShadows[index] = shadows;
     }
 
     GroupMemoryBarrierWithGroupSync();
 }
-// The pixel's occlusion averaged over the 4x4 window at offsets -2 to 1 around it, which holds each of the surface
-// pass's sixteen patterns once (sdfMeshAmbientPattern in sdf-surface-stage.hlsli). A pixel joins the average only while
-// its surface point lies within two pixel footprints of this pixel's tangent plane, so occlusion never crosses a depth
-// edge or a silhouette; the pixel itself always joins.
-float sdfViewsAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
+// The pixel's occlusion and shadow visibilities averaged over the 4x4 window at offsets -2 to 1 around it, which holds
+// each of the surface pass's sixteen tap patterns once (sdfMeshPattern in sdf-surface-stage.hlsli). A pixel joins the
+// average only while its surface point lies within two pixel footprints of this pixel's tangent plane, so neither
+// crosses a depth edge or a silhouette; the pixel itself always joins.
+void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out float ambient, out float4 shadows) {
     uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
     float tolerance = (2.0 * (p.pixelFootprint * t));
-    float sum = 0.0;
+    float ambientSum = 0.0;
+    float4 shadowSum = float4(0.0, 0.0, 0.0, 0.0);
     float weight = 0.0;
 
     [unroll]
     for (uint y = 0u; (y < 4u); y++) {
         [unroll]
         for (uint x = 0u; (x < 4u); x++) {
-            float4 entry = sdfViewsAmbientTile[(((lane.y + y) * SDF_VIEWS_AMBIENT_TILE_EDGE) + lane.x) + x];
+            uint index = ((((lane.y + y) * SDF_VIEWS_FILTER_TILE_EDGE) + lane.x) + x);
+            float4 entry = sdfViewsFilterTile[index];
             float w = ((entry.w < 0.0) ? 0.0 : saturate(1.0 - (abs(dot((entry.xyz - surfacePoint), normal)) / tolerance)));
 
-            sum += (w * entry.w);
+            ambientSum += (w * entry.w);
+            shadowSum += (w * sdfUnpackShadowVisibility(sdfViewsFilterShadows[index]));
             weight += w;
         }
     }
 
-    return (sum / max(weight, 1.0e-4));
+    float inverse = (1.0 / max(weight, 1.0e-4));
+    ambient = (ambientSum * inverse);
+    shadows = (shadowSum * inverse);
 }
 
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
@@ -75,12 +84,14 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     coverage = 0.0;
     reactivity = 0.0;
 
-    // The pass block's lever and the view's mode are uniform across the group, so every lane reaches the gather's
+    // The pass block's levers and the view's mode are uniform across the group, so every lane reaches the gather's
     // barrier or none does.
     bool ambientFilter = (!worldAoDisabled() && (worldFinalShadingMode(p.viewMode) || (p.viewMode == DebugViewModeAo)));
+    bool shadowFilter = ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()
+        && (worldFinalShadingMode(p.viewMode) || (p.viewMode == DebugViewModeShadow)));
 
-    if (ambientFilter) {
-        sdfViewsGatherAmbient(p);
+    if (ambientFilter || shadowFilter) {
+        sdfViewsGatherFilter(p);
     }
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);
@@ -94,8 +105,13 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     int material = s.material;
     SdfLightMesh mesh = (SdfLightMesh)0;
 
-    if (ambientFilter && s.hit) {
-        s.ambient = sdfViewsAmbient(p, surfacePoint, s.normal, s.t);
+    if ((ambientFilter || shadowFilter) && s.hit) {
+        float ambient;
+        float4 shadows;
+
+        sdfViewsFilter(p, surfacePoint, s.normal, s.t, ambient, shadows);
+        s.ambient = (ambientFilter ? ambient : s.ambient);
+        s.shadows = (shadowFilter ? shadows : s.shadows);
     }
 
     if (s.hit && useFinalShading && (s.material < SDF_SCREEN_MATERIAL)) {

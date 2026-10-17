@@ -53,6 +53,10 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = (s.hit ? s.ambient.xxx : float3(0.0, 0.0, 0.0));
             break;
         }
+        case DebugViewModeShadow: { // the filtered key-light shadow visibility views shades with
+            viewColor = (s.hit ? s.shadows.xxx : float3(0.0, 0.0, 0.0));
+            break;
+        }
     }
 
     return viewColor;

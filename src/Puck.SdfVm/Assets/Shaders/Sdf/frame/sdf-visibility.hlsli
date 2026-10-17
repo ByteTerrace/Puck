@@ -13,7 +13,7 @@
 // 5: the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel).
 // 6: curvature and ambient occlusion as halves.
 // 7: K, four eight-bit stable-slot visibilities, 1 where no shadow was rendered. The surface pass writes it for every
-//    pixel; views reads it only while shadows are on and K is nonzero.
+//    pixel; views filters it like the occlusion and lights by it only while shadows are on.
 // The identity and the material are exact; the packed fields round only presentation values.
 //
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
@@ -128,6 +128,7 @@ struct SdfSurfaceSample {
     float3 normal;
     float curvature;
     float ambient;
+    float4 shadows;
 };
 SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     SdfVisibility visibility = sdfLoadVisibility(record);
@@ -143,6 +144,7 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     sample.normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
     sample.curvature = f16tof32(shading & 0xFFFFu);
     sample.ambient = f16tof32(shading >> 16u);
+    sample.shadows = sdfLoadVisibilityShadows(record);
     return sample;
 }
 

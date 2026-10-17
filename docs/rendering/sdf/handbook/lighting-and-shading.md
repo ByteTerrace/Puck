@@ -39,8 +39,14 @@ The surface pass answers each light with a percentage-closer soft shadow from
 the first cascade holding the point: a blocker search over a rotated disk finds
 the mean depth of the occluders, the gap to them times the light's authored
 penumbra half-slope (`worldShadowPenumbraSlope(lightIndex)`) sizes the
-penumbra, and a filter of that width answers. The ambient term still fills
-shadowed regions, so shadows read soft and colored, never black.
+penumbra, and a filter of that width answers. Both disks turn and space their
+taps by the pixel's cell of the same 4×4 tile the ambient occlusion uses, and
+views averages each light's visibility over the same plane-aware 4×4 window
+(`sdfViewsFilter`), so a penumbra carries no per-pixel grain with or without
+temporal reconstruction ([ambient occlusion](#ambient-occlusion-screen-space-obscurance)).
+`world.debug-view shadow` shows the key light's filtered visibility. The
+ambient term still fills shadowed regions, so shadows read soft and colored,
+never black.
 
 Each light reads its own visibility from its K lane. A directional outside the
 slots is unshadowed, scaled by the surface's ambient occlusion. During a
@@ -168,9 +174,9 @@ point on the hit's own plane therefore never occludes it, however the disk falls
 on the pixel grid, and a surface farther than the radius in front casts no halo.
 
 The estimate is decorrelated per pixel and filtered. Each pixel turns and
-spaces its taps by its cell of a 4×4 ordered-dither tile, and a temporal view
-steps the pattern within the tile's strata by its sample index. Views
-(`sdfViewsAmbient` in `passes/sdf-views-stage.hlsli`) averages the 4×4 window
+spaces its taps by its cell of a 4×4 ordered-dither tile (`sdfMeshPattern`),
+and a temporal view steps the pattern within the tile's strata by its sample
+index. Views (`sdfViewsFilter` in `passes/sdf-views-stage.hlsli`) averages the 4×4 window
 around each pixel, which holds all sixteen patterns once, keeping only
 neighbors on the pixel's tangent plane, so no screen-locked pattern survives
 with temporal reconstruction off, and a converged temporal view averages 128

@@ -19,6 +19,7 @@ public static class DebugViewModes {
         "motion",
         "sky-cost",
         "ao",
+        "shadow",
     ];
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");

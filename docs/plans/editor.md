@@ -61,8 +61,8 @@ gauges.
 
 Several pieces exist with nothing using them:
 
-- `world.debug-view` selects one of eight modes (`off`, `depth`, `normals`,
-  `raydir`, `material-id`, `visibility`, `motion`, `sky-cost`). It is
+- `world.debug-view` selects one of ten modes (`off`, `depth`, `normals`,
+  `raydir`, `material-id`, `visibility`, `motion`, `sky-cost`, `ao`, `shadow`). It is
   unbindable and sets the mode on the main world residency only: its camera
   views show it, but a session screen's residency and a routed scene's never do.
 - One shading lever reaches the pass block with no producer:

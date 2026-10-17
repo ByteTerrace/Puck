@@ -30,7 +30,7 @@ a quarter of the hit's distance, whichever is smaller, projects to, each
 rebuilding the surface point its pixel's ray reached and occluding by its
 elevation above the hit's tangent plane. Each pixel's taps follow its cell of a
 4×4 ordered-dither tile, and views averages the 4×4 window around each pixel
-over neighbors on its tangent plane (`sdfViewsAmbient`), so the result carries
+over neighbors on its tangent plane (`sdfViewsFilter`), so the result carries
 no screen-locked pattern with or without temporal reconstruction
 ([lighting and shading](../handbook/lighting-and-shading.md#ambient-occlusion-screen-space-obscurance)).
 The result modulates ambient contribution
@@ -45,8 +45,10 @@ mesh draws through their cascades
 The surface pass answers each with a percentage-closer soft shadow from the
 first cascade holding the point: a twelve-tap blocker search sizes the penumbra
 from the light's penumbra slope and the gap to the blockers, and a sixteen-tap
-filter of that width, at most fourteen texels, answers. The visibilities occupy
-the K word's 8-bit lanes. A directional outside those slots shades unshadowed,
+filter of that width, at most fourteen texels, answers. Both follow the
+occlusion's 4×4 tap tile, and views averages the visibilities over the same
+plane-aware window as the occlusion. The visibilities occupy the K word's 8-bit
+lanes. A directional outside those slots shades unshadowed,
 scaled by ambient occlusion. During a handoff the outgoing light's own
 occlusion deficit fades to zero by the handoff's weight, keeping its radiance,
 and the incoming light lights unshadowed until it holds the slot.

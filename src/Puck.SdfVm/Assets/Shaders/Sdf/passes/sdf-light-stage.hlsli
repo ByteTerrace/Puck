@@ -71,13 +71,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The surface pass writes every pixel's K row; with shadows off every light goes unshadowed.
+        // The surface sample's K row, which views filtered (sdfViewsFilter); with shadows off every light goes unshadowed.
         float4 shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
 
         if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled()) {
-            shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
+            shadowVisibility = s.shadows;
         }
         sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, 1.0);
 
