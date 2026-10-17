@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
@@ -32,6 +34,15 @@ internal interface ISdfContourLattice {
     double Value(int corner, int x, int y, int z);
     (double X, double Y, double Z) World(double x, double y, double z);
     bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz);
+    // The unit normal at the crossing (wx, wy, wz) of the lattice edge `length` cells long along `axis` from corner
+    // (x, y, z), and the field's value there in world units, the distance the surface lies behind the crossing along the
+    // normal: zero where the crossing is taken to lie on the surface.
+    bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset);
+    // How far past its cell, in cells, a vertex may sit where every tangent plane of its patch meets there: a sharp feature
+    // whose crossings this cell sees and its neighbour, which holds the feature, does not. Zero clamps every vertex into
+    // its cell; only a lattice whose crossings lie on the surface (TryCrossingNormal's offset) can tell a feature from
+    // planes that meet off it.
+    double FeatureReach { get; }
     // Each axis's cell size when they differ, or null for a cubic lattice, whose normals need no rescaling.
     (double X, double Y, double Z)? CellExtent { get; }
 }
@@ -67,6 +78,9 @@ internal interface ISdfRefinedContourLattice : ISdfContourLattice {
 internal static class SdfDualContouring {
     // The most patches one cell holds: the four inside corners of an alternating cell are each cut off alone.
     private const int MaximumPatches = 4;
+    // How near, in cells, every tangent plane of a patch must pass to a point past its cell for the point to count as a
+    // sharp feature the vertex keeps (Place, ISdfContourLattice.FeatureReach).
+    private const double FeatureResidual = 0.01;
 
     // The twelve edges of a cell as corner-offset pairs, each offset packed as x | y << 1 | z << 2.
     private static readonly (int A, int B)[] CellEdges = [
@@ -766,6 +780,8 @@ internal static class SdfDualContouring {
     private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, int stride = 1) where TLattice : ISdfContourLattice {
         var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
+        Span<double> planes = stackalloc double[(4 * CellEdges.Length)];
+        var planeCount = 0;
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {
             if ((edges & (1 << edge)) == 0) {
@@ -783,8 +799,32 @@ internal static class SdfDualContouring {
 
             var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
 
-            if (!grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: wx, y: wy, z: wz)) {
+            if (!grid.TryCrossingNormal(
+                axis: BitOperations.TrailingZeroCount(value: (a ^ b)),
+                length: stride,
+                nx: out var nx,
+                ny: out var ny,
+                nz: out var nz,
+                offset: out var offset,
+                wx: wx,
+                wy: wy,
+                wz: wz,
+                x: (x + (ax * stride)),
+                y: (y + (ay * stride)),
+                z: (z + (az * stride))
+            )) {
                 continue;
+            }
+
+            // The tangent plane passes through the surface, the crossing moved back along the normal by the field there,
+            // in cell coordinates: a linear crossing between two samples whose values do not fall linearly (one outside a
+            // convex edge, where the distance is to the edge) lies off the surface.
+            if (offset != 0.0) {
+                var (cx, cy, cz) = (grid.CellExtent ?? (grid.CellSize, grid.CellSize, grid.CellSize));
+
+                px -= ((offset * nx) / (stride * cx));
+                py -= ((offset * ny) / (stride * cy));
+                pz -= ((offset * nz) / (stride * cz));
             }
 
             // The tangent planes are solved in cell coordinates: a world normal there is scaled by each axis's cell size.
@@ -802,6 +842,11 @@ internal static class SdfDualContouring {
 
             var d = (((nx * px) + (ny * py)) + (nz * pz));
 
+            planes[(4 * planeCount)] = nx;
+            planes[((4 * planeCount) + 1)] = ny;
+            planes[((4 * planeCount) + 2)] = nz;
+            planes[((4 * planeCount) + 3)] = d;
+            planeCount++;
             a00 += (nx * nx); a01 += (nx * ny); a02 += (nx * nz);
             a11 += (ny * ny); a12 += (ny * nz); a22 += (nz * nz);
             b0 += (nx * d); b1 += (ny * d); b2 += (nz * d);
@@ -821,6 +866,24 @@ internal static class SdfDualContouring {
         var sx = ((((b0 * ((a11 * a22) - (a12 * a12))) - (a01 * ((b1 * a22) - (a12 * b2)))) + (a02 * ((b1 * a12) - (a11 * b2)))) / det);
         var sy = ((((a00 * ((b1 * a22) - (a12 * b2))) - (b0 * ((a01 * a22) - (a12 * a02)))) + (a02 * ((a01 * b2) - (b1 * a02)))) / det);
         var sz = ((((a00 * ((a11 * b2) - (b1 * a12))) - (a01 * ((a01 * b2) - (b1 * a02)))) + (b0 * ((a01 * a12) - (a11 * a02)))) / det);
+
+        var inside = ((sx >= 0.0) && (sx <= 1.0) && (sy >= 0.0) && (sy <= 1.0) && (sz >= 0.0) && (sz <= 1.0));
+
+        if (!inside && (Math.Max(val1: Math.Abs(value: (sx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (sy - 0.5)), val2: Math.Abs(value: (sz - 0.5)))) <= (0.5 + grid.FeatureReach))) {
+            // A sharp feature whose faces' planes meet just past the cell (an edge the next cell holds but whose crossings
+            // only this cell sees) keeps the point they meet at, where clamping would cut the feature off; a point the
+            // planes do not all pass through is no feature and clamps.
+            var meets = true;
+
+            for (var plane = 0; (plane < planeCount); plane++) {
+                var residual = ((((planes[(4 * plane)] * sx) + (planes[((4 * plane) + 1)] * sy)) + (planes[((4 * plane) + 2)] * sz)) - planes[((4 * plane) + 3)]);
+
+                meets &= (Math.Abs(value: residual) <= FeatureResidual);
+            }
+            if (meets) {
+                return (sx, sy, sz);
+            }
+        }
 
         return (Math.Clamp(max: 1.0, min: 0.0, value: sx), Math.Clamp(max: 1.0, min: 0.0, value: sy), Math.Clamp(max: 1.0, min: 0.0, value: sz));
     }

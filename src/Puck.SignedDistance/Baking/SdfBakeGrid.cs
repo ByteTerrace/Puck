@@ -97,6 +97,12 @@ internal sealed class SdfBakeGrid : ISdfContourLattice {
     /// <inheritdoc/>
     public (double X, double Y, double Z)? CellExtent => null;
     /// <summary>Returns the field's unit gradient at a world point by central differences a quarter cell wide.</summary>
+    public double FeatureReach => 0.0;
+    public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
+        offset = 0.0;
+
+        return TryNormal(nx: out nx, ny: out ny, nz: out nz, x: wx, y: wy, z: wz);
+    }
     public bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz) {
         var epsilon = FixedQ4816.FromRawBits(value: Math.Max(
             val1: 1L,

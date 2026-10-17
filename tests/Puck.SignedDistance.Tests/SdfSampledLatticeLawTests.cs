@@ -23,23 +23,38 @@ public sealed class SdfSampledLatticeLawTests {
 
         return MathF.Max(slab, sphere);
     }
-    private static Vector3 Gradient(Vector3 point) {
-        const float Step = 1.0e-4f;
+    // A box 10 cm a side whose faces lie off the lattice's planes, turned about y by `turn` radians.
+    private static float Box(Vector3 point, float turn) {
+        var turned = Vector3.Transform(value: point, rotation: Quaternion.CreateFromAxisAngle(angle: turn, axis: Vector3.UnitY));
+        var q = (Vector3.Abs(value: (turned - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f))) - new Vector3(value: 0.05f));
 
-        return new Vector3(
-            x: (Field(point: (point + new Vector3(x: Step, y: 0f, z: 0f))) - Field(point: (point - new Vector3(x: Step, y: 0f, z: 0f)))),
-            y: (Field(point: (point + new Vector3(x: 0f, y: Step, z: 0f))) - Field(point: (point - new Vector3(x: 0f, y: Step, z: 0f)))),
-            z: (Field(point: (point + new Vector3(x: 0f, y: 0f, z: Step))) - Field(point: (point - new Vector3(x: 0f, y: 0f, z: Step))))
-        );
+        return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f));
     }
-    private static SdfContour Bake(bool refine) {
+    // The turned box with a sphere carved from one corner: concave creases where the carve meets the faces.
+    private static float Carved(Vector3 point) => MathF.Max(Box(point: point, turn: 0.3f), -(Vector3.Distance(value1: point, value2: new Vector3(value: 0.03f)) - 0.05f));
+    private static Vector3 Position(SdfContour contour, int vertex) =>
+        new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
+    // The bake kernel's gradient (sdf-mesh-bake.comp.hlsl): four tetrahedral taps a sixty-fourth of a cell out.
+    private static Vector3 Gradient(Func<Vector3, float> field, Vector3 point) {
+        const float Spacing = (Cell / 64f);
+        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
+        var gradient = Vector3.Zero;
+
+        foreach (var tap in taps) {
+            gradient += (tap * field(arg: (point + (tap * Spacing))));
+        }
+
+        return gradient;
+    }
+    private static SdfContour Bake(bool refine) => Bake(field: Field, refine: refine);
+    private static SdfContour Bake(Func<Vector3, float> field, bool refine) {
         var count = ((Samples * Samples) * Samples);
         var values = new float[count];
 
         for (var index = 0; (index < count); index++) {
             var at = new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples)));
 
-            values[index] = Field(point: (Origin + (at * Cell)));
+            values[index] = field(arg: (Origin + (at * Cell)));
         }
 
         var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
@@ -48,20 +63,20 @@ public sealed class SdfSampledLatticeLawTests {
             var fine = lattice.Refine(factor: Factor);
 
             Assert.NotEmpty(collection: fine);
-            lattice.AnswerRefinement(first: 0, materials: new int[fine.Length], values: [.. fine.Select(selector: Field)]);
+            lattice.AnswerRefinement(first: 0, materials: new int[fine.Length], values: [.. fine.Select(selector: field)]);
         }
 
         var points = lattice.GradientPoints();
         var gradients = new float[(3 * points.Length)];
 
         for (var index = 0; (index < points.Length); index++) {
-            var gradient = Gradient(point: points[index]);
+            var gradient = Gradient(field: field, point: points[index]);
 
             gradients[(3 * index)] = gradient.X;
             gradients[((3 * index) + 1)] = gradient.Y;
             gradients[((3 * index) + 2)] = gradient.Z;
         }
-        lattice.AnswerGradients(first: 0, gradients: gradients);
+        lattice.AnswerGradients(first: 0, gradients: gradients, values: [.. points.Select(selector: field)]);
 
         return lattice.Contour();
     }
@@ -106,6 +121,50 @@ public sealed class SdfSampledLatticeLawTests {
 
             Assert.True(condition: (MathF.Abs(Field(point: point)) <= (0.5f * Cell)), userMessage: $"vertex {vertex} at {point} lies {Field(point: point)} from the field");
         }
+    }
+
+    // A box with its edges along the lattice's axes and one turned off them: every vertex lies on the box, its edges
+    // included. A turned box's corners are left out: a corner cell's planes come from crossings whose gradients the
+    // corner's radial field tilts.
+    [InlineData(0f)]
+    [InlineData(0.3f)]
+    [Theory]
+    public void BoxEdgesStaySharp(float turn) {
+        var contour = Bake(field: point => Box(point: point, turn: turn), refine: false);
+        var worst = 0f;
+
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            var point = Position(contour: contour, vertex: vertex);
+            var local = Vector3.Abs(value: (Vector3.Transform(value: point, rotation: Quaternion.CreateFromAxisAngle(angle: turn, axis: Vector3.UnitY)) - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f)));
+            var corner = ((turn != 0f) && (MathF.Min(local.X, MathF.Min(local.Y, local.Z)) > (0.05f - Cell)));
+
+            worst = (corner ? worst : MathF.Max(worst, MathF.Abs(Box(point: point, turn: turn))));
+        }
+
+        Assert.True(condition: (worst <= (0.05f * Cell)), userMessage: $"a vertex lies {worst} from the box, {(worst / Cell)} cells");
+    }
+
+    [Fact]
+    public void CarvedBoxFacesOut() {
+        var contour = Bake(field: Carved, refine: false);
+        var inward = 0;
+
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var outward = Vector3.Zero;
+
+            for (var corner = 0; (corner < 4); corner++) {
+                var vertex = contour.Quads[((4 * quad) + corner)];
+
+                outward += new Vector3(x: contour.Normals[(3 * vertex)], y: contour.Normals[((3 * vertex) + 1)], z: contour.Normals[((3 * vertex) + 2)]);
+            }
+
+            var (a, b, c, d) = (Position(contour: contour, vertex: contour.Quads[(4 * quad)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 1)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 2)]), Position(contour: contour, vertex: contour.Quads[((4 * quad) + 3)]));
+
+            inward += ((Vector3.Dot(vector1: Vector3.Cross(vector1: (b - a), vector2: (c - a)), vector2: outward) < 0f) ? 1 : 0);
+            inward += ((Vector3.Dot(vector1: Vector3.Cross(vector1: (c - a), vector2: (d - a)), vector2: outward) < 0f) ? 1 : 0);
+        }
+
+        Assert.Equal(expected: 0, actual: inward);
     }
 
     [Fact]

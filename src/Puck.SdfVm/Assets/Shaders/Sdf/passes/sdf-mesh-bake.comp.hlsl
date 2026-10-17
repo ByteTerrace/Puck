@@ -54,7 +54,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // of a final lattice whose gradient the contour reads. A grid lattice samples its grid.
         bool points = (dims.w >= 2u);
         float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * cell)));
-        float spacing = (0.125 * min(cell.x, min(cell.y, cell.z)));
+        // The gradient taps lie a sixty-fourth of the contour's finest cell out: a crossing a tap's spacing from a sharp
+        // edge reads both faces' blend, and its tangent plane cuts the edge by about that much (SdfSampledLatticeLawTests
+        // samples the same stencil).
+        float spacing = (0.015625 * min(cell.x, min(cell.y, cell.z)));
         uint maskBase = worldInstanceMaskBase(lattice);
         int selector = asint(row1.w);
         float3 slotPosition = float3(0.0, 0.0, 0.0);

@@ -5,7 +5,8 @@ namespace Puck.SignedDistance.Baking;
 /// <summary>A contoured surface in world space: a vertex per surface patch of each crossed cell, with its normal, and a
 /// quad per sign-changing lattice edge, wound counter-clockwise seen from outside, with the material the field reported at
 /// the edge's outside end, whose nearest shape is the one the edge crosses. A quad whose last two vertices are one vertex
-/// is a triangle.</summary>
+/// is a triangle; any other splits into two triangles along its first diagonal, its first vertex to its third, the
+/// diagonal whose triangles face out where only one does.</summary>
 /// <param name="Positions">Three floats per vertex.</param>
 /// <param name="Normals">Three floats per vertex: the unit outward normal.</param>
 /// <param name="Quads">Four vertex indices per quad.</param>
@@ -19,8 +20,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
-/// surface with the one manifold dual contouring the prototype baker uses, placing each vertex by the samples' gradients,
-/// interpolated along each crossing edge, so a sharp edge between two faces stays sharp at any cell size.
+/// surface with the one manifold dual contouring the prototype baker uses, placing each vertex by the tangent planes of
+/// its crossings: each crossing's gradient and value are measured where the edge crosses, and the plane passes through
+/// the crossing moved back onto the surface by that value, so a sharp edge between two faces stays sharp at any cell
+/// size, its vertex reaching up to half a cell past its own cell where the next cell holds the edge but not the crossings
+/// of both faces.
 /// <para>Where the samples cannot resolve the surface, the lattice refines (<see cref="Refine"/>): a cell crossed by a
 /// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, a cell whose
 /// outside corners report different materials, and a cell two separate sheets cross are sampled again at a finer spacing
@@ -28,7 +32,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 /// stays closed where its resolution changes. Every other cell contours whole.</para>
 /// <para>The lattice is answered in stages: <see cref="Refine"/> names the fine samples to measure and
 /// <see cref="AnswerRefinement"/> takes their values; <see cref="GradientPoints"/> names the samples the contour reads a
-/// gradient at and <see cref="AnswerGradients"/> takes them. Unlike a prototype bake, a sampled lattice's values come
+/// gradient at, the corners its vertex normals interpolate and the crossings its tangent planes pass through, and
+/// <see cref="AnswerGradients"/> takes them. Unlike a prototype bake, a sampled lattice's values come
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
 /// reaches simulation state.</para>
 /// </summary>
@@ -55,6 +60,9 @@ public sealed class SdfSampledLattice {
     private int[] m_fineMaterials = [];
     private readonly Dictionary<int, Vector3> m_fineGradients = [];
     private int[] m_gradientKeys = [];
+    private long[] m_crossingKeys = [];
+    // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
+    private readonly Dictionary<long, Vector4> m_crossingGradients = [];
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -369,7 +377,8 @@ public sealed class SdfSampledLattice {
     }
     /// <summary>Returns the samples the contour reads a gradient at: the corners of every crossed cell that contours whole,
     /// the coarse corners of every refined cell, whose gradients its unmeasured fine samples interpolate, and the measured
-    /// corners of every crossed fine cell. Call it once the refinement, if any, is answered.</summary>
+    /// corners of every crossed fine cell, which its vertex normals interpolate; then the crossing of every sign-changing
+    /// edge a vertex is placed by. Call it once the refinement, if any, is answered.</summary>
     /// <returns>The samples, in the lattice's frame, in the order <see cref="AnswerGradients"/> takes their
     /// answers.</returns>
     public Vector3[] GradientPoints() {
@@ -436,8 +445,9 @@ public sealed class SdfSampledLattice {
         }
 
         m_gradientKeys = [.. keys];
+        m_crossingKeys = CrossingEdges();
 
-        var points = new Vector3[keys.Count];
+        var points = new Vector3[(keys.Count + m_crossingKeys.Length)];
         var fine = ContourCell;
 
         for (var index = 0; (index < keys.Count); index++) {
@@ -445,25 +455,123 @@ public sealed class SdfSampledLattice {
 
             points[index] = (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine));
         }
+        for (var index = 0; (index < m_crossingKeys.Length); index++) {
+            var (start, axis, length) = CrossingEdge(key: m_crossingKeys[index]);
+            var (fx, fy, fz) = FineCoordinates(key: start);
+            var position = new Vector3(x: fx, y: fy, z: fz);
+            var step = ((axis == 0) ? Vector3.UnitX : ((axis == 1) ? Vector3.UnitY : Vector3.UnitZ));
+
+            points[(keys.Count + index)] = (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine));
+        }
 
         return points;
     }
-    /// <summary>Answers a run of the samples <see cref="GradientPoints"/> named with their gradients.</summary>
+    // Every sign-changing lattice edge the contour places a vertex by: the edges of each crossed cell that contours whole,
+    // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
+    // where the edge crosses the surface, since its corners' gradients, inside a solid near a sharp edge, point to the
+    // nearer face beyond the edge and tilt the vertex's tangent planes into a chamfer.
+    private long[] CrossingEdges() {
+        var edges = new List<long>();
+        var seen = new HashSet<long>();
+        var cellsX = (m_samplesX - 1);
+        var cellsY = (m_samplesY - 1);
+        var cellsZ = (m_samplesZ - 1);
+        var factor = m_factor;
+        var fineX = ((cellsX * factor) + 1);
+        var fineY = ((cellsY * factor) + 1);
+
+        void AddCell(int x, int y, int z, int stride) {
+            var mask = 0;
+
+            for (var offset = 0; (offset < 8); offset++) {
+                mask |= ((FineValue(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))) < 0f) ? (1 << offset) : 0);
+            }
+            if ((mask == 0) || (mask == 0xFF)) {
+                return;
+            }
+
+            for (var axis = 0; (axis < 3); axis++) {
+                for (var u = 0; (u < 2); u++) {
+                    for (var v = 0; (v < 2); v++) {
+                        // The edge along `axis` at offsets (u, v) on the two axes after it, as corner bits a (start) and b.
+                        var a = (((u << ((axis + 1) % 3)) | (v << ((axis + 2) % 3))));
+                        var b = (a | (1 << axis));
+
+                        if ((((mask >> a) ^ (mask >> b)) & 1) == 0) {
+                            continue;
+                        }
+
+                        var start = ((x + ((a & 1) * stride)) + (fineX * ((y + (((a >> 1) & 1) * stride)) + (fineY * (z + (((a >> 2) & 1) * stride))))));
+                        var key = CrossingKey(axis: axis, length: stride, start: start);
+
+                        if (seen.Add(item: key)) {
+                            edges.Add(item: key);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (var z = 0; (z < cellsZ); z++) {
+            for (var y = 0; (y < cellsY); y++) {
+                for (var x = 0; (x < cellsX); x++) {
+                    if (!((factor > 1) && m_refined[(x + (cellsX * (y + (cellsY * z))))])) {
+                        AddCell(stride: factor, x: (x * factor), y: (y * factor), z: (z * factor));
+
+                        continue;
+                    }
+
+                    for (var fz = (z * factor); (fz < ((z + 1) * factor)); fz++) {
+                        for (var fy = (y * factor); (fy < ((y + 1) * factor)); fy++) {
+                            for (var fx = (x * factor); (fx < ((x + 1) * factor)); fx++) {
+                                AddCell(stride: 1, x: fx, y: fy, z: fz);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return [.. edges];
+    }
+    // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
+    private long CrossingKey(int start, int axis, int length) => (((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L);
+    private (int Start, int Axis, int Length) CrossingEdge(long key) => (((int)((key / 2L) / 3L)), ((int)((key / 2L) % 3L)), (((key & 1L) == 1L) ? m_factor : 1));
+    // Where along the edge `length` fine cells long along `axis` from fine sample (x, y, z) its values cross zero, in [0, 1]:
+    // the linear interpolation the contour places the crossing by.
+    private float Crossing(int x, int y, int z, int axis, int length) {
+        var va = FineValue(x: x, y: y, z: z);
+        var vb = FineValue(x: (x + ((axis == 0) ? length : 0)), y: (y + ((axis == 1) ? length : 0)), z: (z + ((axis == 2) ? length : 0)));
+        var denominator = (va - vb);
+
+        return ((denominator == 0f) ? 0.5f : Math.Clamp(max: 1f, min: 0f, value: (va / denominator)));
+    }
+    /// <summary>Answers a run of the samples <see cref="GradientPoints"/> named with the field's value and gradient
+    /// there.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="GradientPoints"/>'s order.</param>
+    /// <param name="values">The field's value at each sample, in world units: negative inside.</param>
     /// <param name="gradients">Three components per sample, in any scale consistent across the lattice.</param>
-    /// <exception cref="ArgumentException">The run is not whole samples or reaches past the samples.</exception>
-    public void AnswerGradients(int first, ReadOnlySpan<float> gradients) {
-        if (((gradients.Length % 3) != 0) || (first < 0) || ((first + (gradients.Length / 3)) > m_gradientKeys.Length)) {
-            throw new ArgumentException(message: "A gradient answer holds three components per sample it names.");
+    /// <exception cref="ArgumentException">The run is not whole samples, its values and gradients name different samples,
+    /// or it reaches past the samples.</exception>
+    public void AnswerGradients(int first, ReadOnlySpan<float> values, ReadOnlySpan<float> gradients) {
+        if (((gradients.Length % 3) != 0) || (values.Length != (gradients.Length / 3)) || (first < 0) || ((first + values.Length) > (m_gradientKeys.Length + m_crossingKeys.Length))) {
+            throw new ArgumentException(message: "A gradient answer holds one value and three gradient components per sample it names.");
         }
 
         var factor = m_factor;
         var fineX = (((m_samplesX - 1) * factor) + 1);
         var fineY = (((m_samplesY - 1) * factor) + 1);
 
-        for (var index = 0; (index < (gradients.Length / 3)); index++) {
-            var key = m_gradientKeys[(first + index)];
+        for (var index = 0; (index < values.Length); index++) {
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
+
+            if ((first + index) >= m_gradientKeys.Length) {
+                m_crossingGradients[m_crossingKeys[((first + index) - m_gradientKeys.Length)]] = new Vector4(value: gradient, w: values[index]);
+
+                continue;
+            }
+
+            var key = m_gradientKeys[(first + index)];
             var fx = (key % fineX);
             var fy = ((key / fineX) % fineY);
             var fz = (key / (fineX * fineY));
@@ -491,12 +599,35 @@ public sealed class SdfSampledLattice {
             materials[quad] = (Owns(material: outside) ? outside : MaterialAt(key: surface.QuadInsideCorners[quad]));
         }
 
+        float[] normals = [.. surface.Normals.Select(selector: static value => ((float)value))];
+        float[] positions = [.. surface.Positions.Select(selector: static value => ((float)value))];
+        var quads = surface.Quads;
+
+        for (var quad = 0; (quad < materials.Length); quad++) {
+            var at = (4 * quad);
+
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SdfSurfaceTextures.SplitsAlongFirstDiagonal(
+                n0: Vertex(values: normals, vertex: quads[at]),
+                n1: Vertex(values: normals, vertex: quads[(at + 1)]),
+                n2: Vertex(values: normals, vertex: quads[(at + 2)]),
+                n3: Vertex(values: normals, vertex: quads[(at + 3)]),
+                v0: Vertex(values: positions, vertex: quads[at]),
+                v1: Vertex(values: positions, vertex: quads[(at + 1)]),
+                v2: Vertex(values: positions, vertex: quads[(at + 2)]),
+                v3: Vertex(values: positions, vertex: quads[(at + 3)])
+            )) {
+                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
+            }
+        }
+
         return new SdfContour(
-            Normals: [.. surface.Normals.Select(selector: static value => ((float)value))],
-            Positions: [.. surface.Positions.Select(selector: static value => ((float)value))],
+            Normals: normals,
+            Positions: positions,
             QuadMaterials: materials,
-            Quads: surface.Quads
+            Quads: quads
         );
+
+        static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     }
 
     private bool Owns(int material) => ((m_owns is null) || m_owns(arg: material));
@@ -637,6 +768,28 @@ public sealed class SdfSampledLattice {
                 (owner.m_origin.Y + (y * cell.Y)),
                 (owner.m_origin.Z + (z * cell.Z))
             );
+        }
+        public double FeatureReach => 0.5;
+        // A crossing's own measured gradient and value, or the gradient its edge's samples interpolate, on the surface.
+        public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
+            var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
+
+            if (owner.m_crossingGradients.TryGetValue(key: owner.CrossingKey(axis: axis, length: length, start: start), value: out var measured)) {
+                var gradient = new Vector3(x: measured.X, y: measured.Y, z: measured.Z);
+                var magnitude = gradient.Length();
+
+                if (magnitude > 1.0e-12f) {
+                    gradient /= magnitude;
+                    (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
+                    offset = measured.W;
+
+                    return true;
+                }
+            }
+
+            offset = 0.0;
+
+            return TryNormal(nx: out nx, ny: out ny, nz: out nz, x: wx, y: wy, z: wz);
         }
         public bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz) {
             var cell = owner.ContourCell;
