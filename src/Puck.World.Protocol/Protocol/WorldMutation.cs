@@ -232,7 +232,7 @@ public abstract record WorldMutation(Principal Principal) {
     public sealed record SetHostDefaults(Principal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
     /// <summary>Replaces the whole window-composition defaults row — the seat framing plus the authored layouts (see
     /// <see cref="WorldViewDefaults"/>). Applies live: the frame source recompiles the seat rigs and the composer reads
-    /// the new layouts on the next produced frame. The <c>world.row.set views.seatRig</c> verb RMWs the seat rig into this.</summary>
+    /// the new layouts on the next produced frame, and the render-graph set rebuilds when <c>NestingDepthRaw</c> changes. The literal-field form <c>world.row.set views nestingDepth &lt;n&gt;</c> sets one scalar through this kind.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Views">The whole views defaults row.</param>
     [MutationKind(ordinal: 31, section: WorldSection.Views)]
