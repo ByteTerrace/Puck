@@ -33,28 +33,37 @@ whichever World it attached to first.
 | Garden, `far` at (5.5, 0, -20), facing +Z | The frame ahead of you, glass showing the debug world turned about | Walk -Z into it: the pair (`far`, `portal`) shares a yaw, so the crossing turns you about and you come out of the debug frame walking +Z towards the spawn, the view turned with you. |
 | Garden, `obelisk` at (9, 0, -30) | The landmark | |
 
-From the spawn the debug frame shows the garden, and inside it the far frame
-shows the debug world from the far frame's mapped eye, two levels deep. The
+The far frame stands on the line the spawn camera looks along through the debug
+frame, so the window from the spawn holds the far frame's window back onto the
+debug world, two levels deep (`world.nesting` lists `session$24`, then
+`session$24$24` and `session$24$25`, then the third level). The
 axis lines, the reference cubes and the test room stand behind the spawn on +Z
 and -X, out of the frames' way.
 
 ## What to try
 
-- Look at the frame from the spawn: the sunset sky and the green floor fill the
-  glass, with the far frame and the obelisk inside it, and the far frame's glass
-  shows the debug world's blue sky.
-- Walk forward through it and keep walking: you cross into the garden, then
-  through the far frame back into the debug world, turned about and facing the
-  spawn.
-- Step sideways in front of the frame: the window reframes as your eye moves,
-  as a real window would.
-- `world.row.set views.nestingDepth 1` (or edit `nestingDepth` in
-  `views` and `world.reload`): the far frame's glass shows its fallback magenta
-  instead of the debug world, since a face past the depth shows its session's
-  `fallback` colour. Set it back to 3 to restore the nested view.
+A presenting boot (windowed or offscreen) currently draws nothing once the
+frame's window follows the garden's scene: the display stays black and a
+capture is one pixel, while the simulation runs on
+([open item](../../../../docs/plans/open-items.md#rendering)). The crossings
+below work in every boot shape, headless included.
+
+- Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
+  `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
+  arrive in the garden at the same point. Walk on through the far frame
+  (`body.pose 5.5 - -12 0 0 0`, `body.fly 1 0 0 0 0 0 5`) and you come back out
+  of the debug frame turned about.
+- From inside the garden, stand past the arrival frame and walk +Z into it
+  (`body.pose 3 - -12 180 0 0`, `body.fly -1 0 0 0 0 0 2`): you come back out of
+  the debug frame walking +Z.
+- Set `nestingDepth` in `views` to 1 and boot again: `world.nesting` names no
+  level two deep, and the garden's frames show their fallback magenta.
 - Edit [garden.puck](garden.puck), then `world.instance.stop 6~global6~garden`:
-  the garden retires, and the next crossing or window resolves a fresh garden
-  from the edited source. `world.reload` recompiles only the debug world.
+  the garden retires, and the next crossing resolves a fresh garden from the
+  edited source. `world.reload` recompiles only the debug world.
+
+`body.fly` moves along the seat's heading, which a headless boot keeps at -Z,
+so there `body.fly -1` walks +Z whichever way the body faces.
 
 ## Inspecting a portal
 
