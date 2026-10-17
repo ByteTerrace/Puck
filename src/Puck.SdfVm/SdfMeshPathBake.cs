@@ -763,7 +763,7 @@ public sealed class SdfMeshPathBake {
         if (final.Stage == FinalStage.Refinement) {
             sampled.AnswerRefinement(first: final.Answered, materials: materials, values: values);
         } else {
-            sampled.AnswerGradients(first: final.Answered, gradients: gradients!);
+            sampled.AnswerGradients(first: final.Answered, gradients: gradients!, values: values);
         }
         final.Answered += request.Samples;
         if (final.Answered < final.Points.Length) {

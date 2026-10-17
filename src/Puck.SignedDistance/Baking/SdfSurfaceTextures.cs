@@ -170,31 +170,39 @@ internal static class SdfSurfaceTextures {
     // whose lane sum follows the instruction set, so the split is the same on every machine.
     private static void WriteTriangles(uint[] indices, int quad, SdfBakedVertex[] vertices) {
         var first = ((uint)(quad * 4));
-        var v0 = vertices[first].Position;
-        var v1 = vertices[(first + 1)].Position;
-        var v2 = vertices[(first + 2)].Position;
-        var v3 = vertices[(first + 3)].Position;
-
-        var (n0, n1, n2, n3) = (vertices[first].Normal, vertices[(first + 1)].Normal, vertices[(first + 2)].Normal, vertices[(first + 3)].Normal);
-        var outward = (
-            X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
-            Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
-            Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
-        );
         var at = (quad * 6);
 
-        var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
-        var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
-
-        if ((alongFirst == alongSecond)
-            ? (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3))
-            : alongFirst) {
+        if (SplitsAlongFirstDiagonal(
+            n0: vertices[first].Normal,
+            n1: vertices[(first + 1)].Normal,
+            n2: vertices[(first + 2)].Normal,
+            n3: vertices[(first + 3)].Normal,
+            v0: vertices[first].Position,
+            v1: vertices[(first + 1)].Position,
+            v2: vertices[(first + 2)].Position,
+            v3: vertices[(first + 3)].Position
+        )) {
             indices[at] = first; indices[(at + 1)] = (first + 1); indices[(at + 2)] = (first + 2);
             indices[(at + 3)] = first; indices[(at + 4)] = (first + 2); indices[(at + 5)] = (first + 3);
         } else {
             indices[at] = first; indices[(at + 1)] = (first + 1); indices[(at + 2)] = (first + 3);
             indices[(at + 3)] = (first + 1); indices[(at + 4)] = (first + 2); indices[(at + 5)] = (first + 3);
         }
+    }
+    // Whether quad (v0, v1, v2, v3), with corner normals n0 to n3, splits along its first diagonal, v0 to v2, rather than
+    // its second (WriteTriangles); every quad of a contour splits by this one rule.
+    internal static bool SplitsAlongFirstDiagonal(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 n0, Vector3 n1, Vector3 n2, Vector3 n3) {
+        var outward = (
+            X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
+            Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
+            Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
+        );
+        var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
+        var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
+
+        return ((alongFirst == alongSecond)
+            ? (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3))
+            : alongFirst);
     }
     // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
     private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
