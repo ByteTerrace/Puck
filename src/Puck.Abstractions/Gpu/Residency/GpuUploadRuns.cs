@@ -15,6 +15,9 @@ public sealed class GpuUploadRuns {
     private readonly int[] m_starts;
 
     private int m_count;
+    // The furthest end of any run, so a range that starts past it appends without looking for a run it overlaps: a
+    // table written in increasing order with scattered differences records each in constant time.
+    private int m_end;
 
     /// <summary>Initializes a new instance of the <see cref="GpuUploadRuns"/> class.</summary>
     /// <param name="capacity">The most runs held at once; at least two.</param>
@@ -57,11 +60,15 @@ public sealed class GpuUploadRuns {
                     val1: end,
                     val2: m_ends[last]
                 );
+                m_end = Math.Max(
+                    val1: end,
+                    val2: m_end
+                );
 
                 return;
             }
 
-            for (var index = 0; (index < m_count); index++) {
+            for (var index = 0; ((start <= m_end) && (index < m_count)); index++) {
                 if (
                     (start <= m_ends[index]) &&
                     (end >= m_starts[index])
@@ -74,6 +81,10 @@ public sealed class GpuUploadRuns {
                         val1: end,
                         val2: m_ends[index]
                     );
+                    m_end = Math.Max(
+                        val1: end,
+                        val2: m_end
+                    );
 
                     return;
                 }
@@ -84,6 +95,12 @@ public sealed class GpuUploadRuns {
             }
         }
 
+        m_end = ((m_count == 0)
+            ? end
+            : Math.Max(
+                val1: end,
+                val2: m_end
+            ));
         m_starts[m_count] = start;
         m_ends[m_count] = end;
         m_count++;

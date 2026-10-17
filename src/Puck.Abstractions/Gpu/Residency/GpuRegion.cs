@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
@@ -834,7 +836,9 @@ public sealed class GpuRegion : IDisposable {
                     val2: (index + sizeof(uint))
                 );
 
-                if (bytes[index..next].SequenceEqual(other: contents[index..next])) {
+                if (((next - index) == sizeof(uint))
+                    ? (MemoryMarshal.Read<uint>(source: bytes[index..]) == MemoryMarshal.Read<uint>(source: contents[index..]))
+                    : bytes[index..next].SequenceEqual(other: contents[index..next])) {
                     break;
                 }
 

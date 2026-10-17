@@ -191,7 +191,7 @@ public static class SdfMeshCard {
 /// position, normal and texture coordinate), its triangle materials (one word each, for a mesh that has them) and its
 /// indices (one word each). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
 /// materials, then all indices, in the order their first draw names them; a residency's tables place each mesh whole
-/// past a reserve of draw records, where it stays while its draws do (<see cref="SdfMeshRegionArena"/>). A record names
+/// past a reserve of draw records, where it stays until the arena packs again (<see cref="SdfMeshRegionArena"/>). A record names
 /// its mesh's words either way.
 /// <para>
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
