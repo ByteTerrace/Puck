@@ -40,7 +40,10 @@ namespace Puck.DirectX.Presentation;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
-    private const uint FrameCount = 2;
+    // One back buffer more than the frame latency: a composed (DWM) window's on-screen buffer stays with the compositor
+    // until the next frame is composed, so at two buffers the frame queued behind it has nothing to draw into and misses
+    // the following refresh.
+    private const uint FrameCount = (MaximumFrameLatency + 1);
     // Variable-refresh-rate tearing: the swap chain must be created (and resized) with the ALLOW_TEARING flag and
     // presented with the matching Present flag. Both are UINT bitmasks in the DXGI headers.
     private const uint DxgiSwapChainFlagAllowTearing = 0x00000800; // DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
@@ -488,7 +491,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
     /// ring does not duplicate per slot: the single CPU-upload texture, the single encode SRV descriptor, and the
     /// per-slot allocators/lists at teardown. Any write to a cross-slot resource must run behind this, because
-    /// <see cref="WaitForFrameSlot"/> only proves one slot idle while the other may still be sampling.</summary>
+    /// <see cref="WaitForFrameSlot"/> only proves one slot idle while the others may still be sampling.</summary>
     private void WaitForAllFrames() {
         var lastSignaled = (m_nextFrameFenceValue - 1);
 
