@@ -44,9 +44,11 @@ The windowed loop paces off its presenter's swap chain (`ISwapChainPacing`)
 whenever the swap chain presents on vertical blank: after each present it
 waits until the swap chain's queue has room, so each iteration starts on a
 vertical blank and its interval is present to present. A timer paces the rest
-(a variable-refresh display, an explicit rate no whole number of refreshes
-reaches, a tearing or mailbox present mode); [host
-pacing](../../docs/reference/hosting.md#host-pacing) has the rule. The loop runs
+(an explicit rate no whole number of refreshes reaches, a tearing or mailbox
+present mode), and on a variable-refresh display it runs after the swap chain's
+wait, since that display shows a frame as it arrives; [host
+pacing](../../docs/reference/hosting.md#host-pacing) has the rule, and
+`PresentPacingPolicyLawTests` holds the decision from the display's facts. The loop runs
 at the highest thread priority, so it wakes promptly on either: at normal
 priority the timer's wait returned up to 5.7 ms late on a quiet machine. It
 records each iteration in a `HostFrameTimeline`, which the windowed-only

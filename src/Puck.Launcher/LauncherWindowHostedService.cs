@@ -163,9 +163,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         }
     }
     // The timer's period in stopwatch ticks, the presented rate the pacing targets in whole frames a second (zero when
-    // unbounded), which the frame context carries to the render graph's rate sources, and the display refreshes each
-    // present waits for when the swap chain paces the loop (zero when the timer does).
-    private (long Period, int Hertz, uint Refreshes) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
+    // unbounded), which the frame context carries to the render graph's rate sources, the display refreshes each
+    // present waits for when the swap chain paces the loop (zero when the timer does), and whether the timer also paces
+    // an iteration whose swap chain already had room.
+    private (long Period, int Hertz, uint Refreshes, bool TimerBoundsSwapChain) ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
             timing: displayTiming
@@ -173,7 +174,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
         if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
             m_logger.LogInformation(
-                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}); swap chain refreshes per present {Refreshes} (0 paces by timer).",
+                "Display pacing: signal {Signal}; VRR {Support}, range {Range}, source {Source}; target {Target:0.###} Hz ({Basis}); swap chain refreshes per present {Refreshes} (0 paces by timer); timer bounds the swap chain {TimerBounds}.",
                 (displayTiming.Signal.IsKnown
                 ? $"{displayTiming.Signal.Hertz:0.###} Hz"
                 : "unknown"),
@@ -186,14 +187,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 displayTiming.VariableRefresh.Source,
                 decision.TargetHertz,
                 decision.Basis,
-                decision.RefreshesPerPresent
+                decision.RefreshesPerPresent,
+                decision.TimerBoundsSwapChain
             );
         }
 
         return (
             decision.ToPeriodTicks(frequency: frequency),
             ((int)Math.Round(a: decision.TargetHertz)),
-            decision.RefreshesPerPresent
+            decision.RefreshesPerPresent,
+            decision.TimerBoundsSwapChain
         );
     }
     private void RunWindowLoop(CancellationToken stoppingToken) {
@@ -291,10 +294,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // Swap-chain pacing: a presenter whose swap chain presents on vertical blank paces the loop itself. After
                 // each present the loop waits until the swap chain's queue has room, which the display makes on a
                 // vertical blank, so each iteration starts on one and its interval is present to present, with no timer
-                // whose wake-up can land late. The
-                // timer below paces only an iteration the swap chain does not: a variable-refresh display, an explicit
+                // whose wake-up can land late. The timer below paces an iteration the swap chain does not (an explicit
                 // target no whole number of refreshes reaches, a tearing or mailbox present mode, a frame with nothing
-                // presented.
+                // presented), and runs after the swap chain's wait on a variable-refresh display, which shows a frame
+                // as it arrives while variable refresh is engaged, so its queue never waits for a refresh then.
                 var swapPacing = (m_presenter as ISwapChainPacing);
                 // Genlock (latency phase-align): when an external frame producer (a live camera) publishes arrival
                 // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
@@ -316,7 +319,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // never reaches the fixed-step sim.
                 var presentPacingVersion = m_presentPacing.Version;
 
-                var (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
+                var (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
                     displayTiming: displayTiming,
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
@@ -381,7 +384,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     ) {
                         displayConfigurationVersion = displayTimingInfo.DisplayConfigurationVersion;
                         displayTiming = DisplayTimingSnapshot.Unknown;
-                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -399,7 +402,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                         --displayTimingRetryAttemptsRemaining;
                         displayTiming = requeriedTiming;
-                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -418,7 +421,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // only — the fixed-step sim is untouched.
                     if (m_presentPacing.Version != presentPacingVersion) {
                         presentPacingVersion = m_presentPacing.Version;
-                        (renderPeriod, displayHertz, refreshesPerPresent) = ResolveRenderPeriod(
+                        (renderPeriod, displayHertz, refreshesPerPresent, timerBoundsSwapChain) = ResolveRenderPeriod(
                             displayTiming: displayTiming,
                             frequency: frequency,
                             requestedHertz: m_presentPacing.TargetHertz
@@ -685,9 +688,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         }
                     }
 
+                    // On a variable-refresh display the timer's grid still runs after the swap chain's wait. Its period
+                    // leads the target slightly (PresentPacingDecision.SwapChainTimerLead), so where the display
+                    // refreshes at its fixed signal the wait ends at or after each grid point and the timer adds nothing,
+                    // and where it shows frames as they arrive the wait ends at once and the grid holds the target.
                     if (
                         (swapPacing is not null) &&
-                        swapPacing.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent)
+                        swapPacing.TryWaitForFrame(refreshesPerPresent: refreshesPerPresent) &&
+                        !timerBoundsSwapChain
                     ) {
                         // The swap chain paced this iteration: the next one starts on a vertical blank. The timer's grid
                         // restarts here, so an iteration the timer paces later waits one period from the last frame shown

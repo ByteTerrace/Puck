@@ -197,8 +197,9 @@ The fields most often confused in `FrameContext` have distinct meanings:
 | Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
 | Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes, and steps the next tick only once the root reports that frame rendered. Every tick has exactly one rendered frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
 
-The windowed host paces off its swap chain, never a timer, whenever the swap
-chain presents on vertical blank (`host.presentMode: Vsync`). After each
+The windowed host paces off its swap chain whenever the swap chain presents on
+vertical blank (`host.presentMode: Vsync`) and the display refreshes at a
+fixed signal; a variable-refresh display adds the timer (below). After each
 present the loop waits until the swap chain's queue has room
 (`ISwapChainPacing.TryWaitForFrame`), which the display makes on a vertical
 blank, so each iteration starts on one and an interval `host.frames` reads is
@@ -215,14 +216,52 @@ presents on every refresh of whatever signal the display runs, and a signal
 the host cannot read is still paced by its vertical blank. An explicit target
 paces off the swap chain when a whole number of refreshes, at most four,
 reaches it within one percent (30 Hz on a 60 Hz display presents every second
-refresh). Direct3D 12 sets that number as its sync interval; Vulkan's FIFO has
+refresh); the timer then runs at the signal's own rate over that number. Direct3D 12 sets that number as its sync interval; Vulkan's FIFO has
 none, so Vulkan paces off the swap chain only at one refresh a present. The
-timer paces everything else: a verified variable-refresh range, whose display
-shows a frame when it arrives, so the timer's period is the cadence; an
-explicit target no whole number of refreshes reaches; a tearing or mailbox
-present mode; a device without present wait; and an iteration that presented
-nothing. Genlock biases only the timer's deadline. The display log line names
-the choice (`swap chain refreshes per present`, 0 for the timer).
+timer paces an explicit target no whole number of refreshes reaches, a tearing
+or mailbox present mode, a device without present wait, and an iteration that
+presented nothing. Genlock biases only the timer's deadline.
+
+A display with a verified variable-refresh range (`VariableRefreshSupport.Supported`
+with an advertised range) needs both. While variable refresh is engaged (a
+window in front, on independent flip) the display shows each frame as it
+arrives, up to the fastest rate the range reaches, which can exceed the desktop
+signal (a 60 Hz desktop on a 48–165 Hz range refreshes at up to 144 Hz on one
+NVIDIA machine), so the swap chain's queue never waits for a 60 Hz refresh
+and only the timer can hold an explicit target. While the window is composed
+(behind another window) the display refreshes at its fixed signal and the swap
+chain waits on every refresh. The pacer therefore presents on every refresh
+(or the whole number that reaches the target), waits on the swap chain, and
+then waits on the timer's grid. The timer runs 0.1 percent ahead of the target
+(`PresentPacingDecision.SwapChainTimerLead`), so a composed window's swap chain
+wait always ends at or after the timer's deadline and the refresh paces it,
+never the timer drifting behind a refresh whose true period is a few parts per
+million shorter than the reported signal's. An explicit target is capped at the
+range's maximum rather than the signal. Automatic pacing on such a display
+targets the range's maximum less 3 Hz
+(`PresentPacingPolicy.VariableRefreshCeilingGuardHertz`), never below the
+signal: one frame per refresh at whatever rate the display refreshes, which is
+the signal while composed and up to the range's ceiling while variable refresh
+is engaged, with the guard keeping a frame inside the variable-refresh window
+rather than at its edge. A range whose maximum the protocol leaves to the video
+mode takes the signal as its ceiling.
+
+The display log line names the choice (`swap chain refreshes per present`, 0
+for the timer alone, and `timer bounds the swap chain`), and
+`PresentPacingPolicyLawTests` holds the decision for each set of display facts.
+Direct3D 12 keeps three back buffers at a maximum frame latency of two: a
+composed window's on-screen buffer stays with the compositor until the next
+frame is composed, and at two buffers the frame queued behind it has nothing to
+draw into and misses the following refresh. Vulkan asks for one image more
+than the surface's minimum. A composed Vulkan window's present wait returns up
+to 2 ms either side of the refresh, so its intervals scatter around the period
+without missing one.
+
+NVIDIA's Vulkan driver engages variable refresh only for a swap chain created
+while its window is in front: a World launched behind another window and then
+brought forward stays composed at the signal until its swap chain is recreated
+(a resize recreates it). Direct3D 12 engages it whenever the window comes to
+the front.
 
 The simulation's fixed tick is unchanged by this. The pump still hands
 `FixedStepPump.Advance` the wall interval each iteration sampled and runs

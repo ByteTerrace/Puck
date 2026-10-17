@@ -736,6 +736,14 @@ unverified when no device run exists.
   number as a heap offset.
 - Full GPU removal can wedge the in-process NVIDIA Vulkan ICD. TDR recovery is
   supported; physical removal may require a new process.
+- On a variable-refresh display, a window's pacing depends on whether it is in
+  front: in front it runs variable refresh (up to 144 Hz on a 60 Hz desktop on
+  the RTX 2060's display), behind another window it is composed at the desktop
+  signal. Record which one a `host.frames` reading is, and the GPU clocks beside
+  it. NVIDIA's Vulkan driver engages variable refresh only for a swap chain
+  created while the window is in front, so a Vulkan World launched behind
+  another window stays composed after it is brought forward until a resize
+  recreates its swap chain ([host pacing](../reference/hosting.md#host-pacing)).
 - The live Pocket Camera path uses CPU pixels. The zero-copy camera export
   infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
