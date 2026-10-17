@@ -67,19 +67,31 @@ normal at the hit point (the vertex normals interpolated when the mesh carries
 them, carried to world space by the draw's inverse-transpose normal matrix so a
 nonuniform scale keeps them perpendicular to the surface; the face normal
 otherwise), turned toward the camera and clamped so a grazing ray never sees it
-lean away; a screen-space ambient occlusion, twelve normal-oriented hemisphere
-samples against the mesh target's ray distances; and the stable shadow slots'
+lean away; a screen-space ambient occlusion, eight taps over the disk the
+occlusion radius projects to, each rebuilding the surface point its pixel's ray
+reached in the mesh target and occluding by its elevation above the hit's
+tangent plane, so a plane never occludes itself; and the stable shadow slots'
 visibility into the K word, a percentage-closer soft shadow from the first
 cascade holding the point: a blocker search sizes the penumbra from the light's
 penumbra slope and the gap to the blockers, and a filter of that width answers.
+The occlusion is one tap pattern's estimate per pixel: each pixel turns and
+spaces its taps by its cell of a 4×4 ordered-dither tile, stepped within the
+tile's strata by a temporal view's sample index, and views filters it.
 
 **views** (`sdf-world-views.comp.hlsl`) calls no field query either. It reads
 each record and computes materials (a textured mesh's atlas texel, an impostor's
 surface, or the draw's palette entry), lighting, the irradiance volume's
-indirect light and the bounded volumes. A view whose quality
-(`SdfViewSnapshot.Quality`) turns ambient occlusion or soft shadows off reads
-none of the record's occlusion or K; quality is each view's, so views of one
-frame render at different cost.
+indirect light and the bounded volumes. Before shading, each 8×8 group gathers
+its pixels' records with a two-pixel apron into group-shared memory, and each
+pixel averages the surface pass's occlusion over the 4×4 window around it,
+which holds each of the tile's sixteen patterns once, so the per-pixel noise
+cancels to one smooth estimate with or without temporal reconstruction. A
+neighbor joins the average only while its surface point lies within two pixel
+footprints of the pixel's tangent plane, so occlusion never crosses a depth
+edge or a silhouette. `world.debug-view ao` shows the filtered occlusion. A
+view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or soft
+shadows off reads none of the record's occlusion or K; quality is each view's,
+so views of one frame render at different cost.
 
 Every in-extent record is the frame's own: the surface and views passes
 dispatch one 8×8 group per block of the render grid, with no culled region and

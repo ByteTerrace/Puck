@@ -135,8 +135,8 @@ of its passes. The upload and the view's passes, in order:
 | `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours; only while a bake is pending. |
 | `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh.vert`, `sdf-mesh.frag` | Draw every mesh draw from the cascade's light camera into its 2048-texel target; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag`, `sdf-mesh-impostor.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
-| `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion and the stable slots' cascade visibility into K. Calls no field query. |
-| `views` | `sdf-world-views.comp` | Materials, lighting through the one light interface, the irradiance volume and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. Calls no field query. |
+| `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion (one 4×4-tile tap pattern's estimate per pixel, unfiltered) and the stable slots' cascade visibility into K. Calls no field query. |
+| `views` | `sdf-world-views.comp` | Gathers each group's records with a two-pixel apron into group-shared memory and averages the occlusion over each pixel's 4×4 window (`sdfViewsAmbient`), then materials, lighting through the one light interface, the irradiance volume and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. Calls no field query. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the stack's lowest field run's offset, then each upper field run's scale and offset, the base's alpha marking an evaluated texel. Each layer counts `gpu.sky.evaluations` in its own detail row (`SdfSkyDetails`). Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
 | `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's atmosphere transmittance) plus each atmosphere kind's in-scatter colour by the surface transport's weight for it (the fog's and the haze's sky from the environment map the residency's upload renders, `sdfSkyEnvironment`, filtered bilinearly along the pixel's ray, evaluating no sky layer; each kind counted once a pixel in the `atmosphere` detail row), the sky's layers in their authored order (each field run's summary filtered from the texels the sky evaluated, each point layer evaluated at the pixel), through the haze and the medium, beneath it by its coverage, then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
@@ -256,8 +256,8 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost`
-selects a diagnostic image (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao`
+selects a diagnostic image (`ao` is the filtered ambient occlusion views shades with) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
 isolates the raster. To see what a shadow cascade sees, place a camera at the
 shaded point looking along the sun direction under `material-id`.

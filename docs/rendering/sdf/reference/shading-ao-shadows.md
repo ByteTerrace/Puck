@@ -25,11 +25,15 @@ describes projection, refresh thresholds and counted work.
 ## Ambient occlusion
 
 The surface pass estimates occlusion in screen space (`sdfMeshAmbient` in
-`passes/sdf-surface-stage.hlsli`): twelve normal-oriented hemisphere samples,
-within 0.75 metres or a quarter of the hit's distance, whichever is smaller,
-each occluding when the surface the camera sees through its pixel lies in front
-of it by no more than that radius. The disk rotates with each temporal sample so
-the resolve averages its rotations. The result modulates ambient contribution
+`passes/sdf-surface-stage.hlsli`): eight taps over the disk that 0.75 metres or
+a quarter of the hit's distance, whichever is smaller, projects to, each
+rebuilding the surface point its pixel's ray reached and occluding by its
+elevation above the hit's tangent plane. Each pixel's taps follow its cell of a
+4×4 ordered-dither tile, and views averages the 4×4 window around each pixel
+over neighbors on its tangent plane (`sdfViewsAmbient`), so the result carries
+no screen-locked pattern with or without temporal reconstruction
+([lighting and shading](../handbook/lighting-and-shading.md#ambient-occlusion-screen-space-obscurance)).
+The result modulates ambient contribution
 only; it does not darken direct light a second time. Occluders off screen or
 behind a nearer surface do not occlude.
 

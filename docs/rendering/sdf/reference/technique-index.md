@@ -13,7 +13,7 @@ It intentionally omits implementation chronology and review provenance.
 | Cell-local field evaluation behind a hierarchical position | Not applicable; a world-space seam must rebase or refuse | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Per-segment bounds | Open priority for placed creations | [Level of detail and bounds](lod-and-bounds.md) |
 | Tetrahedral bake gradients and interpolated vertex normals | Shipped: the bake measures gradients only at sign-change corners | [Gradients and normals](gradients-and-normals.md) |
-| Screen-space hemisphere AO | Shipped in the surface pass, ambient-only | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
+| Screen-space obscurance AO with a 4×4 interleaved pattern and a plane-aware window filter | Shipped: estimated in the surface pass, filtered in views, ambient-only | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Irradiance volume traced on the CPU against the baked meshes | Shipped | [The mesh path's irradiance volume](../handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination) |
 | Cascaded percentage-closer soft shadows | Shipped: two cascades for the key light, one for the second stable slot | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Tracked by the interpreter, not drawn: the bake point-samples each quad's winning material | [Materials and primitives](materials-and-primitives.md) |
