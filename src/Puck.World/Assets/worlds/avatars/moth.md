@@ -104,7 +104,7 @@ For matching close-ups in the comparison, edit the `three-quarter` camera's
 `rig.operations`. Both panes follow that row. If copying another camera's whole
 row, keep the row name `three-quarter` and give its rig a unique name; duplicate
 camera-program names are refused. Reload the world to restore the saved view.
-Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `boots`,
+Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `knee`, `boots`,
 `boots-side` and `boots-rear` layouts remain available through `view.override`.
 
 The [Pipeline workflow](../../../README.md#shader-pipelines) describes shader edits and

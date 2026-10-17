@@ -774,6 +774,34 @@ cameras [
     }
   }
   {
+    name: "knee"
+    renderHeight: 900
+    renderWidth: 1280
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [0.75, 0.95, -0.95])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.42
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0.05, 0.7, 0])
+        worldAxes: false
+      }
+      name: "knee"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [0.75, 0.95, -0.95]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.05, 0.7, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.42, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
     name: "boots-side"
     renderHeight: 900
     renderWidth: 1280
@@ -4696,6 +4724,7 @@ views {
   cameraLayout("back-close")
   cameraLayout("shoulder-top")
   cameraLayout("boots")
+  cameraLayout("knee")
   cameraLayout("boots-side")
   cameraLayout("boots-rear")
 

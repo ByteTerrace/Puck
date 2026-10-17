@@ -624,13 +624,43 @@ lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`
 a gradient sample counting five), so a frame that bakes keeps its budget. A
 group refines from a coarse lattice over its bounding sphere to the box its
 surface can cross, then samples a final lattice of at most 65 samples a side, no
-finer than 1.5 cm, in slabs of whole planes, values alone; it then measures
-gradients only at the corners of the cells whose corners disagree in sign, the
-only samples the contour reads one at. The samples are read back and contoured
-on the thread pool by `SdfSampledLattice`, the prototype baker's dual contouring
-(`SdfDualContouring`) over a lattice whose spacing may differ per axis. A sample
-whose material no shape of the group carries reads as outside, since the walk
-can answer with a shape of another instance where compiled parts are shared.
+finer than 1.5 cm, in slabs of whole planes, values alone. The samples are read
+back and contoured on the thread pool by `SdfSampledLattice`, the prototype
+baker's dual contouring (`SdfDualContouring`) over a lattice whose spacing may
+differ per axis. A sample whose material no shape of the group carries reads as
+outside, since the walk can answer with a shape of another instance where
+compiled parts are shared.
+
+A 1.5 cm cell cannot hold what the Moth's armour is made of: shells that thin to
+a knife edge (the top of a shin, the helmet's rim), paint layers a millimetre
+proud of the plate beneath, and shells resting on the joints under them. Its
+samples step over a sheet thinner than a cell, so the mesh frays into fragments
+with the joint showing through, and a material boundary inside a cell lands
+wherever the cell's corners put it. So the final lattice refines where its
+samples cannot resolve the surface (`SdfSampledLattice.Refine`):
+
+- a cell next to a lattice edge that a sheet or gap thinner than a cell crosses:
+  a run of one sample between two of the other sign whose crossings lie less
+  than a cell apart, or two samples of one sign whose values fall steeply toward
+  each other from both sides and meet below the surface, a sheet that passed
+  between them;
+- a crossed cell whose outside corners report different materials;
+- a crossed cell whose corner signs hold more than one surface patch, two sheets
+  in one cell.
+
+Each such cell is measured again as a points lattice at a fine spacing: the cell
+split into as many parts as bring it to 5 mm (`FineCell`), at most four along
+each axis. Every cell touching one is contoured at the fine spacing too, from
+its coarse corners' interpolation, and merges each connected piece of its fine
+surface into one vertex, so it adds no triangles and the mesh has no crack where
+the resolution changes (`SdfDualContouring.ExtractRefined`). Every other cell
+contours whole. The gradients are then measured at the samples the contour reads
+one at: the corners of every crossed cell that contours whole, the coarse
+corners of every refined cell, whose unmeasured fine samples interpolate them,
+and the measured corners of every crossed fine cell. On the debug world about
+12,000 cells refine, and the bake makes about 800,000 triangles from about
+20.7 M field evaluations; a sheet that thins below the fine spacing still frays
+over its last few millimetres.
 
 The material is then sampled where a field hit would read it: the bake writes
 four points a quad, its quarters' centres lifted half a millimetre off the
