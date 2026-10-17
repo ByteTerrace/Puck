@@ -383,7 +383,7 @@ internal sealed partial class WorldScreenBinder {
 
         _ = builder.Append(
             provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"depth {m_nestingDepth}"
+            handler: $"depth {BootNestingDepth()}"
         );
 
         foreach (var screens in m_routedScreens.Values) {

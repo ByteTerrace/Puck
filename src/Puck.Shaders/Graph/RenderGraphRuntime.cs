@@ -1060,8 +1060,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private string? ReasonOf(int index) {
         var name = m_set.Instances[index].Name;
 
-        if ((index == m_captureInstance) && (CaptureReadiness is { IsRendered: false } readiness)) { return readiness.Reason; }
-
         if (m_producers[index] is { } producer) {
             return ((producer.NotReadyReason is { } reason)
                 ? $"the instance '{name}' has produced no output: {reason}"
@@ -1275,15 +1273,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var index = renders[position];
             var row = schedule.Instances[index];
 
-            // A finite package operation owns this exact image until its sibling work finishes. Pass-level skips
-            // still submit and rotate frame slots, so the hold must precede binding and the node's submission path.
-            if (PackagesHoldOutput(index: index)) {
-                m_unproduced++;
-                m_historySucceeded[index] = true;
-                MarkCurrent(index: index);
-                continue;
-            }
-
             // The display encoder may still be building after the last requested sample. Keep the contributing
             // images alive until readback completes; another render would silently capture a later jitter sample.
             if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
@@ -1308,7 +1297,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 if (
                     (index == m_captureInstance) &&
                     (m_capture.PendingPath is not null) &&
-                    CaptureReadiness.IsRendered &&
                     (m_taintedReads[index] is null) &&
                     !MarkReadStale(index: index, schedule: schedule)
                 ) {
@@ -1483,7 +1471,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             // A sample rendered at an extent the node was not asked for is one its capture never reads.
             if ((node.FrameCounter != rendered) && (converging is not null) &&
-                CaptureReadiness.IsRendered &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
                 converging.Count();
             }

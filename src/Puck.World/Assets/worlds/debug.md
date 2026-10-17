@@ -33,7 +33,7 @@ whichever World it attached to first.
 
 | Where | What | Portal |
 |---|---|---|
-| Debug world, `portal` at (3, 0, -8), facing +Z, ahead and right of the spawn | The gilt frame, glass showing the garden | Walk -Z through it: you arrive in the garden at the same point, still walking -Z. The pair (`portal`, `arrival`) faces each other, so the crossing maps as the identity. |
+| Debug world, `portal` at (3, 0, -8), facing +Z, ahead and right of the spawn | The gilt frame, glass showing the garden | Walk -Z through it: you arrive in the garden at the same point, still heading -Z. The pair (`portal`, `arrival`) faces each other, so the crossing maps as the identity. |
 | Garden, `arrival` at (3, 0, -8), facing -Z | The frame you came out of, glass showing the debug world | Turn round and walk +Z into it: you arrive back out of the debug frame, walking +Z towards the spawn. |
 | Garden, `far` at (5.5, 0, -20), facing +Z | The frame ahead of you, glass showing the debug world turned about | Walk -Z into it: the pair (`far`, `portal`) shares a yaw, so the crossing turns you about and you come out of the debug frame walking +Z towards the spawn, the view turned with you. |
 | Garden, `obelisk` at (9, 0, -30) | The landmark | |
@@ -45,6 +45,26 @@ debug world, two levels deep (`world.nesting` lists `session$24`, then
 axis lines, the reference cubes and the test room stand behind the spawn on +Z
 and -X, out of the frames' way.
 
+## Where a crossing lands
+
+A door fires on the edge of its band, a slab one band depth thick in front of
+the glass (the frame's half-depth, or the distance one step of the fastest
+authored travel covers, whichever is larger). The crossing maps the traveller
+through the isometry between the two frames, which carries the distance from the
+face through unchanged, so a traveller who fired the band lands that far behind
+the counterpart's face, still walking out through it. That is why the crossings
+arrive at z -6.7 in the garden, behind the garden's `arrival` frame at z -8, and
+at z -9.3 behind the debug frame on the way back: the traveller is placed where
+it would have been had the glass been a plain opening, so the view through the
+glass and the view after the crossing agree.
+
+The landing never re-fires a door. The band is one-sided, so the landing behind
+the counterpart is outside its band, and walking on out through the counterpart's
+glass moves against nothing it triggers on. The arrival also latches the
+traveller as already inside any band it lands in, so a mapped pair that sets the
+traveller down on its counterpart's threshold does not bounce it back. Only
+turning round and walking back into the counterpart's front fires the way back.
+
 ## What to try
 
 The crossings below work in every boot shape, headless included; a presenting
@@ -55,14 +75,18 @@ from the other side ([open item](../../../../docs/plans/open-items.md#rendering)
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
   `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
-  arrive in the garden at the same point. Walk on through the far frame
+  arrive in the garden at the same point. A `body.fly` tape belongs to the
+  instance that holds the body, so it stops at the crossing; issue it again in
+  the garden to walk on (a held key or stick keeps going). Walk on through the far frame
   (`body.pose 5.5 - -12 0 0 0`, `body.fly 1 0 0 0 0 0 5`) and you come back out
   of the debug frame turned about.
 - From inside the garden, stand past the arrival frame and walk +Z into it
   (`body.pose 3 - -12 180 0 0`, `body.fly -1 0 0 0 0 0 2`): you come back out of
   the debug frame walking +Z.
-- Set `nestingDepth` in `views` to 1 and boot again: `world.nesting` names no
-  level two deep, and the garden's frames show their fallback magenta.
+- Run `world.row.set views nestingDepth 1`: the depth changes live, with no
+  boot, `world.nesting` names no level two deep, and the garden's frames show
+  their fallback magenta. `world.row.set views nestingDepth 3` restores it; a
+  value past 8 is refused.
 - Edit [garden.puck](garden.puck), then `world.instance.stop 6~global6~garden`:
   the garden retires, and the next crossing resolves a fresh garden from the
   edited source. `world.reload` recompiles only the debug world.

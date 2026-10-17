@@ -64,17 +64,6 @@ public sealed partial class RenderGraphRuntime {
             Publication: publication,
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
             Tainted: (m_taintedReads[index] is not null));
-        if ((m_set.Instances[index].Output == ShaderPipelineResourceKind.Image) && (m_graphs[index] is { } graph)) {
-            var passes = graph.Pipeline.Plan.Passes;
-
-            for (var position = 0; (position < passes.Count); position++) {
-                var pass = passes[position];
-
-                if ((pass.Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory)) {
-                    factory.OutputPublished(instance: m_set.Instances[index].Name, publication: publication);
-                }
-            }
-        }
     }
     private void MarkCurrent(int index) {
         m_stale[index] = null;
@@ -84,9 +73,9 @@ public sealed partial class RenderGraphRuntime {
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
     }
-    // A paused node or a finite package hold presents its exact previous image on purpose. Its readers consume that
-    // standing publication, not an absent render at the latest scheduled frame.
-    private bool Stands(int index) => ((m_nodes[index] is { Paused: true }) || PackagesHoldOutput(index: index));
+    // A paused node presents its exact previous image on purpose. Its readers consume that standing publication, not
+    // an absent render at the latest scheduled frame.
+    private bool Stands(int index) => (m_nodes[index] is { Paused: true });
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
     // This is the one place a graph instance's refusal becomes Refused: a package's refusal of the instance
     // (IRenderGraphPackageFactory.RefusalOf, such as an SDF residency's refused tables), the node's refused build or a
@@ -236,9 +225,6 @@ public sealed partial class RenderGraphRuntime {
     }
     // Decides the frame's completion from the root's standing.
     private void Complete() {
-        if ((m_capture.PendingPath is not null) && (CaptureReadiness is { Completion: FrameCompletion.Refused } readiness)) {
-            m_capture.Refuse(error: new InvalidOperationException(message: readiness.Reason));
-        }
         // A capture waiting here has not reached a node's readback. A refused dependency cannot become current by
         // composing another frame, so report its refusal instead of keeping the capture's host clock held.
         if ((m_capture.PendingPath is not null) && m_staleRefused[m_captureInstance] &&

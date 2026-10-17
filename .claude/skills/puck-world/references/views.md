@@ -463,7 +463,10 @@ Free Cam do not alter the logical movement basis.
 - `views.nestingDepth` (document) — how many observations deep a world shown
   through screens or named infinity layers renders: 3 unauthored, 0 through 8,
   refused by name past either end. The boot world's governs the presentation
-  and which worlds its authority opens observations for. `WorldObservationSite`
+  and which worlds its authority opens observations for. It edits live through
+  the whole-row `views` section (`world.row.set views nestingDepth <n>`,
+  `world.row.step views.nestingDepth <delta>`), which submits `SetViewDefaults`;
+  `world.nesting` reads the live depth. `WorldObservationSite`
   distinguishes physical screen indices from named sky layers; both use the
   same destination admission, re-admission and release path in
   `WorldInstanceHost`. Presentation reads `ScreenSession` or `InfinitySession`

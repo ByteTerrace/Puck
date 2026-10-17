@@ -11,7 +11,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var gpu = new FakePipelineGpu();
         var recorders = new Recorders();
         var producers = new Producers(gpu: gpu);
-        var package = new CaptureDemandPackage(buffer: false) { Ready = true };
+        var package = new CaptureDemandPackage(buffer: false);
 
         producers.Register(registry: recorders.Registry);
         recorders.Registry.Register(factory: package, package: RenderGraphPackageCatalog.SdfWorld);
@@ -96,11 +96,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         if (demanded) {
             frames.Next(count: 3);
-            Assert.False(condition: request.Completion.IsCompleted);
-            Assert.Contains("pending demanded source", runtime.UnservedCaptureReason);
             Assert.Single(collection: package.Started, predicate: name => (name == (buffer ? "pool" : Inactive)));
             // A standing buffer or previous image still owns its fence. Repeated demand never restarts that operation.
-            if (edge == "removed") { footprints.RemoveAll(match: item => (item.Producer == Inactive)); } else { package.Ready = true; }
+            if (edge == "removed") { footprints.RemoveAll(match: item => (item.Producer == Inactive)); }
         } else {
             Assert.DoesNotContain(Inactive, package.Started);
             Assert.Equal(0UL, runtime.NodeOf(instance: Inactive)!.FrameCounter);
@@ -118,7 +116,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public List<string> Started { get; } = [];
 
         public Action? PrepareFootprints { get; set; }
-        public bool Ready { get; set; }
 
         public void BeginFrame(in FrameContext context) {
             m_inner.BeginFrame(context: in context);
@@ -130,8 +127,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_inner.Create(built: built, context: context, groups: groups);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => m_inner.CounterOf(instance: instance);
         public RenderGraphPackageFragment? FragmentOf(string instance) => m_inner.FragmentOf(instance: instance);
-        public FrameRender CaptureReadinessOf(string instance) => ((Ready || (!buffer && (instance == PackageView)))
-            ? FrameRender.Rendered : FrameRender.Waiting(reason: "pending demanded source"));
         public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Started.Add(item: instance);
     }
 

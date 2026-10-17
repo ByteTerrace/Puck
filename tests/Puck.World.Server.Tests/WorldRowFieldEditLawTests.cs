@@ -336,6 +336,43 @@ public sealed class WorldRowFieldEditLawTests {
         );
     }
     [Fact]
+    public void LiteralSet_ViewsNestingDepth_ChangesTheLiveDocumentAndRefusesPastTheMaximum() {
+        using var row = Build();
+        var registry = BuildRegistry(row: row);
+
+        var setResult = registry.Submit(line: "world.row.set views nestingDepth 1");
+
+        Assert.False(
+            condition: setResult.IsError,
+            userMessage: setResult.Output
+        );
+        Step(row: row);
+        Assert.Equal(
+            actual: row.Server.Definition.Views.NestingDepth,
+            expected: 1
+        );
+
+        var stepResult = registry.Submit(line: "world.row.step views.nestingDepth 1");
+
+        Assert.False(
+            condition: stepResult.IsError,
+            userMessage: stepResult.Output
+        );
+        Step(row: row);
+        Assert.Equal(
+            actual: row.Server.Definition.Views.NestingDepth,
+            expected: 2
+        );
+
+        // Control: a value past the maximum is refused at apply and the live depth stays.
+        _ = registry.Submit(line: "world.row.set views nestingDepth 9");
+        Step(row: row);
+        Assert.Equal(
+            actual: row.Server.Definition.Views.NestingDepth,
+            expected: 2
+        );
+    }
+    [Fact]
     public void LiteralSet_DottedSelectorValue_ResolvesInsideTheBracket() {
         // The path splits on '.' outside brackets only, so a fractional selector value is one segment.
         using var row = Build();
