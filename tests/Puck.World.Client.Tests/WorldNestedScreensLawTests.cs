@@ -386,6 +386,44 @@ public sealed class WorldNestedScreensLawTests {
         // beyond it.
         Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(towardZ: -1f, z: 0.1f), glass: glass));
     }
+    // THE LAW: a glass covers the share of a camera's image its face projects to, unclipped by the image's edges, and the
+    // whole image once its face reaches the near plane, so a window renders one texel for each pixel its glass covers.
+    [Fact]
+    public void AGlassCoversTheShareOfTheImageItsFaceProjectsTo() {
+        var glass = Screen(source: new WorldScreenSource.None());
+        var camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: new Vector3(x: 0f, y: 1f, z: 5f),
+            target: new Vector3(x: 0f, y: 1f, z: 0f),
+            viewportHeight: 64,
+            viewportWidth: 64
+        );
+        var tangent = MathF.Tan(x: 0.5f);
+        var coverage = WorldPortalVisibility.Coverage(camera: in camera, glass: glass);
+
+        Assert.Equal(expected: (1.2 / (5.0 * tangent)), actual: coverage.Width, precision: 4);
+        Assert.Equal(expected: (0.9 / (5.0 * tangent)), actual: coverage.Height, precision: 4);
+        // Past the image's edge the glass still demands its whole face's density, up to the image itself.
+        Assert.Equal(expected: (1.0, 1.0), actual: WorldPortalVisibility.Coverage(camera: CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: new Vector3(x: 0f, y: 1f, z: 0.5f),
+            target: new Vector3(x: 0f, y: 1f, z: 0f),
+            viewportHeight: 64,
+            viewportWidth: 64
+        ), glass: glass));
+        Assert.Equal(expected: (1.0, 1.0), actual: WorldPortalVisibility.Coverage(camera: (camera with { Near = 6f }), glass: glass));
+    }
+    // THE LAW: a window's extent moves by whole octaves: it grows to the smallest power of two that holds its glass and
+    // halves only once the glass falls well below the half, so a glass at an octave's edge reallocates nothing.
+    [Fact]
+    public void AWindowsOctaveGrowsAtOnceAndShrinksOnlyWellBelowItsHalf() {
+        Assert.Equal(expected: 0.0, actual: WorldPortalVisibility.Octave(coverage: 0.0, held: 0.5));
+        Assert.Equal(expected: 0.5, actual: WorldPortalVisibility.Octave(coverage: 0.44, held: 0.0));
+        Assert.Equal(expected: 1.0, actual: WorldPortalVisibility.Octave(coverage: 0.6, held: 0.5));
+        Assert.Equal(expected: 1.0, actual: WorldPortalVisibility.Octave(coverage: 0.45, held: 1.0));
+        Assert.Equal(expected: 0.5, actual: WorldPortalVisibility.Octave(coverage: 0.39, held: 1.0));
+        Assert.Equal(expected: 0.125, actual: WorldPortalVisibility.Octave(coverage: 0.1, held: 0.0));
+    }
     // THE LAW: an authority can keep a session while its screen changes projection, camera or resolution. Its view
     // must reopen with those settings even when the session provider still holds the same destination.
     [Fact]

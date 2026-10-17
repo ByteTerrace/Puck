@@ -373,7 +373,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var table = new float[((SdfWorldTables.MaxScreenSurfaces * Rows) * 4)];
         // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
         // mapped and not letterboxing; then the whole crop, the crop inset by half a pixel, and the state row: unbound,
-        // through the nearest sampler.
+        // through the nearest sampler, drawn through the screen glass since the mapping has a warp.
         float[] rows = [
             inset.M11, 0f, inset.M13, (1f / inset.M11),
             0f, inset.M22, inset.M23, (1f / inset.M22),
@@ -381,7 +381,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0f, 1f, 0f, 0f,
             0f, 0f, 1f, 1f,
             (0.5f / 160f), (0.5f / 144f), (1f - (0.5f / 160f)), (1f - (0.5f / 144f)),
-            0f, ((float)GpuSamplerFilter.Nearest), 0f, 0f,
+            0f, ((float)GpuSamplerFilter.Nearest), 0f, 1f,
         ];
 
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));

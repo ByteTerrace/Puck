@@ -72,8 +72,13 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
+        // A view that skips shadows runs a fragment with no cascade pass, so a cascade with no pass line did not run.
         bool Ran(string part) {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
+
+            if ((pass < 0) && (part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowSecond)) {
+                return false;
+            }
 
             Assert.True(condition: (pass >= 0), userMessage: $"no {part} pass line");
 
@@ -178,6 +183,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Equal(actual: StagesOf(frame: Frame()), expected: (false, false, false));
         Assert.Equal(actual: StagesOf(frame: frame), expected: (true, true, false));
+        // A view that skips shadows has no cascade pass to run.
         Assert.Equal(
             actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } })] })),
             expected: (true, false, false)

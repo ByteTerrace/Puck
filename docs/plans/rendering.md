@@ -4338,11 +4338,12 @@ item 2 landed.
    residency (`WorldScreenBinder.TryResolveWindowView`;
    `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
    A portal window attaches through that door at every depth while its
-   session discloses everything (`WorldSessionWindowRoute`), so a traveller's
+   session discloses everything (`WorldSessionRoute`), so a traveller's
    routed view and every fully disclosed window onto one destination, at any
    level of nesting, render from the endpoint's one residency; a window disclosed
-   less renders its own. Each view of that residency binds the screens of the
-   level it renders (`ISdfScreenSources.ReadOf` takes the view).
+   less renders its own. A session of the boot world is a view of the World's
+   own residency instead, filmed after its camera views. Each view of that
+   residency binds the screens of the level it renders (`ISdfScreenSources.ReadOf` takes the view).
    A camera view renders a view of the world's own residency at its own
    quality. A diegetic screen showing a live camera (a race billboard)
    costs its instance's passes, output and scratch while sharing the world's

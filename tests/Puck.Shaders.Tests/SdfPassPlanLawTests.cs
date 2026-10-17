@@ -92,6 +92,29 @@ public sealed partial class SdfPassPlanLawTests {
     }
     // Each stage declares exactly what it reads and writes: only the surface pass reads the mesh and cascade targets, and
     // every later stage reads the hit from the visibility record.
+    // THE LAW: a view that skips shadows runs every pass but the cascades, holds none of their targets, and its surface
+    // pass reads only the mesh target and the bake samples, whichever fragment it starts from.
+    [Fact]
+    public void AShadowlessFragmentDropsTheCascadesTheirTargetsAndTheirReads() {
+        string[] cascades = [
+            SdfWorldPackage.Parts.ShadowNear, SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.ShadowSecond,
+            SdfWorldPackage.Parts.ShadowNearTarget, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarTarget,
+            SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondTarget, SdfWorldPackage.Parts.ShadowSecondDepth,
+        ];
+
+        foreach (var fragment in new[] { SdfWorldPackage.NativeFragment, SdfWorldPackage.Fragment, SdfWorldPackage.TemporalFragment }) {
+            var shadowless = SdfWorldPackage.WithoutShadows(fragment: fragment);
+            var surface = shadowless.Passes.Single(predicate: static pass => (pass.Name == SdfWorldPackage.Parts.Surface));
+
+            Assert.Equal(
+                actual: shadowless.Passes.Select(selector: static pass => pass.Name),
+                expected: fragment.Passes.Select(selector: static pass => pass.Name).Where(predicate: name => !cascades.Contains(value: name))
+            );
+            Assert.DoesNotContain(collection: shadowless.Resources, filter: resource => cascades.Contains(value: resource.Name));
+            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.BakeSamples]);
+            Assert.Equal(actual: surface.InputAccesses.Count, expected: surface.Inputs.Count);
+        }
+    }
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
         string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
