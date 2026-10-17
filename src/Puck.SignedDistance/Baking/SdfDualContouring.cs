@@ -35,6 +35,20 @@ internal interface ISdfContourLattice {
     // Each axis's cell size when they differ, or null for a cubic lattice, whose normals need no rescaling.
     (double X, double Y, double Z)? CellExtent { get; }
 }
+/// <summary>A lattice contoured at two resolutions (<see cref="SdfDualContouring.ExtractRefined"/>): its cells are fine
+/// cells, <see cref="Refinement"/> to a coarse cell along each axis, and a coarse cell that is not
+/// <see cref="Refined"/> contours whole, from its eight coarse corners.</summary>
+internal interface ISdfRefinedContourLattice : ISdfContourLattice {
+    // Fine cells along each axis of a coarse cell, at least two; the lattice's cells along each axis are a multiple of it.
+    int Refinement { get; }
+    // Whether the coarse cell at coarse coordinates (x, y, z) contours its fine cells. Every fine sample on the faces of
+    // a cell that is not refined must be the multilinear interpolation of that cell's coarse corners, so a measured fine
+    // sample lies only on refined cells.
+    bool Refined(int x, int y, int z);
+    // Whether a refined coarse cell's fine samples were measured. A refined cell that was not merges the fine vertices
+    // of each connected piece of its surface into one, so it adds no detail its coarse corners lack.
+    bool Measured(int x, int y, int z);
+}
 /// <summary>
 /// Extracts a <see cref="SdfSurface"/> by manifold dual contouring: a vertex per surface patch of a cell, and one quad
 /// per sign-changing lattice edge joining the patch vertices of the four cells around it. A cell's patches are the
@@ -147,6 +161,465 @@ internal static class SdfDualContouring {
         };
     }
 
+    /// <summary>
+    /// Extracts the surface of a lattice contoured at two resolutions: a refined coarse cell places a vertex per patch
+    /// of each fine cell the surface crosses, and any other coarse cell places one per patch of its own eight corners,
+    /// as <see cref="Extract"/> does at the coarse spacing. A quad joins the four cells around each sign-changing edge,
+    /// the coarse edge where all four contour whole and each fine edge where any is refined; a cell that contours whole
+    /// lends the vertex of the patch the fine edge's coarse edge belongs to, or, for a fine edge inside one of its faces,
+    /// of the patch whose crossing on that face lies nearest. Where two of the four cells are one coarse cell, the quad
+    /// is a triangle, listed with its last vertex twice. The mesh has no crack where the resolution changes, since every
+    /// fine edge on a whole cell's face reads the samples that cell's corners interpolate.
+    /// </summary>
+    public static SdfSurface ExtractRefined<TLattice>(TLattice grid) where TLattice : ISdfRefinedContourLattice {
+        var factor = grid.Refinement;
+        int[] cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
+        int[] coarse = [(cells[0] / factor), (cells[1] / factor), (cells[2] / factor)];
+        var coarseCount = ((coarse[0] * coarse[1]) * coarse[2]);
+        var refined = new bool[coarseCount];
+        var coarseMasks = new byte[coarseCount];
+        var coarseVertices = new int[coarseCount];
+        var fineMasks = new Dictionary<long, byte>();
+        var fineVertices = new Dictionary<long, int>();
+        var positions = new List<double>();
+        var normals = new List<double>();
+        // Per vertex, the unmeasured refined cell whose fine vertices it merges with, or -1.
+        var owners = new List<int>();
+
+        Array.Fill(array: coarseVertices, value: -1);
+
+        long FineKey(int x, int y, int z) => (x + (((long)cells[0]) * (y + (((long)cells[1]) * z))));
+        int CoarseIndex(int x, int y, int z) => (x + (coarse[0] * (y + (coarse[1] * z))));
+        int MaskAt(int x, int y, int z, int stride) {
+            var mask = 0;
+
+            for (var offset = 0; (offset < 8); offset++) {
+                if (grid.Inside(corner: grid.Corner(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))))) {
+                    mask |= (1 << offset);
+                }
+            }
+
+            return mask;
+        }
+        void AddVertices(int mask, int owner, int x, int y, int z, int stride) {
+            var patchOfEdge = PatchOfEdge[mask];
+
+            for (var patch = 0; (patch < PatchCount[mask]); patch++) {
+                var edges = 0;
+
+                for (var edge = 0; (edge < CellEdges.Length); edge++) {
+                    if (patchOfEdge[edge] == patch) {
+                        edges |= (1 << edge);
+                    }
+                }
+
+                var (px, py, pz) = Place(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
+                var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
+
+                if (!grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: wx, y: wy, z: wz)) {
+                    (nx, ny, nz) = (0.0, 1.0, 0.0);
+                }
+
+                positions.Add(item: wx);
+                positions.Add(item: wy);
+                positions.Add(item: wz);
+                normals.Add(item: nx);
+                normals.Add(item: ny);
+                normals.Add(item: nz);
+                owners.Add(item: owner);
+            }
+        }
+
+        for (var cz = 0; (cz < coarse[2]); cz++) {
+            for (var cy = 0; (cy < coarse[1]); cy++) {
+                for (var cx = 0; (cx < coarse[0]); cx++) {
+                    var index = CoarseIndex(x: cx, y: cy, z: cz);
+
+                    refined[index] = grid.Refined(x: cx, y: cy, z: cz);
+
+                    if (!refined[index]) {
+                        var mask = MaskAt(stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
+
+                        if ((mask != 0) && (mask != 0xFF)) {
+                            coarseMasks[index] = ((byte)mask);
+                            coarseVertices[index] = (positions.Count / 3);
+                            AddVertices(mask: mask, owner: -1, stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
+                        }
+
+                        continue;
+                    }
+
+                    for (var fz = (cz * factor); (fz < ((cz + 1) * factor)); fz++) {
+                        for (var fy = (cy * factor); (fy < ((cy + 1) * factor)); fy++) {
+                            for (var fx = (cx * factor); (fx < ((cx + 1) * factor)); fx++) {
+                                var mask = MaskAt(stride: 1, x: fx, y: fy, z: fz);
+
+                                if ((mask == 0) || (mask == 0xFF)) {
+                                    continue;
+                                }
+
+                                var key = FineKey(x: fx, y: fy, z: fz);
+
+                                fineMasks.Add(key: key, value: ((byte)mask));
+                                fineVertices.Add(key: key, value: (positions.Count / 3));
+                                AddVertices(mask: mask, owner: (grid.Measured(x: cx, y: cy, z: cz) ? -1 : index), stride: 1, x: fx, y: fy, z: fz);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var quads = new List<int>();
+        var quadCorners = new List<int>();
+        var quadInsideCorners = new List<int>();
+        Span<int> ring = stackalloc int[4];
+        Span<int> at = stackalloc int[3];
+        Span<int> cell = stackalloc int[3];
+        Span<int> home = stackalloc int[3];
+
+        void Emit(Span<int> around, bool firstInside, int firstCorner, int secondCorner) {
+            // The ring with its repeated neighbours dropped, in order around the edge.
+            Span<int> distinct = stackalloc int[4];
+            var count = 0;
+
+            for (var corner = 0; (corner < 4); corner++) {
+                var vertex = around[(firstInside ? corner : (3 - corner))];
+
+                if ((count == 0) || (distinct[(count - 1)] != vertex)) {
+                    distinct[count++] = vertex;
+                }
+            }
+            if ((count > 1) && (distinct[(count - 1)] == distinct[0])) {
+                count--;
+            }
+            if (count < 3) {
+                return;
+            }
+
+            quads.Add(item: distinct[0]);
+            quads.Add(item: distinct[1]);
+            quads.Add(item: distinct[2]);
+            quads.Add(item: distinct[((count == 4) ? 3 : 2)]);
+            quadCorners.Add(item: (firstInside ? secondCorner : firstCorner));
+            quadInsideCorners.Add(item: (firstInside ? firstCorner : secondCorner));
+        }
+        // The patch of a whole cell nearest a point in fine coordinates: among its sign-changing coarse edges on one face
+        // (faceAxis, faceSide), or on any face when faceAxis is negative or the face holds none.
+        int NearestPatch(int index, int cx, int cy, int cz, int faceAxis, int faceSide, double px, double py, double pz) {
+            var mask = coarseMasks[index];
+            var patchOfEdge = PatchOfEdge[mask];
+            var best = -1;
+            var bestDistance = double.PositiveInfinity;
+
+            for (var pass = 0; (pass < 2) && (best < 0); pass++) {
+                for (var edge = 0; (edge < CellEdges.Length); edge++) {
+                    if ((patchOfEdge[edge] < 0) || ((pass == 0) && (faceAxis >= 0) && !OnFace(axis: faceAxis, edge: edge, side: faceSide))) {
+                        continue;
+                    }
+
+                    var (a, b) = CellEdges[edge];
+                    var t = Crossing(a: a, b: b, grid: grid, stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
+                    var (ax, ay, az) = Offset(corner: a);
+                    var (bx, by, bz) = Offset(corner: b);
+                    var dx = (((cx + ax + (t * (bx - ax))) * factor) - px);
+                    var dy = (((cy + ay + (t * (by - ay))) * factor) - py);
+                    var dz = (((cz + az + (t * (bz - az))) * factor) - pz);
+                    var distance = (((dx * dx) + (dy * dy)) + (dz * dz));
+
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = patchOfEdge[edge];
+                    }
+                }
+            }
+
+            return best;
+        }
+
+        // The coarse edges all four of whose cells contour whole.
+        for (var axis = 0; (axis < 3); axis++) {
+            var u = ((axis + 1) % 3);
+            var v = ((axis + 2) % 3);
+
+            for (var k = 1; (k < coarse[v]); k++) {
+                for (var j = 1; (j < coarse[u]); j++) {
+                    for (var i = 0; (i < coarse[axis]); i++) {
+                        at[axis] = (i * factor);
+                        at[u] = (j * factor);
+                        at[v] = (k * factor);
+
+                        var firstCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+                        var first = grid.Inside(corner: firstCorner);
+
+                        at[axis] = ((i + 1) * factor);
+
+                        var secondCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+
+                        if (first == grid.Inside(corner: secondCorner)) {
+                            continue;
+                        }
+
+                        var complete = true;
+
+                        for (var corner = 0; (corner < 4); corner++) {
+                            cell[axis] = i;
+                            cell[u] = (j - (((corner == 0) || (corner == 3)) ? 1 : 0));
+                            cell[v] = (k - ((corner < 2) ? 1 : 0));
+
+                            var index = CoarseIndex(x: cell[0], y: cell[1], z: cell[2]);
+
+                            if (refined[index] || (coarseVertices[index] < 0)) {
+                                complete = false;
+                                break;
+                            }
+
+                            var patch = PatchOfEdge[coarseMasks[index]][EdgeIndex(axis: axis, u: (j - cell[u]), v: (k - cell[v]))];
+
+                            ring[corner] = ((patch < 0) ? -1 : (coarseVertices[index] + patch));
+                            complete &= (ring[corner] >= 0);
+                        }
+
+                        if (complete) {
+                            Emit(around: ring, firstCorner: firstCorner, firstInside: first, secondCorner: secondCorner);
+                        }
+                    }
+                }
+            }
+        }
+
+        // The fine edges a refined cell touches: every sign-changing edge of a crossed fine cell, once, in a fixed order.
+        var fineEdges = new List<long>();
+        var seen = new HashSet<long>();
+
+        foreach (var (key, mask) in fineMasks) {
+            var fx = ((int)(key % cells[0]));
+            var fy = ((int)((key / cells[0]) % cells[1]));
+            var fz = ((int)(key / (((long)cells[0]) * cells[1])));
+
+            for (var edge = 0; (edge < CellEdges.Length); edge++) {
+                if (PatchOfEdge[mask][edge] < 0) {
+                    continue;
+                }
+
+                var (a, _) = CellEdges[edge];
+                var (ax, ay, az) = Offset(corner: a);
+                var edgeAxis = (edge >> 2);
+                // An edge's key: its lower sample in fine coordinates and its axis.
+                var edgeKey = ((((((long)(fz + az)) << 21) | ((long)(fy + ay))) << 21) | ((long)(fx + ax))) * 3L + edgeAxis;
+
+                if (seen.Add(item: edgeKey)) {
+                    fineEdges.Add(item: edgeKey);
+                }
+            }
+        }
+        fineEdges.Sort();
+
+        foreach (var edgeKey in fineEdges) {
+            var axis = ((int)(edgeKey % 3L));
+            var packed = (edgeKey / 3L);
+            var u = ((axis + 1) % 3);
+            var v = ((axis + 2) % 3);
+
+            at[0] = ((int)(packed & 0x1FFFFF));
+            at[1] = ((int)((packed >> 21) & 0x1FFFFF));
+            at[2] = ((int)(packed >> 42));
+
+            if ((at[u] < 1) || (at[u] >= cells[u]) || (at[v] < 1) || (at[v] >= cells[v])) {
+                continue;
+            }
+
+            var firstCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+            var first = grid.Inside(corner: firstCorner);
+            var firstValue = grid.Value(corner: firstCorner, x: at[0], y: at[1], z: at[2]);
+
+            at[axis]++;
+
+            var secondCorner = grid.Corner(x: at[0], y: at[1], z: at[2]);
+            var secondValue = grid.Value(corner: secondCorner, x: at[0], y: at[1], z: at[2]);
+
+            at[axis]--;
+
+            if (first == grid.Inside(corner: secondCorner)) {
+                continue;
+            }
+
+            var complete = true;
+
+            for (var corner = 0; (corner < 4); corner++) {
+                cell[axis] = at[axis];
+                cell[u] = (at[u] - (((corner == 0) || (corner == 3)) ? 1 : 0));
+                cell[v] = (at[v] - ((corner < 2) ? 1 : 0));
+                home[0] = (cell[0] / factor);
+                home[1] = (cell[1] / factor);
+                home[2] = (cell[2] / factor);
+
+                var index = CoarseIndex(x: home[0], y: home[1], z: home[2]);
+                var vertex = -1;
+
+                if (refined[index]) {
+                    var key = FineKey(x: cell[0], y: cell[1], z: cell[2]);
+
+                    if (fineMasks.TryGetValue(key: key, value: out var mask)) {
+                        var patch = PatchOfEdge[mask][EdgeIndex(axis: axis, u: (at[u] - cell[u]), v: (at[v] - cell[v]))];
+
+                        vertex = ((patch < 0) ? -1 : (fineVertices[key] + patch));
+                    }
+                } else if (coarseVertices[index] >= 0) {
+                    var lu = (at[u] - (home[u] * factor));
+                    var lv = (at[v] - (home[v] * factor));
+                    var onU = ((lu == 0) || (lu == factor));
+                    var onV = ((lv == 0) || (lv == factor));
+                    var patch = -1;
+
+                    if (onU && onV) {
+                        patch = PatchOfEdge[coarseMasks[index]][EdgeIndex(axis: axis, u: (lu / factor), v: (lv / factor))];
+                    }
+                    if (patch < 0) {
+                        var t = ((firstValue == secondValue) ? 0.5 : Math.Clamp(max: 1.0, min: 0.0, value: (firstValue / (firstValue - secondValue))));
+
+                        patch = NearestPatch(
+                            cx: home[0],
+                            cy: home[1],
+                            cz: home[2],
+                            faceAxis: (onU ? u : (onV ? v : -1)),
+                            faceSide: (onU ? (lu / factor) : (onV ? (lv / factor) : 0)),
+                            index: index,
+                            px: (at[0] + ((axis == 0) ? t : 0.0)),
+                            py: (at[1] + ((axis == 1) ? t : 0.0)),
+                            pz: (at[2] + ((axis == 2) ? t : 0.0))
+                        );
+                    }
+
+                    vertex = ((patch < 0) ? -1 : (coarseVertices[index] + patch));
+                }
+
+                ring[corner] = vertex;
+                complete &= (vertex >= 0);
+            }
+
+            if (complete) {
+                Emit(around: ring, firstCorner: firstCorner, firstInside: first, secondCorner: secondCorner);
+            }
+        }
+
+        return Merge(grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quadInsideCorners: quadInsideCorners, quads: quads);
+    }
+    // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at their mean,
+    // with the field's normal there, and drops the quads that collapse to fewer than three vertices. Two fine vertices of
+    // one cell are one piece when a quad joins them.
+    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<int> owners, List<int> quads, List<int> quadCorners, List<int> quadInsideCorners) where TLattice : ISdfContourLattice {
+        var vertexCount = owners.Count;
+        var parent = new int[vertexCount];
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            parent[vertex] = vertex;
+        }
+
+        int Root(int vertex) {
+            while (parent[vertex] != vertex) {
+                parent[vertex] = parent[parent[vertex]];
+                vertex = parent[vertex];
+            }
+
+            return vertex;
+        }
+
+        for (var quad = 0; (quad < quads.Count); quad += 4) {
+            for (var corner = 0; (corner < 4); corner++) {
+                var a = quads[(quad + corner)];
+                var b = quads[(quad + ((corner + 1) & 3))];
+
+                if ((owners[a] >= 0) && (owners[a] == owners[b])) {
+                    var ra = Root(vertex: a);
+                    var rb = Root(vertex: b);
+
+                    parent[Math.Max(val1: ra, val2: rb)] = Math.Min(val1: ra, val2: rb);
+                }
+            }
+        }
+
+        var remap = new int[vertexCount];
+        var sums = new Dictionary<int, (double X, double Y, double Z, int Count)>();
+        var mergedPositions = new List<double>();
+        var mergedNormals = new List<double>();
+
+        Array.Fill(array: remap, value: -1);
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            var root = ((owners[vertex] >= 0) ? Root(vertex: vertex) : vertex);
+
+            if (owners[vertex] >= 0) {
+                var sum = sums.GetValueOrDefault(key: root);
+
+                sums[root] = ((sum.X + positions[(3 * vertex)]), (sum.Y + positions[((3 * vertex) + 1)]), (sum.Z + positions[((3 * vertex) + 2)]), (sum.Count + 1));
+            }
+            if (remap[root] < 0) {
+                remap[root] = (mergedPositions.Count / 3);
+                for (var axis = 0; (axis < 3); axis++) {
+                    mergedPositions.Add(item: positions[((3 * root) + axis)]);
+                    mergedNormals.Add(item: normals[((3 * root) + axis)]);
+                }
+            }
+            remap[vertex] = remap[root];
+        }
+        foreach (var (root, sum) in sums) {
+            var at = (3 * remap[root]);
+            var (x, y, z) = ((sum.X / sum.Count), (sum.Y / sum.Count), (sum.Z / sum.Count));
+
+            mergedPositions[at] = x;
+            mergedPositions[(at + 1)] = y;
+            mergedPositions[(at + 2)] = z;
+            if (grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: x, y: y, z: z)) {
+                mergedNormals[at] = nx;
+                mergedNormals[(at + 1)] = ny;
+                mergedNormals[(at + 2)] = nz;
+            }
+        }
+
+        var mergedQuads = new List<int>(capacity: quads.Count);
+        var mergedCorners = new List<int>(capacity: quadCorners.Count);
+        var mergedInsideCorners = new List<int>(capacity: quadInsideCorners.Count);
+        Span<int> distinct = stackalloc int[4];
+
+        for (var quad = 0; (quad < quadCorners.Count); quad++) {
+            var count = 0;
+
+            for (var corner = 0; (corner < 4); corner++) {
+                var vertex = remap[quads[((4 * quad) + corner)]];
+
+                if ((count == 0) || (distinct[(count - 1)] != vertex)) {
+                    distinct[count++] = vertex;
+                }
+            }
+            if ((count > 1) && (distinct[(count - 1)] == distinct[0])) {
+                count--;
+            }
+            if ((count < 3) || ((count == 4) && ((distinct[0] == distinct[2]) || (distinct[1] == distinct[3])))) {
+                continue;
+            }
+
+            mergedQuads.Add(item: distinct[0]);
+            mergedQuads.Add(item: distinct[1]);
+            mergedQuads.Add(item: distinct[2]);
+            mergedQuads.Add(item: distinct[((count == 4) ? 3 : 2)]);
+            mergedCorners.Add(item: quadCorners[quad]);
+            mergedInsideCorners.Add(item: quadInsideCorners[quad]);
+        }
+
+        return new SdfSurface {
+            CellSize = grid.CellSize,
+            Normals = [.. mergedNormals],
+            Positions = [.. mergedPositions],
+            QuadCorners = [.. mergedCorners],
+            QuadInsideCorners = [.. mergedInsideCorners],
+            Quads = [.. mergedQuads],
+        };
+    }
+    /// <summary>Returns how many surface patches a cell with corner-sign mask <paramref name="mask"/> holds: more than
+    /// one where separate sheets cross it.</summary>
+    public static int PatchesOf(int mask) => PatchCount[mask];
+
     private static (int X, int Y, int Z) Offset(int corner) =>
         (corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
     // Whether a cube edge lies on one face of the cube: the face whose corners all have bit `axis` equal to `side`.
@@ -248,10 +721,13 @@ internal static class SdfDualContouring {
 
         return (patchOfEdge, patches);
     }
-    // The crossing on a sign-changing edge, as a fraction of the edge from its first corner.
-    private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b) where TLattice : ISdfContourLattice {
+    // The crossing on a sign-changing edge, as a fraction of the edge from its first corner. A cell `stride` lattice cells
+    // wide reads its corners `stride` samples apart.
+    private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b, int stride = 1) where TLattice : ISdfContourLattice {
         var (ax, ay, az) = Offset(corner: a);
         var (bx, by, bz) = Offset(corner: b);
+        (ax, ay, az) = ((ax * stride), (ay * stride), (az * stride));
+        (bx, by, bz) = ((bx * stride), (by * stride), (bz * stride));
         var va = ((double)grid.Value(corner: grid.Corner(x: (x + ax), y: (y + ay), z: (z + az)), x: (x + ax), y: (y + ay), z: (z + az)));
         var vb = ((double)grid.Value(corner: grid.Corner(x: (x + bx), y: (y + by), z: (z + bz)), x: (x + bx), y: (y + by), z: (z + bz)));
         var denominator = (va - vb);
@@ -260,7 +736,7 @@ internal static class SdfDualContouring {
             ? 0.5
             : Math.Clamp(max: 1.0, min: 0.0, value: (va / denominator)));
     }
-    private static (double X, double Y, double Z) Mean<TLattice>(TLattice grid, int edges, int x, int y, int z) where TLattice : ISdfContourLattice {
+    private static (double X, double Y, double Z) Mean<TLattice>(TLattice grid, int edges, int x, int y, int z, int stride = 1) where TLattice : ISdfContourLattice {
         double sx = 0.0, sy = 0.0, sz = 0.0;
         var count = 0;
 
@@ -270,7 +746,7 @@ internal static class SdfDualContouring {
             }
 
             var (a, b) = CellEdges[edge];
-            var t = Crossing(a: a, b: b, grid: grid, x: x, y: y, z: z);
+            var t = Crossing(a: a, b: b, grid: grid, stride: stride, x: x, y: y, z: z);
 
             var (ax, ay, az) = Offset(corner: a);
             var (bx, by, bz) = Offset(corner: b);
@@ -285,9 +761,10 @@ internal static class SdfDualContouring {
     }
     // The vertex of the patch whose cube edges are `edges` (one bit an edge), in cell-local coordinates: the least-squares
     // point of the crossings' tangent planes, solved by Cramer's rule over the 3x3 normal equations with the mean-point
-    // bias on the diagonal.
-    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z) where TLattice : ISdfContourLattice {
-        var mean = Mean(edges: edges, grid: grid, x: x, y: y, z: z);
+    // bias on the diagonal. A cell `stride` lattice cells wide (a coarse cell of a refined lattice) reads its corners
+    // `stride` samples apart; the vertex is still in the cell's own unit coordinates.
+    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, int stride = 1) where TLattice : ISdfContourLattice {
+        var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {
@@ -296,7 +773,7 @@ internal static class SdfDualContouring {
             }
 
             var (a, b) = CellEdges[edge];
-            var t = Crossing(a: a, b: b, grid: grid, x: x, y: y, z: z);
+            var t = Crossing(a: a, b: b, grid: grid, stride: stride, x: x, y: y, z: z);
 
             var (ax, ay, az) = Offset(corner: a);
             var (bx, by, bz) = Offset(corner: b);
@@ -304,7 +781,7 @@ internal static class SdfDualContouring {
             var py = (ay + (t * (by - ay)));
             var pz = (az + (t * (bz - az)));
 
-            var (wx, wy, wz) = grid.World(x: (x + px), y: (y + py), z: (z + pz));
+            var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
 
             if (!grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: wx, y: wy, z: wz)) {
                 continue;

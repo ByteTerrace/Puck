@@ -190,7 +190,15 @@ owns the explanation.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   the prototype baker's `SdfDualContouring` over `ISdfContourLattice`; never
   write a second mesher. The cubic `SdfBakeGrid` keeps its bytes
-  (`SdfBakerLawTests`).
+  (`SdfBakerLawTests`). A final lattice refines the cells its samples cannot
+  resolve (`SdfSampledLattice.Refine`: sheets or gaps thinner than a cell,
+  outside corners of different materials, two patches in one cell) and contours
+  them at the fine spacing through `SdfDualContouring.ExtractRefined`; the cells
+  touching them contour fine from interpolated coarse values and merge each piece
+  into one vertex, which keeps the mesh crack-free. Never refine a cell without
+  that ring: a whole cell next to measured fine samples cracks
+  (`SdfSampledLatticeLawTests`). Refining every cell instead (5 mm across the
+  Moth) bakes about 8 M triangles in 20 s.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
@@ -223,10 +231,10 @@ owns the explanation.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
   field evaluations a frame's bake dispatch makes (a gradient sample counts
   five); every lattice is chunked to fit it (final lattices in slabs, material
-  and gradient points in chunks). Gradients are measured only at the corners of
-  cells whose corners disagree in sign, the samples `SdfDualContouring` reads a
-  normal at; a cell's normal reads its own eight corners, so no other sample
-  needs one.
+  and gradient, fine and material points in chunks). Gradients are measured only
+  at the samples `SdfDualContouring` reads a normal at
+  (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
+  corners, so no other sample needs one.
 - **Shadow handoffs are pass values.** The outgoing light fades from its slot's
   cascade by the handoff's weight; the incoming light lights unshadowed until
   it holds the slot. No handoff plans or allocates anything.

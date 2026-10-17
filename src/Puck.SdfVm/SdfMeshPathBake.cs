@@ -15,7 +15,7 @@ namespace Puck.SdfVm;
 /// <param name="Selector">A dynamic-transform slot whose instances the bake samples when non-negative, the one instance
 /// <c>-(Selector + 1)</c> otherwise.</param>
 /// <param name="Gradients">Whether the sampler measures the field's gradient at each sample: a points lattice's, at the
-/// corners of the final lattice's crossed cells.</param>
+/// samples of the final lattice its contour reads one at.</param>
 public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (int X, int Y, int Z) Dims, int Selector, bool Gradients) {
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
@@ -87,9 +87,10 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// with only its instances in the walk's mask, lattices round robin across the groups within a frame's share of field
 /// evaluations (<see cref="FrameTaps"/>): a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
-/// whose spacing follows the box's own proportions, sampled in slabs of whole planes, values alone, and then gradients
-/// at the corners of the cells whose corners disagree in sign alone, the only samples a contour reads one at. The final
-/// samples contour on the thread pool (<see cref="SdfSampledLattice"/>). A dynamic group bakes in its slot's frame: its
+/// whose spacing follows the box's own proportions, sampled in slabs of whole planes, values alone; then the fine samples
+/// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
+/// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
+/// the thread pool (<see cref="SdfSampledLattice"/>). A dynamic group bakes in its slot's frame: its
 /// box, lattices and points are in that frame, and the kernel carries every sample through the slot's transform in the
 /// frame that dispatches it, so a body moving while it bakes is sampled where it is. Its vertices stay in that frame, and
 /// its draw follows the slot's live transform; a static group's are in world space.</para>
@@ -114,6 +115,10 @@ public sealed class SdfMeshPathBake {
     private const int WorldSelector = int.MinValue;
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
+    // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
+    // along each axis (SdfSampledLattice.Refine).
+    private const float FineCell = 0.005f;
+    private const int MaxRefinement = 4;
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
@@ -130,6 +135,7 @@ public sealed class SdfMeshPathBake {
     private long m_samples;
     private long m_taps;
     private long m_discarded;
+    private long m_refinedCells;
     private double m_seconds;
     private bool m_reported;
 
@@ -354,8 +360,8 @@ public sealed class SdfMeshPathBake {
             lock (m_gate) {
                 group.InFlight = false;
                 if (!m_groups.Contains(item: group)) { return; }
-                if (request.Gradients) {
-                    AnswerGradients(gradients: gradients!, group: group, request: in request);
+                if (group.Final is { } final) {
+                    AnswerFinal(final: final, gradients: gradients, group: group, materials: materials, request: in request, values: values);
                 } else {
                     AnswerPoints(group: group, materials: materials, request: in request);
                 }
@@ -400,7 +406,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -506,6 +512,7 @@ public sealed class SdfMeshPathBake {
             m_samples = 0;
             m_taps = 0;
             m_discarded = 0;
+            m_refinedCells = 0;
             m_reported = false;
             m_clock.Restart();
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
@@ -627,8 +634,8 @@ public sealed class SdfMeshPathBake {
             Slab = final.Planes,
         };
     }
-    // Answers a slab of a group's final lattice. Once every plane is answered, the corners of the cells the surface
-    // crosses, the only samples the contour reads a gradient at, are sampled again with gradients.
+    // Answers a slab of a group's final lattice. Once every plane is answered, the lattice chooses the cells it
+    // refines on the thread pool (Prepare).
     private void AnswerSlab(Group group, in SdfMeshBakeRequest request, float[] values, int[] materials) {
         var final = group.Final!;
         var start = (request.Slab * (request.Dims.X * request.Dims.Y));
@@ -641,8 +648,15 @@ public sealed class SdfMeshPathBake {
             return;
         }
 
-        final.FindCorners();
-        if (final.Corners.Length == 0) {
+        // A lattice all of one sign has no surface; it finishes here, in the frame its last slab lands.
+        var inside = false;
+        var outside = false;
+
+        foreach (var value in final.Values) {
+            inside |= (value < 0f);
+            outside |= (value >= 0f);
+        }
+        if (!(inside && outside)) {
             group.Outcome = "no crossed cell in the final lattice";
             group.Final = null;
             group.Next = null;
@@ -651,57 +665,130 @@ public sealed class SdfMeshPathBake {
             Finish();
             return;
         }
-        group.Next = GradientChunk(group: group);
-    }
-    // The next chunk of a group's crossed-cell corners, as many as a frame's share of field evaluations takes.
-    private static SdfMeshBakeRequest GradientChunk(Group group) {
-        var final = group.Final!;
-        var count = Math.Clamp(value: (FrameTaps / 5), min: 1, max: (final.Corners.Length - final.GradientsAnswered));
 
-        return new SdfMeshBakeRequest(Cell: final.Lattice.Cell, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
-            Points = final.Points.AsMemory(length: count, start: final.GradientsAnswered),
+        group.Next = null;
+        group.Contouring = true;
+        _ = Task.Run(action: () => Prepare(final: final, group: group));
+    }
+    // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
+    // measured next, or, with none, the gradients the contour reads.
+    private void Prepare(Group group, FinalLattice final) {
+        Vector4[]? points = null;
+        string? refusal = null;
+
+        try {
+            var lattice = final.Lattice;
+
+            final.Sampled = new SdfSampledLattice(
+                cell: lattice.Cell,
+                materials: final.Materials,
+                origin: lattice.Origin,
+                owns: ((group.Materials.Count > 0) ? group.Materials.Contains : null),
+                samplesX: lattice.Dims.X,
+                samplesY: lattice.Dims.Y,
+                samplesZ: lattice.Dims.Z,
+                values: final.Values
+            );
+
+            var factor = Math.Min(val1: MaxRefinement, val2: (int)MathF.Ceiling(MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)) / FineCell));
+
+            if (factor >= 2) {
+                points = Homogeneous(points: final.Sampled.Refine(factor: factor));
+            }
+            if ((points is null) || (points.Length == 0)) {
+                final.Stage = FinalStage.Gradients;
+                points = Homogeneous(points: final.Sampled.GradientPoints());
+            } else {
+                final.Stage = FinalStage.Refinement;
+            }
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+            refusal = exception.Message;
+        }
+
+        lock (m_gate) {
+            group.Contouring = false;
+            if (!m_groups.Contains(item: group)) { return; }
+            if ((refusal is not null) || (points is null) || (points.Length == 0)) {
+                if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); }
+                group.Outcome = ((refusal is null) ? "no crossed cell in the final lattice" : "lattice refused");
+                group.Final = null;
+                group.Next = null;
+                group.Done = true;
+                group.Mesh = null;
+                Finish();
+                return;
+            }
+            final.Points = points;
+            final.Answered = 0;
+            group.Next = FinalChunk(final: final, group: group);
+        }
+    }
+    private static Vector4[] Homogeneous(Vector3[] points) {
+        var homogeneous = new Vector4[points.Length];
+
+        for (var index = 0; (index < points.Length); index++) {
+            homogeneous[index] = new Vector4(value: points[index], w: 1f);
+        }
+
+        return homogeneous;
+    }
+    // The next chunk of a group's fine samples or gradient samples, as many as a frame's share of field evaluations
+    // takes. Gradient taps are spaced by the contour's finest cell.
+    private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
+        var gradients = (final.Stage == FinalStage.Gradients);
+        var count = Math.Clamp(value: (FrameTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
+
+        return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
+            Points = final.Points.AsMemory(length: count, start: final.Answered),
         };
     }
-    // Answers a chunk of a group's corner gradients; once every corner is answered, contours the group on the thread pool.
-    private void AnswerGradients(Group group, in SdfMeshBakeRequest request, float[] gradients) {
-        var final = group.Final!;
+    // Answers a chunk of a group's fine samples or gradients. Once every fine sample is answered, the gradient samples
+    // are chosen on the thread pool; once every gradient is, the group contours there.
+    private void AnswerFinal(Group group, FinalLattice final, in SdfMeshBakeRequest request, float[] values, int[] materials, float[]? gradients) {
+        var sampled = final.Sampled!;
 
-        for (var index = 0; (index < request.Samples); index++) {
-            var sample = final.Corners[(final.GradientsAnswered + index)];
-
-            final.Gradients[(3 * sample)] = gradients[(3 * index)];
-            final.Gradients[((3 * sample) + 1)] = gradients[((3 * index) + 1)];
-            final.Gradients[((3 * sample) + 2)] = gradients[((3 * index) + 2)];
+        if (final.Stage == FinalStage.Refinement) {
+            sampled.AnswerRefinement(first: final.Answered, materials: materials, values: values);
+        } else {
+            sampled.AnswerGradients(first: final.Answered, gradients: gradients!);
         }
-        final.GradientsAnswered += request.Samples;
-        if (final.GradientsAnswered < final.Corners.Length) {
-            group.Next = GradientChunk(group: group);
+        final.Answered += request.Samples;
+        if (final.Answered < final.Points.Length) {
+            group.Next = FinalChunk(final: final, group: group);
             return;
         }
 
-        var lattice = final.Lattice with { Gradients = true };
+        group.Next = null;
+        group.Contouring = true;
+        if (final.Stage == FinalStage.Refinement) {
+            _ = Task.Run(action: () => ChooseGradients(final: final, group: group));
+            return;
+        }
 
         group.Final = null;
-        group.Contouring = true;
-        group.Next = null;
-        _ = Task.Run(action: () => Contour(group: group, request: lattice, values: final.Values, gradients: final.Gradients, materials: final.Materials));
+        _ = Task.Run(action: () => Contour(group: group, lattice: sampled));
+    }
+    // Chooses the gradient samples of a refined lattice once its fine samples are answered.
+    private void ChooseGradients(Group group, FinalLattice final) {
+        var points = Homogeneous(points: final.Sampled!.GradientPoints());
+
+        lock (m_gate) {
+            group.Contouring = false;
+            if (!m_groups.Contains(item: group)) { return; }
+            final.Stage = FinalStage.Gradients;
+            final.Points = points;
+            final.Answered = 0;
+            m_refinedCells += final.Sampled.MeasuredCells;
+            group.Next = FinalChunk(final: final, group: group);
+        }
     }
     // Contours a group's final lattice, then queues the points its material is sampled at: four a quad, the centers of
     // its quarters, each a little outside the surface along the normal, as a field hit lies (MaterialPoints).
-    private void Contour(Group group, SdfMeshBakeRequest request, float[] values, float[] gradients, int[] materials) {
+    private void Contour(Group group, SdfSampledLattice lattice) {
         SdfContour? contour = null;
 
         try {
-            contour = new SdfSampledLattice(
-                cell: request.Cell,
-                gradients: gradients,
-                materials: materials,
-                origin: request.Origin,
-                samplesX: request.Dims.X,
-                samplesY: request.Dims.Y,
-                samplesZ: request.Dims.Z,
-                values: values
-            ).Contour(owns: ((group.Materials.Count > 0) ? group.Materials.Contains : null));
+            contour = lattice.Contour();
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
@@ -782,7 +869,7 @@ public sealed class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
@@ -832,11 +919,15 @@ public sealed class SdfMeshPathBake {
 
             return (uint)(positions.Count - 1);
         }
-        void Quad(uint a, uint b, uint c, uint d, int material) {
+        // A quad as two triangles, dropping one with no area, as a contour's triangle (its last two vertices one) has.
+        void Triangle(uint a, uint b, uint c, int material) {
+            if (Vector3.Cross(vector1: (positions[(int)b] - positions[(int)a]), vector2: (positions[(int)c] - positions[(int)a])).LengthSquared() <= 0f) { return; }
             indices.Add(item: a); indices.Add(item: b); indices.Add(item: c);
-            indices.Add(item: a); indices.Add(item: c); indices.Add(item: d);
             triangleMaterials.Add(item: (uint)Math.Max(val1: 0, val2: material));
-            triangleMaterials.Add(item: (uint)Math.Max(val1: 0, val2: material));
+        }
+        void Quad(uint a, uint b, uint c, uint d, int material) {
+            Triangle(a: a, b: b, c: c, material: material);
+            Triangle(a: a, b: c, c: d, material: material);
         }
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
@@ -920,61 +1011,21 @@ public sealed class SdfMeshPathBake {
         // Why a finished group has no mesh, or null.
         public string? Outcome { get; set; }
     }
-    // A group's final lattice: its values and materials, sampled a slab at a time, then the corners of the cells whose
-    // corners disagree in sign, the samples a contour reads a gradient at, and their gradients.
+    // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from
+    // them and the stage of points it is answering: its refinement's fine samples, then the samples its contour reads a
+    // gradient at.
     private sealed class FinalLattice(SdfMeshBakeRequest lattice) {
         public SdfMeshBakeRequest Lattice { get; } = lattice;
         public float[] Values { get; } = new float[lattice.Samples];
         public int[] Materials { get; } = new int[lattice.Samples];
-        public float[] Gradients { get; } = new float[(3 * lattice.Samples)];
         public int Planes { get; set; }
-        public int[] Corners { get; private set; } = [];
-        public Vector4[] Points { get; private set; } = [];
-        public int GradientsAnswered { get; set; }
-
-        // Finds every corner of a cell the surface crosses.
-        public void FindCorners() {
-            var (sx, sy, sz) = Lattice.Dims;
-            var marked = new bool[Values.Length];
-            var corners = new List<int>();
-
-            int Index(int x, int y, int z) => (x + (sx * (y + (sy * z))));
-
-            for (var z = 0; (z < (sz - 1)); z++) {
-                for (var y = 0; (y < (sy - 1)); y++) {
-                    for (var x = 0; (x < (sx - 1)); x++) {
-                        var inside = 0;
-
-                        for (var corner = 0; (corner < 8); corner++) {
-                            if (Values[Index(x: (x + (corner & 1)), y: (y + ((corner >> 1) & 1)), z: (z + ((corner >> 2) & 1)))] < 0f) { inside++; }
-                        }
-                        if ((inside == 0) || (inside == 8)) { continue; }
-                        // The cell's corners, and those of the cells past it along each axis: a vertex clamped to the
-                        // cell's far face, or a crossing at an edge's far end, reads its normal in the next cell.
-                        for (var dz = 0; (dz < 3) && ((z + dz) < sz); dz++) {
-                            for (var dy = 0; (dy < 3) && ((y + dy) < sy); dy++) {
-                                for (var dx = 0; (dx < 3) && ((x + dx) < sx); dx++) {
-                                    var index = Index(x: (x + dx), y: (y + dy), z: (z + dz));
-
-                                    if (!marked[index]) {
-                                        marked[index] = true;
-                                        corners.Add(item: index);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Corners = [.. corners];
-            Points = new Vector4[Corners.Length];
-            for (var corner = 0; (corner < Corners.Length); corner++) {
-                var index = Corners[corner];
-                var at = new Vector3(x: (index % sx), y: ((index / sx) % sy), z: (index / (sx * sy)));
-
-                Points[corner] = new Vector4(value: (Lattice.Origin + (at * Lattice.Cell)), w: 1f);
-            }
-        }
+        public SdfSampledLattice? Sampled { get; set; }
+        public FinalStage Stage { get; set; }
+        public Vector4[] Points { get; set; } = [];
+        public int Answered { get; set; }
+    }
+    private enum FinalStage {
+        Refinement,
+        Gradients,
     }
 }
