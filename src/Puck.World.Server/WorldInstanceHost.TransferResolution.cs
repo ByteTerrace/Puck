@@ -625,6 +625,37 @@ public sealed partial class WorldInstanceHost {
             resolved: out var resolvedPath
         )
         ) {
+            // A destination running here from this very document already answers the question the load below asks: a
+            // document that authors a remote authority never starts a local instance (this load, and
+            // TryResolveObservedProjection's, make the remote one instead), so a running instance whose definition
+            // names none is the authority. Loading, composing and validating the document again costs a crossing's
+            // frame 15 ms.
+            if (
+                (transfer.Destination.Authority is null) &&
+                (transfer.Destination.Name is { } runningName) &&
+                m_instances.TryGetValue(
+                key: runningName,
+                value: out var running
+            ) &&
+                (running.Server.Definition.Host.Authority is not { Length: > 0 }) &&
+                WorldFileOrigin.TryResolveCanonicalPath(
+                path: running.SourcePath,
+                resolved: out var runningPath
+            ) &&
+                string.Equals(
+                a: runningPath,
+                b: resolvedPath,
+                comparisonType: PuckPaths.Comparison
+            )
+            ) {
+                authority = LocalPeerCall(local: running);
+                resolvedName = runningName;
+                spawned = false;
+                reason = string.Empty;
+                return true;
+            }
+
+
             var neighbours = new WorldFileNeighbourResolver(
                 baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: resolvedPath),
                 catalogFingerprint: m_catalogFingerprint,
