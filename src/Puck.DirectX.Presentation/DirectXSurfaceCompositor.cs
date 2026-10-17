@@ -93,10 +93,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private IGpuBindings? m_bindings;
     // The encode block for the chosen output, written once the output is chosen.
     private IGpuStorageBuffer? m_encodeBlock;
-    private DirectXDrawCommand[]? m_encodeDrawCommands;
-    // The encode group's pool, a range of the device's heaps, and its one set, whose source image Blit rewrites.
+    // Each ring slot's encode draw command, set and last written source view: Blit rewrites only the slot's own set,
+    // whose last reader is the slot's previous present, which BeginFrame waited out, so changing the shown image never
+    // waits for the other slots' frames.
+    private readonly DirectXDrawCommand[]?[] m_encodeDrawCommands = new DirectXDrawCommand[]?[FrameCount];
+    private readonly nint[] m_encodeSets = new nint[FrameCount];
+    private readonly nint[] m_lastEncodedViews = new nint[FrameCount];
+    // The encode group's pool, a range of the device's heaps holding every slot's set.
     private nint m_encodePool;
-    private nint m_encodeSet;
     private IGpuSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
@@ -105,7 +109,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
-    private nint m_lastEncodedView;
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
     // matching Present flag, both non-zero only for Immediate mode on a display that supports tearing.
     private uint m_presentFlags;
@@ -243,7 +246,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
         var encodePipeline = AcquireEncodePipeline(deviceContext: deviceContext);
-        var encodeSet = AllocateEncodeSet(
+        var encodeSets = AllocateEncodeSets(
             deviceContext: deviceContext,
             encodePipeline: encodePipeline
         );
@@ -251,23 +254,25 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         CreateCommandInfrastructure(device: device);
 
-        // The encode draw command is invariant for the compositor's whole activation lifetime: every field it reads is
-        // set once, above, and never reassigned. Building it once here (parity with the Vulkan compositor's cached
-        // per-set draw-command arrays) removes a per-present heap allocation from Blit.
-        m_encodeDrawCommands = [
-            new DirectXDrawCommand(
-                DrawParameters: new DirectXDrawParameters(
-                    instanceCount: 1,
-                    vertexCount: FullscreenTriangle.VertexCount
+        // Each slot's encode draw command is invariant for the compositor's whole activation lifetime: every field it
+        // reads is set once, above, and never reassigned. Building them once here (parity with the Vulkan compositor's
+        // cached per-set draw-command arrays) removes a per-present heap allocation from Blit.
+        for (var slot = 0; (slot < FrameCount); slot++) {
+            m_encodeDrawCommands[slot] = [
+                new DirectXDrawCommand(
+                    DrawParameters: new DirectXDrawParameters(
+                        instanceCount: 1,
+                        vertexCount: FullscreenTriangle.VertexCount
+                    ),
+                    Group: DisplayEncodeLayout.Group,
+                    PipelineLayoutHandle: encodePipeline.LayoutHandle,
+                    SamplerHeapHandle: heaps.SamplerHeap,
+                    SamplerTableGpuHandle: encodeSets[slot].SamplerGpuBase,
+                    ViewHeapHandle: heaps.ViewHeap,
+                    ViewTableGpuHandle: encodeSets[slot].GpuBase
                 ),
-                Group: DisplayEncodeLayout.Group,
-                PipelineLayoutHandle: encodePipeline.LayoutHandle,
-                SamplerHeapHandle: heaps.SamplerHeap,
-                SamplerTableGpuHandle: encodeSet.SamplerGpuBase,
-                ViewHeapHandle: heaps.ViewHeap,
-                ViewTableGpuHandle: encodeSet.GpuBase
-            ),
-        ];
+            ];
+        }
     }
     /// <summary>
     /// Waits only for the ring slot this frame's <see cref="Present"/> is about to reuse (the pipelined replacement
@@ -357,25 +362,28 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         _ = (DirectXImageViews.Resolve(handle: sourceView) ?? throw new ObjectDisposedException(objectName: nameof(DirectXImageView), message: $"The surface names image view 0x{sourceView:X}, which has been destroyed."));
 
+        // The slot this present records into: its set's last reader is the slot's previous present, which BeginFrame
+        // waited out, so rewriting it never redirects a frame still in flight.
+        var slot = ((m_swapChain == 0)
+            ? 0
+            : ((int)((IDXGISwapChain3*)m_swapChain)->GetCurrentBackBufferIndex()));
+
         // A resource's COM address can be reissued after destruction. The generational view handle identifies the
         // allocation whose descriptor was written, even when its replacement has the same resource address.
-        if (sourceView != m_lastEncodedView) {
-            // The set's view is consumed at command-list execution, so rewriting it while the other ring slot's frame
-            // is still in flight would redirect that frame's read mid-execution.
-            WaitForAllFrames();
+        if (sourceView != m_lastEncodedViews[slot]) {
             m_bindings!.WriteSampledImage(
                 arrayElement: 0U,
                 binding: DisplayEncodeLayout.SourceImageBinding,
-                descriptorSetHandle: m_encodeSet,
+                descriptorSetHandle: m_encodeSets[slot],
                 imageViewHandle: sourceView
             );
 
-            m_lastEncodedView = sourceView;
+            m_lastEncodedViews[slot] = sourceView;
         }
 
         Present(
             deviceContext: deviceContext,
-            drawCommands: m_encodeDrawCommands!
+            drawCommands: m_encodeDrawCommands[slot]!
         );
     }
     /// <summary>
@@ -602,7 +610,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         m_cpuUpload = null;
         m_surfaceImport?.Dispose();
         m_surfaceImport = null;
-        m_encodeDrawCommands = null;
+        Array.Clear(array: m_encodeDrawCommands);
         ReleaseBackBuffers();
 
         for (var i = 0; (i < m_commandLists.Length); i++) {
@@ -623,11 +631,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // The pool's range returns to the device's heaps, and its set with it.
         m_bindings?.DestroyPool(poolHandle: m_encodePool);
         m_encodePool = 0;
-        m_encodeSet = 0;
+        Array.Clear(array: m_encodeSets);
+        Array.Clear(array: m_lastEncodedViews);
         m_bindings = null;
         m_encodeBlock?.Dispose();
         m_encodeBlock = null;
-        m_lastEncodedView = 0;
         Release(pointer: ref m_rtvHeap);
         Release(pointer: ref m_swapChain);
 
@@ -918,11 +926,18 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         return m_encodeLease.Wait(cancellationToken: CancellationToken.None);
     }
     // Creates the encode group's pool as a range of the device's shader-visible heaps, admitted first like every other
-    // owner's so a heap that cannot hold it refuses it by name, and allocates its one set, whose sampler and block (the
-    // chosen output's, at the paper-white level) never change.
-    private DirectXDescriptorSet AllocateEncodeSet(DirectXDeviceContext deviceContext, GpuPassPipeline encodePipeline) {
+    // owner's so a heap that cannot hold it refuses it by name, and allocates a set per ring slot, whose sampler and block
+    // (the chosen output's, at the paper-white level) never change.
+    private DirectXDescriptorSet[] AllocateEncodeSets(DirectXDeviceContext deviceContext, GpuPassPipeline encodePipeline) {
         var bindings = deviceContext.Services.Bindings;
-        GpuDescriptorPoolSizes[] pools = [GpuDescriptorPoolSizes.ForGroups(groups: DisplayEncodeLayout.Layout.Groups)];
+        var group = GpuDescriptorPoolSizes.ForGroups(groups: DisplayEncodeLayout.Layout.Groups);
+        var sizes = group;
+
+        for (var slot = 1; (slot < FrameCount); slot++) {
+            sizes += group;
+        }
+
+        GpuDescriptorPoolSizes[] pools = [sizes];
 
         if (!bindings.CanAdmit(
             owner: EncodeOwner,
@@ -940,20 +955,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             ),
             sizes: in pools[0]
         );
-        m_encodeSet = bindings.AllocateSet(
-            descriptorSetLayoutHandle: encodePipeline.GroupLayoutHandles[((int)DisplayEncodeLayout.Group)],
-            name: new GpuObjectName(
-                owner: EncodeOwner,
-                part: "set"
-            ),
-            poolHandle: m_encodePool
-        );
-        bindings.WriteSampler(
-            arrayElement: 0U,
-            binding: DisplayEncodeLayout.SamplerBinding,
-            descriptorSetHandle: m_encodeSet,
-            samplerHandle: bindings.CreateSampler(filter: GpuSamplerFilter.Linear)
-        );
+        var sampler = bindings.CreateSampler(filter: GpuSamplerFilter.Linear);
+        var sets = new DirectXDescriptorSet[FrameCount];
+
         m_encodeBlock = SurfaceEncoder.CreateBlock(
             gpu: deviceContext.Services,
             name: new GpuObjectName(
@@ -963,17 +967,36 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             output: m_output,
             paperWhiteNits: m_paperWhiteNits
         );
-        bindings.WriteConstantBuffer(
-            arrayElement: 0U,
-            binding: DisplayEncodeLayout.BlockBinding,
-            bufferHandle: m_encodeBlock.BufferHandle,
-            bufferSize: m_encodeBlock.SizeBytes,
-            descriptorSetHandle: m_encodeSet
-        );
-        // A fresh set has no source written yet; the next Blit writes one.
-        m_lastEncodedView = 0;
 
-        return ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_encodeSet).Target!);
+        for (var slot = 0; (slot < FrameCount); slot++) {
+            m_encodeSets[slot] = bindings.AllocateSet(
+                descriptorSetLayoutHandle: encodePipeline.GroupLayoutHandles[((int)DisplayEncodeLayout.Group)],
+                name: new GpuObjectName(
+                    index: slot,
+                    owner: EncodeOwner,
+                    part: "set"
+                ),
+                poolHandle: m_encodePool
+            );
+            bindings.WriteSampler(
+                arrayElement: 0U,
+                binding: DisplayEncodeLayout.SamplerBinding,
+                descriptorSetHandle: m_encodeSets[slot],
+                samplerHandle: sampler
+            );
+            bindings.WriteConstantBuffer(
+                arrayElement: 0U,
+                binding: DisplayEncodeLayout.BlockBinding,
+                bufferHandle: m_encodeBlock.BufferHandle,
+                bufferSize: m_encodeBlock.SizeBytes,
+                descriptorSetHandle: m_encodeSets[slot]
+            );
+            // A fresh set has no source written yet; the slot's next Blit writes one.
+            m_lastEncodedViews[slot] = 0;
+            sets[slot] = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: m_encodeSets[slot]).Target!);
+        }
+
+        return sets;
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
         for (var i = 0u; (i < FrameCount); i++) {
