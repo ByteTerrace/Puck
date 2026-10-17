@@ -135,6 +135,36 @@ public sealed class WorldInstance : IDisposable {
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>
     public string SourcePath => m_origin();
+    /// <summary>Resolves <see cref="SourcePath"/> as <see cref="WorldFileOrigin.TryResolveCanonicalPath"/> does, probing
+    /// the file system once for each path the instance answers for, so a crossing that compares running instances'
+    /// documents reads no file for a running one. A file that appears or goes after the first probe does not move the
+    /// answer until the instance answers for another path.</summary>
+    /// <param name="resolved">The canonical path, or empty when none resolved.</param>
+    /// <returns>Whether the path resolved to a document.</returns>
+    public bool TryResolveCanonicalSourcePath(out string resolved) {
+        var source = SourcePath;
+
+        if (!string.Equals(
+            a: source,
+            b: m_canonicalFor,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            m_canonicalResolves = WorldFileOrigin.TryResolveCanonicalPath(
+                path: source,
+                resolved: out m_canonical
+            );
+            m_canonicalFor = source;
+        }
+
+        resolved = m_canonical;
+
+        return m_canonicalResolves;
+    }
+
+    // The source path TryResolveCanonicalSourcePath last probed, and what it resolved to.
+    private string? m_canonicalFor;
+    private string m_canonical = string.Empty;
+    private bool m_canonicalResolves;
     /// <summary>This row's own replay tape, or <see langword="null"/> for a row nothing records (every row but a
     /// desktop's boot instance today).</summary>
     public WorldReplayTape? Tape { get; set; }

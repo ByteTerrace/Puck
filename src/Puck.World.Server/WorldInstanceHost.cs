@@ -107,6 +107,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly Action<WorldRemoteAuthority>? m_travelerRouteStarted;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
+    // Every document path a crossing resolved, by the path it named (TryResolveDocument).
+    private readonly Dictionary<string, string> m_resolvedDocuments = new(comparer: StringComparer.Ordinal);
     // Whether the instance's own document came from a composed image this process already held when the instance
     // started, rather than one that start merged itself. Read back per neighbour by world.adjacencies, through
     // TryDescribeDocumentSharing.
@@ -168,20 +170,43 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to
     // fail this transfer outright at TryStart regardless.
-    public static string CanonicalDocumentIdentity(string documentPath) =>
-        (WorldFileOrigin.TryResolveCanonicalPath(
+    private string CanonicalDocumentIdentity(string documentPath) =>
+        (TryResolveDocument(
             path: documentPath,
             resolved: out var resolved
         )
             ? resolved
             : documentPath
         );
+    // Resolves a document path a crossing names as WorldFileOrigin.TryResolveCanonicalPath does, probing the file system
+    // once per path until an instance starts or stops (ForgetResolvedDocuments), so the transfers of one crossing and
+    // the next read no file for a document already resolved. A path that resolves to no document is probed again.
+    private bool TryResolveDocument(string path, out string resolved) {
+        if (m_resolvedDocuments.TryGetValue(
+            key: path,
+            value: out resolved!
+        )) {
+            return true;
+        }
+        var resolves = WorldFileOrigin.TryResolveCanonicalPath(
+            path: path,
+            resolved: out resolved
+        );
+
+        if (resolves) {
+            m_resolvedDocuments[path] = resolved;
+        }
+
+        return resolves;
+    }
+    // Forgets every resolved document path, as the documents the host's instances answer for change.
+    private void ForgetResolvedDocuments() => m_resolvedDocuments.Clear();
     // A references row's locator is relative to the document that AUTHORS it, never to the process's output
     // directory. This is the one host-side fold shared by observed previews and traveler entry; both must name the
     // same physical origin or the resolver can assign two generations to one seamless circuit.
     // A local key is a document name (WorldDocumentName) and resolves to its document file; an owner-form key names
     // no file and passes through as the resolver's identity.
-    public static string ResolveReferenceDocument(WorldInstance source, string neighbourKey) {
+    public string ResolveReferenceDocument(WorldInstance source, string neighbourKey) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         var documentPath = (neighbourKey.StartsWith(
@@ -1221,6 +1246,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         _ = m_instances.Remove(key: name);
+        ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
         // row that next claims it: a destination recovered from its crossing log answers what that log holds.
@@ -1335,6 +1361,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         row.Server.TransferForwarder = this;
         m_instances[row.Name] = row;
+        ForgetResolvedDocuments();
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
         SettleScreenSessions(

@@ -339,14 +339,11 @@ public sealed partial class WorldInstanceHost {
             // the same probe TryStart itself uses (rooted, or relative to the current directory), so a
             // spelling difference alone never false-refuses.
             if (
-                !WorldFileOrigin.TryResolveCanonicalPath(
+                !TryResolveDocument(
                 path: documentPath,
                 resolved: out var expectedPath
             ) ||
-                !WorldFileOrigin.TryResolveCanonicalPath(
-                path: resolved.SourcePath,
-                resolved: out var actualPath
-            ) ||
+                !resolved.TryResolveCanonicalSourcePath(resolved: out var actualPath) ||
                 !string.Equals(
                 a: expectedPath,
                 b: actualPath,
@@ -478,7 +475,7 @@ public sealed partial class WorldInstanceHost {
         matchedName = string.Empty;
         ambiguous = null;
 
-        if (!WorldFileOrigin.TryResolveCanonicalPath(
+        if (!TryResolveDocument(
             path: documentPath,
             resolved: out var targetPath
         )) {
@@ -489,10 +486,7 @@ public sealed partial class WorldInstanceHost {
 
         foreach (var name in Names) {
             if (
-                !WorldFileOrigin.TryResolveCanonicalPath(
-                path: m_instances[name].SourcePath,
-                resolved: out var candidatePath
-            ) ||
+                !m_instances[name].TryResolveCanonicalSourcePath(resolved: out var candidatePath) ||
                 !string.Equals(
                 a: targetPath,
                 b: candidatePath,
@@ -620,7 +614,7 @@ public sealed partial class WorldInstanceHost {
         }
         if (
             (transfer.Destination.DocumentPath is { } documentPath) &&
-            WorldFileOrigin.TryResolveCanonicalPath(
+            TryResolveDocument(
             path: documentPath,
             resolved: out var resolvedPath
         )
@@ -638,10 +632,7 @@ public sealed partial class WorldInstanceHost {
                 value: out var running
             ) &&
                 (running.Server.Definition.Host.Authority is not { Length: > 0 }) &&
-                WorldFileOrigin.TryResolveCanonicalPath(
-                path: running.SourcePath,
-                resolved: out var runningPath
-            ) &&
+                running.TryResolveCanonicalSourcePath(resolved: out var runningPath) &&
                 string.Equals(
                 a: runningPath,
                 b: resolvedPath,
@@ -968,7 +959,7 @@ public sealed partial class WorldInstanceHost {
             return true;
         }
 
-        if (!WorldFileOrigin.TryResolveCanonicalPath(
+        if (!TryResolveDocument(
             path: referencedDocument,
             resolved: out var resolvedPath
         )) {

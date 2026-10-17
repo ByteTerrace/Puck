@@ -284,7 +284,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             var active = DescribeActiveGenerations(
                 destinationName: destination.Name.Value,
                 durability: destination.Durability,
-                referencedDocument: WorldInstanceHost.ResolveReferenceDocument(
+                referencedDocument: instances.ResolveReferenceDocument(
                     neighbourKey: documentPath,
                     source: sourceInstance
                 )
