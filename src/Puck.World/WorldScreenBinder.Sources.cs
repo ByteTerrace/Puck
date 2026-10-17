@@ -122,9 +122,15 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
             : null);
     }
     /// <inheritdoc/>
-    /// <remarks>Every view of the world's residency, a seat's or a camera's, shows the world's screens alike
-    /// (<see cref="InstanceOf"/>).</remarks>
-    public string? ReadOf(int view, int screen) => InstanceOf(screen: screen);
+    /// <remarks>A seat's or a camera's view of the world's residency shows the world's screens (<see cref="InstanceOf"/>); a
+    /// session of the boot world, or a camera it shows, filmed into the world's frame shows its own level's.</remarks>
+    public string? ReadOf(int view, int screen) {
+        var filmed = (view - m_hostViewCount);
+
+        return ((((uint)filmed) < ((uint)m_hostLevels.Count)) && (m_hostLevels[filmed] is { } level))
+            ? level.InstanceOf(screen: screen)
+            : InstanceOf(screen: screen);
+    }
     /// <summary>Returns the name of the instance a screen of the boot world reads: the source it shows, its row's or the
     /// one a live presentation verb bound over the row; the source instance of a producer, machine or probe source, and
     /// the view instance of a camera view or a session.</summary>

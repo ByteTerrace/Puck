@@ -34,8 +34,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Lock m_gate = new();
     // Every residency an entry resolves or a recorder holds, with its holds.
     private readonly Dictionary<SdfWorldResidency, int> m_residencies = new(comparer: ReferenceEqualityComparer.Instance);
-    // Each graph's viewport-row region, by the frame block its passes share: the sky part's, which every later part of the
-    // same graph binds.
+    // Every bake pass's recorder, whose readbacks each frame polls whether or not the pass records again: a view that
+    // leaves the frame, or follows another residency, still answers the bake that dispatched its batch.
+    private readonly HashSet<SdfWorldPassRecorder> m_bakeReaders = new(comparer: ReferenceEqualityComparer.Instance);
     // The frame the package started last, which each residency's frame is started for once.
     private long m_frame = 1;
 
@@ -359,6 +360,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
         }
 
+        lock (m_gate) {
+            foreach (var reader in m_bakeReaders) {
+                reader.PollBake();
+            }
+        }
+
         m_frame++;
 
         foreach (var residency in m_residencies.Keys) {
@@ -388,6 +395,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         if (residency.PackageFrame != m_frame) {
             residency.PackageFrame = m_frame;
             residency.BeginFrame();
+        }
+    }
+    // Adds or removes a bake pass's recorder from the readers each frame polls.
+    internal void ReadBakes(SdfWorldPassRecorder reader, bool reads) {
+        lock (m_gate) {
+            _ = (reads ? m_bakeReaders.Add(item: reader) : m_bakeReaders.Remove(item: reader));
         }
     }
     // Holds a residency the package tells of a device loss.

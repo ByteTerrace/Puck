@@ -131,29 +131,21 @@ public static class WorldRenderRoot {
         var packages = new RenderGraphPackageRecorders(regionCopy: sp.GetRequiredService<GpuRegionCopyPass>());
 
         // The world's views are sdf.world instances. A camera view renders its view of the world's frame, after the
-        // presentation's own; a session the binder registered renders a residency of its own; every other instance renders
-        // one of the presentation's own views, the first unless its name numbers a later one (WorldViewNames), or, while that
-        // view's seat is presented in another world, the view of that world's scene. The package holds the world's residency for its lifetime, so
-        // the frame every other residency films is captured whether or not a view renders it.
+        // presentation's own; a session renders a view of the one residency its destination renders through (this world's,
+        // or its endpoint scene's) while it discloses everything, and a residency of its own otherwise; every other instance
+        // renders one of the presentation's own views, the first unless its name numbers a later one (WorldViewNames), or,
+        // while that view's seat is presented in another world, the view of that world's scene. The package holds the
+        // world's residency for its lifetime, so the frame every other residency films is captured whether or not a view
+        // renders it.
         binder.ViewHost = residency;
         binder.Presenter = frameSource;
         binder.CrossingCapture = sp.GetService<WorldCrossingCapture>();
         host.Pickers = new SdfWorldPasses(
                 host: residency,
-                resolve: instance => (binder.TryResolveView(
+                resolve: instance => binder.ResolveInstanceView(
                     name: instance,
-                    view: out var view
+                    world: residency
                 )
-                    ? view
-                    : (binder.TryResolveRoutedView(
-                        name: instance,
-                        view: out var routed
-                    )
-                        ? routed
-                        : new SdfWorldView(
-                            Residency: residency,
-                            View: binder.HostView(view: (WorldViewNames.ViewOf(instance: instance) ?? 0))
-                        )))
             );
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
         host.Environment = new SdfSkyEnvironmentPasses(views: host.Pickers);

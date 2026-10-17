@@ -36,7 +36,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var feed in m_feeds) {
             if (
-                (feed.FrameSource is not null) && InfinityShown(feed: feed) &&
+                feed.Registered && InfinityShown(feed: feed) &&
                 (feed.Nested is { } level)
             ) {
                 SetNestedCameraViews(
@@ -133,7 +133,14 @@ internal sealed partial class WorldScreenBinder {
                 scene: scene
             );
         } else if (owner.Feed is { } feed) {
-            if (
+            if (feed.Home) {
+                if (ViewHost is not { } world) {
+                    return false;
+                }
+
+                target = m_homeFilms;
+                residency = world;
+            } else if (
                 (RoutedWindowOf(feed: feed) is { } window) &&
                 (ViewHost is { } host)
             ) {

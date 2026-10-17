@@ -92,6 +92,7 @@ placements {
     faceSources [
       {
         face: "glass"
+        filter: linear
         portal {
           arrival: "mapped"
           counterpart: "arrival/glass"
@@ -103,7 +104,6 @@ placements {
           destination: "garden"
           fallback: "#FF00FF"
           projection: window
-          resolution [256, 320]
         }
       }
     ]

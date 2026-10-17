@@ -129,7 +129,8 @@ public abstract record WorldScreenSource {
     /// a top-level <c>screens</c> row or magazine entry carries no face to pair with, so <c>window</c> is refused there
     /// unconditionally.</param>
     /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
-    /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
+    /// the default 160x144 panel; refused under <see cref="WorldScreenProjection.Window"/>, which renders at the extent its
+    /// glass covers on screen (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
     /// <c>DefaultSessionHeight</c>). Each axis is validated within
     /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
     /// <param name="Fallback">The colour the face shows, as <c>#RRGGBB</c>, when the screen is as many screens deep as

@@ -231,10 +231,13 @@ public sealed partial class SdfWorldTables {
         // v rows (coefficients of u, v and 1, then the face distance one warped unit spans), the image map's u and v rows
         // (coefficients, then whether the screen is mapped and whether it letterboxes), the crop (left, top, right,
         // bottom), and the crop inset by half a source pixel, which every sample is clamped to; then the seventh row's
-        // sampler, the filter's value. The seventh row's bound flag is SetScreenBound's.
+        // sampler, the filter's value, and its glass flag, set for a display drawn through the screen glass (a mapping with a
+        // warp) and clear for an opening, which shows its image with no display treatment. The seventh row's bound flag is
+        // SetScreenBound's.
         Span<float> floats = stackalloc float[((ScreenMappingByteLength / sizeof(float)) - ScreenStateFloats)];
 
         var sampler = 0f;
+        var glass = 0f;
 
         floats.Clear();
 
@@ -254,6 +257,7 @@ public sealed partial class SdfWorldTables {
             floats[16] = crop.X; floats[17] = crop.Y; floats[18] = right; floats[19] = bottom;
             floats[20] = (crop.X + halfTexel.X); floats[21] = (crop.Y + halfTexel.Y); floats[22] = (right - halfTexel.X); floats[23] = (bottom - halfTexel.Y);
             sampler = ((float)draw.Filter);
+            glass = ((mapping.Warp is null) ? 0f : 1f);
         }
 
         _ = m_screenMappingRegion.Write(
@@ -263,6 +267,10 @@ public sealed partial class SdfWorldTables {
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in sampler)),
             offset: ((screenIndex * ScreenMappingByteLength) + ScreenSamplerOffset)
+        );
+        _ = m_screenMappingRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in glass)),
+            offset: ((screenIndex * ScreenMappingByteLength) + ScreenGlassOffset)
         );
         m_screenMappings[screenIndex] = mapping;
 

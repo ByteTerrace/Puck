@@ -21,6 +21,13 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     private readonly Dictionary<string, int> m_cameraViewIndices = new(comparer: StringComparer.Ordinal);
 
     private int m_hostViewCount;
+    // Each session of the boot world's view index in the world's frame this frame (FilmHomeViews) and its camera, the
+    // level whose screens each view past the presentation's own shows (null for a camera of the boot world), and the
+    // target the cameras of those levels are filmed under.
+    private readonly Dictionary<string, int> m_homeViewIndices = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, CameraSnapshot> m_homeCameras = new(comparer: StringComparer.Ordinal);
+    private readonly List<WorldNestedScreens<SessionFeed>?> m_hostLevels = [];
+    private readonly object m_homeFilms = new();
 
     /// <summary>Gets the restrictions a camera view adds to the world's quality: a low-resolution diegetic display skips
     /// ambient occlusion and soft shadows.</summary>
@@ -553,6 +560,12 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         }
 
         if (SessionFeedOf(name: view) is { } feed) {
+            if (feed.Home) {
+                return m_homeCameras.TryGetValue(
+                    key: view,
+                    value: out camera
+                );
+            }
             if (RoutedWindowOf(feed: feed) is { } window) {
                 return window.Scene.TryCamera(
                     camera: out camera,
@@ -573,6 +586,20 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     /// so a pick through a portal lands on the destination's surface it shows; a camera view answers nothing.</remarks>
     public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
         if (SessionFeedOf(name: view) is { } feed) {
+            if (
+                feed.Home &&
+                m_homeCameras.TryGetValue(
+                    key: view,
+                    value: out var camera
+                ) &&
+                (Presenter is { } presenter)
+            ) {
+                return presenter.TrySurface(
+                    from: camera.Position,
+                    point: out point,
+                    ray: ray
+                );
+            }
             if (RoutedWindowOf(feed: feed) is { } window) {
                 return window.Scene.TrySurface(
                     point: out point,
@@ -605,6 +632,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         m_viewAuthoritativeTick = authoritativeTick;
         m_hostViewCount = views.Count;
         m_cameraViewIndices.Clear();
+        m_hostLevels.Clear();
 
         var quality = ((views.Count > 0)
             ? views[0].Quality.Restrict(other: CameraViewQuality)
@@ -626,11 +654,58 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
             });
 
             views[^1] = ResolveResolution(views[^1], name, registration.Row.RenderWidth, registration.Row.RenderHeight);
+            m_hostLevels.Add(item: null);
 
             if (Runtime?.NodeOf(instance: name) is { } node) {
                 node.Export = registration.Export;
             }
         }
+
+        FilmHomeViews(views: views);
+    }
+    // Films every session of the boot world, at any depth, as a view of the world's own frame after its camera views
+    // (SettleSessionRoutes), then the cameras of each level those sessions show: the world is resident once, however many
+    // windows show it. Each view records the level whose screens it shows (ReadOf).
+    private void FilmHomeViews(List<SdfViewSnapshot> views) {
+        m_homeViewIndices.Clear();
+        m_homeCameras.Clear();
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if (!(feed.Home && feed.Registered)) {
+                continue;
+            }
+
+            var view = SharedViewOf(feed: feed);
+
+            m_homeViewIndices[feed.RegistrationName] = views.Count;
+            m_homeCameras[feed.RegistrationName] = view.Camera;
+            m_hostLevels.Add(item: feed.Nested);
+            views.Add(item: view);
+        }
+
+        m_nestedFilms.Begin(target: m_homeFilms);
+
+        foreach (var feed in m_feeds) {
+            if (!(feed.Home && feed.Registered) || (feed.Nested is not { } level)) {
+                continue;
+            }
+
+            var first = views.Count;
+
+            FilmLevel(
+                level: level,
+                mirror: feed.Mirror,
+                target: m_homeFilms,
+                views: views
+            );
+
+            for (var index = first; (index < views.Count); index++) {
+                m_hostLevels.Add(item: level);
+            }
+        }
+
+        m_nestedFilms.End(target: m_homeFilms);
     }
     /// <summary>Returns the view of the world's frame an instance numbered for one of the presentation's own views renders:
     /// the numbered view, or the last of the presentation's own views when the frame has fewer, never a camera view's.</summary>

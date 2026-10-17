@@ -193,7 +193,7 @@ internal sealed partial class WorldScreenBinder {
             );
             feed.Nested = screens;
             m_nestedOwners[screens] = new NestedOwner(
-                Eye: () => CameraOf(feed: feed)?.Position,
+                Eye: () => CameraOf(feed: feed).Position,
                 Feed: feed,
                 Instance: feed.InstanceName,
                 Local: () => feed.Mirror.Definition,
@@ -288,7 +288,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
     // has no answer and for a camera projection.
-    private CameraSnapshot? CameraOf(SessionFeed feed) {
+    private CameraSnapshot CameraOf(SessionFeed feed) {
         if (
             (feed.Projection == WorldScreenProjection.Window) &&
             (feed.WindowFit?.Invoke() is { } fitted)
@@ -308,7 +308,7 @@ internal sealed partial class WorldScreenBinder {
     private SessionFeed? WindowFeedOf(WorldRoutedScene scene, int view) {
         foreach (var feed in m_feeds) {
             if (
-                (feed.WindowRoute.Window is { } window) &&
+                (feed.Route.Window is { } window) &&
                 ReferenceEquals(
                     objA: window.Scene,
                     objB: scene
@@ -370,8 +370,8 @@ internal sealed partial class WorldScreenBinder {
     /// <summary>Describes every level the presentation nests, one segment each: the nesting depth, then each world seats
     /// are presented in (<c>routed$&lt;digest&gt; depth 0 world &lt;authority&gt;</c>) and each session view, at every
     /// depth, by name — its
-    /// depth, destination, the residency it renders through (<c>endpoint:&lt;authority&gt;</c>, shared with every seat
-    /// and window presenting that world, or <c>own</c>), and what each of its world's screens shows: a session view one
+    /// depth, destination, the residency it renders through (<c>world</c>, the World's own, for a session of the boot
+    /// world; <c>endpoint:&lt;authority&gt;</c>, shared with every seat and window presenting that world; or <c>own</c>), and what each of its world's screens shows: a session view one
     /// level deeper, a camera view of that world, a source instance (a machine's or a probe's of that world's own host,
     /// with the fault that leaves it dark in parentheses), a fallback colour's source past the depth, <c>text</c>, or
     /// <c>none</c>; then <c>text-fault</c> and why, when the world's font catalog does not resolve.</summary>
@@ -399,11 +399,13 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var feed in m_feeds) {
-            var via = ((RoutedWindowOf(feed: feed) is { } window)
-                ? $"endpoint:{window.Scene.Endpoint.Identity}"
-                : ((feed.FrameSource is null)
-                    ? "unregistered"
-                    : "own"));
+            var via = (feed.Home
+                ? "world"
+                : ((RoutedWindowOf(feed: feed) is { } window)
+                    ? $"endpoint:{window.Scene.Endpoint.Identity}"
+                    : (feed.Registered
+                        ? "own"
+                        : "unregistered")));
 
             _ = builder.Append(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
@@ -750,7 +752,7 @@ internal sealed partial class WorldScreenBinder {
 
             foreach (var feed in binder.m_feeds) {
                 if (
-                    (feed.WindowRoute.Window is { } window) &&
+                    (feed.Route.Window is { } window) &&
                     ReferenceEquals(
                         objA: window.Scene,
                         objB: scene
