@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -17,11 +18,26 @@ public static class OperatorMcpServer {
     private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"One console line, exactly as typed at the Puck console."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the result. When it passes, the attachment closes and the outcome is reported as unknown."}},"required":["command"],"additionalProperties":false}""");
     private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."}},"additionalProperties":false}""");
 
+    private static readonly JsonElement WorldsInput = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}""");
+    private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string","description":"Names this World in a call's world argument."},"processId":{"type":"integer","description":"Also names this World in a call's world argument."},"document":{"type":["string","null"],"description":"The world document the World booted from."},"startedUtc":{"type":"string"},"current":{"type":"boolean","description":"True for the World a call that names none runs on."}},"required":["attachmentId","processId","document","startedUtc","current"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
+
     /// <summary>The output schema every console-backed tool's structured result satisfies: <c>puck_exec</c>,
     /// <c>puck_capture_frame</c>, and <c>puck_state_vector_write</c>, locally and over HTTP.</summary>
-    internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"},"truncated":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript","truncated"],"additionalProperties":false}""");
+    internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"},"truncated":{"type":"boolean"},"world":{"type":["object","null"],"description":"The World the call reached, as puck_worlds lists it; null when none was reached.","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":["string","null"]},"startedUtc":{"type":"string"}},"required":["attachmentId","processId","document","startedUtc"],"additionalProperties":false}},"required":["requestId","status","output","isError","clearTranscript","truncated","world"],"additionalProperties":false}""");
 
-    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1) {
+    /// <summary>Runs one tool call on an attachment.</summary>
+    /// <param name="client">The attachment the call runs on.</param>
+    /// <param name="parameters">The call's name and arguments.</param>
+    /// <param name="clock">Drives the call's deadline.</param>
+    /// <param name="token">Cancels the call.</param>
+    /// <param name="requestId">The control request id for this attachment's next request.</param>
+    /// <param name="world">The World the attachment reaches, reported in the result; <see langword="null"/> for an
+    /// attachment that has none to name.</param>
+    /// <param name="selectsWorld">Whether the call may carry the <c>world</c> selector, which the caller has already
+    /// resolved to <paramref name="client"/>; a remote call may not.</param>
+    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1, OperatorMcpWorld? world = null, bool selectsWorld = false) {
+        CallToolResult Fail(string message, bool unknown = true) => Error(message, unknown, world);
+
         if (
             (parameters is null) ||
             (parameters.Name is not ("puck_exec" or "puck_capture_frame" or "puck_state_vector_write"))
@@ -47,6 +63,10 @@ public static class OperatorMcpServer {
                     value.TryGetInt32(value: out var parsed) &&
                     (parsed is >= 1 and <= ControlLimits.TimeoutMilliseconds)
                 ) { timeout = parsed; } else if (
+                    (argumentKey == "world") &&
+                    selectsWorld &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { } else if (
                     (argumentKey == "command") &&
                     exec &&
                     (value.ValueKind == JsonValueKind.String)
@@ -63,7 +83,7 @@ public static class OperatorMcpServer {
                     vectorWrite &&
                     (value.ValueKind == JsonValueKind.String)
                 ) { vector = value.GetString(); } else {
-                    return Error(
+                    return Fail(
                     $"Invalid argument: {argumentKey}.",
                     unknown: false
                 );
@@ -72,13 +92,13 @@ public static class OperatorMcpServer {
         }
         if (vectorWrite) {
             if (string.IsNullOrWhiteSpace(value: row)) {
-                return Error(
+                return Fail(
                     "Invalid argument: row.",
                     unknown: false
                 );
             }
             if (string.IsNullOrWhiteSpace(value: vector)) {
-                return Error(
+                return Fail(
                     "Invalid argument: vector.",
                     unknown: false
                 );
@@ -95,7 +115,7 @@ public static class OperatorMcpServer {
             : "capture"),
             TimeoutMilliseconds: timeout
         )) is { } refusal) {
-            return Error(
+            return Fail(
             refusal.Output,
             unknown: false
         );
@@ -133,7 +153,7 @@ public static class OperatorMcpServer {
             if (
                 (result is null) ||
                 ((client is not LocalControlClient) && !result.IsValidFor(request: request))
-            ) { client.Dispose(); return Error("Host returned an invalid result; inspect state before retrying."); }
+            ) { client.Dispose(); return Fail("Host returned an invalid result; inspect state before retrying."); }
             return Result(
                 ((result.Id == 0)
                 ? null
@@ -143,17 +163,51 @@ public static class OperatorMcpServer {
                 result.IsError,
                 result.ClearTranscript,
                 result.Png,
-                result.Truncated
+                result.Truncated,
+                world
             );
         } catch (Exception error) when (((error is TimeoutException) || ((error is OperationCanceledException) && !token.IsCancellationRequested))) {
             client.Dispose();
-            return Error("Deadline expired. Attachment closed; dispatched outcome is unknown. Inspect state before retrying; the next call attaches anew.");
+            return Fail("Deadline expired. Attachment closed; dispatched outcome is unknown. Inspect state before retrying; the next call attaches anew.");
         } catch (OperationCanceledException) {
             client.Dispose();
             throw;
         } catch (Exception error) when ((error is IOException or InvalidDataException or System.Net.Sockets.SocketException or ObjectDisposedException or JsonException)) {
-            return Error($"Attachment closed; dispatched outcome may be unknown. Inspect state before retrying; the next call attaches anew. {error.Message}");
+            return Fail($"Attachment closed; dispatched outcome may be unknown. Inspect state before retrying; the next call attaches anew. {error.Message}");
         }
+    }
+    /// <summary>Describes a World's attachment file for a result.</summary>
+    /// <param name="info">What the World published.</param>
+    /// <returns>The World as a result's <c>world</c> member and a listing entry carry it.</returns>
+    internal static OperatorMcpWorld Describe(LocalEndpointInfo info) => new(
+        AttachmentId: info.Id,
+        Document: info.World,
+        ProcessId: info.ProcessId,
+        StartedUtc: info.StartedUtc
+    );
+    internal static Tool WorldsTool() => new() {
+        Name = "puck_worlds",
+        Description = "List the running Worlds that accept an Operator attachment through this adapter: each one's attachmentId, processId, world document, startedUtc and whether it is the adapter's current World, which a call that names none runs on. Name a World in puck_exec, puck_capture_frame or puck_state_vector_write with their world argument. A World whose process has exited is never listed. Takes no arguments and attaches to nothing.",
+        InputSchema = WorldsInput,
+        OutputSchema = WorldsOutput,
+        Annotations = new() { DestructiveHint = false, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = true },
+    };
+    internal static Tool WithWorldSelector(Tool source) {
+        var schema = JsonNode.Parse(json: source.InputSchema.GetRawText())!.AsObject();
+
+        schema["properties"]!.AsObject()["world"] = new JsonObject {
+            ["type"] = "string",
+            ["minLength"] = 1,
+            ["description"] = "Optional. The attachmentId or processId of the running World this call must reach, from puck_worlds. The call attaches to exactly that World or is refused by name; it never falls back to another. Omitted, it runs on the adapter's current World, which the result's world member names.",
+        };
+
+        return new() {
+            Annotations = source.Annotations,
+            Description = source.Description + " Optional world selects which running World the call reaches.",
+            InputSchema = JsonElement.Parse(json: schema.ToJsonString()),
+            Name = source.Name,
+            OutputSchema = source.OutputSchema,
+        };
     }
     internal static Tool CaptureTool() => new() {
         Name = "puck_capture_frame",
@@ -162,7 +216,7 @@ public static class OperatorMcpServer {
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = false, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = true },
     };
-    internal static CallToolResult Error(string message, bool unknown = true) => Result(
+    internal static CallToolResult Error(string message, bool unknown = true, OperatorMcpWorld? world = null) => Result(
         clearTranscript: false,
         isError: true,
         output: message,
@@ -171,7 +225,8 @@ public static class OperatorMcpServer {
         status: (unknown
         ? "unknown"
         : "refused"),
-        truncated: false
+        truncated: false,
+        world: world
     );
     internal static Tool ExecTool() => new() {
         Name = "puck_exec",
@@ -181,7 +236,48 @@ public static class OperatorMcpServer {
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
     };
 
-    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png, bool truncated) {
+    private static CallToolResult ListWorlds(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment) {
+        if (arguments is { Count: > 0 }) {
+            return Error(
+                "Invalid argument: puck_worlds takes none.",
+                unknown: false
+            );
+        }
+
+        var listed = new OperatorMcpWorldList(Worlds: [.. attachment.List().Select(selector: entry => new OperatorMcpListedWorld(
+            AttachmentId: entry.Info.Id,
+            Current: entry.Current,
+            Document: entry.Info.World,
+            ProcessId: entry.Info.ProcessId,
+            StartedUtc: entry.Info.StartedUtc
+        ))]);
+        var metadata = JsonSerializer.SerializeToElement(
+            listed,
+            OperatorMcpJson.Default.OperatorMcpWorldList
+        );
+
+        return new() {
+            Content = [new TextContentBlock { Text = metadata.GetRawText() }],
+            IsError = false,
+            StructuredContent = metadata,
+        };
+    }
+    private static (string? Selector, CallToolResult? Invalid) SelectedWorld(CallToolRequestParams? parameters) {
+        if (
+            (parameters?.Arguments is { } arguments) &&
+            arguments.TryGetValue(key: "world", value: out var value)
+        ) {
+            return (((value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()))
+                ? (value.GetString()!.Trim(), null)
+                : (null, Error(
+                    "Invalid argument: world. Give an attachmentId or processId from puck_worlds.",
+                    unknown: false
+                )));
+        }
+
+        return (null, null);
+    }
+    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png, bool truncated, OperatorMcpWorld? world = null) {
         var metadata = JsonSerializer.SerializeToElement(
             new OperatorMcpResultMetadata(
                 ClearTranscript: clearTranscript,
@@ -189,7 +285,8 @@ public static class OperatorMcpServer {
                 Output: output,
                 RequestId: requestId,
                 Status: status,
-                Truncated: truncated
+                Truncated: truncated,
+                World: world
             ),
             OperatorMcpJson.Default.OperatorMcpResultMetadata
         );
@@ -246,7 +343,7 @@ public static class OperatorMcpServer {
             // harness opens with it. The server answers whichever revision the client speaks.
             new McpServerOptions {
                 ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
-                ServerInstructions = "Trusted local Operator: full Puck Console authority; participant and remote access are not provided. Each call attaches to the running World on demand; with no World it is refused and nothing runs. The adapter runs one call at a time, so issue calls serially when their order matters: a capture is ordered after the commands before it. A submitted result is not an authoritative mutation receipt. Cancellation, timeout or a lost World closes the attachment and reports an unknown outcome; the next call attaches anew, possibly to a restarted World with fresh state, so inspect state before any retry.",
+                ServerInstructions = "Trusted local Operator: full Puck Console authority; participant and remote access are not provided. Each call attaches to a running World on demand; with no World it is refused and nothing runs. Several Worlds can run at once and this adapter serves every caller: puck_worlds lists them, and the optional world argument of puck_exec, puck_capture_frame and puck_state_vector_write names the one a call must reach, by attachment id or process id. A named call reaches exactly that World or is refused, never another. A call that names none runs on the adapter's current World, which may be another caller's; every result's world member says which World it reached, so name your own World. The adapter runs one call at a time, so issue calls serially when their order matters: a capture is ordered after the commands before it. A submitted result is not an authoritative mutation receipt. Cancellation, timeout or a lost World closes the attachment and reports an unknown outcome; the next call attaches anew, possibly to a restarted World with fresh state, so inspect state before any retry.",
                 Filters = new() {
                     Message = new() {
                         IncomingFilters = [next => (context, token) => {
@@ -260,20 +357,38 @@ public static class OperatorMcpServer {
                     },
                 },
                 Handlers = new() {
-                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool(), RemoteMcpHost.StateVectorWriteTool] }),
-                    CallToolHandler = async (context, token) => await attachment.RunAsync(
-                        call: (client, callToken) => CallAsync(
-                            client,
-                            context.Params,
-                            clock,
-                            callToken
-                        ).AsTask(),
-                        refuse: refusal => Error(
-                            refusal,
-                            unknown: false
-                        ),
-                        cancellationToken: token
-                    ).ConfigureAwait(continueOnCapturedContext: false),
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [WorldsTool(), WithWorldSelector(source: ExecTool()), WithWorldSelector(source: CaptureTool()), WithWorldSelector(source: RemoteMcpHost.StateVectorWriteTool)] }),
+                    CallToolHandler = async (context, token) => {
+                        if (context.Params?.Name == "puck_worlds") {
+                            return ListWorlds(
+                                arguments: context.Params.Arguments,
+                                attachment: attachment
+                            );
+                        }
+
+                        var (selector, invalid) = SelectedWorld(parameters: context.Params);
+
+                        if (invalid is not null) {
+                            return invalid;
+                        }
+
+                        return await attachment.RunAsync(
+                            world: selector,
+                            call: (client, callToken) => CallAsync(
+                                client,
+                                context.Params,
+                                clock,
+                                callToken,
+                                world: Describe(info: client.Endpoint),
+                                selectsWorld: true
+                            ).AsTask(),
+                            refuse: refusal => Error(
+                                refusal,
+                                unknown: false
+                            ),
+                            cancellationToken: token
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    },
                 },
             }
         );

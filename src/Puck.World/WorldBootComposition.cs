@@ -879,7 +879,8 @@ public static class WorldBootComposition {
         services.AddSingleton<WorldControlCommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
             () => sp.GetRequiredService<TextCommandSource>(),
             sp.GetRequiredService<WorldCaptureScheduler>(),
-            sp.GetService<WorldRenderProbe>()
+            sp.GetService<WorldRenderProbe>(),
+            () => Path.GetFullPath(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => sp.GetRequiredService<WorldControlCommandModule>());
 

@@ -18,8 +18,10 @@ public sealed class LocalControlClient : IControlSession {
     private int m_disposed;
     private long m_sequence;
 
-    private LocalControlClient(TcpClient socket, TimeProvider clock) { m_clock = clock; m_socket = socket; m_stream = socket.GetStream(); }
+    private LocalControlClient(TcpClient socket, TimeProvider clock, LocalEndpointInfo endpoint) { Endpoint = endpoint; m_clock = clock; m_socket = socket; m_stream = socket.GetStream(); }
 
+    /// <summary>Gets what the host's attachment file published about it: its attachment id, process and world.</summary>
+    public LocalEndpointInfo Endpoint { get; }
     /// <summary>Gets whether this attachment is closed: disposed, or invalidated by a failed or timed-out operation.
     /// A closed attachment never reopens; a caller that needs the host again connects anew.</summary>
     public bool IsClosed => (Volatile.Read(location: ref m_disposed) != 0);
@@ -63,6 +65,7 @@ public sealed class LocalControlClient : IControlSession {
             ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
                 clock: clock,
+                endpoint: descriptor.Info,
                 socket: socket
             );
         } catch { socket.Dispose(); throw; }

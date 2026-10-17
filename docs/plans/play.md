@@ -21,7 +21,7 @@ the reasoning behind every decision is in
   profiles and affinities, per-cell provenance, the `puck canary` manifest
   runner, `WorldEntityAddress`, kit speed envelopes; the local group, role-aware
   grant, transfer, and external-operation foundation; the MCP host extension,
-  the Operator profile's `puck_exec`, `puck_capture_frame` and
+  the Operator profile's `puck_worlds`, `puck_exec`, `puck_capture_frame` and
   `puck_state_vector_write` tools over local stdio, remote HTTP with OAuth and
   the Entra on-behalf-of services provider (owned by
   [`Puck.Mcp`](../../src/Puck.Mcp/README.md) and

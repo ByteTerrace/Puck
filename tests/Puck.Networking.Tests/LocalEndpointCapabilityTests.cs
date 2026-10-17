@@ -35,6 +35,31 @@ public sealed class LocalEndpointCapabilityTests {
         );
         Assert.Throws<UnauthorizedAccessException>(testCode: () => LocalEndpointCapability.ReadDescriptor(path: path));
     }
+    // Law: the descriptor publishes the host's identity, a reader recovers it, and a host whose process has exited, or
+    // whose process id another process now holds, is recognizably gone without connecting.
+    [Fact]
+    public void DescriptorPublishesTheHostAndTellsWhenItIsGone() {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) { Assert.Skip(reason: "Local control supports Windows and Linux x64."); return; }
+        using var directory = new TemporaryDirectory(prefix: "puck-info-test-");
+
+        var path = directory.PathOf(name: "capability.json");
+        var capability = new LocalEndpointCapability(port: 12345, world: new string(c: 'w', count: 600));
+
+        using (capability.WriteDescriptor(path: path)) { }
+        var info = LocalEndpointCapability.ReadDescriptor(path: path).Info;
+
+        Assert.Equal(expected: capability.Info, actual: info);
+        Assert.Equal(expected: Environment.ProcessId, actual: info.ProcessId);
+        Assert.Equal(expected: 512, actual: info.World!.Length);
+        Assert.True(condition: info.IsHostRunning());
+        Assert.False(condition: (info with { StartedUtc = info.StartedUtc.AddHours(hours: -1) }).IsHostRunning());
+
+        using var exited = System.Diagnostics.Process.Start(startInfo: new System.Diagnostics.ProcessStartInfo(fileName: "dotnet", arguments: "--version") { CreateNoWindow = true, RedirectStandardOutput = true, UseShellExecute = false })!;
+        var gone = (info with { ProcessId = exited.Id, StartedUtc = new DateTimeOffset(dateTime: exited.StartTime.ToUniversalTime()) });
+
+        exited.WaitForExit();
+        Assert.False(condition: gone.IsHostRunning());
+    }
     [Fact]
     public void NullDaclIsNotMistakenForAnOwnerOnlyCapability() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
