@@ -189,11 +189,16 @@ public sealed partial class SdfWorldPassesLawTests {
     public void CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift() {
         using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
 
+        // Skipping shadows installs the shadowless fragment, whose rebuild dispatches again the bake batch its old graph
+        // held, so the bake's passes may run beside the shading passes on this frame.
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
-            SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+            SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake))));
+        // The view stands once the rebuilt graph installs and the bake settles.
+        for (var frame = 0; (frame < 16); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();

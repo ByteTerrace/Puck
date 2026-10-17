@@ -504,8 +504,10 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     // never refreshing at the views' divisor the way an ordinary camera projection does, so its resolved pixel
     // dimensions are a real, additive per-frame GPU cost. An ordinary camera projection reports its width/height
     // too (the same resolved render target every session pays for), so the line stays one shape for both.
+    // A window renders at the extent its glass covers on screen, every frame; any other session at its resolution, at the
+    // views' refresh.
     private static string ProjectionText(WorldScreenProjection projection, int width, int height, bool rendersEveryFrame) =>
-        $" projection={projection.ToString().ToLowerInvariant()} cost={width}x{height}{(rendersEveryFrame
+        $" projection={projection.ToString().ToLowerInvariant()} cost={((projection == WorldScreenProjection.Window) ? "glass" : $"{width}x{height}")}{(rendersEveryFrame
             ? "/frame"
             : "")}";
     // Resolves the optional trailing `instance:<name>` token: absent addresses the boot instance (null), a single

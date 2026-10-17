@@ -71,22 +71,21 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Returns the view a window onto an endpoint's world renders (<see cref="WorldFramePresenter.AttachWindow"/>):
     /// the window's index in the residency of its scene, the one every seat presented in that world renders from,
-    /// created the first time a view resolves to it.</summary>
+    /// created the first time a view resolves to it. Until the presenter's latch includes the window, it renders the
+    /// scene's first view, as a camera view does before its first dress, and follows its own index in place from the
+    /// next frame.</summary>
     /// <param name="window">The window.</param>
     /// <param name="view">The view, when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when this presenter's latch includes the window and the views are configured.</returns>
+    /// <returns><see langword="true"/> when the presenter presents the window's scene and the views are configured.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
     public bool TryResolveWindowView(WorldRoutedWindow window, out SdfWorldView view) {
         ArgumentNullException.ThrowIfNull(argument: window);
 
         view = default;
 
-        var index = window.Index;
-
         if (
             (m_viewPipelines is null) ||
             (ViewHost is not { } host) ||
-            (index < 0) ||
             (Presenter is not { } presenter) ||
             !presenter.Presents(scene: window.Scene)
         ) {
@@ -98,7 +97,10 @@ internal sealed partial class WorldScreenBinder {
                 host: host,
                 scene: window.Scene
             ),
-            View: index
+            View: Math.Max(
+                val1: 0,
+                val2: window.Index
+            )
         );
 
         return true;

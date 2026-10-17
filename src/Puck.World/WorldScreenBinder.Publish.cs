@@ -39,7 +39,7 @@ internal sealed partial class WorldScreenBinder {
         EnsureFeeds();
 
         foreach (var feed in m_feeds) {
-            if (feed.FrameSource is null) {
+            if (!feed.Registered) {
                 RegisterSessionView(feed: feed);
             }
         }
@@ -109,7 +109,7 @@ internal sealed partial class WorldScreenBinder {
         PublishFrameCaptures(context: in context);
         ReconcileInfinityRoots();
         ReconcileNesting();
-        SettleWindowRoutes();
+        SettleSessionRoutes();
         // Reconciliation may have closed a view or routed it into a shared residency this frame.
         ReconcileViewResidencies();
         m_frameContext = context;

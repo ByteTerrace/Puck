@@ -175,6 +175,14 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         ? float3(0.0, 0.0, 0.0)
         : sampleScreenSource(screenIndex, clamp(source, mapping.sampleClamp.xy, mapping.sampleClamp.zw)).rgb);
 
+    // An opening (a portal's window) is no display: it shows its image as the world beyond it, with no grille,
+    // scanlines, bloom, bezel or glint.
+    if (mapping.state.w == 0.0) {
+        outColor = sampled;
+
+        return true;
+    }
+
     // Aperture grille — faint vertical RGB phosphor stripes: three cosines 120 degrees apart. Continuous (cos), so a
     // cross-backend UV delta never flips a hard edge; the period rides the screen-local UV, so the stripe stays on the
     // image. CrtApertureGrille = 0 is a no-op.

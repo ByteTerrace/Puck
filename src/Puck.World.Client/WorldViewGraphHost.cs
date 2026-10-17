@@ -280,8 +280,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     private readonly List<RenderGraphRoot> m_roots = [];
     private List<RenderGraphFootprint> m_screenFootprints = [];
-    // The session views of the running set, whose footprints follow what their consumers see (ResetFootprints).
+    // The session views of the running set, whose footprints follow what their consumers see (ResetFootprints), and the
+    // power-of-two fraction each one's glass last held on each axis (WorldPortalVisibility.Octave).
     private readonly HashSet<string> m_portals = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (double Width, double Height)> m_portalOctaves = new(comparer: StringComparer.Ordinal);
 
     private WorldViewDefaults? m_lastViews;
     // The render.tonemap the running set was composed with, and whether a temporally resolved view sharpened then.
@@ -1310,6 +1312,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
+        foreach (var portal in m_portalOctaves.Keys) {
+            if (!m_portals.Contains(item: portal)) {
+                _ = m_portalOctaves.Remove(key: portal);
+            }
+        }
+
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {
@@ -1488,8 +1496,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         return footprints;
     }
-    // The frame's footprints: the synthesized root's, then every screen's, a session's only while its consumer sees the
-    // glass it shows on (ShowsPortal), so a portal face out of view schedules no level beneath it.
+    // The frame's footprints: the synthesized root's, then every screen's. A session's holds only while its consumer sees
+    // the glass it shows on, so a portal face out of view schedules no level beneath it, and spans the power-of-two
+    // fraction of its consumer's image that holds the glass (WorldPortalVisibility.Coverage and Octave), so a window
+    // renders at the extent it is seen at and reallocates only when that extent leaves its octave.
     private void ResetFootprints() {
         m_footprints.Clear();
 
@@ -1498,44 +1508,89 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         foreach (var footprint in m_screenFootprints) {
-            if (
-                !m_portals.Contains(item: footprint.Producer) ||
-                ShowsPortal(
-                    consumer: footprint.Consumer,
-                    producer: footprint.Producer
-                )
-            ) {
+            if (!m_portals.Contains(item: footprint.Producer)) {
                 m_footprints.Add(item: footprint);
+
+                continue;
+            }
+
+            switch (PortalCoverage(
+                consumer: footprint.Consumer,
+                coverage: out var coverage,
+                producer: footprint.Producer
+            )) {
+                case PortalSight.Unknown:
+                    m_footprints.Add(item: footprint);
+
+                    break;
+                case PortalSight.Seen:
+                    var octaves = m_portalOctaves.GetValueOrDefault(key: footprint.Producer);
+
+                    octaves = (
+                        Width: WorldPortalVisibility.Octave(coverage: coverage.Width, held: octaves.Width),
+                        Height: WorldPortalVisibility.Octave(coverage: coverage.Height, held: octaves.Height)
+                    );
+                    m_portalOctaves[footprint.Producer] = octaves;
+                    m_footprints.Add(item: (footprint with {
+                        Height = octaves.Height,
+                        Width = octaves.Width,
+                    }));
+
+                    break;
+                case PortalSight.Hidden:
+                    break;
             }
         }
     }
-    // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with: a consumer in
-    // another world than the glass's sees none of it, and one whose camera or glass is not known yet sees it.
-    private bool ShowsPortal(string consumer, string producer) {
+    // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with, and how much
+    // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or
+    // glass is not known yet is taken to see it at the session's declared extent.
+    private PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage) {
+        coverage = default;
+
         if (ViewScenes is not { } scenes) {
-            return true;
+            return PortalSight.Unknown;
         }
 
-        return scenes.PortalGlass(
+        switch (scenes.PortalGlass(
             consumer: consumer,
             glass: out var glass,
             producer: producer
-        ) switch {
-            WorldPortalGlass.Elsewhere => false,
-            WorldPortalGlass.Found => (
-                !(m_cameras.TryGetValue(
+        )) {
+            case WorldPortalGlass.Elsewhere:
+                return PortalSight.Hidden;
+            case WorldPortalGlass.Found when (
+                m_cameras.TryGetValue(
                     key: consumer,
                     value: out var camera
-                ) || scenes.TryCamera(
+                ) ||
+                scenes.TryCamera(
                     camera: out camera,
                     view: consumer
-                )) ||
-                WorldPortalVisibility.Sees(
+                )
+            ):
+                if (!WorldPortalVisibility.Sees(
                     camera: in camera,
                     glass: glass!
-                )
-            ),
-            _ => true,
-        };
+                )) {
+                    return PortalSight.Hidden;
+                }
+
+                coverage = WorldPortalVisibility.Coverage(
+                    camera: in camera,
+                    glass: glass!
+                );
+
+                return PortalSight.Seen;
+            default:
+                return PortalSight.Unknown;
+        }
+    }
+
+    // What a consumer sees of a session's glass this frame.
+    private enum PortalSight : byte {
+        Unknown = 0,
+        Hidden = 1,
+        Seen = 2,
     }
 }

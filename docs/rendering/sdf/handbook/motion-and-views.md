@@ -224,10 +224,15 @@ another world as a view instance (`WorldViewInstances`).
   is a view instance of its own (`session$<screen>$<screen>…`, or
   `routed$<digest>$<screen>…`, the digest naming the authority beneath a world a seat is presented in), fitted
   to the eye of the view one level up, so two portals facing each other end at
-  the depth; a face at the depth shows its session's `fallback` colour. One
-  world seen at several levels shares its endpoint's residency while its
-  sessions disclose everything, and each view of that residency binds the
-  screens of its own level (`ISdfScreenSources.ReadOf` takes the view). Every
+  the depth; a face at the depth shows its session's `fallback` colour. A
+  world is resident once, however many views show it: while a session
+  discloses everything, it renders as a view of the residency its destination
+  already renders through, the World's own for the boot world (filmed into the
+  World's frame after its camera views) and its endpoint's scene for any other
+  local world. A session builds a residency of its own only when its session
+  discloses less, and builds its frame source the first time it does. Each view
+  of a residency binds the screens of its own level (`ISdfScreenSources.ReadOf`
+  takes the view). Every
   other screen of that world shows its own source: its machines from its own
   host, its text through its own fonts, and its cameras as further views of the
   residency it renders through (`<level>$camera$<camera>`), filmed after its own
@@ -241,7 +246,14 @@ sees the slab it shows on (`WorldPortalVisibility`). The test covers the slab's
 front, back and sides, which all sample the screen image; a slab wholly outside
 the frustum renders nothing beneath it. It renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
-window session on every frame); between refreshes every consumer reads its
+window session on every frame). A window's footprint is the share of its
+consumer's image its glass spans (`WorldPortalVisibility.Coverage`), held to
+whole power-of-two octaves that grow at once and halve only once the glass
+falls below two fifths of its octave (`WorldPortalVisibility.Octave`), since
+every extent change rebuilds the view's graph; a window authors no
+resolution. It draws as clear glass, with none of a display's grille,
+scanlines, bloom or bezel (the mapping row's glass flag, clear for a mapping
+with no warp); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its
 last image. The cost of every view is priced in the schedule and
 `world.budget` like any instance's, with no fixed view count.

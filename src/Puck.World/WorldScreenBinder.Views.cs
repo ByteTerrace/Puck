@@ -97,16 +97,27 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        // A window joined to its destination's endpoint scene renders its view there, from the one residency that scene's
-        // seats and windows share; until the presenter's latch includes it, it renders its own session.
-        if (
-            (RoutedWindowOf(feed: feed) is { } window) &&
-            TryResolveWindowView(
+        // A session of the boot world renders as a view of the World's own residency, filmed after its seats' views.
+        if (feed.Home) {
+            if (ViewHost is not { } world) {
+                return false;
+            }
+
+            view = new SdfWorldView(
+                Residency: world,
+                View: m_homeViewIndices.GetValueOrDefault(key: name)
+            );
+
+            return true;
+        }
+
+        // A session joined to its destination's endpoint scene renders its view there, from the one residency that
+        // scene's seats and windows share; never a residency of its own it would leave at the next frame.
+        if (feed.Route.Window is { } window) {
+            return TryResolveWindowView(
                 view: out view,
                 window: window
-            )
-        ) {
-            return true;
+            );
         }
 
         if (SessionResidencyOf(feed: feed) is not { } residency) {
@@ -120,14 +131,43 @@ internal sealed partial class WorldScreenBinder {
 
         return true;
     }
+    /// <summary>Returns the view a render-graph instance of the world's package renders this frame: a view this binder
+    /// registered (<see cref="TryResolveView"/>), the routed view of a seat presented in another world, or else one of the
+    /// presentation's own views of the world's residency.</summary>
+    /// <param name="name">The instance's name.</param>
+    /// <param name="world">The world's residency.</param>
+    /// <returns>The view.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="world"/> is
+    /// <see langword="null"/>.</exception>
+    public SdfWorldView ResolveInstanceView(string name, SdfWorldResidency world) {
+        ArgumentNullException.ThrowIfNull(argument: world);
+
+        if (TryResolveView(
+            name: name,
+            view: out var view
+        )) {
+            return view;
+        }
+
+        return (TryResolveRoutedView(
+            name: name,
+            view: out var routed
+        )
+            ? routed
+            : new SdfWorldView(
+                Residency: world,
+                View: HostView(view: (WorldViewNames.ViewOf(instance: name) ?? 0))
+            ));
+    }
 
     // A session's own residency, rendering its frame source, created the first time a view resolves to it and made again
     // when its frame source is another; null before the views are configured.
     private SdfWorldResidency? SessionResidencyOf(SessionFeed feed) {
-        if (feed.FrameSource is not { } source) {
+        if (!feed.Registered) {
             return null;
         }
 
+        var source = OwnSourceOf(feed: feed);
         var name = feed.RegistrationName;
 
         if (
@@ -182,6 +222,7 @@ internal sealed partial class WorldScreenBinder {
             transforms: source.MovedTransforms,
             work: residency.Work
         );
+        Console.Error.WriteLine(value: $"[world.view: {name} renders a residency of its own of '{feed.InstanceName}': its session does not disclose everything that world holds]");
 
         return new ViewResidency(
             Residency: residency,
@@ -203,7 +244,8 @@ internal sealed partial class WorldScreenBinder {
                     objA: feed.FrameSource,
                     objB: view.Source
                 ) ||
-                (RoutedWindowOf(feed: feed) is not null)
+                feed.Home ||
+                (feed.Route.Window is not null)
             ) {
                 m_releasedViews.Add(item: name);
             }
@@ -275,7 +317,7 @@ internal sealed partial class WorldScreenBinder {
         EnsureFeeds();
 
         foreach (var feed in m_feeds) {
-            if ((feed.FrameSource is null) || !InfinityShown(feed: feed)) {
+            if (!feed.Registered || !InfinityShown(feed: feed)) {
                 continue;
             }
 
@@ -287,18 +329,23 @@ internal sealed partial class WorldScreenBinder {
             );
 
             // A window renders every produced frame: a stale image between refreshes would show the destination lagging the
-            // viewer's own eye, breaking the parallax the projection exists for.
+            // viewer's own eye, breaking the parallax the projection exists for. It renders at the extent its glass covers
+            // in the view that shows it (WorldViewGraphHost's footprints), any other session at its resolution.
+            var window = (feed.Projection == WorldScreenProjection.Window);
+
             m_views.Set(view: new WorldView(
                 Demand: WorldViewDemand.Screen,
                 FilmsWorld: false,
                 Height: height,
                 Name: feed.RegistrationName,
-                Refresh: ((feed.Projection == WorldScreenProjection.Window)
+                Refresh: (window
                     ? RenderGraphRefresh.EveryFrame
                     : refresh),
                 Width: width
             ) {
-                OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
+                OutputExtent = (window
+                    ? null
+                    : new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight))),
                 Parent = (feed.ParentFeed?.RegistrationName ?? ((feed.ParentInfinity is { } infinity) ? InfinityParent(entry: infinity) : null)),
                 Reads = feed.Nested?.Reads,
             });

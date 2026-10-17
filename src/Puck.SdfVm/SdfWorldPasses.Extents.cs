@@ -4,12 +4,16 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldPasses {
+    // Each fragment without its shadow cascades, made once, so a view's fragment keeps its identity from frame to frame.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> ShadowlessFragments = new();
+
     /// <inheritdoc/>
     public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => Refresh(instance: instance);
     /// <inheritdoc/>
     /// <remarks>A view that asks for temporal reconstruction runs <see cref="SdfWorldPackage.TemporalFragment"/> at
     /// any render scale; otherwise a reduced view runs <see cref="SdfWorldPackage.Fragment"/> and a native one
-    /// <see cref="SdfWorldPackage.NativeFragment"/>.</remarks>
+    /// <see cref="SdfWorldPackage.NativeFragment"/>, each without its shadow cascades for a view that skips shadows
+    /// (<see cref="SdfWorldPackage.WithoutShadows"/>).</remarks>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
         var entry = Refresh(instance: instance);
 
@@ -35,13 +39,19 @@ public sealed partial class SdfWorldPasses {
         public float RenderedSharpness { get; set; }
         // Whether the resolved view asks for temporal reconstruction, which chooses its fragment as the ceiling does.
         public bool RequestsTemporal => Snapshot.Quality.Temporal;
-        public RenderGraphPackageFragment Fragment => (RequestsTemporal
+        // Whether the resolved view renders shadows; a view without them runs no cascade pass and holds no cascade target.
+        public bool RequestsShadows => !Snapshot.Quality.DisableSoftShadows;
+        public RenderGraphPackageFragment Fragment => Shadowed(fragment: (RequestsTemporal
             ? SdfWorldPackage.TemporalFragment
-            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment));
+            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)));
 
-        // The low bit distinguishes temporal reconstruction. Render ceilings are fractions from zero through one, whose
-        // binary exponents share the high bit shifted out here.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 1) | (RequestsTemporal ? 1L : 0L);
+        // The low bit distinguishes temporal reconstruction and the next shadows. Render ceilings are fractions from zero
+        // through one, whose binary exponents share the two high bits shifted out here.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
+
+        private RenderGraphPackageFragment Shadowed(RenderGraphPackageFragment fragment) => (RequestsShadows
+            ? fragment
+            : ShadowlessFragments.GetValue(key: fragment, createValueCallback: SdfWorldPackage.WithoutShadows));
         double IShaderPipelineRenderExtent.Grid => CurrentScale;
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => Pixels(width: width, height: height, scale: Ceiling);

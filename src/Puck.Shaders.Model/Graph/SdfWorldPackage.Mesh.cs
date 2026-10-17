@@ -61,4 +61,33 @@ public static partial class SdfWorldPackage {
     public const int MeshShadowCascadeRows = 4;
     /// <summary>The texels along each side of one shadow cascade's target.</summary>
     public const int MeshShadowResolution = 2048;
+
+    private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
+    private static readonly string[] ShadowStorages = [
+        Parts.ShadowNearTarget, Parts.ShadowNearDepth, Parts.ShadowFarTarget, Parts.ShadowFarDepth, Parts.ShadowSecondTarget, Parts.ShadowSecondDepth,
+    ];
+
+    /// <summary>Returns a fragment without the shadow cascades, for a view whose quality skips shadows: no cascade pass, no
+    /// cascade target or depth, and a surface pass that reads none, so the view allocates none of the cascades' targets
+    /// and its surface pass binds the tables' filler in their place.</summary>
+    /// <param name="fragment">The fragment, any of the package's.</param>
+    /// <returns>The fragment without the cascades.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
+    public static RenderGraphPackageFragment WithoutShadows(RenderGraphPackageFragment fragment) {
+        ArgumentNullException.ThrowIfNull(argument: fragment);
+
+        return fragment with {
+            Passes = [.. fragment.Passes.Where(predicate: static pass => !ShadowParts.Contains(value: pass.Name)).Select(selector: static pass => {
+                var kept = Enumerable.Range(start: 0, count: pass.Inputs.Count).Where(predicate: index => !ShadowStorages.Contains(value: pass.Inputs[index].Name)).ToArray();
+
+                return ((kept.Length == pass.Inputs.Count)
+                    ? pass
+                    : (pass with {
+                        InputAccesses = [.. kept.Select(selector: index => pass.InputAccesses[index])],
+                        Inputs = [.. kept.Select(selector: index => pass.Inputs[index])],
+                    }));
+            })],
+            Resources = [.. fragment.Resources.Where(predicate: static resource => !ShadowStorages.Contains(value: resource.Name))],
+        };
+    }
 }

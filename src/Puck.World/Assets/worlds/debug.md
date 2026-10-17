@@ -41,7 +41,14 @@ whichever World it attached to first.
 The far frame stands on the line the spawn camera looks along through the debug
 frame, so the window from the spawn holds the far frame's window back onto the
 debug world, two levels deep (`world.nesting` lists `session$24`, then
-`session$24$24` and `session$24$25`, then the third level). The
+`session$24$24` and `session$24$25`, then the third level). The debug world
+and the garden are each resident once, however many windows show them: the
+debug world seen through the far frame is a view of the World's own residency
+(`world.nesting` says `via world`), and every window onto the garden a view of
+the garden's scene (`via endpoint:6~global6~garden`), so `world.counters` shows
+the two residencies `world` and `routed$6~global6~garden`. Each window renders
+at the power-of-two share of the screen its glass covers, as clear glass
+sampled linearly (the frames author `filter: linear`), without shadows. The
 axis lines, the reference cubes and the test room stand behind the spawn on +Z
 and -X, out of the frames' way.
 
@@ -69,9 +76,12 @@ turning round and walking back into the counterpart's front fires the way back.
 
 The crossings below work in every boot shape, headless included; a presenting
 boot draws each of them at the display rate on the RTX 2060, Direct3D 12 and
-Vulkan alike, with the chase camera on (`view.override layout play`). The frame
-a crossing lands on still stalls while every nesting level is planned again
-from the other side ([open item](../../../../docs/plans/open-items.md#rendering)).
+Vulkan alike, with the chase camera on (`view.override layout play`), and a
+body that crosses keeps its baked mesh in the world it returns to. A crossing
+still costs a frame 70 to 140 ms on the RTX 2060 (the first crossing of a boot
+the most), and a window's growth across an octave on the approach 15 to 35 ms,
+while the render graph rebuilds the views whose reads or extent moved ([open
+item](../../../../docs/plans/open-items.md#rendering)).
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
   `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you

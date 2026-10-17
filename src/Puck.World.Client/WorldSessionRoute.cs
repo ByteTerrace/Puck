@@ -1,14 +1,15 @@
 namespace Puck.World.Client;
 
 /// <summary>
-/// A window session screen's route into its destination's endpoint scene. While the session is delivered everything its
+/// A session screen's route into its destination's endpoint scene. While the session is delivered everything its
 /// destination holds (a live <c>Replica</c> admission under an observer disclosure that redacts nothing), the window joins
 /// the scene the presentation renders that world with (<see cref="WorldFramePresenter.AttachWindow"/>) and renders from
 /// the one residency every seat and every such window presenting that world shares, over the endpoint's mirror. Any other
 /// admission holds no window, and the screen renders its own disclosed session instead: disclosure is never traded for a
-/// saving. The session stays the gate: once it no longer discloses everything, the window leaves the scene.
+/// saving. The session stays the gate: once it no longer discloses everything, the window leaves the scene. A session of
+/// the presenting world itself renders as a view of that world's own frame instead and holds no route.
 /// </summary>
-public sealed class WorldSessionWindowRoute : IDisposable {
+public sealed class WorldSessionRoute : IDisposable {
     /// <summary>Gets the window the route holds in its endpoint's scene, or <see langword="null"/> while the screen renders
     /// its own session.</summary>
     public WorldRoutedWindow? Window { get; private set; }

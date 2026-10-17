@@ -40,9 +40,13 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
-    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats.
+    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats, the glass flag in its
+    // fourth.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
     private const int ScreenSamplerOffset = (ScreenBoundOffset + sizeof(float));
+    // The seventh row's fourth float: whether the face is a display drawn through the screen glass (a mapping with a warp)
+    // rather than an opening. KEEP IN SYNC with ScreenMappingData.state.w in frame/sdf-screen-mapping.hlsli.
+    private const int ScreenGlassOffset = (ScreenBoundOffset + (sizeof(float) * 3));
     private const int ScreenStateFloats = 4;
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.

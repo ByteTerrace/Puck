@@ -119,6 +119,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.Bake) {
             m_bakeSlots = new BakeSlot[slots];
             for (var slot = 0; (slot < slots); slot++) { m_bakeSlots[slot] = new BakeSlot(); }
+            owner.ReadBakes(reader: this, reads: true);
         }
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
@@ -210,8 +211,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_disposed = true;
         m_pick?.Dispose();
+        if (m_bakeSlots.Length > 0) { m_owner.ReadBakes(reader: this, reads: false); }
         foreach (var slot in m_bakeSlots) {
-            m_view.Residency.MeshPathBake.Abandon(batch: slot.Batch);
+            slot.Batch?.Bake?.Abandon(batch: slot.Batch);
             slot.Buffer?.Dispose();
         }
 
@@ -347,7 +349,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
                 // A batch recorded but never copied answers nothing; its groups dispatch their lattices again.
                 if (target.Record || (target.Fence is not null)) {
-                    residency.MeshPathBake.Abandon(batch: target.Batch);
+                    target.Batch?.Bake?.Abandon(batch: target.Batch);
                     target.Fence = null;
                 }
                 target.Record = true;
@@ -834,8 +836,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return batch.Claim(instance: m_context.Instance);
     }
-    // Reads every bake slot whose submission completed and answers the bake with its samples.
-    private void PollBake() {
+    // Reads every bake slot whose submission completed and answers the bake that dispatched its batch with its samples.
+    internal void PollBake() {
         foreach (var slot in m_bakeSlots) {
             if ((slot.Fence is not { } fence) || !fence.IsSignaled) { continue; }
             slot.Fence = null;
@@ -847,7 +849,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             if (slot.Bytes.Length < bytes) { slot.Bytes = new byte[bytes]; }
             slot.Buffer!.Read(destination: slot.Bytes.AsSpan(length: bytes, start: 0));
             slot.Batch = null;
-            m_view.Residency.MeshPathBake.Complete(batch: batch, samples: slot.Bytes.AsSpan(length: bytes, start: 0));
+            batch.Bake?.Complete(batch: batch, samples: slot.Bytes.AsSpan(length: bytes, start: 0));
         }
     }
 

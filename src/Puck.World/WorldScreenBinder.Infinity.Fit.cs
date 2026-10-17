@@ -27,6 +27,18 @@ internal sealed partial class WorldScreenBinder {
             FitInfinity(root, null, name, presenter, views, index, sky, camera.Row.RenderWidth, camera.Row.RenderHeight);
         }
         EndInfinityConsumers(target: presenter);
+        // The boot world's sessions filmed into its own frame, and the cameras of the levels they show.
+        BeginInfinityConsumers(target: m_homeFilms);
+        foreach (var feed in m_feeds) {
+            if (!feed.Home || !m_homeViewIndices.TryGetValue(key: feed.RegistrationName, value: out var index) || (((uint)index) >= ((uint)views.Count))) { continue; }
+            var nested = InfinityRootOf(feed.Mirror, feed.InstanceName, feed.Depth, feed.RegistrationName);
+
+            FitInfinity(nested, null, feed.RegistrationName, m_homeFilms, views, index, sky,
+                ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)),
+                ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)));
+            FitNestedCameraSkies(feed.Nested, nested, null, m_homeFilms, views, sky);
+        }
+        EndInfinityConsumers(target: m_homeFilms);
     }
     private void FitSessionSky(SessionFeed feed, List<SdfViewSnapshot> views, SdfSky sky, uint width, uint height) {
         BeginInfinityConsumers(target: feed);
@@ -52,7 +64,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
         foreach (var feed in m_feeds) {
-            if ((feed.WindowRoute.Window is not { } window) || !ReferenceEquals(objA: window.Scene, objB: scene)
+            if ((feed.Route.Window is not { } window) || !ReferenceEquals(objA: window.Scene, objB: scene)
                 || (((uint)window.Index) >= ((uint)views.Count))) { continue; }
             var nested = InfinityRootOf(feed.Mirror, feed.InstanceName, feed.Depth, feed.RegistrationName);
 

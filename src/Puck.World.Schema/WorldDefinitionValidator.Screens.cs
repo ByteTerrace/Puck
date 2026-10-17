@@ -864,6 +864,11 @@ public static partial class WorldDefinitionValidator {
             if (portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: not null }) {
                 errors.Add(item: $"{path}.session.projection 'window' requires THIS SAME face's portal facet to author arrival 'mapped' with a counterpart — a window has no destination-space aperture to fit a frustum against without a mapped border pair.");
             }
+
+            // A window renders at the extent its glass covers on screen, so a pixel resolution would be ignored.
+            if (session.Resolution is not null) {
+                errors.Add(item: $"{path}.session.resolution must be absent under projection 'window': a window renders at the extent its glass covers on screen.");
+            }
         }
 
         if (

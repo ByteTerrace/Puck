@@ -9249,7 +9249,7 @@
                     "title": "WorldScreenProjection"
                   },
                   "resolution": {
-                    "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                    "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
                     "default": null,
                     "title": "WorldScreenResolution"
                   },
@@ -9552,7 +9552,7 @@
                           "title": "WorldScreenProjection"
                         },
                         "resolution": {
-                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
                         },
@@ -23518,7 +23518,7 @@
                           "title": "WorldScreenProjection"
                         },
                         "resolution": {
-                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+                          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
                         },

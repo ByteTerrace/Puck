@@ -131,7 +131,8 @@ public abstract record WorldScreenSource {
     /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
     /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
     /// <c>DefaultSessionHeight</c>). Each axis is validated within
-    /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
+    /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Refused under <see cref="WorldScreenProjection.Window"/>,
+    /// which renders at the extent its glass covers on screen. Omitted from the wire when null.</param>
     /// <param name="Fallback">The colour the face shows, as <c>#RRGGBB</c>, when the screen is as many screens deep as
     /// the presentation nests (<c>views.nestingDepth</c>), so two portals facing each other end on it; or
     /// <see langword="null"/> for black. Omitted from the wire when null.</param>

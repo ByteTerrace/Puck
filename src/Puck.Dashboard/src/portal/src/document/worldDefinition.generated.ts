@@ -10571,7 +10571,7 @@ export type WorldScreenSourceSession = {
    */
   projection?: WorldScreenProjection;
   /**
-   * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
+   * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
   /**

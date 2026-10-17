@@ -34,6 +34,9 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 /// <param name="Lattices">The lattices, in dispatch order.</param>
 /// <param name="Tickets">The group each lattice answers.</param>
 public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Tickets) {
+    /// <summary>Gets the bake whose groups the batch's lattices answer, which its readback completes or abandons whatever
+    /// residency the pass that dispatched it records by then; <see langword="null"/> for a batch no bake took.</summary>
+    public SdfMeshPathBake? Bake { get; internal init; }
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples {
         get {
@@ -119,9 +122,18 @@ public sealed class SdfMeshPathBake {
     // along each axis (SdfSampledLattice.Refine).
     private const float FineCell = 0.005f;
     private const int MaxRefinement = 4;
+    // The reciprocal, in metres, of the grid a dynamic group's bound center is rounded to in its key: a centimetre.
+    private const float KeyResolution = 100f;
+
+    /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
+    public string Residency { get; init; } = string.Empty;
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
+    // Every group the bake has meshed, by whether it is dynamic and the geometry its key holds, which a later program's
+    // group of the same geometry takes rather than baking again; dropped whole past MaxBakedGroups.
+    private readonly Dictionary<(bool Dynamic, int Key), Group> m_baked = [];
+    private const int MaxBakedGroups = 4096;
     private readonly List<SdfMeshDraw> m_draws = [];
     private readonly Stopwatch m_clock = new();
 
@@ -256,7 +268,7 @@ public sealed class SdfMeshPathBake {
                     tickets.Add(item: group);
                 }
                 if (lattices.Count > 0) {
-                    m_frameBatch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]);
+                    m_frameBatch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this };
                 }
             }
             batch = m_frameBatch;
@@ -406,7 +418,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -414,6 +426,11 @@ public sealed class SdfMeshPathBake {
     // lattice over its bounding sphere. The meshes of the previous program keep drawing until their group's new mesh lands.
     private void Restart(SdfFrame frame) {
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
+
+        if (m_baked.Count > MaxBakedGroups) { m_baked.Clear(); }
+        foreach (var group in m_groups) {
+            if (group.Done && (group.Mesh is not null)) { m_baked[(group.Dynamic, group.Key)] = group; }
+        }
 
         m_program = frame.Program;
         m_groups.Clear();
@@ -430,8 +447,15 @@ public sealed class SdfMeshPathBake {
             if (!instance.Active || instance.CameraHidden) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
-            // What the instance contributes to its group's geometry: its bound and every instruction it owns.
-            var key = HashCode.Combine(value1: instance.Center, value2: instance.Radius, value3: (instance.End - instance.First));
+            // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
+            // own frame, its center is that offset turned back by the slot's orientation in this frame.
+            var orientation = ((instance.IsDynamic && (instance.Slot < frame.DynamicTransforms.Count)) ? frame.DynamicTransforms[instance.Slot].Orientation : default);
+            var center = (instance.IsDynamic
+                ? Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation)))
+                : instance.Center);
+            // What the instance contributes to its group's geometry: its bound in its own frame, rounded so a body's pose at
+            // the rebuild does not move it, and every instruction it owns.
+            var key = HashCode.Combine(value1: (instance.IsDynamic ? Vector3.Round(vector: (center * KeyResolution)) : center), value2: instance.Radius, value3: (instance.End - instance.First));
 
             var owned = new HashSet<int>();
 
@@ -441,11 +465,6 @@ public sealed class SdfMeshPathBake {
             }
 
             if (instance.IsDynamic) {
-                // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin
-                // in its own frame, its center is that offset turned back by the slot's orientation in this frame.
-                var orientation = ((instance.Slot < frame.DynamicTransforms.Count) ? frame.DynamicTransforms[instance.Slot].Orientation : default);
-                var center = Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation)));
-
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out var group)) {
                     group = new Group(selector: instance.Slot, dynamic: true) {
                         Low = (center - new Vector3(value: radius)),
@@ -492,6 +511,14 @@ public sealed class SdfMeshPathBake {
                 m_groups[index] = old;
                 continue;
             }
+            // Geometry this bake has meshed before, at another index or slot or in an earlier program (a body that left the
+            // world and came back), takes that mesh: a static group's is in world space and a dynamic group's in its slot's
+            // frame, which its key holds.
+            if (m_baked.TryGetValue(key: (group.Dynamic, group.Key), value: out var baked)) {
+                group.Mesh = baked.Mesh;
+                group.Done = true;
+                continue;
+            }
 
             // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
             var center = ((group.Low + group.High) * 0.5f);
@@ -515,7 +542,7 @@ public sealed class SdfMeshPathBake {
             m_refinedCells = 0;
             m_reported = false;
             m_clock.Restart();
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
         }
         // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
         // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
@@ -869,7 +896,7 @@ public sealed class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.

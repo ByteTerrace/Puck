@@ -150,6 +150,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             : EmptyScreenSurfaceTransforms);
         m_width = width;
         Name = name;
+        MeshPathBake = new SdfMeshPathBake { Residency = name };
     }
 
     /// <summary>Gets the residency's name.</summary>
@@ -668,7 +669,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
-    public SdfMeshPathBake MeshPathBake { get; } = new();
+    public SdfMeshPathBake MeshPathBake { get; }
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
     public SdfMeshIrradiance MeshIrradiance { get; } = new();

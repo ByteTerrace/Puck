@@ -997,13 +997,15 @@ same endpoint share one residency, with a view each. A window attached to that w
 (`WorldFramePresenter.AttachWindow`) is one more view of the same frame and residency, after the
 seats' views, at its own quality; the scene stays while a seat is presented there or a window is
 attached. The presenter latches membership each frame: attachments enter at the next latch, and
-disposal reserves the window's slot through the current frame. A portal window whose session
-discloses everything joins its destination's scene this way (`WorldSessionWindowRoute`), so every
-seat and every such window presenting one endpoint share exactly one residency, and its GPU node
+disposal reserves the window's slot through the current frame. A session screen whose session
+discloses everything joins its destination's scene this way (`WorldSessionRoute`), so every
+seat and every such session presenting one endpoint share exactly one residency, and its GPU node
 (`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
 tables hold by memory. Any other session screen renders a residency of its own from its own
-observation of the destination. The rule holds at every depth: a destination shown at two depths, or
-by a window and a seat, shares its endpoint's one residency while each session discloses everything.
+observation of the destination. A session of the boot world joins no scene: it renders as a view of the
+World's own residency, filmed after the World's camera views, so the boot world is resident once however
+many windows show it. The rule holds at every depth: a destination shown at two depths, or by a window and
+a seat, shares its one residency while each session discloses everything.
 Each view of a shared residency binds the screens of the level it renders, so one world seen at two
 depths shows each level's own images. Every level is an instance of its own, with its own temporal
 history and its own resets, so no level's history carries another level's frames. A seat presented

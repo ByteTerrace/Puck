@@ -236,6 +236,16 @@ owns the explanation.
   at the samples `SdfDualContouring` reads a normal at
   (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
   corners, so no other sample needs one.
+- **A batch answers the bake that took it.** `SdfMeshBakeBatch.Bake` names it, and
+  `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame, so a
+  view that leaves the frame or follows another residency never strands a bake.
+  Groups are keyed by geometry (a dynamic group by its bound in its slot's frame)
+  and every meshed group stays kept by its key, so a rebuild or a returning body
+  takes its mesh; only new geometry bakes.
+- **A view without shadows holds no cascade.** A view whose quality skips shadows
+  (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
+  the cascades' passes and their 252 MB of targets go, and the surface pass binds
+  the filler.
 - **Shadow handoffs are pass values.** The outgoing light fades from its slot's
   cascade by the handoff's weight; the incoming light lights unshadowed until
   it holds the slot. No handoff plans or allocates anything.

@@ -689,13 +689,22 @@ frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`
 and a frame where a group's mesh lands writes the records and that mesh alone.
 Every mesh is written again only when the arena outgrows its draw reserve or
 packs out its holes, the mesh atlases change, or the region grows, to twice its
-need. The bake keeps a group whose instructions a program rebuild left
-unchanged, so only an edited group bakes again, and it reports its groups,
+need. The bake keys each group by its geometry: a static group by its bound and
+instructions, a dynamic group by its bound in its slot's own frame, rounded to a
+centimetre, so the body's pose at a rebuild does not move the key. A program
+rebuild keeps every group whose key held, and every group the bake has meshed
+stays kept by its key, so geometry that comes back (a body that left the world
+and returned, an instance at another index) takes its mesh rather than baking
+again. Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, triangles, vertices and wall time on stderr when it
-finishes. It counts a batch as work when a bake pass records it: a frame that
-takes a batch no pass records, as while the boot's pipelines build, dispatches
-nothing, and its lattices go to the next frame. A recorded batch whose readback
-never arrives, as when the view's graph rebuilds mid-bake, is dispatched again, and the line reports those samples as
+starts and finishes (`[sdf.mesh-bake] start residency=…`, `done residency=…`).
+It counts a batch as work when a bake pass records it: a frame that takes a
+batch no pass records, as while the boot's pipelines build, dispatches nothing,
+and its lattices go to the next frame. A batch remembers the bake that took it,
+and the package polls every bake pass's readbacks at the start of each frame,
+so a batch dispatched by a view that then leaves the frame, or follows another
+residency, still answers its own bake. A recorded batch whose readback never
+arrives, as when the view's graph rebuilds mid-bake, is dispatched again, and the line reports those samples as
 `discarded`, so `samples` less `discarded` is the same on every run of one
 build. Until a group's first mesh lands, the group draws nothing.
 
@@ -837,7 +846,11 @@ orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other
 while still overlapping CPU production with GPU execution. Only the view's
 color output is kept per frame slot, so a consumer can read the previous
-frame's image while the next one renders.
+frame's image while the next one renders. The three cascades' targets are 2048
+texels a side and take 252 MB together, so a view whose quality skips shadows
+(a portal window, a camera view) runs its fragment without them
+(`SdfWorldPackage.WithoutShadows`): no cascade pass, no cascade target, and a
+surface pass that binds the tables' filler in their place.
 
 ## Reading per-pass GPU cost
 
