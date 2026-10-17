@@ -265,7 +265,11 @@ renders a held frame instead (a converging capture's) hands the frame to its
 source (`ISdfFrameSource.PresentHeldFrame`), so the view keeps its footprint and
 stays scheduled. A residency bakes its meshes in whichever of its views the
 graph records first, so a residency whose first view is a level out of view
-still bakes for the views that show. Worlds whose windows show each other light
+still bakes for the views that show. A window whose glass is out of sight keeps
+rendering at a sixteenth of its consumer's extent while its world still bakes
+(`WorldPortalVisibility.BakingShare`), since nothing else would record one of
+that world's views, so the garden behind the debug world's spawn camera bakes
+in the 1.3 s it takes in view. Worlds whose windows show each other light
 each other through ordinary frame feedback
 ([screen emission](lighting-and-shading.md#screen-emission)); no residency
 holds a frame for it.

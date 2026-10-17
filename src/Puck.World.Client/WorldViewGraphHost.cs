@@ -1537,6 +1537,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     }));
 
                     break;
+                // A window out of its consumer's sight whose world still bakes renders at the least share, since a world
+                // bakes only in frames that render one of its views: its world then bakes before the glass comes into view.
+                case PortalSight.Unseen when ViewScenes!.Bakes(view: footprint.Producer):
+                    m_footprints.Add(item: (footprint with {
+                        Height = WorldPortalVisibility.BakingShare,
+                        Width = WorldPortalVisibility.BakingShare,
+                    }));
+
+                    break;
+                case PortalSight.Unseen:
                 case PortalSight.Hidden:
                     break;
             }
@@ -1573,7 +1583,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     camera: in camera,
                     glass: glass!
                 )) {
-                    return PortalSight.Hidden;
+                    return PortalSight.Unseen;
                 }
 
                 coverage = WorldPortalVisibility.Coverage(
@@ -1592,5 +1602,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         Unknown = 0,
         Hidden = 1,
         Seen = 2,
+        // The consumer's world shows the glass, out of its camera's sight.
+        Unseen = 3,
     }
 }

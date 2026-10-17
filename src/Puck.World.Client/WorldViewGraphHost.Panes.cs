@@ -36,6 +36,11 @@ public interface IWorldViewScenes {
     /// <param name="glass">The screen row the session shows on, when this returns <see cref="WorldPortalGlass.Found"/>.</param>
     /// <returns>Whether the producer is a session the consumer's world shows, and where.</returns>
     WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass);
+    /// <summary>Returns whether the world a session view renders still bakes its meshes, which a view of that world
+    /// dispatches only in a frame that renders the view.</summary>
+    /// <param name="view">The session view's instance name.</param>
+    /// <returns><see langword="true"/> when the view's world has a residency whose bake is pending.</returns>
+    bool Bakes(string view);
 }
 /// <summary>Where a session view stands in the world of an instance that reads it.</summary>
 public enum WorldPortalGlass : byte {

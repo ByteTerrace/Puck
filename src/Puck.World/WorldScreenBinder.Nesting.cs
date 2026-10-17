@@ -570,6 +570,25 @@ internal sealed partial class WorldScreenBinder {
             ? WorldPortalGlass.None
             : WorldPortalGlass.Found);
     }
+    /// <inheritdoc/>
+    /// <remarks>Reads the residency the session already renders, the World's own, its endpoint scene's or its own, and
+    /// creates none.</remarks>
+    public bool Bakes(string view) {
+        if (!m_feedsByName.TryGetValue(
+            key: view,
+            value: out var feed
+        )) {
+            return false;
+        }
+
+        var residency = (feed.Home
+            ? ViewHost
+            : ((feed.Route.Window is { } window)
+                ? m_routedResidencies.GetValueOrDefault(key: window.Scene)
+                : m_viewResidencies.GetValueOrDefault(key: feed.RegistrationName)?.Residency));
+
+        return (residency?.MeshPathBake.Pending ?? false);
+    }
 
     // What one level's screens present: the instance whose screen sessions they show, the world their glass stands in,
     // and the eye a window among them fits to, with the feed or routed scene the level belongs to.

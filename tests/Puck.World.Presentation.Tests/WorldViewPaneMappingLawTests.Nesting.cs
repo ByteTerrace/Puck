@@ -82,15 +82,18 @@ public sealed partial class WorldViewPaneMappingLawTests {
                 : screens.Mappings)
         );
     }
-    // THE LAW: a session whose glass its consumer does not see renders nothing that frame. The boot world's session is
-    // read by the world's view through the screen's glass; a scene placing that glass behind the view's camera keeps the
-    // session out of the schedule, while one placing it before the camera schedules it.
-    [InlineData(true)]
-    [InlineData(false)]
+    // THE LAW: a session whose glass its consumer does not see renders nothing that frame, unless its world still bakes.
+    // The boot world's session is read by the world's view through the screen's glass; a scene placing that glass behind
+    // the view's camera keeps the session out of the schedule, while one placing it before the camera schedules it. A
+    // glass behind the camera whose world still bakes keeps its session rendering at the baking share, since its world
+    // bakes only in frames that render one of its views; a session in a world no view shows renders nothing either way.
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
     [Theory]
-    public void APortalFaceNoConsumerSeesSchedulesNothing(bool facing) {
+    public void APortalFaceNoConsumerSeesSchedulesNothingUnlessItsWorldBakes(bool facing, bool bakes) {
         _ = ShowTwoWorlds();
-        m_host.ViewScenes = new GlassScenes(Glass: (facing
+        m_host.ViewScenes = new GlassScenes(Bakes: bakes, Glass: (facing
             ? FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond"))
             : (FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")) with {
                 Origin = new DocumentVector3(value: new System.Numerics.Vector3(x: 0f, y: 1f, z: 9f)),
@@ -101,7 +104,15 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
         Assert.Equal(
             actual: (RendersOf(instance: BootSession) != 0),
-            expected: facing
+            expected: (facing || bakes)
+        );
+        Assert.Equal(
+            actual: m_host.Footprints.Any(predicate: static footprint => (
+                (footprint.Producer == BootSession) &&
+                (footprint.Width == WorldPortalVisibility.BakingShare) &&
+                (footprint.Height == WorldPortalVisibility.BakingShare)
+            )),
+            expected: (!facing && bakes)
         );
         Assert.Equal(
             actual: RendersOf(instance: RoutedSession),
@@ -136,10 +147,12 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return WorldPortalGlass.None;
         }
+        public bool Bakes(string view) => false;
     }
     // A scene whose boot session stands on a given glass in the boot world, and whose routed session stands in a world
-    // no view shows.
-    private sealed record GlassScenes(WorldScreen Glass) : IWorldViewScenes {
+    // no view shows; every session's world bakes, or none does.
+    private sealed record GlassScenes(WorldScreen Glass, bool Bakes) : IWorldViewScenes {
+        bool IWorldViewScenes.Bakes(string view) => Bakes;
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = default;
 

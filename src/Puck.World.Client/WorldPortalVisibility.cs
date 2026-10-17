@@ -78,6 +78,10 @@ public static class WorldPortalVisibility {
 
         return (outside == 0);
     }
+    /// <summary>The fraction of its consumer's image, on each axis, a window out of sight renders at while its world
+    /// still bakes: the least that keeps it rendering, since a world bakes only in frames that render one of its
+    /// views.</summary>
+    public const double BakingShare = 0.0625;
     /// <summary>The share of its held octave a glass's coverage must fall to before the octave halves: well below the half
     /// the next octave down holds, so a glass at an octave's edge does not change its session's extent from frame to
     /// frame.</summary>
