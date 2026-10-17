@@ -26,7 +26,12 @@ and each lease retires exactly once.
   `ShaderPipelineRenderNode.Retirement.cs`) is disposed at the fence of the
   submission made `RetirementLag` (2) submissions after it stopped being
   published. A replaced graph is retired once the queue finishes the node's
-  latest submission, never through a device drain.
+  latest submission, never through a device drain. An instance a
+  reconfiguration retires, and the graph of an instance nothing names, wait for
+  the latest submission of the first frame rendered after they left, which the
+  frame's last submitter holds a notification for
+  (`RenderGraphRuntime.Retiring.cs`); an unnamed instance named again first
+  keeps its graph.
 - At reconfiguration, a producer removed while a kept consumer still reads it
   is held whole (`RetiredProducer`, counted in `RetiredProducers`) until the
   consumer's replacement installs, and `ShaderPipelineRenderNode.HoldBinding`

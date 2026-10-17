@@ -990,11 +990,16 @@ instance name: `world` is the first view's node, whose passes are
 `sdf.world$mask` through `sdf.world$composite`, `main` the scene's node, whose
 passes are the place and post passes, `main$overlay` the overlay's, and each
 pane its own node. Each graph instance's node also reports `owned-bytes`, the
-bytes of every GPU resource it owns now. An unnamed instance releases its graph;
-sources, pending capture targets and the instances a pending capture's output
-stands for keep theirs. An image a reader still leases is disposed when its last
-lease retires; the drain before a release retires every finished submission's
-leases, so a released instance's images go with it. It counts
+bytes of every GPU resource it owns now. An unnamed instance leaves at once, its
+readers binding a stand-in, and releases its graph once a submission made after
+it left has completed, which on the one queue follows every submission that read
+it; one named again before then renders with the graph it kept. Sources, pending
+capture targets and the instances a pending capture's output stands for keep
+theirs. A reconfiguration retires the instances it drops the same way, never
+through a device drain. An image a reader still leases is disposed when its last
+lease retires. In a World the runtime destroys freed images, and a retired
+graph's buffers and regions, on a worker thread (`GpuImageLeases(true)`,
+`GpuImageLeases.DisposeLater`), so retiring a graph costs the frame nothing. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.
@@ -2184,11 +2189,16 @@ the slot showing it and a selection made before that frame are built once,
 together.
 Every frame produced meanwhile presents the installed graph, paused or
 running, and a step requested on a paused instance waits for the candidate it
-follows. When the
+follows. The build also creates the candidate's images, its node-owned storage
+buffers and each pass's ring of pass blocks, since creating device objects is
+free-threaded and creating a view's targets on the frame thread cost a frame 10
+to 40 ms. When the
 build finishes, the frame thread allocates the rest of what the candidate will
-use: its images and buffers, each geometry pass's vertex and index buffer, each
+use: each geometry pass's vertex and index buffer, each
 graphics pass's framebuffer over each frame slot's attachments, and each frame
-slot's descriptor pool, set, sampler and command pools. A pass that binds no
+slot's descriptor pool, set, sampler and command pools. A storage whose history
+the install carries over keeps its own images, and a build nothing installs hands
+what it created to the node's disposal. A pass that binds no
 descriptor, such as a geometry pass with no input, has no descriptor pool, set
 or sampler and binds none. The candidate installs at that frame boundary. If a build or an allocation fails, the node refuses the candidate
 and records the failure as `LastSwapError`. It disposes each object the

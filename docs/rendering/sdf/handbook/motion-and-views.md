@@ -250,7 +250,8 @@ window session on every frame). A window's footprint is the share of its
 consumer's image its glass spans (`WorldPortalVisibility.Coverage`), held to
 whole power-of-two octaves that grow at once and halve only once the glass
 falls below two fifths of its octave (`WorldPortalVisibility.Octave`), since
-every extent change rebuilds the view's graph; a window authors no
+every extent change rebuilds the view's graph, its targets created off the frame
+thread while the installed graph keeps presenting; a window authors no
 resolution. It draws as clear glass, with none of a display's grille,
 scanlines, bloom or bezel (the mapping row's glass flag, clear for a mapping
 with no warp); between refreshes every consumer reads its

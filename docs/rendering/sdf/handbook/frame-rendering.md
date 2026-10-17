@@ -689,8 +689,12 @@ The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a
 frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`),
 and a frame where a group's mesh lands writes the records and that mesh alone.
+A mesh no draw names any more stays where it lies, so a body that leaves the
+world and returns finds its meshes placed and writes nothing for them; the arena
+packs again only once those words outnumber the named meshes' words and 32 MB
+(`SdfMeshRegionArena.RetainedSlackWords`).
 Every mesh is written again only when the arena outgrows its draw reserve or
-packs out its holes, the mesh atlases change, or the region grows, to twice its
+packs, the mesh atlases change, or the region grows, to twice its
 need. The bake keys each group by its geometry: a static group by its bound and
 instructions, a dynamic group by its bound in its slot's own frame, rounded to a
 centimetre, so the body's pose at a rebuild does not move the key. A program
