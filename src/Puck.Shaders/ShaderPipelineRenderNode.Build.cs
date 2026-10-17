@@ -172,7 +172,7 @@ public sealed partial class ShaderPipelineRenderNode {
             !TryDesiredKey(key: out var desired) ||
             !key.Matches(other: desired)
         ) {
-            built?.Dispose();
+            built?.Discard(later: DisposeLater);
             EnsureBuild();
 
             return;
@@ -279,6 +279,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // Kept apart from EnsureBuild so the build's closure is allocated only when a build starts, never on a polled frame.
     private void StartBuild(BuildKey key) {
         var request = new BuildRequest(
+            // The storages whose history the install carries over keep their own images, so the build makes none for them.
+            Carried: [.. CarriedHistoryOf(extent: (key.Width, key.Height), plan: key.Pipeline!.Plan).Keys],
             Device: m_device,
             DirectX: m_directX,
             Gpu: m_gpu,
@@ -393,7 +395,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
-    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages);
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages, int[] Carried);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -440,6 +442,12 @@ public sealed partial class ShaderPipelineRenderNode {
                     plan: plan,
                     request: request
                 ).ConfigureAwait(continueOnCapturedContext: false);
+                build.CreatePassRegions(cancellationToken: cancellationToken, plan: plan, request: request);
+                build.CreateImages(
+                    cancellationToken: cancellationToken,
+                    plan: plan,
+                    request: request
+                );
 
                 if (request.Key.Preview is { } preview) {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -468,6 +476,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 pass?.Dispose();
             }
 
+            DisposeUntaken(later: static disposable => disposable?.Dispose());
             Preview?.Dispose();
             Preview = null;
             RegionCopy?.Release();
@@ -513,6 +522,162 @@ public sealed partial class ShaderPipelineRenderNode {
             ).Acquire(device: request.Device);
             CopyPipeline = (await RegionCopy.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).Compute;
         }
+
+        // Creates every owned image storage's images at the build's extent, so the install takes them rather than
+        // creating them on the frame thread, where creating a view's targets cost a frame 10 to 40 ms. Object creation is
+        // free-threaded on both backends, and the node's wrapped services count it interlocked.
+        private void CreateImages(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+            m_images = new IGpuImage[]?[plan.Storages.Count];
+            m_buffers = new IGpuBuffer[]?[plan.Storages.Count];
+
+            foreach (var planned in plan.Storages) {
+                if (planned.Declaration.IsExternal || request.Carried.Contains(value: planned.Index)) {
+                    continue;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // A node-owned storage buffer; a package that owns a buffer lends its own at the install.
+                if (planned.Declaration.Kind == ShaderPipelineResourceKind.Buffer) {
+                    var sizeBytes = planned.Declaration.ResolveSizeBytes(counts: request.Key.Counts);
+
+                    if (
+                        (sizeBytes == 0UL) ||
+                        request.Packages.OwnsBuffer(plan: plan, storage: planned)
+                    ) {
+                        continue;
+                    }
+
+                    var buffers = new IGpuBuffer[InstancesOf(
+                        inFlight: request.InFlight,
+                        storage: planned
+                    )];
+                    var usage = BufferUsageOf(
+                        plan: plan,
+                        storage: planned
+                    );
+
+                    m_buffers[planned.Index] = buffers;
+
+                    for (var i = 0; (i < buffers.Length); i++) {
+                        buffers[i] = request.Gpu.BufferFactory.CreateDeviceLocal(
+                            name: new GpuObjectName(
+                                index: i,
+                                owner: request.Instance,
+                                part: planned.Declaration.Name
+                            ),
+                            sizeBytes: sizeBytes,
+                            usage: usage
+                        );
+                    }
+
+                    continue;
+                }
+
+                var images = new IGpuImage[InstancesOf(
+                    inFlight: request.InFlight,
+                    storage: planned
+                )];
+
+                m_images[planned.Index] = images;
+                CreateStorageImages(
+                    counts: request.Key.Counts,
+                    frame: (request.Key.Width, request.Key.Height),
+                    gpu: request.Gpu,
+                    images: images,
+                    owner: request.Instance,
+                    plan: plan,
+                    planned: planned
+                );
+            }
+        }
+        // Creates every pass's ring of pass blocks, which the install takes as it allocates the pass's slot objects.
+        private void CreatePassRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+            m_passRegions = new GpuRegion?[plan.Passes.Count];
+
+            foreach (var planned in plan.Passes) {
+                cancellationToken.ThrowIfCancellationRequested();
+                m_passRegions[planned.Index] = PassRegionOf(
+                    device: request.Device,
+                    gpu: request.Gpu,
+                    inFlight: request.InFlight,
+                    owner: request.Instance,
+                    parameters: planned.Parameters,
+                    planned: planned.Name
+                );
+            }
+        }
+        // Takes a pass's ring of pass blocks, or null when the build made none for it.
+        public GpuRegion? TakePassRegion(int pass) {
+            if (pass >= m_passRegions.Length) {
+                return null;
+            }
+
+            var region = m_passRegions[pass];
+
+            m_passRegions[pass] = null;
+
+            return region;
+        }
+
+        private GpuRegion?[] m_passRegions = [];
+        private IGpuBuffer[]?[] m_buffers = [];
+
+        // Takes a storage's buffers, or null when the build made none for it.
+        public IGpuBuffer[]? TakeBuffers(int storage) {
+            if (storage >= m_buffers.Length) {
+                return null;
+            }
+
+            var buffers = m_buffers[storage];
+
+            m_buffers[storage] = null;
+
+            return buffers;
+        }
+
+        // Takes a storage's images, or null when the build made none for it.
+        public IGpuImage[]? TakeImages(int storage) {
+            if (storage >= m_images.Length) {
+                return null;
+            }
+
+            var images = m_images[storage];
+
+            m_images[storage] = null;
+
+            return images;
+        }
+        // Disposes a build nothing installs, handing its pass regions to the node's disposal (images go through the
+        // image table either way): none was ever submitted, so a discarded candidate costs the frame thread only its
+        // pipelines' leases.
+        public void Discard(Action<IDisposable?> later) {
+            DisposeUntaken(later: later);
+            Dispose();
+        }
+        // Disposes the images and pass regions the install did not take: a storage whose history it carried keeps its own.
+        public void DisposeUntaken(Action<IDisposable?> later) {
+            foreach (var images in m_images) {
+                foreach (var image in (images ?? [])) {
+                    image?.Dispose();
+                }
+            }
+            foreach (var region in m_passRegions) {
+                later(obj: region);
+            }
+            foreach (var buffers in m_buffers) {
+                foreach (var buffer in (buffers ?? [])) {
+                    later(obj: buffer);
+                }
+            }
+
+            m_buffers = [];
+
+            m_images = [];
+            m_passRegions = [];
+        }
+
+        private IGpuImage[]?[] m_images = [];
 
         // Takes the build's lease: the node's own when it holds none, and otherwise released, since both share the one
         // pipeline the device's cache keeps.

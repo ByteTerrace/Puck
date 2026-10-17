@@ -49,11 +49,17 @@ public sealed partial class ShaderPipelineRenderNode {
         value: out image
     );
 
-    /// <summary>Retires the leases of every submission the node made, once the host has drained the device, so every one of
-    /// them has finished.</summary>
-    internal void RetireDrainedLeases() {
+    /// <summary>Retires, without waiting, the leases of every frame slot whose submission has completed, so a node that
+    /// stops submitting (paused, standing or released) lets go of the images its finished submissions read rather than
+    /// holding them until it next reuses the slot.</summary>
+    internal void RetireCompletedLeases() {
         foreach (var slot in m_slots) {
-            slot.Leases.RetireAll();
+            if (
+                (slot.Leases.Count != 0) &&
+                (slot.Fence is null or { IsSignaled: true })
+            ) {
+                slot.Leases.RetireAll();
+            }
         }
     }
 

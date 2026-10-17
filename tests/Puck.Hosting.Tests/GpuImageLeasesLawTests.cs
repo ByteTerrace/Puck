@@ -115,6 +115,49 @@ public sealed class GpuImageLeasesLawTests {
     }
 
     // Creates images with distinct handles and counts their disposals.
+    [Fact]
+    public void ATableThatDisposesInTheBackgroundDisposesWhatItFreesAndWhatItIsHandedBeforeADrainReturns() {
+        var images = new GpuImageLeases(disposesInBackground: true);
+        var factory = new CountingImages();
+        var image = images.Wrap(factory: factory).Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 1, name: default, usage: GpuImageUsage.Sampled, width: 1);
+        var handed = new Disposal(fails: false);
+
+        Assert.True(condition: images.DisposesInBackground);
+        Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var lease));
+        image.Dispose();
+        lease.Retire();
+        images.DisposeLater(disposable: handed);
+        images.DisposeLater(disposable: null);
+        images.DrainDisposals();
+        Assert.Equal(expected: (1, 1), actual: (factory.Disposed, handed.Count));
+
+        // A disposal that throws on the worker reaches the next drain by name, once.
+        images.DisposeLater(disposable: new Disposal(fails: true));
+        Assert.Contains(expectedSubstring: "device object", actualString: Assert.Throws<InvalidOperationException>(testCode: images.DrainDisposals).Message);
+        images.DrainDisposals();
+    }
+    [Fact]
+    public void ATableThatDisposesInPlaceDisposesWhatItIsHandedAtOnce() {
+        var images = new GpuImageLeases();
+        var handed = new Disposal(fails: false);
+
+        images.DisposeLater(disposable: handed);
+        Assert.Equal(expected: 1, actual: handed.Count);
+        Assert.False(condition: images.DisposesInBackground);
+        images.DrainDisposals();
+    }
+
+    private sealed class Disposal(bool fails) : IDisposable {
+        public int Count;
+
+        public void Dispose() {
+            Count++;
+
+            if (fails) {
+                throw new InvalidOperationException(message: "The device refused the release.");
+            }
+        }
+    }
     private sealed class CountingImages : IGpuImageFactory {
         private nint m_next = 0x100;
 

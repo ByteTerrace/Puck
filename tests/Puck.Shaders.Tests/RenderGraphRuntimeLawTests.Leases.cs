@@ -4,7 +4,8 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// Laws of the lease list a package recording holds leases in (<see cref="RenderGraphPackageRecording.Leases"/>): a
-/// lease held by a frame retires only once the instance waits that frame slot's fence again, and every held lease retires
+/// lease held by a frame retires only once that frame slot's submission has completed: when the instance waits the slot's
+/// fence again, or at the start of a frame that finds the fence signaled; every held lease retires
 /// at disposal.
 /// </summary>
 public sealed partial class RenderGraphRuntimeLawTests {
@@ -17,6 +18,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         using (runtime) {
             frames.Settle();
+            // A held queue finishes a submission only when a fence wait completes it, so a lease can retire no sooner.
+            gpu.QueueHeld = true;
 
             var over = recorders.Of(instance: "main");
 

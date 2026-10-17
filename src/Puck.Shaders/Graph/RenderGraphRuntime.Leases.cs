@@ -31,16 +31,6 @@ public sealed partial class RenderGraphRuntime {
     )
         ? lease
         : image.ImageViewHandle);
-    // Retires every lease a finished submission held, once the device has drained: each node's, and the display's, whose
-    // host presented them before this frame began. An image an owner then drops is disposed with the drain's guarantee
-    // rather than a few frames later.
-    private void RetireDrainedLeases() {
-        foreach (var node in m_nodes) {
-            node?.RetireDrainedLeases();
-        }
-
-        RetireShownLeases();
-    }
     // Offers a node a pending capture's source when the node publishes another instance's image: the image its output
     // stands for this frame, under a lease, with the tick its owner rendered it from. A node that serves the capture
     // without rendering copies it first (ShaderPipelineRenderNode.CapturePin.cs); one that renders lets the offer go.

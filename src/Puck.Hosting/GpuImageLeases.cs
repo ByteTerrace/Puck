@@ -25,6 +25,98 @@ public sealed class GpuImageLeases {
     private int m_leasesUsed;
     private int m_used;
 
+    // Objects queued while the table disposes in the background, the one worker draining them while it runs, and the
+    // first failure a disposal met, which DrainDisposals rethrows.
+    private readonly bool m_disposesInBackground;
+    private readonly Lock m_disposalGate = new();
+    private readonly Queue<IDisposable> m_disposals = new();
+    private Task m_disposer = Task.CompletedTask;
+    private bool m_disposing;
+    private Exception? m_disposalFailure;
+
+    /// <summary>Initializes a new instance of the <see cref="GpuImageLeases"/> class.</summary>
+    /// <param name="disposesInBackground">Whether an image freed once its owner dropped it and its last lease retired is
+    /// disposed on a worker thread rather than on the thread that freed it, so destroying a graph's targets costs the
+    /// frame nothing: every submission that read the image has finished by then, and creating and destroying device
+    /// objects is free-threaded on both backends. <see cref="DrainDisposals"/> waits for them.</param>
+    public GpuImageLeases(bool disposesInBackground = false) => m_disposesInBackground = disposesInBackground;
+
+    /// <summary>Gets whether the table disposes what it frees, and what <see cref="DisposeLater"/> is handed, on a worker
+    /// thread.</summary>
+    public bool DisposesInBackground => m_disposesInBackground;
+
+    /// <summary>Disposes a device object no submission can still read, an owner's buffer or region that held no image of
+    /// this table, on the table's worker when it disposes in the background and at once otherwise, so an owner releasing a
+    /// replaced graph frees all of it off the frame thread. <see cref="DrainDisposals"/> waits for it.</summary>
+    /// <param name="disposable">The object, or <see langword="null"/> for none.</param>
+    public void DisposeLater(IDisposable? disposable) {
+        if (disposable is null) {
+            return;
+        }
+        if (!m_disposesInBackground) {
+            disposable.Dispose();
+
+            return;
+        }
+
+        lock (m_disposalGate) {
+            m_disposals.Enqueue(item: disposable);
+
+            if (!m_disposing) {
+                m_disposing = true;
+                m_disposer = Task.Run(action: DisposeQueued);
+            }
+        }
+    }
+    /// <summary>Waits until every object the table freed or was handed has been disposed, then rethrows the first failure
+    /// a background disposal met, if any. A table that disposes on the calling thread has nothing to wait for.</summary>
+    public void DrainDisposals() {
+        while (true) {
+            Task disposer;
+
+            lock (m_disposalGate) {
+                if (!m_disposing) {
+                    var failure = m_disposalFailure;
+
+                    m_disposalFailure = null;
+
+                    if (failure is not null) {
+                        throw new InvalidOperationException(message: "Disposing a freed device object failed.", innerException: failure);
+                    }
+
+                    return;
+                }
+
+                disposer = m_disposer;
+            }
+
+            disposer.Wait();
+        }
+    }
+    // Disposes a freed image, or queues it for the worker.
+    private void DisposeFreed(IGpuImage? image) => DisposeLater(disposable: image);
+    private void DisposeQueued() {
+        while (true) {
+            IDisposable? disposable;
+
+            lock (m_disposalGate) {
+                if (!m_disposals.TryDequeue(result: out disposable)) {
+                    m_disposing = false;
+
+                    return;
+                }
+            }
+
+            try {
+                disposable.Dispose();
+            } catch (Exception error) {
+                lock (m_disposalGate) {
+                    m_disposalFailure ??= error;
+                }
+            }
+        }
+    }
+
     /// <summary>Gets the number of images an owner has dropped that a lease still keeps alive.</summary>
     public int Deferred {
         get {
@@ -191,7 +283,7 @@ public sealed class GpuImageLeases {
                 : null);
         }
 
-        disposed?.Dispose();
+        DisposeFreed(image: disposed);
     }
     // Retires one lease: refuses one already retired, then drops its count on the image and disposes an image its owner
     // dropped once nothing leases it.
@@ -228,7 +320,7 @@ public sealed class GpuImageLeases {
             }
         }
 
-        disposed?.Dispose();
+        DisposeFreed(image: disposed);
     }
     // Forgets an entry under the gate and returns its image for the caller to dispose outside it.
     private IGpuImage Free(int index) {

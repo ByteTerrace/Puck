@@ -248,6 +248,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
             specs ??= VersionSpecs(plan: plan);
             request ??= new BuildRequest(
+                Carried: [],
                 Device: m_device,
                 DirectX: m_directX,
                 Gpu: m_gpu,

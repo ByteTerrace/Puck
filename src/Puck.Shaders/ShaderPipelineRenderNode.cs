@@ -329,6 +329,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         runtime.Samplers = new nint[m_inFlight];
         try {
             AllocateSlotObjects(
+                built: built,
                 descriptorPool: ref descriptorPool,
                 graphPool: graphPool,
                 pass: runtime
@@ -393,18 +394,29 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         return true;
     }
+    // Disposes a buffer or region of a graph no submission reads any more through the image table, which does so on its
+    // worker when it disposes in the background (GpuImageLeases.DisposeLater), so retiring a graph costs the frame
+    // nothing; a node with no table disposes at once.
+    private void DisposeLater(IDisposable? disposable) {
+        if (m_images is { } images) {
+            images.DisposeLater(disposable: disposable);
+        } else {
+            disposable?.Dispose();
+        }
+    }
     private void DisposeGraph(RuntimePass[] passes, RuntimeResource[] resources) {
         foreach (var pass in passes) {
             if (pass is not null) {
                 pass.Dispose(
                     device: m_device,
-                    gpu: m_gpu
+                    gpu: m_gpu,
+                    later: DisposeLater
                 );
             }
         }
         foreach (var resource in resources) {
             if (resource is not null) {
-                resource.Dispose();
+                resource.Dispose(later: DisposeLater);
             }
         }
     }
@@ -412,6 +424,54 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // pipeline and module set into them. The budget was checked against the plan and the rows before the build started. A
     // storage whose instances carry over from the replaced graph gets none of its own; PreserveCompatibleHistory moves the
     // carried ones in.
+    // Creates an owned image storage's images at the extent its declaration resolves against the frame and render
+    // extents, storing each as it is made so a failure leaves every created image where its owner disposes it.
+    private static void CreateStorageImages(GpuDeviceServices gpu, string owner, ShaderPipelinePlan plan, ShaderPipelinePlannedStorage planned, (uint Width, uint Height) frame, ShaderPipelineStorageCounts counts, IGpuImage[] images) {
+        var declaration = planned.Declaration;
+        var extent = (declaration.Dimensions?.Resolve(
+            frameHeight: frame.Height,
+            frameWidth: frame.Width,
+            renderWidth: counts.RenderWidth,
+            renderHeight: counts.RenderHeight
+        ) ?? frame);
+        var usage = UsageOf(
+            plan: plan,
+            storage: planned
+        );
+        var format = ParseFormat(format: declaration.Format);
+        // A depth storage's images are created for the depth attachment a pass draws it as: a graphics pass's planned
+        // attachment, or the one a package pass drawing it through its own render pass declares.
+        GpuDepthAttachment? depth = ((usage == GpuImageUsage.DepthAttachment)
+            ? DepthOf(
+                format: format,
+                plan: plan,
+                storage: planned
+            )
+            : null);
+
+        for (var i = 0; (i < images.Length); i++) {
+            var name = new GpuObjectName(
+                index: i,
+                owner: owner,
+                part: declaration.Name
+            );
+
+            images[i] = ((depth is { } attachment)
+                ? gpu.ImageFactory.CreateDepth(
+                    attachment: in attachment,
+                    height: extent.Height,
+                    name: in name,
+                    width: extent.Width
+                )
+                : gpu.ImageFactory.Create(
+                    format: format,
+                    height: extent.Height,
+                    name: in name,
+                    usage: usage,
+                    width: extent.Width
+                ));
+        }
+    }
     private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows, ShaderPipelineStorageCounts counts) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
@@ -460,50 +520,20 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     (declaration.Kind != ShaderPipelineResourceKind.Buffer) &&
                     !declaration.IsExternal
                 ) {
-                    resource.Images = new IGpuImage[resource.Count];
-                    var extent = (declaration.Dimensions?.Resolve(
-                        frameHeight: m_height,
-                        frameWidth: m_width,
-                        renderWidth: counts.RenderWidth,
-                        renderHeight: counts.RenderHeight
-                    ) ?? (m_width, m_height));
-                    var usage = UsageOf(
-                        plan: plan,
-                        storage: planned
-                    );
-
-                    var format = ParseFormat(format: declaration.Format);
-                    // A depth storage's images are created for the depth attachment a pass draws it as: a graphics pass's
-                    // planned attachment, or the one a package pass drawing it through its own render pass declares.
-                    GpuDepthAttachment? depth = ((usage == GpuImageUsage.DepthAttachment)
-                        ? DepthOf(
-                            format: format,
-                            plan: plan,
-                            storage: planned
-                        )
-                        : null);
-
-                    for (var i = 0; (i < resource.Count); i++) {
-                        var name = new GpuObjectName(
-                            index: i,
+                    // The build created them off the frame thread at this extent (GraphBuild.CreateImages).
+                    if (built.TakeImages(storage: planned.Index) is { } prebuilt) {
+                        resource.Images = prebuilt;
+                    } else {
+                        resource.Images = new IGpuImage[resource.Count];
+                        CreateStorageImages(
+                            counts: counts,
+                            frame: (m_width, m_height),
+                            gpu: m_gpu,
+                            images: resource.Images,
                             owner: m_name,
-                            part: declaration.Name
+                            plan: plan,
+                            planned: planned
                         );
-
-                        resource.Images[i] = ((depth is { } attachment)
-                            ? m_gpu.ImageFactory.CreateDepth(
-                                attachment: in attachment,
-                                height: extent.Height,
-                                name: in name,
-                                width: extent.Width
-                            )
-                            : m_gpu.ImageFactory.Create(
-                                format: format,
-                                height: extent.Height,
-                                name: in name,
-                                usage: usage,
-                                width: extent.Width
-                            ));
                     }
                 } else if (
                     (declaration.Kind == ShaderPipelineResourceKind.Buffer) &&
@@ -539,6 +569,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     }
                     if (m_packages.OwnsBuffer(plan: plan, storage: planned)) {
                         throw new InvalidDataException(message: $"Package-owned buffer '{declaration.Name}' has no allocation.");
+                    }
+                    // The build created them off the frame thread at this size (GraphBuild.CreateImages).
+                    if (built.TakeBuffers(storage: planned.Index) is { } prebuilt) {
+                        prebuilt.CopyTo(array: resource.Buffers, index: 0);
+                        continue;
                     }
                     for (var i = 0; (i < resource.Count); i++) {
                         resource.Buffers[i] = m_gpu.BufferFactory.CreateDeviceLocal(
@@ -706,7 +741,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_installingRows = null;
             if (m_resources.Length == 0) {
                 foreach (var resource in storages) {
-                    resource?.Dispose();
+                    resource?.Dispose(later: DisposeLater);
                 }
             }
             m_passes = [];
@@ -995,6 +1030,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             return;
         }
         AdoptRegionCopy(built: built);
+        built.DisposeUntaken(later: DisposeLater);
         MovePortRegions();
         // The graph installed with the desired selection's preview, so no separate preview is wanted; a preview build
         // still running for it is disposed when it is taken.
@@ -1296,7 +1332,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     // A build in flight creates objects on the device being released, so it is waited out and discarded first.
     private void CancelBuilds() {
-        m_build.CancelAndWait(discard: static built => built.Dispose());
+        m_build.CancelAndWait(discard: built => built.Discard(later: DisposeLater));
         m_buildKey = default;
         CancelPreviewBuild();
     }

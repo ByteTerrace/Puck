@@ -204,6 +204,7 @@ public static class WorldRenderRoot {
 
         if (!RenderGraphRuntime.TryCreate(
             deviceContext: device,
+            disposesInBackground: true,
             graphs: graphs,
             hostsOnDirectX: hostSettings.HostsOnDirectX,
             packages: packages,

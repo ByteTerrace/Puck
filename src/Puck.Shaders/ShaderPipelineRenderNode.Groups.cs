@@ -78,24 +78,31 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Creates a pass's pass region, one constant buffer per slot, which SeedPassRegions fills once the install has
     // preserved the live config.
-    private void CreatePassRegion(RuntimePass pass) {
-        pass.PassRegion = new GpuRegion(
-            bindings: m_gpu.Bindings,
-            buffers: m_gpu.BufferFactory,
-            byteCount: UniformBytes(blockBytes: pass.ParametersLayout.SizeBytes),
-            copyPipeline: null,
-            memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
-            name: new GpuObjectName(
-                detail: "pass block",
-                owner: m_name,
-                part: pass.Name
-            ),
-            policy: GpuResidencyPolicy.Ring,
-            recorder: m_gpu.Recorder,
-            slotCount: ((int)m_inFlight),
-            usage: GpuBufferUsage.Uniform
-        );
-    }
+    private void CreatePassRegion(RuntimePass pass, GraphBuild built) => pass.PassRegion = (built.TakePassRegion(pass: pass.Index) ?? PassRegionOf(
+        device: m_device,
+        gpu: m_gpu,
+        inFlight: m_inFlight,
+        owner: m_name,
+        planned: pass.Name,
+        parameters: pass.ParametersLayout
+    ));
+    // A pass's ring of pass blocks, which the build creates off the frame thread (GraphBuild.CreatePassRegions).
+    private static GpuRegion PassRegionOf(IGpuDeviceContext device, GpuDeviceServices gpu, uint inFlight, string owner, string planned, ShaderPipelineParameterLayout parameters) => new(
+        bindings: gpu.Bindings,
+        buffers: gpu.BufferFactory,
+        byteCount: UniformBytes(blockBytes: parameters.SizeBytes),
+        copyPipeline: null,
+        memory: GpuResidency.RingMemory(profile: device.MemoryProfile),
+        name: new GpuObjectName(
+            detail: "pass block",
+            owner: owner,
+            part: planned
+        ),
+        policy: GpuResidencyPolicy.Ring,
+        recorder: gpu.Recorder,
+        slotCount: ((int)inFlight),
+        usage: GpuBufferUsage.Uniform
+    );
     // Allocates a document pass's per-slot sets and sampler, and writes what never changes into each set: the frame and
     // pass blocks' constant buffers, each array's row region and the pass's samplers.
     private void AllocateGroupSets(RuntimePass pass, nint descriptorPool) {

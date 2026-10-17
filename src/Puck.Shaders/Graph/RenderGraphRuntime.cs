@@ -141,8 +141,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_turn;
     private int m_unproduced;
 
-    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
+    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
         m_images = images;
+        m_packageGraphs = packageGraphs;
         m_current = new Output[nodes.Length];
         m_device = device;
         m_graphs = graphs;
@@ -457,6 +458,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// producer created to learn its format was disposed then, and nothing else was created.</param>
     /// <param name="inFlightFrames">Each instance's frames in flight, at least two, since an instance's history and its
     /// previous-frame reads live in its previous frame slot.</param>
+    /// <param name="disposesInBackground">Whether an image every reader is done with is disposed on a worker thread
+    /// (<see cref="GpuImageLeases(bool)"/>), so destroying a replaced or released graph's targets costs the frame
+    /// nothing; disposal and device loss wait for the worker.</param>
     /// <returns><see langword="true"/> when the graphs installed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="graphs"/>,
     /// <paramref name="root"/>, <paramref name="packages"/>, <paramref name="pipelines"/> or
@@ -464,7 +468,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlightFrames"/> is less than two.</exception>
     /// <exception cref="InvalidDataException">A graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
-    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames) {
+    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames, bool disposesInBackground = false) {
         ArgumentNullException.ThrowIfNull(argument: set);
         ArgumentNullException.ThrowIfNull(argument: graphs);
         ArgumentNullException.ThrowIfNull(argument: root);
@@ -502,8 +506,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return false;
         }
 
+        var packageGraphs = new PackageGraphs();
+
         if (RefuseExternal(
             graphs: graphs,
+            packageGraphs: packageGraphs,
             packages: packages,
             set: set
         ) is { } external) {
@@ -516,7 +523,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var nodes = new ShaderPipelineRenderNode?[graphs.Count];
         var sources = new SourceGraph?[graphs.Count];
         var installed = new RenderGraphRuntimeGraph?[graphs.Count];
-        var images = new GpuImageLeases();
+        var fragments = new RenderGraphPackageFragment?[graphs.Count];
+        var images = new GpuImageLeases(disposesInBackground: disposesInBackground);
 
         try {
             for (var index = 0; (index < graphs.Count); index++) {
@@ -530,10 +538,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     instance: instance,
                     packages: packages
                 )) {
-                    installed[index] = PackageGraphFor(
+                    installed[index] = packageGraphs.GraphFor(
+                        fragment: out fragments[index],
                         instance: instance.Name,
-                        packages: packages,
-                        package: instance.ExternalPackage!
+                        package: instance.ExternalPackage!,
+                        packages: packages
                     );
                 } else if (packages.ServesSource(package: instance.ExternalPackage!)) {
                     (sources[index], nodes[index]) = CreateSource(
@@ -611,6 +620,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 inFlightFrames: inFlightFrames,
                 inputs: inputs,
                 nodes: nodes,
+                packageGraphs: packageGraphs,
                 packages: packages,
                 pipelines: pipelines,
                 producers: producers,
@@ -618,6 +628,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 set: set,
                 sources: sources
             );
+            runtime.RecordPackageFragments(fragments: fragments);
 
             return true;
         } catch {
@@ -634,7 +645,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // Why an external instance cannot run as given, or null when every one can: it was given a graph, declares an output
     // that is not an image, or names a package neither an external producer nor an upload serves, and that no recorder
     // runs as an instance.
-    private static RenderGraphRuntimeRefusal? RefuseExternal(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, RenderGraphPackageRecorders packages) {
+    private static RenderGraphRuntimeRefusal? RefuseExternal(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs) {
         for (var index = 0; (index < graphs.Count); index++) {
             var instance = set.Instances[index];
 
@@ -649,7 +660,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     : ((packages.ServesProducer(package: instance.ExternalPackage!) || packages.ServesSource(package: instance.ExternalPackage!))
                         ? ((instance.Reads ?? []).Any(predicate: read => (read.Kind != ShaderPipelineResourceKind.Image))
                             ? "is an image producer, but declares a buffer read" : null)
-                        : PackageRefusal(
+                        : packageGraphs.RefusalOf(
                             instance: instance.Name,
                             package: instance.ExternalPackage!,
                             packages: packages
@@ -1132,8 +1143,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             producers: m_producers
         );
         DisposeSources(sources: m_sources);
+        ReleaseRetiring(lost: false);
         RetireShownLeases();
         ReleaseStandIns(wait: true);
+        m_images.DrainDisposals();
     }
     /// <summary>Releases every instance's device objects after the device was lost and recreated, so nothing of the old
     /// device survives: each node releases its graph and package recorders, the stand-ins are released, and every
@@ -1163,8 +1176,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             PackagesLostDevice();
+            ReleaseRetiring(lost: true);
             ReleaseStandIns(wait: false);
             Release();
+            m_images.DrainDisposals();
         } finally {
             m_releasingLostDevice = false;
         }
@@ -1203,6 +1218,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         RebuildDriftedSources();
         PollOwedReadbacks();
+        DisposeDrainedRetiring();
         m_captureFootprints = frame.Footprints;
         PackagesBeginFrame(context: in context);
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
@@ -1497,6 +1513,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
         // retire displaced package owners against this actual reader fence, without another producer submission.
         foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
+        ArmRetiring(submitter: submitter);
 
         return Shown(
             image: RootImage(),

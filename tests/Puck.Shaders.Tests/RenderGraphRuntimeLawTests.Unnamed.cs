@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -154,20 +153,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
         _ = scene.Produce(screenInView: true, seated: false);
         Assert.Equal(expected: (0UL, 0), actual: (scene.Holdings(instance: "seat").Owned, scene.Holdings(instance: "seat").Recorders));
-    }
-    [Fact]
-    public void ALossWhileDrainingAnUnnamedGraphReachesTheHostBeforeAnythingIsReleased() {
-        using var scene = new NamingScene();
-
-        scene.Settle(screenInView: true, seated: true);
-        var held = scene.Holdings(instance: "seat");
-        var submissions = scene.Gpu.Submissions;
-
-        scene.Gpu.LoseNextIdleWait = true;
-
-        Assert.Throws<DeviceLostException>(testCode: () => scene.Produce(screenInView: true, seated: false));
-        Assert.Equal(expected: submissions, actual: scene.Gpu.Submissions);
-        Assert.Equal(expected: held, actual: scene.Holdings(instance: "seat"));
     }
     [Fact]
     public void AnInstanceNothingNamesReleasesItsGraphAndRebuildsWhenShownAgain() {

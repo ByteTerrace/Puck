@@ -294,6 +294,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             var world = producers.Only;
 
             frames.Settle();
+            // A held queue finishes a submission only when a fence wait completes it, so a lease can retire no sooner.
+            gpu.QueueHeld = true;
             frames.Next(count: 4);
             gpu.Events.Clear();
             gpu.Recording = true;

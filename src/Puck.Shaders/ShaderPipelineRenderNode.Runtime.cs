@@ -83,7 +83,7 @@ public sealed partial class ShaderPipelineRenderNode {
             HasOverride[instance] = true;
             OverridePlanned[instance] = false;
         }
-        public void Dispose() {
+        public void Dispose(Action<IDisposable?> later) {
             if (Images is not null) {
                 foreach (var image in Images) {
                     image?.Dispose();
@@ -91,7 +91,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             if ((Buffers is not null) && !Borrowed) {
                 foreach (var buffer in Buffers) {
-                    buffer?.Dispose();
+                    later(obj: buffer);
                 }
             }
             Export?.Dispose();
@@ -179,10 +179,11 @@ public sealed partial class ShaderPipelineRenderNode {
         // The version an indirectly dispatched package pass reads its group counts from, or null.
         public string? PackageArguments;
 
-        public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device) {
+        public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device, Action<IDisposable?> later) {
             Package?.Dispose();
             Package = null;
-            GeometryBuffer?.Dispose();
+            later(obj: GeometryBuffer);
+            GeometryBuffer = null;
             if (Framebuffers is not null) {
                 foreach (var framebuffer in Framebuffers) {
                     framebuffer?.Dispose();
@@ -197,16 +198,16 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             RegionCopySets?.Dispose();
             RegionCopySets = null;
-            KernelCounters?.Dispose();
+            later(obj: KernelCounters);
             KernelCounters = null;
-            PassRegion?.Dispose();
+            later(obj: PassRegion);
             PassRegion = null;
             foreach (var region in (RowRegions ?? [])) {
                 region.Region.Dispose();
             }
 
             RowRegions = null;
-            FrameRegion?.Dispose();
+            later(obj: FrameRegion);
             FrameRegion = null;
             gpu.Bindings.DestroyPool(poolHandle: DescriptorPool);
             DescriptorPool = 0;

@@ -39,6 +39,10 @@ internal sealed class FakeGpuDevice :
     IGpuTimestampFactory {
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
+    // The queue order of held fences' submissions, and the latest one a wait has completed: one queue completes its
+    // submissions in order, so a wait completes every submission made before the one it waits on.
+    private long m_armed;
+    private long m_waitedThrough;
     private readonly GpuObjectNaming m_naming;
 
     private readonly Dictionary<nint, Creation> m_trackedHandles = [];
@@ -682,8 +686,11 @@ internal sealed class FakeGpuDevice :
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 
     /// <summary>A submission fence. It reads signaled once submitted unless the device holds fences; a held fence reads
-    /// signaled when nothing is armed or the test has completed it, as the backends' fences do.</summary>
+    /// signaled when nothing is armed, the test has completed it, or a wait has completed a submission made after it, as
+    /// the backends' fences on one queue do.</summary>
     public sealed class Fence(FakeGpuDevice gpu, Creation? creation = null) : IGpuSubmissionFence {
+        private long m_order;
+
         /// <summary>Gets whether a submission is outstanding on the fence.</summary>
         public bool Armed { get; private set; }
         /// <summary>Gets or sets whether a held fence's outstanding submission has completed.</summary>
@@ -692,7 +699,7 @@ internal sealed class FakeGpuDevice :
             get {
                 gpu.Hit(key: "IGpuSubmissionFence.IsSignaled");
 
-                return (!gpu.m_holdFences || !Armed || Completed);
+                return (!gpu.m_holdFences || !Armed || Completed || (m_order <= gpu.m_waitedThrough));
             }
         }
 
@@ -702,6 +709,11 @@ internal sealed class FakeGpuDevice :
         }
         public void Wait() {
             gpu.Hit(key: "IGpuSubmissionFence.Wait");
+
+            if (Armed) {
+                gpu.m_waitedThrough = Math.Max(val1: gpu.m_waitedThrough, val2: m_order);
+            }
+
             Armed = false;
             Completed = false;
         }
@@ -716,6 +728,7 @@ internal sealed class FakeGpuDevice :
 
             Armed = true;
             Completed = false;
+            m_order = ++gpu.m_armed;
         }
     }
     /// <summary>One object created while the device tracks objects: its kind, its one-based creation number, its unique

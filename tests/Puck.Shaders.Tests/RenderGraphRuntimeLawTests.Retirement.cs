@@ -14,6 +14,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         views.Clear();
         views.Frame();
         Assert.True(condition: views.Reconfigure(PackageView));
+        views.Settle();
         Assert.Equal(new ShaderPipelineCompletions(Grid: 0.5d, Renders: 1), views.Runtime.TakeRetiredCompletions(instance: "second"));
         Assert.Equal(default, views.Runtime.TakeRetiredCompletions(instance: "second"));
         Assert.Equal(new ShaderPipelineCompletions(Grid: 0.75d, Renders: 1), views.Runtime.TakeRetiredCompletions(instance: "third"));
@@ -26,6 +27,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         views.Clear();
         views.Frame();
         Assert.True(condition: views.Reconfigure(PackageView));
+        views.Settle();
 
         // The removed view's render at 0.5 completed before the next read, so the views' renders since the last read
         // name no one grid, though the view that remains rendered at 0.625 alone.
@@ -57,6 +59,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var renders = (1 + ((int)again.FrameCounter));
 
         Assert.True(condition: views.Reconfigure(PackageView));
+        views.Settle();
 
         // The second view's renders at 0.5, both nodes', and the third's two at 0.75.
         Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0d, Renders: (renders + 2)), actual: views.Runtime.TakeRetiredCompletions());
@@ -126,6 +129,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         // The view read for still hands its renders over when it leaves: one in each of the three frames since the read.
         views.Frame();
         Assert.True(condition: views.Reconfigure(PackageView));
+        views.Settle();
         Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0.5d, Renders: 3), actual: views.Runtime.TakeRetiredCompletions());
 
         // A reader that stops reading drops what it has not read.
@@ -177,6 +181,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             _ = Runtime.TakeRetiredCompletions();
         }
         public void Dispose() => Runtime.Dispose();
+        // Completes every render and produces frames until every instance a reconfiguration retired is disposed, as a
+        // device catching up does: a retired node hands over what it completed once a later submission has completed.
+        public void Settle() => TestLiveness.Until(step: () => {
+            CompleteAll();
+            Frame();
+
+            return (Runtime.RetiringInstances == 0);
+        });
         public void Frame() {
             var frame = new RenderGraphFrame(
                 DisplayHeight: Display,

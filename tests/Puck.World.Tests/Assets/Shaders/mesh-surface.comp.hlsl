@@ -24,5 +24,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint draw = (uint)hit.w;
     uint triangleIndex = (uint)ray.w;
 
-    meshResults[uint2(slot, 0u)] = float4(sdfMeshSurfaceNormal(draw, triangleIndex, hit.xyz, ray.xyz), (float)sdfMeshMaterial(draw, triangleIndex));
+    float3 faceNormal;
+
+    meshResults[uint2(slot, 0u)] = float4(sdfMeshSurfaceNormal(draw, triangleIndex, hit.xyz, ray.xyz, faceNormal), (float)sdfMeshMaterial(draw, triangleIndex));
 }

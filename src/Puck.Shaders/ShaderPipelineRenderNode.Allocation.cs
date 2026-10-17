@@ -99,7 +99,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // the pass as soon as it exists, so a failure partway leaves every created object where RuntimePass.Dispose releases
     // it exactly once. A document pass allocates its frame group and pass group sets (AllocateGroupSets); a package pass
     // allocates its own sets through its recorder.
-    private void AllocateSlotObjects(RuntimePass pass, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
+    private void AllocateSlotObjects(RuntimePass pass, GraphBuild built, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
         var bindings = m_gpu.Bindings;
 
         if (descriptorPool == 0) {
@@ -112,7 +112,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
             pass.DescriptorPool = descriptorPool;
         }
-        CreatePassRegion(pass: pass);
+        CreatePassRegion(built: built, pass: pass);
         if (pass.Grouped) {
             AllocateGroupSets(
                 descriptorPool: descriptorPool,

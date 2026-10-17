@@ -15,10 +15,6 @@ namespace Puck.Shaders;
 // (RenderGraphFrame.Unchanged), so their latest output stands for the frame. An instance a pending capture reads is never
 // declared unchanged, since only a render serves it.
 public sealed partial class RenderGraphRuntime {
-    private static RenderGraphRuntimeGraph? PackageGraphFor(string package, string instance, RenderGraphPackageRecorders packages) {
-        packages.TryGetFactory(factory: out var factory, package: package);
-        return PackageGraphOf(package: package, fault: out _, selected: factory?.FragmentOf(instance: instance), inputs: factory?.InputsOf(instance: instance));
-    }
 
     // The instances the frame being scheduled declares unchanged, reused frame to frame.
     private readonly List<string> m_unchanged = [];
@@ -30,25 +26,9 @@ public sealed partial class RenderGraphRuntime {
         !packages.ServesSource(package: instance.ExternalPackage!) &&
         packages.Serves(package: instance.ExternalPackage!)
     );
-    // Why an external instance of a package no producer or upload serves cannot run, or null when it runs as a package
-    // instance.
-    private static string? PackageRefusal(string package, string instance, RenderGraphPackageRecorders packages) {
-        if (!packages.Serves(package: package)) {
-            return "names a package neither an external producer, an upload nor a recorder serves";
-        }
-
-        packages.TryGetFactory(factory: out var factory, package: package);
-        _ = PackageGraphOf(
-            fault: out var fault,
-            package: package,
-            selected: factory?.FragmentOf(instance: instance)
-        );
-
-        return fault;
-    }
     // Makes the one-pass graph a package instance renders, or returns why the package does not run as an instance: it
     // is no selected or catalog fragment with an exported output.
-    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null, IReadOnlyList<RenderGraphRuntimeInput>? inputs = null) {
+    private static RenderGraphRuntimeGraph? PackageGraphOf(string package, out string? fault, RenderGraphPackageFragment? selected = null) {
         if (
             !RenderGraphPackageCatalog.Engine.TryGet(
                 id: package,
@@ -117,7 +97,7 @@ public sealed partial class RenderGraphRuntime {
         fault = null;
 
         return new RenderGraphRuntimeGraph(
-            Inputs: (inputs ?? []),
+            Inputs: [],
             Pipeline: new CompiledShaderPipeline(
                 plan: plan.Pipeline,
                 shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)

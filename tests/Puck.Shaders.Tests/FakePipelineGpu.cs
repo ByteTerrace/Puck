@@ -34,7 +34,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     private long m_submitted;
 
     private readonly Dictionary<nint, HashSet<nint>> m_commandReads = [];
-    private readonly Dictionary<nint, HashSet<nint>> m_setReads = [];
+    // Each descriptor set's image per binding and array element: a write replaces what the binding named, as a device's does.
+    private readonly Dictionary<nint, Dictionary<(uint Binding, uint Element), nint>> m_setReads = [];
     private readonly Dictionary<nint, long> m_lastRead = [];
 
     /// <summary>Gets every recorded command that named an object the fake had already released (an image barrier, a
@@ -113,8 +114,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool RefuseNextSubmission { get; set; }
     /// <summary>Gets or sets whether the next submission reports device loss before any commands reach the queue.</summary>
     public bool LoseNextSubmission { get; set; }
-    /// <summary>Gets or sets whether the next device drain reports a lost device.</summary>
-    public bool LoseNextIdleWait { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
@@ -250,8 +249,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     // Records a command that names an object the fake has already released, and, while pending reads are tracked, the
-    // image a command buffer or a descriptor set names.
-    private void NoteUse(nint handle, string use, nint commandBuffer = 0, nint set = 0) {
+    // image a command buffer names.
+    private void NoteUse(nint handle, string use, nint commandBuffer = 0) {
         var created = CreatedOf(handle: handle);
 
         if (created is { DisposeCount: > 0 } released) {
@@ -261,18 +260,33 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
         if (
             !TracksPendingReads ||
-            (created is null)
+            (created is null) ||
+            (commandBuffer == 0)
         ) {
             return;
         }
 
         lock (m_gate) {
-            if (commandBuffer != 0) {
-                ReadsOf(key: commandBuffer, map: m_commandReads).Add(item: created.Handle);
+            ReadsOf(key: commandBuffer, map: m_commandReads).Add(item: created.Handle);
+        }
+    }
+    // While pending reads are tracked, records the image a descriptor write names in its set's binding, replacing what
+    // the binding named before.
+    private void NoteSetWrite(nint set, uint binding, uint arrayElement, nint handle) {
+        if (
+            !TracksPendingReads ||
+            (CreatedOf(handle: handle) is not { } created)
+        ) {
+            return;
+        }
+
+        lock (m_gate) {
+            if (!m_setReads.TryGetValue(key: set, value: out var bindings)) {
+                bindings = [];
+                m_setReads.Add(key: set, value: bindings);
             }
-            if (set != 0) {
-                ReadsOf(key: set, map: m_setReads).Add(item: created.Handle);
-            }
+
+            bindings[(binding, arrayElement)] = created.Handle;
         }
     }
     private static HashSet<nint> ReadsOf(Dictionary<nint, HashSet<nint>> map, nint key) {
@@ -367,7 +381,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         if (TracksPendingReads) {
             lock (m_gate) {
                 if (m_setReads.TryGetValue(key: descriptorSetHandle, value: out var reads)) {
-                    ReadsOf(key: commandBufferHandle, map: m_commandReads).UnionWith(other: reads);
+                    ReadsOf(key: commandBufferHandle, map: m_commandReads).UnionWith(other: reads.Values);
                 }
             }
         }
@@ -685,10 +699,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordImageBarrier(commandBufferHandle: commandBufferHandle, imageHandle: imageHandle, barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask));
     public void WaitIdle() {
         WaitIdleCount++;
-        if (LoseNextIdleWait) {
-            LoseNextIdleWait = false;
-            throw new DeviceLostException(message: "Injected loss while draining.");
-        }
         Record(text: "device drain");
         Complete(through: m_submitted);
     }
@@ -741,14 +751,16 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
-        NoteUse(handle: imageViewHandle, set: descriptorSetHandle, use: "sampled descriptor");
+        NoteUse(handle: imageViewHandle, use: "sampled descriptor");
+        NoteSetWrite(arrayElement: arrayElement, binding: binding, handle: imageViewHandle, set: descriptorSetHandle);
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }
     }
     public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
-        NoteUse(handle: imageViewHandle, set: descriptorSetHandle, use: "storage descriptor");
+        NoteUse(handle: imageViewHandle, use: "storage descriptor");
+        NoteSetWrite(arrayElement: arrayElement, binding: binding, handle: imageViewHandle, set: descriptorSetHandle);
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }

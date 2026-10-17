@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
@@ -67,6 +66,7 @@ public sealed partial class RenderGraphRuntime {
 
         if (RefuseExternal(
             graphs: graphs,
+            packageGraphs: m_packageGraphs,
             packages: m_packages,
             set: set
         ) is { } external) {
@@ -83,6 +83,7 @@ public sealed partial class RenderGraphRuntime {
         var sources = new SourceGraph?[count];
         var createdSources = new SourceGraph?[count];
         var createdSourceNodes = new ShaderPipelineRenderNode?[count];
+        var fragments = new RenderGraphPackageFragment?[count];
 
         for (var index = 0; (index < count); index++) {
             var instance = set.Instances[index];
@@ -110,11 +111,12 @@ public sealed partial class RenderGraphRuntime {
                     instance: set.Instances[index],
                     packages: m_packages
                 )) {
-                    effective[index] = PackageGraphFor(
-                            instance: set.Instances[index].Name,
-                            packages: m_packages,
-                            package: set.Instances[index].ExternalPackage!
-                        );
+                    effective[index] = m_packageGraphs.GraphFor(
+                        fragment: out fragments[index],
+                        instance: set.Instances[index].Name,
+                        package: set.Instances[index].ExternalPackage!,
+                        packages: m_packages
+                    );
 
                     continue;
                 }
@@ -341,8 +343,8 @@ public sealed partial class RenderGraphRuntime {
             new RenderGraphSchedule(set: set),
             new RenderGraphSchedule(set: set),
         ];
-        ForgetReplacedFragments(kept: kept, set: set);
         m_set = set;
+        RecordPackageFragments(fragments: fragments);
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];
         ResetStale(count: count);
@@ -617,18 +619,9 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     // Retires the old set's instances the new set does not keep, once the new set runs: a held one waits for its last
-    // hold, and the rest are disposed after the device has finished every submission that may sample their outputs,
-    // since a kept consumer's frame in flight may still read them. Every disposal is attempted, and the failures are
-    // thrown together after the last.
+    // hold, and the rest wait for a submission ordered after every one that may sample their outputs, since a kept
+    // consumer's frame in flight may still read them (RenderGraphRuntime.Retiring.cs).
     private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring, RenderGraphInstanceSet set) {
-        if (!retired.Contains(value: true)) {
-            return;
-        }
-
-        m_device.TryWaitIdle();
-
-        List<Exception>? failures = null;
-
         for (var old = 0; (old < retired.Length); old++) {
             if (!retired[old]) {
                 continue;
@@ -643,22 +636,7 @@ public sealed partial class RenderGraphRuntime {
                 continue;
             }
 
-            try {
-                if (nodes[old] is { } node) {
-                    RetireNode(held: false, instance: set.Instances[old].Name, node: node);
-                }
-
-                producers[old]?.Dispose();
-            } catch (Exception error) {
-                (failures ??= []).Add(item: error);
-            }
-        }
-
-        if (failures is not null) {
-            throw new AggregateException(
-                innerExceptions: failures,
-                message: "The render graph's new instance set runs, but retiring an old instance failed."
-            );
+            QueueRetired(instance: set.Instances[old].Name, node: nodes[old], producer: producers[old]);
         }
     }
 
