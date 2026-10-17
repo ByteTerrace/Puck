@@ -54,6 +54,13 @@ public sealed partial class RenderGraphRuntime {
         }
         if (candidate is not null) {
             if (!TryBindAll(graphs: candidate, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
+                // A package resolves its instances' views as the frame begins, and a view that moved to another
+                // residency (a portal window following its destination's scene) binds that residency's producers
+                // before the host reconciles a set whose reads name them. The installed graphs stand for this frame,
+                // and the changed fragments are tried again on the next, against the reconciled set.
+                if (refusal.Code == RenderGraphRuntimeRefusalCode.InputProducer) {
+                    return;
+                }
                 throw new InvalidDataException(message: refusal.Message);
             }
             foreach (var (index, _) in changes!) { m_nodes[index]!.RequireSwappable(pipeline: candidate[index]!.Pipeline); }

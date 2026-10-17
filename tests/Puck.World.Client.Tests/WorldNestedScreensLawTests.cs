@@ -418,6 +418,41 @@ public sealed class WorldNestedScreensLawTests {
         Assert.Equal(expected: 1, actual: sessions.Closed);
         Assert.False(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
     }
+    // THE LAW: a presented world's new definition moves nothing while its screens and cameras stand. A world delivers a
+    // new definition whenever its state moves, every few ticks for a world whose rules run on a timer, and the render
+    // graph rebuilds its set whenever a level moves, so a level that moved on every delivery would rebuild the set
+    // behind every portal several times a second. The red leg is a screen that moved with the delivery.
+    [Fact]
+    public void ADeliveryThatMovesNoScreenOrCameraMovesNothing() {
+        var world = World(name: "a", next: "b");
+        var sessions = new Sessions(worlds: new Dictionary<string, WorldDefinition> {
+            ["b"] = World(name: "b", next: "a"),
+        });
+        var screens = new WorldNestedScreens<Level>(
+            definition: () => world,
+            depth: 1,
+            head: "session$3",
+            shares: static _ => true,
+            world: "a"
+        );
+
+        Assert.True(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
+        var view = Assert.Single(collection: screens.Views);
+        var reads = screens.Reads;
+
+        world = world with { };
+
+        Assert.False(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
+        Assert.Same(expected: view, actual: Assert.Single(collection: screens.Views));
+        Assert.Same(expected: reads, actual: screens.Reads);
+
+        world = world with {
+            ScreensRaw = [world.Screens[0] with { Origin = new DocumentVector3(value: new Vector3(x: 2f, y: 1f, z: 0f)) }],
+        };
+
+        Assert.True(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
+        Assert.Same(expected: view, actual: Assert.Single(collection: screens.Views));
+    }
 
     // One session view: the destination's screens one level deeper.
     private sealed record Level(string Destination, WorldNestedScreens<Level> Screens);

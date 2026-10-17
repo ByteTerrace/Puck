@@ -208,7 +208,8 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             ? camera
             : Mappings.InstanceOf(screen: screen)));
     /// <summary>Follows the presented world's definition and the sessions its screens show for this frame: rows and
-    /// mappings move when the definition or the nesting depth does, and each session screen within the depth keeps its
+    /// mappings move when the rows the definition derives, its cameras or the nesting depth do, and a definition that
+    /// moved only its state moves nothing. Each session screen within the depth keeps its
     /// view while it still shows the session the authority holds, opens one when it holds one, and closes one it no longer
     /// shows.</summary>
     /// <param name="nestingDepth">The presentation's nesting depth.</param>
@@ -220,23 +221,31 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
 
         var definition = m_definition();
         var within = (Depth < nestingDepth);
-        var rowsMoved = (
-            !ReferenceEquals(
-                objA: definition,
-                objB: m_reconciled
-            ) ||
-            ((m_reconciledDepth < 0) || (within != (Depth < m_reconciledDepth)))
-        );
+        var rowsMoved = ((m_reconciledDepth < 0) || (within != (Depth < m_reconciledDepth)));
 
-        if (rowsMoved) {
+        // A presented world delivers a new definition whenever its state moves, which a world whose rules run on a
+        // timer does every few ticks. Its screens move only when the rows they derive or its cameras do, so only then
+        // do the mappings and the views the render graph runs.
+        if (!ReferenceEquals(objA: definition, objB: m_reconciled)) {
+            var previousCameras = m_reconciled?.Cameras;
+
             m_reconciled = definition;
-            m_reconciledDepth = nestingDepth;
-            m_rows = ((definition is null)
+            IReadOnlyList<WorldScreen> rows = ((definition is null)
                 ? []
                 : [
                     .. definition.Screens.Select(selector: Shown),
                     .. WorldPrototypeFacets.Seated(definition: definition).Select(selector: Shown),
                 ]);
+
+            rowsMoved |= (
+                !rows.SequenceEqual(second: m_rows) ||
+                !(previousCameras ?? []).SequenceEqual(second: (definition?.Cameras ?? []))
+            );
+            m_rows = rows;
+        }
+
+        if (rowsMoved) {
+            m_reconciledDepth = nestingDepth;
         }
 
         var childrenMoved = false;
