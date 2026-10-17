@@ -120,9 +120,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// for.</param>
     /// <param name="brickPoolVoxelCapacity">The carve-bake brick pool's voxel capacity (see
     /// <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>), frozen at construction; 0 allocates no pool.</param>
+    /// <param name="meshLibrary">The library the residency's bake shares meshes through with every other residency
+    /// holding it (<see cref="SdfMeshPathBake.Library"/>), or <see langword="null"/> for a library of its own.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int brickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity, SdfMeshLibrary? meshLibrary = null) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -150,7 +152,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             : EmptyScreenSurfaceTransforms);
         m_width = width;
         Name = name;
-        MeshPathBake = new SdfMeshPathBake { Residency = name };
+        MeshPathBake = new SdfMeshPathBake { Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
     }
 
     /// <summary>Gets the residency's name.</summary>

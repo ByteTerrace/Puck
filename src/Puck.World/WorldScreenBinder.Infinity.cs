@@ -193,7 +193,7 @@ internal sealed partial class WorldScreenBinder {
             height: ((uint)m_viewDisplayHeight), width: ((uint)m_viewDisplayWidth),
             instanceCapacity: source.WorstCaseInstanceCapacity,
             programWordCapacity: source.WorstCaseProgramWordCapacity,
-            kernels: ViewKernels(), name: entry.Name, pipelines: m_viewPipelines,
+            kernels: ViewKernels(), meshLibrary: MeshLibrary, name: entry.Name, pipelines: m_viewPipelines,
             screenSources: new InfinityScreenSources(entry: entry));
 
         entry.Residency = residency;

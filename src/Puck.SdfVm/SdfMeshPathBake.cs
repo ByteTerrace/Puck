@@ -122,18 +122,17 @@ public sealed class SdfMeshPathBake {
     // along each axis (SdfSampledLattice.Refine).
     private const float FineCell = 0.005f;
     private const int MaxRefinement = 4;
-    // The reciprocal, in metres, of the grid a dynamic group's bound center is rounded to in its key: a centimetre.
-    private const float KeyResolution = 100f;
 
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
 
+    /// <summary>Gets the library the bake stores each group's mesh in and takes a group of geometry it holds from, rather
+    /// than baking the group again: in a later program of the residency, or in another residency holding the same
+    /// library.</summary>
+    public SdfMeshLibrary Library { get; init; } = new();
+
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
-    // Every group the bake has meshed, by whether it is dynamic and the geometry its key holds, which a later program's
-    // group of the same geometry takes rather than baking again; dropped whole past MaxBakedGroups.
-    private readonly Dictionary<(bool Dynamic, int Key), Group> m_baked = [];
-    private const int MaxBakedGroups = 4096;
     private readonly List<SdfMeshDraw> m_draws = [];
     private readonly Stopwatch m_clock = new();
 
@@ -427,17 +426,11 @@ public sealed class SdfMeshPathBake {
     private void Restart(SdfFrame frame) {
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
 
-        if (m_baked.Count > MaxBakedGroups) { m_baked.Clear(); }
-        foreach (var group in m_groups) {
-            if (group.Done && (group.Mesh is not null)) { m_baked[(group.Dynamic, group.Key)] = group; }
-        }
-
         m_program = frame.Program;
         m_groups.Clear();
         m_cursor = 0;
 
         var bySlot = new Dictionary<int, Group>();
-        var instructions = frame.Program.Instructions;
         var instances = frame.Program.Instances;
         var reach = MathF.Max(1f, frame.FarDistance);
 
@@ -453,19 +446,10 @@ public sealed class SdfMeshPathBake {
             var center = (instance.IsDynamic
                 ? Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation)))
                 : instance.Center);
-            // What the instance contributes to its group's geometry: its bound in its own frame, rounded so a body's pose at
-            // the rebuild does not move it, and every instruction it owns.
-            var key = HashCode.Combine(value1: (instance.IsDynamic ? Vector3.Round(vector: (center * KeyResolution)) : center), value2: instance.Radius, value3: (instance.End - instance.First));
-
-            var owned = new HashSet<int>();
-
-            for (var instruction = instance.First; (instruction < instance.End); instruction++) {
-                key = HashCode.Combine(value1: key, value2: instructions[instruction]);
-                if (instructions[instruction].Op == SdfOp.ShapeBlend) { _ = owned.Add(item: (int)instructions[instruction].Material); }
-            }
+            Group group;
 
             if (instance.IsDynamic) {
-                if (!bySlot.TryGetValue(key: instance.Slot, value: out var group)) {
+                if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
                     group = new Group(selector: instance.Slot, dynamic: true) {
                         Low = (center - new Vector3(value: radius)),
                         High = (center + new Vector3(value: radius)),
@@ -476,28 +460,27 @@ public sealed class SdfMeshPathBake {
                     group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
                     group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
                 }
-                group.Key = HashCode.Combine(value1: group.Key, value2: key);
-                group.Materials.UnionWith(other: owned);
             } else {
-                var group = new Group(selector: -(index + 1), dynamic: false) {
+                group = new Group(selector: -(index + 1), dynamic: false) {
                     Low = (instance.Center - new Vector3(value: radius)),
                     High = (instance.Center + new Vector3(value: radius)),
-                    Key = key,
                 };
-
-                group.Materials.UnionWith(other: owned);
                 m_groups.Add(item: group);
             }
+
+            group.Geometry.AppendInstance(instance: index, program: frame.Program);
+        }
+
+        foreach (var group in m_groups) {
+            group.Seal();
         }
 
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
         // cube the frame's far distance wide about the origin.
-        if (WorldInstructions(program: frame.Program) is { } worldKey) {
-            m_groups.Add(item: new Group(selector: WorldSelector, dynamic: false) {
-                High = new Vector3(value: reach),
-                Key = worldKey,
-                Low = new Vector3(value: -reach),
-            });
+        if (WorldInstructions(program: frame.Program) is { } world) {
+            m_groups.Add(item: world);
+            world.High = new Vector3(value: reach);
+            world.Low = new Vector3(value: -reach);
         }
 
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
@@ -507,15 +490,15 @@ public sealed class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
-            if (previous.TryGetValue(key: group.Selector, value: out var old) && (old.Key == group.Key) && (old.Dynamic == group.Dynamic)) {
+            if (previous.TryGetValue(key: group.Selector, value: out var old) && (old.Sealed == group.Sealed) && old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) {
                 m_groups[index] = old;
                 continue;
             }
-            // Geometry this bake has meshed before, at another index or slot or in an earlier program (a body that left the
-            // world and came back), takes that mesh: a static group's is in world space and a dynamic group's in its slot's
-            // frame, which its key holds.
-            if (m_baked.TryGetValue(key: (group.Dynamic, group.Key), value: out var baked)) {
-                group.Mesh = baked.Mesh;
+            // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
+            // the world and came back) or by another residency (a body that crossed from another world), takes that mesh: a
+            // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
+            if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {
+                group.Mesh = baked;
                 group.Done = true;
                 continue;
             }
@@ -550,8 +533,9 @@ public sealed class SdfMeshPathBake {
             m_drawnMeshes = -1;
         }
     }
-    // A key of the shapes the program's segments outside every instance hold, or null when none holds a shape.
-    private static int? WorldInstructions(SdfProgram program) {
+    // The group of the shapes the program's segments outside every instance hold, from the first segment instruction that
+    // holds a drawn shape on, by their absolute materials; null when no segment holds one.
+    private static Group? WorldInstructions(SdfProgram program) {
         var instructions = program.Instructions;
         var owned = new bool[instructions.Count];
 
@@ -559,15 +543,17 @@ public sealed class SdfMeshPathBake {
             for (var index = instance.First; (index < instance.End); index++) { owned[index] = true; }
         }
 
-        int? key = null;
+        Group? world = null;
 
         for (var index = 0; (index < instructions.Count); index++) {
             if (owned[index]) { continue; }
-            if ((instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail) { key ??= 0; }
-            if (key is { } running) { key = HashCode.Combine(value1: running, value2: instructions[index]); }
+            if ((instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail) { world ??= new Group(selector: WorldSelector, dynamic: false); }
+            world?.Geometry.AppendInstruction(index: index, program: program);
         }
 
-        return key;
+        world?.Seal();
+
+        return world;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
     // never fewer than `minimum` samples along any. A final lattice's spacing is never finer than MinimumCell, so a small
@@ -867,6 +853,10 @@ public sealed class SdfMeshPathBake {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
 
+        if (mesh is not null) {
+            Library.Store(geometry: group.Sealed, materials: group.MaterialOrder, mesh: mesh);
+        }
+
         lock (m_gate) {
             group.Contouring = false;
             group.Done = true;
@@ -1015,9 +1005,19 @@ public sealed class SdfMeshPathBake {
         public int Selector { get; } = selector;
         public bool Dynamic { get; } = dynamic;
         public int Slot => Selector;
-        public int Key { get; set; }
-        // The materials the group's shapes carry.
+        // The geometry the group bakes while its instances are appended, then sealed: a world group's names its segments'
+        // materials as they are, an instance group's by their place in MaterialOrder.
+        public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
+        public SdfMeshGeometry Sealed { get; private set; }
+        // The materials the group's shapes carry, and the same in the order its geometry numbers them.
         public HashSet<int> Materials { get; } = [];
+        public int[] MaterialOrder { get; private set; } = [];
+
+        public void Seal() {
+            Sealed = Geometry.Geometry;
+            MaterialOrder = [.. Geometry.Materials];
+            Materials.UnionWith(other: MaterialOrder);
+        }
         public Vector3 Low { get; set; }
         public Vector3 High { get; set; }
         public SdfMeshBakeRequest? Next { get; set; }

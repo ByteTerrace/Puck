@@ -200,8 +200,9 @@ public sealed partial class SdfWorldTables {
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;
         }
+        // Twice the need, as the mesh region grows, so draws landing over several frames wait for the device once.
         m_deviceContext.TryWaitIdle();
-        var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-mesh-transforms"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-mesh-transforms"), sizeBytes: (2UL * bytes), usage: GpuBufferUsage.Storage);
 
         m_previousMeshTransforms.Dispose();
         m_previousMeshTransforms = replacement;

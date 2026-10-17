@@ -39,6 +39,9 @@ public sealed record SdfWorldRenderSpec(
     /// retires each lease only after the submission that sampled it has completed, and adds the wait the lease carries to
     /// that submission.</summary>
     public ISdfScreenSources? ScreenSources { get; init; }
+    /// <summary>The library the residency's bake shares meshes through with every other residency holding it, or
+    /// <see langword="null"/>, the default, for a library of its own.</summary>
+    public SdfMeshLibrary? MeshLibrary { get; init; }
 
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would

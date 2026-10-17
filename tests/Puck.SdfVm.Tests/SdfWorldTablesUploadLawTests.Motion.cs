@@ -52,7 +52,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: a), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: b),
         ];
         Matrix4x4[] Previous() => MemoryMarshal.Cast<byte, Matrix4x4>(
-            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 128)).ToArray();
+            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 256))[..2].ToArray();
         rig.Render(time: 0f, meshDraws: Draws(a: first, b: second));
         Assert.Equal(expected: new[] { first, second }, actual: Previous());
         var movedFirst = (first * Matrix4x4.CreateRotationY(radians: 0.3f));
@@ -126,7 +126,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var third = Matrix4x4.CreateTranslation(xPosition: -4f, yPosition: 0f, zPosition: 1f);
 
         Matrix4x4[] Previous() => MemoryMarshal.Cast<byte, Matrix4x4>(
-            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 128)).ToArray();
+            span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: 256))[..2].ToArray();
 
         rig.Render(time: 0f, meshDraws: [
             new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second),

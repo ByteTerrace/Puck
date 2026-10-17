@@ -123,6 +123,7 @@ public static class WorldRenderRoot {
                 DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
                 HostsOnDirectX = hostSettings.HostsOnDirectX,
                 InstanceCapacity = frameSource.InstanceCapacity,
+                MeshLibrary = binder.MeshLibrary,
                 ProgramWordCapacity = frameSource.ProgramWordCapacity,
                 // The diegetic screens: the instance each one reads, and the light each casts into the room.
                 ScreenSources = binder,

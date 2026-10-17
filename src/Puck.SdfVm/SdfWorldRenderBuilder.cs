@@ -32,6 +32,7 @@ public static class SdfWorldRenderBuilder {
             pipelines: pipelines,
             programWordCapacity: spec.ProgramWordCapacity,
             screenSources: spec.ScreenSources,
+            meshLibrary: spec.MeshLibrary,
             width: spec.Width
         );
     }

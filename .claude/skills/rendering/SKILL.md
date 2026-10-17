@@ -226,9 +226,11 @@ owns the explanation.
   (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
   layout that moves placed meshes when one lands (sections by attribute) made
   every landing rewrite the whole million-triangle region, 45 to 120 ms frames
-  on the debug world. A placement names absolute words
-  (`SdfMeshRegionMesh`); a new per-draw field belongs in the record, never in a
-  mesh's words.
+  on the debug world. Newly placed meshes land within
+  `SdfWorldTables.MeshLandingWords` a frame, their draws waiting out of the
+  staged records until they do, and a grown region takes the words it held. A
+  placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
+  belongs in the record, never in a mesh's words.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
   field evaluations a frame's bake dispatch makes (a gradient sample counts
   five); every lattice is chunked to fit it (final lattices in slabs, material
@@ -239,9 +241,13 @@ owns the explanation.
 - **A batch answers the bake that took it.** `SdfMeshBakeBatch.Bake` names it, and
   `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame, so a
   view that leaves the frame or follows another residency never strands a bake.
-  Groups are keyed by geometry (a dynamic group by its bound in its slot's frame)
-  and every meshed group stays kept by its key, so a rebuild or a returning body
-  takes its mesh; only new geometry bakes.
+  Groups are keyed by geometry (`SdfMeshGeometryBuilder`: instructions with
+  side-table values for offsets, materials by place, no dynamic bound) and every
+  meshed group is stored in the `SdfMeshLibrary` all of a presentation's
+  residencies share, so a rebuild, a returning body or a body crossing from
+  another world takes its mesh; only new geometry bakes. A field the hash reads
+  that a program assigns by position (a slot, a table offset, a palette index)
+  breaks sharing silently: canonicalize it in the builder.
 - **A view without shadows holds no cascade.** A view whose quality skips shadows
   (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
   the cascades' passes and their 252 MB of targets go, and the surface pass binds

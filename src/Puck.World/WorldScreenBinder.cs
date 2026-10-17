@@ -147,6 +147,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private int m_viewProgramWordCapacity;
     private SdfWorldPipelineCatalog? m_viewPipelines;
 
+    /// <summary>Gets the library every residency rendering a world of the presentation shares its baked meshes through:
+    /// the world's own, each routed scene's, each session's and each infinity view's.</summary>
+    public SdfMeshLibrary MeshLibrary { get; } = new();
+
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
     // The screen indices declared at boot (construction): the screens the world's views bind, fixed for their lifetime.

@@ -151,6 +151,7 @@ internal sealed partial class WorldScreenBinder {
             instanceCapacity: ((int)host.CapacityRevision),
             kernels: ViewKernels(),
             name: name,
+            meshLibrary: MeshLibrary,
             pipelines: m_viewPipelines!,
             programWordCapacity: Math.Max(
                 val1: source.WorstCaseProgramWordCapacity,

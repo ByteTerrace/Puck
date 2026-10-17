@@ -693,15 +693,28 @@ A mesh no draw names any more stays where it lies, so a body that leaves the
 world and returns finds its meshes placed and writes nothing for them; the arena
 packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
-Every mesh is written again only when the arena outgrows its draw reserve or
-packs, the mesh atlases change, or the region grows, to twice its
-need. The bake keys each group by its geometry: a static group by its bound and
-instructions, a dynamic group by its bound in its slot's own frame, rounded to a
-centimetre, so the body's pose at a rebuild does not move the key. A program
-rebuild keeps every group whose key held, and every group the bake has meshed
-stays kept by its key, so geometry that comes back (a body that left the world
-and returned, an instance at another index) takes its mesh rather than baking
-again. Only new geometry bakes. The bake reports its residency, groups,
+Meshes a list newly places land within a frame's share of words
+(`SdfWorldTables.MeshLandingWords`, 2 MB), in the list's order; a draw whose
+mesh is still owed waits out of the staged records until it lands, so a body
+whose meshes all arrive at once, as when it crosses into a world, lands over a
+few frames. Every mesh is written again at once only when the arena outgrows
+its draw reserve or packs, or the mesh atlases change; a region that grows, to
+twice its need, takes the words it held. The bake keys each group by its
+geometry (`SdfMeshGeometryBuilder`), a 128-bit hash of what determines its
+surface independent of where its program places it: its instructions, a convex
+polygon's, sweep's or path's side-table values in place of the offset its
+program packed them at, its shapes' materials by their place among the group's
+materials, a static group's bound, and a dynamic group's transform into its own
+slot by that role rather than the slot's number. A dynamic group's bound is left
+out, since it is offset along world axes by the body's pose when the program was
+emitted. A program rebuild keeps every group whose geometry held, and every
+meshed group is stored by its geometry in an `SdfMeshLibrary` every residency of
+a presentation shares (`WorldScreenBinder.MeshLibrary`), so geometry that comes
+back (a body that left the world and returned, an instance at another index) or
+arrives from another world (a body crossing between the debug world and the
+garden) takes its mesh rather than baking again, its triangle materials
+renumbered by place when the program numbers the group's materials otherwise.
+Only new geometry bakes. The bake reports its residency, groups,
 dispatches, samples, triangles, vertices and wall time on stderr when it
 starts and finishes (`[sdf.mesh-bake] start residency=…`, `done residency=…`).
 It counts a batch as work when a bake pass records it: a frame that takes a
