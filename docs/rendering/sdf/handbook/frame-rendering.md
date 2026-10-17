@@ -73,7 +73,9 @@ reached in the mesh target and occluding by its elevation above the hit's
 tangent plane, so a plane never occludes itself; and the stable shadow slots'
 visibility into the K word, a percentage-closer soft shadow from the first
 cascade holding the point: a blocker search sizes the penumbra from the light's
-penumbra slope and the gap to the blockers, and a filter of that width answers.
+penumbra slope and the gap to the blockers, and a filter of that width answers,
+each tap against the receiver's own plane from the hit triangle's normal
+([soft shadows](lighting-and-shading.md#soft-shadows-cascades-and-a-penumbra-filter)).
 The occlusion and each shadow are one tap pattern's estimate per pixel: each
 pixel turns and spaces its taps (the occlusion's spiral, the shadow's blocker
 search and filter disks) by its cell of a 4×4 ordered-dither tile

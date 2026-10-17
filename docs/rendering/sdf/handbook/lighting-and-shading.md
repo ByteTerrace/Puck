@@ -48,6 +48,19 @@ temporal reconstruction ([ambient occlusion](#ambient-occlusion-screen-space-obs
 ambient term still fills shadowed regions, so shadows read soft and colored,
 never black.
 
+A wide filter on a single receiver depth shadows the receiver by its own
+surface: a floor seen at a slant from the light lies nearer the light on one
+side of the disk, and a curved receiver such as a shin curls toward it. Each tap
+therefore compares against the receiver's own plane, extended to that tap's
+texel centre from the hit triangle's normal (`sdfMeshShadowGap`); the triangle
+is what the cascade holds, while the smoothed shading normal tilts away from it
+across an edge the bake rounded. A filter tap then counts a caster only inside
+the light's penumbra cone over the receiver, since one outside it cannot shadow
+the receiver, and within a texel and a half only one rising toward the light at
+least 2.5 times as steeply as it lies aside, so the foot of a wall facing the
+light does not darken the floor before it. The blocker search counts every
+caster in front of the plane, so the penumbra estimate still sees them all.
+
 Each light reads its own visibility from its K lane. A directional outside the
 slots is unshadowed, scaled by the surface's ambient occlusion. During a
 handoff, an outgoing light with cascade visibility `v` reads

@@ -145,8 +145,9 @@ float3 sdfMeshFaceCamera(float3 normal, float3 face, float3 rayDirection) {
 }
 // The surface normal of a draw's triangle at a world point on it, seen along `rayDirection`: the vertex normals
 // interpolated at the point's barycentric coordinates when the mesh carries them, the face normal otherwise, facing the
-// camera (sdfMeshFaceCamera).
-float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection) {
+// camera (sdfMeshFaceCamera). `faceNormal` is the triangle's own unit normal on the camera's side, the plane the
+// rasterized surface lies in.
+float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, float3 rayDirection, out float3 faceNormal) {
     uint record = sdfMeshRecord(draw);
     uint first = (3u * triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
@@ -155,6 +156,9 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
     float3 face = cross((b - a), (c - a));
     float3 normal = face;
     float3 weights;
+
+    faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
+    faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 
     if (((sdfMeshRegion[(record + SdfMeshFlagsWord)] & SdfMeshNormalsFlag) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
         float3 interpolated = (((weights.x * sdfMeshWorldNormal(record, first)) + (weights.y * sdfMeshWorldNormal(record, (first + 1u)))) + (weights.z * sdfMeshWorldNormal(record, (first + 2u))));

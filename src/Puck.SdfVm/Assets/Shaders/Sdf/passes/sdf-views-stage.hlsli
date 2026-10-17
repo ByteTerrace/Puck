@@ -12,9 +12,9 @@
 groupshared float4 sdfViewsFilterTile[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
 groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE];
 
-// Loads the group's filter tile from the visibility records. Every lane of the group calls it, a lane past the render
-// extent included, since it ends at the group's barrier.
-void sdfViewsGatherFilter(SdfPixel p) {
+// Loads the group's filter tile from the visibility records, the K words only when `shadows` asks for them. Every lane of
+// the group calls it, a lane past the render extent included, since it ends at the group's barrier.
+void sdfViewsGatherFilter(SdfPixel p, bool shadows) {
     uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
     int2 origin = (int2(p.pixel - lane) - 2);
     int2 dims = int2(worldViewDims(p.view));
@@ -23,7 +23,7 @@ void sdfViewsGatherFilter(SdfPixel p) {
         index += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
         int2 pixel = (origin + int2((index % SDF_VIEWS_FILTER_TILE_EDGE), (index / SDF_VIEWS_FILTER_TILE_EDGE)));
         float4 entry = float4(0.0, 0.0, 0.0, -1.0);
-        uint shadows = 0u;
+        uint word = 0u;
 
         if (all(pixel >= 0) && all(pixel < dims)) {
             uint record = worldVisibilityRecord(uint2(pixel), p.viewIndex);
@@ -33,12 +33,12 @@ void sdfViewsGatherFilter(SdfPixel p) {
             if (t < p.farDistance) {
                 float3 direction = cameraRayDirection(p.view, ((float2(pixel) + 0.5) / float2(dims)));
                 entry = float4((p.rayOrigin + (direction * t)), f16tof32(sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] >> 16u));
-                shadows = sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord];
+                word = (shadows ? sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord] : 0u);
             }
         }
 
         sdfViewsFilterTile[index] = entry;
-        sdfViewsFilterShadows[index] = shadows;
+        sdfViewsFilterShadows[index] = word;
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -91,7 +91,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         && (worldFinalShadingMode(p.viewMode) || (p.viewMode == DebugViewModeShadow)));
 
     if (ambientFilter || shadowFilter) {
-        sdfViewsGatherFilter(p);
+        sdfViewsGatherFilter(p, shadowFilter);
     }
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);

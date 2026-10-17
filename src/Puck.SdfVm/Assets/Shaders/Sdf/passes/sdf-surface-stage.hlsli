@@ -21,6 +21,10 @@ static const float SdfMeshAoMaxPixels = 128.0;
 static const uint SdfMeshShadowSearchTaps = 12u;
 static const uint SdfMeshShadowFilterTaps = 16u;
 static const float SdfMeshShadowMaxTexels = 14.0;
+// The filter's least clearance per texel a caster lies beside the receiver, and the lateral distance, in texels, past
+// which the light's cone governs instead (sdfMeshShadowGap).
+static const float SdfMeshShadowSlopeBias = 2.5;
+static const float SdfMeshShadowNearTexels = 1.5;
 static const float SdfGoldenAngle = 2.39996323;
 // The texels along each side of a cascade target. KEEP IN SYNC with SdfWorldPackage.MeshShadowResolution.
 #define SDF_MESH_SHADOW_RESOLUTION 2048
@@ -123,20 +127,37 @@ float sdfMeshShadowDepth(uint cascade, int2 texel, float far) {
         : ((cascade == 1u) ? meshShadowFar.Load(int3(clamped, 0)) : meshShadowSecond.Load(int3(clamped, 0))));
     return ((value.y >= 1.0) ? value.x : far);
 }
+// How far a cascade's caster at the texel `offset` texels from the receiver's lies in front of the receiver, less the
+// clearance it needs: positive for an occluder. The receiver is extended over its plane to that texel's centre
+// (`gradient`, its depth change per texel). The clearance grows with the caster's lateral distance: by `near` texels
+// per texel, and past SdfMeshShadowNearTexels by `cone`, the inverse penumbra slope, so a caster outside the light's
+// cone over the receiver, which cannot shadow it, does not count. A surface beside the receiver that rises toward the
+// light less steeply than `near` (a wall's foot seen from the floor before it) is the texel grid's, not an occluder.
+// The blocker search passes zero for both, so it finds every caster the filter might count.
+float sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 offset, float receiver, float2 gradient, float texelWorld, float near, float cone) {
+    float2 at = floor(texel + offset);
+    float2 delta = ((at + 0.5) - texel);
+    float lateral = length(delta);
+    float clearance = (texelWorld * max((near * lateral), ((lateral - SdfMeshShadowNearTexels) * cone)));
+
+    return (((receiver + dot(gradient, delta)) - clearance) - sdfMeshShadowDepth(cascade, int2(at), c.far));
+}
 // A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
 // search sizes the penumbra from the light's penumbra slope and the gap to the average blocker, and a percentage-closer
 // filter of that width answers. Both disks follow the pixel's pattern (sdfMeshPattern), and views averages the answer
-// over the pattern's window (sdfViewsFilter).
-float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, uint end, float slope) {
+// over the pattern's window (sdfViewsFilter). `face` is the hit triangle's own normal: the cascade holds the triangle,
+// not the shading normal's smoothed surface, which tilts away from it across a crease the bake rounded.
+float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, uint end, float slope) {
     float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
+    float cone = (1.0 / slope);
 
     [loop]
     for (uint cascade = first; (cascade < end); cascade++) {
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         float texelWorld = ((2.0 * c.halfHeight) / float(SDF_MESH_SHADOW_RESOLUTION));
-        float3 biased = (surfacePoint + (normal * (parameters.z * texelWorld)));
+        float3 biased = (surfacePoint + (face * (parameters.z * texelWorld)));
         float3 relative = (biased - c.position);
         float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
 
@@ -145,19 +166,25 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
         }
 
         float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * float(SDF_MESH_SHADOW_RESOLUTION));
-        float receiver = (dot(relative, c.forward) - (parameters.y + texelWorld));
+        float receiver = (dot(relative, c.forward) - parameters.y);
+        // The receiver's plane in the cascade: its depth change per texel along the target's x and y, from the normal in
+        // light space (x along right, y down the target's rows), so each tap compares against the receiver's own surface
+        // at that tap's texel centre rather than the depth at the pixel. A receiver near edge-on to the light keeps its
+        // slope at that of a normal a fifth of the way toward the light.
+        float3 lightNormal = float3(dot(face, c.right), dot(face, c.up), min(dot(face, c.forward), -0.2));
+        float2 gradient = (float2((-lightNormal.x * c.aspect), lightNormal.y) * (texelWorld / lightNormal.z));
         float searchTexels = SdfMeshShadowMaxTexels;
         float blockers = 0.0;
-        float blockerDepth = 0.0;
+        float blockerGap = 0.0;
 
         [loop]
         for (uint tap = 0u; (tap < SdfMeshShadowSearchTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowSearchTaps));
             float angle = ((float(tap) * SdfGoldenAngle) + rotation);
-            float depth = sdfMeshShadowDepth(cascade, int2(texel + (float2(cos(angle), sin(angle)) * (r * searchTexels))), c.far);
-            if (depth < receiver) {
+            float gap = sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * searchTexels)), receiver, gradient, texelWorld, 0.0, 0.0);
+            if (gap > 0.0) {
                 blockers += 1.0;
-                blockerDepth += depth;
+                blockerGap += gap;
             }
         }
 
@@ -165,9 +192,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
             return 1.0;
         }
 
-        blockerDepth /= blockers;
-
-        float penumbra = (((receiver - blockerDepth) * slope) / texelWorld);
+        float penumbra = (((blockerGap / blockers) * slope) / texelWorld);
         float filterTexels = clamp(penumbra, 1.0, SdfMeshShadowMaxTexels);
         float lit = 0.0;
 
@@ -175,8 +200,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 normal, uint first, 
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
             float angle = ((float(tap) * SdfGoldenAngle) + rotation);
-            float depth = sdfMeshShadowDepth(cascade, int2(texel + (float2(cos(angle), sin(angle)) * (r * filterTexels))), c.far);
-            lit += ((depth >= receiver) ? 1.0 : 0.0);
+            lit += ((sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone) > 0.0) ? 0.0 : 1.0);
         }
 
         return (lit / float(SdfMeshShadowFilterTaps));
@@ -205,7 +229,8 @@ void sdfSurfaceStage(SdfPixel p) {
 
     if (hit) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
-        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection);
+        float3 face;
+        float3 normal = sdfMeshSurfaceNormal(meshHit.draw, meshHit.triangleIndex, surfacePoint, p.rayDirection, face);
 
         value.normal = normal;
         if (!worldAoDisabled()) {
@@ -216,11 +241,11 @@ void sdfSurfaceStage(SdfPixel p) {
             // light's cosine already darkens, so only a lit side queries them.
             float4 parameters = passGroup.meshShadowParameters;
             float3 key = -sdfMeshCascadeAt(0u).forward;
-            value.shadows.x = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
+            value.shadows.x = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
             // The second shadow slot's light, from its one cascade.
             if (parameters.w > 0.0) {
                 float3 fill = -sdfMeshCascadeAt(2u).forward;
-                value.shadows.y = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, normal, 2u, 3u, parameters.w) : 1.0);
+                value.shadows.y = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : 1.0);
             }
         }
     }

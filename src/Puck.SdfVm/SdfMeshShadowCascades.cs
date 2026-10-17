@@ -33,7 +33,7 @@ public readonly struct SdfMeshShadowCascades {
     public const float CasterReach = 200f;
     /// <summary>The constant depth bias a receiver subtracts, in metres.</summary>
     public const float ConstantBias = 0.02f;
-    /// <summary>The receiver's offset along its normal, in cascade texels.</summary>
+    /// <summary>The receiver's offset along its triangle's normal, in cascade texels.</summary>
     public const float NormalOffsetTexels = 1.5f;
 
     /// <summary>The depth, in metres from the eye, the second shadow slot's one cascade covers.</summary>

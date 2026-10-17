@@ -53,9 +53,17 @@ scaled by ambient occlusion. During a handoff the outgoing light's own
 occlusion deficit fades to zero by the handoff's weight, keeping its radiance,
 and the incoming light lights unshadowed until it holds the slot.
 
-A cascade's texel bounds the shadow's resolution, and its normal offset
-(`SdfMeshShadowCascades.NormalOffsetTexels`) bounds its acne; a body thinner
-than a texel can miss its own shadow.
+Each tap compares the cascade's depth against the receiver's own plane at that
+tap's texel centre, the plane of the hit triangle rather than the smoothed
+shading normal, so a flat or convex receiver never shadows itself however wide
+the filter. A filter tap counts only a caster inside the light's penumbra cone
+over the receiver, and within a texel and a half of it only one that rises
+toward the light at least 2.5 times as steeply as it lies aside, so the foot of
+a wall facing the light does not darken the floor before it. A cascade's texel
+bounds the shadow's resolution, and a constant bias
+(`SdfMeshShadowCascades.ConstantBias`) and a normal offset
+(`SdfMeshShadowCascades.NormalOffsetTexels`) bound the rest of its acne; a body
+thinner than a texel can miss its own shadow.
 
 ## Curvature and stylization
 
