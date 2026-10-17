@@ -81,12 +81,13 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // Eight metres ahead of the spawn, facing it. Its glass shows the garden through the frame, as a window, and is a
-  // door: walking -Z through it arrives at the garden's arrival frame, which stands at the same point facing away, so
-  // the crossing maps as the identity and the walk carries straight on.
+  // Eight metres ahead of the spawn and three to the right, so the avatar at the spawn does not hide it from the chase
+  // camera, facing +Z. Its glass shows the garden through the frame, as a window, and is a door: walking -Z through it
+  // arrives at the garden's arrival frame, which stands at the same point facing away, so the crossing maps as the
+  // identity and the walk carries straight on.
   placement "portal" {
     prototype: "frame"
-    position [0, 0, -8]
+    position [3, 0, -8]
     yawDegrees: 180
     faceSources [
       {

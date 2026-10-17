@@ -1,10 +1,10 @@
 // The garden: the debug world's portal destination, a small sunset plot with a green floor and a golden obelisk, so a
 // window onto it reads at a glance. The debug world's frame (`portal`) opens onto the arrival frame here, and the two
 // map as the identity: a body walking -Z through the debug frame arrives here at the same point, still walking -Z.
-// Turn round and the arrival frame is the way back; walk on and the far frame, twelve metres ahead, shows the debug
-// world turned about, so it is also a frame seen through a frame from the debug world's spawn. Boot the debug world,
-// never this one: it is reached through the debug world's frame, and `world.reload` there recompiles only the debug
-// world. See debug.md beside this file.
+// Turn round and the arrival frame is the way back. Walk on and the far frame, twelve metres further along the line the
+// spawn camera looks through the debug frame, shows the debug world turned about, so it is also a frame seen through a
+// frame from the debug world's spawn. Boot the debug world, never this one: it is reached through the debug world's
+// frame, and `world.reload` there recompiles only the debug world. See debug.md beside this file.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -81,7 +81,7 @@ placements {
   // way back: walking +Z into it arrives out of the debug frame walking +Z, towards the debug world's spawn.
   placement "arrival" {
     prototype: "frame"
-    position [0, 0, -8]
+    position [3, 0, -8]
     yawDegrees: 0
     faceSources [
       {
@@ -103,11 +103,12 @@ placements {
     ]
   }
 
-  // The far frame faces back at the arrival, so the debug world's window onto the garden shows it. It also maps onto
-  // the debug frame, turned about: a body walking -Z into it arrives out of the debug frame walking +Z.
+  // The far frame stands on the line the spawn camera looks along through the debug frame and faces back along it, so
+  // the debug world's window onto the garden shows it. It also maps onto the debug frame, turned about: a body walking
+  // -Z into it arrives out of the debug frame walking +Z.
   placement "far" {
     prototype: "frame"
-    position [0, 0, -20]
+    position [5.5, 0, -20]
     yawDegrees: 180
     faceSources [
       {
@@ -131,7 +132,7 @@ placements {
 
   placement "obelisk" {
     prototype: "obelisk"
-    position [-6, 0, -16]
+    position [9, 0, -30]
     solid
   }
 }

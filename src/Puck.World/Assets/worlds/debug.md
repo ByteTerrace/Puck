@@ -28,10 +28,10 @@ whichever World it attached to first.
 
 | Where | What | Portal |
 |---|---|---|
-| Debug world, `portal` at (0, 0, -8), facing +Z toward the spawn | The gilt frame, glass showing the garden | Walk -Z through it: you arrive in the garden at the same point, still walking -Z. The pair (`portal`, `arrival`) faces each other, so the crossing maps as the identity. |
-| Garden, `arrival` at (0, 0, -8), facing -Z | The frame you came out of, glass showing the debug world | Turn round and walk +Z into it: you arrive back out of the debug frame, walking +Z towards the spawn. |
-| Garden, `far` at (0, 0, -20), facing +Z | The frame ahead of you, glass showing the debug world turned about | Walk -Z into it: the pair (`far`, `portal`) shares a yaw, so the crossing turns you about and you come out of the debug frame walking +Z towards the spawn, the view turned with you. |
-| Garden, `obelisk` at (-6, 0, -16) | The landmark | |
+| Debug world, `portal` at (3, 0, -8), facing +Z, ahead and right of the spawn | The gilt frame, glass showing the garden | Walk -Z through it: you arrive in the garden at the same point, still walking -Z. The pair (`portal`, `arrival`) faces each other, so the crossing maps as the identity. |
+| Garden, `arrival` at (3, 0, -8), facing -Z | The frame you came out of, glass showing the debug world | Turn round and walk +Z into it: you arrive back out of the debug frame, walking +Z towards the spawn. |
+| Garden, `far` at (5.5, 0, -20), facing +Z | The frame ahead of you, glass showing the debug world turned about | Walk -Z into it: the pair (`far`, `portal`) shares a yaw, so the crossing turns you about and you come out of the debug frame walking +Z towards the spawn, the view turned with you. |
+| Garden, `obelisk` at (9, 0, -30) | The landmark | |
 
 From the spawn the debug frame shows the garden, and inside it the far frame
 shows the debug world from the far frame's mapped eye, two levels deep. The
