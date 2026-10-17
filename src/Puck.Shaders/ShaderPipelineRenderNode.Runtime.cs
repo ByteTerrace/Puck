@@ -191,7 +191,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             if (Regions is not null) {
                 foreach (var region in Regions) {
-                    region?.Dispose();
+                    DisposeRegion(later: later, region: region);
                 }
 
                 Regions = null;
@@ -203,7 +203,7 @@ public sealed partial class ShaderPipelineRenderNode {
             later(obj: PassRegion);
             PassRegion = null;
             foreach (var region in (RowRegions ?? [])) {
-                region.Region.Dispose();
+                DisposeRegion(later: later, region: region.Region);
             }
 
             RowRegions = null;
@@ -225,6 +225,16 @@ public sealed partial class ShaderPipelineRenderNode {
             RenderPass = null;
             Pipeline?.Release();
             Pipeline = null;
+        }
+
+        // A staged region releases its share of the graph's copy pool, whose bookkeeping the frame thread owns, so it is
+        // disposed at once; any other region holds only its buffers and goes the way of the graph's buffers.
+        private static void DisposeRegion(GpuRegion? region, Action<IDisposable?> later) {
+            if (region?.Policy == GpuResidencyPolicy.Staged) {
+                region.Dispose();
+            } else {
+                later(obj: region);
+            }
         }
     }
 }

@@ -163,8 +163,8 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Creates the installing graph's row regions, each staged one taking the copy-pool share CreateRegionCopies reserved
     // for it, and writes each bound row's kept values into its regions. The regions belong to m_rowRegionsOwner until the
-    // graph's leading pass takes them.
-    private void CreateRowRegions(IGpuComputePipeline? copyPipeline) {
+    // graph's leading pass takes them. Every region that does not stage is the one the build made off the frame thread.
+    private void CreateRowRegions(GraphBuild built, IGpuComputePipeline? copyPipeline) {
         var plan = m_installingRows!;
         var regions = new RowRegion[plan.Regions.Length];
 
@@ -175,19 +175,15 @@ public sealed partial class ShaderPipelineRenderNode {
             var staged = (m_rowShares[index] >= 0);
 
             regions[index] = new RowRegion(
-                region: CreateRegion(
+                region: ((staged ? null : built.TakeRowRegion(index: index)) ?? CreateRegion(
                     byteCount: ((int)spec.ByteCount),
                     copyPipeline: copyPipeline,
                     copySets: (staged
                         ? m_regionCopies!.Region(index: m_rowShares[index])
                         : null),
-                    name: new GpuObjectName(
-                        detail: spec.Name,
-                        owner: m_name,
-                        part: "rows"
-                    ),
+                    name: RowRegionName(owner: m_name, spec: spec),
                     staged: staged
-                ),
+                )),
                 row: spec.Row,
                 type: spec.Type
             );

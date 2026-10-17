@@ -23,6 +23,8 @@ public sealed partial class ShaderPipelineRenderNode {
     private const GpuStage RegionReaders = GpuStage.ComputeShader | GpuStage.FragmentShader;
 
     private readonly Dictionary<string, GpuRegion> m_externalRegions = new(comparer: StringComparer.Ordinal);
+    // Port regions the installed graph's build made off the frame thread, by port name, until a bind takes them.
+    private Dictionary<string, GpuRegion> m_preparedPorts = new(comparer: StringComparer.Ordinal);
 
     // The device's region-copy pipeline, leased by the build of the first graph with a staged region, and each slot's
     // command pool the frame's copies are recorded in; all held until a device loss or disposal.
@@ -96,24 +98,27 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         var share = -1;
 
+        // A region binds into an installed graph: a staged port's copy sets are that graph's, and a port that does not stage
+        // takes the region its build made off the frame thread. Until one installs, binding advances the candidate's build
+        // and install as a produced frame does: a host that produces only once its region is bound would otherwise never
+        // install one.
+        if (staged ? !m_portShares.ContainsKey(key: name) : !IsReady) {
+            m_advances++;
+            EnsureBuild();
+            InstallPending();
+        }
         if (staged) {
-            // A port's copy sets are the installed graph's, so until a graph reserving them installs, binding advances the
-            // candidate's build and install as a produced frame does: a host that produces only once its region is bound
-            // would otherwise never install one.
-            if (!m_portShares.ContainsKey(key: name)) {
-                m_advances++;
-                EnsureBuild();
-                InstallPending();
-            }
             if (!m_portShares.TryGetValue(
                 key: name,
                 value: out share
             )) {
                 return null;
             }
+        } else if (!IsReady) {
+            return null;
         }
 
-        var region = CreateRegion(
+        var region =((staged ? null : TakePreparedPort(name: name)) ?? CreateRegion(
             byteCount: ((int)sizeBytes),
             copyPipeline: m_copyPipeline,
             copySets: (staged
@@ -124,7 +129,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 part: name
             ),
             staged: staged
-        );
+        ));
 
         m_externalRegions.Add(
             key: name,
@@ -442,7 +447,8 @@ public sealed partial class ShaderPipelineRenderNode {
         m_portShares = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
     }
     // Disposes every bound region, once no submission can read it: after the node waited its submissions, after a device
-    // loss, or when a retired node's host has seen its readers complete.
+    // loss, or when a retired node's host has seen its readers complete, and every port region a build made that no bind
+    // took.
     private void ReleaseRegions() {
         foreach (var (name, region) in m_externalRegions) {
             _ = m_externalBuffers.Remove(key: name);
@@ -450,5 +456,63 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         m_externalRegions.Clear();
+        ReleasePreparedPorts();
     }
+    // Disposes the port regions a build made that no bind took; no submission ever read them.
+    private void ReleasePreparedPorts() {
+        foreach (var region in m_preparedPorts.Values) { DisposeLater(disposable: region); }
+
+        m_preparedPorts.Clear();
+    }
+    // Takes the port region the installed graph's build made, when a bind reads the installed graph's declaration, which
+    // the build sized it by, rather than a pending candidate's.
+    private GpuRegion? TakePreparedPort(string name) =>
+        (((m_pending is null) && m_preparedPorts.Remove(key: name, value: out var region)) ? region : null);
+    // A ring region every frame slot writes its own buffer of, as a graph's frame block, a row region or a host buffer
+    // port that does not stage takes.
+    private static GpuRegion RingRegionOf(IGpuDeviceContext device, GpuDeviceServices gpu, uint inFlight, int byteCount, in GpuObjectName name, GpuBufferUsage usage = GpuBufferUsage.Storage) => new(
+        bindings: gpu.Bindings,
+        buffers: gpu.BufferFactory,
+        byteCount: byteCount,
+        copyPipeline: null,
+        memory: GpuResidency.RingMemory(profile: device.MemoryProfile),
+        name: name,
+        policy: GpuResidencyPolicy.Ring,
+        recorder: gpu.Recorder,
+        slotCount: ((int)inFlight),
+        usage: usage
+    );
+    // The frame group block every pass of a graph binds, held by its leading pass.
+    private static GpuRegion FrameRegionOf(IGpuDeviceContext device, GpuDeviceServices gpu, uint inFlight, string owner, uint blockBytes) => RingRegionOf(
+        byteCount: UniformBytes(blockBytes: blockBytes),
+        device: device,
+        gpu: gpu,
+        inFlight: inFlight,
+        name: new GpuObjectName(
+            owner: owner,
+            part: "frame block"
+        ),
+        usage: GpuBufferUsage.Uniform
+    );
+    // The name of a graph's row region.
+    private static GpuObjectName RowRegionName(string owner, RowRegionSpec spec) => new(
+        detail: spec.Name,
+        owner: owner,
+        part: "rows"
+    );
+    // A frame slot's command pool, whose one command list every pass of the slot's frame records into.
+    private static IGpuCommandPool CommandsOf(GpuDeviceServices gpu, string owner, int slot) =>
+        gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+            index: slot,
+            owner: owner,
+            part: "commands"
+        ));
+    // A graph's kernel counters: one row per pass and per work detail its packages report, in each frame slot.
+    private static GpuKernelCounters KernelCountersOf(IGpuBufferFactory buffers, uint inFlight, string owner, int rows) => new(
+        buffers: buffers,
+        owner: owner,
+        part: "kernel counters",
+        rows: rows,
+        slots: ((int)inFlight)
+    );
 }

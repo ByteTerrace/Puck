@@ -287,6 +287,9 @@ public sealed partial class ShaderPipelineRenderNode {
             InFlight: m_inFlight,
             Instance: m_name,
             Key: key,
+            KernelCounterRows: (m_passes.FirstOrDefault()?.KernelCounters?.Rows ?? 0),
+            BoundPorts: [.. m_externalRegions.Keys],
+            SlotObjects: m_slots.Any(predicate: static slot => ((slot.Fence is null) || (slot.Commands is null))),
             Packages: m_packages,
             Pipelines: m_pipelines
         );
@@ -395,7 +398,9 @@ public sealed partial class ShaderPipelineRenderNode {
             );
     }
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
-    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages, int[] Carried);
+    // KernelCounterRows is the rows the installed counters reached, BoundPorts the host buffer ports already bound,
+    // which keep their regions across installs, and SlotObjects whether a frame slot still lacks its fence or commands.
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages, int[] Carried, int KernelCounterRows = 0, string[]? BoundPorts = null, bool SlotObjects = false);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -443,6 +448,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     request: request
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 build.CreatePassRegions(cancellationToken: cancellationToken, plan: plan, request: request);
+                build.CreateGraphRegions(cancellationToken: cancellationToken, plan: plan, request: request);
                 build.CreateImages(
                     cancellationToken: cancellationToken,
                     plan: plan,
@@ -607,6 +613,143 @@ public sealed partial class ShaderPipelineRenderNode {
                 );
             }
         }
+        // Creates what the install would otherwise create on the frame thread: the frame block ring every pass binds, the
+        // row regions and host buffer ports that do not stage (a staged one takes copy sets from the pool the install
+        // creates), the kernel counters, as many rows as the node's installed counters reached, so they are not grown on
+        // the frame either, and for a node's first graph its frame slots' fences and command pools.
+        private void CreateGraphRegions(ShaderPipelinePlan plan, BuildRequest request, CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (plan.Passes.FirstOrDefault()?.Parameters is { } frameLayout) {
+                m_frameRegion = FrameRegionOf(
+                    blockBytes: frameLayout.FrameBlockSizeBytes,
+                    device: request.Device,
+                    gpu: request.Gpu,
+                    inFlight: request.InFlight,
+                    owner: request.Instance
+                );
+            }
+
+            var rows = RowPlan.Of(plan: plan, rows: request.Key.Rows).Regions;
+
+            m_rowRegions = new GpuRegion?[rows.Length];
+
+            for (var index = 0; (index < rows.Length); index++) {
+                if (!Staged(device: request.Device, byteCount: rows[index].ByteCount)) {
+                    m_rowRegions[index] = RingRegionOf(
+                        byteCount: ((int)rows[index].ByteCount),
+                        device: request.Device,
+                        gpu: request.Gpu,
+                        inFlight: request.InFlight,
+                        name: RowRegionName(owner: request.Instance, spec: rows[index])
+                    );
+                }
+            }
+            foreach (var port in HostBufferPorts(plan: plan)) {
+                if (
+                    !(request.BoundPorts ?? []).Contains(value: port.Name) &&
+                    (port.SizeBytes is { } sizeBytes and > 0UL and <= int.MaxValue) &&
+                    !Staged(device: request.Device, byteCount: sizeBytes)
+                ) {
+                    m_portRegions[port.Name] = RingRegionOf(
+                        byteCount: ((int)sizeBytes),
+                        device: request.Device,
+                        gpu: request.Gpu,
+                        inFlight: request.InFlight,
+                        name: new GpuObjectName(
+                            owner: request.Instance,
+                            part: port.Name
+                        )
+                    );
+                }
+            }
+            if (plan.CountsKernelWork) {
+                m_kernelCounters = KernelCountersOf(
+                    buffers: request.Gpu.BufferFactory,
+                    inFlight: request.InFlight,
+                    owner: request.Instance,
+                    rows: Math.Max(val1: plan.Passes.Count, val2: request.KernelCounterRows)
+                );
+            }
+            if (request.SlotObjects) {
+                m_slotFences = new IGpuSubmissionFence?[request.InFlight];
+                m_slotCommands = new IGpuCommandPool?[request.InFlight];
+
+                for (var index = 0; (index < request.InFlight); index++) {
+                    m_slotFences[index] = request.Gpu.QueueSubmitter.CreateSubmissionFence();
+                    m_slotCommands[index] = CommandsOf(
+                        gpu: request.Gpu,
+                        owner: request.Instance,
+                        slot: index
+                    );
+                }
+            }
+        }
+        // Takes a frame slot's fence the build made, or null when it made none.
+        public IGpuSubmissionFence? TakeFence(int slot) {
+            if (slot >= m_slotFences.Length) {
+                return null;
+            }
+
+            var fence = m_slotFences[slot];
+
+            m_slotFences[slot] = null;
+
+            return fence;
+        }
+        // Takes a frame slot's command pool the build made, or null when it made none.
+        public IGpuCommandPool? TakeCommands(int slot) {
+            if (slot >= m_slotCommands.Length) {
+                return null;
+            }
+
+            var commands = m_slotCommands[slot];
+
+            m_slotCommands[slot] = null;
+
+            return commands;
+        }
+
+        private IGpuSubmissionFence?[] m_slotFences = [];
+        private IGpuCommandPool?[] m_slotCommands = [];
+        // Takes the frame block ring, or null when the build made none.
+        public GpuRegion? TakeFrameRegion() {
+            var region = m_frameRegion;
+
+            m_frameRegion = null;
+
+            return region;
+        }
+        // Takes a row region the build made, or null when it stages: the install's row plan is the build's.
+        public GpuRegion? TakeRowRegion(int index) {
+            var region = m_rowRegions[index];
+
+            m_rowRegions[index] = null;
+
+            return region;
+        }
+        // Takes every host buffer port's region the build made, by port name.
+        public Dictionary<string, GpuRegion> TakePortRegions() {
+            var regions = m_portRegions;
+
+            m_portRegions = new Dictionary<string, GpuRegion>(comparer: StringComparer.Ordinal);
+
+            return regions;
+        }
+        // Takes the kernel counters, or null when the build made none.
+        public GpuKernelCounters? TakeKernelCounters() {
+            var counters = m_kernelCounters;
+
+            m_kernelCounters = null;
+
+            return counters;
+        }
+
+        private GpuRegion? m_frameRegion;
+        private GpuRegion?[] m_rowRegions = [];
+        private Dictionary<string, GpuRegion> m_portRegions = new(comparer: StringComparer.Ordinal);
+        private GpuKernelCounters? m_kernelCounters;
+
         // Takes a pass's ring of pass blocks, or null when the build made none for it.
         public GpuRegion? TakePassRegion(int pass) {
             if (pass >= m_passRegions.Length) {
@@ -655,7 +798,7 @@ public sealed partial class ShaderPipelineRenderNode {
             DisposeUntaken(later: later);
             Dispose();
         }
-        // Disposes the images and pass regions the install did not take: a storage whose history it carried keeps its own.
+        // Disposes every object the install did not take: a storage whose history it carried keeps its own images.
         public void DisposeUntaken(Action<IDisposable?> later) {
             foreach (var images in m_images) {
                 foreach (var image in (images ?? [])) {
@@ -670,7 +813,21 @@ public sealed partial class ShaderPipelineRenderNode {
                     later(obj: buffer);
                 }
             }
+            foreach (var region in m_rowRegions) {
+                later(obj: region);
+            }
+            foreach (var region in m_portRegions.Values) { later(obj: region); }
+            foreach (var fence in m_slotFences) { later(obj: fence); }
+            foreach (var commands in m_slotCommands) { later(obj: commands); }
 
+            later(obj: m_frameRegion);
+            later(obj: m_kernelCounters);
+            m_frameRegion = null;
+            m_kernelCounters = null;
+            m_rowRegions = [];
+            m_portRegions.Clear();
+            m_slotFences = [];
+            m_slotCommands = [];
             m_buffers = [];
 
             m_images = [];

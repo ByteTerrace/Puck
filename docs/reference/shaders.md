@@ -1551,11 +1551,16 @@ set per frame slot for each staged package region in pass order and then each
 staged port in declaration order, and takes the device's copy pipeline in the
 candidate's build, off the frame thread (`GpuBuildLease.Wait` on its
 `GpuRegionCopyPass` entry). The pool belongs to the graph's first pass and
-retires with the graph. A port's region is created by
-`ShaderPipelineRenderNode.BindRegion` at the port's declared size under the same
-choice; a staged one takes the installed graph's reserved share, so binding takes
-no descriptor range, and moves to each later graph's share
-(`GpuRegion.MoveCopySets`). A candidate that drops a bound port or changes its
+retires with the graph. A port's region is bound by
+`ShaderPipelineRenderNode.BindRegion` once a graph has installed, at the port's
+declared size under the same choice: a staged one is created then and takes the
+installed graph's reserved share, so binding takes no descriptor range, and
+moves to each later graph's share (`GpuRegion.MoveCopySets`); one that does not
+stage is the region the graph's build made off the frame thread for each port
+not yet bound. The build also makes the graph's frame block, its row regions
+that do not stage and its kernel counters (as many rows as the instance's
+installed counters reached), so an install creates only what takes a staged
+copy set. A candidate that drops a bound port or changes its
 size is refused, and `BindBuffer` refuses a port. Every region counts in the
 instance's memory account at `GpuRegion.BytesOf` for its policy, a port's
 whether or not it is bound yet (`ShaderPipelineRenderNode.RegionBytes`), and

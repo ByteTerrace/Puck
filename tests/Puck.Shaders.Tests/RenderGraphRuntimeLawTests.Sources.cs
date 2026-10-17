@@ -415,6 +415,81 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expectedSubstring: $" regions {regionBytes} bytes"
         );
     }
+    /// <summary>On a device whose aperture rings the source's region, the region binds once the conversion graph installs,
+    /// and is the one that graph's build made off the frame thread: every buffer of the region's size was created on
+    /// another thread than the one producing frames.</summary>
+    [Fact]
+    public void ARingSourceRegionIsTheOneItsGraphsBuildMade() {
+        var gpu = new FakePipelineGpu {
+            MemoryProfile = new GpuMemoryProfile(
+                CoherentUnifiedMemory: false,
+                DeviceLocalBytes: (1UL << 30),
+                HostVisibleDeviceLocalBytes: (1UL << 28),
+                LargestDeviceLocalHeapBytes: (1UL << 30),
+                UnifiedMemory: false
+            ),
+        };
+        var recorders = new Recorders();
+        var header = ImageSourceUploadLayout.HeaderOf(
+            color: ImageColorEncoding.Srgb,
+            format: ImagePixelFormat.B8G8R8A8Unorm,
+            height: SourceExtent,
+            width: SourceExtent
+        );
+        var byteCount = ImageSourceUploadLayout.ByteCount(header: in header);
+
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm),
+            package: Upload
+        );
+        Assert.Equal(
+            actual: GpuResidency.Select(profile: gpu.MemoryProfile, byteCount: ((ulong)byteCount), readersInFlight: true),
+            expected: GpuResidencyPolicy.Ring
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var tick = 0L;
+        var frames = Environment.CurrentManagedThreadId;
+
+        TestLiveness.Until(
+            reason: () => "The ring source never converted.",
+            step: () => {
+                tick++;
+
+                var frame = new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: [],
+                    Index: tick,
+                    Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                    Tick: tick
+                );
+
+                _ = runtime.ProduceFrame(
+                    context: default,
+                    frame: in frame
+                );
+
+                return (runtime.Node(instance: 0).FrameCounter > 0UL);
+            }
+        );
+
+        var regionBuffers = gpu.CreatedObjects.Where(predicate: created => (created.Bytes == ((ulong)byteCount))).ToArray();
+
+        Assert.Equal(expected: ((int)RenderGraphRuntime.DefaultInFlightFrames), actual: regionBuffers.Length);
+        Assert.All(collection: regionBuffers, action: created => Assert.NotEqual(expected: frames, actual: created.ThreadId));
+        Assert.Equal(
+            actual: runtime.Node(instance: 0).RegionBytes,
+            expected: GpuRegion.BytesOf(
+                byteCount: byteCount,
+                policy: GpuResidencyPolicy.Ring,
+                slotCount: ((int)RenderGraphRuntime.DefaultInFlightFrames)
+            )
+        );
+    }
     /// <summary>The node records a staged region's copy after the frame's passes, whose recorders write the regions, but
     /// submits it ahead of them, so every buffer state one command buffer leaves must be the state the next one declares:
     /// replayed in submission order as Direct3D 12 tracks a submission's buffer states, no transition of the frames that

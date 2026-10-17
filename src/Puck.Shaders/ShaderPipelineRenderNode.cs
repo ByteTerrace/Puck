@@ -642,30 +642,28 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             var descriptorPool = ((nint)0);
 
             // The frame group block every pass binds at set 0, held by the graph's leading pass.
+            // The build made it, and the row regions, port regions and kernel counters, off the frame thread.
             m_frameLayout = plan.Passes.FirstOrDefault()?.Parameters;
             m_frameRegion = ((m_frameLayout is { } frameLayout)
-                ? new GpuRegion(
-                    bindings: m_gpu.Bindings,
-                    buffers: m_gpu.BufferFactory,
-                    byteCount: UniformBytes(blockBytes: frameLayout.FrameBlockSizeBytes),
-                    copyPipeline: null,
-                    memory: GpuResidency.RingMemory(profile: m_device.MemoryProfile),
-                    name: new GpuObjectName(
-                        owner: m_name,
-                        part: "frame block"
-                    ),
-                    policy: GpuResidencyPolicy.Ring,
-                    recorder: m_gpu.Recorder,
-                    slotCount: ((int)m_inFlight),
-                    usage: GpuBufferUsage.Uniform
-                )
+                ? (built.TakeFrameRegion() ?? FrameRegionOf(
+                    blockBytes: frameLayout.FrameBlockSizeBytes,
+                    device: m_device,
+                    gpu: m_gpu,
+                    inFlight: m_inFlight,
+                    owner: m_name
+                ))
                 : null);
             m_frameRegionOwner = m_frameRegion;
             CreateRegionCopies(
                 built: built,
                 plan: plan
             );
-            CreateRowRegions(copyPipeline: built.CopyPipeline);
+            CreateRowRegions(
+                built: built,
+                copyPipeline: built.CopyPipeline
+            );
+            ReleasePreparedPorts();
+            m_preparedPorts = built.TakePortRegions();
 
             for (var i = 0; (i < plan.Passes.Count); i++) {
                 InstallPass(
@@ -678,13 +676,12 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 );
             }
             if (plan.CountsKernelWork) {
-                m_passes[0].KernelCounters = new GpuKernelCounters(
+                m_passes[0].KernelCounters = (built.TakeKernelCounters() ?? KernelCountersOf(
                     buffers: m_gpu.BufferFactory,
+                    inFlight: m_inFlight,
                     owner: m_name,
-                    part: "kernel counters",
-                    rows: plan.Passes.Count,
-                    slots: ((int)m_inFlight)
-                );
+                    rows: plan.Passes.Count
+                ));
             }
             // The preview the selected output publishes through is part of the graph: an external selection
             // was built with its targets and pipelines, and gets its descriptors and command pools here, before the
@@ -706,11 +703,12 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             for (var index = 0; (index < m_slots.Length); index++) {
                 var slot = m_slots[index];
 
-                slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence();
-                slot.Commands ??= m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(
-                    index: index,
+                // A node's first build made them off the frame thread.
+                slot.Fence ??= (built.TakeFence(slot: index) ?? m_gpu.QueueSubmitter.CreateSubmissionFence());
+                slot.Commands ??= (built.TakeCommands(slot: index) ?? CommandsOf(
+                    gpu: m_gpu,
                     owner: m_name,
-                    part: "commands"
+                    slot: index
                 ));
             }
             if (built.StagedRegions > 0) {
@@ -1346,6 +1344,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             passes: m_passes,
             resources: m_resources
         );
+        ReleasePreparedPorts();
         ReleaseRetired();
         RetireAllLeases();
         // The installed graph's copy pool went with its first pass, and the copies a frame owed with its slots.
