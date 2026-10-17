@@ -1,0 +1,238 @@
+// The garden: the debug world's portal destination, a small sunset plot with a green floor and a golden obelisk, so a
+// window onto it reads at a glance. The debug world's frame (`portal`) opens onto the arrival frame here, and the two
+// map as the identity: a body walking -Z through the debug frame arrives here at the same point, still walking -Z.
+// Turn round and the arrival frame is the way back; walk on and the far frame, twelve metres ahead, shows the debug
+// world turned about, so it is also a frame seen through a frame from the debug world's spawn. Boot the debug world,
+// never this one: it is reached through the debug world's frame, and `world.reload` there recompiles only the debug
+// world. See debug.md beside this file.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "garden"
+
+// The garden's palette slots.
+let frameGold = 0 // #C9A43A
+
+metadata {
+  title: "Garden"
+  description: "The debug world's portal destination: a sunset plot with a green floor, a golden obelisk and two frames back to the debug world."
+}
+
+// A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
+admission [
+  {
+    algorithm: ""
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+    publicKey: ""
+    subject: null
+  }
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+// The debug world's window onto the garden is one level; the far frame's window back onto the debug world is the
+// second, so two levels show from the debug world's spawn.
+views {
+  nestingDepth: 3
+}
+
+placements {
+  // Two derived face screens: the arrival frame's glass and the far frame's.
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 2
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  // The debug frame's counterpart, at its position and facing -Z, so the pair maps as the identity. Its glass is the
+  // way back: walking +Z into it arrives out of the debug frame walking +Z, towards the debug world's spawn.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0, -8]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        portal {
+          arrival: "mapped"
+          counterpart: "portal/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#FF00FF"
+          projection: window
+          resolution [256, 320]
+        }
+      }
+    ]
+  }
+
+  // The far frame faces back at the arrival, so the debug world's window onto the garden shows it. It also maps onto
+  // the debug frame, turned about: a body walking -Z into it arrives out of the debug frame walking +Z.
+  placement "far" {
+    prototype: "frame"
+    position [0, 0, -20]
+    yawDegrees: 180
+    faceSources [
+      {
+        face: "glass"
+        portal {
+          arrival: "mapped"
+          counterpart: "portal/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#FF00FF"
+          projection: window
+          resolution [256, 320]
+        }
+      }
+    ]
+  }
+
+  placement "obelisk" {
+    prototype: "obelisk"
+    position [-6, 0, -16]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        {
+          color: "#3E8A4F"
+          roughness: 0.95
+          specular: 0.02
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, -0.2, 0]
+        scale [32, 0.2, 32]
+      }
+    }
+  }
+
+  // The same picture frame the debug world stands: a gilt rim round an open aperture whose glass is face 0.
+  prototype "frame" {
+    document {
+      behavior {
+        faces [
+          {
+            name: "glass"
+            shapeId: 0
+          }
+        ]
+      }
+      name: "frame"
+      palette [
+        {
+          color: "#C9A43A"
+          roughness: 0.4
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "rim" {
+        material: frameGold
+        position [0, 1.75, 0]
+        scale [1.25, 1.75, 0.08]
+      }
+      shape Box "opening" {
+        blend: Subtraction
+        material: frameGold
+        position [0, 1.75, 0]
+        scale [1.1, 1.6, 0.3]
+      }
+    }
+  }
+
+  prototype "obelisk" {
+    document {
+      name: "obelisk"
+      palette [
+        {
+          color: "#F2C230"
+          emissive: 0.35
+          roughness: 0.5
+          specular: 0.3
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "shaft" {
+        material: 0
+        position [0, 3, 0]
+        scale [0.6, 3, 0.6]
+      }
+      shape Sphere "cap" {
+        material: 0
+        position [0, 6.6, 0]
+        scale [0.9, 0.9, 0.9]
+      }
+    }
+  }
+}
+
+render {
+  farDistance: 120
+  sky {
+    layers [
+      gradient(name: "air", stops: [
+        { elevation: -1, color: "#3A2440" }
+        { elevation: 0, color: "#FF9A4D" }
+        { elevation: 0.25, color: "#D2557A" }
+        { elevation: 1, color: "#3B2A6E" }
+      ]
+      )
+      sunDisc(name: "sun", light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
+    ]
+  }
+  atmosphere {
+    fog {
+      density: 0.008
+    }
+  }
+}

@@ -92,6 +92,10 @@ OAuth-protected remote HTTP; see [setup and trust](../Puck.Mcp/README.md).
 
 ## Usage
 
+For the debug world's portals (a window onto a second world, walking through
+it, and a portal seen through a portal) and the verbs that inspect them, see
+[Debug world portals](Assets/worlds/debug.md).
+
 For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/avatars/moth.md).
 It pairs a rebuilt SDF avatar with the Moth Pipeline, with inspection cameras,
 walking and flight poses, and live document reload.
@@ -1044,7 +1048,9 @@ Facts a script needs:
 - `Assets/`—the shipped worlds. While the current campaign runs, the one live
   world is `worlds/debug.puck` (the boot default, compiled to
   `debug.world.json`), with its basis `worlds/avatars/moth.puck`, the
-  `quality.puck` presets that avatar imports and the `skies.puck` it imports;
+  `quality.puck` presets that avatar imports, the `skies.puck` it imports and
+  `worlds/garden.puck`, the destination its portal frame opens onto
+  ([the portal demo](Assets/worlds/debug.md));
   every other world named in this bullet is quarantined at the same path under
   `experimental/src/Puck.World/Assets/worlds/`
   ([decision](../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).

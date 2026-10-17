@@ -16,7 +16,9 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 `rendering`.
 
 **One live world.** The debug world (`src/Puck.World/Assets/worlds/debug.puck`,
-basis `avatars/moth`) is the only live world and the default boot. Every other
+basis `avatars/moth`) is the only live world and the default boot, with the
+garden (`garden.puck`) its portal frame opens onto; `debug.md` beside them is
+the portal demo and its inspection verbs. Every other
 world (the island `puck.world.json`, its districts, the games) and their
 canary, parity and verdict fixtures are quarantined under `experimental/`; do
 not boot, repair or retarget them

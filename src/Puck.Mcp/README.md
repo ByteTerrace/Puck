@@ -108,15 +108,21 @@ the checkout as the [CLI reference](../../docs/reference/cli.md#installing-the-c
 describes, closing the MCP client first, since it holds the installed tool. The
 check needs no checkout: outside one, or without git, the tool says nothing.
 
-which follows the newest running World, so one configuration serves every run.
-The checkout carries it for every client: `.mcp.json` at the root for Claude
-Code, `.codex/config.toml` for Codex, and `.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
+Without `--attach`, the adapter attaches to the newest running World that
+answers and stays on it until that attachment closes, so one configuration
+serves every run. The checkout carries that configuration for every client:
+`.mcp.json` at the root for Claude Code, `.codex/config.toml` for Codex, and
+`.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
 started before any World, or after the World exits, a call is refused with
 nothing dispatched; once a World runs `world.control start`, the next call
 attaches. A call whose attachment closes (timeout, cancellation, World exit or
 `world.control stop`) reports an unknown outcome and is never replayed; the next
-call attaches anew, possibly to a restarted World with fresh state.
-`--attach <printed-file>` pins one World where several run. Never launch the
+call attaches anew, possibly to a restarted World with fresh state. A World
+started while the adapter is attached elsewhere is not followed.
+`--attach <printed-file>` pins one World where several run. Every agent that
+shares one adapter shares its attachment, so an agent driving its own World
+beside others runs its own adapter, `puck mcp --profile operator --attach
+<printed-file>`, from its own CLI copy. Never launch the
 server from a project's build output: the running server holds every assembly
 in that folder, and the next build fails to replace them. Paths containing spaces
 must remain one argument in the client configuration. `world.control status`
