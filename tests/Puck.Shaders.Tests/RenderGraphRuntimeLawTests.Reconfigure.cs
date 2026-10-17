@@ -281,12 +281,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             runtime: runtime
         );
 
+        // Main's own graph builds in the background, so whether it has rendered yet depends on the build; with no
+        // footprint, a stand-in it binds for the camera is no read a capture waits out, so nothing about main is asserted
+        // until the camera installs.
         frames.Next(count: 4);
         Assert.Equal(
             actual: recorders.Of(instance: "camera").Records,
             expected: 0L
         );
-        Assert.NotNull(@object: runtime.UnservedCaptureReasonOf(instance: "main"));
 
         Assert.True(condition: runtime.TryInstall(
             graph: Graph(pipeline: CameraGraph()),

@@ -13,12 +13,12 @@ namespace Puck.SdfVm;
 // its meshes at once lands over a few frames. A plan that relocates every mesh or the mesh atlases changing (a textured
 // mesh's texture coordinates are written moved into them, SdfWorldTables.MeshAtlas.cs) writes every word at once. The
 // region is created with the tables, one draw record long so every set that binds it binds a buffer, and grows to twice
-// the need, once the device is idle, like program capacity, taking the words it held; a frame without draws keeps it. A
-// view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
+// the need without waiting for the device, the next upload carrying the words it held on the GPU; a frame without draws
+// keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
-    // The region and atlases the arena's meshes were last written into and for.
-    private GpuRegion? m_meshSectionRegion;
+    // Whether the arena has written its meshes into the region, and the atlases it wrote them for.
+    private bool m_meshSectionWritten;
     private SdfMeshAtlas? m_meshSectionAtlas;
 
     // The draw list last planned and its revision, the atlases its meshes were planned into, and whether its draws are all
@@ -39,7 +39,7 @@ public sealed partial class SdfWorldTables {
     /// one.</summary>
     public const int MeshLandingWords = (1 << 19);
 
-    private GpuRegion m_meshRegion;
+    private readonly GpuRegion m_meshRegion;
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
     // renders.
     private long m_meshRevision;
@@ -80,17 +80,17 @@ public sealed partial class SdfWorldTables {
             m_meshArena.Plan(draws: draws);
 
             if (m_meshArena.Words > 0) {
-                var grown = EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
-                // Every mesh is written again at once when the arena moved them, the region is new, or the atlases their
+                EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
+                // Every mesh is written again at once when the arena moved them, none was written yet, or the atlases their
                 // texture coordinates are moved into changed, since no mesh's words stand where its draw reads them;
                 // otherwise only the meshes this list placed are owed, and land over the next frames.
-                if (m_meshArena.Relocated || !ReferenceEquals(objA: m_meshSectionRegion, objB: m_meshRegion) || !ReferenceEquals(objA: m_meshSectionAtlas, objB: m_meshAtlas)) {
+                if (m_meshArena.Relocated || !m_meshSectionWritten || !ReferenceEquals(objA: m_meshSectionAtlas, objB: m_meshAtlas)) {
                     m_meshesOwed.Clear();
                     foreach (var (mesh, placement) in m_meshArena.Placements) { WriteMeshWords(atlas: m_meshAtlas, mesh: mesh, placement: placement); }
                 } else {
                     m_meshesOwed.UnionWith(other: m_meshArena.Placed);
                 }
-                m_meshSectionRegion = m_meshRegion;
+                m_meshSectionWritten = true;
                 m_meshSectionAtlas = m_meshAtlas;
             }
 
@@ -182,41 +182,27 @@ public sealed partial class SdfWorldTables {
         );
         _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (placement.VertexWord * sizeof(uint)));
     }
-    // Replaces the region with one twice the need, once the device is idle, since every view's mesh pass reads it, and
-    // returns whether it did. The replacement takes the old region's words, which it owes, so every placed mesh stands
-    // where it was written, and writes its buffers into the reserved copy sets the old one wrote, so growing takes no
-    // descriptor range.
-    private bool EnsureMeshRegionCapacity(ulong bytes) {
+    // Grows the region to twice the need without waiting for the device (GpuRegion.Grow): the next upload clears the new
+    // buffer and copies the words the old one held into it on the GPU, so every placed mesh stands where it was written
+    // and nothing it held is staged again, and the old buffer is disposed once that upload completes (Retire). The
+    // region keeps its reserved copy sets, so growing takes no descriptor range.
+    private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
         if (bytes <= current) {
-            return false;
+            return;
         }
 
         var grown = (2UL * bytes);
 
         grown = (((grown + (sizeof(uint) - 1UL)) / sizeof(uint)) * sizeof(uint));
 
-        m_deviceContext.TryWaitIdle();
-
-        var replacement = CreateRegion(
-            byteCount: checked((int)grown),
-            region: MeshRegionIndex
-        );
-
-        _ = replacement.Write(bytes: m_meshRegion.Contents, offset: 0);
-        m_meshRegion.Dispose();
-        if (ReferenceEquals(objA: m_meshSectionRegion, objB: m_meshRegion)) {
-            m_meshSectionRegion = replacement;
-        }
-        m_meshRegion = replacement;
+        Retire(replaced: m_meshRegion.Grow(byteCount: checked((int)grown)));
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
             location: ref m_meshRegionBytes,
             value: grown
         );
-
-        return true;
     }
 }

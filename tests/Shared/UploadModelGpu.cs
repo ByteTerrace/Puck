@@ -10,8 +10,8 @@ namespace Puck.Testing;
 /// carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember which
 /// buffer each binding names; and a dispatch recorded while the pipeline built from <see cref="RegionCopyBytecode"/> is
 /// bound runs that kernel's copy at record time, from the set's binding 0 into its binding 1: the source leads with
-/// <c>(count, runCount, blockBase, destinationBase)</c> and <c>(block offset, first thread)</c> per run, and thread
-/// <c>i</c> below the count copies <c>destination[destinationBase + word] = source[blockBase + word]</c>, where
+/// <c>(count, runCount, blockBase, destinationBase)</c> and <c>(region word, first thread)</c> per run, and thread
+/// <c>i</c> below the count copies <c>destination[destinationBase + word] = source[blockBase + i]</c>, where
 /// <c>word</c> is found in that run table (a linear search here; the kernel's binary search finds the same run). The
 /// dispatch must carry exactly the groups the count needs, and nothing pushes constants to the copy. The copy runs when it
 /// is recorded, which is its execution order only when the command buffers are submitted in the order they were recorded,
@@ -371,7 +371,7 @@ internal sealed class UploadModelGpu :
 
             var word = (source[((int)(Header + (run * 2u)))] + (thread - source[((int)((Header + (run * 2u)) + 1u))]));
 
-            destination[((int)(destinationBase + word))] = source[((int)(blockBase + word))];
+            destination[((int)(destinationBase + word))] = source[((int)(blockBase + thread))];
         }
 
         UploadCopies++;

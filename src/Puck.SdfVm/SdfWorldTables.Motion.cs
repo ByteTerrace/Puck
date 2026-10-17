@@ -200,11 +200,11 @@ public sealed partial class SdfWorldTables {
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;
         }
-        // Twice the need, as the mesh region grows, so draws landing over several frames wait for the device once.
-        m_deviceContext.TryWaitIdle();
+        // Twice the need, as the mesh region grows, so draws landing over several frames replace it once; the old buffer is
+        // disposed once the next upload completes, after every view that bound it.
         var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-mesh-transforms"), sizeBytes: (2UL * bytes), usage: GpuBufferUsage.Storage);
 
-        m_previousMeshTransforms.Dispose();
+        Retire(replaced: m_previousMeshTransforms);
         m_previousMeshTransforms = replacement;
         m_bindingRevision++;
         m_meshHistoryWritten = false;

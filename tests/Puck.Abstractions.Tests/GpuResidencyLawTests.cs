@@ -1025,6 +1025,126 @@ public sealed class GpuResidencyLawTests {
         );
     }
 
+    // A staged region grows without staging what it held: the next recording clears the new destination and copies the
+    // old one into it on the GPU, behind the barriers Direct3D 12's states need, and stages only the owed words packed. A
+    // second grow before that recording carries from the destination last written and hands back the one never written.
+    // A staging buffer too small for what a slot owes is replaced by a larger one.
+    [Fact]
+    public void AStagedRegionGrowsByCarryingItsDestinationOnTheGpu() {
+        const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
+        const int RunEntryBytes = 8;
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var held = new byte[64];
+
+        new Random(Seed: 5).NextBytes(buffer: held);
+        _ = region.Write(bytes: held, offset: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
+
+        var first = region.Buffer(slot: 0);
+
+        _ = region.Write(bytes: [9, 9, 9, 9], offset: 8);
+        Assert.Same(expected: first, actual: region.Grow(byteCount: 256));
+        Assert.True(condition: region.OwesCarry);
+        _ = region.Write(bytes: [7, 7, 7, 7], offset: 200);
+
+        var unwritten = region.Grow(byteCount: 512);
+
+        Assert.NotSame(expected: first, actual: unwritten);
+        Assert.Equal(expected: 512, actual: region.ByteCount);
+        Assert.Equal(expected: 512UL, actual: region.CpuShadowBytes);
+        Assert.All(collection: region.Contents[256..].ToArray(), action: static value => Assert.Equal(expected: 0, actual: value));
+        unwritten.Dispose();
+        gpu.ResetTallies();
+
+        var recording = new GpuRegionCopyRecording(begin: static () => 2, readers: GpuStage.ComputeShader, recorder: gpu.Services.Recorder);
+
+        recording.Record(handsToReaders: true, region: region, slot: 1);
+        gpu.Services.QueueSubmitter.Submit(commandBufferHandles: [recording.Finish()]);
+        first.Dispose();
+        Assert.Empty(collection: gpu.StateConflicts);
+        Assert.False(condition: region.OwesCarry);
+        Assert.Equal(expected: 64UL, actual: gpu.BufferCopyBytes);
+        Assert.Equal(expected: ((long)((HeaderBytes + (2 * RunEntryBytes)) + 8)), actual: gpu.HostBytes());
+        Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+
+        // A grown region with nothing owed hands its carried destination to the readers itself.
+        Assert.NotSame(expected: first, actual: region.Grow(byteCount: 1024));
+        recording.Record(handsToReaders: true, region: region, slot: 0);
+        Assert.False(condition: region.OwesCopy);
+        gpu.Services.QueueSubmitter.Submit(commandBufferHandles: [recording.Finish()]);
+        Assert.Empty(collection: gpu.StateConflicts);
+        Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
+
+        // Owing the whole region outgrows the staging buffer created for 64 bytes.
+        var before = region.OwnedBytes.HostVisible;
+        var whole = new byte[1024];
+
+        new Random(Seed: 6).NextBytes(buffer: whole);
+        _ = region.Write(bytes: whole, offset: 0);
+        Copy(gpu: gpu, region: region, slot: 1);
+        Assert.Equal(expected: whole, actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
+        Assert.True(condition: (region.OwnedBytes.HostVisible > before));
+    }
+    [Fact]
+    public void OnlyAStagedRegionOwningItsDestinationGrows() {
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var ring = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Ring,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 64, usage: GpuBufferUsage.Storage);
+        using var external = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            destination: destination,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var staged = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.Grow(byteCount: 128));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => external.Grow(byteCount: 128));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Grow(byteCount: 64));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Grow(byteCount: 130));
+        staged.Dispose();
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Grow(byteCount: 128));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.RecordCarry(commandBuffer: 2, copies: false, readers: GpuStage.ComputeShader));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => staged.Contents.Length);
+    }
+
     private static IGpuComputePipeline CopyPipeline(UploadModelGpu gpu) {
         using var module = gpu.Services.ShaderModuleFactory.Create(
             bytecode: new byte[] { UploadModelGpu.RegionCopyBytecode },

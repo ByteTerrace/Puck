@@ -25,21 +25,29 @@ namespace Puck.Abstractions.Gpu;
 /// retargeted region owes every word written after it.
 /// </para>
 /// <para>
+/// A staged region that owns its destination grows (<see cref="Grow"/>) without waiting for its readers: it creates a
+/// larger destination, and its next copy recording clears it and copies the old destination's bytes into it on the GPU
+/// (<see cref="RecordCarry"/>), so growing writes no carried word from the host and leaves the old destination to the
+/// caller, who disposes it once that recording's submission and every earlier reader have completed. Its host copy lives
+/// in native memory, so a large region costs the managed heap nothing and growing it allocates no managed array.
+/// </para>
+/// <para>
 /// The copy kernel reads the staging buffer as uints at <see cref="CopySourceBinding"/> and writes the destination at
 /// <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, and takes no push constants:
 /// the staging buffer states its copy. Its first <see cref="CopyHeaderWords"/> uints are <c>(count, runCount,
-/// blockBase, destinationBase)</c>, then come <c>runCount</c> <c>(block offset, first thread)</c> pairs, and the block
-/// starts at <c>blockBase</c>. Thread <c>i</c> (its dispatch row times <see cref="CopyRowThreads"/> plus its column,
-/// <see cref="CopyGroups"/> sizing the dispatch) below <c>count</c> finds the last run whose first thread is at most
-/// <c>i</c>, takes <c>word</c> as that run's block offset plus <c>i</c> minus its first thread, and copies
-/// <c>destination[destinationBase + word] = source[blockBase + word]</c>. That kernel is <c>Puck.Shaders</c>'
+/// blockBase, destinationBase)</c>, then come <c>runCount</c> <c>(region word, first thread)</c> pairs, and the block
+/// starts at <c>blockBase</c>, holding the owed runs packed one after another. Thread <c>i</c> (its dispatch row times
+/// <see cref="CopyRowThreads"/> plus its column, <see cref="CopyGroups"/> sizing the dispatch) below <c>count</c> finds
+/// the last run whose first thread is at most <c>i</c>, takes <c>word</c> as that run's region word plus <c>i</c> minus
+/// its first thread, and copies <c>destination[destinationBase + word] = source[blockBase + i]</c>. A staging buffer
+/// therefore holds only what its slot owes, and grows when a flush owes more. That kernel is <c>Puck.Shaders</c>'
 /// <c>region-copy.comp</c>, created from <see cref="CopyPipeline"/> once per device and leased by every owner
 /// (<c>GpuRegionCopyPass</c>, an entry of the pass-pipeline cache). Its copy sets are its share of a <see cref="GpuRegionCopyPool"/>: one the region
 /// creates for itself alone, or its owner's, reserved for all its regions when the owner was admitted, so a region the
 /// owner creates at a later frame takes no descriptor range.
 /// </para>
 /// </summary>
-public sealed class GpuRegion : IDisposable {
+public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>The copy kernel's binding for the destination buffer it writes.</summary>
     public const uint CopyDestinationBinding = 1U;
     /// <summary>The uints of the header a staging buffer leads with: the copy's thread count, its run count, where the
@@ -68,7 +76,8 @@ public sealed class GpuRegion : IDisposable {
     // A run-table entry costs two words, so copying a gap of up to two unchanged words costs no more than another run.
     private const int StagedMergeGapWords = 2;
 
-    private readonly byte[] m_contents;
+    // The host's copy of the region, ByteCount bytes of native memory the region frees when disposed.
+    private byte* m_contents;
     private readonly IGpuComputePipeline? m_copyPipeline;
 
     // The staged policy's copy sets: its share of its owner's reserved pool, or of its own; null under the other
@@ -76,7 +85,14 @@ public sealed class GpuRegion : IDisposable {
     private GpuRegionCopySets? m_copySets;
 
     private readonly IGpuBindings m_bindings;
-    private readonly IGpuBuffer? m_destination;
+    private readonly IGpuBufferFactory m_buffers;
+    private readonly GpuObjectName m_name;
+    private readonly GpuBufferUsage m_usage;
+    // The destination a staged region's copies write; replaced when the region grows.
+    private IGpuBuffer? m_destination;
+    // The destination a grown region's next copy recording carries its bytes from, and how many; null when none is owed.
+    private IGpuBuffer? m_carrySource;
+    private int m_carryBytes;
     private readonly bool m_external;
     // The copy pool the region created for itself, which it destroys with it; null when its owner reserved its sets.
     private readonly GpuRegionCopyPool? m_ownedCopyPool;
@@ -267,9 +283,12 @@ public sealed class GpuRegion : IDisposable {
         );
         Policy = policy;
         SlotCount = slotCount;
-        m_contents = new byte[byteCount];
+        m_contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
         m_copyPipeline = copyPipeline;
         m_bindings = bindings;
+        m_buffers = buffers;
+        m_name = name;
+        m_usage = usage;
         m_destination = destination;
         m_external = (destination is not null);
         m_recorder = recorder;
@@ -423,21 +442,19 @@ public sealed class GpuRegion : IDisposable {
         };
     }
 
-    /// <summary>Gets the bytes of the buffers the region created, by the memory they live in: its host-visible buffers
+    /// <summary>Gets the bytes of the buffers the region holds, by the memory they live in: its host-visible buffers
     /// (one per slot under the ring or staged, one in place; a staged buffer carries the header and run-table reserve
-    /// before the region's bytes) in the memory <see cref="Memory"/> names, and a staged region's own device-local
-    /// destination. A destination the region was handed is its owner's, not counted here. Each is a buffer's logical size
-    /// (<see cref="BytesOf"/>).</summary>
+    /// before the words it stages) in the memory <see cref="Memory"/> names, and a staged region's own device-local
+    /// destination. A destination the region was handed, or one it replaced by growing, is its owner's, not counted
+    /// here. Each is a buffer's logical size, <see cref="BytesOf"/> until a staging buffer or the region grows.</summary>
     public GpuMemoryBytes OwnedBytes {
         get {
-            var hostBytes = ((Policy == GpuResidencyPolicy.Staged)
-                ? ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount))
-                : ((ulong)ByteCount)
-            );
-            var host = checked((hostBytes * ((Policy == GpuResidencyPolicy.InPlace)
-                ? 1UL
-                : ((ulong)SlotCount)
-            )));
+            var host = 0UL;
+
+            foreach (var buffer in m_hostBuffers) {
+                host = checked((host + buffer.SizeBytes));
+            }
+
             var destination = (((Policy == GpuResidencyPolicy.Staged) && !m_external)
                 ? ((ulong)ByteCount)
                 : 0UL
@@ -455,13 +472,27 @@ public sealed class GpuRegion : IDisposable {
             );
         }
     }
-    /// <summary>Gets the region's size in bytes.</summary>
-    public int ByteCount { get; }
+    /// <summary>Gets the region's size in bytes, which <see cref="Grow"/> raises.</summary>
+    public int ByteCount { get; private set; }
     /// <summary>Gets the host's copy of the region: what every slot's <see cref="Buffer"/> holds once flushed and
-    /// copied.</summary>
-    public ReadOnlySpan<byte> Contents => m_contents;
-    /// <summary>Gets the retained CPU shadow payload bytes, excluding managed array overhead.</summary>
-    public ulong CpuShadowBytes => ((ulong)m_contents.LongLength);
+    /// copied. The span reads native memory the region frees when disposed or moves when it grows, so it is read before
+    /// either.</summary>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public ReadOnlySpan<byte> Contents {
+        get {
+            ObjectDisposedException.ThrowIf(
+                condition: m_disposed,
+                instance: this
+            );
+
+            return new ReadOnlySpan<byte>(pointer: m_contents, length: ByteCount);
+        }
+    }
+    /// <summary>Gets the retained CPU shadow payload bytes: the native host copy's size.</summary>
+    public ulong CpuShadowBytes => ((ulong)ByteCount);
+    /// <summary>Gets whether the region has grown since its last copy recording, so its next one clears the new
+    /// destination and carries the old one's bytes into it (<see cref="RecordCarry"/>).</summary>
+    public bool OwesCarry => (m_carrySource is not null);
     /// <summary>Gets the retained CPU upload-header scratch payload bytes, excluding managed array overhead.</summary>
     public ulong CpuScratchBytes => (((ulong)m_header.LongLength) * sizeof(uint));
     /// <summary>Gets whether the next <see cref="RecordCopy"/> records a copy: the region is staged and owes words.</summary>
@@ -515,6 +546,139 @@ public sealed class GpuRegion : IDisposable {
         }
 
         m_ownedBuffers.Clear();
+        m_carrySource = null;
+        NativeMemory.Free(ptr: m_contents);
+        m_contents = null;
+    }
+    /// <summary>Grows a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
+    /// for any submission: it creates a destination of the new size, extends <see cref="Contents"/> with zeros, and owes
+    /// its next copy recording a carry (<see cref="RecordCarry"/>) that clears the new destination and copies the old
+    /// one's bytes into it on the GPU, so no word the region held is staged again. Owed words stay owed, the copy sets
+    /// are written again before each slot's next copy, and no staging buffer is created: one grows when a flush owes more
+    /// than it holds.</summary>
+    /// <param name="byteCount">The new size in bytes; larger than <see cref="ByteCount"/> and a whole number of
+    /// uints.</param>
+    /// <returns>The destination the region replaced, which the caller now owns: GPU work recorded before the grow may
+    /// still read it, and the next copy recording's submission reads it once more, so the caller disposes it only once
+    /// every such submission has completed. A region that grows again before a copy recording carries from the
+    /// destination it held at its last recording and returns the one it never wrote.</returns>
+    /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not larger than
+    /// <see cref="ByteCount"/> or not a whole number of uints.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public IGpuBuffer Grow(int byteCount) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (
+            (Policy != GpuResidencyPolicy.Staged) ||
+            m_external
+        ) {
+            throw new InvalidOperationException(message: "Only a staged region that owns its destination grows.");
+        }
+        if (
+            (byteCount <= ByteCount) ||
+            ((byteCount % sizeof(uint)) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: byteCount,
+                message: $"A region grows to a whole number of uints past its {ByteCount} bytes.",
+                paramName: nameof(byteCount)
+            );
+        }
+
+        var replacement = m_buffers.CreateDeviceLocal(
+            name: m_name,
+            sizeBytes: ((ulong)byteCount),
+            usage: GpuBufferUsage.Storage
+        );
+        var replaced = m_destination!;
+
+        // A zeroed allocation takes fresh pages the system zeroes as they are first touched, so only the bytes held are
+        // copied, where reallocating would also clear the new tail.
+        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
+
+        HostCopy.CopyTo(destination: new Span<byte>(
+            length: ByteCount,
+            pointer: contents
+        ));
+        NativeMemory.Free(ptr: m_contents);
+        m_contents = contents;
+        _ = m_ownedBuffers.Remove(item: replaced);
+        m_ownedBuffers.Add(item: replacement);
+
+        if (m_carrySource is null) {
+            m_carrySource = replaced;
+            m_carryBytes = ByteCount;
+        }
+
+        m_destination = replacement;
+        ByteCount = byteCount;
+        m_knownWords = (byteCount / sizeof(uint));
+        m_copySets!.ForgetWriter(region: this);
+
+        return replaced;
+    }
+    /// <summary>Records a grown region's carry: the clear of its destination, then the copy of the bytes the destination
+    /// it replaced held, each ordered after the last, and the barrier handing the destination to the next access, the
+    /// copy kernel's write when <paramref name="copies"/> and otherwise <paramref name="readers"/>. The replaced
+    /// destination is read as a copy source after <paramref name="readers"/>' earlier reads of it. Nothing is recorded
+    /// when no carry is owed (<see cref="OwesCarry"/>).</summary>
+    /// <param name="commandBuffer">The command buffer being recorded, submitted before any GPU work that reads the
+    /// region's new destination.</param>
+    /// <param name="readers">The shader stages that read the region's buffers.</param>
+    /// <param name="copies">Whether the region records its copy next in the same command buffer.</param>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void RecordCarry(nint commandBuffer, GpuStage readers, bool copies) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (m_carrySource is not { } source) {
+            return;
+        }
+
+        var destination = m_destination!.BufferHandle;
+
+        m_recorder.ClearStorageBuffer(
+            bufferHandle: destination,
+            commandBufferHandle: commandBuffer,
+            sizeBytes: ((ulong)ByteCount)
+        );
+        m_recorder.TransitionBuffer(
+            bufferHandle: destination,
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuAccess.CopyWrite,
+            destinationStageMask: GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.TransferWrite,
+            sourceStageMask: GpuStage.Transfer
+        );
+        m_recorder.TransitionBuffer(
+            bufferHandle: source.BufferHandle,
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuAccess.TransferRead,
+            destinationStageMask: GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.ShaderRead,
+            sourceStageMask: readers
+        );
+        m_recorder.CopyBuffer(
+            commandBufferHandle: commandBuffer,
+            destinationBufferHandle: destination,
+            sizeBytes: ((ulong)m_carryBytes),
+            sourceBufferHandle: source.BufferHandle
+        );
+        m_recorder.TransitionBuffer(
+            bufferHandle: destination,
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: (copies ? GpuAccess.ShaderWrite : GpuAccess.ShaderRead),
+            destinationStageMask: (copies ? GpuStage.ComputeShader : readers),
+            sourceAccessMask: GpuAccess.CopyWrite,
+            sourceStageMask: GpuStage.Transfer
+        );
+        m_carrySource = null;
     }
     /// <summary>Makes <paramref name="slot"/> owe every word of the region again, as a new buffer does, so its next flush
     /// or copy sends the whole region whatever the slot last held. An owner that rewrites the whole region each frame
@@ -553,7 +717,6 @@ public sealed class GpuRegion : IDisposable {
             case GpuResidencyPolicy.Ring:
                 WriteOwed(
                     buffer: m_hostBuffers[slot],
-                    firstWord: 0,
                     owed: m_owed[slot]
                 );
                 m_owed[slot].Clear();
@@ -562,7 +725,6 @@ public sealed class GpuRegion : IDisposable {
             case GpuResidencyPolicy.InPlace:
                 WriteOwed(
                     buffer: m_hostBuffers[0],
-                    firstWord: 0,
                     owed: m_owed[0]
                 );
                 m_owed[0].Clear();
@@ -755,7 +917,7 @@ public sealed class GpuRegion : IDisposable {
             owed = true;
         }
 
-        bytes.CopyTo(destination: m_contents.AsSpan(start: offset));
+        bytes.CopyTo(destination: HostCopy[offset..]);
 
         if ((offset / sizeof(uint)) <= m_knownWords) {
             m_knownWords = Math.Max(
@@ -808,7 +970,7 @@ public sealed class GpuRegion : IDisposable {
     // Owes each run of words in which bytes differ from the contents at offset, a word at a time past the first
     // differing byte, and returns whether any did.
     private bool OweDifferences(ReadOnlySpan<byte> bytes, int offset) {
-        var contents = m_contents.AsSpan(
+        var contents = HostCopy.Slice(
             length: bytes.Length,
             start: offset
         );
@@ -865,8 +1027,13 @@ public sealed class GpuRegion : IDisposable {
             value: slot
         );
     }
-    // Stages every owed word at the slot's staging buffer's block, then the header and run table in front of it: the
-    // copy's thread count, run count, block base and destination word, then per run its block offset and first thread.
+    // The host copy as a writable span; it moves when the region grows.
+    private Span<byte> HostCopy => new(pointer: m_contents, length: ByteCount);
+
+    // Stages every owed run packed one after another at the slot's staging buffer's block, growing the buffer when it is
+    // too small (the slot's last submission has retired, so its buffer is free), then the header and run table in front
+    // of it: the copy's thread count, run count, block base and destination word, then per run its region word and first
+    // thread, which is also where its words start in the block.
     private void StageOwed(int slot) {
         var owed = m_owed[0];
 
@@ -876,41 +1043,83 @@ public sealed class GpuRegion : IDisposable {
             return;
         }
 
-        var prefix = 0;
-
-        WriteOwed(
-            buffer: m_hostBuffers[slot],
-            firstWord: CopyBlockBase,
-            owed: owed
-        );
+        var words = 0L;
 
         for (var run = 0; (run < owed.Count); run++) {
+            words += owed.Length(index: run);
+        }
+
+        var buffer = StagingFor(
+            bytes: checked(((((ulong)CopyBlockBase) + ((ulong)words)) * sizeof(uint))),
+            slot: slot
+        );
+        var prefix = 0;
+
+        for (var run = 0; (run < owed.Count); run++) {
+            var length = owed.Length(index: run);
+
+            buffer.Write<byte>(
+                data: HostCopy.Slice(
+                    length: (length * sizeof(uint)),
+                    start: (owed.Start(index: run) * sizeof(uint))
+                ),
+                destinationOffsetBytes: ((((ulong)CopyBlockBase) + ((ulong)prefix)) * sizeof(uint))
+            );
             m_header[(CopyHeaderWords + (run * 2))] = ((uint)owed.Start(index: run));
             m_header[((CopyHeaderWords + (run * 2)) + 1)] = ((uint)prefix);
-            prefix += owed.Length(index: run);
+            prefix += length;
         }
 
         m_header[0] = ((uint)prefix);
         m_header[1] = ((uint)owed.Count);
         m_header[2] = CopyBlockBase;
         m_header[3] = ((uint)m_destinationWord);
-        m_hostBuffers[slot].Write<uint>(data: m_header.AsSpan(
+        buffer.Write<uint>(data: m_header.AsSpan(
             length: (CopyHeaderWords + (owed.Count * 2)),
             start: 0
         ));
         m_stagedSlot = slot;
     }
-    // Writes each owed word range of the contents into the buffer, word w landing at word firstWord + w.
-    private void WriteOwed(GpuUploadRuns owed, IGpuStorageBuffer buffer, int firstWord) {
+    // Returns the slot's staging buffer, replaced first by one of at least the bytes asked, twice its size or the whole
+    // region's reserve if larger, when it holds fewer; the copy sets are written again before each slot's next copy.
+    private IGpuStorageBuffer StagingFor(int slot, ulong bytes) {
+        var buffer = m_hostBuffers[slot];
+
+        if (bytes <= buffer.SizeBytes) {
+            return buffer;
+        }
+
+        var replacement = m_buffers.CreateHostVisible(
+            name: m_name.At(index: slot),
+            sizeBytes: Math.Max(
+                val1: bytes,
+                val2: Math.Min(
+                    val1: (2UL * buffer.SizeBytes),
+                    val2: ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount))
+                )
+            ),
+            usage: m_usage
+        );
+
+        _ = m_ownedBuffers.Remove(item: buffer);
+        buffer.Dispose();
+        m_ownedBuffers.Add(item: replacement);
+        m_hostBuffers[slot] = replacement;
+        m_copySets!.ForgetWriter(region: this);
+
+        return replacement;
+    }
+    // Writes each owed word range of the contents into the buffer at the same words.
+    private void WriteOwed(GpuUploadRuns owed, IGpuStorageBuffer buffer) {
         for (var run = 0; (run < owed.Count); run++) {
             var start = (owed.Start(index: run) * sizeof(uint));
 
             buffer.Write<byte>(
-                data: m_contents.AsSpan(
+                data: HostCopy.Slice(
                     length: (owed.Length(index: run) * sizeof(uint)),
                     start: start
                 ),
-                destinationOffsetBytes: ((((ulong)firstWord) * sizeof(uint)) + ((ulong)start))
+                destinationOffsetBytes: ((ulong)start)
             );
         }
     }

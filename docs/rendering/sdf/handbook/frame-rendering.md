@@ -699,7 +699,9 @@ mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
 few frames. Every mesh is written again at once only when the arena outgrows
 its draw reserve or packs, or the mesh atlases change; a region that grows, to
-twice its need, takes the words it held. The bake keys each group by its
+twice its need, takes the words it held without waiting for the device: the
+next upload clears the new buffer and copies the old one into it on the GPU,
+and the old buffer is disposed once that upload has completed. The bake keys each group by its
 geometry (`SdfMeshGeometryBuilder`), a 128-bit hash of what determines its
 surface independent of where its program places it: its instructions, a convex
 polygon's, sweep's or path's side-table values in place of the offset its
@@ -776,9 +778,11 @@ queued before it has finished, so the views that read the slot two uploads
 earlier are done with it. This is what lets a moving screen or a walking player
 update its transform in place each frame without racing the GPU reading last
 frame's copy. A rewrite of what every slot shares — a program
-that outgrew its region, a grown mesh region, a new glyph atlas, a reloaded
-kernel — waits for the whole device to go idle instead, because the submissions
-of other nodes read it too.
+that outgrew its region, a new glyph atlas, a reloaded kernel — waits for the
+whole device to go idle instead, because the submissions of other nodes read it
+too. A grown mesh region and its previous-transform table do not: the buffers
+they replace are kept until the upload after the growth completes, which one
+queue signals only after every submission that could still read them.
 
 ### What a frame uploads
 
@@ -803,7 +807,9 @@ from its memory profile and the table's size, with a reader always in flight:
   `upload` pass copies the owed words into one device-local buffer the kernels
   read, one dispatch per region however scattered the changes are. The staging
   buffer states the copy: a 16-byte header, 8 bytes for each run, then the
-  words. A word nobody changed stays as an earlier frame left it, so a
+  runs' words packed one after another, so it holds only what its slot owes and
+  grows when a slot owes more. A region's host copy lives in native memory. A
+  word nobody changed stays as an earlier frame left it, so a
   transform changed on frame *N* is still correct on frame *N+1*, even though
   that frame stages in the other slot's buffer.
 - **Ring**, on a device with a host-visible aperture or unified memory: each
@@ -815,10 +821,11 @@ from its memory profile and the table's size, with a reader always in flight:
 Every pass of every view reads the tables through one descriptor set, the
 `sdf.world` interface's World group at set 1: each ring slot's buffers, the
 brick pool, the glyph atlas, the samplers and the mesh and impostor atlases. The tables own
-one such set per ring slot and write both once; a frame binds the slot its
-upload wrote. They rewrite the sets only when what they bind moves (a region
-grows, or the glyph, mesh or impostor atlases change), after the device is idle, since
-every view's submission in flight binds them.
+one such set per ring slot; a frame binds the slot its upload wrote. A slot's
+set is rewritten the first time a view binds it after what it binds moved (a
+region grows, or the glyph, mesh or impostor atlases change), without waiting
+for the device: the upload that took the slot waited the fence that signals
+after every view that bound the slot's set before.
 
 Dynamic transforms are never compared as a table: the residency packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
@@ -830,7 +837,7 @@ then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list. Each scene emitter states its draws, a static placement's
 fixed at its rebuild and a stamp's posed at its root each frame, and returns the
 same list while none moved, so a still scene packs nothing. The region starts with one draw record when the tables are built
-and grows by half again when a list outgrows it. The mesh pass reads its triangles,
+and grows to twice the need when a list outgrows it. The mesh pass reads its triangles,
 and the surface pass reads the winning draw's material.
 
 A host-baked brick reaches the brick pool through a staged region whose

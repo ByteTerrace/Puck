@@ -553,6 +553,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         // Drain the device BEFORE destroying anything (tolerating an already-lost device, where there is nothing left to
         // drain): the views' submissions, which the tables' own fences cannot see, read every table.
         m_deviceContext.TryWaitIdle();
+        DisposeRetired(completed: ulong.MaxValue);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {
             m_frameFences[slot].Dispose();

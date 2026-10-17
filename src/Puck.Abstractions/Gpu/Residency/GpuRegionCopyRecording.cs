@@ -2,7 +2,8 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// Records one frame slot's owed staged copies of any number of regions into one command buffer, as the SDF engine's
-/// upload pass and the render node do: each region is flushed for the slot, and a region owing a copy records it (<see cref="GpuRegion.RecordCopy"/>).
+/// upload pass and the render node do: each region is flushed for the slot, a grown region records its carry
+/// (<see cref="GpuRegion.RecordCarry"/>), and a region owing a copy records it (<see cref="GpuRegion.RecordCopy"/>).
 /// The first copy is preceded by one memory barrier that orders every earlier read of a staged destination by the
 /// regions' reader stages, in this or an earlier submission, before the copies write it, and <see cref="Finish"/> makes
 /// each copied buffer's writes visible to those stages with one buffer barrier. A recording with nothing owed records
@@ -24,7 +25,8 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
 
     private nint m_commandBuffer;
 
-    /// <summary>Flushes a region's share of the slot and, when the region owes a copy, records it, recording first, at the
+    /// <summary>Flushes a region's share of the slot and records the carry a grown region owes, which hands its new
+    /// destination to the readers itself when no copy follows, then the copy it owes, recording first, at the
     /// recording's first copy, the barrier that orders the earlier reads of every staged destination before the copies'
     /// writes.</summary>
     /// <param name="region">The region.</param>
@@ -37,7 +39,9 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
 
         region.Flush(slot: slot);
 
-        if (!region.OwesCopy) {
+        var copies = region.OwesCopy;
+
+        if (!copies && !region.OwesCarry) {
             return;
         }
 
@@ -50,6 +54,16 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
                 sourceAccessMask: GpuAccess.ShaderRead,
                 sourceStageMask: readers
             );
+        }
+
+        region.RecordCarry(
+            commandBuffer: m_commandBuffer,
+            copies: copies,
+            readers: readers
+        );
+
+        if (!copies) {
+            return;
         }
 
         region.RecordCopy(

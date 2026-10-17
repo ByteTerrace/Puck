@@ -5,14 +5,16 @@ namespace Puck.SdfVm;
 
 // What a view's pass binds of the tables: the World set of the ring slot the frame's upload wrote, holding every table's
 // buffer in that slot (the lights and the sky's among them), the brick pool, the samplers, the glyph atlas and the mesh atlases; and what it binds at a member
-// of its pass set whose storage it does not touch. The tables own one World set per ring slot and write both once. They
-// write them again only when what they bind moves (the binding revision), which happens only in a frame's upload or a
-// host call between frames, before any view records the frame; the rewrite waits for the device to go idle, since every
-// view's submission in flight binds them.
+// of its pass set whose storage it does not touch. The tables own one World set per ring slot and write each when a view
+// first binds it after what they bind moved (the binding revision), which happens only in a frame's pack or upload or a
+// host call between frames. A view binds only the set of the slot the frame's upload took, and that upload waited the
+// previous one's fence, which one queue signals after every view that bound the slot's set before, so a set is rewritten
+// without waiting for the device; what it bound before is kept until no view can read it (Retire), or was replaced
+// once the device was idle.
 public sealed partial class SdfWorldTables {
-    // The World set per ring slot, and the binding revision both were last written at, or -1 before the first write.
+    // The World set per ring slot, and the binding revision each was last written at, or -1 before its first write.
     private readonly nint[] m_worldSets = new nint[FrameRingSize];
-    private long m_worldSetsRevision = -1;
+    private readonly long[] m_worldSetRevisions = Enumerable.Repeat(count: FrameRingSize, element: -1L).ToArray();
 
     // Gets the buffer a pass binds at a buffer member it does not touch.
     internal IGpuBuffer DummyBuffer => m_dummyBuffer;
@@ -23,22 +25,15 @@ public sealed partial class SdfWorldTables {
     // Gets the device's bindings, counted under the tables.
     internal IGpuBindings Bindings => m_bindings;
 
-    // Returns the World set every pass of every view binds for a ring slot. Writes both slots' sets the first time and
-    // after the binding revision moves, waiting for the device to go idle before a rewrite.
+    // Returns the World set every pass of every view binds for the ring slot the latest upload took, written first when
+    // the binding revision moved since it was last written.
     internal nint WorldSet(int slot) {
-        if (m_worldSetsRevision != m_bindingRevision) {
-            if (m_worldSetsRevision >= 0) {
-                m_deviceContext.TryWaitIdle();
-            }
-
-            for (var ring = 0; (ring < FrameRingSize); ring++) {
-                WriteWorldSet(
-                    set: m_worldSets[ring],
-                    slot: ring
-                );
-            }
-
-            m_worldSetsRevision = m_bindingRevision;
+        if (m_worldSetRevisions[slot] != m_bindingRevision) {
+            WriteWorldSet(
+                set: m_worldSets[slot],
+                slot: slot
+            );
+            m_worldSetRevisions[slot] = m_bindingRevision;
         }
 
         return m_worldSets[slot];

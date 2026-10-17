@@ -4,11 +4,12 @@
 // brick pool. One pipeline serves a device (GpuRegionCopyPass). Words outside every range keep what earlier
 // copies wrote. Bit-exact: uints move as uints, whatever the block stores in them.
 //
-// Source layout: a four-uint header (count, runCount, blockBase, destinationBase), then runCount (block offset, first
-// thread) pairs, then the block at blockBase. Thread i, its dispatch row times RegionCopyRowThreads plus its column (a
-// copy past one row of 65,535 groups dispatches further rows), below count binary-searches the last run whose first
-// thread is at most i, and copies destination[destinationBase + word] = source[blockBase + word], word being that run's block offset
-// plus i minus its first thread. No push constants: the staging buffer states its copy.
+// Source layout: a four-uint header (count, runCount, blockBase, destinationBase), then runCount (region word, first
+// thread) pairs, then the block at blockBase holding every run's words packed one after another. Thread i, its dispatch
+// row times RegionCopyRowThreads plus its column (a copy past one row of 65,535 groups dispatches further rows), below
+// count binary-searches the last run whose first thread is at most i, and copies destination[destinationBase + word] =
+// source[blockBase + i], word being that run's region word plus i minus its first thread. No push constants: the staging
+// buffer states its copy.
 // KEEP IN SYNC with GpuRegion (its Copy* constants, CopyGroups, and StageOwed's header and run table). Each register number equals
 // its binding (GpuRegisterNumbering.Binding).
 
@@ -43,5 +44,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint run = (RegionCopyHeaderWords + (low * 2));
     uint word = (copySource[run] + (i - copySource[(run + 1)]));
 
-    copyDestination[(copySource[3] + word)] = copySource[(copySource[2] + word)];
+    copyDestination[(copySource[3] + word)] = copySource[(copySource[2] + i)];
 }
