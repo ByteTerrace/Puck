@@ -246,6 +246,17 @@ latest completed image. A view nothing shows renders nothing and keeps its
 last image. The cost of every view is priced in the schedule and
 `world.budget` like any instance's, with no fixed view count.
 
+Nothing a portal adds may hold the world's own view. The World places that
+view in each frame from inside its residency's capture, and a residency that
+renders a held frame instead (a converging capture's) hands the frame to its
+source (`ISdfFrameSource.PresentHeldFrame`), so the view keeps its footprint and
+stays scheduled. A residency bakes its meshes in whichever of its views the
+graph records first, so a residency whose first view is a level out of view
+still bakes for the views that show. Worlds whose windows show each other light
+each other through ordinary frame feedback
+([screen emission](lighting-and-shading.md#screen-emission)); no residency
+holds a frame for it.
+
 ### The self-reference rule
 
 A view filming the world reads every view, itself included, at its previous

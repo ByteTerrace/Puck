@@ -17,7 +17,12 @@ dotnet run --project src/Puck.World -c Release -- --control --world src/Puck.Wor
 ```
 
 The debug world is the World's default, so `--world` only matters when you
-want `world.reload` to recompile your edits to the source. `--control` opens the
+want `world.reload` to recompile your edits to the source. It opens on the
+Moth basis's fixed three-quarter camera, which faces the avatar from the -Z
+side and so has the frame behind it. Press 5, or run `view.override layout
+play`, for the chase camera: it follows the avatar from behind, shows the frame
+ahead and to the right with the far frame inside it, and follows the avatar
+through every crossing. `--control` opens the
 Operator attachment an MCP client drives
 ([setup](../../../Puck.Mcp/README.md)). Where several Worlds run, start the
 adapter with `--attach <file>`, naming the file the World prints on stderr
@@ -42,11 +47,11 @@ and -X, out of the frames' way.
 
 ## What to try
 
-A presenting boot (windowed or offscreen) currently draws nothing once the
-frame's window follows the garden's scene: the display stays black and a
-capture is one pixel, while the simulation runs on
-([open item](../../../../docs/plans/open-items.md#rendering)). The crossings
-below work in every boot shape, headless included.
+The crossings below work in every boot shape, headless included; a presenting
+boot draws each of them at the display rate on the RTX 2060, Direct3D 12 and
+Vulkan alike, with the chase camera on (`view.override layout play`). The frame
+a crossing lands on still stalls while every nesting level is planned again
+from the other side ([open item](../../../../docs/plans/open-items.md#rendering)).
 
 - Walk forward from the spawn and keep walking (`body.pose 3 - 0 0 0 0`, then
   `body.fly 1 0 0 0 0 0 4`): the debug frame's band mints a transfer, and you
