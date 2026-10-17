@@ -108,9 +108,9 @@ the checkout as the [CLI reference](../../docs/reference/cli.md#installing-the-c
 describes, closing the MCP client first, since it holds the installed tool. The
 check needs no checkout: outside one, or without git, the tool says nothing.
 
-Without `--attach`, the adapter attaches to the newest running World that
-answers and stays on it until that attachment closes, so one configuration
-serves every run. The checkout carries that configuration for every client:
+Without `--attach`, an unnamed call runs on the adapter's current World: the
+newest running World that answers, kept until its attachment closes, so one
+configuration serves every run. The checkout carries that configuration for every client:
 `.mcp.json` at the root for Claude Code, `.codex/config.toml` for Codex, and
 `.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
 started before any World, or after the World exits, a call is refused with
@@ -118,11 +118,42 @@ nothing dispatched; once a World runs `world.control start`, the next call
 attaches. A call whose attachment closes (timeout, cancellation, World exit or
 `world.control stop`) reports an unknown outcome and is never replayed; the next
 call attaches anew, possibly to a restarted World with fresh state. A World
-started while the adapter is attached elsewhere is not followed.
-`--attach <printed-file>` pins one World where several run. Every agent that
-shares one adapter shares its attachment, so an agent driving its own World
-beside others runs its own adapter, `puck mcp --profile operator --attach
-<printed-file>`, from its own CLI copy. Never launch the
+started while the adapter is attached elsewhere is not followed by unnamed
+calls. `--attach <printed-file>` pins one World where several run.
+
+### Choosing a World per call
+
+Every agent of a harness shares the one adapter the checkout's `.mcp.json`
+starts, so an unnamed call can reach another agent's World. A call names its
+own:
+
+- `puck_worlds` lists the running Worlds that accept an Operator attachment
+  through this adapter: each one's `attachmentId`, `processId`, world
+  `document` (the path the World booted from), `startedUtc` (its process start)
+  and whether it is the `current` World, which unnamed calls run on. It takes no
+  arguments and never waits behind a call in flight.
+- `puck_exec`, `puck_capture_frame` and `puck_state_vector_write` take an
+  optional `world`: an `attachmentId` or a `processId` from that list. The call
+  attaches to exactly that World, with an attachment of its own that the adapter
+  keeps for the next call naming it, or is refused by name with nothing
+  dispatched: no match, a process id that matches several Worlds (name one by
+  attachment id), a World that does not accept the attachment, or a name other
+  than the pinned World's on an adapter started with `--attach`. It never falls
+  back to another World, and naming one does not move the current World.
+- Every result of these three tools carries a `world` member (`attachmentId`,
+  `processId`, `document`, `startedUtc`) naming the World the call reached, null
+  for a refusal that reached none, so a caller that named nothing can see it
+  landed on a wrong one.
+
+A World publishes that identity in its attachment file, beside the capability
+secret, when `world.control start` or `--control` opens the endpoint; the
+attachment id is the file's incarnation id, new for every start. A file whose
+host process has exited, or whose process id another process now holds, is never
+listed, followed or named, so the stale files killed Worlds leave in the
+temporary directory cost nothing. Only the identity, never the secret, reaches a
+tool result.
+
+Never launch the
 server from a project's build output: the running server holds every assembly
 in that folder, and the next build fails to replace them. Paths containing spaces
 must remain one argument in the client configuration. `world.control status`
@@ -269,9 +300,10 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`. Empty output is `submitted`, not authoritative application. |
-| `puck_capture_frame` | Optional `timeoutMs`, same range/default. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
-| `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`) and `timeoutMs`, same range/default. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
+| `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc` and `current`. |
+| `puck_exec` | Required `command`: one console line, at most 8192 characters. Optional integer `timeoutMs`: 1–120000, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Console output plus structured decimal-string `requestId`, `status`, `output`, `isError`, `clearTranscript`, `truncated`, and `world`, the World reached. Empty output is `submitted`, not authoritative application. |
+| `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. No path. | Completed PNG image content, up to 16 MiB, plus completion metadata. Includes the composed view and overlays; requires an initialized renderer. |
+| `puck_state_vector_write` | Required `row` and `vector`; optional `key` (defaults to `$value`), `timeoutMs`, same range/default, and `world`. | Writes the admitted unit vector into that state cell through `world.state.cell.set`, returning the same structured result shape as `puck_exec`. |
 
 Mutation commands that provide an authority settlement wait for its applied or
 refused verdict. This is console output, not a durable persistence receipt.
@@ -299,6 +331,8 @@ Both tools advertise an output schema. Metadata is returned as structured conten
 and matching JSON text, so clients that consume only text retain the same facts.
 `requestId` is null when no reliable host reply exists. `status` is `completed`,
 `submitted`, `refused` or `unknown`; an uncertain outcome is never certified as success.
+`world` names the World the call reached on local stdio, including for an unknown
+outcome, and is null over HTTP and for a refusal before any World was reached.
 
 Console output arrives whole up to 1,048,576 UTF-16 code units, the control
 transport's `ControlLimits.OutputCharacters`. Longer output is cut to that
@@ -362,7 +396,11 @@ exec, images and argument errors, plus EOF and oversized-input exits that leave
 the World serving. One boots a real headless World on a copy of the debug
 world's `.puck` source and holds one attachment through a `world.wait` that
 answers at its release tick, a wait refused for outlasting its call, and a
-`world.reload` after a source edit that answers and installs the edit. Each gives the child a private temporary directory, so
+`world.reload` after a source edit that answers and installs the edit. Another
+boots two such Worlds side by side and checks that `puck_worlds` lists both, that a
+call naming either by attachment id or process id reaches it whichever one the
+adapter is on, and that after one is killed, leaving its capability file behind, it
+is no longer listed and a call naming it is refused by name. Each gives the child a private temporary directory, so
 `latest` can only find that test's World. Each connection ends as the stdio
 transport specifies: the client closes the adapter's stdin and the adapter must
 exit with code 0. The SDK's own `StdioClientTransport` never closes that stdin,

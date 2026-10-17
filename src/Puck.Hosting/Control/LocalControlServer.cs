@@ -43,7 +43,9 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
     /// <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
     /// <param name="directory">The directory the attachment file is published in, where an adapter following the
     /// newest World looks; <see langword="null"/> is the user's temporary directory.</param>
-    public LocalControlServer(Func<IControlSession> createSession, TimeProvider? clock = null, string? directory = null) {
+    /// <param name="world">What this host runs, such as its world document path, published in the attachment file so an
+    /// adapter can list hosts; <see langword="null"/> publishes none.</param>
+    public LocalControlServer(Func<IControlSession> createSession, TimeProvider? clock = null, string? directory = null, string? world = null) {
         ArgumentNullException.ThrowIfNull(createSession);
         m_clock = (clock ?? TimeProvider.System);
         m_createSession = createSession;
@@ -55,7 +57,10 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
         );
         try {
             m_listener.Start(backlog: 4);
-            m_descriptor = new(port: ((IPEndPoint)m_listener.LocalEndpoint).Port);
+            m_descriptor = new(
+                port: ((IPEndPoint)m_listener.LocalEndpoint).Port,
+                world: world
+            );
             m_descriptorFile = m_descriptor.WriteDescriptor(path: AttachmentPath);
         } catch { m_listener.Stop(); m_stop.Dispose(); throw; }
         m_accept = AcceptAsync();
@@ -64,6 +69,8 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
 
     /// <summary>The capability file path. Its contents must never be logged or put in process arguments.</summary>
     public string AttachmentPath { get; }
+    /// <summary>Gets what the attachment file publishes about this host: its attachment id, process and world.</summary>
+    public LocalEndpointInfo Info => m_descriptor.Info;
     /// <summary>Gets a task that completes after the server has stopped and its accept loop and every connection's
     /// serving task, including the session each created, have returned. It never faults, and it does not complete
     /// while the server is running. Work a session handed to the host's pump is the host's and is not awaited.</summary>

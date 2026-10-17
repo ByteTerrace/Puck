@@ -46,12 +46,29 @@ public sealed class McpInteropTests {
         var tools = await client.ListToolsAsync(cancellationToken: Token);
 
         Assert.Equal(
-            ["puck_capture_frame", "puck_exec", "puck_state_vector_write"],
+            ["puck_capture_frame", "puck_exec", "puck_state_vector_write", "puck_worlds"],
             tools.Select(selector: tool => tool.Name).Order()
         );
         Assert.All(
             tools,
             tool => Assert.NotNull(value: tool.ProtocolTool.OutputSchema)
+        );
+        Assert.All(
+            tools.Where(predicate: tool => (tool.Name != "puck_worlds")),
+            tool => Assert.True(condition: tool.ProtocolTool.InputSchema.GetProperty(propertyName: "properties").TryGetProperty(propertyName: "world", value: out _))
+        );
+        var worlds = (await client.CallToolAsync(
+            "puck_worlds",
+            cancellationToken: Token
+        )).StructuredContent!.Value.GetProperty(propertyName: "worlds");
+
+        Assert.Equal(
+            expected: host.Info.Id,
+            actual: worlds.EnumerateArray().Single().GetProperty(propertyName: "attachmentId").GetString()
+        );
+        Assert.Equal(
+            expected: Environment.ProcessId,
+            actual: worlds.EnumerateArray().Single().GetProperty(propertyName: "processId").GetInt32()
         );
         var echo = await client.CallToolAsync(
             "puck_exec",
@@ -67,6 +84,31 @@ public sealed class McpInteropTests {
         Assert.Equal(
             "echo \tç",
             echo.StructuredContent!.Value.GetProperty(propertyName: "output").GetString()
+        );
+        Assert.Equal(
+            host.Info.Id,
+            echo.StructuredContent.Value.GetProperty(propertyName: "world").GetProperty(propertyName: "attachmentId").GetString()
+        );
+        var named = await client.CallToolAsync(
+            "puck_exec",
+            new Dictionary<string, object?> { ["command"] = "echo named", ["world"] = host.Info.Id },
+            cancellationToken: Token
+        );
+
+        Assert.Equal(
+            "echo named",
+            named.StructuredContent!.Value.GetProperty(propertyName: "output").GetString()
+        );
+        var absent = await client.CallToolAsync(
+            "puck_exec",
+            new Dictionary<string, object?> { ["command"] = "echo lost", ["world"] = "1" },
+            cancellationToken: Token
+        );
+
+        Assert.True(condition: absent.IsError);
+        Assert.Equal(
+            "refused",
+            absent.StructuredContent!.Value.GetProperty(propertyName: "status").GetString()
         );
         using var text = System.Text.Json.JsonDocument.Parse(echo.Content.OfType<TextContentBlock>().Single().Text);
 
@@ -207,41 +249,11 @@ public sealed class McpInteropTests {
     public async Task AWaitHoldsItsOwnCallAndAReloadAnswersOverOneAttachment() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var directory = new TemporaryDirectory();
-        var root = RepositoryPaths.RequireRoot();
-        var worlds = directory.PathOf(name: "worlds");
-
-        CopyTree(
-            source: Path.Combine(path1: root, path2: "src/Puck.World/Assets/worlds"),
-            target: worlds
-        );
-        var source = Path.Combine(path1: worlds, path2: "debug.puck");
-        var output = new DirectoryInfo(path: AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var world = new ProcessStartInfo(fileName: "dotnet") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true, RedirectStandardOutput = true, StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), UseShellExecute = false, WorkingDirectory = directory.RootPath };
-
-        foreach (var argument in new[] {
-            Path.Combine(path1: root, path2: $"src/Puck.World/bin/{output.Parent!.Name}/{output.Name}/Puck.World.dll"),
-            "--world", source,
-            "--headless", "true",
-            "--state-dir", directory.PathOf(name: "state"),
-            "--control",
-        }) { world.ArgumentList.Add(item: argument); }
-        world.Environment["TEMP"] = directory.RootPath;
-        world.Environment["TMP"] = directory.RootPath;
-        using var host = Process.Start(startInfo: world)!;
-        var announced = new TaskCompletionSource<string>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-        var stderr = new System.Text.StringBuilder();
-
-        host.ErrorDataReceived += (_, line) => {
-            if (line.Data is not { } data) { _ = announced.TrySetException(exception: new InvalidOperationException(message: $"World closed standard error before announcing control:{Environment.NewLine}{stderr}")); return; }
-            lock (stderr) { _ = stderr.AppendLine(value: data); }
-            if (data.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.control: operator attachment ")) { _ = announced.TrySetResult(result: data); }
-        };
-        host.OutputDataReceived += static (_, _) => { };
-        host.BeginErrorReadLine();
-        host.BeginOutputReadLine();
+        var source = StageWorld(directory: directory, name: "worlds");
+        using var host = LaunchWorld(announced: out var announced, directory: directory, source: source, stateName: "state");
 
         try {
-            _ = await announced.Task.WaitAsync(timeout: TimeSpan.FromMinutes(minutes: 5), cancellationToken: Token);
+            await announced.WaitAsync(timeout: TimeSpan.FromMinutes(minutes: 5), cancellationToken: Token);
             await using (var adapter = await ConnectAsync(
                 attach: "latest",
                 directory: directory,
@@ -270,7 +282,7 @@ public sealed class McpInteropTests {
 
                 var before = await ExecAsync(command: "world.status", timeoutMs: 30000);
 
-                Assert.Contains(expectedSubstring: " placements 8 ", actualString: before.Output);
+                var baseline = Placements(status: before.Output);
 
                 var text = File.ReadAllText(path: source);
                 var edited = text.Replace(oldValue: "placements {\n", newValue: "placements {\n  placement \"mcp-reload\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", comparisonType: StringComparison.Ordinal);
@@ -282,7 +294,7 @@ public sealed class McpInteropTests {
 
                 Assert.Equal(expected: "completed", actual: reload.Status);
                 Assert.StartsWith(expectedStartString: "[world.reload: world.reload applied", actualString: reload.Output);
-                Assert.Contains(expectedSubstring: " placements 9 ", actualString: (await ExecAsync(command: "world.status", timeoutMs: 30000)).Output);
+                Assert.Equal(expected: (baseline + 1), actual: Placements(status: (await ExecAsync(command: "world.status", timeoutMs: 30000)).Output));
             }
             await host.StandardInput.WriteAsync(buffer: "quit\n".AsMemory(), cancellationToken: Token);
             await host.StandardInput.FlushAsync(cancellationToken: Token);
@@ -292,6 +304,171 @@ public sealed class McpInteropTests {
         } finally {
             if (!host.HasExited) { host.Kill(entireProcessTree: true); }
         }
+    }
+    // Law: two real headless Worlds run beside each other under one adapter. puck_worlds lists both with their process,
+    // document and start time, and marks none current before any call attached. A call naming a World by attachment id
+    // or by process id reaches that World whichever one the adapter is on, an unnamed call says which World it reached,
+    // and naming a World never moves the current one. A killed World leaves its capability file behind; it is no longer
+    // listed, and a call naming it is refused by name without falling back to the World that is still running.
+    [Fact]
+    public async Task ACallNamingAWorldReachesExactlyThatWorld() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        using var directory = new TemporaryDirectory();
+        var first = StageWorld(directory: directory, name: "worlds-a");
+        var second = StageWorld(directory: directory, name: "worlds-b");
+        var text = File.ReadAllText(path: second);
+        var edited = text.Replace(oldValue: "placements {\n", newValue: "placements {\n  placement \"mcp-second\" {\n    prototype: \"cube-1m\"\n    position [0, 0.5, -6]\n  }\n\n", comparisonType: StringComparison.Ordinal);
+
+        Assert.NotEqual(expected: text, actual: edited);
+        File.WriteAllText(path: second, contents: edited);
+        using var a = LaunchWorld(announced: out var announcedA, directory: directory, source: first, stateName: "state-a");
+        using var b = LaunchWorld(announced: out var announcedB, directory: directory, source: second, stateName: "state-b");
+
+        try {
+            await Task.WhenAll(announcedA, announcedB).WaitAsync(timeout: TimeSpan.FromMinutes(minutes: 5), cancellationToken: Token);
+            await using var adapter = await ConnectAsync(
+                attach: "latest",
+                directory: directory,
+                revision: "2026-07-28"
+            );
+
+            async Task<System.Text.Json.JsonElement> CallAsync(string tool, string? world = null, string? command = null) {
+                var arguments = new Dictionary<string, object?>();
+
+                if (world is not null) { arguments["world"] = world; }
+                if (command is not null) { arguments["command"] = command; }
+
+                return (await adapter.Client.CallToolAsync(tool, arguments, cancellationToken: Token)).StructuredContent!.Value.Clone();
+            }
+            async Task<System.Text.Json.JsonElement[]> ListAsync() => [.. (await CallAsync(tool: "puck_worlds")).GetProperty(propertyName: "worlds").EnumerateArray()];
+            async Task<(string Status, string Output, System.Text.Json.JsonElement World)> StatusAsync(string? world) {
+                var result = await CallAsync(tool: "puck_exec", world: world, command: "world.status");
+
+                return (result.GetProperty(propertyName: "status").GetString()!, result.GetProperty(propertyName: "output").GetString()!, result.GetProperty(propertyName: "world"));
+            }
+
+            var listed = await ListAsync();
+
+            Assert.Equal(
+                expected: new[] { a.Id, b.Id }.Order(),
+                actual: listed.Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32()).Order()
+            );
+            Assert.All(collection: listed, action: world => Assert.False(condition: world.GetProperty(propertyName: "current").GetBoolean()));
+            Assert.All(collection: listed, action: world => Assert.True(condition: (DateTimeOffset.Parse(input: world.GetProperty(propertyName: "startedUtc").GetString()!, formatProvider: System.Globalization.CultureInfo.InvariantCulture) < DateTimeOffset.UtcNow)));
+
+            var idOf = listed.ToDictionary(keySelector: world => world.GetProperty(propertyName: "processId").GetInt32(), elementSelector: world => world.GetProperty(propertyName: "attachmentId").GetString()!);
+
+            Assert.Equal(
+                expected: Path.GetFullPath(path: first),
+                actual: listed.Single(predicate: world => (world.GetProperty(propertyName: "processId").GetInt32() == a.Id)).GetProperty(propertyName: "document").GetString(),
+                ignoreCase: true
+            );
+            Assert.Equal(
+                expected: Path.GetFullPath(path: second),
+                actual: listed.Single(predicate: world => (world.GetProperty(propertyName: "processId").GetInt32() == b.Id)).GetProperty(propertyName: "document").GetString(),
+                ignoreCase: true
+            );
+
+            // The second World's document holds one more placement than the first's, which tells them apart.
+            var baseline = Placements(status: (await StatusAsync(world: idOf[a.Id])).Output);
+
+            foreach (var (selector, process, placements) in new[] {
+                (idOf[a.Id], a.Id, baseline),
+                (b.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), b.Id, (baseline + 1)),
+                (a.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), a.Id, baseline),
+                (idOf[b.Id], b.Id, (baseline + 1)),
+            }) {
+                var named = await StatusAsync(world: selector);
+
+                Assert.True(condition: ((named.Status == "completed") && (Placements(status: named.Output) == placements)), userMessage: $"{selector}: {named.Status}: {named.Output}");
+                Assert.Equal(expected: process, actual: named.World.GetProperty(propertyName: "processId").GetInt32());
+                Assert.Equal(expected: idOf[process], actual: named.World.GetProperty(propertyName: "attachmentId").GetString());
+            }
+
+            var unnamed = await StatusAsync(world: null);
+            var current = unnamed.World.GetProperty(propertyName: "processId").GetInt32();
+
+            Assert.Equal(expected: ((current == a.Id) ? baseline : (baseline + 1)), actual: Placements(status: unnamed.Output));
+            Assert.Equal(
+                expected: [current],
+                actual: (await ListAsync()).Where(predicate: world => world.GetProperty(propertyName: "current").GetBoolean()).Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32())
+            );
+
+            var other = ((current == a.Id) ? b.Id : a.Id);
+
+            Assert.Equal(expected: other, actual: (await StatusAsync(world: other.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))).World.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: current, actual: (await StatusAsync(world: null)).World.GetProperty(propertyName: "processId").GetInt32());
+
+            // A killed World leaves its capability file behind.
+            b.Kill(entireProcessTree: true);
+            await b.WaitForExitAsync(cancellationToken: Token).WaitAsync(HangGuard, Token);
+            Assert.NotEmpty(collection: Directory.GetFiles(path: directory.RootPath, searchPattern: "puck-control-*.json"));
+            Assert.Equal(expected: [a.Id], actual: (await ListAsync()).Select(selector: world => world.GetProperty(propertyName: "processId").GetInt32()));
+
+            foreach (var gone in new[] { idOf[b.Id], b.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) }) {
+                var refused = await StatusAsync(world: gone);
+
+                Assert.Equal(expected: "refused", actual: refused.Status);
+                Assert.Equal(expected: System.Text.Json.JsonValueKind.Null, actual: refused.World.ValueKind);
+                Assert.Contains(expectedSubstring: $"No running World matches '{gone}'", actualString: refused.Output);
+            }
+
+            var survivor = await StatusAsync(world: idOf[a.Id]);
+
+            Assert.Equal(expected: "completed", actual: survivor.Status);
+            Assert.Equal(expected: a.Id, actual: survivor.World.GetProperty(propertyName: "processId").GetInt32());
+            Assert.Equal(expected: a.Id, actual: (await StatusAsync(world: null)).World.GetProperty(propertyName: "processId").GetInt32());
+        } finally {
+            foreach (var process in new[] { a, b }) {
+                if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+            }
+        }
+    }
+    private static int Placements(string status) => int.Parse(
+        provider: System.Globalization.CultureInfo.InvariantCulture,
+        s: System.Text.RegularExpressions.Regex.Match(input: status, pattern: @" placements (\d+) ").Groups[1].Value
+    );
+    // Copies the debug world's source tree into the directory and returns the world document's path.
+    private static string StageWorld(TemporaryDirectory directory, string name) {
+        var worlds = directory.PathOf(name: name);
+
+        CopyTree(
+            source: Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: "src/Puck.World/Assets/worlds"),
+            target: worlds
+        );
+
+        return Path.Combine(path1: worlds, path2: "debug.puck");
+    }
+    // Starts a headless World from its own build output beside this suite's, publishing its control endpoint in the
+    // directory. The task completes when the World announces it, and faults if its standard error closes first.
+    private static Process LaunchWorld(out Task announced, TemporaryDirectory directory, string source, string stateName) {
+        var output = new DirectoryInfo(path: AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var world = new ProcessStartInfo(fileName: "dotnet") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true, RedirectStandardOutput = true, StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), UseShellExecute = false, WorkingDirectory = directory.RootPath };
+
+        foreach (var argument in new[] {
+            Path.Combine(path1: RepositoryPaths.RequireRoot(), path2: $"src/Puck.World/bin/{output.Parent!.Name}/{output.Name}/Puck.World.dll"),
+            "--world", source,
+            "--headless", "true",
+            "--state-dir", directory.PathOf(name: stateName),
+            "--control",
+        }) { world.ArgumentList.Add(item: argument); }
+        world.Environment["TEMP"] = directory.RootPath;
+        world.Environment["TMP"] = directory.RootPath;
+        var host = Process.Start(startInfo: world)!;
+        var control = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        var stderr = new System.Text.StringBuilder();
+
+        host.ErrorDataReceived += (_, line) => {
+            if (line.Data is not { } data) { _ = control.TrySetException(exception: new InvalidOperationException(message: $"World closed standard error before announcing control:{Environment.NewLine}{stderr}")); return; }
+            lock (stderr) { _ = stderr.AppendLine(value: data); }
+            if (data.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.control: operator attachment ")) { _ = control.TrySetResult(); }
+        };
+        host.OutputDataReceived += static (_, _) => { };
+        host.BeginErrorReadLine();
+        host.BeginOutputReadLine();
+        announced = control.Task;
+
+        return host;
     }
     private static void CopyTree(string source, string target) {
         foreach (var file in Directory.EnumerateFiles(path: source, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {

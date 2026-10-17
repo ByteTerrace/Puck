@@ -64,9 +64,9 @@ public sealed class ControlTests {
         );
         var proof = Convert.ToHexString(inArray: HMACSHA256.HashData(
             key: secret,
-            source: Encoding.UTF8.GetBytes(s: $"puck-control:1:{host}:client:{serverNonce}:{nonce}")
+            source: Encoding.UTF8.GetBytes(s: $"puck-control:2:{host}:client:{serverNonce}:{nonce}")
         ));
-        var response = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{proof}}"}""");
+        var response = Encoding.UTF8.GetBytes(s: $$"""{"revision":2,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{proof}}"}""");
 
         await WriteFrameAsync(
             stream,
@@ -279,7 +279,7 @@ public sealed class ControlTests {
             FileOptions.None,
             new FileInfo(fileName: real.AttachmentPath).GetAccessControl()
         )) {
-            file.Write(buffer: Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","port":{{port}},"secret":"{{secret}}"}"""));
+            file.Write(buffer: Encoding.UTF8.GetBytes(s: $$"""{"revision":2,"host":"{{host}}","port":{{port}},"secret":"{{secret}}","processId":{{Environment.ProcessId}},"startedUtc":"2026-01-01T00:00:00+00:00","world":null}"""));
         }
         var attempt = LocalControlClient.ConnectAsync(
             attachmentPath: path,
@@ -290,7 +290,7 @@ public sealed class ControlTests {
             c: 'A',
             count: 64
         );
-        var challenge = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":""}""");
+        var challenge = Encoding.UTF8.GetBytes(s: $$"""{"revision":2,"host":"{{host}}","nonce":"{{nonce}}","proof":""}""");
 
         await WriteFrameAsync(
             peer.GetStream(),
@@ -303,7 +303,7 @@ public sealed class ControlTests {
             4096,
             Token
         ));
-        var forged = Encoding.UTF8.GetBytes(s: $$"""{"revision":1,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{new string(
+        var forged = Encoding.UTF8.GetBytes(s: $$"""{"revision":2,"host":"{{host}}","nonce":"{{nonce}}","proof":"{{new string(
             c: '0',
             count: 64
         )}}"}""");

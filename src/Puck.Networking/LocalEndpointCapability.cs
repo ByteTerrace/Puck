@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -11,13 +13,17 @@ namespace Puck.Networking;
 /// <remarks>The secret stays private to the descriptor and proof computation. This establishes the OS user,
 /// including that user's other processes and elevation levels; callers must bind and connect only to loopback.</remarks>
 public sealed class LocalEndpointCapability {
-    private const int Revision = 1;
+    private const int Revision = 2;
+    private const int MaxWorldCharacters = 512;
 
     private readonly LocalEndpointDescriptor m_descriptor;
 
     /// <summary>Creates a fresh host incarnation and 256-bit capability secret for a loopback listener.</summary>
     /// <param name="port">The bound TCP port, from 1 through 65535.</param>
-    public LocalEndpointCapability(int port) {
+    /// <param name="world">What the endpoint's host is running, such as a world document path, published in the
+    /// descriptor so an adapter can tell hosts apart; <see langword="null"/> publishes none. Cut to its last 512
+    /// characters.</param>
+    public LocalEndpointCapability(int port, string? world = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             port,
             1
@@ -30,15 +36,32 @@ public sealed class LocalEndpointCapability {
             Revision,
             Guid.NewGuid().ToString(format: "N"),
             port,
-            Convert.ToHexString(inArray: RandomNumberGenerator.GetBytes(count: 32))
+            Convert.ToHexString(inArray: RandomNumberGenerator.GetBytes(count: 32)),
+            Environment.ProcessId,
+            ProcessStart(),
+            (((world is not null) && (world.Length > MaxWorldCharacters))
+                ? world[^MaxWorldCharacters..]
+                : world)
         );
     }
 
     private LocalEndpointCapability(LocalEndpointDescriptor descriptor) { m_descriptor = descriptor; }
 
+    /// <summary>What this capability publishes beside its secret: the incarnation id, the host process and what it runs.</summary>
+    public LocalEndpointInfo Info => new(
+        Id: m_descriptor.Host,
+        ProcessId: m_descriptor.ProcessId,
+        StartedUtc: m_descriptor.StartedUtc,
+        World: m_descriptor.World
+    );
     /// <summary>The loopback TCP port advertised by this capability.</summary>
     public int Port => m_descriptor.Port;
 
+    private static DateTimeOffset ProcessStart() {
+        using var self = Process.GetCurrentProcess();
+
+        return new DateTimeOffset(dateTime: self.StartTime.ToUniversalTime());
+    }
     private static bool IsHex(string? text, int length) => ((text?.Length == length) && !text.AsSpan().ContainsAnyExcept(values: "0123456789abcdefABCDEF"));
     private static string Proof(LocalEndpointDescriptor descriptor, string role, string serverNonce, string clientNonce) => Convert.ToHexString(inArray: HMACSHA256.HashData(
         key: Convert.FromHexString(s: descriptor.Secret),
@@ -254,6 +277,8 @@ public sealed class LocalEndpointCapability {
         if (
             (descriptor.Revision != Revision) ||
             (descriptor.Port is <= 0 or > 65535) ||
+            (descriptor.ProcessId <= 0) ||
+            ((descriptor.World?.Length ?? 0) > MaxWorldCharacters) ||
             !Guid.TryParseExact(
             descriptor.Host,
             "N",
@@ -302,7 +327,27 @@ public sealed class LocalEndpointCapability {
     }
 }
 
-internal sealed record LocalEndpointDescriptor(int Revision, string Host, int Port, string Secret);
+/// <summary>What an endpoint's descriptor says about the host that published it, without its secret.</summary>
+/// <param name="Id">The incarnation's attachment id: 32 hexadecimal digits, new for every endpoint start.</param>
+/// <param name="ProcessId">The host process.</param>
+/// <param name="StartedUtc">When the host process started.</param>
+/// <param name="World">What the host runs, such as its world document path, or <see langword="null"/>.</param>
+public sealed record LocalEndpointInfo(string Id, int ProcessId, DateTimeOffset StartedUtc, string? World) {
+    /// <summary>Whether the host process is still running: a descriptor left behind by an exited or crashed host, or
+    /// whose process id another process now holds, is not. A process this one cannot inspect counts as running, since
+    /// the connection then decides.</summary>
+    /// <returns><see langword="false"/> only when the host process is provably gone.</returns>
+    public bool IsHostRunning() {
+        try {
+            using var host = Process.GetProcessById(processId: ProcessId);
+
+            return (!host.HasExited && (Math.Abs(value: (new DateTimeOffset(dateTime: host.StartTime.ToUniversalTime()) - StartedUtc).TotalSeconds) < 2));
+        } catch (Exception error) when ((error is ArgumentException or InvalidOperationException or Win32Exception)) {
+            return (error is Win32Exception);
+        }
+    }
+}
+internal sealed record LocalEndpointDescriptor(int Revision, string Host, int Port, string Secret, int ProcessId, DateTimeOffset StartedUtc, string? World);
 internal sealed record LocalEndpointHello(int Revision, string Host, string Nonce, string Proof);
 [JsonSerializable(typeof(LocalEndpointDescriptor))]
 [JsonSerializable(typeof(LocalEndpointHello))]

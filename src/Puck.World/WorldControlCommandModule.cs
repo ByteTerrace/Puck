@@ -8,7 +8,7 @@ namespace Puck.World;
 // The module owns the endpoint's lifetime. Text source resolution is deferred to avoid the source -> registry ->
 // modules -> source DI cycle; no worker starts until the operator explicitly opts in, through the console or the
 // --control launch option.
-internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldCaptureScheduler captureScheduler, WorldRenderProbe? probe) : ICommandModule, IAsyncDisposable, IDisposable {
+internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldCaptureScheduler captureScheduler, WorldRenderProbe? probe, Func<string?>? world = null) : ICommandModule, IAsyncDisposable, IDisposable {
     private readonly Lock m_gate = new();
 
     private LocalControlServer? m_server;
@@ -78,7 +78,7 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
 
                     return request;
                 }
-            ));
+            ), world: world?.Invoke());
 
             return m_server.AttachmentPath;
         }

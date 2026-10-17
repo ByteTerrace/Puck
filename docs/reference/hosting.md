@@ -628,7 +628,14 @@ The opt-in endpoint binds only IPv4 loopback, admits at most four connections
 including handshakes, and uses Networking's user-only Windows/Linux x64
 local endpoint capability. It publishes its attachment file in the user's
 temporary directory, where an adapter following the newest World looks, unless
-the host names another directory.
+the host names another directory. The file carries, beside the secret, what the
+host publishes about itself: its incarnation id (the attachment id a client can
+name), its process id and start time, and what it runs (`LocalEndpointInfo`,
+read through `LocalControlClient.Endpoint` and `LocalControlServer.Info`). A
+reader can tell that the host is gone from its process id and start time
+(`LocalEndpointInfo.IsHostRunning`) without connecting, so a file a killed host
+left behind is recognizable; the descriptor revision changes whenever its members
+do, and a reader refuses another revision.
 Creating an instance starts the listener; the host owns its disposal.
 An in-process extension can use `IControlSessionHost` instead. `DescribeAsync`
 returns the identity's admitted command help and renderer availability without

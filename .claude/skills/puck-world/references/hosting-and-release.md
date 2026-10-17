@@ -21,7 +21,11 @@ A host runs an agent as an extension-configuration `participants` row (`WorldPar
 `McpServicesProvider` (`Puck.Mcp.Azure` ships the `azure` one) and is refused by name with none or two. World installs the `Puck.Hosting` local control endpoint only
 when the host Console issues `world.control start`, or when the run was launched with `--control` (the same start at
 boot, announced on stderr, wired through `WorldBootInputs.Control`); `stop` and `status` manage its live lifetime. Attach with
-`puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. The file protects a mutual-authenticated
+`puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. One adapter serves every agent of a
+harness: `puck_worlds` lists the running Worlds, and the `world` argument of `puck_exec`, `puck_capture_frame` and
+`puck_state_vector_write` (an attachment id or process id) reaches exactly that World or is refused; an unnamed call
+runs on the adapter's current World and the result's `world` member names it, so name your own World when several
+run. The file protects a mutual-authenticated
 loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
 one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
 session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary

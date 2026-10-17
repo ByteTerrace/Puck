@@ -212,7 +212,7 @@ public sealed class McpAdversarialTests {
             );
 
             Assert.Equal(
-                3,
+                4,
                 tools.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "tools").GetArrayLength()
             );
         } else {
