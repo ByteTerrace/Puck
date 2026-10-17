@@ -53,6 +53,13 @@ it never injects a hardware press. True headless presentation still refuses.
 The application
 README's presentation inspection section owns the user contract.
 
+To aim a view from the console (frame a spot, orbit, restore) use the operator
+camera, `view.override camera pose|look|orbit|turn|swing|move|fov`
+([views.md](views.md#verbs)), never `player.look`: that is a seat input and
+turns nothing while `seatLook` sensitivity is zero. It is a composition leaf
+(`WorldComposition.SetOperatorCamera`), so it works in a headless boot, answers
+with the absolute pose it set, and `world.view.state` reads it back.
+
 Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
 stops at the two factories MISSES the wrapper's registration sites.
 

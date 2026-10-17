@@ -49,6 +49,7 @@ public static class WorldReplayEntryDescriber {
     private static string DescribeComposition(WorldComposition composition) => composition switch {
         WorldComposition.SetActiveLayout layout => $"composition layout={(layout.Name ?? "auto")}",
         WorldComposition.SelectCamera camera => $"composition camera={(camera.Name ?? "auto")}",
+        WorldComposition.SetOperatorCamera operatorCamera => $"composition operator-camera={(operatorCamera.Pose?.ToString() ?? "auto")}",
         _ => $"composition {composition.GetType().Name}",
     };
     private static string DescribeGrant(WorldGrant grant) => $"{grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} -> {grant.Grantee.Describe()}{(grant.Exclusive

@@ -904,6 +904,23 @@ Facts a script needs:
 - **Refusals are loud and named.** A denied write prints a
   `[world.grant denied: …]`-shaped line and drops; `world.why` and
   `world.refusals` are the read-backs.
+- **Aiming the view.** `view.override camera` has an operator camera that
+  frames the world whatever a seat's look sensitivity is, which is a player
+  input setting and not an operator lever (the engine default is zero, so
+  `player.look` turns nothing until a world authors `playerDefaults.seatLook`).
+  `pose <x> <y> <z> <yaw> <pitch> [<fov>]` sets an absolute eye and heading,
+  `look <x> <y> <z> <tx> <ty> <tz> [<fov>]` an eye facing a point, and
+  `orbit <tx> <ty> <tz> <distance> <yaw> <pitch> [<fov>]` an eye behind a point.
+  `turn <dYaw> <dPitch>`, `swing <dYaw> <dPitch> [<dDistance>]` (about the
+  pivot, `distance` metres ahead of the eye), `move <dRight> <dUp> <dForward>`
+  and `fov <degrees>` change the pose already set. Angles are degrees, yaw 0
+  faces -Z and positive turns left (180 faces +Z), pitch positive looks up. The
+  pose replaces every window slot, seat slots included, and each call echoes the
+  absolute pose it set (`[view.override: camera operator eye=(…) yaw= pitch=
+  fov= distance= forward=(…) pivot=(…)]`); `world.view.state` repeats it as
+  `camera=operator …`, headless included. `view.override camera auto` (or a
+  named camera) restores the layout's own views. It is session presentation: it
+  never enters the document or the journal.
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at

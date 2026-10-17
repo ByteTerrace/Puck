@@ -85,11 +85,13 @@ public static partial class WorldSubmissionCodec {
     private static byte CompositionKind(WorldComposition value) => value switch {
         WorldComposition.SetActiveLayout => 0,
         WorldComposition.SelectCamera => 1,
+        WorldComposition.SetOperatorCamera => 2,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? CompositionType(byte kind) => kind switch {
         0 => typeof(WorldComposition.SetActiveLayout),
         1 => typeof(WorldComposition.SelectCamera),
+        2 => typeof(WorldComposition.SetOperatorCamera),
         _ => null,
     };
     private static JsonSerializerOptions CreateJsonOptions() {

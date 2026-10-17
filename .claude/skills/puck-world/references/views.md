@@ -494,6 +494,29 @@ Free Cam do not alter the logical movement basis.
   <name|auto>]`) and refuses by name, submitting nothing, a layout or camera
   the live document does not author, an ordinal past its layouts, and a cycle
   with no authored layout; a composition-grant denial prints on stderr.
+- `view.override camera pose|look|orbit|turn|swing|move|fov <numbers>` — the
+  OPERATOR CAMERA, the lever for aiming a view from the console. Seat look
+  sensitivity (`seatLook`, zero unless a world authors it) is a player input
+  setting, so `player.look` is the wrong tool and stays as it is. `pose <x> <y>
+  <z> <yaw> <pitch> [<fov>]`, `look <x> <y> <z> <tx> <ty> <tz> [<fov>]` and
+  `orbit <tx> <ty> <tz> <distance> <yaw> <pitch> [<fov>]` set an absolute pose;
+  `turn <dYaw> <dPitch>`, `swing <dYaw> <dPitch> [<dDistance>]` (about the
+  pivot, the point `distance` metres ahead of the eye), `move <dRight> <dUp>
+  <dForward>` (camera axes) and `fov <deg>` edit the pose already set and are
+  refused by name when none is. Degrees and metres; yaw 0 faces -Z and positive
+  turns left; pitch is limited to 89; fov 1..170, default 60. Each call echoes
+  `[view.override: camera operator eye=(…) yaw= pitch= fov= distance=
+  forward=(…) pivot=(…)]`, the absolute pose submitted, and `world.view.state`
+  repeats it as `camera=operator …`, headless included. Code:
+  `WorldOperatorCamera` (Protocol: the pose math and the one read-back
+  format), `WorldComposition.SetOperatorCamera` (the grant-checked composition
+  leaf), `WorldCompositionState.OperatorCamera` (the store),
+  `WorldViewCommandModule.OperatorCamera.cs` (the verb). While set,
+  `WorldViewComposer.OperatorCameraName` replaces every non-instance slot,
+  seat slots included, and `WorldFramePresenter` resolves that name from the
+  pose, cutting temporal history on every change. `view.override camera auto`
+  or a named camera clears it. Nothing reaches the document, journal or
+  simulation.
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).

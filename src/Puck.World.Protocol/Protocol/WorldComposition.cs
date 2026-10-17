@@ -18,4 +18,7 @@ public abstract record WorldComposition {
     /// assignment.</summary>
     /// <param name="Name">The camera name, or <see langword="null"/> to clear the override.</param>
     public sealed record SelectCamera(string? Name) : WorldComposition;
+    /// <summary>Sets or clears the operator's free camera, which replaces every window slot's view while set.</summary>
+    /// <param name="Pose">The absolute pose, or <see langword="null"/> to restore the normal view.</param>
+    public sealed record SetOperatorCamera(WorldOperatorCamera? Pose) : WorldComposition;
 }

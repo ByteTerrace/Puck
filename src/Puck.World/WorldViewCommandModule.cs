@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -74,6 +74,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
         return new CommandResult(Output: composition switch {
             WorldComposition.SetActiveLayout layout => $"[view.override: layout {(layout.Name ?? "auto")}]",
             WorldComposition.SelectCamera camera => $"[view.override: camera {(camera.Name ?? "auto")}]",
+            WorldComposition.SetOperatorCamera free => $"[view.override: camera operator {free.Pose}]",
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(composition)),
         });
     }
@@ -254,6 +255,12 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
             );
         }
 
+        if (composition.OperatorCamera is { } free) {
+            _ = builder.Append(value: $" camera=operator {free}");
+        } else if (composition.SelectedCamera is { } selected) {
+            _ = builder.Append(value: $" camera={selected}");
+        }
+
         return builder.Append(value: ']').ToString();
     }
 
@@ -262,7 +269,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "view.override",
-            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection; 'layout toggle' and 'layout next' cycle the authored layouts. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: -1 toggles, -2 selects the next, n selects the nth authored views.layouts row (document order, 1-based), and any other value clears to auto. Echoes what it submitted ([view.override: layout <name|auto>] or [view.override: camera <name|auto>]) and refuses by name, submitting nothing, a layout or camera the live document does not author, an ordinal past its layouts, and a cycle with no authored layout. Gated Control over composition; a denial prints loudly on stderr and changes nothing.",
+            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection; 'layout toggle' and 'layout next' cycle the authored layouts. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: -1 toggles, -2 selects the next, n selects the nth authored views.layouts row (document order, 1-based), and any other value clears to auto. Echoes what it submitted ([view.override: layout <name|auto>] or [view.override: camera <name|auto>]) and refuses by name, submitting nothing, a layout or camera the live document does not author, an ordinal past its layouts, and a cycle with no authored layout. Gated Control over composition; a denial prints loudly on stderr and changes nothing. THE OPERATOR CAMERA aims the view independent of any seat's look sensitivity: view.override camera pose <x> <y> <z> <yaw> <pitch> [<fov>] sets an absolute eye and heading; look <x> <y> <z> <tx> <ty> <tz> [<fov>] sets an eye facing a world point; orbit <tx> <ty> <tz> <distance> <yaw> <pitch> [<fov>] places the eye <distance> m behind a point along that heading; turn <dYaw> <dPitch> turns in place, swing <dYaw> <dPitch> [<dDistance>] circles the pivot (the point <distance> m ahead of the eye, the look-at target for look and orbit), move <dRight> <dUp> <dForward> shifts along the camera's own axes, and fov <degrees> sets the lens, all by delta against the pose already set (refused when none is). Angles are degrees (yaw 0 faces -Z and positive turns left, so yaw 180 faces +Z; pitch positive looks up, limited to 89), distances metres, fov 1..170 (default 60). The pose replaces every slot's view, seat slots included, whatever the layout; 'camera <name>' or 'camera auto' restores the layout's own views. Every form echoes [view.override: camera operator eye=(..) yaw= pitch= fov= distance= forward=(..) pivot=(..)], the absolute pose it set, and world.view.state echoes it back as camera=operator <pose>. Session presentation only, never the document, and it works headless.",
             routing: CommandRouting.Simulation,
             valueKind: CommandValueKind.Axis1D,
             handler: (context, args) => {
@@ -288,9 +295,18 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
                         token: "toggle"
                     );
                 }
+                if (
+                    (args.Count > 2) &&
+                    string.Equals(a: args[0].ToString(), b: "camera", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ) {
+                    return OperatorCamera(
+                        args: args,
+                        context: context
+                    );
+                }
                 if (args.Count != 2) {
                     return CommandResult.Usage(
-                        form: "camera|layout <name|auto|toggle|next>",
+                        form: "camera|layout <name|auto|toggle|next> | camera pose|look|orbit|turn|swing|move|fov <numbers>",
                         verb: "view.override"
                     );
                 }

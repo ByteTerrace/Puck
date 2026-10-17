@@ -1381,7 +1381,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             joinedCount: joinedCount,
             views: m_client.Definition.Views,
             layoutOverride: m_composition.ActiveLayout,
-            cameraOverride: m_composition.SelectedCamera,
+            cameraOverride: m_composition.EffectiveCamera,
             elapsedSeconds: m_elapsedSeconds
         );
 
@@ -1406,6 +1406,45 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 continue;
             }
 
+            if (
+                (composed.Camera is { } operatorName) &&
+                string.Equals(
+                    a: operatorName,
+                    b: WorldViewComposer.OperatorCameraName,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                if (m_composition.OperatorCamera is { } pose) {
+                    var placed = PlacedExtent(height: height, region: region, width: width);
+                    var free = CameraSnapshot.LookAt(
+                        fieldOfViewRadians: pose.FieldOfViewRadians,
+                        position: pose.Eye(),
+                        target: (pose.Eye() + pose.Forward()),
+                        viewportHeight: placed.Y,
+                        viewportWidth: placed.X
+                    );
+
+                    m_views.Add(item: new SdfViewSnapshot(
+                        Camera: free,
+                        Region: region
+                    ) {
+                        // A new pose is a new record, so every operator move cuts the temporal history like a teleport.
+                        CutRevision = ViewCut(index: m_views.Count, source: pose, revision: 0),
+                        Quality = quality,
+                        RenderScale = m_settings.RenderCeiling,
+                        ResolvedRenderScale = transitionScale,
+                        UpscaleSharpness = m_settings.UpscaleSharpness,
+                    });
+                    if (!hasSeatViewFallback) {
+                        hasSeatViewFallback = true;
+                        seatViewFallbackCamera = free;
+                        seatViewFallbackRegion = region;
+                        seatViewFallbackIndex = (m_views.Count - 1);
+                    }
+                }
+
+                continue;
+            }
             if (composed.Camera is { } cameraName) {
                 // Named cameras share the live resolution setting with seat cameras, including a layout transition's dip.
                 if (ResolveNamedCamera(

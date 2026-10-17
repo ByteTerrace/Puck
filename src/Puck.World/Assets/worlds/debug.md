@@ -120,5 +120,17 @@ Every verb below runs headless as well as windowed, except where noted.
 | `world.screens` | In a presenting boot, each face's source and the mapping it publishes. |
 | `world.view.panes <x> <y>` | In a presenting boot, the walk from a display point through each window into the world it lands on. |
 
+### Aiming the view
+
+The operator camera frames any spot over the console, whatever the seat's look
+sensitivity is (the debug world authors none, so `player.look` turns nothing).
+`view.override camera look 0 1.7 0 0 0 -24 50` stands the eye at the spawn's
+head height, aims it at the floor 24 m out with a 50 degree lens, and answers
+with the pose it set; add `pose`, `orbit`, `turn`, `swing`, `move` or `fov` to
+place or nudge it, and read it back with `world.view.state`. `view.override
+camera auto` restores the three-quarter camera. Yaw 0 faces -Z, 180 faces +Z
+(toward the frame's far side), and the verbs are listed in
+[the World README](../../README.md#the-console).
+
 Crossings narrate on stdout as they happen: `world.portal: 'boot' portal/glass
 seat 1 entered -> queued transfer…` and `world.transfer: … departed -> … arrived`.

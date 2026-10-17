@@ -22,6 +22,9 @@ public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatO
 /// continuously, occupants cut at the midpoint, and the render scale dips mid-ease then sharpens on settle.
 /// </summary>
 public sealed class WorldViewComposer {
+    /// <summary>The camera name every slot resolves to while the operator camera is set; no document camera takes it.</summary>
+    public const string OperatorCameraName = "$operator";
+
     private const string BuiltinName = "builtin";
     private const float BuiltinTransitionRenderScale = 0.5f;
     // The built-in ladder's own transition envelope (ScreenLayoutDirector's compiled 0.6 s / 0.5 scale), used only when
@@ -72,14 +75,24 @@ public sealed class WorldViewComposer {
     /// (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> EndSlots => m_endSlots;
 
-    // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set.
+    // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set. The operator camera
+    // is the one override that also takes the seat slots: it frames the world whatever the layout shows.
     private void ApplyCameraOverride(string? cameraOverride) {
         if (cameraOverride is not { } camera) {
             return;
         }
 
+        var operatorCamera = string.Equals(
+            a: camera,
+            b: OperatorCameraName,
+            comparisonType: StringComparison.Ordinal
+        );
+
         for (var index = 0; (index < m_targetSlots.Count); index++) {
-            if (m_targetSlots[index].Camera is not null) {
+            if (
+                (m_targetSlots[index].Instance is null) &&
+                (operatorCamera || (m_targetSlots[index].Camera is not null))
+            ) {
                 m_targetSlots[index] = (m_targetSlots[index] with { Camera = camera });
             }
         }

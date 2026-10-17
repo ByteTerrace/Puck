@@ -1,3 +1,5 @@
+using Puck.World.Protocol;
+
 namespace Puck.World.Client;
 
 /// <summary>
@@ -13,4 +15,13 @@ public sealed class WorldCompositionState {
     /// <summary>The forced camera for every camera-bearing slot, or <see langword="null"/> to use each slot's own
     /// authored assignment.</summary>
     public string? SelectedCamera { get; set; }
+    /// <summary>The operator's free camera, or <see langword="null"/> for the layout's own views. While set it
+    /// replaces what every slot shows, seat slots included, and outranks <see cref="SelectedCamera"/>.</summary>
+    public WorldOperatorCamera? OperatorCamera { get; set; }
+    /// <summary>The camera name the composer forces onto every slot: <see cref="WorldViewComposer.OperatorCameraName"/>
+    /// while an operator camera is set, otherwise <see cref="SelectedCamera"/>.</summary>
+    public string? EffectiveCamera => ((OperatorCamera is null)
+        ? SelectedCamera
+        : WorldViewComposer.OperatorCameraName
+    );
 }
