@@ -477,8 +477,9 @@ only in the main world residency.
    `WorldRenderLeverCommandModule` beside `world.shadows` and `world.ao`,
    bindable and echoed.
 4. **Views for lighting questions.** New modes `lighting` (shading over white
-   albedo), `albedo` (unlit color), `shadow` (the key light's visibility, the
-   record's K word) and `ao` (the record's occlusion). The mode names in
+   albedo), `albedo` (unlit color) and `shadow` (the key light's visibility, the
+   record's K word), beside the existing `ao` (the filtered occlusion views
+   shades with). The mode names in
    `DebugViewModes` and the kernel's count and switch
    (`frame/sdf-debug-modes.hlsli`, `debug/sdf-debug-views.hlsli`) move together.
 

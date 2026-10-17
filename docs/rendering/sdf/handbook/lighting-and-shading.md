@@ -172,15 +172,26 @@ in the frame.
   only the direct sky term. Leaks are held back by the back-face weight and the
   inside-geometry test alone; there is no per-probe visibility.
 
-## Ambient occlusion: a screen-space hemisphere
+## Ambient occlusion: screen-space obscurance
 
 The surface pass estimates occlusion from the mesh target alone
-(`sdfMeshAmbient` in `passes/sdf-surface-stage.hlsli`): twelve samples over the
-normal-oriented hemisphere, within 0.75 metres or a quarter of the hit's
-distance, whichever is smaller, each occluding when the surface the camera sees
-through its pixel lies in front of it by no more than that radius. The disk
-rotates with each temporal sample, by a noise of the pixel and the sample
-count, so a temporal view's resolve averages its rotations.
+(`sdfMeshAmbient` in `passes/sdf-surface-stage.hlsli`), within 0.75 metres or a
+quarter of the hit's distance, whichever is smaller. Eight taps fall on a
+golden-angle spiral over the disk that radius projects to on screen. Each tap
+rebuilds the surface point its own pixel's ray reached and occludes by the
+cosine of that point's elevation above the hit's tangent plane, past a small
+bias and a lift of two pixel footprints, fading to nothing at the radius. A
+point on the hit's own plane therefore never occludes it, however the disk falls
+on the pixel grid, and a surface farther than the radius in front casts no halo.
+
+The estimate is decorrelated per pixel and filtered. Each pixel turns and
+spaces its taps by its cell of a 4×4 ordered-dither tile, and a temporal view
+steps the pattern within the tile's strata by its sample index. Views
+(`sdfViewsAmbient` in `passes/sdf-views-stage.hlsli`) averages the 4×4 window
+around each pixel, which holds all sixteen patterns once, keeping only
+neighbors on the pixel's tangent plane, so no screen-locked pattern survives
+with temporal reconstruction off, and a converged temporal view averages 128
+patterns. `world.debug-view ao` shows the result.
 
 Two rules give it its shape. It multiplies into **ambient light only, never
 direct**—folding occlusion into the whole lighting equation causes ghosting;
@@ -232,7 +243,7 @@ frame uploads zero and every default is preserved.
 | Verb | Effect | Why you'd use it |
 |---|---|---|
 | `world.shadows on\|off` | `off` leaves every light unshadowed and renders no cascade | Isolates the shadow cascades and filter |
-| `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the occlusion's twelve samples per pixel |
+| `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the occlusion's taps and its filter |
 
 `SdfFrame` also carries a lane for disabling screen lights
 (`DisableScreenLights`); no `Puck.World` verb sets it.

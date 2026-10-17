@@ -47,10 +47,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
 
-- **AO is the surface pass's.** It lives in `passes/sdf-surface-stage.hlsli`
-  (`sdfMeshAmbient`), and views only reads the occlusion the surface pass wrote
-  into the visibility record, so an AO edit inside the views code changes
-  nothing.
+- **AO is estimated in the surface pass and filtered in views.** The estimate
+  (`sdfMeshAmbient` and its 4×4 tap pattern, `passes/sdf-surface-stage.hlsli`)
+  is the surface pass's, written into the visibility record; views only
+  averages it over a 4×4 window (`sdfViewsAmbient`, `passes/sdf-views-stage.hlsli`)
+  before shading. A wrong occlusion value (a dark band, a missing crease) is
+  the estimate's, so an edit to the views lighting code changes nothing; the
+  window and the pattern's tile are a pair. `world.debug-view ao` shows the
+  filtered value.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance

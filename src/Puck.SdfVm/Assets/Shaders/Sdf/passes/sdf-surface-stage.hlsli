@@ -6,11 +6,16 @@
 #define PASSES_SDF_SURFACE_STAGE_HLSLI
 #ifdef SDF_SURFACE_PASS
 
-// The screen-space occlusion's world radius, sample count and the depth band past which a closer surface no longer
-// occludes.
+// The screen-space occlusion's world radius, taps and strength. A tap occludes only past the cosine bias and the lift (a
+// height above the tangent plane in pixel footprints), which keep a tessellated curve's facets and a baked surface's
+// sub-pixel relief from occluding the interpolated normal beside them. The taps stay within the screen radius, which
+// bounds how far a near surface's taps scatter through the cache.
 static const float SdfMeshAoRadius = 0.75;
-static const uint SdfMeshAoSamples = 12u;
-static const float SdfMeshAoStrength = 1.15;
+static const uint SdfMeshAoSamples = 8u;
+static const float SdfMeshAoStrength = 2.5;
+static const float SdfMeshAoBias = 0.1;
+static const float SdfMeshAoLift = 2.0;
+static const float SdfMeshAoMaxPixels = 128.0;
 // The shadow filter's taps: a blocker search and the percentage-closer filter, each over a rotated Vogel disk.
 static const uint SdfMeshShadowSearchTaps = 12u;
 static const uint SdfMeshShadowFilterTaps = 16u;
@@ -19,62 +24,73 @@ static const float SdfGoldenAngle = 2.39996323;
 // The texels along each side of a cascade target. KEEP IN SYNC with SdfWorldPackage.MeshShadowResolution.
 #define SDF_MESH_SHADOW_RESOLUTION 2048
 
-// Interleaved gradient noise, rotated each temporal sample, so the resolve averages the disk's rotations.
+// Interleaved gradient noise, rotated each temporal sample, so the resolve averages the shadow disks' rotations.
 float sdfMeshNoise(uint2 pixel) {
     float2 shifted = (float2(pixel) + (5.588238 * float(passGroup.historyFrames & 7u)));
     return frac(52.9829189 * frac(dot(shifted, float2(0.06711056, 0.00583715))));
 }
-// The pixel a world point projects to in the view, and its distance from the camera; false behind the camera.
-bool sdfMeshProject(ViewportData view, float3 world, out float2 pixel, out float distance) {
-    float3 relative = (world - view.position.xyz);
-    float forward = dot(relative, view.forward.xyz);
-    pixel = float2(0.0, 0.0);
-    distance = length(relative);
-    if (forward <= 1.0e-4) {
-        return false;
-    }
-    float2 tangent = (float2(dot(relative, view.right.xyz), dot(relative, view.up.xyz)) / forward) - view.lens.yz;
-    float2 ndc = (tangent / float2((view.up.w * view.right.w), view.right.w));
-    pixel = (float2(((ndc.x * 0.5) + 0.5), (0.5 - (ndc.y * 0.5))) * view.extent.xy);
-    return true;
+// The occlusion's pixel pattern: a tap rotation and a radial offset, each in [0, 1). Each pixel takes its cell of a 4x4
+// ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen patterns exactly once, and views
+// averages such a window (sdfViewsAmbient in sdf-views-stage.hlsli, KEEP IN SYNC with its 4x4 window): on any surface
+// the per-pixel noise cancels to the same sixteen-pattern estimate, leaving no screen-locked structure. A temporal view
+// also steps the pattern within its sixteenth by the sample index of its eight-sample period, so a converged history
+// averages 128 patterns.
+float2 sdfMeshAmbientPattern(uint2 pixel) {
+    uint x = (pixel.x & 3u);
+    uint y = (pixel.y & 3u);
+    uint a = (x ^ y);
+    // The Bayer cell: the bits of x ^ y and y interleaved, then reversed.
+    uint cell = ((((a & 1u) << 3u) | ((y & 1u) << 2u)) | ((a & 2u) | ((y & 2u) >> 1u)));
+    uint step = (passGroup.historyFrames & 7u);
+
+    return float2(
+        ((float(cell) + (float(step) / 8.0)) / 16.0),
+        ((float(((cell * 5u) + 3u) & 15u) + (float((step * 5u) & 7u) / 8.0)) / 16.0)
+    );
 }
-// Normal-oriented hemisphere occlusion against the mesh target's ray distances: a sample point occludes when the surface
-// the camera sees through its pixel lies in front of it, by no more than the radius.
+// Screen-space obscurance from the surface points the mesh target holds: taps on a golden-angle spiral over the disk
+// the world radius projects to, turned and spaced by the pixel's pattern. Each tap rebuilds the point its pixel's own ray
+// reached, so a tap on the pixel's plane lies on it and occludes nothing however the disk falls on the pixel grid; a tap
+// above the tangent plane occludes by the cosine of its elevation past the bias, fading to nothing at the radius, so a
+// surface farther than the radius in front casts no halo. Unfiltered: views averages it (sdfViewsAmbient).
 float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
-    float3 helper = ((abs(normal.y) < 0.99) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
-    float3 tangent = normalize(cross(helper, normal));
-    float3 bitangent = cross(normal, tangent);
-    float noise = sdfMeshNoise(p.pixel);
-    float radius = min(SdfMeshAoRadius, (0.25 * t));
+    float forward = (t * dot(p.rayDirection, p.view.forward.xyz));
+    float footprint = (p.pixelFootprint * forward);
+    float pixels = min((min(SdfMeshAoRadius, (0.25 * t)) / footprint), SdfMeshAoMaxPixels);
+
+    if (pixels < 1.0) {
+        return 1.0;
+    }
+
+    float radius = (pixels * footprint);
+    float inverseRadius2 = (1.0 / (radius * radius));
+    float2 pattern = sdfMeshAmbientPattern(p.pixel);
+    float rotation = (pattern.x * 6.2831853);
+    float2 dims = float2(worldViewDims(p.view));
     float occlusion = 0.0;
-    float2 extent = p.view.extent.xy;
 
     [loop]
     for (uint index = 0u; (index < SdfMeshAoSamples); index++) {
-        float fraction = ((float(index) + 0.5) / float(SdfMeshAoSamples));
-        float angle = ((float(index) * SdfGoldenAngle) + (noise * 6.2831853));
-        float spread = sqrt(fraction);
-        float lift = sqrt(max(0.0, (1.0 - fraction)));
-        float scale = lerp(0.2, 1.0, frac((noise * 7.0) + (fraction * 3.0)));
-        float3 direction = (((tangent * (cos(angle) * spread)) + (bitangent * (sin(angle) * spread))) + (normal * lift));
-        float3 sample = ((surfacePoint + (normal * (0.02 * radius))) + (direction * (radius * scale)));
-        float2 pixel;
-        float distance;
+        float angle = ((float(index) * SdfGoldenAngle) + rotation);
+        float reach = (((float(index) + pattern.y) / float(SdfMeshAoSamples)) * pixels);
+        float2 tap = floor((float2(p.pixel) + 0.5) + (float2(cos(angle), sin(angle)) * reach));
 
-        if (!sdfMeshProject(p.view, sample, pixel, distance) || any(pixel < 0.0) || any(pixel >= extent)) {
+        if (any(tap < 0.0) || any(tap >= dims)) {
             continue;
         }
 
-        float4 texel = meshVisibility.Load(int3(int2(pixel), 0));
+        float4 texel = meshVisibility.Load(int3(int2(tap), 0));
 
         if (texel.y < 1.0) {
             continue;
         }
 
-        float depth = (distance - texel.x);
+        float3 offset = ((p.rayOrigin + (cameraRayDirection(p.view, ((tap + 0.5) / dims)) * texel.x)) - surfacePoint);
+        float distance2 = dot(offset, offset);
 
-        if (depth > (0.02 * radius)) {
-            occlusion += saturate(1.0 - ((depth - radius) / radius));
+        if (distance2 > 0.0) {
+            float elevation = ((dot(offset, normal) - (SdfMeshAoLift * footprint)) * rsqrt(distance2));
+            occlusion += (saturate(1.0 - (distance2 * inverseRadius2)) * saturate((elevation - SdfMeshAoBias) / (1.0 - SdfMeshAoBias)));
         }
     }
 

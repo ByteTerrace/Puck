@@ -49,6 +49,10 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = (valid ? float3(saturate(0.5 + ((previousPixel - (float2(p.pixel) + 0.5)) / 32.0)), 1.0) : 0.0);
             break;
         }
+        case DebugViewModeAo: { // the filtered ambient occlusion views shades with
+            viewColor = (s.hit ? s.ambient.xxx : float3(0.0, 0.0, 0.0));
+            break;
+        }
     }
 
     return viewColor;
