@@ -54,7 +54,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <param name="shadowSettings">The presentation's live slot policy.</param>
     /// <param name="skyLayers">The presentation's session-only layer audition.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null) {
+    /// <param name="buildsInBackground">Whether the scene's rebuilt programs build on the thread pool
+    /// (<see cref="SdfCompositionFrameSource.BuildsInBackground"/>).</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
@@ -72,7 +74,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
             emitters: [m_emitter]
-        );
+        ) { BuildsInBackground = buildsInBackground };
     }
 
     /// <summary>Gets the authority the scene draws.</summary>

@@ -1886,7 +1886,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_composed = new SdfCompositionFrameSource(
                 dresser: this,
                 emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
-            );
+            ) { BuildsInBackground = true };
         } catch (SdfProgramCapacityException capacity) {
             // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
             // what did not fit. Re-raise it as this world's own refusal so the composition root reports it the way it

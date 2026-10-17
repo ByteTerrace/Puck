@@ -177,7 +177,10 @@ pool of live creatures—and contributes to a *shared* builder instead of
 building its own program. `SdfCompositionFrameSource` holds a fixed list of
 these, assigns each one a contiguous range of dynamic-transform slots, compares
 their revision components to know when to rebuild, and rebuilds by calling every
-emitter's `Emit` in order against one builder.
+emitter's `Emit` in order against one builder. Emission reads the emitters' live
+state, so it runs in the frame; a source that `BuildsInBackground` then packs and
+analyses the builder on the thread pool and keeps rendering the program it held
+until the build lands.
 
 An emitter that watches several counters reports them *side by side* rather
 than as one number, and the host compares the flattened vector elementwise.

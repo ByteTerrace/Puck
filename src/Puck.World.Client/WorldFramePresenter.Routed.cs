@@ -173,6 +173,7 @@ public sealed partial class WorldFramePresenter {
         return scene;
     }
     private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => new(
+        buildsInBackground: true,
         bodyColor: index => RoutedBodyColor(
             endpoint: endpoint,
             index: index

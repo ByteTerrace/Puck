@@ -30,6 +30,7 @@ public sealed partial class WorldFramePresenter {
         if (!ReferenceEquals(objA: m_convergence, objB: request)) {
             m_convergence = request;
             m_convergedFrame = null;
+            m_composed.BeginConvergence(request: request);
         }
     }
     /// <inheritdoc/>

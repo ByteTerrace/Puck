@@ -123,10 +123,34 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
     private readonly SdfMovedTransforms m_moved = new();
 
+    // The background build in flight, if any, and the components it was emitted from.
+    private readonly int[] m_buildingRevisions;
+    private Task<SdfProgram>? m_building;
+    private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
+
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
     private float m_time;
+
+    /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
+    /// content moved emits the program, and every frame until the build finishes renders the program held before it, with
+    /// its transforms, mesh draws and dress live; the first frame after the build finishes adopts it. A converging capture
+    /// (<see cref="BeginConvergence"/>) waits for the build instead. <see langword="false"/>, the default, builds every
+    /// program in the frame that finds the content moved.</summary>
+    public bool BuildsInBackground { get; init; }
+    /// <summary>Gets whether a background build is in flight (<see cref="BuildsInBackground"/>).</summary>
+    public bool Building => (m_building is not null);
+
+    private bool Converging => (m_convergence is { Completion.IsCompleted: false });
+
+    /// <inheritdoc/>
+    /// <remarks>Until the request completes, a frame adopts a background build in flight, waiting for it, and builds a
+    /// moved program in the frame itself.</remarks>
+    public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+        m_convergence = request;
+    }
 
     /// <inheritdoc/>
     /// <remarks>The dresser's (<see cref="ISdfFrameDresser.GlyphAtlas"/>).</remarks>
@@ -182,6 +206,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_revisionOffsets[m_emitters.Count] = revisionCursor;
         m_builtRevisions = new int[revisionCursor];
         m_pendingRevisions = new int[revisionCursor];
+        m_buildingRevisions = new int[revisionCursor];
         m_transforms = new DynamicTransform[slotCursor];
         m_gridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: SdfProgramBuilder.MaxInstances);
 
@@ -224,13 +249,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// with room for part compilation and sharing to vary within the probe's instruction and instance ceilings.</summary>
     public int WorstCaseProgramWordCapacity { get; }
 
-    // A live rebuild. `previous`, the program this call rebuilds, supplies List capacity hints for the fresh builder: its
-    // own counts are exactly what this build's counts were last time, and a live scene's shape rarely swings wildly
-    // frame to frame, so seeding from them removes most of List<T>'s geometric-growth reallocation without guessing at a
-    // number nothing measured. A capacity hint changes nothing observable (List<T>.Capacity affects no read value), and
-    // every build is routed through m_gridWorkspace, the pooled grid-build scratch this type owns, so the grid block is
-    // produced without its own per-call allocation either.
-    private SdfProgram BuildProgram(SdfEmitContext context, SdfProgram? previous) {
+    // A live rebuild's emission, which reads the emitters' live state and so runs in the frame. `previous`, the program
+    // this call rebuilds, supplies List capacity hints for the fresh builder: its own counts are exactly what this build's
+    // counts were last time, and a live scene's shape rarely swings wildly frame to frame, so seeding from them removes
+    // most of List<T>'s geometric-growth reallocation without guessing at a number nothing measured. A capacity hint
+    // changes nothing observable (List<T>.Capacity affects no read value).
+    private SdfProgramBuilder EmitProgram(SdfEmitContext context, SdfProgram? previous) {
         var builder = new SdfProgramBuilder(
             instructionCapacity: (previous?.InstructionCount ?? 0),
             instanceCapacity: (previous?.Instances.Count ?? 0),
@@ -243,7 +267,31 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             context: context
         );
 
-        return builder.Build(gridWorkspace: m_gridWorkspace);
+        return builder;
+    }
+    // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
+    // Builds of one source run one at a time: every build is routed through m_gridWorkspace, the pooled grid-build scratch
+    // this type owns, so the grid block is produced without its own per-call allocation.
+    private SdfProgram Build(SdfProgramBuilder builder) => builder.Build(gridWorkspace: m_gridWorkspace);
+    // Adopts the program a background build finished, or waits for it while a capture converges, so a converging frame
+    // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
+    // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
+    // throws here and leaves the built record describing the program still held, so the next frame emits again.
+    private bool AdoptBuild(ref bool moved) {
+        if ((m_building is not { } building) || (!building.IsCompleted && !Converging)) {
+            return false;
+        }
+
+        m_building = null;
+        m_program = building.GetAwaiter().GetResult();
+        Array.Copy(
+            sourceArray: m_buildingRevisions,
+            destinationArray: m_builtRevisions,
+            length: m_builtRevisions.Length
+        );
+        moved = !m_pendingRevisions.AsSpan().SequenceEqual(other: m_builtRevisions);
+
+        return true;
     }
     // Shared by construction's probe and every live rebuild: every emitter's Emit in list order, wrapped in a material
     // scope for any OwnsMaterialScope emitter (the only behavior difference from calling Emit directly; see
@@ -435,16 +483,16 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         //   Into PENDING — because a build can THROW. Writing the built record up front would leave it claiming the
         //   held program was built from revisions no program was ever built from, and since the compare then sees no
         //   movement, the stale program is held indefinitely: one failed build turns into permanently frozen geometry.
-        //   Promotion below happens only once BuildProgram has returned, so a throw leaves the record describing the
-        //   program actually held and the next frame retries the rebuild.
+        //   Promotion happens only once a build has returned (here, or in AdoptBuild for a background build), so a
+        //   throw leaves the record describing the program actually held and the next frame retries the rebuild.
+        //
+        // A frame holding the previous program while its successor builds packs only the moved transforms: a slot's owner
+        // may differ between the two programs for the frames until the adoption, which repacks the whole table.
         var moved = CaptureRevisions();
-        var rebuilt = (
-            (m_program is null) ||
-            moved
-        );
+        var rebuilt = AdoptBuild(moved: ref moved);
 
-        if (rebuilt) {
-            m_program = BuildProgram(
+        if ((m_building is null) && ((m_program is null) || moved)) {
+            var builder = EmitProgram(
                 context: new SdfEmitContext(
                     Probe: false,
                     Time: m_time,
@@ -458,9 +506,21 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
             Array.Copy(
                 sourceArray: m_pendingRevisions,
-                destinationArray: m_builtRevisions,
-                length: m_builtRevisions.Length
+                destinationArray: m_buildingRevisions,
+                length: m_buildingRevisions.Length
             );
+
+            if ((m_program is null) || !BuildsInBackground || Converging) {
+                m_program = Build(builder: builder);
+                Array.Copy(
+                    sourceArray: m_buildingRevisions,
+                    destinationArray: m_builtRevisions,
+                    length: m_builtRevisions.Length
+                );
+                rebuilt = true;
+            } else {
+                m_building = Task.Run(function: () => Build(builder: builder));
+            }
         }
 
         PackTransforms(everything: rebuilt);
