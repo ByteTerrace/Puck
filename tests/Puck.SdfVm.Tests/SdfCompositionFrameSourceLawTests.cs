@@ -50,6 +50,35 @@ public sealed class SdfCompositionFrameSourceLawTests {
         Assert.Equal(expected: 4f, actual: Capture(source: source).Program.Instances[0].Radius);
         Assert.False(condition: source.Building);
     }
+    // THE LAW: the frame that adopts a background build carries the words its program differs in from the program it
+    // replaced, measured by the build, and owes only the dynamic-transform rows the rebuild's repack moved; the first
+    // program, built in its frame, carries no delta, and the first frame owes every row.
+    [Fact]
+    public void AnAdoptedBuildCarriesItsDeltaAndOwesOnlyTheRowsItsRepackMoved() {
+        var emitter = new RadiusEmitter();
+        var source = new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]) { BuildsInBackground = true };
+        var first = Capture(source: source);
+
+        Assert.Null(@object: first.ProgramDelta);
+        Assert.Equal(expected: 2L, actual: OwedRows(source: source));
+
+        emitter.Radius = 2f;
+
+        var adopted = Capture(source: source);
+
+        for (var attempt = 0; ((attempt < 2000) && ReferenceEquals(objA: adopted.Program, objB: first.Program)); attempt++) {
+            Thread.Sleep(millisecondsTimeout: 1);
+            adopted = Capture(source: source);
+        }
+
+        var delta = Assert.IsType<SdfProgramDelta>(@object: adopted.ProgramDelta);
+
+        Assert.Same(expected: first.Program, actual: delta.From);
+        Assert.Same(expected: adopted.Program, actual: delta.To);
+        Assert.InRange(actual: delta.Runs.Count, high: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns, low: 1);
+        Assert.Equal(expected: 3L, actual: OwedRows(source: source));
+        Assert.Equal(expected: 2f, actual: adopted.DynamicTransforms[1].Position.X);
+    }
     [Fact]
     public void ABackgroundBuildThatThrowsThrowsWhenItIsAdoptedAndTheNextFrameEmitsAgain() {
         var emitter = new RadiusEmitter();
@@ -69,6 +98,11 @@ public sealed class SdfCompositionFrameSourceLawTests {
         Assert.Equal(expected: 5f, actual: Capture(source: source).Program.Instances[0].Radius);
     }
 
+    private static long OwedRows(SdfCompositionFrameSource source) {
+        Assert.True(condition: source.MovedTransforms.TryRead(kind: SdfMovedTransforms.OwedRows, value: out var owed));
+
+        return owed;
+    }
     private static SdfFrame Capture(SdfCompositionFrameSource source) => source.CaptureFrame(
         deltaSeconds: 0f,
         height: 8,
@@ -77,7 +111,8 @@ public sealed class SdfCompositionFrameSourceLawTests {
     );
 
     // One sphere instance of the radius the test sets, whose every change moves the emitter's revision; an unbalanced
-    // emission leaves an instance open, which the build refuses.
+    // emission leaves an instance open, which the build refuses. Of its two dynamic slots, a repack poses the first at the
+    // origin and the second at the radius along X.
     private sealed class RadiusEmitter : ISdfSceneEmitter, ISdfFrameDresser {
         private SdfProgram? m_dressed;
         private int m_revision;
@@ -97,6 +132,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
             }
         }
         public int RevisionComponentCount => 1;
+        public int DynamicSlotCount => 2;
 
         public void WriteRevision(Span<int> destination) => destination[0] = m_revision;
         public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
@@ -108,12 +144,20 @@ public sealed class SdfCompositionFrameSourceLawTests {
                 _ = builder.EndInstance();
             }
         }
+        public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+            if (!moved.Everything) {
+                return;
+            }
+
+            slots[context.SlotBase] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero);
+            slots[(context.SlotBase + 1)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (Vector3.UnitX * Radius));
+        }
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             var changed = !ReferenceEquals(objA: program, objB: m_dressed);
 
             m_dressed = program;
 
-            return new SdfFrame(Program: program, ProgramChanged: changed, Time: 0f, Views: []);
+            return new SdfFrame(Program: program, ProgramChanged: changed, Time: 0f, Views: []) { DynamicTransforms = transforms };
         }
     }
 }

@@ -483,6 +483,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 // does.
                 m_programPending = false;
                 UploadProgram(
+                    delta: frame.ProgramDelta,
                     program: frame.Program,
                     tables: tables
                 );
@@ -888,8 +889,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_uploadedGlyphAtlas = glyphAtlas;
         m_glyphAtlasInitialized = true;
     }
-    private void UploadProgram(SdfWorldTables tables, SdfProgram program) {
-        tables.UploadProgram(program: program);
+    private void UploadProgram(SdfWorldTables tables, SdfProgram program, SdfProgramDelta? delta) {
+        tables.UploadProgram(delta: delta, program: program);
         NoteProgram(program: program);
     }
     private void NoteProgram(SdfProgram program) {

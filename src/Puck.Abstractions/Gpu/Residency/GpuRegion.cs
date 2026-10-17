@@ -73,8 +73,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     private const int CopyBlockBase = (CopyHeaderWords + (MaxCopyRuns * 2));
     // The most separate owed ranges a host-written buffer holds before neighbours pair up.
     private const int HostRunCapacity = 8;
-    // A run-table entry costs two words, so copying a gap of up to two unchanged words costs no more than another run.
-    private const int StagedMergeGapWords = 2;
+    /// <summary>The largest gap of unchanged words a staged region's owed runs join across: a run-table entry costs two
+    /// words, so copying a gap of up to two costs no more than another run.</summary>
+    public const int StagedMergeGapWords = 2;
 
     // The host's copy of the region, ByteCount bytes of native memory the region frees when disposed.
     private byte* m_contents;
@@ -933,6 +934,64 @@ public sealed unsafe class GpuRegion : IDisposable {
         return owed;
     }
 
+    /// <summary>Copies the runs of <paramref name="words"/> that <paramref name="runs"/> names into <see cref="Contents"/>
+    /// at the same words and owes each in every buffer, comparing nothing: the caller has found every word of
+    /// <paramref name="words"/> outside the runs equal to <see cref="Contents"/>, as a diff against the words it last
+    /// wrote does, so the write costs the runs alone.</summary>
+    /// <param name="words">The region's new words from word 0.</param>
+    /// <param name="runs">The runs of words, from word 0, in which <paramref name="words"/> differs from
+    /// <see cref="Contents"/>.</param>
+    /// <returns><see langword="true"/> when any word was owed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="runs"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="words"/> runs past <see cref="ByteCount"/>, or a run
+    /// past the end of <paramref name="words"/>.</exception>
+    /// <exception cref="InvalidOperationException">The region's destination is external, whose contents the region does
+    /// not know.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public bool WriteRuns(ReadOnlySpan<uint> words, GpuUploadRuns runs) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ArgumentNullException.ThrowIfNull(argument: runs);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: (ByteCount / sizeof(uint)),
+            value: words.Length
+        );
+
+        if (m_external) {
+            throw new InvalidOperationException(message: "A region with an external destination writes by comparing, since it does not know what its destination holds.");
+        }
+
+        var contents = MemoryMarshal.Cast<byte, uint>(span: HostCopy);
+
+        for (var run = 0; (run < runs.Count); run++) {
+            var start = runs.Start(index: run);
+            var length = runs.Length(index: run);
+
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(
+                other: words.Length,
+                value: (start + length),
+                paramName: nameof(runs)
+            );
+            words.Slice(
+                length: length,
+                start: start
+            ).CopyTo(destination: contents[start..]);
+            Owe(
+                endWord: (start + length),
+                startWord: start
+            );
+        }
+
+        if (runs.Count == 0) {
+            return false;
+        }
+
+        m_stagedSlot = -1;
+
+        return true;
+    }
     // Writes the slot's staging buffer as the source and the destination as the destination into the slot's copy set.
     private void WriteCopySet(int slot) {
         var set = m_copySets!.SetOf(slot: slot);

@@ -117,6 +117,9 @@ public sealed record SdfFrame(
     /// <summary>Gets the immutable host identity table for the composed frame. Composition fills it before publishing
     /// the frame; it is CPU-only presentation data and is never uploaded to the frame block.</summary>
     public ISdfPickMap? PickMap { get; internal set; }
+    /// <summary>Gets the words <see cref="Program"/> differs in from the program built before it, which tables holding
+    /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
+    public SdfProgramDelta? ProgramDelta { get; internal set; }
 
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame

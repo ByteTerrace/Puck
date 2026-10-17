@@ -795,6 +795,64 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: (0L, 0), actual: (gpu.HostBytes(), gpu.UploadCopies));
         Assert.Null(@object: GpuRegion.CopyPipeline.PushConstantBinding);
     }
+    // THE LAW: words written by their known runs are copied and owed without a compare. The runs a diff of the words the
+    // region holds against new ones finds, a word past the old words' end among them, stage exactly those words and leave
+    // the destination holding the new words; an empty diff owes nothing, a run past the words is refused, and a region
+    // whose destination is external, whose contents it does not know, refuses the write.
+    [Fact]
+    public void WordsWrittenByTheirDifferingRunsStageOnlyThoseWordsAndReadBackExact() {
+        const int RunEntryBytes = 8;
+        const int HeaderBytes = (GpuRegion.CopyHeaderWords * sizeof(uint));
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 256,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        uint[] before = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        uint[] after = [1, 2, 30, 40, 5, 6, 7, 8, 9, 10, 11];
+
+        _ = region.Write(bytes: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: before.AsSpan()), offset: 0);
+        Copy(gpu: gpu, region: region, slot: 0);
+        gpu.ResetTallies();
+
+        var runs = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns, mergeGap: GpuRegion.StagedMergeGapWords);
+        var none = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
+
+        runs.AddDifferences(current: after, previous: before);
+        none.AddDifferences(current: before, previous: before);
+        Assert.Equal(expected: 2, actual: runs.Count);
+        Assert.False(condition: region.WriteRuns(runs: none, words: before));
+        Assert.True(condition: region.WriteRuns(runs: runs, words: after));
+        Copy(gpu: gpu, region: region, slot: 1);
+        Assert.Equal(expected: ((long)((HeaderBytes + (2 * RunEntryBytes)) + (3 * sizeof(uint)))), actual: gpu.HostBytes());
+        Assert.Equal(
+            expected: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: after.AsSpan()).ToArray(),
+            actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle)[..(after.Length * sizeof(uint))]
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => region.WriteRuns(runs: runs, words: before));
+
+        using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 64, usage: GpuBufferUsage.Storage);
+        using var external = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            destination: destination,
+            name: default,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => external.WriteRuns(runs: none, words: before));
+    }
     [Fact]
     public void AnExternalDestinationTakesTheRegionAtItsTargetAndARetargetOwesEveryWordWrittenAfterIt() {
         const int DestinationWords = 64;

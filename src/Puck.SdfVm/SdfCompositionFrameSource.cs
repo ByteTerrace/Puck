@@ -122,15 +122,20 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly DynamicTransform[] m_transforms;
 
     private readonly SdfMovedTransforms m_moved = new();
+    // The table as it stood before a repack, which the repack is compared with; made at the first repack.
+    private DynamicTransform[]? m_repackedTransforms;
+    private bool m_transformsPacked;
 
     // The background build in flight, if any, and the components it was emitted from.
     private readonly int[] m_buildingRevisions;
-    private Task<SdfProgram>? m_building;
+    private Task<(SdfProgram Program, SdfProgramDelta? Delta)>? m_building;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
 
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
+    // The words the held program differs in from the one held before it, when its background build measured them.
+    private SdfProgramDelta? m_programDelta;
     private float m_time;
 
     /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
@@ -283,7 +288,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         m_building = null;
-        m_program = building.GetAwaiter().GetResult();
+        (m_program, m_programDelta) = building.GetAwaiter().GetResult();
         Array.Copy(
             sourceArray: m_buildingRevisions,
             destinationArray: m_builtRevisions,
@@ -420,17 +425,29 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         m_meshDraws = m_composedMeshDraws;
     }
-    // A frame owes the whole table when the program was rebuilt (every slot's meaning may have changed) or the park
-    // position moved; the table is parked first so a slot no owner claims reads hidden. Any other frame repacks only
-    // the owners each emitter finds moved or settling.
-    private void PackTransforms(bool everything) {
-        everything |= (m_packedParkPosition != ParkPosition);
-        m_moved.Begin(
-            everything: everything,
-            tableRows: m_transforms.Length
-        );
+    // The first frame and a moved park position owe the whole table, and a frame that adopts a rebuilt program repacks
+    // it, since every slot's owner may have changed, owing only the rows the repack moved (SdfMovedTransforms.BeginRepack);
+    // either way the table is parked first so a slot no owner claims reads hidden. Any other frame repacks only the
+    // owners each emitter finds moved or settling.
+    private void PackTransforms(bool rebuilt) {
+        var everything = (!m_transformsPacked || (m_packedParkPosition != ParkPosition));
+        var repack = (rebuilt && !everything);
 
-        if (everything) {
+        if (repack) {
+            m_repackedTransforms ??= new DynamicTransform[m_transforms.Length];
+            m_transforms.CopyTo(
+                array: m_repackedTransforms,
+                index: 0
+            );
+            m_moved.BeginRepack(tableRows: m_transforms.Length);
+        } else {
+            m_moved.Begin(
+                everything: everything,
+                tableRows: m_transforms.Length
+            );
+        }
+
+        if (everything || repack) {
             Array.Fill(
                 array: m_transforms,
                 value: new DynamicTransform(
@@ -463,6 +480,15 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 slots: m_transforms
             );
         }
+
+        if (repack) {
+            m_moved.CompleteRepack(
+                current: m_transforms,
+                previous: m_repackedTransforms
+            );
+        }
+
+        m_transformsPacked = true;
     }
 
     /// <inheritdoc/>
@@ -512,6 +538,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
             if ((m_program is null) || !BuildsInBackground || Converging) {
                 m_program = Build(builder: builder);
+                m_programDelta = null;
                 Array.Copy(
                     sourceArray: m_buildingRevisions,
                     destinationArray: m_builtRevisions,
@@ -519,11 +546,19 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 );
                 rebuilt = true;
             } else {
-                m_building = Task.Run(function: () => Build(builder: builder));
+                var held = m_program;
+
+                // The build also finds the words its program differs in from the one held, so the tables that hold
+                // that program upload the new one without comparing it on the frame thread.
+                m_building = Task.Run(function: () => {
+                    var built = Build(builder: builder);
+
+                    return (built, (SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built));
+                });
             }
         }
 
-        PackTransforms(everything: rebuilt);
+        PackTransforms(rebuilt: rebuilt);
         ComposeMeshDraws();
 
         var dressed = m_dresser.Dress(
@@ -539,6 +574,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         );
 
         dressed.PickMap = ComposePickMap();
+        dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         return dressed;
     }
 }

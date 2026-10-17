@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
@@ -9,8 +11,10 @@ namespace Puck.SdfVm;
 /// last <see cref="History"/> frames so every engine that consumes the table — the primary view, and each offscreen
 /// view that renders only some frames — stages exactly the rows that changed since the frame it last consumed.
 /// <para>
-/// A frame is either incremental, owing only the ranges its emitters reported through <see cref="Commit"/>, or
-/// owes everything (<see cref="Everything"/>): the first frame, a program rebuild, a park-position change. An engine
+/// A frame is either incremental, owing only the ranges its emitters reported through <see cref="Commit"/>, owes
+/// everything (the first frame, a park-position change), or repacks the whole table and owes the rows the repack
+/// changed (a program rebuild, <see cref="BeginRepack"/>); emitters pack every owner in the last two
+/// (<see cref="Everything"/>). An engine
 /// whose last consumed frame has fallen out of the history, or that has never consumed this table, is owed
 /// everything too. There is no other refresh path: an engine never compares the whole table against its mirror.
 /// </para>
@@ -67,6 +71,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     private WorkCount m_comparedBytes;
     private WorkCount m_owedRows;
     private WorkCount m_packedRows;
+    private bool m_repacking;
     private long m_serial;
     private int m_slot;
     private int m_tableRows;
@@ -79,8 +84,10 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         }
     }
 
-    /// <summary>Gets a value indicating whether the current frame owes every slot.</summary>
-    public bool Everything => m_everything[m_slot];
+    /// <summary>Gets a value indicating whether the current frame packs every slot: it owes every slot, or it repacks the
+    /// whole table and owes only the rows that repack changed (<see cref="BeginRepack"/>). Either way the host has parked
+    /// the table and every emitter packs every owner.</summary>
+    public bool Everything => (m_everything[m_slot] || m_repacking);
     /// <summary>Gets the current frame's serial, starting at 1 for the first frame; 0 before any frame began.</summary>
     public long Serial => m_serial;
     /// <inheritdoc/>
@@ -104,10 +111,61 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         m_reseats[m_slot].Clear();
         m_serials[m_slot] = m_serial;
         m_tableRows = tableRows;
+        m_repacking = false;
 
         if (everything) {
             m_owedRows.Add(amount: tableRows);
         }
+    }
+    /// <summary>Starts the next frame as a repack of the whole table, as after a program rebuild that may give a slot
+    /// another owner: every emitter packs every owner (<see cref="Everything"/>), and the frame owes no slot until
+    /// <see cref="CompleteRepack"/> compares the repacked table with the one before it.</summary>
+    /// <param name="tableRows">The table's length in slots.</param>
+    public void BeginRepack(int tableRows) {
+        Begin(everything: false, tableRows: tableRows);
+        m_repacking = true;
+    }
+    /// <summary>Completes a repack (<see cref="BeginRepack"/>): owes, and reseats, each run of rows whose bytes differ
+    /// from the table before the repack, and every row past the previous table's end, so a consumer stages the rows the
+    /// rebuild moved and seeds their previous poses, as it does for a new owner, rather than every row.</summary>
+    /// <param name="previous">The table as it stood before the repack.</param>
+    /// <param name="current">The repacked table.</param>
+    /// <exception cref="InvalidOperationException">The current frame is not a repack.</exception>
+    public void CompleteRepack(ReadOnlySpan<DynamicTransform> previous, ReadOnlySpan<DynamicTransform> current) {
+        if (!m_repacking) {
+            throw new InvalidOperationException(message: "Only a frame begun as a repack completes one.");
+        }
+
+        m_repacking = false;
+
+        var rows = Math.Min(
+            val1: previous.Length,
+            val2: current.Length
+        );
+        var size = Unsafe.SizeOf<DynamicTransform>();
+        var before = MemoryMarshal.AsBytes(span: previous[..rows]);
+        var after = MemoryMarshal.AsBytes(span: current[..rows]);
+        var index = 0;
+
+        while (index < after.Length) {
+            index += after[index..].CommonPrefixLength(other: before[index..]);
+
+            if (index >= after.Length) {
+                break;
+            }
+
+            var row = (index / size);
+            var end = (row + 1);
+
+            while ((end < rows) && !after.Slice(length: size, start: (end * size)).SequenceEqual(other: before.Slice(length: size, start: (end * size)))) {
+                end++;
+            }
+
+            Reseat(count: (end - row), start: row);
+            index = (end * size);
+        }
+
+        Reseat(count: (current.Length - rows), start: rows);
     }
     /// <summary>Settles one owner's repacked slots: counts the rows packed and the bytes compared, and owes the range
     /// when any slot differs from its prior contents.</summary>
@@ -138,14 +196,14 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         }
 
         if (moved) {
-            Owe(
-                count: packed.Length,
-                start: start
-            );
-
-            if (reseat && !m_everything[m_slot]) {
-                m_reseats[m_slot].Add(
-                    length: packed.Length,
+            if (reseat) {
+                Reseat(
+                    count: packed.Length,
+                    start: start
+                );
+            } else {
+                Owe(
+                    count: packed.Length,
                     start: start
                 );
             }
@@ -160,7 +218,8 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     public void Owe(int start, int count) {
         if (
             (count <= 0) ||
-            m_everything[m_slot]
+            m_everything[m_slot] ||
+            m_repacking
         ) {
             return;
         }
@@ -170,6 +229,25 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
             start: start
         );
         m_owedRows.Add(amount: count);
+    }
+    // Owes a range whose slots hold another owner's poses than they did, and reseats it.
+    private void Reseat(int start, int count) {
+        if (
+            (count <= 0) ||
+            m_everything[m_slot] ||
+            m_repacking
+        ) {
+            return;
+        }
+
+        Owe(
+            count: count,
+            start: start
+        );
+        m_reseats[m_slot].Add(
+            length: count,
+            start: start
+        );
     }
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) {

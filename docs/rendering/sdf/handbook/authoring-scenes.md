@@ -205,9 +205,11 @@ that only compound as a world grows:
   On an ordinary frame an emitter repacks only the owners (an avatar's leaf
   range, a stamp's slots) whose inputs moved or that are still settling, and
   reports each through the frame's `SdfMovedTransforms`: `Commit` owes a range
-  whose repack changed it, `Owe` a range the emitter parked. A rebuild owes the
-  whole table, which the host parks first. The engine then stages exactly the
-  owed rows, so a still frame packs and uploads no transform.
+  whose repack changed it, `Owe` a range the emitter parked. A rebuild repacks the
+  whole table, which the host parks first, and owes only the rows whose bytes the
+  repack changed, each seeded as a new owner's (`SdfMovedTransforms.BeginRepack`).
+  The engine then stages exactly the owed rows, so a still frame packs and uploads
+  no transform.
 - **Positional material safety is structural, not a documentation
   convention**—see the next section.
 

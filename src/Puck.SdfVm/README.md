@@ -350,8 +350,11 @@ the World's presenter and routed scenes build, a rebuild after the first emits
 in the frame that finds the change and builds on the thread pool: the frames
 until the build finishes render the program held before it, with live
 transforms, mesh draws and dress, and the first frame after adopts it, so a
-portal crossing's two program rebuilds leave the crossing frame. A converging
-capture waits for the build instead. Its table persists across
+portal crossing's two program rebuilds leave the crossing frame. The build also
+measures the words its program differs in from the one held (`SdfProgramDelta`),
+which the adopting frame carries so its upload copies only them, and the
+adopting frame repacks the transform table but owes only the rows the repack
+changed. A converging capture waits for the build instead. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.

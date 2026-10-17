@@ -31,6 +31,27 @@ public sealed class SdfMovedTransformsWorkLawTests {
         }
         Assert.All(collection: moved.WorkKinds.ToArray(), action: static kind => Assert.Equal(expected: WorkClass.Pacing, actual: kind.Class));
     }
+    // THE LAW: a repack packs every owner but owes only the rows whose bytes it changed and the rows past the previous
+    // table's end; an owe an emitter reports while it repacks is not counted, and only a repack completes.
+    [Fact]
+    public void ARepackOwesOnlyTheRowsItChangedAndTheRowsPastThePreviousTable() {
+        var moved = new SdfMovedTransforms();
+        var previous = new DynamicTransform[6];
+        var current = new DynamicTransform[8];
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => moved.CompleteRepack(current: current, previous: previous));
+        moved.BeginRepack(tableRows: current.Length);
+        Assert.True(condition: moved.Everything);
+        moved.Owe(count: 8, start: 0);
+        current[1] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.UnitY);
+        current[2] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.UnitZ);
+        current[4] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.UnitX);
+        moved.CompleteRepack(current: current, previous: previous);
+
+        Assert.False(condition: moved.Everything);
+        Assert.True(condition: moved.TryRead(kind: SdfMovedTransforms.OwedRows, value: out var owed));
+        Assert.Equal(actual: owed, expected: 5L);
+    }
     [Fact]
     public void AForwarderRegisteredBeforeTheMovedSetReadsItOnceRetargeted() {
         var forwarder = new ForwardingWorkCounterSource(

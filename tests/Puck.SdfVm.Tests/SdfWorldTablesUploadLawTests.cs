@@ -307,6 +307,42 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ).ToArray()
         );
     }
+    // A program uploaded with the words it differs in from the program it was built after writes only those words when
+    // that program is the live one, and compares itself with the live program when it is not: either way the device
+    // holds the new program word for word.
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void AProgramBuiltAfterTheLiveOneUploadsTheWordsItsDeltaNames(bool fromLive) {
+        using var rig = new Rig(slots: 40);
+
+        rig.Warm();
+
+        var edited = Program(albedo: new Vector3(x: 0.25f, y: 0.5f, z: 0.75f));
+        var delta = SdfProgramDelta.Between(
+            from: (fromLive ? rig.LiveProgram : Program(albedo: Vector3.Zero, radius: 3f)),
+            to: edited
+        );
+
+        Assert.InRange(actual: delta.Runs.Count, high: GpuRegion.MaxCopyRuns, low: 1);
+        rig.Gpu.ResetTallies();
+        rig.Engine.UploadProgram(delta: delta, program: edited);
+        rig.Render(
+            resetTallies: false,
+            time: 0f
+        );
+
+        var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
+
+        Assert.InRange(actual: Assert.Single(collection: rig.Gpu.HostWrites()).Written, high: (StagingReserveBytes + (edited.Words.Length * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: edited.Words).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
+                length: (edited.Words.Length * sizeof(uint)),
+                start: 0
+            ).ToArray()
+        );
+    }
     [Fact]
     public void TheProgramRegionHoldsTheLiveProgramAndGrowsByHalfAgainPastIt() {
         const int Reserve = (1 << 20);
@@ -343,8 +379,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             val2: (words + (words / 2))
         );
 
+        // The delta names the words the larger program differs in from the live one, but the grown region holds none of
+        // the live program's words, so the upload writes the program whole.
         Assert.True(condition: (larger.Words.Length > words));
-        rig.Engine.UploadProgram(program: larger);
+        rig.Engine.UploadProgram(
+            delta: SdfProgramDelta.Between(from: rig.LiveProgram, to: larger),
+            program: larger
+        );
         rig.Render(time: 0f);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
@@ -993,6 +1034,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         public SdfWorldTables Engine { get; private set; }
         public UploadModelGpu Gpu { get; }
+        // The program the tables were built with, the live one until a test uploads another.
+        public SdfProgram LiveProgram => m_program;
 
         // The device-local dynamic-transform table holds exactly the frame's packed transforms.
         public void AssertDeviceTransforms() => Assert.Equal(

@@ -105,6 +105,44 @@ public sealed class GpuUploadRuns {
         m_ends[m_count] = end;
         m_count++;
     }
+    /// <summary>Records as owed each run of words in which <paramref name="current"/> differs from
+    /// <paramref name="previous"/> at the same index, and every word of <paramref name="current"/> past
+    /// <paramref name="previous"/>'s end, in increasing order.</summary>
+    /// <param name="previous">The words a table held.</param>
+    /// <param name="current">The words it holds now.</param>
+    public void AddDifferences(ReadOnlySpan<uint> previous, ReadOnlySpan<uint> current) {
+        var shared = Math.Min(
+            val1: previous.Length,
+            val2: current.Length
+        );
+        var before = previous[..shared];
+        var after = current[..shared];
+        var index = 0;
+
+        while (index < shared) {
+            index += after[index..].CommonPrefixLength(other: before[index..]);
+
+            if (index >= shared) {
+                break;
+            }
+
+            var start = index;
+
+            while ((index < shared) && (after[index] != before[index])) {
+                index++;
+            }
+
+            Add(
+                length: (index - start),
+                start: start
+            );
+        }
+
+        Add(
+            length: (current.Length - shared),
+            start: shared
+        );
+    }
     /// <summary>Forgets every run, as a table's owed ranges reach the GPU.</summary>
     public void Clear() => m_count = 0;
     /// <summary>Gets run <paramref name="index"/>'s length in units.</summary>

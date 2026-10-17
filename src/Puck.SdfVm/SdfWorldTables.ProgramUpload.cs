@@ -9,9 +9,12 @@ public sealed partial class SdfWorldTables {
     /// screen bindings and pipelines remain in place. Palette-value edits keep transport and geometry signatures;
     /// material reassignment or any other field/layout change invalidates them.</summary>
     /// <param name="program">The scene program to upload.</param>
+    /// <param name="delta">The words <paramref name="program"/> differs in from the program it was built after, or
+    /// <see langword="null"/>: when that program is the one the tables hold, only those words are copied, and otherwise
+    /// the program's words are compared with what the tables hold.</param>
     /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>, or its
     /// dynamic-transform requirements exceed the host's reserved transform slots.</exception>
-    public void UploadProgram(SdfProgram program) {
+    public void UploadProgram(SdfProgram program, SdfProgramDelta? delta = null) {
         ArgumentNullException.ThrowIfNull(program);
         program.ValidateIsa();
         var geometryChanged = true;
@@ -37,9 +40,24 @@ public sealed partial class SdfWorldTables {
 
         // The program words go through their region like every other table, so a frame in flight keeps reading the words
         // its slot was sent; only growing a capacity waits for the device to go idle.
+        var region = m_programRegion;
+
         EnsureProgramCapacity(program: program);
 
-        WriteProgramWords(program: program);
+        // A region the capacity replaced holds none of the earlier program's words.
+        if (
+            (delta is { } known) &&
+            ReferenceEquals(objA: known.To, objB: program) &&
+            ReferenceEquals(objA: known.From, objB: m_liveProgram) &&
+            ReferenceEquals(objA: region, objB: m_programRegion)
+        ) {
+            _ = m_programRegion.WriteRuns(
+                runs: known.Runs,
+                words: program.Words
+            );
+        } else {
+            WriteProgramWords(program: program);
+        }
         // Seed the screen-surface table from the program's declared surfaces (the "program uploaded once" baseline);
         // any SetScreenSurface call made before the next produced frame patches this same table before it goes out — a
         // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.

@@ -831,7 +831,11 @@ Dynamic transforms are never compared as a table: the residency packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
 last consumed, and the region owes the words of those rows that changed. The
 program is written only by a program upload, into a region sized to the live
-program and grown by half again when a larger one arrives. Mesh draws (`SdfFrame.MeshDraws`)
+program and grown by half again when a larger one arrives. A program built on
+the thread pool carries the words it differs in from the one held before it
+(`SdfFrame.ProgramDelta`), which its build measured, so tables holding that
+program copy only those words (`GpuRegion.WriteRuns`) and compare nothing on the
+frame thread; any other upload compares the program with the live one. Mesh draws (`SdfFrame.MeshDraws`)
 are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list. Each scene emitter states its draws, a static placement's
