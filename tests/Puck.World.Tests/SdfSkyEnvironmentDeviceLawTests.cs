@@ -217,13 +217,12 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
     private static (byte[] Map, byte[] Coefficients, long Evaluations, long MapTexels, long ReduceTexels,
         byte[] Screens, long ScreenLoads, long ScreenWrites) Run(GpuDeviceServices services, string extension, SdfSkyBlock block,
         SdfSkyLayer[] layers, ReadOnlyMemory<byte> screenPixels = default, int screenWidth = 1, int screenHeight = 1,
-        uint screenWriteMask = uint.MaxValue, ReadOnlyMemory<byte> screenSeed = default) {
+        ReadOnlyMemory<byte> screenSeed = default) {
         var parameters = SdfWorldInterfaces.EnvironmentParameters;
         var layout = parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         var blockBytes = new byte[parameters.SizeBytes];
 
         parameters.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)parameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionWriteMask))), value: screenWriteMask);
 
         var padded = new byte[((((((ulong)blockBytes.Length) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
         var framePadded = new byte[((((((ulong)parameters.FrameBlockSizeBytes) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];

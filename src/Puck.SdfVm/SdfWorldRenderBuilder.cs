@@ -20,19 +20,10 @@ public static class SdfWorldRenderBuilder {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(spec);
 
-        // The frame-source decorator seam (SdfWorldRenderSpec.DecorateFrameSource): a host wraps the scene's frame
-        // source here (e.g. the overworld's diegetic-UI director, which emits its own SDF geometry into the program)
-        // before the residency is built. Identity when the spec supplies none — most callers (the document-driven world
-        // path) never set it.
-        var frameSource = ((spec.DecorateFrameSource is { } decorateFrameSource)
-            ? decorateFrameSource(spec.FrameSource)
-            : spec.FrameSource
-        );
-
         return new SdfWorldResidency(
             brickPoolVoxelCapacity: spec.BrickPoolVoxelCapacity,
             dynamicTransformCapacity: spec.DynamicTransformCapacity,
-            frameSource: frameSource,
+            frameSource: spec.FrameSource,
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
             // The views built over the same cache read this same deployed set, so a boot reads the kernels once.

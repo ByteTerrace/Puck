@@ -1676,7 +1676,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 exported: exported
             );
         } finally {
-            DiscardUnsubmittedReadCopies();
             if (exported is not null) {
                 m_export!.EndWrite(
                     image: exported,
@@ -1709,7 +1708,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var command = BeginFrameCommands(slot: slotIndex);
 
         commands.Clear();
-        RecordFrozenReads(command: command);
         BeginCadenceFrame(slot: slotIndex);
         RecordPasses(
             command: command,
@@ -1749,7 +1747,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         // From here the queue owns the write. A later export or readback failure must not reuse this submission slot
         // or roll the committed history back.
-        CommitFrozenReads();
         CommitCadenceFrame();
         m_frame++;
         m_frameLeases.MoveTo(destination: slot.Leases);

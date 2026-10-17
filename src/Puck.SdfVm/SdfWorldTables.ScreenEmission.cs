@@ -14,13 +14,6 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the latest screen reduction whose actual submission fence has completed.</summary>
     public GpuImagePublication CompletedScreenEmission { get { m_screenEmission.Poll(); return m_screenEmission.Completed; } }
 
-    internal SdfScreenClosureMember? ScreenClosure { get; set; }
-    internal bool ScreenClosureInputsChanged => m_screenEmission.IndependentChanged;
-    internal uint ScreenEmissionWriteMask => (ScreenClosure?.WriteMask ?? uint.MaxValue);
-    internal bool ScreenEmissionCanRecord => m_screenEmission.CanRecord;
-
-    internal void RestartScreenClosureSources() { m_screenEmission.Forget(); m_skyEnvironment.RestartClosure(); }
-
     internal bool ScreenEmissionOwes => m_screenEmission.Owes;
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
     internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
@@ -51,23 +44,14 @@ public sealed partial class SdfWorldTables {
         public bool Owes { get; private set; } = true;
 
         public GpuImagePublication Completed { get; private set; }
-        public bool IndependentChanged { get; private set; }
         public long Renders { get; private set; }
         public SdfEnvironmentSubmission? Submitted { get; private set; }
-
-        public bool CanRecord { get; private set; } = true;
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
             Poll();
             Array.Clear(array: m_sources);
             Array.Clear(array: Screens);
             Array.Clear(array: m_tainted);
-            var known = true;
-
-            CanRecord = true;
-            IndependentChanged = false;
-            var closure = m_tables.ScreenClosure;
-
             if (residency.ScreenSources is { } sources) {
                 foreach (var screen in sources.Screens) {
                     if (!sources.Emits(screen: screen) || (sources.ReadOf(screen: screen, view: view) is not { } producer) || (reads is null)) { continue; }
@@ -76,42 +60,29 @@ public sealed partial class SdfWorldTables {
                     if (index < 0) { continue; }
                     var input = reads[index];
 
+                    // An image with no known publication, such as a portal's level that has not rendered because its glass
+                    // is out of view, is missing: it writes a zero record rather than holding every other screen's.
+                    if ((input.Lease.ImageViewHandle == 0) || !input.Publication.IsKnown) { continue; }
                     m_tainted[screen] = input.Tainted;
-                    Screens[screen] = (input.Lease.ImageViewHandle != 0);
+                    Screens[screen] = true;
                     m_sources[screen] = input.Publication;
                 }
             }
             var changed = false;
 
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                var bit = (1u << screen);
                 var offset = (screen * ScreenMappingByteLength);
                 var different = ((m_sources[screen] != m_renderedSources[screen]) || (m_tainted[screen] != m_renderedTainted[screen]) ||
                     !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
                         .SequenceEqual(other: m_mappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
 
                 changed |= different;
-                if (closure is null) {
-                    known &= (!Screens[screen] || m_sources[screen].IsKnown);
-                    continue;
-                }
-                if ((closure.DerivedMask & bit) == 0) { IndependentChanged |= different; }
-                if ((closure.WriteMask & bit) == 0) { Screens[screen] = false; continue; }
-                if ((closure.DerivedMask & bit) == 0) {
-                    known &= (!Screens[screen] || m_sources[screen].IsKnown);
-                    continue;
-                }
-                if (closure.ZeroDerived) { Screens[screen] = false; m_sources[screen] = default; m_tainted[screen] = false; } else if (!closure.Accepts(screen, m_sources[screen])) { CanRecord = false; }
             }
-            CanRecord &= known;
-            Owes = ((closure is null) ? ((Submitted is null) || !known || changed) : (closure.WriteMask != 0));
-            return (known ? unchecked((ulong)(Renders + (Owes ? 1 : 0))) : null);
+            Owes = ((Submitted is null) || changed);
+            return unchecked((ulong)(Renders + (Owes ? 1 : 0)));
         }
         public long Publish(IGpuSubmissionFence fence) {
-            var writeMask = m_tables.ScreenEmissionWriteMask;
-
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
-                if ((writeMask & (1u << screen)) == 0) { continue; }
                 m_renderedSources[screen] = m_sources[screen];
                 m_renderedTainted[screen] = m_tainted[screen];
                 var offset = (screen * ScreenMappingByteLength);
@@ -120,7 +91,6 @@ public sealed partial class SdfWorldTables {
             }
             Owes = false;
             Submitted = new(Owner: this, Sequence: ++Renders, Fence: fence, Tainted: m_renderedTainted.Any(predicate: static tainted => tainted));
-            m_tables.ScreenClosure?.Published();
             return Renders;
         }
         public void Poll() {

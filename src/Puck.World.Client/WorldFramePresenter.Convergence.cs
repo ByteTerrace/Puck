@@ -103,6 +103,11 @@ public sealed partial class WorldFramePresenter {
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Places the retained composition's views and panes for the frame, which the graph host cleared when the
+    /// frame began, so the world stays scheduled while its residency renders a held frame.</remarks>
+    public void PresentHeldFrame() => PlaceComposedFrame();
+
     private FrameContext FrozenContext(in FrameContext context) =>
         ((m_convergence is { Completion.IsCompleted: false })
             ? (context with { FrameDeltaTicks = 0 })

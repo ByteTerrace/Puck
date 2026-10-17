@@ -81,8 +81,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private bool m_disposed;
     private bool m_sourceTainted;
     private bool m_readsHistory;
-    private SdfViewLightingSource m_recordedLighting;
-    private bool m_lightingSubmitted;
 
     private readonly SdfWorldPickReadback? m_pick;
 
@@ -229,13 +227,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_view.Residency.Release();
     }
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mask and
-    // bake passes run only while the residency's bake dispatches a lattice this frame (the mask then selects the
-    // lattice's instances, as the bake's walk reads them), the mesh part a frame that draws no mesh, whose surface pass
+    // bake passes run only while the residency's bake dispatches a lattice this frame, in whichever of its views the
+    // render graph records first (the mask then selects the lattice's instances, as the bake's walk reads them), so a
+    // residency whose first view is out of view still bakes, the mesh part a frame that draws no mesh, whose surface pass
     // reads nothing of the target since its pass block's mesh draws are zero, and a shadow cascade a frame with no draw or
     // no cascade of its own. No other part walks the field, and none skips.
     public bool Skips(in FrameContext context) {
-        if (m_owner.HoldsScreenClosureImage(instance: m_context.Instance)) { return true; }
-
         switch (m_part) {
             case SdfWorldPackage.Parts.Mask:
             case SdfWorldPackage.Parts.Bake: {
@@ -243,7 +240,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 m_owner.Begin(residency: m_view.Residency);
                 PollBake();
                 _ = m_view.Residency.Submit(context: in context);
-                return ((m_view.View != 0) || !ClaimsBake(batch: out _));
+                return !ClaimsBake(batch: out _);
             }
             case SdfWorldPackage.Parts.Mesh: {
                 Follow();
@@ -272,7 +269,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public void Submitted() {
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTainted, m_readsHistory);
-            m_lightingSubmitted = true;
         }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
     }
@@ -308,8 +304,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_sourceTainted = (SdfWorldPasses.SourceTainted(frame: frame, tables: tables) || (recording.Reads is { Tainted: true }));
             m_readsHistory = (m_temporal && temporal.HasPreviousView);
-            m_recordedLighting = new(m_owner.ClosureEpochOf(residency: residency), (tables.SubmittedSkyEnvironment?.Publication ?? default),
-                (tables.SubmittedScreenEmission?.Publication ?? default));
         }
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
@@ -405,10 +399,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if ((m_bakeSlots.Length > 0) && m_bakeSlots[slot].Submit) {
             m_bakeSlots[slot].Submit = false;
             m_bakeSlots[slot].Fence = fence;
-        }
-        if (m_lightingSubmitted) {
-            m_owner.SubmittedLighting(m_context.Instance, m_recordedLighting, fence);
-            m_lightingSubmitted = false;
         }
         m_pick?.Submitted(fence: fence, slot: slot);
     }

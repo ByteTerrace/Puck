@@ -217,15 +217,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.Temporal.Reset();
         }
         entry.HistoryTainted = false;
-        if (entry.Residency is { } residency) {
-            residency.BeginConvergence(request: convergence.Request);
-            if (ClosureOf(residency: residency) is { } closure) {
-                foreach (var member in closure.Members) {
-                    member.Residency.BeginConvergence(request: convergence.Request);
-                }
-            }
-            RestartClosures(residency: residency);
-        }
+        entry.Residency?.BeginConvergence(request: convergence.Request);
     }
 
     // Prepares an instance's history once a frame, after its residency's upload for the frame: the tables then hold this
@@ -340,9 +332,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.Temporal.Reset();
             entry.TemporalFrame = -1;
             entry.RenderedBindings = -1;
-            entry.ImagePublication = default;
-            entry.ImageLightingFence = null;
-            entry.SubmittedLightingFence = null;
         }
     }
     /// <inheritdoc/>
@@ -351,9 +340,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var entry in m_entries.Values) {
             entry.Picker.Clear();
             entry.Temporal.Reset();
-            entry.ImagePublication = default;
-            entry.ImageLightingFence = null;
-            entry.SubmittedLightingFence = null;
         }
         foreach (var residency in m_residencies.Keys) {
             residency.OnDeviceLost();
@@ -392,7 +378,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         foreach (var instance in m_entries.Keys) {
             _ = Refresh(instance: instance);
         }
-        AdvanceClosures();
     }
 
     // Starts a residency's frame the first time the package meets it in this frame.

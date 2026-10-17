@@ -18,9 +18,6 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// <inheritdoc/>
     public bool SamplesReads => true;
 
-    /// <inheritdoc/>
-    public RenderGraphReadEpoch? ReadEpochOf(string instance, string producer) =>
-        ((Resolve(instance: instance)?.Residency is { } residency) ? views.ReadEpochOf(producer: producer, residency: residency) : null);
     /// <summary>Names a residency's one producer while at least one of its views is demanded.</summary>
     /// <param name="name">The generated producer name.</param>
     /// <param name="residency">The existing residency whose environment it projects.</param>

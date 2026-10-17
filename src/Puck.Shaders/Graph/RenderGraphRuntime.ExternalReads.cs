@@ -139,7 +139,6 @@ public sealed partial class RenderGraphRuntime {
                 if (external.TryAcquireOutput(output: out var output)) {
                     m_producerTainted[producer] = output.Tainted;
                 }
-                output = FrozenReadOf(index, m_set.Instances[producer].Name, output);
                 if (output.Lease.ImageViewHandle != 0) {
 
                     if (Withholds(
@@ -181,8 +180,8 @@ public sealed partial class RenderGraphRuntime {
                     ? long.MaxValue
                     : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
-            var acquired = FrozenReadOf(index, m_set.Instances[producer].Name, new RenderGraphExternalOutput(
-                Image: completed.Image, Layout: completed.Layout, Lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication }, Tainted: completed.Tainted));
+            var acquired = new RenderGraphExternalOutput(
+                Image: completed.Image, Layout: completed.Layout, Lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication }, Tainted: completed.Tainted);
 
             if (
                 acquired.Image.IsSameDeviceImage &&

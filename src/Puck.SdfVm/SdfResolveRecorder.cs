@@ -46,8 +46,6 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private SdfWorldView m_view;
     private bool m_disposed;
 
-    public bool Skips(in Puck.Hosting.FrameContext context) => m_owner.HoldsScreenClosureImage(instance: m_context.Instance);
-
     internal SdfResolveRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
         m_owner = owner;

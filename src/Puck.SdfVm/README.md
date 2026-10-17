@@ -462,16 +462,16 @@ instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
 A capture freezes its dependency closure even when it requests no additional
-convergence samples, and waits while a screen-lighting closure it belongs to
-has not completed its two rounds. The runtime waits for the required source's
+convergence samples. While it converges, each frozen residency hands its frame
+source the held frame (`ISdfFrameSource.PresentHeldFrame`), so the World still
+places its views and keeps them scheduled. The runtime waits for the required source's
 completed view fence before forwarding the capture or counting samples.
 Retained source and temporal-history taint remain independent of newer clean
 graph inputs.
 
 Freezing or releasing a source may replace its transform collection with an
 identical copy. That replacement reseeds motion history, while geometry cadence
-changes only for different packed rows or an active row-count change. Snapshot
-ownership alone does not restart a completed screen-lighting closure.
+changes only for different packed rows or an active row-count change.
 
 A readback `DeviceLostException` completes the request with that failure and
 is then rethrown so the host can rebuild the graphics device. Ordinary PNG or

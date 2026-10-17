@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/a45e98ef2201e57a07e601b5d0492528a023adf16bd985f70cd4bcabf46bbd22). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/b66cc6416a3c03c682151f207b82329078e5582f570de13a8b3f4b9d4986f363). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -90,9 +90,8 @@ struct SdfSkyEnvironmentFrame {
 struct SdfSkyEnvironmentPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] uint screenEmissionMask;
-    [[vk::offset(12)]] uint screenEmissionWriteMask;
-    [[vk::offset(16)]] uint workCounterRow;
-    [[vk::offset(20)]] uint workCounterRowDetail;
+    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(16)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsaAA4902F8 : register(b0, space3);
 #define passGroup passGroupIsaAA4902F8

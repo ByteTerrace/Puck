@@ -15,18 +15,6 @@ namespace Puck.World.Tests;
 
 public sealed partial class SdfSkyEnvironmentDeviceLawTests {
     [Fact]
-    public void VulkanFreezesActualPixelsPublicationAndTaintForAnEpoch() {
-        using var device = HeadlessVulkanDevice.Create(nameof(SdfSkyEnvironmentDeviceLawTests));
-
-        VerifyEpoch(device: device, extension: ".spv");
-    }
-    [Fact]
-    public void DirectXFreezesActualPixelsPublicationAndTaintForAnEpoch() {
-        using var device = DirectXTestDevices.Hardware();
-
-        VerifyEpoch(device: device, extension: ".dxil");
-    }
-    [Fact]
     public void VulkanRefreshesALivePanoramaFromItsActualPublication() {
         using var device = HeadlessVulkanDevice.Create(nameof(SdfSkyEnvironmentDeviceLawTests));
 
@@ -37,98 +25,6 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         using var device = DirectXTestDevices.Hardware();
 
         VerifyLivePanorama(device: device, extension: ".dxil");
-    }
-
-    // A real conversion ring keeps publishing and reusing its slots. The two readers must see the original pixels
-    // and their original provenance until the epoch ends, including when the live source becomes clean.
-    private static void VerifyEpoch(IGpuDeviceContext device, string extension) {
-        const string Package = "test.epoch-pixels";
-        var cache = new GpuPassPipelineCache();
-        var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: cache));
-
-        SourceConversionPackage.RegisterAll(packages);
-        var source = new LivePixels(device: device) { Tainted = true };
-        var readers = new PixelReaders();
-
-        packages.RegisterProducer(factory: _ => source, package: "test.live-pixels");
-        packages.Register(factory: readers, package: Package);
-        var compiled = PixelGraph(Package);
-
-        Assert.True(condition: RenderGraphInstanceSet.TryCreate([LiveInstance(), Reader(name: "left"), Reader(name: "right")], out var set, out var setRefusal), userMessage: setRefusal?.Message);
-        Assert.True(condition: RenderGraphRuntime.TryCreate(set, [null, compiled, compiled], "left", packages, cache,
-            device, (extension == ".dxil"), out var runtime, out var refusal), userMessage: refusal?.Message);
-        using var graph = runtime;
-        using var converter = graph.CreateConverter("epoch-live-pixels", LivePixels.Descriptor);
-
-        source.Converter = converter;
-        using var readback = device.Services.SurfaceTransferFactory.CreateReadback();
-        var frame = 0L;
-
-        void Produce() {
-            _ = graph.ProduceFrame(new(DisplayHeight: 4, DisplayWidth: 4, DisplayHertz: 60, Index: frame, Tick: frame++,
-                Roots: [new(Height: 1, Instance: "left", Width: 1), new(Height: 1, Instance: "right", Width: 1)],
-                Footprints: [new(Consumer: "left", Height: 1, Producer: "feed", Width: 1), new(Consumer: "right", Height: 1, Producer: "feed", Width: 1)]), LiveContext(device: device));
-            device.WaitIdle();
-        }
-        TestLiveness.Until(() => { Produce(); return (graph.IsSettled && (readers.Seen.Count == 2)); }, reason: () => graph.Render.Reason);
-        using var epoch = new RenderGraphReadEpoch();
-
-        readers.Epoch = epoch;
-        Produce();
-        var frozen = readers.Seen["left"];
-
-        Assert.Equal(frozen, readers.Seen["right"]);
-        Assert.Equal(converter.Publication, frozen.Publication);
-        Assert.True(condition: frozen.Tainted);
-        Assert.NotEqual(converter.Output.ImageHandle, frozen.Image.ImageHandle);
-        AssertPixels(frozen, red: true);
-        var originalHandles = new HashSet<nint>();
-
-        source.Tainted = false;
-        for (var update = 0; (update < 12); update++) {
-            source.Red = ((update % 2) != 0);
-            source.Revision++;
-            Produce();
-            originalHandles.Add(item: converter.Output.ImageHandle);
-            Assert.Equal(frozen, readers.Seen["left"]);
-            Assert.Equal(frozen, readers.Seen["right"]);
-            AssertPixels(frozen, red: true);
-            AssertPixels(input: new(Image: converter.Output, Layout: converter.OutputLayout, Publication: converter.Publication, Tainted: false), red: source.Red);
-        }
-        Assert.True(condition: (originalHandles.Count < 12), userMessage: "The live producer must actually reuse storage during the epoch.");
-        Assert.True(condition: epoch.Changed);
-        Assert.True(condition: (converter.Publication.Sequence > (frozen.Publication.Sequence + 3)));
-        epoch.Dispose();
-        using var next = new RenderGraphReadEpoch();
-
-        readers.Epoch = next;
-        source.Red = false;
-        source.Revision++;
-        Produce();
-        var adopted = readers.Seen["left"];
-
-        Assert.Equal(adopted, readers.Seen["right"]);
-        Assert.Equal(converter.Publication, adopted.Publication);
-        Assert.NotEqual(frozen.Publication, adopted.Publication);
-        Assert.False(condition: adopted.Tainted);
-        AssertPixels(adopted, red: false);
-        graph.Dispose();
-        Assert.False(condition: next.IsValid);
-        Assert.Equal(source.Acquired, source.Released);
-
-        RenderGraphInstance Reader(string name) => new(Name: name, Passes: 1, Reads: [new("feed")], Refresh: RenderGraphRefresh.EveryFrame);
-        void AssertPixels(PixelRead input, bool red) {
-            var bytes = readback.Read(sourceImageHandle: input.Image.ImageHandle, sourceLayout: input.Layout,
-                width: input.Image.Width, height: input.Image.Height, format: input.Image.Format, bytesPerPixel: 4);
-            var values = bytes.Span;
-
-            for (var at = 0; (at < values.Length); at += 4) {
-                Assert.Equal(((byte)(red ? 255 : 0)), values[at]);
-                Assert.Equal(((byte)0), values[(at + 1)]);
-                Assert.Equal(((byte)(red ? 0 : 255)), values[(at + 2)]);
-                Assert.Equal(((byte)255), values[(at + 3)]);
-            }
-        }
     }
     // The sky definition, mapping and dimensions are held while successful conversion publications change and the
     // source ring rotates. The production environment factory must refresh both retained buffers and their identity.
@@ -304,11 +200,9 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
 
     private readonly record struct PixelRead(Surface Image, GpuImageLayout Layout, GpuImagePublication Publication, bool Tainted);
     private sealed class PixelReaders : IRenderGraphPackageFactory {
-        public RenderGraphReadEpoch? Epoch { get; set; }
         public bool SamplesReads => true;
         public Dictionary<string, PixelRead> Seen { get; } = [];
 
-        public RenderGraphReadEpoch? ReadEpochOf(string instance, string producer) => Epoch;
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Reader(this, context.Instance);
 
@@ -337,7 +231,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         }
     }
     // The normal source converter supplies actual GPU pixels, ring reuse and submission identity. This fixture's
-    // writer waits between updates so it never overwrites an in-flight reader; it does not promise epoch immutability.
+    // writer waits between updates so it never overwrites an in-flight reader.
     private sealed class LivePixels(IGpuDeviceContext device) : IRenderGraphExternalProducer {
         private long m_revision = -1;
         private readonly GpuWorkLedger m_empty = new(framesInFlight: 1, name: "unopened.live-pixels");

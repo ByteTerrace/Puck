@@ -56,8 +56,6 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     private SdfWorldView m_view;
     private bool m_disposed;
 
-    public bool Skips(in FrameContext context) => m_owner.HoldsScreenClosureImage(instance: m_context.Instance);
-
     internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
         m_owner = owner;

@@ -1111,7 +1111,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// render scale, since the view reconstructs its own output: the root then stands for the world itself and publishes
     /// it as no pane. Whether a pane covers the whole display decides whether pixels no view
     /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The package captures the world
-    /// before scheduling, so camera composition and placement both reach that frame's schedule.</summary>
+    /// before scheduling, so camera composition and placement both reach that frame's schedule; a frame whose residency
+    /// renders a held frame places the retained composition instead (<see cref="PresentHeldFrame"/>).</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) => PrepareGraphCore(context: FrozenContext(context: in context));
 
@@ -1140,11 +1141,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
         );
-        // The residency reuses its frozen frame without calling CaptureFrame again. BeginFrame cleared every
-        // placement, so publish the retained composition here on those frames as well.
-        if ((m_convergence is { Completion.IsCompleted: false }) && (m_convergedFrame is not null)) {
-            PlaceComposedFrame();
-        }
     }
 
     /// <summary>Gets or sets the work that follows this frame's composed cameras and graph placements, before the

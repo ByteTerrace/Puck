@@ -289,7 +289,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
             // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
             // while it is the one the node publishes now, which a capture it serves without rendering reads.
-            if ((held.Epoch is { IsActive: true }) || (held.Leased
+            if ((held.Leased
                 ? (held.Handle == m_lastSurface.ImageHandle)
                 : ((held.Kind == ShaderPipelineResourceKind.Buffer)
                     ? IsPublishedBuffer(handle: held.Handle) : IsPublished(imageHandle: held.Handle)))) {
@@ -506,7 +506,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // An owned published allocation or image copy, detached from replaced objects. Leased marks an image another
     // instance owns, held under the node's existing image lease. Buffers never take such a lease.
     private readonly record struct HeldResource(nint Handle, IDisposable Resource, ulong Bytes, bool Leased = false,
-        RenderGraphReadEpoch? Epoch = null, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
+        ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
     // Objects replaced by an install or a selection, or a held allocation no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when replaced, or, for a published allocation, the
     // fence of the submission made RetirementLag submissions after it stopped being published. The runtime may

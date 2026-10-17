@@ -57,19 +57,17 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         Assert.Equal(actual: fill.ScreenLoads, expected: 1L);
         Assert.Equal(actual: fill.ScreenWrites, expected: 32L);
 
-        // A later finite round rewrites only its derived screen. The other screens' records remain byte-identical,
-        // and a genuinely dark acquired image still writes a valid terminal rather than retaining its old glow.
+        // A genuinely dark acquired image writes a valid terminal rather than retaining the glow already in the buffer.
         var seed = new byte[SdfScreenEmission.Bytes];
 
         for (var word = 0; (word < (seed.Length / sizeof(float))); word++) {
             BinaryPrimitives.WriteSingleLittleEndian(destination: seed.AsSpan(start: (word * sizeof(float))), value: (word + 1f));
         }
-        var dark = Run(services, extension, block, layers, new byte[] { 0, 0, 0, 255 }, screenWriteMask: 1u, screenSeed: seed);
+        var dark = Run(services, extension, block, layers, new byte[] { 0, 0, 0, 255 }, screenSeed: seed);
 
-        Assert.Equal(seed.AsSpan(start: 16).ToArray(), dark.Screens.AsSpan(start: 16).ToArray());
         Near(new Vector4(w: SdfScreenEmission.DirectGain, x: 0f, y: 0f, z: 0f), Read(bytes: dark.Screens, row: 0));
         Assert.Equal(actual: dark.ScreenLoads, expected: 1L);
-        Assert.Equal(actual: dark.ScreenWrites, expected: 1L);
+        Assert.Equal(actual: dark.ScreenWrites, expected: 32L);
 
         static Vector4 Read(byte[] bytes, int row) => new(
             BinaryPrimitives.ReadSingleLittleEndian(source: bytes.AsSpan(start: (row * 16))),

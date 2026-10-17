@@ -17,6 +17,11 @@ public interface ISdfFrameSource {
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> between the previous and current fixed simulation tick, for interpolating presentation state toward the variable display rate; a static source may ignore it.</param>
     /// <returns>The frame to render.</returns>
     SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    /// <summary>Presents the frame the source captured last once more, in a produced frame whose residency renders a
+    /// held frame (a converging capture's) in place of calling
+    /// <see cref="CaptureFrame"/>: whatever the source does for each produced frame beyond composing it, such as placing
+    /// its views in the render graph, still happens. The default implementation does nothing.</summary>
+    void PresentHeldFrame() { }
     /// <summary>Advances a carve-bake planner by one produced frame against the live engine.
     /// the host node calls this right BEFORE <see cref="CaptureFrame"/> once the engine exists, handing the frame source
     /// the engine's brick-bake seam so its planner can poll bake states, request newly-settled bakes, and flip

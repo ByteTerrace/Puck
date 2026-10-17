@@ -21,10 +21,6 @@ public sealed record SdfWorldRenderSpec(
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
     public int BrickPoolVoxelCapacity { get; init; } = SdfWorldTables.DefaultBrickPoolVoxelCapacity;
 
-    /// <summary>An optional in-place decorator applied to <see cref="FrameSource"/> before the residency is built —
-    /// the seam a host uses to wrap the scene's frame source (e.g. a diegetic-UI overlay that emits its own SDF
-    /// geometry into the program). Returns the frame source to actually render; identity when absent.</summary>
-    public Func<ISdfFrameSource, ISdfFrameSource>? DecorateFrameSource { get; init; }
     /// <summary>A floor on the dynamic-transform slot capacity — headroom above the program's own
     /// <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> (the engine always raises the floor to that); a
     /// host whose moving-entity population grows over the run passes its peak here.</summary>

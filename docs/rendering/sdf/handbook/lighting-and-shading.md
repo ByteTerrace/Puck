@@ -85,42 +85,25 @@ ambient. Direct lighting, reflections, fog and the material's own emission are
 independent. A material's `bleed` tints the light it sends into the volume, and
 its `receive` scales the light it takes from it.
 
-## Screen emission and the screen-lighting closure
+## Screen emission
 
 Screen radiance comes from the acquired GPU image. The residency's environment
 producer reduces each admitted image into one pixel-weighted whole-image mean,
 summed over a fixed 4×4 grid of cells in source-pixel order, which supplies the
 analytic room glow at the view's own surface. Same-world camera feeds emit zero;
-independent sources and other-world views can emit. Missing and excluded images
-write zero records. Every actual image load and every written record is counted.
-The 512-byte residency buffer, one record per screen slot, is shared by all views.
+independent sources and other-world views, a portal's window among them, can
+emit. Missing and excluded images write zero records, and so does an image with
+no known publication yet, such as a nested portal level whose glass is out of
+view and has never rendered: it never holds the other screens' records. Every
+actual image load and every written record is counted. The 512-byte residency
+buffer, one record per screen slot, is shared by all views.
 
-The existing view owner closes connected emitting world-camera and
-lighting-visible Panorama reads in two finite rounds. Each epoch starts with
-dark derived screen records and black derived Panorama radiance, retains
-independent reduced records, and waits for every participant's initial
-reduction. Destination images record their actual environment and screen
-publications when Views submits. All required images then stand while the
-existing reduction rewrites only derived screen records. A derived Panorama
-reprojects the complete ordered layer stack over the same frozen independent
-pixels, preserving opacity, masks and blend order. Every real load and store is
-counted. The second reduction must feed final images whose submissions have
-completed before the epoch releases its frozen frames; it triggers no third
-reduction. Capture cleanup checks taint in sky and screens, so a clean screen
-reduction cannot hide an older tainted Panorama. Derived camera updates do not
-restart the epoch. A later independent-source or scene change starts another
-epoch, and a capture resets the component even when it requests no extra
-convergence samples.
-
-Independent images visible inside the participating camera views and lighting
-Panoramas share one owned copy per source for the whole epoch. The runtime copies
-the actual acquired image in the first consumer submission, retains its source
-publication and taint, and releases the original lease after the copy finishes.
-The same copies survive both rounds and capture convergence; their real bytes
-join the owning node's memory count and existing retirement. Later live images
-queue another epoch. Releasing a copy owner invalidates the whole epoch. Own-world
-cameras remain outside lighting feedback and keep their ordinary visual
-previous-frame policy. An authored zero screen-source gain stays excluded.
+Worlds that show each other light each other through ordinary frame feedback:
+each reduction reads the image the other world last completed, so the glow
+settles over a few frames and follows a moving scene, and nothing holds a frame
+for it. A capture sees the same lighting the display shows. Own-world cameras
+remain outside lighting feedback. An authored zero screen-source gain stays
+excluded.
 
 ## The mesh path's irradiance volume
 
