@@ -4148,7 +4148,7 @@ prototypes {
         id: 953
         position [0.2, 0.0458, 0.075]
         rotation [-0.342, 0, 0, 0.9397]
-        scale [0.17, 0.12, 0.3]
+        scale [0.162, 0.112, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.012
@@ -4209,7 +4209,7 @@ prototypes {
       shape Prism "archBandBackInner-left" {
         id: 969
         position [0.2, 0.1365, -0.2125]
-        scale [0.14, 0.125, 0.226]
+        scale [0.132, 0.117, 0.226]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.01
@@ -5588,7 +5588,7 @@ prototypes {
         id: 960
         position [-0.2, 0.0458, 0.075]
         rotation [-0.342, 0, 0, 0.9397]
-        scale [0.17, 0.12, 0.3]
+        scale [0.162, 0.112, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.012
@@ -5649,7 +5649,7 @@ prototypes {
       shape Prism "archBandBackInner-right" {
         id: 977
         position [-0.2, 0.1365, -0.2125]
-        scale [0.14, 0.125, 0.226]
+        scale [0.132, 0.117, 0.226]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.01
