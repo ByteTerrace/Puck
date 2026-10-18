@@ -630,7 +630,14 @@ word), and the bake pass runs
 interpreter, one call site, with only the group's instances in the walk
 (`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
 lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`,
-a gradient sample counting five), so a frame that bakes keeps its budget. A
+a gradient sample counting five), so a frame that bakes keeps its budget. A frame
+takes its lattices in the groups' order, not round robin, so the groups finish in
+order and each lands in the shared mesh library (`SdfMeshLibrary`) as it finishes: a
+body that crosses into another world mid-bake leaves the groups it finished there,
+and the world it reaches, or returns to, takes them rather than baking them again. On
+the debug world, a crossing into the garden five seconds into the bake and straight
+back leaves 36 of the body's 177 groups to bake again on return, where round robin,
+which finished none before the end, rebaked all 177. A
 group refines from a coarse lattice over its bounding sphere to the box its
 surface can cross, then samples a final lattice of at most 65 samples a side, no
 finer than 1.5 cm, in slabs of whole planes, values alone. A static copy of
