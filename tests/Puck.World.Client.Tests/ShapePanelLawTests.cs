@@ -122,7 +122,7 @@ public sealed class ShapePanelLawTests {
         );
         _ = builder.EndInstance();
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static SdfProgram EmitStatic(ShapeDocument shape) {
         var builder = new SdfProgramBuilder();
@@ -147,7 +147,7 @@ public sealed class ShapePanelLawTests {
             : albedo1)
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     // The one field scope a live pool program opens for its single panelled shape, or the
     // first one a probe opens: the instructions from its PushField through its PopField.
@@ -1045,7 +1045,7 @@ public sealed class ShapePanelLawTests {
                 reservedShapeInstances: CreationStampEmitter.PerCopyInstanceCount(document: document)
             );
 
-            var probe = probeBuilder.Build(buildInstanceGrid: false);
+            var probe = probeBuilder.Build();
 
             Assert.True(
                 condition: (probe.Words.Length >= stamp.Words.Length),
@@ -1060,7 +1060,7 @@ public sealed class ShapePanelLawTests {
                 reservedCount: 0,
                 reservedShapeInstances: 1
             );
-            Assert.True(condition: (singleBuilder.Build(buildInstanceGrid: false).Words.Length < stamp.Words.Length));
+            Assert.True(condition: (singleBuilder.Build().Words.Length < stamp.Words.Length));
         }
     }
     [Fact]
@@ -1105,7 +1105,7 @@ public sealed class ShapePanelLawTests {
         );
         _ = builder.EndInstance();
 
-        var creation = builder.Build(buildInstanceGrid: false);
+        var creation = builder.Build();
         var probeBuilder = new SdfProgramBuilder();
 
         WorldPlacementStamper.EmitProbe(
@@ -1113,7 +1113,7 @@ public sealed class ShapePanelLawTests {
             reservedCount: 1
         );
 
-        var probe = probeBuilder.Build(buildInstanceGrid: false);
+        var probe = probeBuilder.Build();
 
         Assert.True(
             condition: (probe.Words.Length >= creation.Words.Length),

@@ -77,7 +77,6 @@ public sealed partial class WorldFramePresenter {
 
         // A no-op after PrepareGraph reconciled this frame's delivery; a capture no graph prepares reconciles here.
         ReconcileDelivery();
-        m_bakes?.Pump(definition: m_client.Definition);
 
         m_continuum.BeginFrame();
         try {

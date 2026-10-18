@@ -136,7 +136,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldTables.MaxVolumes}";
             render += string.Create(
                 CultureInfo.InvariantCulture,
-                $", segments {rendered.LiveProgramSegments} ({rendered.LiveProgramRigidSegments} rigid) running {rendered.LiveProgramChains} chain(s), specialization {(rendered.LiveProgramSpecialization?.Describe() ?? "none")}"
+                $", segments {rendered.LiveProgramSegments} ({rendered.LiveProgramRigidSegments} rigid)"
             );
             var clamps = rendered.LiveProgramFieldScopeClamps;
 
@@ -432,7 +432,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering (the live program's words, instances, step scale, volumes, scoped clamps, segments, chains and specialization vocabulary), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering (the live program's words, instances, step scale, volumes, scoped clamps and segments), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"

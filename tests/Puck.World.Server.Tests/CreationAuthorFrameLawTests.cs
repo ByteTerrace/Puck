@@ -323,7 +323,7 @@ public sealed class CreationAuthorFrameLawTests {
             materialFor: _ => renderMaterial
         );
 
-        var renderEvaluator = new SdfFieldEvaluator(program: renderBuilder.Build(buildInstanceGrid: false));
+        var renderEvaluator = new SdfFieldEvaluator(program: renderBuilder.Build());
 
         Assert.True(condition: renderEvaluator.TryDistance(
             position: FixedPosition.FromLocal(local: authoredPoint),

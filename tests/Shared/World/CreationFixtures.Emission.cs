@@ -61,7 +61,7 @@ internal static partial class CreationFixtures {
             slotBase: 0
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     /// <summary>Emits the shapes through the animated pool as a prototype named <paramref name="name"/>.</summary>
     /// <param name="name">The prototype identifier.</param>

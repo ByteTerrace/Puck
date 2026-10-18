@@ -8,12 +8,6 @@ and the fixed-point coordinate-progress bound used for banded visibility work.
 
 It does not substitute for a rendered glyph pixel-conformance test.
 
-`SdfBakerLawTests` holds prototype bakes to their field, their tile-aware texture
-chains and exact one-material tiles. `Fixtures/bake-sampling.json` holds the
-BC7, BC5 and BC6H textures of one real bake with a probe texel per level;
-`BakeSamplingDeviceLawTests` in `tests/Puck.World.Tests` samples its probes on
-Vulkan, Direct3D 12 and WARP.
-
 ## Verification
 
 ```powershell

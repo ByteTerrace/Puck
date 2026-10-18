@@ -679,13 +679,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
-        // The triangle carries every attribute: a normal and a texture coordinate a vertex, and a palette entry.
+        // The triangle carries every attribute: a normal a vertex, and a palette entry.
         var triangle = new SdfMesh(
             indices: new uint[] { 0, 1, 2 },
             normals: new Vector3[] { Vector3.UnitY, Vector3.UnitY, Vector3.UnitY },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 0f, z: 1f), new(x: 1f, y: 0f, z: 0f) },
-            triangleMaterials: new uint[] { 2 },
-            uvs: new Vector2[] { new(x: 0.25f, y: 0.5f), new(x: 0.5f, y: 0.5f), new(x: 0.25f, y: 0.75f) }
+            triangleMaterials: new uint[] { 2 }
         );
         var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
         SdfMeshDraw[] draws = [
@@ -697,15 +696,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
-        // its normal matrix (the inverse transpose of its upper 3x3), its ten impostor words, zeros for a draw with none, and
-        // its frame slot, -1 for a mesh stored in world space. The arena starts past the reserved draw records, and each
+        // its normal matrix (the inverse transpose of its upper 3x3), and its frame slot, -1 for a mesh stored in world
+        // space. The arena starts past the reserved draw records, and each
         // mesh lies whole there in the order the list first names it: the quad's four vertices and six indices, then the
         // triangle's three vertices, its one triangle material and its three indices.
         var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRegion.DrawWords);
         var quadVertices = ((uint)arena);
-        var quadIndices = (quadVertices + 32u);
+        var quadIndices = (quadVertices + (4u * SdfMeshRegion.VertexWords));
         var triangleVertices = (quadIndices + 6u);
-        var triangleMaterials = (triangleVertices + 24u);
+        var triangleMaterials = (triangleVertices + (3u * SdfMeshRegion.VertexWords));
         var triangleIndices = (triangleMaterials + 1u);
         var words = ((int)(triangleIndices + 3u));
         var bytes = (((ulong)words) * sizeof(uint));
@@ -725,17 +724,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var normal = Matrix4x4.Transpose(matrix: inverse);
 
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: new uint[10]);
             expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
         }
-        // A vertex: its position, its normal and its texture coordinate, zeros for an attribute its mesh lacks.
+        // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
             for (var vertex = 0; (vertex < mesh.Positions.Length); vertex++) {
                 var position = mesh.Positions.Span[vertex];
                 var normal = (mesh.Normals.IsEmpty ? Vector3.Zero : mesh.Normals.Span[vertex]);
-                var uv = (mesh.Uvs.IsEmpty ? Vector2.Zero : mesh.Uvs.Span[vertex]);
 
-                expected.AddRange(collection: new[] { position.X, position.Y, position.Z, normal.X, normal.Y, normal.Z, uv.X, uv.Y }.Select(selector: BitConverter.SingleToUInt32Bits));
+                expected.AddRange(collection: new[] { position.X, position.Y, position.Z, normal.X, normal.Y, normal.Z }.Select(selector: BitConverter.SingleToUInt32Bits));
             }
         }
 
@@ -1023,7 +1020,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
-        private GpuPassPipeline m_impostorRaster = null!;
         private GpuPassPipeline m_shadowRaster = null!;
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
@@ -1055,7 +1051,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
-            m_impostorRaster.Dispose();
             m_shadowRaster.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
@@ -1082,7 +1077,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
-            m_impostorRaster.Dispose();
             m_shadowRaster.Dispose();
             Engine = Build();
         }
@@ -1149,10 +1143,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
-            m_impostorRaster = SdfTestPipelines.ImpostorRaster(
-                device: Gpu,
-                ledger: ledger
-            );
             m_shadowRaster = SdfTestPipelines.ShadowRaster(
                 device: Gpu,
                 ledger: ledger
@@ -1181,7 +1171,6 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
-                impostorRaster: m_impostorRaster,
                 shadowRaster: m_shadowRaster,
                 meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!

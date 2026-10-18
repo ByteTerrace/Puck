@@ -8376,7 +8376,7 @@ export type WorldPrototype = {
         inset?: number;
       } | null)[] | null;
       /**
-       * Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at an already-found hit, where its own material and its perturbation of the surface normal paint its footprint — a seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance instead of dotting out. Refused by name alongside Panel or Trims on the same shape.
+       * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
        */
       detail?: boolean | null;
       /**
@@ -8412,10 +8412,6 @@ export type WorldPrototype = {
        * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
        */
       exponent?: number | null;
-      /**
-       * Whether this shape casts soft shadows and contributes ambient occlusion (null = true). False excludes it from ONLY the soft-shadow and ambient-occlusion field walks — it still carves the silhouette, the contact field, and the collider like any ordinary shape, unlike Detail (which excludes from every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet, a groove) — see Secondary.
-       */
-      secondary?: boolean | null;
       /**
        * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
        */
@@ -8927,6 +8923,10 @@ export type WorldPrototype = {
           height: number;
         } | null;
       } | null;
+      /**
+       * How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the tip axis that points against the target's probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin's rest height then puts the whole sole on the surface.
+       */
+      align?: number | null;
     } | null)[] | null;
     /**
      * The bounded participating volumes (null = none), at most MaxVolumes — see VolumeDocument. Each rides the creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider.

@@ -25,7 +25,8 @@ let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
 let violetPodLeft = 14 // violet of the left back pod's plates, under its vent and grey plate
 let violetPodRight = 15 // violet of the right back pod's plates, under its vent and grey plate
 let violetChest = 16 // violet under the breastplate's #EED3A6 lower band
-let shinCream = 17 // #EED3A6 under the shins' violet trims
+let shinCream = 17 // #EED3A6, the back pods' cream bands
+let shinViolet = 18 // #9D66C6 greaves under their #EED3A6 arch band and side panel
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
@@ -278,7 +279,6 @@ template braidChain(chainIdx, baseId, positions, rotations) {
       position: positions[i]
       rotation: rotations[i]
       scale [0.014, 0.026, 0.016]
-      secondary: false
       smooth: 0
     }
   }
@@ -1445,8 +1445,6 @@ prototypes {
               metal: 0
             }
           }
-          // Each boot's violet rim, in the boot's frame: the band of its surface between 2.65 and 7.65 cm above the
-          // ground.
           paints [
             {
               parent: "boot-left"
@@ -1908,7 +1906,38 @@ prototypes {
               metal: 0
             }
           }
-          // Each shin's violet trims, in the shin's own frame: a ring round the arch, its ellipse projected front to
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.36
+          specular: 0.08
+          emissive: 0
+          coat: 0.28
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 31
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#D7C9B7"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          // Each greave's cream trims, in the shin's own frame: a ring round the arch, its ellipse projected front to
           // back, and a pentagonal panel on the outer side.
           paints [
             {
@@ -1920,7 +1949,7 @@ prototypes {
                 kind: "Ellipse"
               }
               stroke: 0.023
-              color: "#9D66C6"
+              color: "#EED3A6"
             }
             {
               parent: "shin-left"
@@ -1933,7 +1962,7 @@ prototypes {
                 vertices: shinPanelOutline
                 cornerRadius: 0.12
               }
-              color: "#9D66C6"
+              color: "#EED3A6"
             }
             {
               parent: "shin-right"
@@ -1944,7 +1973,7 @@ prototypes {
                 kind: "Ellipse"
               }
               stroke: 0.023
-              color: "#9D66C6"
+              color: "#EED3A6"
             }
             {
               parent: "shin-right"
@@ -1957,7 +1986,7 @@ prototypes {
                 vertices: shinPanelOutline
                 cornerRadius: 0.12
               }
-              color: "#9D66C6"
+              color: "#EED3A6"
             }
           ]
         }
@@ -2246,7 +2275,6 @@ prototypes {
           material: charcoal
           parent: "torso"
           exponent: 3
-          secondary: false
         }
       }
 
@@ -2286,7 +2314,6 @@ prototypes {
         material: charcoal
         parent: "torso"
         rounding: 0.00125
-        secondary: false
       }
 
       shape Superellipsoid "helmet" {
@@ -2448,7 +2475,6 @@ prototypes {
         material: leather
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "nostril1" {
@@ -2458,7 +2484,6 @@ prototypes {
         material: leather
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Prism "socket-left" {
@@ -2505,7 +2530,6 @@ prototypes {
         material: umber
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "pupil-left" {
@@ -2515,7 +2539,6 @@ prototypes {
         material: jet
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlight-left" {
@@ -2525,7 +2548,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlightSmall-left" {
@@ -2535,7 +2557,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "upperLid-left" {
@@ -2550,7 +2571,6 @@ prototypes {
           radiusStart: 0.004
           radiusEnd: 0.004
         }
-        secondary: false
       }
 
       shape Sweep "lowerLid-left" {
@@ -2565,7 +2585,6 @@ prototypes {
           radiusStart: 0.0018
           radiusEnd: 0.0018
         }
-        secondary: false
       }
 
       shape Sweep "lash-left" {
@@ -2580,7 +2599,6 @@ prototypes {
           radiusStart: 0.003
           radiusEnd: 0.003
         }
-        secondary: false
       }
 
       shape Sweep "brow-left" {
@@ -2595,7 +2613,6 @@ prototypes {
           radiusStart: 0.005
           radiusEnd: 0.005
         }
-        secondary: false
       }
 
       shape Cylinder "earMount-left" {
@@ -2701,7 +2718,6 @@ prototypes {
         material: umber
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "pupil-right" {
@@ -2711,7 +2727,6 @@ prototypes {
         material: jet
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlight-right" {
@@ -2721,7 +2736,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlightSmall-right" {
@@ -2731,7 +2745,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "upperLid-right" {
@@ -2746,7 +2759,6 @@ prototypes {
           radiusStart: 0.004
           radiusEnd: 0.004
         }
-        secondary: false
       }
 
       shape Sweep "lowerLid-right" {
@@ -2761,7 +2773,6 @@ prototypes {
           radiusStart: 0.0018
           radiusEnd: 0.0018
         }
-        secondary: false
       }
 
       shape Sweep "lash-right" {
@@ -2776,7 +2787,6 @@ prototypes {
           radiusStart: 0.003
           radiusEnd: 0.003
         }
-        secondary: false
       }
 
       shape Sweep "brow-right" {
@@ -2791,7 +2801,6 @@ prototypes {
           radiusStart: 0.005
           radiusEnd: 0.005
         }
-        secondary: false
       }
 
       shape Cylinder "earMount-right" {
@@ -3200,7 +3209,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-1" {
@@ -3215,7 +3223,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-2" {
@@ -3230,7 +3237,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-3" {
@@ -3245,7 +3251,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "thumb-left" {
@@ -3260,7 +3265,6 @@ prototypes {
           radiusStart: 0.019
           radiusEnd: 0.019
         }
-        secondary: false
       }
 
       shape Superellipsoid "bracerSocket-left" {
@@ -3410,8 +3414,8 @@ prototypes {
       shape Superellipsoid "shin-left" {
         id: 180
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
-        material: shinCream
+        scale [0.119, 0.36, 0.131]
+        material: shinViolet
         group: 18
         parent: "thigh-left"
         exponent: 3
@@ -3445,9 +3449,9 @@ prototypes {
 
       shape Box "shinEnds-left" {
         id: 181
-        position [0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: shinCream
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinViolet
         blend: "Intersection"
         group: 18
         parent: "shin-left"
@@ -3456,7 +3460,7 @@ prototypes {
       shape Superellipsoid "shinCavity-left" {
         id: 182
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 18
@@ -3528,26 +3532,27 @@ prototypes {
         rounding: 0.003
       }
 
-      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
-      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
+      // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
       shape Prism "boot-left" {
         id: 195
-        position [0.2, 0.1315, 0.085]
+        position [0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.235]
+        scale [0.2075, 0.2075, 0.2075]
         material: skin
         group: 21
         parent: "shin-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.1
           vertices [
-            [-1, -0.1979]
-            [-1, 0.4617]
-            [0.1489, 0.4617]
-            [0.7872, -0.0489]
-            [0.8723, -0.134]
-            [0.8723, -0.1979]
+            [-1, -0.4699]
+            [-1, 0.4458]
+            [-0.3735, 0.4699]
+            [0.3012, 0.2289]
+            [0.7831, -0.1325]
+            [1, -0.3494]
+            [0.9759, -0.4699]
           ]
         }
         swings [
@@ -3578,63 +3583,57 @@ prototypes {
         ]
       }
 
-      shape Prism "bootPlan-left" {
+      shape Superellipsoid "bootPlan-left" {
         id: 196
-        position [0.2, 0.1315, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.135, 0.235, 0.12]
+        position [0.2, 0.19, 0.0775]
+        scale [0.135, 0.25, 0.22]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.02
         group: 21
         parent: "boot-left"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 2.8
       }
 
       shape Prism "toe-left" {
         id: 199
-        position [0.2, 0.05, 0.085]
+        position [0.2, 0.0475, 0.065]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.255, 0.255, 0.255]
+        scale [0.265, 0.265, 0.265]
         material: violet
         group: 23
         parent: "boot-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.08
           vertices [
-            [-0.9804, -0.1647]
-            [-0.9804, 0.1373]
-            [0.451, 0.1765]
-            [0.8431, 0.1373]
-            [1, 0]
-            [0.9216, -0.1647]
+            [-1, -0.1792]
+            [-1, 0.1415]
+            [0.3208, 0.1792]
+            [0.8491, 0.0849]
+            [1, -0.0472]
+            [0.9245, -0.1792]
           ]
         }
       }
 
-      shape Prism "toePlan-left" {
+      shape Superellipsoid "toePlan-left" {
         id: 200
-        position [0.2, 0.05, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.14, 0.255, 0.08]
+        position [0.2, 0.05, 0.065]
+        scale [0.152, 0.2, 0.265]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.015
         group: 23
         parent: "boot-left"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3.2
       }
 
       shape Prism "sole-left" {
         id: 201
-        position [0.2, 0.006, 0.085]
+        position [0.2, 0.006, 0.05]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.105, 0.19, 0.004]
         material: charcoal
         parent: "boot-left"
         profile {
@@ -4369,7 +4368,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-1" {
@@ -4384,7 +4382,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-2" {
@@ -4399,7 +4396,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-3" {
@@ -4414,7 +4410,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "thumb-right" {
@@ -4429,7 +4424,6 @@ prototypes {
           radiusStart: 0.019
           radiusEnd: 0.019
         }
-        secondary: false
       }
 
       shape Superellipsoid "bracerSocket-right" {
@@ -4576,8 +4570,8 @@ prototypes {
       shape Superellipsoid "shin-right" {
         id: 248
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
-        material: shinCream
+        scale [0.119, 0.36, 0.131]
+        material: shinViolet
         group: 32
         parent: "thigh-right"
         exponent: 3
@@ -4611,9 +4605,9 @@ prototypes {
 
       shape Box "shinEnds-right" {
         id: 249
-        position [-0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: shinCream
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinViolet
         blend: "Intersection"
         group: 32
         parent: "shin-right"
@@ -4622,7 +4616,7 @@ prototypes {
       shape Superellipsoid "shinCavity-right" {
         id: 250
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 32
@@ -4694,26 +4688,27 @@ prototypes {
         rounding: 0.003
       }
 
-      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
-      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
+      // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
       shape Prism "boot-right" {
         id: 263
-        position [-0.2, 0.1315, 0.085]
+        position [-0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.235]
+        scale [0.2075, 0.2075, 0.2075]
         material: skin
         group: 35
         parent: "shin-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.1
           vertices [
-            [-1, -0.1979]
-            [-1, 0.4617]
-            [0.1489, 0.4617]
-            [0.7872, -0.0489]
-            [0.8723, -0.134]
-            [0.8723, -0.1979]
+            [-1, -0.4699]
+            [-1, 0.4458]
+            [-0.3735, 0.4699]
+            [0.3012, 0.2289]
+            [0.7831, -0.1325]
+            [1, -0.3494]
+            [0.9759, -0.4699]
           ]
         }
         swings [
@@ -4744,63 +4739,57 @@ prototypes {
         ]
       }
 
-      shape Prism "bootPlan-right" {
+      shape Superellipsoid "bootPlan-right" {
         id: 264
-        position [-0.2, 0.1315, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.135, 0.235, 0.12]
+        position [-0.2, 0.19, 0.0775]
+        scale [0.135, 0.25, 0.22]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.02
         group: 35
         parent: "boot-right"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 2.8
       }
 
       shape Prism "toe-right" {
         id: 267
-        position [-0.2, 0.05, 0.085]
+        position [-0.2, 0.0475, 0.065]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.255, 0.255, 0.255]
+        scale [0.265, 0.265, 0.265]
         material: violet
         group: 37
         parent: "boot-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.08
           vertices [
-            [-0.9804, -0.1647]
-            [-0.9804, 0.1373]
-            [0.451, 0.1765]
-            [0.8431, 0.1373]
-            [1, 0]
-            [0.9216, -0.1647]
+            [-1, -0.1792]
+            [-1, 0.1415]
+            [0.3208, 0.1792]
+            [0.8491, 0.0849]
+            [1, -0.0472]
+            [0.9245, -0.1792]
           ]
         }
       }
 
-      shape Prism "toePlan-right" {
+      shape Superellipsoid "toePlan-right" {
         id: 268
-        position [-0.2, 0.05, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.14, 0.255, 0.08]
+        position [-0.2, 0.05, 0.065]
+        scale [0.152, 0.2, 0.265]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.015
         group: 37
         parent: "boot-right"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3.2
       }
 
       shape Prism "sole-right" {
         id: 269
-        position [-0.2, 0.006, 0.085]
+        position [-0.2, 0.006, 0.05]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.105, 0.19, 0.004]
         material: charcoal
         parent: "boot-right"
         profile {
@@ -5289,7 +5278,6 @@ prototypes {
         material: rust
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "blinkCrease-left" {
@@ -5304,7 +5292,6 @@ prototypes {
           radiusStart: 0.0017
           radiusEnd: 0.0017
         }
-        secondary: false
       }
 
       shape Superellipsoid "blinkCover-right" {
@@ -5314,7 +5301,6 @@ prototypes {
         material: rust
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "blinkCrease-right" {
@@ -5329,7 +5315,6 @@ prototypes {
           radiusStart: 0.0017
           radiusEnd: 0.0017
         }
-        secondary: false
       }
       drivers [
         // Her pace in metres per second, the X every gait curve reads.
@@ -5570,6 +5555,9 @@ prototypes {
             "shin-left"
           ]
           tip: "boot-left"
+          // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
+          // centre's rest height is the standoff that puts the whole sole on the surface.
+          align: 1
           "when" [
             "Grounded"
           ]
@@ -5577,7 +5565,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1315
+            standoff: 0.1875
           }
           plant {
             driver: "stride"
@@ -5599,6 +5587,7 @@ prototypes {
             "shin-right"
           ]
           tip: "boot-right"
+          align: 1
           "when" [
             "Grounded"
           ]
@@ -5606,7 +5595,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1315
+            standoff: 0.1875
           }
           plant {
             driver: "stride"

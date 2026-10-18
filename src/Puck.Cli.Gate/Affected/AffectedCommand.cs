@@ -19,8 +19,8 @@ public static class AffectedCommand {
     /// <summary>The game's Release catalog of shipped worlds, repository-relative.</summary>
     public const string ShippedCatalog = "src/Puck.World/bin/Release/net11.0/Assets/worlds";
 
-    // The projects whose code decides the bytes the tree compile writes: the world composer, the SDF baker, the shader
-    // packager and the texture codecs. Everything they reference decides them too.
+    // The projects whose code decides the bytes the tree compile writes: the world composer, the field model, the
+    // shader packager and the asset codecs. Everything they reference decides them too.
     private static readonly string[] CatalogSeeds = ["Puck.World.Transpiler", "Puck.SignedDistance", "Puck.Shaders", "Puck.Assets"];
 
     private const string Verb = "affected";

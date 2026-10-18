@@ -15,10 +15,6 @@ public interface ICompiledWorldChunk {
     /// <summary>Gets the codes of the earlier chunks whose products this derivation reads; when a boot derives one of
     /// them afresh, it derives this chunk afresh too rather than keeping it.</summary>
     IReadOnlyList<ChunkCode> DependsOn { get; }
-    /// <summary>Gets whether a boot derives this chunk when no compiled world holds it. A derivation too heavy for a
-    /// boot's critical path answers <see langword="false"/>: only <see cref="CompiledWorld.TryCompile"/> derives it, and
-    /// a boot that finds none leaves the chunk out, for background work to cover.</summary>
-    bool DerivesOnBoot { get; }
     /// <summary>Gets the version of the derivation.</summary>
     uint Version { get; }
 
@@ -202,8 +198,6 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
     /// <inheritdoc/>
     public IReadOnlyList<ChunkCode> DependsOn => [];
     /// <inheritdoc/>
-    public bool DerivesOnBoot => true;
-    /// <inheritdoc/>
     public uint Version => 2;
 
     /// <inheritdoc/>
@@ -284,8 +278,6 @@ public sealed class AssetChunk : ICompiledWorldChunk {
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "ASST");
     /// <inheritdoc/>
     public IReadOnlyList<ChunkCode> DependsOn => [];
-    /// <inheritdoc/>
-    public bool DerivesOnBoot => true;
     /// <inheritdoc/>
     public uint Version => 1;
 

@@ -47,10 +47,6 @@ jobs:
         uses: ./.github/actions/shader-cache
         with:
           mode: restore
-      - name: Restore the creation bake cache
-        uses: ./.github/actions/bake-cache
-        with:
-          mode: restore
       - name: Restore locked dependencies
         run: dotnet restore Puck.slnx --locked-mode
       # The candidate CLI is this checkout's own, packed by setup-puck, and is also the formatter below.

@@ -3,8 +3,8 @@
 // extent in the field-of-view slot, an aspect of one, and its depth interval as the near and far distances. The
 // projection is orthographic along the light with a finite reversed-Z depth, linear from one at the near plane to zero at
 // the far plane, clip = (x / h, y / h, (f - w) / (f - n), 1) for a point at plane-space right x, up y and forward distance
-// w, so the cascade's depth holds each caster's light-space depth exactly as sdfMeshShadowDepth decodes it. A cascade
-// draws no impostor card, and hands the fragment stage nothing but the position.
+// w, so the cascade's depth holds each caster's light-space depth exactly as sdfMeshShadowDepth decodes it. It hands the
+// fragment stage nothing but the position.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"

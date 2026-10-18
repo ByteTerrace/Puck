@@ -18,7 +18,7 @@ public sealed partial class SdfProgram {
     public const int ProgramMaterialOffsetLane = 3;
     /// <summary>An instruction header's lane holding its <see cref="SdfOp"/> (<c>SDF_INSTRUCTION_OP_LANE</c>).</summary>
     public const int InstructionOpLane = 0;
-    /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Shape"/>, with a ShapeBlend's flags
+    /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Shape"/>
     /// (<c>SDF_INSTRUCTION_SHAPE_LANE</c>).</summary>
     public const int InstructionShapeLane = 1;
     /// <summary>An instruction header's lane holding <see cref="SdfInstruction.Blend"/>
@@ -49,37 +49,9 @@ public sealed partial class SdfProgram {
     /// <summary>The instance directory header's lane holding the part-program table's vector offset, zero when none
     /// qualify (<c>SDF_INSTANCE_PART_PROGRAMS_LANE</c>).</summary>
     public const int InstancePartProgramsLane = 1;
-    /// <summary>The instance directory header's lane holding the program's flags, <see cref="NoDetailShapesFlag"/>
-    /// (<c>SDF_INSTANCE_FLAGS_LANE</c>).</summary>
-    public const int InstanceFlagsLane = 2;
     /// <summary>The world-segment list header's lane holding the list's length
     /// (<c>SDF_WORLD_SEGMENT_COUNT_LANE</c>).</summary>
     public const int WorldSegmentCountLane = 0;
-    /// <summary>The world-segment list header's lane holding the chain table's absolute vector offset
-    /// (<c>SDF_CHAIN_TABLE_OFFSET</c>). Every lane of the directory headers before it is taken, so the table hangs off
-    /// this free one.</summary>
-    public const int ChainTableLane = 1;
-    /// <summary>The chain table header's lane holding the program's chain count, every segment's chains together
-    /// (<c>SDF_CHAIN_COUNT</c>).</summary>
-    public const int ChainCountLane = 0;
-    /// <summary>The chain table header's lane holding the absolute vector offset of its identity list
-    /// (<c>SDF_CHAIN_IDENTITIES_OFFSET</c>).</summary>
-    public const int ChainIdentitiesLane = 1;
-    /// <summary>The chain table's segment entries per vector, after its <see cref="DirectoryHeaderVectors"/> header: segment
-    /// <c>s</c>'s entry is vector <c>s / ChainSegmentsPerVector</c> of them, at word
-    /// <c>(s % ChainSegmentsPerVector) * ChainSegmentWords</c> (<c>SDF_CHAIN_SEGMENTS_PER_VECTOR</c>).</summary>
-    public const int ChainSegmentsPerVector = 2;
-    /// <summary>The words of one segment's chain-table entry: its first chain, then its chain count.</summary>
-    public const int ChainSegmentWords = 2;
-    /// <summary>The word of a segment's chain-table entry holding the index of its first chain in the identity list
-    /// (<c>SDF_CHAIN_SEGMENT_FIRST</c>).</summary>
-    public const int ChainSegmentFirstWord = 0;
-    /// <summary>The word of a segment's chain-table entry holding its chain count (<c>SDF_CHAIN_SEGMENT_COUNT</c>).</summary>
-    public const int ChainSegmentCountWord = 1;
-    /// <summary>The chain identities (<see cref="SdfChain.Identity"/>) per vector of the identity list: chain <c>c</c> is
-    /// word <c>c % ChainIdentitiesPerVector</c> of vector <c>c / ChainIdentitiesPerVector</c>
-    /// (<c>SDF_CHAIN_IDENTITIES_PER_VECTOR</c>).</summary>
-    public const int ChainIdentitiesPerVector = 4;
     /// <summary>The bound mode of a record that carries no bound: the interpreter evaluates it in full
     /// (<c>SDF_BOUND_NONE</c>).</summary>
     public const uint BoundModeNone = 0;
@@ -104,9 +76,6 @@ public sealed partial class SdfProgram {
     /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
     /// (<c>SDF_PAINT_WINNING_FRAME</c>).</summary>
     public const uint PaintWinningFrame = uint.MaxValue;
-    /// <summary>Bit 0 of the instance directory header's <c>.z</c> word: no instruction carries
-    /// <see cref="SdfInstruction.Detail"/>, so the kernels skip detail admission (<c>SDF_NO_DETAIL_SHAPES_FLAG</c>).</summary>
-    public const uint NoDetailShapesFlag = 1u;
     /// <summary>The second-highest bit of a rigid leaf's shape index: the leaf rides a fold run, described by the slot
     /// that follows it (<c>SDF_RIGID_LEAF_FOLDED</c>).</summary>
     public const uint RigidLeafFoldedFlag = 0x40000000u;
@@ -122,34 +91,9 @@ public sealed partial class SdfProgram {
     /// <summary>The low byte of a segment's bound-mode word, which holds the bound mode beside
     /// <see cref="SegmentRigidPlanFlag"/> (<c>SDF_SEGMENT_BOUND_MASK</c>).</summary>
     public const uint SegmentBoundModeMask = 0xFFu;
-    /// <summary>The bits of an instance record's segmentEnd lane that hold the segment range's end; the two high bits are
-    /// <see cref="ShadowTransparentInstanceFlag"/> and <see cref="CameraHiddenInstanceFlag"/>
-    /// (<c>SDF_INSTANCE_SEGMENT_END_MASK</c>).</summary>
-    public const uint SegmentEndMask = 0x3FFFFFFFu;
-    /// <summary>The per-instance camera-hidden flag, OR'd into the second-highest bit of the instance meta's segmentEnd
-    /// lane (i1.w) for an instance declared <see cref="SdfInstanceRange.CameraHidden"/>: the tile cull leaves it out of
-    /// every camera mask, and mapCore masks it off with <see cref="SegmentEndMask"/>. Segment-directory indices are far
-    /// below 2^30, so the bit is free (<c>SDF_INSTANCE_CAMERA_HIDDEN_BIT</c>).</summary>
-    public const uint CameraHiddenInstanceFlag = 0x40000000u;
     /// <summary>The high bit of a segment's bound mode: the segment owns a host-compiled rigid-leaf plan. The low byte
     /// remains the bound mode (<c>SDF_SEGMENT_RIGID_PLAN</c>).</summary>
     public const uint SegmentRigidPlanFlag = 0x80000000u;
-    /// <summary>The per-instance shadow-transparent flag, OR'd into the high bit of the instance meta's segmentEnd lane
-    /// (i1.w) for an instance whose compose only removes material (a pure Subtraction-family carve). The soft-shadow
-    /// gather reads it under the <c>sdf.shadow-proxy</c> lever to omit the instance from the shadow occluder set
-    /// (marching the pre-carve union hull); mapCore masks it off with <see cref="SegmentEndMask"/>, so segmentEnd
-    /// stays the true directory range and every rendered pixel is byte-identical. Segment-directory indices are far below
-    /// 2^31, so this high bit is free (<c>SDF_INSTANCE_SHADOW_TRANSPARENT_BIT</c>).</summary>
-    public const uint ShadowTransparentInstanceFlag = 0x80000000u;
-    /// <summary>The high bit of a ShapeBlend instruction's shape lane: <see cref="SdfInstruction.Detail"/>. Shape-type
-    /// ids are far below 2^31, so the bit is free (<c>SDF_SHAPE_DETAIL_FLAG</c>).</summary>
-    public const uint ShapeDetailFlag = 0x80000000u;
-    /// <summary>The next-highest bit of a ShapeBlend instruction's shape lane: <see cref="SdfInstruction.Secondary"/> is
-    /// <see langword="false"/> (<c>SDF_SHAPE_NO_SECONDARY_FLAG</c>).</summary>
-    public const uint ShapeNoSecondaryFlag = 0x40000000u;
-    /// <summary>The bits of a ShapeBlend instruction's shape lane below <see cref="ShapeDetailFlag"/> and
-    /// <see cref="ShapeNoSecondaryFlag"/>: the <see cref="SdfShapeType"/> id (<c>SDF_SHAPE_TYPE_MASK</c>).</summary>
-    public const uint ShapeTypeMask = ~(ShapeDetailFlag | ShapeNoSecondaryFlag);
     /// <summary>The bits a dynamic-transform slot occupies. A <see cref="SdfOp.TransformDynamic"/> instruction carries
     /// its slot in a float data lane, which holds every integer below 2^24 exactly, so a wider slot would round there;
     /// the kernels' transform row index, three times the slot plus two, stays inside 32 bits.</summary>
@@ -192,17 +136,4 @@ public sealed partial class SdfProgram {
     /// <returns>The slot: <see cref="NoDynamicTransformSlot"/> for <see cref="StaticTransformSlotWord"/>, or the dynamic
     /// slot the word packs.</returns>
     public static int UnpackTransformSlot(uint word) => checked((((int)word) + NoDynamicTransformSlot));
-
-    // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes
-    // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the
-    // pre-carve union hull), and camera-hidden when declared so.
-    private uint InstanceFlagsOf(SdfInstanceRange instance) =>
-        (IsShadowTransparentInstance(
-            first: instance.First,
-            end: instance.End
-        )
-            ? ShadowTransparentInstanceFlag
-            : 0u) | (instance.CameraHidden
-            ? CameraHiddenInstanceFlag
-            : 0u);
 }

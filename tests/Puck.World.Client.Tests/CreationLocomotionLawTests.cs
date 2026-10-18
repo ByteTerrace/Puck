@@ -70,7 +70,7 @@ public sealed class CreationLocomotionLawTests {
             round: 0f
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static ShapeDocument Bone(int id, string name, float side, float y, float z, string? parent, Vector3? pivot) => new(
         Id: id,
@@ -88,7 +88,8 @@ public sealed class CreationLocomotionLawTests {
             ? [new ShapeSwingDocument(Amplitude: 0f, Axis: Vector3.UnitX, Driver: "stride", Pivot: hinge, Wave: CreationWave.Constant)]
             : null)
     );
-    private static CreationEffectorDocument Foot(string name, string side, float from, float to) => new(
+    private static CreationEffectorDocument Foot(string name, string side, float from, float to, float? align = null) => new(
+        Align: align,
         Chain: [$"thigh-{side}", $"shin-{side}"],
         Name: name,
         Plant: new CreationPlantDocument(
@@ -106,15 +107,18 @@ public sealed class CreationLocomotionLawTests {
         Tip: $"boot-{side}",
         When: [CreationDriverDocument.WhenAlways]
     );
-    // Two two-bone legs 0.4 apart, each foot planted on the stride driver with a resting replant.
-    private static CreationDocument Legs() {
+    // Two two-bone legs 0.4 apart, each foot planted on the stride driver with a resting replant; `toe` is a constant
+    // stride swing on each boot, radians, and `align` each foot's align.
+    private static CreationDocument Legs(float? align = null, float toe = 0f) {
         var shapes = new List<ShapeDocument>();
         var id = 0;
 
         foreach (var (side, x) in new[] { ("left", 0.2f), ("right", -0.2f) }) {
             shapes.Add(item: Bone(id: id++, name: $"thigh-{side}", parent: null, pivot: new Vector3(x: x, y: 0.5f, z: 0f), side: x, y: 0.37f, z: 0.03f));
             shapes.Add(item: Bone(id: id++, name: $"shin-{side}", parent: $"thigh-{side}", pivot: new Vector3(x: x, y: 0.24f, z: 0.06f), side: x, y: 0.11f, z: 0.04f));
-            shapes.Add(item: Bone(id: id++, name: $"boot-{side}", parent: $"shin-{side}", pivot: null, side: x, y: 0.05f, z: 0.02f));
+            shapes.Add(item: (Bone(id: id++, name: $"boot-{side}", parent: $"shin-{side}", pivot: null, side: x, y: 0.05f, z: 0.02f) with {
+                Swings = [new ShapeSwingDocument(Amplitude: toe, Axis: Vector3.UnitX, Driver: "stride", Pivot: new Vector3(x: x, y: 0.05f, z: 0.02f), Wave: CreationWave.Constant)],
+            }));
         }
 
         return new CreationDocument(
@@ -130,13 +134,13 @@ public sealed class CreationLocomotionLawTests {
                 When: [CreationDriverDocument.TokenMoving]
             )],
             Effectors: [
-                Foot(name: "foot-left", side: "left", from: 0f, to: 3.14f),
-                Foot(name: "foot-right", side: "right", from: 3.14f, to: 6.28f),
+                Foot(align: align, name: "foot-left", side: "left", from: 0f, to: 3.14f),
+                Foot(align: align, name: "foot-right", side: "right", from: 3.14f, to: 6.28f),
             ]
         );
     }
-    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage() {
-        var creation = CreationFixtures.Prototype(document: Legs(), id: "rig");
+    private static (WorldClient Client, WorldStampPool Pool, DynamicTransform[] Transforms) Stage(float? align = null, float toe = 0f) {
+        var creation = CreationFixtures.Prototype(document: Legs(align: align, toe: toe), id: "rig");
         var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
             CreationsRaw = [creation],
             LookRowsRaw = [new WorldLook(
@@ -340,7 +344,7 @@ public sealed class CreationLocomotionLawTests {
         var integrating = (Legs() with { Drivers = [Driver(dynamics: "turn", signal: CreationDriverDocument.SignalPlanarTravel) with { Name = "stride" }] });
         var empty = (Legs() with { Drivers = [Driver(dynamics: " ", signal: CreationDriverDocument.SignalTurnRate) with { Name = "stride" }] });
         var replant = (Legs() with {
-            Effectors = [Foot(name: "foot-left", side: "left", from: 0f, to: 3f) with {
+            Effectors = [Foot(align: 1.5f, name: "foot-left", side: "left", from: 0f, to: 3f) with {
                 Plant = new CreationPlantDocument(
                     Driver: "stride",
                     Window: new Vector2(x: 0f, y: 3f),
@@ -354,6 +358,8 @@ public sealed class CreationLocomotionLawTests {
         Assert.Contains(expectedSubstring: "replant.distance", actualString: Refusal(document: replant));
         Assert.Contains(expectedSubstring: "replant.seconds", actualString: Refusal(document: replant));
         Assert.Contains(expectedSubstring: "replant.height", actualString: Refusal(document: replant));
+        Assert.Contains(expectedSubstring: "effectors[0].align: align 1.5 is outside [0, 1].", actualString: Refusal(document: replant));
+        Assert.Equal(expected: string.Empty, actual: Refusal(document: Legs(align: 1f)));
         Assert.Equal(expected: string.Empty, actual: Refusal(document: Legs()));
 
         var followed = (Legs() with {
@@ -435,6 +441,51 @@ public sealed class CreationLocomotionLawTests {
         }
 
         Assert.All(collection: Rig(pool: pool).Effectors, action: effector => Assert.False(condition: effector.Stepping));
+    }
+    /// <summary>A planted boot whose chain stretches to reach a target off its rest offset stays level with the floor
+    /// when its foot aligns, on the same spot as the unaligned control, which tilts with its shin; once a walk releases
+    /// the foot to its swing, the aligned boot carries its own swing exactly as the control does.</summary>
+    [Fact]
+    public void AnAlignedPlantedTipStaysLevelAndItsSwingIsUntouched() {
+        const int Boot = (1 + 2);
+        const float Toe = 0.3f;
+        var (alignedClient, aligned, alignedTransforms) = Stage(align: 1f, toe: Toe);
+        var (plainClient, plain, plainTransforms) = Stage(toe: Toe);
+        var position = Vector3.Zero;
+        var tick = 0UL;
+
+        static Vector3 Up(DynamicTransform[] transforms) => Vector3.Transform(rotation: transforms[Boot].Orientation, value: Vector3.UnitY);
+        void Step() {
+            Advance(client: alignedClient, pool: aligned, position: position, tick: tick, transforms: alignedTransforms, yaw: 0f);
+            Advance(client: plainClient, pool: plain, position: position, tick: tick, transforms: plainTransforms, yaw: 0f);
+            tick++;
+        }
+
+        for (var frame = 0; (frame < 90); frame++) {
+            Step();
+        }
+
+        var standing = Rig(pool: aligned).Effectors[0];
+
+        Assert.Equal(expected: "yes", actual: standing.Contact);
+        Assert.Equal(expected: 1f, actual: standing.Align);
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: standing.Normal) < 1e-4f), userMessage: $"normal {standing.Normal}");
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: alignedTransforms)) < 1e-4f), userMessage: $"aligned up {Up(transforms: alignedTransforms)}");
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: plainTransforms)) > 0.05f), userMessage: $"control up {Up(transforms: plainTransforms)}");
+        Assert.True(
+            condition: (Vector3.Distance(value1: alignedTransforms[Boot].Position, value2: plainTransforms[Boot].Position) < 1e-4f),
+            userMessage: $"aligned {alignedTransforms[Boot].Position}, control {plainTransforms[Boot].Position}"
+        );
+        Assert.Null(@object: Rig(pool: plain).Effectors[0].Align);
+
+        for (var frame = 0; ((Rig(pool: aligned).Effectors[0] is { Planted: true } or { Weight: >= 1e-3f })); frame++) {
+            Assert.True(condition: (frame < 600), userMessage: "the walk releases the left foot to its swing");
+            position += new Vector3(x: 0f, y: 0f, z: -(0.2f * Frame));
+            Step();
+        }
+
+        Assert.True(condition: (Vector3.Distance(value1: Up(transforms: plainTransforms), value2: Up(transforms: alignedTransforms)) < 1e-3f), userMessage: $"aligned up {Up(transforms: alignedTransforms)}, control {Up(transforms: plainTransforms)}");
+        Assert.True(condition: (Vector3.Distance(value1: Vector3.UnitY, value2: Up(transforms: plainTransforms)) > (Toe / 2f)), userMessage: $"the swing tilts the control {Up(transforms: plainTransforms)}");
     }
     /// <summary>A resting foot over no surface holds no latch until one resolves.</summary>
     [Fact]

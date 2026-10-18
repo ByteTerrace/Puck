@@ -5,8 +5,7 @@ and "can I see that" through one query interface. Puck supplies two
 implementations with different confidence levels: the deterministic evaluator
 for exact simulation and the bounded path for conservative answers. The
 determinism contract separates those results from presentation checks, and
-gravity remains a one-line field derivation owned by the caller. The
-[prototype baker](bricks-and-baking.md#prototype-bakes) reads the same evaluator.
+gravity remains a one-line field derivation owned by the caller.
 
 ## Why a world needs a query interface
 

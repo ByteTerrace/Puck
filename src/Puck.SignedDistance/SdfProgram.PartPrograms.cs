@@ -7,11 +7,11 @@ public sealed partial class SdfProgram {
     /// operand of another instance's subtraction, intersection or modifier. Internal scoped CSG is allowed.</summary>
     public bool InstancesComposable { get; }
     // Header .x packs the count in bits 0..30 and whole-root tracing admission in bit 31.
-    // KEEP IN SYNC with sdfTracePrimary in sdf-primary.hlsli.
+    // KEEP IN SYNC with sdfCanTracePartsIndependently in field/sdf-parts.hlsli.
     private const uint IndependentPartTracingFlag = 0x80000000u;
 
-    /// <summary>The part entry's leaf-count bits, below its distance gain (<see cref="PartDistanceGainShift"/>), its
-    /// bounded-secondary flag (<see cref="PartBoundedSecondaryFlag"/>, bit 30) and its dynamic flag (bit 31).</summary>
+    /// <summary>The part entry's leaf-count bits, below its distance gain (<see cref="PartDistanceGainShift"/>) and its
+    /// dynamic flag (bit 31).</summary>
     public const uint PartLeafCountMask = 0xffffu;
 
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
@@ -24,7 +24,7 @@ public sealed partial class SdfProgram {
     // A part is one complete hard-union field scope. Its direct leaf program is shared by geometry identity;
     // poses/materials stay in a separate binding run per placement. Original instructions remain the CPU/dual
     // reference and supply canonical primitive payloads, including the packed polygon profile pointer.
-    // KEEP IN SYNC with sdfComposePartProgram and the instance-header .y pointer in field/sdf-map.hlsli.
+    // KEEP IN SYNC with sdfComposePartProgram in field/sdf-parts.hlsli and the instance-header .y pointer mapCore reads.
     private PartProgramPlan CompilePartPrograms() {
         var assets = new List<PartLeafPlan[]>();
         var instances = new PartInstancePlan?[m_instances.Length];
@@ -143,12 +143,10 @@ public sealed partial class SdfProgram {
             if (((SdfShapeType)shape.Shape) == SdfShapeType.Sweep) {
                 return false;
             }
+            // The authored Detail flag stays part of the shape's identity, in a bit no shape-type id reaches.
             signature.Add(item: shape.Shape | (shape.Detail
-                ? ShapeDetailFlag
-                : 0u)
-                | (shape.Secondary
-                ? 0u
-                : ShapeNoSecondaryFlag));
+                ? 0x80000000u
+                : 0u));
             signature.Add(item: shape.Blend);
             var data0 = shape.Data0;
 
@@ -281,12 +279,10 @@ public sealed partial class SdfProgram {
 
         for (var index = 0; (index < plan.Instances.Length); index++) {
             var entry = (((offset + 1) + index) * WordsPerVector);
-            // mapCore's whole-instance skip (sdfInstanceCannotWin) and the group-mask word summary reject an instance
-            // against its packed bound at this gain, a compiled part always and a generic one under the root-union
-            // certificate; the shadow and ambient walks read a bounded-secondary instance at a unit gain, its field floored
-            // at the gap. A generic entry's zero leaf count keeps it on the generic walk.
-            var gainBits = (EncodePartDistanceGain(gain: InstanceDistanceGain(index: index)) << PartDistanceGainShift)
-                | (InstanceBoundsSecondaryField(index: index) ? PartBoundedSecondaryFlag : 0u);
+            // mapCore's whole-instance skip (sdfInstanceCannotWin) rejects an instance against its packed bound at this
+            // gain, a compiled part always and a generic one under the root-union certificate. A generic entry's zero
+            // leaf count keeps it on the generic walk.
+            var gainBits = (EncodePartDistanceGain(gain: InstanceDistanceGain(index: index)) << PartDistanceGainShift);
 
             m_words[(entry + 2)] = gainBits;
 

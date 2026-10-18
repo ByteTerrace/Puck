@@ -770,9 +770,7 @@ compilations, neighbour resolutions, curve derivations, shape-program builds
 and asset loads, beside the `.puck` compiles and compile-cache answers
 `Puck.World.Transpiler` counts, and the compiled-world hits and chunk
 derivations a boot's [compiled world](../../docs/architecture/worlds.md#compiled-worlds)
-(`CompiledWorld`, `CompiledWorldCache`, `CompiledWorldChunks`) counts; the
-`BAKE` chunk (`WorldBakeChunk`) fills the one creation-bake cache,
-`WorldBakeStore` ([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
+(`CompiledWorld`, `CompiledWorldCache`, `CompiledWorldChunks`) counts. The
 compile-cache and compiled-world counts depend on what the per-user cache and
 the state root already hold, so they are pacing-class; the rest are
 deterministic. The loaders are static, so they count into the

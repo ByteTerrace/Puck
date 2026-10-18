@@ -107,7 +107,7 @@ public sealed class CreationEffectorLawTests {
             round: 0f
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static WorldClient Client(WorldDefinition definition) {
         var client = ClientFixtures.Client(definition: definition);
@@ -157,7 +157,7 @@ public sealed class CreationEffectorLawTests {
             slotBase: 0
         );
 
-        return builder.Build(buildInstanceGrid: false).Words.ToArray();
+        return builder.Build().Words.ToArray();
     }
     // The one two-bone leg every pipeline law drives: a hip-knee-boot chain whose boot probes for whatever is below
     // the body within half a metre and stands 0.03 off it.
@@ -423,11 +423,17 @@ public sealed class CreationEffectorLawTests {
                 ),
                 reach: 1f,
                 rootRotation: Quaternion.Identity,
+                normal: out var normal,
                 standoff: 0.03f,
                 target: out var target,
                 towards: -Vector3.UnitY
             ),
             userMessage: "the probe missed a box directly below it"
+        );
+        AssertNear(
+            actual: normal,
+            expected: Vector3.UnitY,
+            what: "the probe did not report the box's top-face normal"
         );
         AssertNear(
             actual: target,
@@ -454,6 +460,7 @@ public sealed class CreationEffectorLawTests {
                     angle: MathF.PI,
                     axis: Vector3.UnitZ
                 ),
+                normal: out _,
                 standoff: 0.03f,
                 target: out _,
                 towards: -Vector3.UnitY
@@ -471,6 +478,7 @@ public sealed class CreationEffectorLawTests {
                 ),
                 reach: 0.1f,
                 rootRotation: Quaternion.Identity,
+                normal: out _,
                 standoff: 0.03f,
                 target: out _,
                 towards: -Vector3.UnitY

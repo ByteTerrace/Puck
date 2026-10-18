@@ -7,7 +7,7 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>
 /// Laws over <see cref="SdfSampledLattice"/>'s refinement: a disc thinner than a lattice cell, which the lattice's own
 /// samples miss in places, refines and contours as one closed two-manifold, with no crack where the contour's resolution
-/// changes, and its mesh lies within half a lattice cell of the field, as a prototype bake's does.
+/// changes, and its mesh lies within half a lattice cell of the field.
 /// </summary>
 public sealed class SdfSampledLatticeLawTests {
     private const float Cell = 0.015f;

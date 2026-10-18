@@ -65,7 +65,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
-    /// <param name="detail">Whether the emitted shape instruction is shading-only (<see cref="SdfInstruction.Detail"/>).</param>
+    /// <param name="detail">Whether the emitted shape instruction is a detail shape (<see cref="SdfInstruction.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="a"/>/<paramref name="b"/>/<paramref name="c"/>
     /// is not finite; <paramref name="radiusStart"/>/<paramref name="radiusEnd"/> is not finite and strictly
     /// positive; <paramref name="bulge"/>/<paramref name="twist"/> is not finite; <paramref name="strandOffset"/> is

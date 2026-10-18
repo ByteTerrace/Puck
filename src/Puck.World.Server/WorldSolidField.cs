@@ -492,7 +492,7 @@ public sealed class WorldSolidField : IContactField {
             );
         }
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         SdfFieldEvaluator evaluator;
 
         WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);

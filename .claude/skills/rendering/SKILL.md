@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Maps Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, prototype bakes and texture codecs, Puck.Shaders packages, pipelines and the frame-graph runtime, and how world render data reaches SdfFrame. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, the baked-mesh frame or hot reload; a bake; GPU cost, capacity or world.budget; cross-backend parity or captures. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage."
+description: "Maps Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, Puck.Shaders packages, pipelines and the frame-graph runtime, and how world render data reaches SdfFrame. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, the baked-mesh frame or hot reload; a bake; GPU cost, capacity or world.budget; cross-backend parity or captures. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage."
 ---
 
 # Rendering
@@ -21,7 +21,7 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 |---|---|---|
 | Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`, `SdfOpRoles`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, its `Bounds`, `Cull` and `Certificates` partials, `BakedWorldQuery`) | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
-| Prototype bakes | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakedTexture`); codecs in `src/Puck.Assets/Textures`; `CreationBaker` in `src/Puck.World.Authoring`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes) |
+| Mesh bake | `src/Puck.SdfVm` (`SdfMeshPathBake`, `SdfMeshLibrary`, `SdfMeshRegionArena`); `src/Puck.SignedDistance/Baking` (`SdfSampledLattice`, `SdfDualContouring`) | [the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch and the stage modules under `passes/` | [kernels](references/kernels.md) |
 | Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
@@ -107,9 +107,8 @@ if it does, ship it as a `SdfProgramBuilder` method emitting existing
 instructions. A real new instruction touches every partner in one change:
 
 1. **C# model.** The enum, `SdfProgramBuilder` (its `RequireDefined` maximum),
-   `SdfProgram` validation and packing, the Lipschitz analysis, its rows in
-   `SdfOpRoles` (`Of`, `CodeLanesOf`), and the part-program key for a new
-   parameter.
+   `SdfProgram` validation and packing, the Lipschitz analysis, its row in
+   `SdfOpRoles.Of`, and the part-program key for a new parameter.
 2. **Cull margins.** `MaxSmoothBlendRadius` (blend halo), `MaxScopedFieldReach`
    or `HasUnmaskableInfluence`.
 3. **Generated declarations.** `isa/sdf-isa.hlsli` is generated from the C#
@@ -168,19 +167,6 @@ drifted.
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.
 
-## Prototype bakes
-
-- **One evaluator.** `SdfBaker` reads the field only through `SdfFieldEvaluator`.
-- **Portable bytes.** One build's bake pack stands in for every device, so a
-  bake's bytes must not depend on the machine: scalar IEEE arithmetic in a
-  written order, no transcendental function (`Math.Pow` included), no
-  `Vector3` math (its multiply-add may fuse), sRGB through
-  `ImageSourceConversion.LinearToSrgb8`/`Srgb8ToLinear`, mip filters and block
-  encoders in integer or scalar double arithmetic.
-- **Encoder bytes are pinned** by `TextureCodecLawTests` and the bake fixture
-  `BakeSamplingDeviceLawTests` samples; an encoder change that moves bytes
-  updates them in the same change.
-
 ## The baked-mesh path
 
 Every view renders a residency's program from meshes the program is baked into,
@@ -189,9 +175,8 @@ with no field walk in the frame;
 owns the explanation.
 
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
-  the prototype baker's `SdfDualContouring` over `ISdfContourLattice`; never
-  write a second mesher. The cubic `SdfBakeGrid` keeps its bytes
-  (`SdfBakerLawTests`). A final lattice refines the cells its samples cannot
+  `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
+  A final lattice refines the cells its samples cannot
   resolve (`SdfSampledLattice.Refine`: sheets or gaps thinner than a cell,
   outside corners of different materials, two patches in one cell) and contours
   them at the fine spacing through `SdfDualContouring.ExtractRefined`; the cells
@@ -234,7 +219,7 @@ owns the explanation.
 - **Materials are point-sampled, not taken from the lattice.** Each final quad's
   quarters are sampled through `sdfMeshBakePoints` (a staged World table the
   residency writes before the upload) and a disagreeing quad splits; the draw
-  record's word 41 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
+  record's word 31 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
   sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
@@ -306,7 +291,7 @@ reading is evidence beside the counts of the same run, never the verdict alone.
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
-world.budget           # program words, instances, scopes, segments, chains
+world.budget           # program words, instances, scopes, segments
 ```
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,

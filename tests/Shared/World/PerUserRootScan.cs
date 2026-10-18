@@ -19,9 +19,8 @@ internal static class PerUserRootScan {
     // The metadata table of a ldstr operand: the user-string heap.
     internal const int UserStringTable = 0x70;
 
-    // The per-user subdirectories only the desktop entry point may name: the state root and the three device caches.
+    // The per-user subdirectories only the desktop entry point may name: the state root and the two device caches.
     internal static readonly string[] PerUserNames = [
-        "bakes",
         "compilations",
         "compiled-worlds",
         "world",

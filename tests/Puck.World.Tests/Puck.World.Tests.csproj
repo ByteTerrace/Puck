@@ -29,10 +29,8 @@
         <Using Include="Puck.World.Testing" />
     </ItemGroup>
     <ItemGroup>
-        <!-- BakeSamplingDeviceLawTests: its probe kernel compiles through the shared shader build like any shipped
-             kernel, and it samples the bake fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
+        <!-- The device laws' probe kernels compile through the shared shader build like any shipped kernel. -->
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
-        <Content Include="../Puck.SignedDistance.Tests/Fixtures/bake-sampling.json" Link="Fixtures/bake-sampling.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->

@@ -255,8 +255,9 @@ by a named `driver` reading a signal or a state row. Directional locomotion read
 earlier driver's cycle (`driver.<name>`) and scale its cadence or weight by a
 world `curves` row of an earlier driver (`cadenceBy`, `weightBy`), which is how a
 stride lengthens with speed and a run's swings fade in over a walk's. `chains` plus `effectors`
-give CCD inverse kinematics with plant windows for feet and a `replant` latch that
-steps a resting foot rather than sliding it. `frames` snapshot base poses. A
+give CCD inverse kinematics with plant windows for feet, a `replant` latch that
+steps a resting foot rather than sliding it, and `align`, which keeps a planted
+sole flat on its contact. `frames` snapshot base poses. A
 behaviour the vocabulary cannot express is a new signal, member or op here,
 never a client special case. Details, caps, every refusal, and the moth's own
 driver map are in `references/rig.md`.
@@ -274,14 +275,9 @@ but are omitted from creation contact geometry (cells keep the base primitive).
 These authoring omissions are distinct from low-level VM interpreter support.
 See [shapes](references/shapes.md#contact-admission).
 
-A creation's bake (its mesh, textures and impostor) is the deterministic contact
-field's view of it: detail shapes, sweeps, text, noise relief, volumes and the
-omitted warp facets are absent from the bake, and a creation the fixed-point
-evaluator refuses (a residual nonuniform `Scale`, a wallpaper fold) has none and
-has none. No view draws a prototype bake: every view renders the residency's
-own baked meshes ([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)),
-and prototype bakes are compiled and held for their pack alone. See
-[prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes).
+Every view renders the residency's baked meshes, which the frame bakes from the
+program itself, so a shape contact omits still draws
+([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)).
 
 ## Verifying
 

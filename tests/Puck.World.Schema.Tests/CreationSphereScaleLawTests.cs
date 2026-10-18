@@ -34,7 +34,7 @@ public sealed class CreationSphereScaleLawTests {
             )
         );
 
-        var evaluator = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
 
         Assert.True(condition: evaluator.TryDistance(
             distance: out var distance,

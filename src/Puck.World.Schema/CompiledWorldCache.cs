@@ -11,9 +11,7 @@ namespace Puck.World;
 /// When anything was derived, the whole compiled world is written into the cache's directory, never beside the
 /// document; a file there is named for the document's path, so each document has at most one. A boot that takes the
 /// cache's file stamps it as used, and a write keeps the directory within <see cref="Retention"/>, least recently used
-/// out (<see cref="CacheRetention"/>). A chunk that does not
-/// derive on boot (<see cref="ICompiledWorldChunk.DerivesOnBoot"/>) is kept when it holds and otherwise left out of the
-/// boot and of what it writes. A compiled world that cannot be read or written costs the boot a derivation and nothing
+/// out (<see cref="CacheRetention"/>). A compiled world that cannot be read or written costs the boot a derivation and nothing
 /// else.
 /// </summary>
 public sealed class CompiledWorldCache {
@@ -56,16 +54,15 @@ public sealed class CompiledWorldCache {
         documentPath: documentPath
     );
 }
-/// <summary>What one boot's compiled world did: where it was read from, which chunks it kept, derived and left out, and
-/// where it was written.</summary>
+/// <summary>What one boot's compiled world did: where it was read from, which chunks it kept and derived, and where it
+/// was written.</summary>
 /// <param name="LoadedFrom">The compiled world whose header matched, or <see langword="null"/> when none did.</param>
 /// <param name="Kept">The chunks taken from it, in registry order.</param>
 /// <param name="Derived">The chunks derived fresh, in registry order.</param>
-/// <param name="Deferred">The chunks no compiled world held that do not derive on boot, in registry order.</param>
 /// <param name="WrittenTo">The file the compiled world was written into, or <see langword="null"/> when nothing was
 /// derived or the write failed.</param>
 /// <param name="WriteFailure">Why the write failed, or <see langword="null"/>.</param>
-public sealed record CompiledWorldResolution(string? LoadedFrom, IReadOnlyList<ChunkCode> Kept, IReadOnlyList<ChunkCode> Derived, IReadOnlyList<ChunkCode> Deferred, string? WrittenTo, string? WriteFailure) {
+public sealed record CompiledWorldResolution(string? LoadedFrom, IReadOnlyList<ChunkCode> Kept, IReadOnlyList<ChunkCode> Derived, string? WrittenTo, string? WriteFailure) {
     /// <summary>Gets whether the boot's definition came from a compiled world rather than a fresh draw.</summary>
     public bool DefinitionFromCompiledWorld => Kept.Contains(value: DefinitionChunk.Instance.Code);
 
@@ -84,10 +81,6 @@ public sealed record CompiledWorldResolution(string? LoadedFrom, IReadOnlyList<C
 
         if (Derived.Count > 0) {
             _ = text.Append(value: "; derived ").AppendJoin(separator: ' ', values: Derived);
-        }
-
-        if (Deferred.Count > 0) {
-            _ = text.Append(value: "; deferred ").AppendJoin(separator: ' ', values: Deferred);
         }
 
         if (WrittenTo is not null) {
@@ -191,12 +184,11 @@ public sealed class CompiledWorldRequest {
         var chunks = new List<ContainerChunk>(capacity: m_cache.Chunks.Count);
         var kept = new List<ChunkCode>();
         var derived = new List<ChunkCode>();
-        var deferred = new List<ChunkCode>();
 
         foreach (var chunk in m_cache.Chunks) {
             if (
                 (container is not null) &&
-                !chunk.DependsOn.Any(predicate: code => (derived.Contains(item: code) || deferred.Contains(item: code))) &&
+                !chunk.DependsOn.Any(predicate: code => derived.Contains(item: code)) &&
                 container.TryFind(
                 chunk: out var stored,
                 code: chunk.Code
@@ -214,11 +206,6 @@ public sealed class CompiledWorldRequest {
             ) {
                 chunks.Add(item: stored);
                 kept.Add(item: chunk.Code);
-                continue;
-            }
-
-            if (!chunk.DerivesOnBoot) {
-                deferred.Add(item: chunk.Code);
                 continue;
             }
 
@@ -265,7 +252,6 @@ public sealed class CompiledWorldRequest {
         }
 
         Resolution = new CompiledWorldResolution(
-            Deferred: deferred,
             Derived: derived,
             Kept: kept,
             LoadedFrom: loadedFrom,

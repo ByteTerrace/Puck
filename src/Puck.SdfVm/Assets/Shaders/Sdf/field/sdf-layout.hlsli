@@ -101,13 +101,10 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         }
 
         uint4 instanceMeta = sdfProgramWord(entryBase + 1u);
-        // Strip the two visibility flag bits before using this lane as segmentEnd.
-        // Their values never change the segment range they classify.
-        uint metaSegmentEnd = (instanceMeta.w & SDF_INSTANCE_SEGMENT_END_MASK);
 
-        if (instanceMeta.z < metaSegmentEnd) {
+        if (instanceMeta.z < instanceMeta.w) {
             segmentFirst = instanceMeta.z;
-            segmentEnd = metaSegmentEnd;
+            segmentEnd = instanceMeta.w;
             return;
         }
     }
@@ -130,12 +127,10 @@ struct SdfProgramLayout {
     uint segmentCount;       // segment directory's segment count
     uint rigidPlanOffset;    // rigid-leaf execution plan offset (segmentHeader.z)
     uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
-    bool noDetailShapes;    // instanceHeader.z bit 0: the visibility record's distance and attributes are valid for shading
     float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
     uint worldSegmentOffset; // world-segment list offset
-    uint chainTableOffset;   // chain table offset (worldHeader.y), validated where it is read
 };
 
 // Every kernel calling a field evaluator must initialize this per-thread cache once at entry.
@@ -180,12 +175,10 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = SDF_SEGMENT_RIGID_PLAN_OFFSET(segmentHeader);
     layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfProgramWord(instanceOffset));
-    layout.noDetailShapes = (SDF_INSTANCE_FLAGS(sdfProgramWord(instanceOffset)) & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
     layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));
-    layout.chainTableOffset = SDF_CHAIN_TABLE_OFFSET(worldHeader);
 
     return layout;
 }

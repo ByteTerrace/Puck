@@ -15,7 +15,7 @@ public sealed class SdfPrimitiveIntervalLawTests {
         Contains(expected: (2d - radius), interval: interval);
         Assert.True(condition: (interval.Lower < FixedQ4816.One),
             userMessage: "Nearest fixed conversion erases the radius bit and falsely proves a lower bound of one.");
-        var parameter = SdfTapeCertificate.EncloseFloat(value: radius);
+        var parameter = SdfIntervalBounds.EncloseFloat(value: radius);
 
         Contains(expected: radius, interval: parameter);
         Assert.True(condition: (parameter.Lower < parameter.Upper));
@@ -68,9 +68,9 @@ public sealed class SdfPrimitiveIntervalLawTests {
         var exactFloat = FixedQ4816.FromInteger(value: (1L << 40));
         var interval = FixedInterval.FromPoint(value: new FixedQ4816(Value: (exactFloat.Value + 1L)));
 
-        Assert.Equal(expected: float.BitIncrement(x: 1099511627776f), actual: SdfTapeCertificate.UpperFloat(value: interval));
-        Assert.True(condition: float.IsPositiveInfinity(f: SdfTapeCertificate.UpperFloat(binaryScale: 120, value: interval)));
-        Assert.True(condition: SdfTapeCertificate.EncloseFloat(value: float.PositiveInfinity).IsUnbounded);
+        Assert.Equal(expected: float.BitIncrement(x: 1099511627776f), actual: SdfIntervalBounds.UpperFloat(value: interval));
+        Assert.True(condition: float.IsPositiveInfinity(f: SdfIntervalBounds.UpperFloat(binaryScale: 120, value: interval)));
+        Assert.True(condition: SdfIntervalBounds.EncloseFloat(value: float.PositiveInfinity).IsUnbounded);
     }
 
     private static FixedInterval Point(int value) => FixedInterval.FromPoint(value: FixedQ4816.FromInteger(value: value));

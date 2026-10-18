@@ -14,9 +14,6 @@ public sealed partial class SdfProgram {
     /// <summary>The part entry's distance-gain bits, below <see cref="PartDistanceGainShift"/>: <c>k</c> encodes
     /// <c>k * PartDistanceGainUnit</c>, and the full mask encodes exactly 1.</summary>
     public const uint PartDistanceGainMask = 0x3fffu;
-    /// <summary>The part entry's <c>.z</c> flag naming an instance the shadow and ambient-occlusion walks read as
-    /// bounded (<see cref="InstanceBoundsSecondaryField"/>).</summary>
-    public const uint PartBoundedSecondaryFlag = 0x40000000u;
     /// <summary>The part entry's distance-gain field's bit position in its <c>.z</c> lane.</summary>
     public const int PartDistanceGainShift = 16;
     /// <summary>The value of one step of the packed distance gain.</summary>
@@ -56,41 +53,6 @@ public sealed partial class SdfProgram {
     /// operand. A smooth union lowers the field by at most its radius; the packed sphere is widened until that sag is
     /// absorbed at the instance's gain. Scope rescales multiply the gains of the scope's operands.</remarks>
     public float InstanceDistanceGain(int index) => m_instanceDistanceBounds[index].Gain;
-    /// <summary>Gets whether the shadow and ambient-occlusion walks read an instance's field as at least the distance
-    /// from the query point to its packed influence sphere, max(field, |p - c| - r), and so reject it whole at a unit
-    /// gain. The camera, surface, views and indirect walks read the field itself.</summary>
-    /// <param name="index">The instance index.</param>
-    /// <returns><see langword="true"/> when the program's root is a hard union of independent operands
-    /// (<see cref="InstancesComposable"/>) and the instance is live, maskable, and drops no clipping operand in
-    /// those walks, so the surface they see lies inside the sphere; <see langword="false"/> otherwise.</returns>
-    /// <remarks>The sphere contains the instance's surface and its blends' influence, so outside it the distance to the
-    /// sphere is at most the true distance to the surface, and inside it the reading is unchanged wherever the field is
-    /// positive: the maximum keeps every surface and interior, never exceeds the true distance where the field does not,
-    /// and only lifts an underestimating gauge, scale, warp or field op toward that distance away from the body. An
-    /// operand only those walks drop (a detail or non-secondary shape) can widen the surface they see only through the
-    /// intersection family, a xor or a morph, so such an instance, and one with a lane erosion that can skip a clipper,
-    /// keeps its own field. Under any other root composition an instance's field feeds later operations of the shared
-    /// accumulator, so none is bounded.</remarks>
-    public bool InstanceBoundsSecondaryField(int index) {
-        var instance = m_instances[index];
-
-        if (!InstancesComposable || !instance.Active || IsUnmaskable(instance: instance) ||
-            !float.IsFinite(f: m_instanceBinning[index].Radius) || (m_instanceBinning[index].Radius < 0f)) {
-            return false;
-        }
-        for (var cursor = instance.First; (cursor < instance.End); cursor++) {
-            var instruction = m_instructions[cursor];
-
-            if (instruction.Op == SdfOp.LaneErode) { return false; }
-            if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Detail || !instruction.Secondary) &&
-                (((SdfBlendOp)instruction.Blend) is SdfBlendOp.Intersection or SdfBlendOp.SmoothIntersection
-                    or SdfBlendOp.ChamferIntersection or SdfBlendOp.Xor or SdfBlendOp.Morph)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     // The soft-blend coupling halo the packed radius adds, widened to cover the smooth-union sag at the instance's
     // distance gain: past the bound the field is at least gain * (distance to the geometry) - sag, so a sag of S needs
     // S / gain of clearance there.
@@ -148,7 +110,7 @@ public sealed partial class SdfProgram {
                         accumulator: ref scopes[depth],
                         blend: ((SdfBlendOp)instruction.Blend),
                         candidate: new DistanceBound(Gain: (shapeGain * chain), Sag: 0f),
-                        optional: (instruction.Detail || !instruction.Secondary),
+                        optional: instruction.Detail,
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
                     break;

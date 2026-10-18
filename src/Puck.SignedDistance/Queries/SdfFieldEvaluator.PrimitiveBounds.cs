@@ -17,13 +17,13 @@ public sealed partial class SdfFieldEvaluator {
             return FixedInterval.Entire;
         }
         var p = new IntervalVector3(X: x, Y: y, Z: z);
-        var a = new IntervalParameters(X: SdfTapeCertificate.EncloseFloat(value: instruction.Data0.X),
-            Y: SdfTapeCertificate.EncloseFloat(value: instruction.Data0.Y), Z: SdfTapeCertificate.EncloseFloat(value: instruction.Data0.Z),
-            W: SdfTapeCertificate.EncloseFloat(value: instruction.Data0.W));
-        var b = new IntervalParameters(X: SdfTapeCertificate.EncloseFloat(value: instruction.Data1.X),
-            Y: SdfTapeCertificate.EncloseFloat(value: instruction.Data1.Y), Z: SdfTapeCertificate.EncloseFloat(value: instruction.Data1.Z),
-            W: SdfTapeCertificate.EncloseFloat(value: instruction.Data1.W));
-        var shape = ((SdfShapeType)(instruction.Shape & SdfProgram.ShapeTypeMask));
+        var a = new IntervalParameters(X: SdfIntervalBounds.EncloseFloat(value: instruction.Data0.X),
+            Y: SdfIntervalBounds.EncloseFloat(value: instruction.Data0.Y), Z: SdfIntervalBounds.EncloseFloat(value: instruction.Data0.Z),
+            W: SdfIntervalBounds.EncloseFloat(value: instruction.Data0.W));
+        var b = new IntervalParameters(X: SdfIntervalBounds.EncloseFloat(value: instruction.Data1.X),
+            Y: SdfIntervalBounds.EncloseFloat(value: instruction.Data1.Y), Z: SdfIntervalBounds.EncloseFloat(value: instruction.Data1.Z),
+            W: SdfIntervalBounds.EncloseFloat(value: instruction.Data1.W));
+        var shape = ((SdfShapeType)instruction.Shape);
 
         return shape switch {
             SdfShapeType.Sphere => SphereBounds(p: p, radius: a.X),
@@ -39,7 +39,7 @@ public sealed partial class SdfFieldEvaluator {
                 && (instruction.Data0.X > 0f) && (instruction.Data0.Y > 0f) && (instruction.Data0.Z > 0f)
                 && (instruction.Data1.Y > 0f) && (instruction.Data1.Z > 0f) && (instruction.Data1.W > 0f)) =>
                 SuperellipsoidNormBounds(p: p, radii: a.Xyz, inverseRadii: new IntervalVector3(X: b.Y, Y: b.Z, Z: b.W),
-                    lowerFactor: SdfTapeCertificate.SuperellipsoidNormFactor(exponent: instruction.Data0.W)),
+                    lowerFactor: SdfIntervalBounds.SuperellipsoidNormFactor(exponent: instruction.Data0.W)),
             SdfShapeType.RoundedRectangle or SdfShapeType.ChamferedRectangle or SdfShapeType.Trapezoid =>
                 PackedLiftBounds(p: p, shape: shape, a: a, b: b, extrude: (instruction.Data1.Y > 0.5f)),
             _ => FixedInterval.Entire,
@@ -54,7 +54,7 @@ public sealed partial class SdfFieldEvaluator {
     private static IntervalVector3 Interval(FixedVector3 value) => new(X: Point(value: value.X), Y: Point(value: value.Y), Z: Point(value: value.Z));
     private static FixedInterval PackedLiftBounds(IntervalVector3 p, SdfShapeType shape, IntervalParameters a,
         IntervalParameters b, bool extrude) {
-        var sqrtHalf = SdfTapeCertificate.EncloseFloat(value: 0.70710678f);
+        var sqrtHalf = SdfIntervalBounds.EncloseFloat(value: 0.70710678f);
         var profilePoint = new IntervalVector2(X: (extrude ? p.X : (FixedInterval.Magnitude(x: p.X, y: p.Z) - a.W)), Y: p.Y);
         var profile = shape switch {
             SdfShapeType.RoundedRectangle => RoundedRectangle2DBounds(p: profilePoint, halfWidth: a.X, halfHeight: a.Y, cornerRadius: a.Z),

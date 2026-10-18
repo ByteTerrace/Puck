@@ -240,8 +240,7 @@ public sealed partial class SdfProgram {
                     // query point nor distance scale, so it does not require a generic segment.
                     break;
                 case SdfOp.ShapeBlend: {
-                        // Leaves retain their original shape header: both GPU rigid walks apply its Detail and
-                        // Secondary mode gates before evaluating the primitive, just as the generic walks do.
+                        // Leaves retain their original shape header, as the generic walks read it.
                         if (int.MinValue == commonDynamicSlot) {
                             commonDynamicSlot = chainDynamicSlot;
                         } else if (commonDynamicSlot != chainDynamicSlot) {

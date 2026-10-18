@@ -69,7 +69,7 @@ var storageDiscoveryUriOption = new Option<string?>(name: "--storage-discovery-u
 };
 var stateDirOption = new Option<string?>(name: "--state-dir") {
     DefaultValueFactory = static _ => null,
-    Description = "Override the on-disk state root (profile catalog, replays). Compiled worlds and bakes are per-user caches every boot shares. Absent uses the world subdirectory of the per-user Puck directory (%LOCALAPPDATA%/Puck/world on Windows). A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
+    Description = "Override the on-disk state root (profile catalog, replays). Compiled worlds and compiles are per-user caches every boot shares. Absent uses the world subdirectory of the per-user Puck directory (%LOCALAPPDATA%/Puck/world on Windows). A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
 };
 var captureDirOption = new Option<string?>(name: "--capture-dir") {
     DefaultValueFactory = static _ => null,
@@ -207,7 +207,6 @@ stateRoot = new Puck.World.Server.WorldStateRoot(path: (parseResult.GetValue(opt
 // The device caches are per user rather than under the state root, since each holds a pure function of its inputs and
 // the build, never of a run's state. Their per-user defaults are named here and nowhere else, like the state root's.
 var caches = new WorldCacheRoots(
-    bakes: PuckUserDirectory.Resolve(name: "bakes"),
     compilations: PuckUserDirectory.Resolve(name: "compilations"),
     compiledWorlds: PuckUserDirectory.Resolve(name: "compiled-worlds"),
     meshes: PuckUserDirectory.Resolve(name: "meshes")

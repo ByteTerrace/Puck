@@ -205,7 +205,7 @@ public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTe
             );
         }
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
 
     private sealed class SilentAudio : IWorldAudioCueSink {

@@ -67,7 +67,9 @@ internal sealed partial class PlayerCommandModule {
         foreach (var effector in state.Effectors) {
             _ = line.Append(value: $" effector:{effector.Name} weight={Scalar(value: effector.Weight)} planted={effector.Contact} target={((effector.Target is { } target)
                 ? Point(value: target)
-                : "none")}");
+                : "none")}{((effector.Align is { } align)
+                ? $" align={Scalar(value: align)} normal={Point(value: effector.Normal)}"
+                : string.Empty)}");
 
             if (effector.Bones < Puck.World.Authoring.CreationEffectorDocument.MinChainBones) {
                 _ = line.Append(value: $" bones={effector.Bones}");

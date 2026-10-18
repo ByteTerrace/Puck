@@ -36,18 +36,18 @@ float4 sdfDynamicTransformRow(uint index) {
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances): one
-//                           (instanceCount, partProgramOffset, shadingFlags, tapeTokens) header uint4, then 2 uint4 per instance — i0 = bound
+//                           (instanceCount, partProgramOffset, 0, 0) header uint4, then 2 uint4 per instance — i0 = bound
 //                           center/offset.xyz + radius (float bits), i1 = (mode, dynamicSlot, segmentFirst,
 //                           segmentEnd) — segmentFirst/segmentEnd index the SEGMENT directory (not raw
 //                           instructions): every segment in that range is owned by exactly that instance, so
 //                           mapCore's merge walks the range whole when the instance's mask bit is set.
-//   [.. + 1 + 2*instanceCount ..] then the WORLD-SEGMENT list (SdfProgram.PackWorldSegments, world render path
-//                           only): one (worldSegmentCount, 0, 0, 0) header uint4, then one uint4 (only .x used) per
-//                           WORLD segment (owned by no instance), value = its segment-directory index, ascending.
+//   [.. + 1 + 2*instanceCount ..] then the WORLD-SEGMENT list (SdfProgram.PackWorldSegments): one
+//                           (worldSegmentCount, 0, 0, 0) header uint4, then one uint4 (only .x used) per WORLD
+//                           segment (owned by no instance), value = its segment-directory index, ascending.
 //                           mapCore merges this list with the VISIBLE instances' segment ranges — ascending segment
 //                           index, so blend-op order is the flat stream's — and a call costs O(world segments +
 //                           visible instances' segments), never O(all segments).
-//   [.. after the instance grid ..] then the RIGID-LEAF execution plan: one directory uint4 per segment followed by
+//   [.. after the world-segment list ..] then the RIGID-LEAF execution plan: one directory uint4 per segment followed by
 //                           three uint4 per compiled leaf (pose, quaternion, tight sphere). Segment-header .z is its absolute uint4 offset. The host
 //                           collapses Reset/Translate/Rotate/TransformDynamic/Shape chains into direct local poses; mapCore bypasses the
 //                           generic per-op switch for those segments, while the authored instruction range stays intact for every non-rigid
@@ -173,9 +173,7 @@ uint sdfInstanceCountClamped() {
 // kernel compiles the conservative union-hull fallback instead.
 
 // --- instruction lanes ---
-// SDF_SHAPE_DETAIL_FLAG (Puck.SignedDistance.SdfInstruction.Detail) and SDF_SHAPE_NO_SECONDARY_FLAG
-// (SdfInstruction.Secondary == false) mark a shape the bake samples like any other: a detail shape's material wins its
-// footprint on the baked mesh, and a secondary-excluded shape still bakes into the mesh its cascades draw.
+// A ShapeBlend's shape lane holds its SDF_SHAPE_* type alone.
 // SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
 // Scoped field accumulator (SdfOp.PushField/PopField). PUSH saves the immediate parent and reseeds a fresh field;
 // POP composes only into that parent. The walk uses the bounded SDF_MAX_FIELD_SCOPE_DEPTH stack; the program validator

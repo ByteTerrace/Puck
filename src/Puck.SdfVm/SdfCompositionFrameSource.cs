@@ -90,13 +90,6 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly int[] m_builtRevisions;
     private readonly ISdfFrameDresser m_dresser;
     private readonly IReadOnlyList<ISdfSceneEmitter> m_emitters;
-    // Pooled scratch for the packed instance-cull grid every BuildProgram call needs (see SdfProgram's gridWorkspace
-    // parameter) — sized once against SdfProgramBuilder.MaxInstances, the same ceiling the allocating
-    // SdfInstanceGrid.Build path derives the grid resolution against, so routing through this workspace instead
-    // produces byte-identical packed words. Every live CaptureFrame rebuild shares one instance: each build copies the
-    // workspace's span into the new SdfProgram's own m_words before returning (see SdfProgram's constructor), so nothing
-    // outlives a build that could alias the next one.
-    private readonly SdfInstanceGrid.Workspace m_gridWorkspace;
     // This frame's freshly-read components, and the STAGING half of the built record: captured before a build, promoted
     // into m_builtRevisions only once that build has returned. See CaptureRevisions/CaptureFrame for why both halves
     // of that ordering are load-bearing.
@@ -213,7 +206,6 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_pendingRevisions = new int[revisionCursor];
         m_buildingRevisions = new int[revisionCursor];
         m_transforms = new DynamicTransform[slotCursor];
-        m_gridWorkspace = new SdfInstanceGrid.Workspace(maxInstances: SdfProgramBuilder.MaxInstances);
 
         // The probe is measured, never built: its emission states every count the capacity depends on.
         var probe = new SdfProgramBuilder();
@@ -275,9 +267,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         return builder;
     }
     // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
-    // Builds of one source run one at a time: every build is routed through m_gridWorkspace, the pooled grid-build scratch
-    // this type owns, so the grid block is produced without its own per-call allocation.
-    private SdfProgram Build(SdfProgramBuilder builder) => builder.Build(gridWorkspace: m_gridWorkspace);
+    private static SdfProgram Build(SdfProgramBuilder builder) => builder.Build();
     // Adopts the program a background build finished, or waits for it while a capture converges, so a converging frame
     // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
     // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
