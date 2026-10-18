@@ -264,7 +264,13 @@ owns the explanation.
   residencies share, so a rebuild, a returning body or a body crossing from
   another world takes its mesh; only new geometry bakes. A field the hash reads
   that a program assigns by position (a slot, a table offset, a palette index)
-  breaks sharing silently: canonicalize it in the builder.
+  breaks sharing silently: canonicalize it in the builder. The World's library
+  persists across runs (`SdfMeshStore`, the `meshes` device cache), keyed by
+  geometry and the bake's identity (bake kernels' bytecode,
+  `Puck.SignedDistance`'s build, the hash of `PuckMeshBakeSource` in
+  `Puck.SdfVm.csproj`): a new file the bake's CPU code reads joins that list, or
+  an edit to it reads stale meshes. A boot that bakes nothing shows
+  `done … loaded=N` with `dispatches=0`.
 - **A view without shadows holds no cascade.** A view whose quality skips shadows
   (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
   the cascades' passes and their 252 MB of targets go, and the surface pass binds
@@ -316,8 +322,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - Run it and look: `dotnet run --project src/Puck.World -c Release --
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at. Every boot bakes the mesh path (15 to 20 s on the debug world on an
-  RTX 4070, longer on a slower card) and then traces the irradiance volume (about
+  looked at. A boot bakes the groups the mesh store does not hold (the whole debug
+  world takes 15 to 20 s on an RTX 4070, longer on a slower card; a reboot of an
+  unchanged world loads them instead) and then traces the irradiance volume (about
   2 s): a script that captures the finished image waits on `world.wait 2400` or
   longer and checks for `[sdf.mesh-gi] done` in the log before the capture line.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`

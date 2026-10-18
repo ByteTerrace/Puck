@@ -209,7 +209,8 @@ stateRoot = new Puck.World.Server.WorldStateRoot(path: (parseResult.GetValue(opt
 var caches = new WorldCacheRoots(
     bakes: PuckUserDirectory.Resolve(name: "bakes"),
     compilations: PuckUserDirectory.Resolve(name: "compilations"),
-    compiledWorlds: PuckUserDirectory.Resolve(name: "compiled-worlds")
+    compiledWorlds: PuckUserDirectory.Resolve(name: "compiled-worlds"),
+    meshes: PuckUserDirectory.Resolve(name: "meshes")
 );
 // A world source compiles once across boots.
 Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: caches.Compilations);

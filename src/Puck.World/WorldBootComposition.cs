@@ -473,7 +473,12 @@ public static class WorldBootComposition {
                 alwaysFillsCaptures: sp.GetRequiredService<WorldHostSettings>().Offscreen,
                 // Image producers the host registers beside the four the engine ships.
                 producers: [.. sp.GetServices<IWorldImageProducer>()]
-            ) { SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers };
+            ) {
+                // The baked meshes persist in the device cache the boot was handed, so an unchanged world reboots without
+                // baking; a composition without the roots keeps them for the run.
+                MeshLibrary = new SdfMeshLibrary(store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes) : null)),
+                SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers,
+            };
         });
         // The slice of the binder the frame presenter drives each frame.
         services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());

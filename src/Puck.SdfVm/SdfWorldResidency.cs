@@ -152,7 +152,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             : EmptyScreenSurfaceTransforms);
         m_width = width;
         Name = name;
-        MeshPathBake = new SdfMeshPathBake { Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
+        MeshPathBake = new SdfMeshPathBake { Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
     }
 
     /// <summary>Gets the residency's name.</summary>

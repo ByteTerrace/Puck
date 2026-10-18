@@ -755,9 +755,21 @@ back (a body that left the world and returned, an instance at another index) or
 arrives from another world (a body crossing between the debug world and the
 garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
+The World's library also keeps every mesh it stores between runs, in the
+`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, bounded at a
+gibibyte, least recently used first out), keyed by the group's geometry and
+the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s build
+and the hash of the bake's own sources in `Puck.SdfVm` (their list is
+`PuckMeshBakeSource` in its project). A program's group the store holds loads
+from disk on the thread pool instead of baking, so an unchanged world reboots
+without baking and a changed creation bakes only its own groups; an entry that
+fails its checksum, names another key or is no mesh is refused by name
+(`[sdf.mesh-bake] group … store refused: …`), deleted, and its group bakes.
+The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
-dispatches, samples, triangles, vertices and wall time on stderr when it
-starts and finishes (`[sdf.mesh-bake] start residency=…`, `done residency=…`).
+dispatches, samples, groups loaded, triangles, vertices and wall time on stderr
+when it starts and finishes (`[sdf.mesh-bake] start residency=… baking=…
+loading=…`, `done residency=… loaded=…`).
 It counts a batch as work when a bake pass records it: a frame that takes a
 batch no pass records, as while the boot's pipelines build, dispatches nothing,
 and its lattices go to the next frame. A batch remembers the bake that took it,

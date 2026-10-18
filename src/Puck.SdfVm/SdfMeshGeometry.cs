@@ -69,6 +69,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Append(index: index, instruction: instruction, program: program);
         }
     }
+    /// <summary>Appends the reach a group's box is clamped to: a group whose bound passes the frame's far distance, or the
+    /// group of the segments no instance owns, bakes over a box that reach wide, so the same instructions under another
+    /// reach mesh another surface.</summary>
+    /// <param name="reach">The reach, in world units.</param>
+    public void AppendReach(float reach) => m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(in reach)));
     /// <summary>Appends one instruction of a program as it stands, its material included.</summary>
     /// <param name="program">The program.</param>
     /// <param name="index">The instruction's index in <see cref="SdfProgram.Instructions"/>.</param>
