@@ -74,7 +74,10 @@ public static class WorldGaitDrivers {
     /// <param name="kinematics">The registration's eased motion and driver followers, which the direction and
     /// acceleration signals and a driver's <see cref="CreationDriverDocument.Dynamics"/> read; <see langword="null"/>
     /// reads those signals as zero and tracks every signal exactly.</param>
-    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null) {
+    /// <param name="definition">The live definition whose <c>curves</c> rows a driver's
+    /// <see cref="CreationDriverDocument.CadenceBy"/> and <see cref="CreationDriverDocument.WeightBy"/> read, or
+    /// <see langword="null"/>, which leaves both unscaled.</param>
+    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
         if (
             !seeded ||
             (lastAddress != address)
@@ -152,8 +155,23 @@ public static class WorldGaitDrivers {
                 moving: moving,
                 reads: reads
             );
-
-            var seconds = (holds
+            var level = (holds
+                ? ((driver.WeightBy is { } weightBy)
+                    ? Math.Clamp(
+                        max: 1f,
+                        min: 0f,
+                        value: CurveOf(
+                            curve: weightBy,
+                            definition: definition,
+                            index: index,
+                            phases: phases,
+                            rows: rows
+                        )
+                    )
+                    : 1f)
+                : 0f
+            );
+            var seconds = ((level > weights[index])
                 ? driver.BlendInSeconds
                 : driver.BlendOutSeconds
             );
@@ -164,15 +182,37 @@ public static class WorldGaitDrivers {
                 )
                 : blend
             );
-            var weight = (weights[index] + (((holds
-                ? 1f
-                : 0f) - weights[index]) * driverBlend));
+            var weight = (weights[index] + ((level - weights[index]) * driverBlend));
 
-            weights[index] = ((!holds && (weight < RestWeight))
+            weights[index] = (((level < RestWeight) && (weight < RestWeight))
                 ? 0f
                 : weight
             );
 
+            var cadence = (driver.Cadence.Value * ((driver.CadenceBy is { } cadenceBy)
+                ? CurveOf(
+                    curve: cadenceBy,
+                    definition: definition,
+                    index: index,
+                    phases: phases,
+                    rows: rows
+                )
+                : 1f
+            ));
+
+            if (CreationDriverDocument.TryDriverSignal(
+                name: out var source,
+                signal: driver.Signal
+            )) {
+                phases[index] = (cadence * PhaseOf(
+                    before: index,
+                    driver: source,
+                    phases: phases,
+                    rows: rows
+                ));
+
+                continue;
+            }
             if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
                 // A state cell presented at the frame: a cycle-trait clock, a drawn value, an advancing counter —
                 // the phase is the sim's own number, read through the state mirror like every other binding.
@@ -181,7 +221,7 @@ public static class WorldGaitDrivers {
                     truth: false,
                     value: out var stateValue
                 ))
-                    ? (driver.Cadence.Value * stateValue)
+                    ? (cadence * stateValue)
                     : 0f
                 );
 
@@ -195,7 +235,7 @@ public static class WorldGaitDrivers {
                 continue;
             }
             if (!CreationDriverDocument.Integrates(signal: driver.Signal)) {
-                var target = (driver.Cadence.Value * (driver.Signal switch {
+                var target = (cadence * (driver.Signal switch {
                     CreationDriverDocument.SignalSpeed => (total * perSecond),
                     CreationDriverDocument.SignalVerticalSpeed => (travel.Y * perSecond),
                     CreationDriverDocument.SignalTravelDirection => (kinematics?.TravelDirection ?? 0f),
@@ -208,7 +248,7 @@ public static class WorldGaitDrivers {
                     deltaSeconds: deltaSeconds,
                     index: index,
                     period: WorldGaitKinematics.Period(
-                        cadence: driver.Cadence.Value,
+                        cadence: cadence,
                         signal: driver.Signal
                     ),
                     target: target
@@ -223,7 +263,7 @@ public static class WorldGaitDrivers {
 
             // Wrapped into [0, 2π) every frame: both waveforms are 2π-periodic in their argument, so wrapping is
             // exact for the motion and is what keeps a rotor's phase from losing float precision after an hour.
-            phases[index] = Wrap(radians: (phases[index] + (driver.Cadence.Value * (driver.Signal switch {
+            phases[index] = Wrap(radians: (phases[index] + (cadence * (driver.Signal switch {
                 CreationDriverDocument.SignalPlanarTravel => planar,
                 CreationDriverDocument.SignalTravel => total,
                 _ => deltaSeconds,
@@ -358,6 +398,72 @@ public static class WorldGaitDrivers {
                 )) * weight));
             }
         }
+    }
+    /// <summary>Returns a <c>curves</c> row's height (Z) where its X equals <paramref name="x"/>, held at the end knots
+    /// outside the row's span. The row is one the world validator admits as a driver curve, drawn left to right, so X
+    /// rises along its arc and a bisection of the arc finds the one point at <paramref name="x"/>.</summary>
+    /// <param name="row">The curve row.</param>
+    /// <param name="x">The X to read the height at, in the row's own units.</param>
+    /// <returns>The height, in the row's own units.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public static float CurveHeight(WorldCurveRow row, float x) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        // Arc stations are Q32 raws; halving down to one Q16 step reads the height at the precision the row stores.
+        const long Resolution = (1L << 16);
+        var compiled = row.Compiled;
+        var target = FixedQ4816.FromDouble(value: x).Value;
+        var low = 0L;
+        var high = compiled.TotalLengthRaw;
+
+        if (compiled.EvaluateRaw(arcRaw: low).Position.X.Value >= target) {
+            high = low;
+        } else if (compiled.EvaluateRaw(arcRaw: high).Position.X.Value <= target) {
+            low = high;
+        }
+
+        while ((high - low) > Resolution) {
+            var middle = (low + ((high - low) / 2L));
+
+            if (compiled.EvaluateRaw(arcRaw: middle).Position.X.Value < target) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+
+        return ((float)((double)compiled.EvaluateRaw(arcRaw: low).Position.Z));
+    }
+    // A driver's curve modulator: the height of the named row at the named earlier driver's phase this frame; a row
+    // the definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
+    private static float CurveOf(CreationDriverCurveDocument curve, IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int index, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
+        curves: definition.Curves,
+        name: curve.Curve
+    ) is { } row))
+        ? CurveHeight(
+            row: row,
+            x: PhaseOf(
+                before: index,
+                driver: curve.Driver,
+                phases: phases,
+                rows: rows
+            )
+        )
+        : 1f
+    );
+    // The phase an earlier driver reached this frame; the canonicalizer refuses a name no earlier driver carries.
+    private static float PhaseOf(IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int before, string driver) {
+        for (var index = 0; (index < before); index++) {
+            if (string.Equals(
+                a: rows[index].Name,
+                b: driver,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return phases[index];
+            }
+        }
+
+        return 0f;
     }
     /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
     /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule

@@ -251,7 +251,10 @@ carries this one, which is why chains resolve in one pass and can never cycle.
 On top of that, `swings` rotate about a pivot and `slides` translate, both driven
 by a named `driver` reading a signal or a state row. Directional locomotion reads
 `travelDirection` and the planar accelerations, and a driver naming a world
-`dynamics` row trails and settles instead of tracking. `chains` plus `effectors`
+`dynamics` row trails and settles instead of tracking. A driver can ride an
+earlier driver's cycle (`driver.<name>`) and scale its cadence or weight by a
+world `curves` row of an earlier driver (`cadenceBy`, `weightBy`), which is how a
+stride lengthens with speed and a run's swings fade in over a walk's. `chains` plus `effectors`
 give CCD inverse kinematics with plant windows for feet and a `replant` latch that
 steps a resting foot rather than sliding it. `frames` snapshot base poses. A
 behaviour the vocabulary cannot express is a new signal, member or op here,

@@ -17,11 +17,11 @@ namespace Puck.World.Authoring;
 /// <param name="Signal">One of <see cref="SignalPlanarTravel"/>, <see cref="SignalTravel"/>,
 /// <see cref="SignalTime"/>, <see cref="SignalSpeed"/>, <see cref="SignalVerticalSpeed"/>,
 /// <see cref="SignalTurnRate"/>, <see cref="SignalTravelDirection"/>, <see cref="SignalLateralAcceleration"/>,
-/// <see cref="SignalForwardAcceleration"/>, or a <see cref="SignalStatePrefix"/> state cell. The first three
-/// integrate: φ accumulates <see cref="Cadence"/> × the signal's per-frame delta while w &gt; 0, and wraps modulo 2π
-/// so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to <see cref="Cadence"/> ×
-/// the current value (through <see cref="Dynamics"/> when one is named), so a facet reading them tracks rather than
-/// cycles.</param>
+/// <see cref="SignalForwardAcceleration"/>, a <see cref="SignalStatePrefix"/> state cell, or a
+/// <see cref="SignalDriverPrefix"/> earlier driver. The first three integrate: φ accumulates <see cref="Cadence"/> ×
+/// the signal's per-frame delta while w &gt; 0, and wraps modulo 2π so a wheel spins forever without losing precision.
+/// The rest are instantaneous: φ is set to <see cref="Cadence"/> × the current value (through <see cref="Dynamics"/>
+/// when one is named), so a facet reading them tracks rather than cycles.</param>
 /// <param name="Cadence">The signal-to-phase gain: radians per metre for the travel signals, radians per second for
 /// <see cref="SignalTime"/>, radians per metre-per-second for <see cref="SignalSpeed"/>/<see cref="SignalVerticalSpeed"/>,
 /// radians per radian-per-second for <see cref="SignalTurnRate"/>, radians per radian for
@@ -34,15 +34,25 @@ namespace Puck.World.Authoring;
 /// array form. A token is a <c>Puck.Physics.Motion.BodyFacts</c> member name, <see cref="WhenAlways"/>,
 /// <see cref="TokenMoving"/>, or <see cref="TokenStill"/>; null is ungated. At most <see cref="MaxGateTokens"/>.
 /// A token no consumer can resolve gates the driver permanently off.</param>
-/// <param name="BlendInSeconds">Gate activation's exponential time constant in seconds; null uses
-/// <see cref="WeightSeconds"/>. Finite and non-negative; zero applies immediately on the next positive frame delta.</param>
-/// <param name="BlendOutSeconds">Gate release's exponential time constant in seconds, on the same terms as
-/// <paramref name="BlendInSeconds"/>. Independent release timing lets a mechanism settle after a quick body response.</param>
+/// <param name="BlendInSeconds">The exponential time constant in seconds the weight rises over (the gate opening, or
+/// a <see cref="WeightBy"/> level climbing); null uses <see cref="WeightSeconds"/>. Finite and non-negative; zero
+/// applies immediately on the next positive frame delta.</param>
+/// <param name="BlendOutSeconds">The exponential time constant in seconds the weight falls over (the gate releasing, or
+/// a <see cref="WeightBy"/> level dropping), on the same terms as <paramref name="BlendInSeconds"/>. Independent release
+/// timing lets a mechanism settle after a quick body response.</param>
 /// <param name="Dynamics">The containing world's <c>dynamics</c> row (natural frequency, damping, initial response)
 /// an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and
 /// overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal
-/// read through a second-order response. Refused on an integrating signal, whose phase is a running cycle rather than
-/// a level; the world validator refuses a name its <c>dynamics</c> section does not declare.</param>
+/// read through a second-order response. Refused on an integrating signal and on a <see cref="SignalDriverPrefix"/>
+/// signal, whose phase is a running cycle rather than a level; the world validator refuses a name its
+/// <c>dynamics</c> section does not declare.</param>
+/// <param name="CadenceBy">Scales <see cref="Cadence"/> each frame by a curve of an earlier driver's phase, or null to
+/// keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed
+/// lengthens its stride as the body speeds up, so its step rate rises less than its speed does.</param>
+/// <param name="WeightBy">Sets the level the weight eases toward while the gate holds, from a curve of an earlier
+/// driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through
+/// <see cref="SignalDriverPrefix"/>, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk
+/// into a run without their legs ever leaving step.</param>
 public sealed record CreationDriverDocument(
     string Name,
     string Signal,
@@ -50,7 +60,9 @@ public sealed record CreationDriverDocument(
     [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendInSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? CadenceBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationDriverCurveDocument? WeightBy = null
 ) {
     /// <summary>The largest signal-to-phase gain magnitude.</summary>
     public const float MaxCadence = 256f;
@@ -61,6 +73,11 @@ public sealed record CreationDriverDocument(
     public const string SignalPlanarTravel = "planarTravel";
     /// <summary>The body's total rendered speed, metres per second.</summary>
     public const string SignalSpeed = "speed";
+    /// <summary>The prefix of a driver signal: <c>driver.&lt;name&gt;</c> sets the phase to the cadence times the phase
+    /// an earlier driver reached this frame, so a walk set and a run set of swings, or a bob at twice the step rate,
+    /// ride one stride and never leave step with it. Its weight is its own gate's; it refuses
+    /// <see cref="Dynamics"/>, since it copies a running cycle.</summary>
+    public const string SignalDriverPrefix = "driver.";
     /// <summary>The prefix of a state-cell signal: <c>state.&lt;row&gt;[.&lt;key&gt;]</c>, whose numeric value at the
     /// frame's tick is the phase (times the cadence) — a cycle-trait clock, a drawn value, an advancing counter.</summary>
     public const string SignalStatePrefix = "state.";
@@ -109,8 +126,34 @@ public sealed record CreationDriverDocument(
     public static bool Integrates(string? signal) => (signal is (SignalPlanarTravel or SignalTravel or SignalTime));
     /// <summary>Returns whether a signal name is recognized.</summary>
     /// <param name="signal">The signal name.</param>
-    /// <returns><see langword="true"/> when the name is one of the nine body signals or a state-cell signal.</returns>
-    public static bool IsSignal(string? signal) => (Integrates(signal: signal) || (signal is (SignalSpeed or SignalVerticalSpeed or SignalTurnRate or SignalTravelDirection or SignalLateralAcceleration or SignalForwardAcceleration)) || IsStateSignal(signal: signal));
+    /// <returns><see langword="true"/> when the name is one of the nine body signals, a state-cell signal, or a driver
+    /// signal.</returns>
+    public static bool IsSignal(string? signal) => (Integrates(signal: signal) || (signal is (SignalSpeed or SignalVerticalSpeed or SignalTurnRate or SignalTravelDirection or SignalLateralAcceleration or SignalForwardAcceleration)) || IsStateSignal(signal: signal) || TryDriverSignal(
+        name: out _,
+        signal: signal
+    ));
+    /// <summary>Returns the driver a <see cref="SignalDriverPrefix"/> signal reads.</summary>
+    /// <param name="signal">The signal name.</param>
+    /// <param name="name">The named driver, or empty.</param>
+    /// <returns><see langword="true"/> for a non-empty <see cref="SignalDriverPrefix"/> form.</returns>
+    public static bool TryDriverSignal(string? signal, out string name) {
+        name = string.Empty;
+
+        if (
+            (signal is not { } named) ||
+            !named.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: SignalDriverPrefix
+        ) ||
+            (named.Length <= SignalDriverPrefix.Length)
+        ) {
+            return false;
+        }
+
+        name = named[SignalDriverPrefix.Length..];
+
+        return true;
+    }
     /// <summary>Returns whether a signal names a state cell.</summary>
     /// <param name="signal">The signal name.</param>
     public static bool IsStateSignal(string? signal) => ((signal is { } named) && named.StartsWith(
@@ -118,6 +161,19 @@ public sealed record CreationDriverDocument(
         value: SignalStatePrefix
     ) && (named.Length > SignalStatePrefix.Length));
 }
+/// <summary>
+/// A curve of an earlier driver's phase, the way a driver's <see cref="CreationDriverDocument.CadenceBy"/> and
+/// <see cref="CreationDriverDocument.WeightBy"/> read one signal through another: the value is the height (Z) of the
+/// containing world's <c>curves</c> row where its X equals <see cref="Driver"/>'s phase, held at the end knots outside
+/// the row's span. The named driver's cadence scales its signal onto the curve's X, and its <c>dynamics</c> smooths it.
+/// </summary>
+/// <param name="Driver">A driver declared before the one this curve modulates.</param>
+/// <param name="Curve">The world's <c>curves</c> row: open and drawn left to right, each knot further along X than the
+/// last with its tangent pointing toward +X. The world validator refuses a row that is not.</param>
+public sealed record CreationDriverCurveDocument(
+    string Driver,
+    string Curve
+);
 /// <summary>Reads a driver's gate as either one token or an array of them, and always writes the array — the
 /// single-token spelling stays authorable while every consumer past the parse sees one shape.</summary>
 public sealed class DriverGateJsonConverter : JsonConverter<IReadOnlyList<string>> {

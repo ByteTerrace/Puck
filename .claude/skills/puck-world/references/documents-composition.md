@@ -169,7 +169,7 @@ and have no collider. See the authoring README's volume reference.
 
 A creation also carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 16 —
 `{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
-`speed`/`verticalSpeed`/`turnRate`/`travelDirection`/`lateralAcceleration`/`forwardAcceleration` (instantaneous, optionally followed through a world `dynamics` row) and `when` is one token or an array of ≤ 4 that
+`speed`/`verticalSpeed`/`turnRate`/`travelDirection`/`lateralAcceleration`/`forwardAcceleration` (instantaneous, optionally followed through a world `dynamics` row) or `driver.<name>` (an earlier driver's phase), with optional `cadenceBy`/`weightBy` reading an earlier driver through a world `curves` row, and `when` is one token or an array of ≤ 4 that
 must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, the client-derived `moving`/
 `still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), or a `state.<row>[.<key>]`
 reference that holds while the cell's STORED value is nonzero — so a walker gated

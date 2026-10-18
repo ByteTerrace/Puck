@@ -476,6 +476,9 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.drivers[{index}].dynamics '{dynamics}' names no declared dynamics row.");
             }
+
+            RequireFunctionCurveRow(definition: definition, errors: errors, path: $"{path}.drivers[{index}].cadenceBy.curve", curve: drivers[index].CadenceBy?.Curve);
+            RequireFunctionCurveRow(definition: definition, errors: errors, path: $"{path}.drivers[{index}].weightBy.curve", curve: drivers[index].WeightBy?.Curve);
             if (Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
                 RequireNumericStateReference(
                     definition: definition,
@@ -614,6 +617,32 @@ public static partial class WorldDefinitionValidator {
             name: name
         ) is null) {
             errors.Add(item: $"{path} '{wave}' names no declared curves row.");
+        }
+    }
+    // A driver curve is read as a function, its height at a given X, which needs one point at every X: an open row
+    // whose knots advance along X with their tangents pointing that way. Bisecting arc length for an X then has one
+    // answer.
+    private static void RequireFunctionCurveRow(WorldDefinition definition, List<string> errors, string path, string? curve) {
+        if (curve is not { Length: > 0 } name) {
+            return;
+        }
+        if (WorldDefinitionRows.FindCurve(
+            curves: definition.Curves,
+            name: name
+        ) is not { } row) {
+            errors.Add(item: $"{path} '{name}' names no declared curves row.");
+
+            return;
+        }
+
+        var knots = row.Knots;
+        var drawnLeftToRight = !row.Closed;
+
+        for (var index = 0; (index < knots.Count); index++) {
+            drawnLeftToRight &= ((MathF.Cos(x: knots[index].TangentYaw) > 0f) && ((index == 0) || (knots[index].Position.Value.X > knots[index - 1].Position.Value.X)));
+        }
+        if (!drawnLeftToRight) {
+            errors.Add(item: $"{path} '{name}' is not drawn left to right; a driver curve is open, each knot further along X than the last, each tangent pointing toward +X.");
         }
     }
     private static HashSet<string> ValidateCreations(WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {

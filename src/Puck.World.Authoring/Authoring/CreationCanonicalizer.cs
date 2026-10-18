@@ -388,19 +388,51 @@ public static partial class CreationCanonicalizer {
             }
             if (!CreationDriverDocument.IsSignal(signal: driver.Signal)) {
                 errors.Add(item: new(
-                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', '{CreationDriverDocument.SignalTurnRate}', '{CreationDriverDocument.SignalTravelDirection}', '{CreationDriverDocument.SignalLateralAcceleration}', '{CreationDriverDocument.SignalForwardAcceleration}', and '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]'.",
+                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', '{CreationDriverDocument.SignalTurnRate}', '{CreationDriverDocument.SignalTravelDirection}', '{CreationDriverDocument.SignalLateralAcceleration}', '{CreationDriverDocument.SignalForwardAcceleration}', '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]', and '{CreationDriverDocument.SignalDriverPrefix}<driver>'.",
                     Path: $"drivers[{i}].signal"
                 ));
+            } else if (CreationDriverDocument.TryDriverSignal(
+                name: out var source,
+                signal: driver.Signal
+            )) {
+                RequireEarlierDriver(
+                    drivers: drivers,
+                    errors: errors,
+                    index: i,
+                    name: source,
+                    path: $"drivers[{i}].signal"
+                );
             }
             if (driver.Dynamics is { } dynamics) {
                 if (string.IsNullOrWhiteSpace(value: dynamics)) {
                     errors.Add(item: new(Message: "dynamics is empty; name a dynamics row or omit it.", Path: $"drivers[{i}].dynamics"));
-                } else if (CreationDriverDocument.Integrates(signal: driver.Signal)) {
+                } else if (CreationDriverDocument.Integrates(signal: driver.Signal) || CreationDriverDocument.TryDriverSignal(
+                    name: out _,
+                    signal: driver.Signal
+                )) {
                     errors.Add(item: new(
-                        Message: $"dynamics cannot follow the integrating signal '{driver.Signal}': its phase is a running cycle, not a level a response can ease toward.",
+                        Message: $"dynamics cannot follow the signal '{driver.Signal}': its phase is a running cycle, not a level a response can ease toward.",
                         Path: $"drivers[{i}].dynamics"
                     ));
                 }
+            }
+            if (driver.CadenceBy is { } cadenceBy) {
+                ValidateDriverCurve(
+                    curve: cadenceBy,
+                    drivers: drivers,
+                    errors: errors,
+                    index: i,
+                    path: $"drivers[{i}].cadenceBy"
+                );
+            }
+            if (driver.WeightBy is { } weightBy) {
+                ValidateDriverCurve(
+                    curve: weightBy,
+                    drivers: drivers,
+                    errors: errors,
+                    index: i,
+                    path: $"drivers[{i}].weightBy"
+                );
             }
             if ((driver.BlendInSeconds is { } blendIn) && (!float.IsFinite(f: blendIn) || (blendIn < 0f))) {
                 errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendInSeconds"));
@@ -424,6 +456,40 @@ public static partial class CreationCanonicalizer {
                 gate: driver.When,
                 path: $"drivers[{i}].when"
             );
+        }
+    }
+    // A driver reads only drivers declared before it, so one pass in declaration order advances every source before
+    // its readers and a reading can never cycle — the rule a shape's parent follows.
+    private static void RequireEarlierDriver(IReadOnlyList<CreationDriverDocument> drivers, List<DocumentValidationError> errors, int index, string name, string path) {
+        for (var earlier = 0; (earlier < index); earlier++) {
+            if (string.Equals(
+                a: drivers[earlier].Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return;
+            }
+        }
+
+        errors.Add(item: new(
+            Message: $"names no driver '{name}' declared before this one; a driver reads only earlier drivers.",
+            Path: path
+        ));
+    }
+    private static void ValidateDriverCurve(CreationDriverCurveDocument curve, IReadOnlyList<CreationDriverDocument> drivers, List<DocumentValidationError> errors, int index, string path) {
+        RequireEarlierDriver(
+            drivers: drivers,
+            errors: errors,
+            index: index,
+            name: curve.Driver,
+            path: $"{path}.driver"
+        );
+
+        if (string.IsNullOrWhiteSpace(value: curve.Curve)) {
+            errors.Add(item: new(
+                Message: "curve is empty; name a curves row.",
+                Path: $"{path}.curve"
+            ));
         }
     }
     // Whether `descendant` reaches `ancestor` by walking `parent`. A parent is validated to be declared earlier, so

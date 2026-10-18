@@ -2425,7 +2425,7 @@
                 },
                 "signal": {
                   "type": "string",
-                  "description": "One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, or a SignalStatePrefix state cell. The first three integrate: \u03C6 accumulates Cadence \u00D7 the signal\u0027s per-frame delta while w \u003E 0, and wraps modulo 2\u03C0 so a wheel spins forever without losing precision. The rest are instantaneous: \u03C6 is set to Cadence \u00D7 the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles."
+                  "description": "One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a SignalStatePrefix state cell, or a SignalDriverPrefix earlier driver. The first three integrate: \u03C6 accumulates Cadence \u00D7 the signal\u0027s per-frame delta while w \u003E 0, and wraps modulo 2\u03C0 so a wheel spins forever without losing precision. The rest are instantaneous: \u03C6 is set to Cadence \u00D7 the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles."
                 },
                 "cadence": {
                   "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
@@ -2451,7 +2451,7 @@
                     "null"
                   ],
                   "default": null,
-                  "description": "Gate activation\u0027s exponential time constant in seconds; null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta."
+                  "description": "The exponential time constant in seconds the weight rises over (the gate opening, or a WeightBy level climbing); null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta."
                 },
                 "blendOutSeconds": {
                   "type": [
@@ -2459,7 +2459,7 @@
                     "null"
                   ],
                   "default": null,
-                  "description": "Gate release\u0027s exponential time constant in seconds, on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response."
+                  "description": "The exponential time constant in seconds the weight falls over (the gate releasing, or a WeightBy level dropping), on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response."
                 },
                 "dynamics": {
                   "type": [
@@ -2467,7 +2467,53 @@
                     "null"
                   ],
                   "default": null,
-                  "description": "The containing world\u0027s dynamics row (natural frequency, damping, initial response) an instantaneous signal\u0027s phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare."
+                  "description": "The containing world\u0027s dynamics row (natural frequency, damping, initial response) an instantaneous signal\u0027s phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare."
+                },
+                "cadenceBy": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "driver": {
+                      "type": "string",
+                      "description": "A driver declared before the one this curve modulates."
+                    },
+                    "curve": {
+                      "type": "string",
+                      "description": "The world\u0027s curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward \u002BX. The world validator refuses a row that is not."
+                    }
+                  },
+                  "required": [
+                    "driver",
+                    "curve"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "Scales Cadence each frame by a curve of an earlier driver\u0027s phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body\u0027s speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does."
+                },
+                "weightBy": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "driver": {
+                      "type": "string",
+                      "description": "A driver declared before the one this curve modulates."
+                    },
+                    "curve": {
+                      "type": "string",
+                      "description": "The world\u0027s curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward \u002BX. The world validator refuses a row that is not."
+                    }
+                  },
+                  "required": [
+                    "driver",
+                    "curve"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver\u0027s phase clamped to [0, 1], or null for 1. Two drivers reading one stride\u0027s phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step."
                 }
               },
               "required": [

@@ -8,9 +8,10 @@ using Xunit;
 
 namespace Puck.World.Client.Tests;
 
-/// <summary>The rig's three doors onto the world: a scalar facet bound to a numeric state cell resolves through the
-/// document walk, a driver's state-cell signal reads the sim's own number at a tick, and a <c>curve:</c> waveform
-/// samples a declared curves row — with the world validator refusing the bindings it cannot resolve.</summary>
+/// <summary>The rig's doors onto the world: a scalar facet bound to a numeric state cell resolves through the
+/// document walk, a driver's state-cell signal reads the sim's own number at a tick, and a <c>curve:</c> waveform and a
+/// driver's <c>cadenceBy</c>/<c>weightBy</c> sample declared curves rows — with the world validator refusing the
+/// bindings it cannot resolve.</summary>
 public sealed class CreationCharacterLawTests {
     private const float Tolerance = 1e-3f;
 
@@ -31,42 +32,47 @@ public sealed class CreationCharacterLawTests {
                 Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value)
             )]
     );
-    // A hump drawn left to right (z = sin(πx), the waveform an artist would draw), as the curvature-first knots the
-    // spline compiles: yaw = atan2(dz/dx, 1), curvature = the yaw's rate along the arc.
-    private static WorldCurveRow Hump() {
-        // Drawn over x in [0, 4] so the crest's curvature stays inside the spline's authoring bound.
-        static float F(float x) => MathF.Sin(x: (MathF.PI * (x / 4f)));
-        static float D(float x) => ((F(x: (x + 1e-3f)) - F(x: (x - 1e-3f))) / 2e-3f);
-        static float D2(float x) => ((D(x: (x + 1e-3f)) - D(x: (x - 1e-3f))) / 2e-3f);
+    // z = f(x) drawn left to right over [0, span] as the curvature-first knots the spline compiles, a knot every half
+    // unit: yaw = atan2(dz/dx, 1), curvature = the yaw's rate along the arc.
+    private static WorldCurveRow Drawn(string name, Func<double, double> f, int span) {
+        double D(double x) => ((f(arg: (x + 1e-4)) - f(arg: (x - 1e-4))) / 2e-4);
+        double D2(double x) => ((D(x: (x + 1e-4)) - D(x: (x - 1e-4))) / 2e-4);
 
         var knots = new List<WorldCurveKnot>();
 
-        for (var i = 0; (i <= 8); i++) {
-            var x = (i / 2f);
+        for (var i = 0; (i <= (span * 2)); i++) {
+            var x = (i / 2.0);
             var slope = D(x: x);
 
             knots.Add(item: new WorldCurveKnot(
                 Position: new DocumentVector3(
-                    x: x,
+                    x: (float)x,
                     y: 0f,
-                    z: F(x: x)
+                    z: (float)f(arg: x)
                 ),
-                TangentYaw: MathF.Atan2(
-                    x: 1f,
+                TangentYaw: (float)Math.Atan2(
+                    x: 1.0,
                     y: slope
                 ),
-                Curvature: (D2(x: x) / MathF.Pow(
-                    x: (1f + (slope * slope)),
-                    y: 1.5f
+                Curvature: (float)(D2(x: x) / Math.Pow(
+                    x: (1.0 + (slope * slope)),
+                    y: 1.5
                 ))
             ));
         }
 
         return new WorldCurveRow(
-            Name: "hump",
+            Name: name,
             Knots: knots
         );
     }
+    // A hump (z = sin(πx/4), the waveform an artist would draw), over x in [0, 4] so the crest's curvature stays
+    // inside the spline's authoring bound.
+    private static WorldCurveRow Hump() => Drawn(
+        f: static x => Math.Sin(a: (Math.PI * (x / 4.0))),
+        name: "hump",
+        span: 4
+    );
     private static string Refusal(WorldDefinition definition) => (WorldDefinitionValidator.TryValidateLocally(
         definition: definition,
         reason: out var reason
@@ -133,6 +139,106 @@ public sealed class CreationCharacterLawTests {
             low: -Tolerance,
             high: Tolerance
         );
+    }
+    /// <summary>A speed-adaptive gait: a stride whose radians per metre are a curve of a pace driver's speed, and a
+    /// run set riding that stride's phase at twice its rate, weighted by a second curve of the pace. At 2 m/s the
+    /// rate curve reads 2 and the fade curve 0.25; the control is the same frames advanced with no definition, where
+    /// both curves leave their drivers unscaled. The validator and canonicalizer refuse each binding they cannot
+    /// resolve, by name.</summary>
+    [Fact]
+    public void DriverCurvesScaleTheCadenceAndWeightAndADriverSignalSharesThePhase() {
+        CreationDriverDocument[] Drivers(string runSignal = "driver.stride", string? runDynamics = null, string fadeCurve = "fade") => [
+            new CreationDriverDocument(Name: "pace", Signal: CreationDriverDocument.SignalSpeed, Cadence: 1f, When: ["always"]),
+            new CreationDriverDocument(Name: "stride", Signal: CreationDriverDocument.SignalPlanarTravel, Cadence: 1f, When: ["always"], CadenceBy: new CreationDriverCurveDocument(Driver: "pace", Curve: "rate")),
+            new CreationDriverDocument(Name: "run", Signal: runSignal, Cadence: 2f, When: ["always"], BlendInSeconds: 0f, Dynamics: runDynamics, WeightBy: new CreationDriverCurveDocument(Driver: "pace", Curve: fadeCurve)),
+        ];
+        CreationDocument Creation(CreationDriverDocument[] drivers) => CreationFixtures.Rig(
+            drivers: drivers,
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
+                Driver: "run",
+                Pivot: Vector3.Zero,
+                Axis: Vector3.UnitZ,
+                Amplitude: 1f
+            ))
+        );
+
+        var rate = Drawn(name: "rate", f: static x => (1.0 + ((x * x) / 8.0)), span: 4);
+        var fade = Drawn(name: "fade", f: static x => ((x * x) / 64.0), span: 8);
+        var world = CreationFixtures.RigWorld(creation: Creation(drivers: Drivers()), curves: [rate, fade]);
+
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: world));
+        Assert.Contains(
+            expectedSubstring: "cadenceBy.curve 'rate' names no declared curves row",
+            actualString: Refusal(definition: CreationFixtures.RigWorld(creation: Creation(drivers: Drivers())))
+        );
+        Assert.Contains(
+            expectedSubstring: "weightBy.curve 'fade' is not drawn left to right",
+            actualString: Refusal(definition: CreationFixtures.RigWorld(
+                creation: Creation(drivers: Drivers()),
+                curves: [rate, new WorldCurveRow(Name: "fade", Knots: [.. fade.Knots.Reverse()])]
+            ))
+        );
+        CreationFixtures.AssertRefusesNaming(
+            document: Creation(drivers: Drivers(runSignal: "driver.later")),
+            needle: "names no driver 'later' declared before this one"
+        );
+        CreationFixtures.AssertRefusesNaming(
+            document: Creation(drivers: Drivers(runDynamics: "body-turn")),
+            needle: "dynamics cannot follow the signal 'driver.stride'"
+        );
+        CreationFixtures.AssertRefusesNaming(
+            document: Creation(drivers: Drivers(fadeCurve: "")),
+            needle: "curve is empty"
+        );
+
+        Assert.InRange(actual: WorldGaitDrivers.CurveHeight(row: rate, x: -1f), low: (1f - Tolerance), high: (1f + Tolerance));
+        Assert.InRange(actual: WorldGaitDrivers.CurveHeight(row: rate, x: 9f), low: (3f - Tolerance), high: (3f + Tolerance));
+
+        // A driver signal naming no earlier driver reads a zero phase; the canonicalizer refuses it before a frame.
+        CreationDriverDocument[] advanced = [.. Drivers(), new CreationDriverDocument(Name: "ghost", Signal: "driver.nobody", Cadence: 1f, When: ["always"])];
+
+        (float[] Phases, float[] Weights) Run(WorldDefinition? definition) {
+            var phases = new float[CreationDocument.MaxDrivers];
+            var weights = new float[CreationDocument.MaxDrivers];
+            var address = new Protocol.WorldEntityAddress(Authority: "a", Generation: 1, Index: 0);
+            var last = Vector3.Zero;
+            var lastRotation = Quaternion.Identity;
+            var seeded = false;
+            var lastAddress = default(Protocol.WorldEntityAddress);
+            var speed = 0f;
+
+            for (var frame = 0; (frame <= 30); frame++) {
+                WorldGaitDrivers.Advance(
+                    drivers: advanced,
+                    phases: phases,
+                    weights: weights,
+                    deltaSeconds: (1f / 60f),
+                    facts: Physics.Motion.BodyFacts.Grounded,
+                    position: new Vector3(x: (frame * (2f / 60f)), y: 0f, z: 0f),
+                    orientation: Quaternion.Identity,
+                    lastPosition: ref last,
+                    lastOrientation: ref lastRotation,
+                    seeded: ref seeded,
+                    lastAddress: ref lastAddress,
+                    easedSpeed: ref speed,
+                    address: address,
+                    definition: definition
+                );
+            }
+
+            return (phases, weights);
+        }
+
+        var (curved, curvedWeights) = Run(definition: world);
+        var (plain, plainWeights) = Run(definition: null);
+
+        Assert.Equal(expected: 2f, actual: curved[0], precision: 3);
+        Assert.Equal(expected: 1.5f, actual: curved[1], precision: 3);
+        Assert.Equal(expected: (2f * curved[1]), actual: curved[2], precision: 4);
+        Assert.Equal(expected: 0.0625f, actual: curvedWeights[2], precision: 3);
+        Assert.Equal(expected: 0f, actual: curved[3]);
+        Assert.Equal(expected: 1f, actual: plain[1], precision: 3);
+        Assert.Equal(expected: 1f, actual: plainWeights[2], precision: 4);
     }
     /// <summary>A driver cadence and a swing amplitude bound to fixed cells resolve through the document walk to
     /// the cells' numbers; the control is a literal beside them, untouched by the walk.</summary>

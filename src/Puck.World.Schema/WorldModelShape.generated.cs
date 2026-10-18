@@ -1495,6 +1495,13 @@ public static partial class WorldModelShape {
                 M("volumes", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Authoring.VolumeDocument>), typeof(global::Puck.World.Authoring.CreationDocument), "Volumes", Read | Write, static value => ((global::Puck.World.Authoring.CreationDocument)value).Volumes),
                 M("extensions", typeof(global::System.Collections.Generic.IDictionary<global::System.String, global::System.Text.Json.JsonElement>), typeof(global::Puck.World.Authoring.CreationDocument), "Extensions", Read | Write, static value => ((global::Puck.World.Authoring.CreationDocument)value).Extensions),
             ]),
+        T(typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("driver", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), "Driver", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverCurveDocument)value).Driver),
+                M("curve", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), "Curve", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverCurveDocument)value).Curve),
+            ],
+            []),
         T(typeof(global::Puck.World.Authoring.CreationDriverDocument), true, JsonTypeInfoKind.Object, null,
             [],
             [
@@ -1505,6 +1512,8 @@ public static partial class WorldModelShape {
                 M("blendInSeconds", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.CreationDriverDocument), "BlendInSeconds", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).BlendInSeconds),
                 M("blendOutSeconds", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.CreationDriverDocument), "BlendOutSeconds", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).BlendOutSeconds),
                 M("dynamics", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationDriverDocument), "Dynamics", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).Dynamics),
+                M("cadenceBy", typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), typeof(global::Puck.World.Authoring.CreationDriverDocument), "CadenceBy", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).CadenceBy),
+                M("weightBy", typeof(global::Puck.World.Authoring.CreationDriverCurveDocument), typeof(global::Puck.World.Authoring.CreationDriverDocument), "WeightBy", Read | Write, static value => ((global::Puck.World.Authoring.CreationDriverDocument)value).WeightBy),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.CreationEffectorDocument), true, JsonTypeInfoKind.Object, null,
