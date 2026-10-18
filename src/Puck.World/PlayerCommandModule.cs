@@ -161,7 +161,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.motion",
-            description: "Sets or echoes a body's declared motion program: body.motion [program] [body]. With no program it echoes the current selection, followed by planarTarget strafe=<s> backward=<b> when that program authors ComputePlanarTargetVelocity's planarTarget parameters. A switch is authoritative and may re-constrain the pose. The optional trailing body index is 0..4095 (default 0).",
+            description: "Sets or echoes a body's declared motion program: body.motion [program] [body]. With no program it echoes the current selection, followed by planarTarget strafe=<s> backward=<b> when that program authors ComputePlanarTargetVelocity's planarTarget parameters, and stepHeight=<h>, the tallest riser the body walks up onto (its kit's motion.stepHeight times its scale; 0 never steps). A switch is authoritative and may re-constrain the pose. The optional trailing body index is 0..4095 (default 0).",
             handler: MotionHandler,
             ackOnly: true
         );

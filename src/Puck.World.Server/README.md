@@ -820,9 +820,11 @@ cell size, corner extent, baked corner count, band, and hash. The field provider
 moving body's step clear before its contact solve, by a certified sweep over the exact program's
 bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
 counted as the `physics.sweep` work source). The analytic provider emits exact isotropically
-scaled spheres and world-axis bounds for other finite placement primitives;
-rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
-conservative there. A solid row participates in simulation, which is why
+scaled spheres and, for other finite placement primitives, each primitive's own
+bounding box turned with it (an oriented box, or an axis-aligned one when its
+axes land on world axes), so a sharp box collides exactly at any yaw; rounded,
+non-box, smoothed, and boolean-carved geometry is conservative there, and a
+solid screen keeps its world-axis bounds. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
@@ -888,6 +890,18 @@ because a faster kit's larger inward bias converts to downhill drift under
 depenetration rather than held contact — a shipped world would need to author
 `GradientDerivedUp` to exercise the regression at all, and none does.
 `world.kits` echoes it alongside the other feel fields.
+
+A grounded walker steps up a riser no taller than its kit's
+`WorldMotion.StepHeight` (`stepHeight`, scaled with the body, zero by
+default). `ResolveProgramContacts` runs the ordinary sweep through a
+`BodyContactStep` bound to the body's pose and volumes; when the body was
+grounded last tick, the sweep reported a non-walkable push, the program owns
+the vertical contact channel and no pull hold owns it, `Puck.Physics`'
+`FixedStepUp` retries the step through that same sweep, so an entity-aware
+field resolves the retry against the other bodies too. The retry replaces the
+blocked step only when it lands grounded on a walkable surface, so a face
+steeper than `maxSlopeDegrees` is never stepped onto. `body.motion` echoes
+the body's effective `stepHeight=`, and `world.kits` the kit's.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position

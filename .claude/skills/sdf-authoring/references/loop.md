@@ -59,6 +59,7 @@ discards unsaved row edits, since it rebuilds from what is on disk.
 
 ```
 view.override camera <name>      # or: layout <name>, or auto / - to clear
+view.isolate <prototype> <shape-name>...   # render only those shapes and their descendants; off restores
 world.screenshot <abs-path.png>
 world.wait <ticks>
 ```

@@ -203,7 +203,7 @@ the per-frame dynamic transforms and nothing else reads it, so the SDF program, 
 solid field, and simulation state are untouched — pinned by `CreationAnimationLawTests`, with the
 grammar and the worked rigs in `Puck.World.Authoring`'s README. A fourth, composing AFTER the
 drivers and the parent chain: an `effectors` list (≤ 8 — `{name, chain, tip, target, when, weight,
-plant}`) corrects the driver-posed skeleton so a named tip reaches a target. `chain` names the bones
+plant, align}`) corrects the driver-posed skeleton so a named tip reaches a target. `chain` names the bones
 root→tip, each descending from the one before through `parent` (a bone's joint is the pivot of its
 first swing, its authored `joint` when it swings nothing, else its own position); two bones close
 analytically in the plane the driver-posed limb already bends in, three to eight sweep by cyclic
@@ -215,6 +215,9 @@ every probe there misses), `body` (another entity's root plus `offset`, in that 
 `state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
 driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
 when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
+`align` turns the solved tip about its own origin so its rest axis against the probe lies along the
+latched contact normal (world up without a surface), scaled by the same eased weight, which keeps a
+planted boot's sole flat however the chain bent to reach it.
 Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. A shape's `panel`
 (`ShapePanelDocument`) is a second-material inset face region — a plate that reads as two shapes
 (an ivory inset in a lilac armor plate, say) for the price of one against `CreationDocument.StampShapeCount`'s

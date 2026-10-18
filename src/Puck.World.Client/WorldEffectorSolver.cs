@@ -283,11 +283,14 @@ public static class WorldEffectorSolver {
     /// <param name="reach">How far to march, world units; a non-positive reach probes nothing.</param>
     /// <param name="standoff">How far off the hit surface, along its own normal, the target sits.</param>
     /// <param name="target">The world-space target; <paramref name="origin"/> when nothing answered.</param>
+    /// <param name="normal">The hit surface's unit world normal, the field gradient at the hit: back along the probe
+    /// where the field reports no gradient, and world up when nothing answered.</param>
     /// <returns><see langword="true"/> when the march hit.</returns>
     /// <remarks>The march starts <see cref="ProbeBackoff"/> behind the origin, so a tip already resting on the surface
     /// it probes answers the same way one reaching toward it does.</remarks>
-    public static bool TryProbeSurface(SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target) {
+    public static bool TryProbeSurface(SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
         target = origin;
+        normal = Vector3.UnitY;
 
         if (
             (field is null) ||
@@ -303,6 +306,8 @@ public static class WorldEffectorSolver {
         ));
         var start = (origin - (direction * ProbeBackoff));
 
+        normal = -direction;
+
         if (!field.Raycast(
             dir: FixedVector3.FromVector3(value: direction),
             hit: out var hit,
@@ -316,12 +321,6 @@ public static class WorldEffectorSolver {
         // answer stays in the same float world frame the origin was expressed in whichever cell the march ended in.
         var point = (start + (direction * ((float)((double)hit.Distance))));
 
-        target = point;
-
-        if (standoff <= 0f) {
-            return true;
-        }
-
         // The march reports no normal, so the surface's own is the field gradient at the hit — the standoff is along
         // the SURFACE's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.
         if (
@@ -329,11 +328,16 @@ public static class WorldEffectorSolver {
             gradient: out var gradient,
             position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))
         ) &&
-            (gradient.ToVector3() is { } normal) &&
-            (normal.LengthSquared() > 0f)
+            (gradient.ToVector3() is { } surface) &&
+            (surface.LengthSquared() > 0f)
         ) {
-            target = (point + (Vector3.Normalize(value: normal) * standoff));
+            normal = Vector3.Normalize(value: surface);
         }
+
+        target = (point + (normal * MathF.Max(
+            x: 0f,
+            y: standoff
+        )));
 
         return true;
     }

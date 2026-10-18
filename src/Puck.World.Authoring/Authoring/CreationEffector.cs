@@ -121,6 +121,16 @@ public sealed record CreationReplantDocument(float Distance, float Seconds, floa
 /// <param name="Weight">A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the
 /// gate's eased weight, so a half-weight effector suggests rather than commands.</param>
 /// <param name="Plant">The contact latch (null = none) — see <see cref="CreationPlantDocument"/>.</param>
+/// <param name="Align">How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever
+/// orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the
+/// tip axis that points against the target's probe <see cref="CreationEffectorTargetDocument.Direction"/> at rest
+/// (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or
+/// onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the
+/// tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends
+/// by, so a tip a plant releases to its swing (<see cref="CreationPlantDocument.SwingWeight"/> 0) keeps its authored
+/// swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its
+/// rest offset, and a <see cref="CreationEffectorTargetDocument.Standoff"/> equal to the tip origin's rest height then
+/// puts the whole sole on the surface.</param>
 public sealed record CreationEffectorDocument(
     string Name,
     IReadOnlyList<string> Chain,
@@ -128,7 +138,8 @@ public sealed record CreationEffectorDocument(
     CreationEffectorTargetDocument Target,
     [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentScalar? Weight = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationPlantDocument? Plant = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationPlantDocument? Plant = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Align = null
 ) {
     /// <summary>The cyclic-coordinate-descent sweep CEILING for a chain of three or more bones. The sweep stops early
     /// once the tip is within <c>Puck.World.Client.WorldEffectorSolver.ReachedTolerance</c>, so this bounds the worst

@@ -357,10 +357,24 @@ whose plants name the same driver step one at a time, so feet turning in place o
 settling into a stance after a stop take alternate steps instead of sliding. A gait that
 resumes mid-step latches afresh.
 
+`align` (in [0, 1], omitted = 0) keeps the tip's sole on the contact. The solve only
+moves the tip's origin, and the tip inherits whatever turn the chain made to get it
+there, so a boot planted off its rest offset tilts with its shin. With `align` the
+solved tip turns about its own origin, the shortest way, until the axis that pointed
+against the probe `direction` at rest (creation up for a `body` or `state` target)
+lies along the surface normal at the target; the normal is latched with the plant and
+turns over a replant step, and a target with no surface aligns to world up. The turn is
+scaled by `align` and by the same eased weight the goal blends by, so a plant with
+`swingWeight: 0` leaves the swing's own toe-off and heel lift untouched off the ground.
+The tip keeps the heading the chain gave it, and its own swings are levelled with the
+rest of its tilt while it is on the ground. `standoff` stays measured to the tip's
+origin: with the tip aligned, the origin's rest height above the sole is exactly the
+standoff that puts the whole sole on the surface.
+
 | Rig | Chain | Target | Plant |
 |---|---|---|---|
 | Climber's hands | `["upperArmLeft", "forearmLeft"]`, tip the hand | `surface`, `direction: [0, 0, 1]` (the body's own front), reach 0.6, standoff the palm's thickness | one per hold, windowed on the reach driver |
-| Walker's feet | `["thighLeft", "shinLeft"]`, tip the boot | `surface`, `direction: [0, -1, 0]`, reach a stride's clearance, standoff the sole | windowed on the stride driver, contralateral halves |
+| Walker's feet | `["thighLeft", "shinLeft"]`, tip the boot, `align: 1` | `surface`, `direction: [0, -1, 0]`, reach a stride's clearance, standoff the boot origin's rest height | windowed on the stride driver, contralateral halves |
 | Tail | four to eight segments, tip the last | `state`, a point a rule publishes | none—a tail tracks, it does not latch |
 | Spider leg | `["coxaLeft1", "femurLeft1", "tibiaLeft1", "tarsusLeft1"]` | `surface`, `direction` the body's own down, which on a ceiling points UP the world | windowed per leg on a shared gait driver |
 
@@ -380,7 +394,9 @@ probe there misses and every effector over one eases out.
 
 `body.rig [body]` is the read-back: per driver its phase and eased weight, per effector
 its weight, whether its latch is holding (`planted=yes|no`, or `stepping` mid-step), and the world point its tip is being asked for
-(`target=(x, y, z)`, or `none` when nothing resolved). It reads the pool's latched
+(`target=(x, y, z)`, or `none` when nothing resolved), and for an effector that authors
+`align` the share of the tilt it took out and the contact normal it aligned to
+(`align=w normal=(x, y, z)`). It reads the pool's latched
 values, never a fresh advance, so a piped run can fence twice and assert a planted
 target is unchanged while `body.where` moved.
 

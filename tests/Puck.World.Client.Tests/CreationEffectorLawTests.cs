@@ -423,11 +423,17 @@ public sealed class CreationEffectorLawTests {
                 ),
                 reach: 1f,
                 rootRotation: Quaternion.Identity,
+                normal: out var normal,
                 standoff: 0.03f,
                 target: out var target,
                 towards: -Vector3.UnitY
             ),
             userMessage: "the probe missed a box directly below it"
+        );
+        AssertNear(
+            actual: normal,
+            expected: Vector3.UnitY,
+            what: "the probe did not report the box's top-face normal"
         );
         AssertNear(
             actual: target,
@@ -454,6 +460,7 @@ public sealed class CreationEffectorLawTests {
                     angle: MathF.PI,
                     axis: Vector3.UnitZ
                 ),
+                normal: out _,
                 standoff: 0.03f,
                 target: out _,
                 towards: -Vector3.UnitY
@@ -471,6 +478,7 @@ public sealed class CreationEffectorLawTests {
                 ),
                 reach: 0.1f,
                 rootRotation: Quaternion.Identity,
+                normal: out _,
                 standoff: 0.03f,
                 target: out _,
                 towards: -Vector3.UnitY

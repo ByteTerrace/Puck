@@ -6772,6 +6772,10 @@ export type WorldMotion = {
    * The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast — depenetration removes whatever the surface curves away, so a walker's own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit's own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine's old hardcoded constant. Must remain positive after Q48.16 compilation.
    */
   groundStick?: number;
+  /**
+   * The tallest riser, in world units scaled with the body, a grounded body walks up onto rather than stopping against (see FixedStepUp). A step the ordinary contact solve finds blocked is retried raised by this height, moved, and lowered back, and is kept only when it lands grounded on a walkable surface no higher than this above where it started. Read only by a program that owns the vertical contact channel, and never while the body is airborne or held by a pull. Zero, the default, never steps. Must be finite and non-negative, and a positive value must remain positive after Q48.16 compilation.
+   */
+  stepHeight?: number;
 };
 
 export type WorldMotionDefaults = {
@@ -8919,6 +8923,10 @@ export type WorldPrototype = {
           height: number;
         } | null;
       } | null;
+      /**
+       * How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the tip axis that points against the target's probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin's rest height then puts the whole sole on the surface.
+       */
+      align?: number | null;
     } | null)[] | null;
     /**
      * The bounded participating volumes (null = none), at most MaxVolumes — see VolumeDocument. Each rides the creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider.

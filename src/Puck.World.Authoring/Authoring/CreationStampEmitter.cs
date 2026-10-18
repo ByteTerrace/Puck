@@ -47,11 +47,15 @@ public readonly record struct FixedCreationStampTransform(
 );
 /// <summary>One primitive copy after a fixed-point stamp transform has been applied.</summary>
 /// <param name="Shape">The authored shape.</param>
-/// <param name="Center">The primitive's world-axis bound center.</param>
+/// <param name="Center">The primitive's bound center, shared by its world-axis and oriented bounds.</param>
 /// <param name="HalfExtents">The primitive's world-axis bound half-extents.</param>
 /// <param name="UniformScale">The primitive's world scale when it is isotropic; zero otherwise.</param>
 /// <param name="PlaneNormal">The unit world normal for an unbounded plane; zero for a finite primitive.</param>
-public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shape, FixedVector3 Center, FixedVector3 HalfExtents, FixedQ4816 UniformScale, FixedVector3 PlaneNormal);
+/// <param name="Rotation">The unit rotation that turns the primitive's own axes into world space.</param>
+/// <param name="LocalHalfExtents">The primitive's bound half-extents along its own axes, scaled: with
+/// <paramref name="Rotation"/> and <paramref name="Center"/>, the oriented box that encloses it, never larger than
+/// the world-axis bound.</param>
+public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shape, FixedVector3 Center, FixedVector3 HalfExtents, FixedQ4816 UniformScale, FixedVector3 PlaneNormal, FixedQuaternion Rotation, FixedVector3 LocalHalfExtents);
 /// <summary>
 /// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
 /// </summary>
@@ -665,12 +669,22 @@ public static class CreationStampEmitter {
     /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
     /// whole-creation stamp of <see cref="RequiresScope"/>). The creation emitter shares this scope: a shape whose field
     /// op or warp would otherwise open its own scope then rides the caller's instead.</param>
-    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false) {
+    /// <param name="hidden">The shapes, by index, that emit nothing (a presentation's shape isolation), or
+    /// <see langword="null"/> to emit every shape.</param>
+    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false, IReadOnlyList<bool>? hidden = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        foreach (var shape in (document.Shapes ?? [])) {
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shape = shapes[index];
+
+            if ((hidden is not null) && hidden[index]) {
+                continue;
+            }
+
             EmitShapeChain(
                 builder: builder,
                 contactMargin: contactMargin,
@@ -1463,9 +1477,15 @@ public static class CreationStampEmitter {
                         Y: (((FixedQ4816.Abs(value: axisX.Y) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * boundsHalfExtents.Z)),
                         Z: (((FixedQ4816.Abs(value: axisX.Z) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * boundsHalfExtents.Z))
                     ),
+                    LocalHalfExtents: new FixedVector3(
+                        X: ((boundsHalfExtents.X * shapeScale.X) * stampScale),
+                        Y: ((boundsHalfExtents.Y * shapeScale.Y) * stampScale),
+                        Z: ((boundsHalfExtents.Z * shapeScale.Z) * stampScale)
+                    ),
                     PlaneNormal: (bounds.IsUnbounded
                     ? axisY.Normalize()
                     : FixedVector3.Zero),
+                    Rotation: (stampRotation * placed.Rotation).Normalize(),
                     Shape: shape,
                     UniformScale: uniformScale
                 ));

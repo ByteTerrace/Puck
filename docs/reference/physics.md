@@ -171,7 +171,16 @@ Capsule/box pairs still use conservative world bounds. Compound correction
 selection compares full-width squared magnitudes so a shallow overlap is not
 lost by rounding its square to the scalar precision.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
-axis-aligned boxes, and half-spaces, returning only a `FixedContactPush`.
+axis-aligned boxes, oriented boxes, and half-spaces, returning only a
+`FixedContactPush`. An oriented box carries its own half-extents and a unit
+rotation; the push carries the body into the box's frame, runs the
+axis-aligned query there, and turns the push back, so a capsule, sphere, or
+box meets the box's true faces and a face push points along that face's
+normal. `FixedStaticCollider.Box` builds one from a center, rotation and
+half-extents, and keeps the axis-aligned collider whenever the rotation
+carries every box axis exactly onto a world axis. Against either box a capsule
+or box body is measured by its bounds in the box's frame, which is exact for
+an upright capsule on a box's faces and conservative at its edges.
 
 `IContactField` is the seam a grounded body resolves its swept position
 against, and `FixedStaticContactSolver` is the analytic provider's half of it:
@@ -235,6 +244,22 @@ A body approaching the carrier's end is ordinarily held a step sooner by its
 sweep, whose box reaches the end before any core's start does and proves no
 ground there; the refusal is met by a body already past that point, posed or
 arriving there.
+
+`FixedStepUp.TryStep` lifts a grounded body over a riser its ordinary step met
+as a wall. It runs every move through the caller's own `IFixedContactStep`, a
+sweep bound to one body's orientation, volumes and up axis, so it works over
+either provider. It raises the start by the step height, moves the step's
+planar displacement, and bisects downward (`LandingProbes`, 8 sweeps) for the
+shallowest descent that meets support, no lower than where the original step
+would have ended along up. The bisection is what lets an endpoint-only provider
+land: `FixedStaticContactSolver` pushes a capsule out of a box along the box's
+own axis of least overlap, so one deep move reads a riser's side as the nearer face,
+while a landing that overlaps the top by less than the probe resolution
+resolves upward. The retry is kept only when the raised move gets further than
+the blocked step and the landing grounds on a walkable surface, no higher than
+the step height above the start and higher than the blocked step. A wall costs
+two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
+it from the kit's `motion.stepHeight`, zero by default.
 
 Each sweep takes an explicit bounds-query budget
 (`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact
@@ -561,7 +586,8 @@ thread-safe**.
 - **Contact geometry**—`FixedBodyColliderVolume`, `FixedDynamicBodyContacts`,
   `FixedStaticCollider`, `FixedContactPush`.
 - **The contact seam**—`IContactField`, `ContactResolution`,
-  `FixedStaticContactSolver`, `FixedFieldContactSolver`.
+  `FixedStaticContactSolver`, `FixedFieldContactSolver`, `FixedStepUp`,
+  `IFixedContactStep`, `FixedStepUpResult`.
 - **Surface-attach query**—`FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
   `FixedSurfaceColliderSource`.
 - **Rigid solver**—`FixedRigidSolver`, `FixedContactCandidate`.

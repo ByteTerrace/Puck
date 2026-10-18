@@ -255,8 +255,9 @@ by a named `driver` reading a signal or a state row. Directional locomotion read
 earlier driver's cycle (`driver.<name>`) and scale its cadence or weight by a
 world `curves` row of an earlier driver (`cadenceBy`, `weightBy`), which is how a
 stride lengthens with speed and a run's swings fade in over a walk's. `chains` plus `effectors`
-give CCD inverse kinematics with plant windows for feet and a `replant` latch that
-steps a resting foot rather than sliding it. `frames` snapshot base poses. A
+give CCD inverse kinematics with plant windows for feet, a `replant` latch that
+steps a resting foot rather than sliding it, and `align`, which keeps a planted
+sole flat on its contact. `frames` snapshot base poses. A
 behaviour the vocabulary cannot express is a new signal, member or op here,
 never a client special case. Details, caps, every refusal, and the moth's own
 driver map are in `references/rig.md`.

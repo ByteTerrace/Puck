@@ -16,25 +16,18 @@ public sealed partial class WorldBody {
             (m_collider is { } collider)
         ) {
             var resolvedVelocity = scratch.Velocity;
-            var volumes = ScaledColliderVolumes();
-            var contactResolution = ((field is IEntityContactField entityField)
-                ? entityField.ResolveEntitySweep(
-                    entityIndex: scratch.EntityIndex,
-                    orientation: in scratch.Orientation,
-                    position: ref scratch.NextPosition,
-                    previousPosition: m_position,
-                    up: in scratch.Up,
-                    velocity: ref resolvedVelocity,
-                    volumes: volumes
-                )
-                : field.ResolveSweep(
-                    orientation: in scratch.Orientation,
-                    position: ref scratch.NextPosition,
-                    previousPosition: m_position,
-                    up: in scratch.Up,
-                    velocity: ref resolvedVelocity,
-                    volumes: volumes
-                )
+            var intended = scratch.NextPosition;
+            var step = new BodyContactStep(
+                entityIndex: scratch.EntityIndex,
+                field: field,
+                orientation: scratch.Orientation,
+                up: scratch.Up,
+                volumes: ScaledColliderVolumes()
+            );
+            var contactResolution = step.Sweep(
+                position: ref scratch.NextPosition,
+                previousPosition: m_position,
+                velocity: ref resolvedVelocity
             );
 
             // A refused step writes nothing from its resolution; everything the step wrote is restored once it ends.
@@ -42,6 +35,31 @@ public sealed partial class WorldBody {
                 NoteSweepRefusal(refusal: contactResolution.Refusal);
 
                 return;
+            }
+
+            // STEP-UP. A grounded body (m_grounded is still last tick's verdict here) whose step met a non-walkable
+            // face retries it over the face, through the same sweep; FixedStepUp keeps the retry only when it lands
+            // walkable within the kit's step height.
+            if (
+                m_grounded &&
+                (contactResolution.ObstructionNormal != FixedVector3.Zero) &&
+                (m_tuning.StepHeight > FixedQ4816.Zero) &&
+                m_bodyMotionProgram.OwnsVerticalContactState &&
+                !HoldOwnsVerticalChannel &&
+                FixedStepUp.TryStep(
+                    blocked: in scratch.NextPosition,
+                    intended: in intended,
+                    result: out var stepped,
+                    start: m_position,
+                    step: ref step,
+                    stepHeight: StepHeight,
+                    up: in scratch.Up,
+                    velocity: in scratch.Velocity
+                )
+            ) {
+                scratch.NextPosition = stepped.Position;
+                resolvedVelocity = stepped.Velocity;
+                contactResolution = stepped.Resolution;
             }
 
             m_grounded = contactResolution.Grounded;
@@ -203,6 +221,37 @@ public sealed partial class WorldBody {
                 velocity: (velocity - (normal * inward))
             );
         }
+    }
+
+    // One body's swept contact solve, bound to its pose and volumes: the ordinary step and every step-up move run
+    // through it, so an entity-aware field resolves each of them against the other bodies too.
+    private readonly ref struct BodyContactStep(IContactField field, int entityIndex, FixedQuaternion orientation, FixedVector3 up, ReadOnlySpan<FixedBodyColliderVolume> volumes) : IFixedContactStep {
+        private readonly IContactField m_field = field;
+        private readonly int m_entityIndex = entityIndex;
+        private readonly FixedQuaternion m_orientation = orientation;
+        private readonly FixedVector3 m_axis = up;
+        private readonly ReadOnlySpan<FixedBodyColliderVolume> m_volumes = volumes;
+
+        public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+            ((m_field is IEntityContactField entityField)
+                ? entityField.ResolveEntitySweep(
+                    entityIndex: m_entityIndex,
+                    orientation: in m_orientation,
+                    position: ref position,
+                    previousPosition: in previousPosition,
+                    up: in m_axis,
+                    velocity: ref velocity,
+                    volumes: m_volumes
+                )
+                : m_field.ResolveSweep(
+                    orientation: in m_orientation,
+                    position: ref position,
+                    previousPosition: in previousPosition,
+                    up: in m_axis,
+                    velocity: ref velocity,
+                    volumes: m_volumes
+                )
+            );
     }
 
     // A walking body's velocity in world space: its planar velocity, tangent to the body's own up, plus its vertical

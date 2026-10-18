@@ -25,7 +25,22 @@ let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
 let violetPodLeft = 14 // violet of the left back pod's plates, under its vent and grey plate
 let violetPodRight = 15 // violet of the right back pod's plates, under its vent and grey plate
 let violetChest = 16 // violet under the breastplate's #EED3A6 lower band
-let shinCream = 17 // #EED3A6 under the shins' violet trims
+let shinCream = 17 // #EED3A6, the back pods' cream bands
+let shinViolet = 18 // #9D66C6 greaves under their #EED3A6 arch band and side panel
+let gunmetal = 19 // #43464E heel lens housing and heel block
+let steel = 20 // #8B9099 the lens housing's bright ring
+let glow = 21 // #D8FDFF the heel lenses' white-hot cores
+
+let archBackOutline = [
+  [-1, -1]
+  [-1, 0]
+  [-0.809, 0.588]
+  [-0.309, 0.951]
+  [0.309, 0.951]
+  [0.809, 0.588]
+  [1, 0]
+  [1, -1]
+]
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
@@ -489,6 +504,458 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
+  // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
+  {
+    name: "shoulders-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -50.4])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -50.4]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [45.6, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -45.6])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -45.6]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50.4, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  // Eight hero cameras round the lower legs at the hero spawn, at 45-degree steps from the front, tiled by the legs-hero
+  // layout. Each looks down about 20 degrees, so its frame tops out just under the horizon and shows only plain ground.
+  {
+    name: "legs-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 1.05, -50])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -50]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-front-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.5858, 1.05, -49.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-front-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -49.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46, 1.05, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46, 1.05, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.5858, 1.05, -46.5858])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-back-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -46.5858]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 1.05, -46])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-back"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -46]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.4142, 1.05, -46.5858])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-back-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -46.5858]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50, 1.05, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50, 1.05, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-front-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.4142, 1.05, -49.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 0.36, -48])
+        worldAxes: false
+      }
+      name: "legs-front-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -49.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   {
     name: "front"
     renderHeight: 900
@@ -1192,6 +1659,8 @@ kits {
         speed {
           value: 5
         }
+        // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
+        stepHeight: 0.3
         turn {
           falloff: 1
           maxPitch: 1.2
@@ -1442,9 +1911,21 @@ prototypes {
               metal: 0
             }
           }
-          // Each boot's violet rim, in the boot's frame: the band of its surface between 2.65 and 7.65 cm above the
-          // ground.
           paints [
+            {
+              parent: "bootPlan-left"
+              type: "Box"
+              position [0, 0, 0.04]
+              scale [0.0025, 0.2, 0.17]
+              color: "#CDB794"
+            }
+            {
+              parent: "bootPlan-right"
+              type: "Box"
+              position [0, 0, 0.04]
+              scale [0.0025, 0.2, 0.17]
+              color: "#CDB794"
+            }
             {
               parent: "boot-left"
               type: "Box"
@@ -1514,6 +1995,50 @@ prototypes {
           // The helmet's cream trim, in the helmet's frame: a horseshoe round the face opening, its ellipse projected
           // along the face's forward axis; the throat opening leaves the helmet no surface below it.
           paints [
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
             {
               parent: "helmet"
               type: "Prism"
@@ -1905,58 +2430,149 @@ prototypes {
               metal: 0
             }
           }
-          // Each shin's violet trims, in the shin's own frame: a ring round the arch, its ellipse projected front to
-          // back, and a pentagonal panel on the outer side.
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.36
+          specular: 0.08
+          emissive: 0
+          coat: 0.28
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 31
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#D7C9B7"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          // A panel line and two rivets on each greave's outer side; its cream arch band and side panel are raised plates.
           paints [
             {
               parent: "shin-left"
               type: "Prism"
-              position [0, -0.29, 0]
-              scale [0.174, 0.174, 0.45]
+              position [0, -0.29, -0.225]
+              scale [0.191, 0.198, 0.225]
               profile {
-                kind: "Ellipse"
+                kind: "Convex"
+                vertices: archBackOutline
+                cornerRadius: 0.07
               }
-              stroke: 0.023
-              color: "#9D66C6"
+              stroke: 0.0035
+              color: "#4A3266"
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [0, -0.29, -0.225]
+              scale [0.191, 0.198, 0.225]
+              profile {
+                kind: "Convex"
+                vertices: archBackOutline
+                cornerRadius: 0.07
+              }
+              stroke: 0.0035
+              color: "#4A3266"
+            }
+            {
+              parent: "shin-left"
+              type: "Box"
+              position [0.12, -0.06, 0.05]
+              rotation [0.3827, 0, 0, 0.9239]
+              scale [0.06, 0.0022, 0.16]
+              color: "#6F4B9A"
             }
             {
               parent: "shin-left"
               type: "Prism"
-              position [0.15, 0.02, 0]
+              position [0.12, 0.2, 0.075]
               rotation [0, diagonal, 0, diagonal]
-              scale [0.13, 0.18, 0.08]
-              profile {
-                kind: "Convex"
-                vertices: shinPanelOutline
-                cornerRadius: 0.12
-              }
-              color: "#9D66C6"
-            }
-            {
-              parent: "shin-right"
-              type: "Prism"
-              position [0, -0.29, 0]
-              scale [0.174, 0.174, 0.45]
+              scale [0.006, 0.006, 0.3]
               profile {
                 kind: "Ellipse"
               }
-              stroke: 0.023
-              color: "#9D66C6"
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-left"
+              type: "Prism"
+              position [0.12, -0.12, -0.07]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-right"
+              type: "Box"
+              position [-0.12, -0.06, 0.05]
+              rotation [0.3827, 0, 0, 0.9239]
+              scale [0.06, 0.0022, 0.16]
+              color: "#6F4B9A"
             }
             {
               parent: "shin-right"
               type: "Prism"
-              position [-0.15, 0.02, 0]
-              rotation [0, -diagonal, 0, diagonal]
-              scale [0.13, 0.18, 0.08]
+              position [-0.12, 0.2, 0.075]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
               profile {
-                kind: "Convex"
-                vertices: shinPanelOutline
-                cornerRadius: 0.12
+                kind: "Ellipse"
               }
-              color: "#9D66C6"
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [-0.12, -0.12, -0.07]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
             }
           ]
+        }
+        {
+          color: "#43464E"
+          roughness: 0.34
+          specular: 0.35
+          metal: 0.6
+          emissive: 0
+          coat: 0.2
+        }
+        {
+          color: "#8B9099"
+          roughness: 0.3
+          specular: 0.4
+          metal: 0.7
+          emissive: 0
+          coat: 0.2
+        }
+        {
+          color: "#D8FDFF"
+          roughness: 0.2
+          specular: 0.04
+          emissive: 3
+          coat: 0
         }
       ]
       shape Superellipsoid "pelvis" {
@@ -3382,8 +3998,8 @@ prototypes {
       shape Superellipsoid "shin-left" {
         id: 180
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
-        material: shinCream
+        scale [0.119, 0.36, 0.131]
+        material: shinViolet
         group: 18
         parent: "thigh-left"
         exponent: 3
@@ -3417,9 +4033,9 @@ prototypes {
 
       shape Box "shinEnds-left" {
         id: 181
-        position [0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: shinCream
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinViolet
         blend: "Intersection"
         group: 18
         parent: "shin-left"
@@ -3428,7 +4044,7 @@ prototypes {
       shape Superellipsoid "shinCavity-left" {
         id: 182
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 18
@@ -3446,14 +4062,218 @@ prototypes {
 
       shape Prism "shinArch-left" {
         id: 183
-        position [0.2, 0.1365, 0.0125]
-        scale [0.151, 0.15, 0.45]
+        position [0.2, 0.1365, 0.2375]
+        scale [0.151, 0.15, 0.225]
         material: charcoal
         blend: "Subtraction"
         group: 18
         parent: "shin-left"
         profile {
           kind: "Ellipse"
+        }
+      }
+
+      shape Prism "shinArchBack-left" {
+        id: 964
+        position [0.2, 0.1365, -0.2125]
+        scale [0.126, 0.112, 0.225]
+        material: jet
+        blend: "Subtraction"
+        group: 18
+        parent: "shin-left"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Box "archRecess-left" {
+        id: 965
+        position [0.2, 0.17, -0.105]
+        scale [0.125, 0.075, 0.008]
+        material: jet
+        parent: "shin-left"
+      }
+
+      shape Superellipsoid "archBand-left" {
+        id: 950
+        position [0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 76
+        parent: "shin-left"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandEnds-left" {
+        id: 951
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 76
+        parent: "shin-left"
+      }
+
+      shape Prism "archBandOuter-left" {
+        id: 952
+        position [0.2, 0.1365, 0.2375]
+        scale [0.197, 0.196, 0.225]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 76
+        parent: "shin-left"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Prism "archBandInner-left" {
+        id: 953
+        position [0.2, 0.1365, 0.2375]
+        scale [0.151, 0.15, 0.226]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.012
+        group: 76
+        parent: "shin-left"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Superellipsoid "archBandBack-left" {
+        id: 966
+        position [0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 80
+        parent: "shin-left"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandBackEnds-left" {
+        id: 967
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 80
+        parent: "shin-left"
+      }
+
+      shape Prism "archBandBackOuter-left" {
+        id: 968
+        position [0.2, 0.1365, -0.2125]
+        scale [0.185, 0.192, 0.225]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.01
+        group: 80
+        parent: "shin-left"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Prism "archBandBackInner-left" {
+        id: 969
+        position [0.2, 0.1365, -0.2125]
+        scale [0.126, 0.112, 0.226]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.01
+        group: 80
+        parent: "shin-left"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Superellipsoid "sidePanel-left" {
+        id: 954
+        position [0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 77
+        parent: "shin-left"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Prism "sidePanelCut-left" {
+        id: 955
+        position [0.35, 0.4465, 0.0125]
+        rotation [0, diagonal, 0, diagonal]
+        scale [0.13, 0.18, 0.2]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 77
+        parent: "shin-left"
+        profile {
+          kind: "Convex"
+          vertices: shinPanelOutline
+          cornerRadius: 0.12
         }
       }
 
@@ -3482,9 +4302,9 @@ prototypes {
 
       shape Cylinder "ankleJoint-left" {
         id: 193
-        position [0.386, 0.184, 0.0025]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.057, 0.015, 0.057]
+        position [0.392, 0.22, -0.045]
+        rotation [0.153, 0.153, 0.6903, 0.6903]
+        scale [0.068, 0.015, 0.068]
         material: charcoal
         parent: "shin-left"
         rounding: 0.003
@@ -3492,34 +4312,35 @@ prototypes {
 
       shape Cylinder "ankleDisc-left" {
         id: 194
-        position [0.402, 0.184, 0.0025]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.039, 0.008, 0.039]
+        position [0.41, 0.22, -0.0535]
+        rotation [0.153, 0.153, 0.6903, 0.6903]
+        scale [0.048, 0.008, 0.048]
         material: violet
         parent: "shin-left"
         rounding: 0.003
       }
 
-      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
-      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
+      // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
       shape Prism "boot-left" {
         id: 195
-        position [0.2, 0.1315, 0.085]
+        position [0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.235]
+        scale [0.2075, 0.2075, 0.2075]
         material: skin
         group: 21
         parent: "shin-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.07
+          cornerRadius: 0.05
           vertices [
-            [-1, -0.1979]
-            [-1, 0.4617]
-            [0.1489, 0.4617]
-            [0.7872, -0.0489]
-            [0.8723, -0.134]
-            [0.8723, -0.1979]
+            [-1, -0.4699]
+            [-1, 0.4458]
+            [-0.3735, 0.4699]
+            [0.3012, 0.2289]
+            [0.7831, -0.1325]
+            [1, -0.3494]
+            [0.9759, -0.4699]
           ]
         }
         swings [
@@ -3550,98 +4371,155 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "bootPlan-left" {
+      shape Prism "bootPlan-left" {
         id: 196
-        position [0.2, 0.1315, 0.085]
-        scale [0.145, 0.15, 0.265]
+        position [0.2, 0.19, 0.0775]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.22, 0.25]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.008
         group: 21
         parent: "boot-left"
-        exponent: 3
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.38
+        }
       }
 
       shape Prism "toe-left" {
         id: 199
-        position [0.2, 0.05, 0.085]
+        position [0.2, 0.0475, 0.065]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.255, 0.255, 0.255]
+        scale [0.265, 0.265, 0.265]
         material: violet
         group: 23
         parent: "boot-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.07
+          cornerRadius: 0.03
           vertices [
-            [-0.9804, -0.1647]
-            [-0.9804, 0.1373]
-            [0.451, 0.1765]
-            [0.8431, 0.1373]
-            [1, 0]
-            [0.9216, -0.1647]
+            [-1, -0.1792]
+            [-1, 0.2547]
+            [0.3208, 0.1792]
+            [0.8491, 0.0849]
+            [1, -0.0472]
+            [0.9245, -0.1792]
           ]
         }
       }
 
-      shape Superellipsoid "toePlan-left" {
+      shape Prism "toePlan-left" {
         id: 200
-        position [0.2, 0.05, 0.085]
-        scale [0.15, 0.09, 0.28]
+        position [0.2, 0.05, 0.065]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.152, 0.265, 0.2]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.006
         group: 23
         parent: "boot-left"
-        exponent: 3.5
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.36
+        }
       }
 
-      shape Prism "sole-left" {
-        id: 201
-        position [0.2, 0.006, 0.085]
+      shape Cylinder "toeRound-left" {
+        id: 982
+        position [0.2, -0.01, 0.065]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.172, 0.4, 0.172]
+        material: violet
+        blend: "SmoothIntersection"
+        smooth: 0.02
+        group: 23
+        parent: "boot-left"
+      }
+
+      shape Box "soleGap-left" {
+        id: 956
+        position [0.2, 0.055, -0.045]
+        scale [0.2, 0.065, 0.04]
+        material: violet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 23
+        parent: "boot-left"
+      }
+
+      shape Box "soleHeelSlot-left" {
+        id: 970
+        position [0.2, 0.08, -0.17]
+        scale [0.072, 0.08, 0.08]
+        material: jet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 23
+        parent: "boot-left"
+      }
+
+      shape Box "heelBlock-left" {
+        id: 971
+        position [0.2, 0.036, -0.165]
+        scale [0.06, 0.036, 0.055]
+        material: gunmetal
+        parent: "boot-left"
+        chamfer: 0.016
+      }
+
+      shape Box "sole-left" {
+        id: 201
+        position [0.2, 0.055, -0.045]
+        scale [0.12, 0.055, 0.05]
         material: charcoal
         parent: "boot-left"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.43
-        }
       }
 
       shape Cylinder "heelHousing-left" {
         id: 202
-        position [0.2, 0.1565, -0.1725]
+        position [0.2, 0.15, -0.15]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.07, 0.02, 0.07]
-        material: charcoal
+        scale [0.1, 0.03, 0.1]
+        material: gunmetal
         parent: "boot-left"
-        rounding: 0.003
+        rounding: 0.01
       }
 
       shape Cylinder "heelRing-left" {
         id: 203
-        position [0.2, 0.1565, -0.1915]
+        position [0.2, 0.15, -0.172]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.053, 0.01, 0.053]
-        material: violet
+        scale [0.085, 0.016, 0.085]
+        material: steel
         parent: "boot-left"
-        rounding: 0.003
+        rounding: 0.006
       }
 
       shape Cylinder "heelInset-left" {
         id: 204
-        position [0.2, 0.1565, -0.2025]
+        position [0.2, 0.15, -0.181]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.043, 0.01, 0.043]
-        material: charcoal
+        scale [0.066, 0.016, 0.066]
+        material: jet
         parent: "boot-left"
         rounding: 0.003
       }
 
       shape Superellipsoid "heelLight-left" {
         id: 205
-        position [0.2, 0.1565, -0.2105]
-        scale [0.035, 0.035, 0.013]
+        position [0.2, 0.15, -0.19]
+        scale [0.05, 0.05, 0.012]
         material: cyan
+        parent: "boot-left"
+        exponent: softness
+      }
+
+      shape Superellipsoid "heelCore-left" {
+        id: 980
+        position [0.2, 0.15, -0.196]
+        scale [0.022, 0.022, 0.01]
+        material: glow
         parent: "boot-left"
         exponent: softness
       }
@@ -3655,17 +4533,17 @@ prototypes {
         id: 206
         position [0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1412, 0.4158, 0.1275]
+        scale [0.1256, 0.4158, 0.1148]
         material: charcoal
         group: 60
         parent: "torso"
         exponent: 2.7
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -3702,8 +4580,8 @@ prototypes {
 
       shape Box "podBottomRim-left" {
         id: 920
-        position [0.4265, 1.3886, -0.2919]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.4265, 1.315, -0.105]
+        rotation [0.2881, 0.066, -0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
@@ -3728,17 +4606,17 @@ prototypes {
         id: 903
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1518, 0.42, 0.15]
+        scale [0.135, 0.42, 0.135]
         material: violetPodLeft
         group: 61
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -3751,15 +4629,15 @@ prototypes {
         id: 904
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.149, 0.15, 0.504]
+        scale [0.125, 0.123, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 61
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -3771,7 +4649,7 @@ prototypes {
       shape Box "podCapSlice-left" {
         id: 905
         position [0.15, 1.5407, -0.269]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.1, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -3794,7 +4672,7 @@ prototypes {
 
       shape Prism "podVent-left" {
         id: 918
-        position [0.1645, 1.517, -0.4136]
+        position [0.1645, 1.5149, -0.3999]
         rotation [0.0749, 0, 0, 0.9972]
         scale [0.048, 0.017, 0.018]
         material: charcoal
@@ -3812,17 +4690,17 @@ prototypes {
         id: 906
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1548, 0.42, 0.153]
+        scale [0.1377, 0.42, 0.1377]
         material: shinCream
         group: 62
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -3835,15 +4713,15 @@ prototypes {
         id: 907
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.152, 0.153, 0.504]
+        scale [0.1275, 0.1255, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 62
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -3855,7 +4733,7 @@ prototypes {
       shape Box "podBand1Slice-left" {
         id: 908
         position [0.1658, 1.3849, -0.2925]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -3868,17 +4746,17 @@ prototypes {
         id: 909
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1579, 0.42, 0.156]
+        scale [0.1404, 0.42, 0.1404]
         material: violetPodLeft
         group: 63
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -3891,15 +4769,15 @@ prototypes {
         id: 910
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.155, 0.156, 0.504]
+        scale [0.13, 0.1279, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 63
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -3911,7 +4789,7 @@ prototypes {
       shape Box "podMidSlice-left" {
         id: 911
         position [0.1778, 1.2663, -0.3104]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0625, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -3924,17 +4802,17 @@ prototypes {
         id: 912
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1609, 0.42, 0.159]
+        scale [0.1431, 0.42, 0.1431]
         material: shinCream
         group: 64
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -3947,15 +4825,15 @@ prototypes {
         id: 913
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1579, 0.159, 0.504]
+        scale [0.1325, 0.1304, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 64
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -3967,7 +4845,7 @@ prototypes {
       shape Box "podBand2Slice-left" {
         id: 914
         position [0.1898, 1.1476, -0.3284]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -3980,17 +4858,17 @@ prototypes {
         id: 915
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1639, 0.42, 0.162]
+        scale [0.1458, 0.42, 0.1458]
         material: violetPodLeft
         group: 65
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4003,15 +4881,15 @@ prototypes {
         id: 916
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1609, 0.162, 0.504]
+        scale [0.135, 0.1328, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 65
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4023,7 +4901,7 @@ prototypes {
       shape Box "podSkirtSlice-left" {
         id: 917
         position [0.2095, 0.9524, -0.3579]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.14, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4034,8 +4912,8 @@ prototypes {
 
       shape Box "podBottom-left" {
         id: 919
-        position [0.4265, 1.4024, -0.2899]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.4265, 1.3289, -0.103]
+        rotation [0.2881, 0.066, -0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4057,7 +4935,7 @@ prototypes {
       shape Superellipsoid "nozzle-left" {
         id: 213
         position [0.209, 0.9603, -0.3567]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 27
@@ -4067,8 +4945,8 @@ prototypes {
 
       shape Cylinder "nozzleBore-left" {
         id: 214
-        position [0.1946, 0.9309, -0.3611]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.1946, 0.9357, -0.3735]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
@@ -4078,8 +4956,8 @@ prototypes {
 
       shape Cylinder "nozzleGlow-left" {
         id: 215
-        position [0.2038, 0.9496, -0.3583]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.2038, 0.9513, -0.3628]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-left"
@@ -4535,8 +5413,8 @@ prototypes {
       shape Superellipsoid "shin-right" {
         id: 248
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
-        material: shinCream
+        scale [0.119, 0.36, 0.131]
+        material: shinViolet
         group: 32
         parent: "thigh-right"
         exponent: 3
@@ -4570,9 +5448,9 @@ prototypes {
 
       shape Box "shinEnds-right" {
         id: 249
-        position [-0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: shinCream
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinViolet
         blend: "Intersection"
         group: 32
         parent: "shin-right"
@@ -4581,7 +5459,7 @@ prototypes {
       shape Superellipsoid "shinCavity-right" {
         id: 250
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 32
@@ -4599,14 +5477,218 @@ prototypes {
 
       shape Prism "shinArch-right" {
         id: 251
-        position [-0.2, 0.1365, 0.0125]
-        scale [0.151, 0.15, 0.45]
+        position [-0.2, 0.1365, 0.2375]
+        scale [0.151, 0.15, 0.225]
         material: charcoal
         blend: "Subtraction"
         group: 32
         parent: "shin-right"
         profile {
           kind: "Ellipse"
+        }
+      }
+
+      shape Prism "shinArchBack-right" {
+        id: 972
+        position [-0.2, 0.1365, -0.2125]
+        scale [0.126, 0.112, 0.225]
+        material: jet
+        blend: "Subtraction"
+        group: 32
+        parent: "shin-right"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Box "archRecess-right" {
+        id: 973
+        position [-0.2, 0.17, -0.105]
+        scale [0.125, 0.075, 0.008]
+        material: jet
+        parent: "shin-right"
+      }
+
+      shape Superellipsoid "archBand-right" {
+        id: 957
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 78
+        parent: "shin-right"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandEnds-right" {
+        id: 958
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 78
+        parent: "shin-right"
+      }
+
+      shape Prism "archBandOuter-right" {
+        id: 959
+        position [-0.2, 0.1365, 0.2375]
+        scale [0.197, 0.196, 0.225]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 78
+        parent: "shin-right"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Prism "archBandInner-right" {
+        id: 960
+        position [-0.2, 0.1365, 0.2375]
+        scale [0.151, 0.15, 0.226]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.012
+        group: 78
+        parent: "shin-right"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Superellipsoid "archBandBack-right" {
+        id: 974
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 81
+        parent: "shin-right"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandBackEnds-right" {
+        id: 975
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 81
+        parent: "shin-right"
+      }
+
+      shape Prism "archBandBackOuter-right" {
+        id: 976
+        position [-0.2, 0.1365, -0.2125]
+        scale [0.185, 0.192, 0.225]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.01
+        group: 81
+        parent: "shin-right"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Prism "archBandBackInner-right" {
+        id: 977
+        position [-0.2, 0.1365, -0.2125]
+        scale [0.126, 0.112, 0.226]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.01
+        group: 81
+        parent: "shin-right"
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.07
+          vertices [
+            [-1, -1]
+            [-1, 0]
+            [-0.809, 0.588]
+            [-0.309, 0.951]
+            [0.309, 0.951]
+            [0.809, 0.588]
+            [1, 0]
+            [1, -1]
+          ]
+        }
+      }
+
+      shape Superellipsoid "sidePanel-right" {
+        id: 961
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 79
+        parent: "shin-right"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Prism "sidePanelCut-right" {
+        id: 962
+        position [-0.35, 0.4465, 0.0125]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.13, 0.18, 0.2]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 79
+        parent: "shin-right"
+        profile {
+          kind: "Convex"
+          vertices: shinPanelOutline
+          cornerRadius: 0.12
         }
       }
 
@@ -4635,9 +5717,9 @@ prototypes {
 
       shape Cylinder "ankleJoint-right" {
         id: 261
-        position [-0.386, 0.184, 0.0025]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.057, 0.015, 0.057]
+        position [-0.392, 0.22, -0.045]
+        rotation [-0.153, -0.153, 0.6903, 0.6903]
+        scale [0.068, 0.015, 0.068]
         material: charcoal
         parent: "shin-right"
         rounding: 0.003
@@ -4645,34 +5727,35 @@ prototypes {
 
       shape Cylinder "ankleDisc-right" {
         id: 262
-        position [-0.402, 0.184, 0.0025]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.039, 0.008, 0.039]
+        position [-0.41, 0.22, -0.0535]
+        rotation [-0.153, -0.153, 0.6903, 0.6903]
+        scale [0.048, 0.008, 0.048]
         material: violet
         parent: "shin-right"
         rounding: 0.003
       }
 
-      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
-      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
+      // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
       shape Prism "boot-right" {
         id: 263
-        position [-0.2, 0.1315, 0.085]
+        position [-0.2, 0.1875, 0.0775]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.235, 0.235, 0.235]
+        scale [0.2075, 0.2075, 0.2075]
         material: skin
         group: 35
         parent: "shin-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.07
+          cornerRadius: 0.05
           vertices [
-            [-1, -0.1979]
-            [-1, 0.4617]
-            [0.1489, 0.4617]
-            [0.7872, -0.0489]
-            [0.8723, -0.134]
-            [0.8723, -0.1979]
+            [-1, -0.4699]
+            [-1, 0.4458]
+            [-0.3735, 0.4699]
+            [0.3012, 0.2289]
+            [0.7831, -0.1325]
+            [1, -0.3494]
+            [0.9759, -0.4699]
           ]
         }
         swings [
@@ -4703,98 +5786,155 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "bootPlan-right" {
+      shape Prism "bootPlan-right" {
         id: 264
-        position [-0.2, 0.1315, 0.085]
-        scale [0.145, 0.15, 0.265]
+        position [-0.2, 0.19, 0.0775]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.22, 0.25]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.008
         group: 35
         parent: "boot-right"
-        exponent: 3
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.38
+        }
       }
 
       shape Prism "toe-right" {
         id: 267
-        position [-0.2, 0.05, 0.085]
+        position [-0.2, 0.0475, 0.065]
         rotation [0, -diagonal, 0, diagonal]
-        scale [0.255, 0.255, 0.255]
+        scale [0.265, 0.265, 0.265]
         material: violet
         group: 37
         parent: "boot-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.07
+          cornerRadius: 0.03
           vertices [
-            [-0.9804, -0.1647]
-            [-0.9804, 0.1373]
-            [0.451, 0.1765]
-            [0.8431, 0.1373]
-            [1, 0]
-            [0.9216, -0.1647]
+            [-1, -0.1792]
+            [-1, 0.2547]
+            [0.3208, 0.1792]
+            [0.8491, 0.0849]
+            [1, -0.0472]
+            [0.9245, -0.1792]
           ]
         }
       }
 
-      shape Superellipsoid "toePlan-right" {
+      shape Prism "toePlan-right" {
         id: 268
-        position [-0.2, 0.05, 0.085]
-        scale [0.15, 0.09, 0.28]
+        position [-0.2, 0.05, 0.065]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.152, 0.265, 0.2]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.006
         group: 37
         parent: "boot-right"
-        exponent: 3.5
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.36
+        }
       }
 
-      shape Prism "sole-right" {
-        id: 269
-        position [-0.2, 0.006, 0.085]
+      shape Cylinder "toeRound-right" {
+        id: 983
+        position [-0.2, -0.01, 0.065]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.172, 0.4, 0.172]
+        material: violet
+        blend: "SmoothIntersection"
+        smooth: 0.02
+        group: 37
+        parent: "boot-right"
+      }
+
+      shape Box "soleGap-right" {
+        id: 963
+        position [-0.2, 0.055, -0.045]
+        scale [0.2, 0.065, 0.04]
+        material: violet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 37
+        parent: "boot-right"
+      }
+
+      shape Box "soleHeelSlot-right" {
+        id: 978
+        position [-0.2, 0.08, -0.17]
+        scale [0.072, 0.08, 0.08]
+        material: jet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 37
+        parent: "boot-right"
+      }
+
+      shape Box "heelBlock-right" {
+        id: 979
+        position [-0.2, 0.036, -0.165]
+        scale [0.06, 0.036, 0.055]
+        material: gunmetal
+        parent: "boot-right"
+        chamfer: 0.016
+      }
+
+      shape Box "sole-right" {
+        id: 269
+        position [-0.2, 0.055, -0.045]
+        scale [0.12, 0.055, 0.05]
         material: charcoal
         parent: "boot-right"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.43
-        }
       }
 
       shape Cylinder "heelHousing-right" {
         id: 270
-        position [-0.2, 0.1565, -0.1725]
+        position [-0.2, 0.15, -0.15]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.07, 0.02, 0.07]
-        material: charcoal
+        scale [0.1, 0.03, 0.1]
+        material: gunmetal
         parent: "boot-right"
-        rounding: 0.003
+        rounding: 0.01
       }
 
       shape Cylinder "heelRing-right" {
         id: 271
-        position [-0.2, 0.1565, -0.1915]
+        position [-0.2, 0.15, -0.172]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.053, 0.01, 0.053]
-        material: violet
+        scale [0.085, 0.016, 0.085]
+        material: steel
         parent: "boot-right"
-        rounding: 0.003
+        rounding: 0.006
       }
 
       shape Cylinder "heelInset-right" {
         id: 272
-        position [-0.2, 0.1565, -0.2025]
+        position [-0.2, 0.15, -0.181]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.043, 0.01, 0.043]
-        material: charcoal
+        scale [0.066, 0.016, 0.066]
+        material: jet
         parent: "boot-right"
         rounding: 0.003
       }
 
       shape Superellipsoid "heelLight-right" {
         id: 273
-        position [-0.2, 0.1565, -0.2105]
-        scale [0.035, 0.035, 0.013]
+        position [-0.2, 0.15, -0.19]
+        scale [0.05, 0.05, 0.012]
         material: cyan
+        parent: "boot-right"
+        exponent: softness
+      }
+
+      shape Superellipsoid "heelCore-right" {
+        id: 981
+        position [-0.2, 0.15, -0.196]
+        scale [0.022, 0.022, 0.01]
+        material: glow
         parent: "boot-right"
         exponent: softness
       }
@@ -4803,17 +5943,17 @@ prototypes {
         id: 274
         position [-0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1412, 0.4158, 0.1275]
+        scale [0.1256, 0.4158, 0.1148]
         material: charcoal
         group: 70
         parent: "torso"
         exponent: 2.7
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4850,8 +5990,8 @@ prototypes {
 
       shape Box "podBottomRim-right" {
         id: 947
-        position [-0.4265, 1.3886, -0.2919]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.4265, 1.315, -0.105]
+        rotation [0.2881, -0.066, 0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
@@ -4876,17 +6016,17 @@ prototypes {
         id: 930
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1518, 0.42, 0.15]
+        scale [0.135, 0.42, 0.135]
         material: violetPodRight
         group: 71
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4899,15 +6039,15 @@ prototypes {
         id: 931
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.149, 0.15, 0.504]
+        scale [0.125, 0.123, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 71
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4919,7 +6059,7 @@ prototypes {
       shape Box "podCapSlice-right" {
         id: 932
         position [-0.15, 1.5407, -0.269]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.1, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -4942,7 +6082,7 @@ prototypes {
 
       shape Prism "podVent-right" {
         id: 945
-        position [-0.1645, 1.517, -0.4136]
+        position [-0.1645, 1.5149, -0.3999]
         rotation [0.0749, 0, 0, 0.9972]
         scale [0.048, 0.017, 0.018]
         material: charcoal
@@ -4960,17 +6100,17 @@ prototypes {
         id: 933
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1548, 0.42, 0.153]
+        scale [0.1377, 0.42, 0.1377]
         material: shinCream
         group: 72
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4983,15 +6123,15 @@ prototypes {
         id: 934
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.152, 0.153, 0.504]
+        scale [0.1275, 0.1255, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 72
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5003,7 +6143,7 @@ prototypes {
       shape Box "podBand1Slice-right" {
         id: 935
         position [-0.1658, 1.3849, -0.2925]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -5016,17 +6156,17 @@ prototypes {
         id: 936
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1579, 0.42, 0.156]
+        scale [0.1404, 0.42, 0.1404]
         material: violetPodRight
         group: 73
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5039,15 +6179,15 @@ prototypes {
         id: 937
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.155, 0.156, 0.504]
+        scale [0.13, 0.1279, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 73
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5059,7 +6199,7 @@ prototypes {
       shape Box "podMidSlice-right" {
         id: 938
         position [-0.1778, 1.2663, -0.3104]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0625, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -5072,17 +6212,17 @@ prototypes {
         id: 939
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1609, 0.42, 0.159]
+        scale [0.1431, 0.42, 0.1431]
         material: shinCream
         group: 74
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5095,15 +6235,15 @@ prototypes {
         id: 940
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1579, 0.159, 0.504]
+        scale [0.1325, 0.1304, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 74
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5115,7 +6255,7 @@ prototypes {
       shape Box "podBand2Slice-right" {
         id: 941
         position [-0.1898, 1.1476, -0.3284]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -5128,17 +6268,17 @@ prototypes {
         id: 942
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1639, 0.42, 0.162]
+        scale [0.1458, 0.42, 0.1458]
         material: violetPodRight
         group: 75
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5151,15 +6291,15 @@ prototypes {
         id: 943
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1609, 0.162, 0.504]
+        scale [0.135, 0.1328, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 75
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5171,7 +6311,7 @@ prototypes {
       shape Box "podSkirtSlice-right" {
         id: 944
         position [-0.2095, 0.9524, -0.3579]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.14, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -5182,8 +6322,8 @@ prototypes {
 
       shape Box "podBottom-right" {
         id: 946
-        position [-0.4265, 1.4024, -0.2899]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.4265, 1.3289, -0.103]
+        rotation [0.2881, -0.066, 0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -5205,7 +6345,7 @@ prototypes {
       shape Superellipsoid "nozzle-right" {
         id: 281
         position [-0.209, 0.9603, -0.3567]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 41
@@ -5215,8 +6355,8 @@ prototypes {
 
       shape Cylinder "nozzleBore-right" {
         id: 282
-        position [-0.1946, 0.9309, -0.3611]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.1946, 0.9357, -0.3735]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
@@ -5226,8 +6366,8 @@ prototypes {
 
       shape Cylinder "nozzleGlow-right" {
         id: 283
-        position [-0.2038, 0.9496, -0.3583]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.2038, 0.9513, -0.3628]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-right"
@@ -5517,6 +6657,9 @@ prototypes {
             "shin-left"
           ]
           tip: "boot-left"
+          // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
+          // centre's rest height is the standoff that puts the whole sole on the surface.
+          align: 1
           "when" [
             "Grounded"
           ]
@@ -5524,7 +6667,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1315
+            standoff: 0.1875
           }
           plant {
             driver: "stride"
@@ -5546,6 +6689,7 @@ prototypes {
             "shin-right"
           ]
           tip: "boot-right"
+          align: 1
           "when" [
             "Grounded"
           ]
@@ -5553,7 +6697,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1315
+            standoff: 0.1875
           }
           plant {
             driver: "stride"
@@ -5680,6 +6824,12 @@ simulation {
 }
 
 spawnPoints [
+  // A clean stage for inspection shots, 68 m clear of the debug world's test room, cubes, axis markers and portal.
+  {
+    id: "hero"
+    position [48, 0, -48]
+    yawDegrees: 0
+  }
   {
     id: "stage"
     position [0, 0, 0]
@@ -5771,6 +6921,136 @@ views {
   cameraLayout("knee")
   cameraLayout("boots-side")
   cameraLayout("boots-rear")
+
+  // The legs from eight sides at once, for judging the greaves and boots against the model sheet.
+  layout "legs-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "legs-front"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "legs-front-left"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "legs-left"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "legs-back-left"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "legs-back"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "legs-back-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "legs-right"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "legs-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  // The shoulders from eight sides at once.
+  layout "shoulders-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "shoulders-front"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "shoulders-front-left"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "shoulders-left"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "shoulders-back-left"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "shoulders-back"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "shoulders-back-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "shoulders-right"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "shoulders-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
 
   layout "pipeline" {
     seatCount: 0

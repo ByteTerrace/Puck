@@ -81,6 +81,7 @@ public sealed partial class WorldStampPool {
             var resolved = TryResolveTarget(
                 client: client,
                 effector: effector,
+                normal: out var normalWorld,
                 reads: live.Reads,
                 rootRotation: rootRotation,
                 target: out var targetWorld,
@@ -103,6 +104,7 @@ public sealed partial class WorldStampPool {
                     effector: effector,
                     index: index,
                     live: live,
+                    normal: ref normalWorld,
                     resolved: resolved,
                     rootRotation: rootRotation,
                     target: ref targetWorld
@@ -133,6 +135,8 @@ public sealed partial class WorldStampPool {
 
             live.EffectorHasTarget[index] = resolved;
             live.EffectorTarget[index] = targetWorld;
+            live.EffectorNormal[index] = normalWorld;
+            live.EffectorAlign[index] = 0f;
 
             var applied = (live.EffectorWeight[index] * (effector.Weight?.Value ?? 1f));
 
@@ -239,13 +243,107 @@ public sealed partial class WorldStampPool {
                     shapeCount: shapeCount
                 );
             }
+            if (AlignTip(
+                amount: ((effector.Align ?? 0f) * Math.Min(
+                    val1: applied,
+                    val2: 1f
+                )),
+                effector: effector,
+                index: index,
+                live: live,
+                normal: Vector3.Transform(
+                    rotation: inverseRoot,
+                    value: normalWorld
+                ),
+                poses: poses,
+                shapes: shapes,
+                tipSlot: tipSlot
+            )) {
+                ChainPartDeltas(
+                    live: live,
+                    shapeCount: shapeCount
+                );
+                corrected = true;
+            }
         }
 
         return corrected;
     }
-    // Holds the effector's target where it was when the plant window opened, and reports whether a usable target
-    // exists: a latched contact survives a probe that misses this frame, which is the whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, ref Vector3 target, out float contactWeight) {
+    // An effector's align (CreationEffectorDocument.Align): turns the solved tip about its own posed origin, the
+    // shortest way and `amount` of it, so the axis that pointed against the probe at rest points along the contact
+    // normal. The turn folds into the tip's own delta on the near side of its parent's, as a bone's correction does,
+    // so the tip's descendants ride it. Returns whether the own delta moved.
+    private static bool AlignTip(Registration live, CreationEffectorDocument effector, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, int index, int tipSlot, float amount, Vector3 normal) {
+        if (amount <= 0f) {
+            return false;
+        }
+
+        var direction = (effector.Target.Direction?.Value ?? Vector3.Zero);
+        var turn = Quaternion.Slerp(
+            amount: amount,
+            quaternion1: Quaternion.Identity,
+            quaternion2: WorldEffectorSolver.FromTo(
+                from: Vector3.Transform(
+                    rotation: live.PartDeltaRotation[tipSlot],
+                    value: ((direction.LengthSquared() > 0f)
+                        ? -direction
+                        : Vector3.UnitY)
+                ),
+                to: normal
+            )
+        );
+
+        live.EffectorAlign[index] = amount;
+
+        if (turn == Quaternion.Identity) {
+            return false;
+        }
+
+        var (tipPosition, _) = BasePose(
+            poses: poses,
+            shape: shapes[tipSlot]
+        );
+        var parent = live.PartParent[tipSlot];
+        var parentRotation = ((parent >= 0)
+            ? live.PartDeltaRotation[parent]
+            : Quaternion.Identity
+        );
+        var inverseParent = Quaternion.Conjugate(value: parentRotation);
+        // The posed origin and the turn, carried back through the parent's delta into the frame the tip's own delta
+        // lives in: parent ∘ (turn about pivot′) equals (turn about pivot) ∘ parent.
+        var pivot = Vector3.Transform(
+            rotation: inverseParent,
+            value: (Compose(
+                point: tipPosition,
+                rotation: live.PartDeltaRotation[tipSlot],
+                translation: live.PartDeltaTranslation[tipSlot]
+            ) - ((parent >= 0)
+                ? live.PartDeltaTranslation[parent]
+                : Vector3.Zero))
+        );
+        var local = ((inverseParent * turn) * parentRotation);
+        var rotation = live.PartOwnRotation[tipSlot];
+        var translation = live.PartOwnTranslation[tipSlot];
+
+        WorldGaitDrivers.Chain(
+            parentRotation: local,
+            parentTranslation: (pivot - Vector3.Transform(
+                rotation: local,
+                value: pivot
+            )),
+            rotation: ref rotation,
+            translation: ref translation
+        );
+
+        live.PartOwnRotation[tipSlot] = rotation;
+        live.PartOwnTranslation[tipSlot] = translation;
+
+        return true;
+    }
+    // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
+    // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
+    // whole point of latching.
+    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, ref Vector3 target, ref Vector3 normal, out float contactWeight) {
         contactWeight = 1f;
         if (effector.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
@@ -274,6 +372,7 @@ public sealed partial class WorldStampPool {
                     driver: plant.Driver,
                     index: index,
                     live: live,
+                    normal: ref normal,
                     replant: replant,
                     resolved: resolved,
                     target: ref target,
@@ -313,6 +412,7 @@ public sealed partial class WorldStampPool {
         }
         if (live.EffectorPlanted[index]) {
             target = live.EffectorPlantTarget[index];
+            normal = live.EffectorPlantNormal[index];
 
             return true;
         }
@@ -322,14 +422,16 @@ public sealed partial class WorldStampPool {
 
         live.EffectorPlanted[index] = true;
         live.EffectorPlantTarget[index] = target;
+        live.EffectorPlantNormal[index] = normal;
 
         return true;
     }
     // A resting plant (CreationReplantDocument): the tip holds its latched world point until the point its target
     // resolves to drifts past the replant distance, then steps there along a raised arc, one effector per plant
     // driver at a time. A latch survives a probe that misses this frame; a step heading for a point the probe has
-    // since lost keeps the last point it found.
-    private static bool ApplyRestingPlant(Registration live, CreationDocument document, string driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target) {
+    // since lost keeps the last point it found. The contact normal travels with the point: latched with it, and
+    // turned from the left point's normal to the landing point's over the step.
+    private static bool ApplyRestingPlant(Registration live, CreationDocument document, string driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
         if (!live.EffectorPlanted[index]) {
             live.EffectorStepping[index] = false;
 
@@ -339,15 +441,20 @@ public sealed partial class WorldStampPool {
 
             live.EffectorPlanted[index] = true;
             live.EffectorPlantTarget[index] = target;
+            live.EffectorPlantNormal[index] = normal;
 
             return true;
         }
 
         var fresh = target;
+        var freshNormal = normal;
         var latch = live.EffectorPlantTarget[index];
 
         if (live.EffectorStepping[index]) {
-            live.EffectorStepTo[index] = (resolved ? fresh : live.EffectorStepTo[index]);
+            if (resolved) {
+                live.EffectorStepTo[index] = fresh;
+                live.EffectorStepToNormal[index] = freshNormal;
+            }
 
             var progress = MathF.Min(
                 x: 1f,
@@ -359,7 +466,9 @@ public sealed partial class WorldStampPool {
             if (progress >= 1f) {
                 live.EffectorStepping[index] = false;
                 live.EffectorPlantTarget[index] = live.EffectorStepTo[index];
+                live.EffectorPlantNormal[index] = live.EffectorStepToNormal[index];
                 target = live.EffectorStepTo[index];
+                normal = live.EffectorStepToNormal[index];
 
                 return true;
             }
@@ -371,11 +480,23 @@ public sealed partial class WorldStampPool {
                 to: live.EffectorStepTo[index],
                 up: up
             );
+            normal = Vector3.Transform(
+                rotation: Quaternion.Slerp(
+                    amount: progress,
+                    quaternion1: Quaternion.Identity,
+                    quaternion2: WorldEffectorSolver.FromTo(
+                        from: live.EffectorPlantNormal[index],
+                        to: live.EffectorStepToNormal[index]
+                    )
+                ),
+                value: live.EffectorPlantNormal[index]
+            );
 
             return true;
         }
 
         target = latch;
+        normal = live.EffectorPlantNormal[index];
 
         if (
             resolved &&
@@ -390,6 +511,7 @@ public sealed partial class WorldStampPool {
             live.EffectorStepping[index] = true;
             live.EffectorStepFrom[index] = latch;
             live.EffectorStepTo[index] = fresh;
+            live.EffectorStepToNormal[index] = freshNormal;
             live.EffectorStepProgress[index] = 0f;
         }
 
@@ -542,9 +664,11 @@ public sealed partial class WorldStampPool {
         return -1;
     }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
-    // body target that is not live, a state cell that holds no point.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target) {
+    // body target that is not live, a state cell that holds no point. The normal is the probed surface's; a body or
+    // state target names no surface and reports world up.
+    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target, out Vector3 normal) {
         target = tipWorld;
+        normal = Vector3.UnitY;
 
         var goal = effector.Target;
 
@@ -584,6 +708,7 @@ public sealed partial class WorldStampPool {
                         origin: tipWorld,
                         reach: (goal.Reach?.Value ?? 0f),
                         rootRotation: rootRotation,
+                        normal: out normal,
                         standoff: (goal.Standoff?.Value ?? 0f),
                         target: out target,
                         towards: (goal.Direction?.Value ?? Vector3.Zero)
@@ -642,7 +767,11 @@ public sealed partial class WorldStampPool {
                 ? live.EffectorTarget[index]
                 : null),
                 Bones: live.EffectorBoneCount[index],
-                Stepping: live.EffectorStepping[index]
+                Stepping: live.EffectorStepping[index],
+                Align: ((effectorRows[index].Align is null)
+                ? null
+                : live.EffectorAlign[index]),
+                Normal: live.EffectorNormal[index]
             ));
         }
 
@@ -671,7 +800,11 @@ public readonly record struct WorldRigDriver(string Name, float Phase, float Wei
 /// <see cref="CreationEffectorDocument.MinChainBones"/> means the effector is inert.</param>
 /// <param name="Stepping">Whether its resting plant is mid-step toward a new point
 /// (<see cref="CreationReplantDocument"/>).</param>
-public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones, bool Stepping) {
+/// <param name="Align">The share of the tip's tilt its align took out this frame, in [0, 1], or
+/// <see langword="null"/> when the effector authors no <see cref="CreationEffectorDocument.Align"/>.</param>
+/// <param name="Normal">The unit world contact normal the tip was aligned against, meaningful while
+/// <paramref name="Target"/> is.</param>
+public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones, bool Stepping, float? Align = null, Vector3 Normal = default) {
     /// <summary>Gets the contact word <c>body.rig</c> prints: <c>stepping</c> mid-step, else <c>yes</c> while the latch
     /// holds and <c>no</c> while it does not.</summary>
     public string Contact => (Stepping

@@ -588,6 +588,8 @@ public sealed class DriveLawTests {
             (motion => motion with { ObstructionRaw = (motion.Obstruction with { IdleThreshold = -1f }) }, "obstruction.idleThreshold"),
             (motion => motion with { ObstructionRaw = (motion.Obstruction with { GraceSeconds = 0m }) }, "obstruction.graceSeconds"),
             (motion => motion with { GroundStick = 0f }, "groundStick"),
+            (motion => motion with { StepHeight = -0.1f }, "stepHeight"),
+            (motion => motion with { StepHeight = float.Epsilon }, "stepHeight"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { When = new WorldPredicate.Held(Channel: "nope") }, motion.Shaping[1]] }, "shaping[0].when.channel"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { Across = motion.Shaping[0].Across! with { Lateral = 0f } }, motion.Shaping[1]] }, "shaping[0].across.lateral"),
             (motion => motion with { Shaping = [motion.Shaping![0] with { TurnScale = 0f }, motion.Shaping[1]] }, "shaping[0].turnScale"),

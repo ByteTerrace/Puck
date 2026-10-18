@@ -46,6 +46,10 @@ public sealed partial class WorldStampPool {
 
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
+
+    /// <summary>Gets the operator's live shape isolation (<c>view.isolate</c>), which every live <see cref="Emit"/>
+    /// applies to its registrations and the boot scene applies to its static placements.</summary>
+    public WorldShapeIsolation Isolation { get; } = new();
     // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
     // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
@@ -149,6 +153,9 @@ public sealed partial class WorldStampPool {
         // each live EmitOne; PackTransforms poses it at the registration's root. Null for a creation without a mesh.
         public SdfMesh? Mesh;
         public int MeshMaterial;
+        // The shapes the isolation hid when EmitOne last emitted this registration, null for none: PackTransforms drops
+        // the volumes parented to them, so the volumes match the program the frame draws.
+        public bool[]? Hidden;
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
         // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
@@ -206,15 +213,20 @@ public sealed partial class WorldStampPool {
         public readonly float[] EffectorWeight = new float[CreationDocument.MaxEffectors];
         public readonly bool[] EffectorPlanted = new bool[CreationDocument.MaxEffectors];
         public readonly Vector3[] EffectorPlantTarget = new Vector3[CreationDocument.MaxEffectors];
-        // The world point each effector resolved this frame, latched purely so `body.rig` can echo the decision the
-        // solve acted on; a frame that resolved nothing leaves EffectorHasTarget false.
+        public readonly Vector3[] EffectorPlantNormal = new Vector3[CreationDocument.MaxEffectors];
+        // The world point and contact normal each effector resolved this frame, and the share of the tip's tilt its
+        // align took out, latched purely so `body.rig` can echo the decision the solve acted on; a frame that resolved
+        // nothing leaves EffectorHasTarget false.
         public readonly Vector3[] EffectorTarget = new Vector3[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorNormal = new Vector3[CreationDocument.MaxEffectors];
+        public readonly float[] EffectorAlign = new float[CreationDocument.MaxEffectors];
         public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
         // A resting plant's step (CreationReplantDocument): whether the tip is mid-step, the latched point it left,
-        // the point it is heading for, and how far through the step it is, in [0, 1].
+        // the point it is heading for and that point's contact normal, and how far through the step it is, in [0, 1].
         public readonly bool[] EffectorStepping = new bool[CreationDocument.MaxEffectors];
         public readonly Vector3[] EffectorStepFrom = new Vector3[CreationDocument.MaxEffectors];
         public readonly Vector3[] EffectorStepTo = new Vector3[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorStepToNormal = new Vector3[CreationDocument.MaxEffectors];
         public readonly float[] EffectorStepProgress = new float[CreationDocument.MaxEffectors];
         public readonly int[] EffectorBoneSlot = new int[(CreationDocument.MaxEffectors * CreationEffectorDocument.MaxChainBones)];
         public readonly int[] EffectorBoneCount = new int[CreationDocument.MaxEffectors];
@@ -962,6 +974,10 @@ public sealed partial class WorldStampPool {
 
             var firstInstance = builder.InstanceCount;
 
+            if (live is not null) {
+                live.Hidden = Isolation.HiddenFor(document: live.Creation.EngineDocument, prototype: live.Creation.Id.Value);
+            }
+
             EmitOne(
                 builder: builder,
                 colors: colors,
@@ -988,7 +1004,7 @@ public sealed partial class WorldStampPool {
     // A volume rides the slot of the shape its parent names (the shape's own live frame, so the volume's authored
     // offset is shape-local) or the root slot; a parent past the animated shape-slot budget has no slot and falls
     // back to the root. The list is capped at the engine's volume ceiling; later registrations' volumes are dropped.
-    private void AppendVolumes(CreationDocument document, float placementScale, int rootSlot, int shapeCount) {
+    private void AppendVolumes(CreationDocument document, float placementScale, int rootSlot, int shapeCount, bool[]? hidden) {
         if (document.Volumes is not { Count: > 0 } volumes) {
             return;
         }
@@ -1006,6 +1022,10 @@ public sealed partial class WorldStampPool {
             var slot = rootSlot;
 
             if (volume.Parent is { } parent) {
+                if (WorldShapeIsolation.IsHidden(hidden: hidden, name: parent, shapes: shapes)) {
+                    continue;
+                }
+
                 for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
                     if (string.Equals(
                         a: shapes[shapeIndex].Name?.Value,

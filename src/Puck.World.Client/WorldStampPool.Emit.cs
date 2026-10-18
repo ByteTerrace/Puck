@@ -6,9 +6,23 @@ using Puck.World.Authoring;
 namespace Puck.World.Client;
 
 public sealed partial class WorldStampPool {
+    // Whether a blend group keeps any member the isolation does not hide; a wholly hidden group emits no instance.
+    private static bool AnyKept(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, bool[]? hidden) {
+        if (hidden is null) {
+            return true;
+        }
+
+        for (var member = fromIndex; ((member < shapes.Count) && (member < WorldPlacementPolicy.MaxAnimatedStampShapes)); member++) {
+            if (((shapes[member].Group ?? 0) == groupId) && !hidden[member]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
     // Groups with independent motion or followers retain the conservative creation-root bound.
-    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance) {
+    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -30,7 +44,7 @@ public sealed partial class WorldStampPool {
         for (var member = fromIndex; ((member < shapes.Count) && (member < WorldPlacementPolicy.MaxAnimatedStampShapes)); member++) {
             var shape = shapes[member];
 
-            if ((shape.Group ?? 0) != groupId) {
+            if (((shape.Group ?? 0) != groupId) || ((hidden is not null) && hidden[member])) {
                 continue;
             }
 
@@ -91,6 +105,9 @@ public sealed partial class WorldStampPool {
     private static void EmitOne(SdfProgramBuilder builder, WorldBakedColors colors, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog, WorldPickMapBuilder? picks) {
         var document = live?.Creation.EngineDocument;
         var shapes = (document?.Shapes ?? []);
+        // The isolation's hidden shapes emit nothing, and with them the paints they carry, the creation's mesh and its
+        // text; their slots still pack, so a hidden parent still poses what it carries.
+        var hidden = (probeWorstCase ? null : live?.Hidden);
         // The probe reserves a FULL distinct palette per pool slot (the conservative material bound); a live slot
         // registers its creation's real palette, an unused one a single placeholder entry — both within the probe.
         var paletteIds = (probeWorstCase
@@ -100,7 +117,8 @@ public sealed partial class WorldStampPool {
                 colors: colors,
                 document: (document ?? EmptyDocument),
                 pool: (rootSlot, (live?.Scale ?? 1f)),
-                tint: null
+                tint: null,
+                hidden: hidden
             )
         );
 
@@ -113,7 +131,7 @@ public sealed partial class WorldStampPool {
         // The mesh rides the registration's root, drawn by the mesh pass rather than emitted into the program, so the
         // probe reserves nothing for it; the material is this build's registration of its palette entry.
         if (!probeWorstCase && (live is not null)) {
-            live.Mesh = ((live.Creation.Mesh is { } mesh)
+            live.Mesh = (((hidden is null) && (live.Creation.Mesh is { } mesh))
                 ? WorldPlacementStamper.MeshOf(mesh: mesh)
                 : null);
             live.MeshMaterial = paletteIds[Math.Clamp(
@@ -126,7 +144,7 @@ public sealed partial class WorldStampPool {
         // same stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
         // the probe's full-modifier shape chain. The coupled creation uses fewer instance records than the per-shape
         // probe and keeps each shape's existing local field operations inside the creation's outer scope.
-        var hasText = (!probeWorstCase && (textCatalog is not null) &&
+        var hasText = (!probeWorstCase && (hidden is null) && (textCatalog is not null) &&
             (document is { TextRuns.Count: > 0 }) && (shapes.Count < WorldPlacementPolicy.MaxAnimatedStampShapes));
         // Cached on the surviving Registration (hasText implies live is not null — document came from live.Creation),
         // keyed by the scale it was computed for: Reconcile only swaps in a fresh Registration when the creation's
@@ -187,6 +205,9 @@ public sealed partial class WorldStampPool {
 
             if (placed is { Group: not null and not 0 }) {
                 continue; // Pass 2 — the shape emits inside its group's instance.
+            }
+            if ((hidden is not null) && hidden[index]) {
+                continue;
             }
 
             var slot = ((rootSlot + 1) + index);
@@ -323,6 +344,11 @@ public sealed partial class WorldStampPool {
             }
 
             emittedGroups[emittedCount++] = groupId;
+
+            if (!AnyKept(fromIndex: index, groupId: groupId, hidden: hidden, shapes: shapes)) {
+                continue;
+            }
+
             var boundSlot = rootSlot;
             var boundRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
 
@@ -343,7 +369,8 @@ public sealed partial class WorldStampPool {
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
-                shapes: shapes
+                shapes: shapes,
+                hidden: hidden
             );
         }
 

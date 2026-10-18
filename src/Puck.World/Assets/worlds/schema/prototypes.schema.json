@@ -2670,6 +2670,14 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "The contact latch (null = none) \u2014 see CreationPlantDocument."
+                },
+                "align": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "How much of the tip\u0027s tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip\u0027s rest orientation is re-aligned to the contact normal: the tip axis that points against the target\u0027s probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip\u0027s own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin\u0027s rest height then puts the whole sole on the surface."
                 }
               },
               "required": [

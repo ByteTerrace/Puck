@@ -169,6 +169,7 @@ public sealed partial class WorldStampPool {
 
             AppendVolumes(
                 document: document,
+                hidden: live.Hidden,
                 placementScale: placementScale,
                 rootSlot: rootSlot,
                 shapeCount: shapeCount
