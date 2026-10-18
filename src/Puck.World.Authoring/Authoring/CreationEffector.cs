@@ -67,13 +67,35 @@ public sealed record CreationEffectorTargetDocument(
 /// <param name="SwingWeight">The target influence outside the plant window while the driver is active, in [0, 1].
 /// Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to
 /// rest, target influence returns to 1 so an idle limb can settle onto its surface.</param>
+/// <param name="Replant">The stepping latch the tip keeps while <paramref name="Driver"/> is at rest (null = none,
+/// and a resting tip follows its target every frame) — see <see cref="CreationReplantDocument"/>.</param>
 public sealed record CreationPlantDocument(
     string Driver,
     DocumentVector2 Window,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? SwingWeight = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? SwingWeight = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationReplantDocument? Replant = null
 ) {
     /// <summary>One full turn — the exclusive bound both window ends sit under.</summary>
     public const float TwoPi = (2f * MathF.PI);
+}
+/// <summary>
+/// The resting latch of a <see cref="CreationPlantDocument"/>: while the plant's driver rests, the tip holds the
+/// world point it stood on, and once the point its target resolves to this frame lies more than
+/// <see cref="Distance"/> from that hold, it steps there, travelling over <see cref="Seconds"/> along an arc that
+/// rises <see cref="Height"/> against the target's probe direction. Effectors whose plants name the same driver step
+/// one at a time, so a pair of feet turning in place, or settling into a stance after a stop, takes alternate steps
+/// instead of sliding. Presentation-only, as every effector is.
+/// </summary>
+/// <param name="Distance">The drift that starts a step, world units, in (0, <see cref="MaxDistance"/>].</param>
+/// <param name="Seconds">The step's duration, seconds, in (0, <see cref="MaxSeconds"/>].</param>
+/// <param name="Height">The arc's peak lift, world units, in [0, <see cref="MaxHeight"/>].</param>
+public sealed record CreationReplantDocument(float Distance, float Seconds, float Height) {
+    /// <summary>The largest <see cref="Distance"/>, world units.</summary>
+    public const float MaxDistance = 2f;
+    /// <summary>The largest <see cref="Height"/>, world units.</summary>
+    public const float MaxHeight = 1f;
+    /// <summary>The largest <see cref="Seconds"/>.</summary>
+    public const float MaxSeconds = 2f;
 }
 /// <summary>
 /// One inverse-kinematics effector a creation declares: a chain of its own shapes, root→tip, whose driver-posed pose is

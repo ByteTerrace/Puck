@@ -175,6 +175,7 @@ public sealed partial class WorldStampPool {
 
         public readonly float[] DriverPhase = new float[CreationDocument.MaxDrivers];
         public readonly float[] DriverWeight = new float[CreationDocument.MaxDrivers];
+        public readonly WorldGaitKinematics Kinematics = new();
 
         public WorldEntityAddress RootAddress;
         public SecondOrderResponse RootResponse;
@@ -209,6 +210,12 @@ public sealed partial class WorldStampPool {
         // solve acted on; a frame that resolved nothing leaves EffectorHasTarget false.
         public readonly Vector3[] EffectorTarget = new Vector3[CreationDocument.MaxEffectors];
         public readonly bool[] EffectorHasTarget = new bool[CreationDocument.MaxEffectors];
+        // A resting plant's step (CreationReplantDocument): whether the tip is mid-step, the latched point it left,
+        // the point it is heading for, and how far through the step it is, in [0, 1].
+        public readonly bool[] EffectorStepping = new bool[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorStepFrom = new Vector3[CreationDocument.MaxEffectors];
+        public readonly Vector3[] EffectorStepTo = new Vector3[CreationDocument.MaxEffectors];
+        public readonly float[] EffectorStepProgress = new float[CreationDocument.MaxEffectors];
         public readonly int[] EffectorBoneSlot = new int[(CreationDocument.MaxEffectors * CreationEffectorDocument.MaxChainBones)];
         public readonly int[] EffectorBoneCount = new int[CreationDocument.MaxEffectors];
         public readonly int[] EffectorTipSlot = new int[CreationDocument.MaxEffectors];

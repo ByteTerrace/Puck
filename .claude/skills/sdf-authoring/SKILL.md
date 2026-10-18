@@ -249,9 +249,14 @@ backwards, which is how something *appears* as a lane rises.
 `parent` is the skeleton: it names an **earlier** shape whose animated motion
 carries this one, which is why chains resolve in one pass and can never cycle.
 On top of that, `swings` rotate about a pivot and `slides` translate, both driven
-by a named `driver` reading a signal or a state row. `chains` plus `effectors`
-give CCD inverse kinematics with plant windows for feet. `frames` snapshot base
-poses. Details, caps, and every refusal are in `references/rig.md`.
+by a named `driver` reading a signal or a state row. Directional locomotion reads
+`travelDirection` and the planar accelerations, and a driver naming a world
+`dynamics` row trails and settles instead of tracking. `chains` plus `effectors`
+give CCD inverse kinematics with plant windows for feet and a `replant` latch that
+steps a resting foot rather than sliding it. `frames` snapshot base poses. A
+behaviour the vocabulary cannot express is a new signal, member or op here,
+never a client special case. Details, caps, every refusal, and the moth's own
+driver map are in `references/rig.md`.
 
 A shape carrying `domain` folds may not also carry a swing or slide — a fold
 rides its parent's frame.

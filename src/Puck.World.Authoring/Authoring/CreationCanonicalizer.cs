@@ -388,9 +388,19 @@ public static partial class CreationCanonicalizer {
             }
             if (!CreationDriverDocument.IsSignal(signal: driver.Signal)) {
                 errors.Add(item: new(
-                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', and '{CreationDriverDocument.SignalTurnRate}'.",
+                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', '{CreationDriverDocument.SignalTurnRate}', '{CreationDriverDocument.SignalTravelDirection}', '{CreationDriverDocument.SignalLateralAcceleration}', '{CreationDriverDocument.SignalForwardAcceleration}', and '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]'.",
                     Path: $"drivers[{i}].signal"
                 ));
+            }
+            if (driver.Dynamics is { } dynamics) {
+                if (string.IsNullOrWhiteSpace(value: dynamics)) {
+                    errors.Add(item: new(Message: "dynamics is empty; name a dynamics row or omit it.", Path: $"drivers[{i}].dynamics"));
+                } else if (CreationDriverDocument.Integrates(signal: driver.Signal)) {
+                    errors.Add(item: new(
+                        Message: $"dynamics cannot follow the integrating signal '{driver.Signal}': its phase is a running cycle, not a level a response can ease toward.",
+                        Path: $"drivers[{i}].dynamics"
+                    ));
+                }
             }
             if ((driver.BlendInSeconds is { } blendIn) && (!float.IsFinite(f: blendIn) || (blendIn < 0f))) {
                 errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendInSeconds"));
@@ -707,6 +717,17 @@ public static partial class CreationCanonicalizer {
         }
         if ((plant.SwingWeight is { } swingWeight) && (!float.IsFinite(f: swingWeight) || (swingWeight < 0f) || (swingWeight > 1f))) {
             errors.Add(item: new(Message: "swingWeight must be finite and in [0, 1].", Path: $"{path}.swingWeight"));
+        }
+        if (plant.Replant is { } replant) {
+            if (!float.IsFinite(f: replant.Distance) || (replant.Distance <= 0f) || (replant.Distance > CreationReplantDocument.MaxDistance)) {
+                errors.Add(item: new(Message: $"distance must be finite and in (0, {CreationReplantDocument.MaxDistance}].", Path: $"{path}.replant.distance"));
+            }
+            if (!float.IsFinite(f: replant.Seconds) || (replant.Seconds <= 0f) || (replant.Seconds > CreationReplantDocument.MaxSeconds)) {
+                errors.Add(item: new(Message: $"seconds must be finite and in (0, {CreationReplantDocument.MaxSeconds}].", Path: $"{path}.replant.seconds"));
+            }
+            if (!float.IsFinite(f: replant.Height) || (replant.Height < 0f) || (replant.Height > CreationReplantDocument.MaxHeight)) {
+                errors.Add(item: new(Message: $"height must be finite and in [0, {CreationReplantDocument.MaxHeight}].", Path: $"{path}.replant.height"));
+            }
         }
         if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
             a: row.Name,

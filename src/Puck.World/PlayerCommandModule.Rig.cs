@@ -65,9 +65,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         foreach (var effector in state.Effectors) {
-            _ = line.Append(value: $" effector:{effector.Name} weight={Scalar(value: effector.Weight)} planted={(effector.Planted
-                ? "yes"
-                : "no")} target={((effector.Target is { } target)
+            _ = line.Append(value: $" effector:{effector.Name} weight={Scalar(value: effector.Weight)} planted={effector.Contact} target={((effector.Target is { } target)
                 ? Point(value: target)
                 : "none")}");
 

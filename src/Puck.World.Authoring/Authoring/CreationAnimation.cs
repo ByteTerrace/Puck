@@ -15,15 +15,18 @@ namespace Puck.World.Authoring;
 /// <param name="Name">The driver's name, unique within the creation — the spelling a facet's <c>driver</c> member
 /// resolves against.</param>
 /// <param name="Signal">One of <see cref="SignalPlanarTravel"/>, <see cref="SignalTravel"/>,
-/// <see cref="SignalTime"/>, <see cref="SignalSpeed"/>, <see cref="SignalVerticalSpeed"/>, or
-/// <see cref="SignalTurnRate"/>. The first three integrate: φ accumulates <see cref="Cadence"/> × the signal's
-/// per-frame delta while w &gt; 0, and wraps modulo 2π so a wheel spins forever without losing precision. The last
-/// three are instantaneous: φ is set to <see cref="Cadence"/> × the current value, so a facet reading them tracks
-/// rather than cycles.</param>
+/// <see cref="SignalTime"/>, <see cref="SignalSpeed"/>, <see cref="SignalVerticalSpeed"/>,
+/// <see cref="SignalTurnRate"/>, <see cref="SignalTravelDirection"/>, <see cref="SignalLateralAcceleration"/>,
+/// <see cref="SignalForwardAcceleration"/>, or a <see cref="SignalStatePrefix"/> state cell. The first three
+/// integrate: φ accumulates <see cref="Cadence"/> × the signal's per-frame delta while w &gt; 0, and wraps modulo 2π
+/// so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to <see cref="Cadence"/> ×
+/// the current value (through <see cref="Dynamics"/> when one is named), so a facet reading them tracks rather than
+/// cycles.</param>
 /// <param name="Cadence">The signal-to-phase gain: radians per metre for the travel signals, radians per second for
 /// <see cref="SignalTime"/>, radians per metre-per-second for <see cref="SignalSpeed"/>/<see cref="SignalVerticalSpeed"/>,
-/// and radians per radian-per-second for <see cref="SignalTurnRate"/>. Magnitude at most
-/// <see cref="MaxCadence"/>.</param>
+/// radians per radian-per-second for <see cref="SignalTurnRate"/>, radians per radian for
+/// <see cref="SignalTravelDirection"/>, and radians per metre-per-second-squared for the acceleration signals.
+/// Magnitude at most <see cref="MaxCadence"/>.</param>
 /// <param name="When">The gate: every token must hold for the driver's weight to ease toward 1 (it eases
 /// toward 0 otherwise, using the authored blend times or <see cref="WeightSeconds"/> by default, so a limb returns
 /// to rest instead of freezing mid-stride).
@@ -35,13 +38,19 @@ namespace Puck.World.Authoring;
 /// <see cref="WeightSeconds"/>. Finite and non-negative; zero applies immediately on the next positive frame delta.</param>
 /// <param name="BlendOutSeconds">Gate release's exponential time constant in seconds, on the same terms as
 /// <paramref name="BlendInSeconds"/>. Independent release timing lets a mechanism settle after a quick body response.</param>
+/// <param name="Dynamics">The containing world's <c>dynamics</c> row (natural frequency, damping, initial response)
+/// an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and
+/// overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal
+/// read through a second-order response. Refused on an integrating signal, whose phase is a running cycle rather than
+/// a level; the world validator refuses a name its <c>dynamics</c> section does not declare.</param>
 public sealed record CreationDriverDocument(
     string Name,
     string Signal,
     DocumentScalar Cadence,
     [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendInSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null
 ) {
     /// <summary>The largest signal-to-phase gain magnitude.</summary>
     public const float MaxCadence = 256f;
@@ -65,6 +74,20 @@ public sealed record CreationDriverDocument(
     public const string SignalTurnRate = "turnRate";
     /// <summary>The body's rendered vertical speed, metres per second; positive rises.</summary>
     public const string SignalVerticalSpeed = "verticalSpeed";
+    /// <summary>The direction of the body's eased planar travel relative to its rendered facing, radians in (−π, π]:
+    /// 0 runs forward, π backpedals, and a positive angle travels to the body's left (right-handed about +Y, the sense
+    /// <see cref="SignalTurnRate"/> uses). The travel is eased in the body's own frame over <see cref="WeightSeconds"/>,
+    /// so a stick sweep turns it over a few frames, and it holds its last direction while the body stands still. A hip
+    /// turned into a forward diagonal, a stride plane steered to a sidestep, and a gait run backward read it.</summary>
+    public const string SignalTravelDirection = "travelDirection";
+    /// <summary>The body's eased planar acceleration across its rendered facing, metres per second squared, positive
+    /// toward the body's left. A run curving left accelerates left by speed × turn rate, so a lean into a turn reads
+    /// this; so does the sway of a strafe starting or stopping.</summary>
+    public const string SignalLateralAcceleration = "lateralAcceleration";
+    /// <summary>The body's eased planar acceleration along its rendered facing, metres per second squared, positive
+    /// forward: positive as a run starts and negative as it brakes, the lean into a start and back out of a
+    /// stop.</summary>
+    public const string SignalForwardAcceleration = "forwardAcceleration";
     /// <summary>The client-derived gate token holding while the body's eased rendered speed is above
     /// <c>Puck.World.Client.WorldGaitDrivers.MovingSpeed</c> — a presentation predicate, not a sim fact, so a
     /// walker's stride returns its limbs to rest when the body stops without the simulation publishing anything.</summary>
@@ -86,8 +109,8 @@ public sealed record CreationDriverDocument(
     public static bool Integrates(string? signal) => (signal is (SignalPlanarTravel or SignalTravel or SignalTime));
     /// <summary>Returns whether a signal name is recognized.</summary>
     /// <param name="signal">The signal name.</param>
-    /// <returns><see langword="true"/> when the name is one of the six signals.</returns>
-    public static bool IsSignal(string? signal) => (Integrates(signal: signal) || (signal is (SignalSpeed or SignalVerticalSpeed or SignalTurnRate)) || IsStateSignal(signal: signal));
+    /// <returns><see langword="true"/> when the name is one of the nine body signals or a state-cell signal.</returns>
+    public static bool IsSignal(string? signal) => (Integrates(signal: signal) || (signal is (SignalSpeed or SignalVerticalSpeed or SignalTurnRate or SignalTravelDirection or SignalLateralAcceleration or SignalForwardAcceleration)) || IsStateSignal(signal: signal));
     /// <summary>Returns whether a signal names a state cell.</summary>
     /// <param name="signal">The signal name.</param>
     public static bool IsStateSignal(string? signal) => ((signal is { } named) && named.StartsWith(

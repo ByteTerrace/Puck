@@ -9,7 +9,7 @@ moves a collider or the simulation.
 |---|---|
 | `parent` | the `name` of a shape declared **earlier**, whose animated motion carries this one, pivots included. This is the skeleton. Null means the creation root |
 | `joint` | a hinge point used only when the shape is an effector bone that declares no swings. Otherwise it poses nothing |
-| `swings` | up to 4 rotations about a pivot |
+| `swings` | up to 8 rotations about a pivot |
 | `slides` | up to 4 translations, applied after every swing |
 
 Because a parent must be declared earlier in the list, a chain resolves in one
@@ -40,14 +40,20 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 
 ## Drivers
 
-`drivers` is up to 8 named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds }`. Everything animated names one.
+`drivers` is up to 16 named `{ name, signal, cadence, when, blendInSeconds,
+blendOutSeconds, dynamics }`. Everything animated names one.
 
 | Signal | Behavior |
 |---|---|
 | `planarTravel`, `travel`, `time` | integrate |
-| `speed`, `verticalSpeed`, `turnRate` | set directly |
+| `speed`, `verticalSpeed`, `turnRate` | set directly; `turnRate` is positive turning left |
+| `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
+| `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
 | `state.<row>[.<key>]` | read a state row |
+
+`dynamics` names a world `dynamics` row a setting driver's phase follows through
+(second-order: trail, overshoot, settle). An integrating driver refuses it; the
+world validator refuses an undeclared row.
 
 `cadence` is capped at 256 in magnitude. `when` takes up to 4 gate tokens from
 the body-facts vocabulary plus `moving`, `still`, and `always`; `always` may not
@@ -85,6 +91,32 @@ authored swing, omission keeps following the target, and driver rest restores
 contact influence. A false effector `when` gate clears the latch, so
 reacquisition cannot reuse a pre-flight world target. `CreationEffectorLawTests`
 holds the pack-path controls; Moth opts into zero swing influence.
+
+`replant: { distance, seconds, height }` on a plant is the resting latch: while
+the driver rests, the tip holds its world point and steps to the freshly
+resolved target once it drifts past `distance`, over `seconds`, along an arc
+`height` high. Effectors sharing a plant driver step one at a time; `body.rig`
+prints `planted=stepping` mid-step. `CreationLocomotionLawTests` pins it.
+
+## How the moth moves
+
+Every part of the moth's motion is a driver, a swing or an effector in
+`avatars/moth.puck`; nothing is special-cased in the client.
+
+| Motion | Driver | Where |
+|---|---|---|
+| Stride, arm swing, knee and ankle | `stride` (`planarTravel`, `Grounded` + `moving`) | thighs, shins, boots, upper arms; pelvis waddle |
+| Hips into a forward diagonal, chest and head back to the facing | `heading` (`travelDirection`, cadence 2, `sine`) | pelvis +0.7, torso −0.4, helmet −0.3 |
+| Stride plane steered to the travel direction (sidestep, backpedal) | `heading`, `linear` ±0.5 between `sine` ±0.7 | each thigh, about the hip, around its stride swing |
+| Hips trail a turn, chest and head lead | `trail` (`turnRate` through `body-turn`) | pelvis −0.12, torso +0.08, helmet +0.07 |
+| Lean into a curving run, a start or a stop | `lean`, `surge` (accelerations through `body-lean`) | pelvis, pivoting about the ground point |
+| Feet plant while walking, step when turning in place or settling | `foot-left`/`foot-right` effectors, `stride` windows plus `replant` | thigh–shin chains, boot tips |
+| Breath, flight pose, wings, airborne bank and cruise | `breath`, `flight`, `wings`, `bank`, `cruise` | torso, limbs, pods |
+
+The root shape is the pelvis, so a swing on it carries the whole body; the
+upper body undoes part of it through the torso and helmet, and each thigh's
+stride swing sits between yaw swings that turn the stride plane without
+turning the leg at rest.
 
 Chain refusals worth recognizing:
 
