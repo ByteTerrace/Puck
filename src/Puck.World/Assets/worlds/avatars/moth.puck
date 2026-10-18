@@ -352,6 +352,13 @@ bindingOverlays [
                 ]
               }
               {
+                command: "player.look.recenter"
+                label: "Recenter"
+                sources [
+                  "gamepad.rightStickPress"
+                ]
+              }
+              {
                 command: "player.orbit"
                 sources [
                   "mouse.button1"
@@ -939,6 +946,12 @@ defaultSeatKit: "walker"
 
 dynamics [
   {
+    f: 2.2
+    name: "camera-boom"
+    r: 0
+    zeta: 1
+  }
+  {
     f: 3
     name: "flight-pose"
     r: 0.5
@@ -1032,7 +1045,7 @@ kits {
           }
         ]
         speed {
-          value: 2.4
+          value: 5
         }
         turn {
           falloff: 1
@@ -4536,11 +4549,7 @@ state {
 }
 
 views {
-  cameraLayout("three-quarter")
-  cameraLayout("front")
-  cameraLayout("rear")
-  cameraLayout("flight-stage")
-
+  // The seat's own camera comes first, so it is what a boot shows; the named inspection cameras follow.
   layout "play" {
     seatCount: 0
     slots [
@@ -4554,6 +4563,11 @@ views {
     transitionRenderScale: 1
     transitionSeconds: 0
   }
+
+  cameraLayout("three-quarter")
+  cameraLayout("front")
+  cameraLayout("rear")
+  cameraLayout("flight-stage")
 
   cameraLayout("head")
   cameraLayout("face")
@@ -4588,35 +4602,38 @@ views {
     transitionSeconds: 0
   }
 
+  // A dual-stick third-person action camera: the left stick moves and strafes relative to the camera, the right stick
+  // turns the camera and the body with it, and the right-stick press recenters it behind the body.
   seatControl {
     maxPitch: 1.2
-    minPitch: -0.35
+    minPitch: -0.5
     yawReference: "World"
   }
 
   seatRig "moth-camera" {
     version: "puck.camera.program.v1"
     operations [
-      orbit(distance: 6, opcode: "orbit", pitch: 0.2, pivotOffset: [0, 1.2, 0], yaw: 0)
-      lookAt(focusDistance: 6, opcode: "lookAt", subject: reference(), targetOffset: [0, 1.2, 0], worldAxes: true)
-      fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
+      orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
+      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true)
+      fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
+      dynamics(row: `camera-boom`)
     ]
     fovOp {
-      fieldOfViewRadians: 0.65
+      fieldOfViewRadians: 0.96
       opcode: "fov"
     }
     lookAtOp {
-      focusDistance: 6
+      focusDistance: 4.2
       opcode: "lookAt"
       subject: reference()
-      targetOffset [0, 1.2, 0]
+      targetOffset [0, 1, 0]
       worldAxes: true
     }
     orbitOp {
-      distance: 6
+      distance: 4.2
       opcode: "orbit"
-      pitch: 0.2
-      pivotOffset [0, 1.2, 0]
+      pitch: 0.3
+      pivotOffset [0, 1, 0]
       yaw: 0
     }
   }
