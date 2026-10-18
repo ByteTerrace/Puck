@@ -262,9 +262,10 @@ prototypes {
     }
   }
 
-  // A Cornell-style room for judging indirect light: red and green side walls, a white back wall, ceiling and raised
-  // floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open sky
-  // elsewhere in this world hides them.
+  // A Cornell-style room for judging indirect light: red and green side walls, a white back wall between them, ceiling
+  // and raised floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open
+  // sky elsewhere in this world hides them. The plates abut without overlapping: each bakes as its own mesh, and two
+  // meshes sharing a face fight over it.
   prototype "gi-corner" {
     document {
       name: "gi-corner"
@@ -304,7 +305,7 @@ prototypes {
       shape Box "back-wall" {
         material: roomWhite
         position [0, 1.6, -2.05]
-        scale [2.1, 1.5, 0.05]
+        scale [2, 1.5, 0.05]
       }
       shape Box "ceiling" {
         material: roomWhite
