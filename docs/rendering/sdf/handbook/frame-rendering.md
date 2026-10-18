@@ -736,14 +736,23 @@ dropped: the specks a shell leaves where it thins to a knife edge (the top of th
 Moth's shins). The inner band of the Moth's face opening still shows jagged
 slivers at the fine spacing ([open item](../../../plans/open-items.md#rendering)).
 
-The material is then sampled where a field hit would read it: the bake writes
-four points a quad, its quarters' centres lifted half a millimetre off the
-surface, into the tables' point table (`SdfWorldTables.WriteMeshBakePoints`,
-World member `sdfMeshBakePoints`) ahead of the frame's upload, and
-`sdf-mesh-bake` samples them as a points lattice. A quad whose quarters agree
-keeps one material; any other splits into its quarters, so a material boundary,
-a painted iris or pupil included, resolves at half a cell even where its shape
-is thinner than the mesh.
+The material is then sampled where a field hit would read it, at points lifted
+half a millimetre off the surface, in rounds the bake writes into the tables'
+point table (`SdfWorldTables.WriteMeshBakePoints`, World member
+`sdfMeshBakePoints`) ahead of the frame's upload and `sdf-mesh-bake` samples as
+points lattices (`SdfMeshMaterialCut`). The first round samples each quad's four
+quarter centres and each vertex. A quad whose vertices agree keeps one material
+when its quarters agree too, and splits into its quarters otherwise, so a
+feature thinner than a cell that no vertex sees, a painted iris or pupil,
+survives at half a cell. A quad whose vertices disagree is cut: each mesh edge
+of its two triangles whose ends disagree is bisected over four more rounds for
+the point its material changes, and each triangle splits along the line between
+its edges' points, so a boundary between two shapes of one group (a nozzle's
+glow disc in its bore) follows its true place to a thirty-second of an edge,
+unbroken across triangles, rather than stepping in half cells. On the debug
+world the cut searches about 14,000 edges, adding about 480,000 points, 60
+dispatches and 20,000 triangles to the bake. A boundary between two groups is
+the meshes' crossing and no cut reaches it.
 
 A dynamic group bakes in its slot's frame: its box, lattices and points are in
 that frame, and `sdf-mesh-bake` carries each sample through the slot's transform

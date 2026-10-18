@@ -226,8 +226,12 @@ owns the explanation.
   a box fixed in world space at the bake's start misses a body that moves
   while it bakes. The contour is the mesh, already in that frame.
 - **Materials are point-sampled, not taken from the lattice.** Each final quad's
-  quarters are sampled through `sdfMeshBakePoints` (a staged World table the
-  residency writes before the upload) and a disagreeing quad splits; the draw
+  quarters and vertices are sampled through `sdfMeshBakePoints` (a staged World
+  table the residency writes before the upload); a quad whose quarters disagree
+  splits into them, and one whose vertices disagree is cut along the boundary
+  its edges' bisection finds (`SdfMeshMaterialCut`). A material boundary only
+  lies on the surface within one group: two groups' shapes meet as crossing
+  meshes, whatever their materials. The draw
   record's word 31 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
   sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
 - **Meshes keep their words; draws repack only their records.** The tables
