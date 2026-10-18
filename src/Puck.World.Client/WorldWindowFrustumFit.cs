@@ -35,7 +35,7 @@ public static class WorldWindowFrustumFit {
     public static bool TryResolveApertures(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceGeometry source, out WorldFaceGeometry counterpart) {
         var resolved = TryResolveFrames(
             counterpart: out var counterpartFrame,
-            counterpartHasGlass: out _,
+            counterpartGlass: out _,
             destination: destination,
             local: local,
             screenIndex: screenIndex,
@@ -54,13 +54,13 @@ public static class WorldWindowFrustumFit {
 
     // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
     // counterpart its portal facet names in the destination.
-    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart, out bool counterpartHasGlass) {
+    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart, out WorldScreenSource? counterpartGlass) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
         source = default;
         counterpart = default;
-        counterpartHasGlass = false;
+        counterpartGlass = null;
 
         foreach (var row in WorldFaceCatalog.For(definition: local).Rows) {
             if (row.ScreenIndex != screenIndex) {
@@ -95,7 +95,7 @@ public static class WorldWindowFrustumFit {
 
             source = row.Frame;
             counterpart = counterpartRow.Frame;
-            counterpartHasGlass = (counterpartRow.ScreenIndex >= 0);
+            counterpartGlass = ((counterpartRow.ScreenIndex >= 0) ? counterpartRow.Source : null);
 
             return true;
         }
@@ -233,7 +233,7 @@ public static class WorldWindowFrustumFit {
 
         if (!TryResolveFrames(
             counterpart: out var counterpartFrame,
-            counterpartHasGlass: out var counterpartHasGlass,
+            counterpartGlass: out var counterpartGlass,
             destination: destination,
             local: local,
             screenIndex: screen.Index,
@@ -256,7 +256,7 @@ public static class WorldWindowFrustumFit {
             return false;
         }
 
-        if (!counterpartHasGlass) {
+        if (counterpartGlass is null) {
             return true;
         }
 
@@ -272,7 +272,7 @@ public static class WorldWindowFrustumFit {
             vector2: counterpart.Normal
         );
 
-        var (back, front) = WorldPrototypeFacets.GlassSpan(frame: counterpartFrame);
+        var (back, front) = WorldPrototypeFacets.GlassSpan(frame: counterpartFrame, source: counterpartGlass);
         var along = Vector3.Dot(
             vector1: camera.Forward,
             vector2: counterpart.Normal

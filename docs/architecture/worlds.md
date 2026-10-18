@@ -973,7 +973,10 @@ A portal's face can show its destination as a window (`projection: window`): the
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
 the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
 window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
-the glass shows it edge to edge, with no bezel. The eye is the camera the frame renders its viewer with in the same frame,
+the glass shows it edge to edge, with no bezel. That glass lies inside the face's own shape, a centimetre short of
+each of its faces, so it fills whatever aperture the creation cuts through that shape (the debug world's frame names
+its rim and cuts the opening through it), where a display's glass is an inset screen proud of its face. The eye is the
+camera the frame renders its viewer with in the same frame,
 one per screen, since a screen shows one image: the first joined seat's view, chase or first
 person, which is the camera a click through that view is cast from, so the texel the glass shows at
 a point and a click at that point look along one line into the destination. With no seat resolving
