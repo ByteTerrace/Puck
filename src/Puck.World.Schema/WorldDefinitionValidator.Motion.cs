@@ -135,6 +135,22 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{program.Name}' is duplicated.");
                 continue;
             }
+            if (program.PlanarTarget is { } planarTarget) {
+                RequireRange(
+                    value: planarTarget.Strafe,
+                    min: 0f,
+                    max: 1f,
+                    name: $"{path}.planarTarget.strafe",
+                    errors: errors
+                );
+                RequireRange(
+                    value: planarTarget.Backward,
+                    min: 0f,
+                    max: 1f,
+                    name: $"{path}.planarTarget.backward",
+                    errors: errors
+                );
+            }
 
             try {
                 var compiledProgram = BodyMotionProgramFactory.Compile(program: program);

@@ -124,7 +124,13 @@ device lands there with a test.
    tunable, for example, belongs to the seat camera path:
    `views.seatControl`/`playerDefaults.seatLook` and the camera program's ops).
 2. Author the value as a document record with a default that preserves today's
-   behavior.
+   behavior. Behaviour is an operation, or an operation's parameter, in the
+   program vocabularies (the owner's ruling): body movement in
+   `bodyMotionPrograms` (the program carries its ops' parameters, as `target`
+   and `planarTarget` do), camera framing and smoothing in the camera program's
+   ops. Never add a knob to a kit or tuning record beside them; where a
+   hard-coded behaviour blocks a program from expressing something, move it
+   into an op the program authors.
 3. Validate it in `WorldDefinitionValidator`, refusing by name.
 4. Sweep the shipped worlds; parsing is strict and refuses unmapped members.
 5. Add a read-back verb that echoes the decision (`world.why`, `world.grants`,
