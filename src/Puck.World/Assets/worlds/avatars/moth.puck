@@ -2849,7 +2849,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.6
+            amplitude: 0.42
             pivot [0.295, 1.4515, 0]
             wave: "sine"
             phase: 3.1415927
@@ -2958,7 +2958,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.9
+            amplitude: -0.7
             pivot [0.39, 1.1765, 0.005]
             wave: "constant"
             phase: 0
@@ -2966,7 +2966,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.25
+            amplitude: 0.18
             pivot [0.39, 1.1765, 0.005]
             wave: "sine"
             phase: 3.6416
@@ -4018,7 +4018,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.6
+            amplitude: 0.42
             pivot [-0.295, 1.4515, 0]
             wave: "sine"
             phase: 6.2831853
@@ -4127,7 +4127,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.9
+            amplitude: -0.7
             pivot [-0.39, 1.1765, 0.005]
             wave: "constant"
             phase: 0
@@ -4135,7 +4135,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.25
+            amplitude: 0.18
             pivot [-0.39, 1.1765, 0.005]
             wave: "sine"
             phase: 0.5
