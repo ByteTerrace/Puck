@@ -602,11 +602,10 @@ public sealed class PartProgramLawTests {
             ).Words)
         );
     }
-    [InlineData(true, true)]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
+    [InlineData(true)]
+    [InlineData(false)]
     [Theory]
-    public void ParticipationFlagsArePartOfGeometryIdentity(bool detail, bool secondary) {
+    public void TheDetailFlagIsPartOfGeometryIdentity(bool detail) {
         var instructions = Scope(
             inner: 1,
             materialA: 0,
@@ -624,7 +623,7 @@ public sealed class PartProgramLawTests {
             slotB: 8
         );
 
-        second[3] = second[3] with { Detail = detail, Secondary = secondary };
+        second[3] = second[3] with { Detail = detail };
         instructions.AddRange(collection: second);
         var words = Build(
             instructions,
@@ -638,8 +637,10 @@ public sealed class PartProgramLawTests {
         ).Words;
         var table = PartTable(words: words);
 
+        // A detail copy differs from the first scope's shape in its identity, so it compiles a part of its own; an
+        // identical copy shares the first one's.
         Assert.Equal(
-            2u,
+            (detail ? 2u : 1u),
             words[(table + 1)]
         );
     }

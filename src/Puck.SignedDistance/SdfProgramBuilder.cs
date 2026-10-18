@@ -1085,28 +1085,6 @@ public sealed partial class SdfProgramBuilder {
         return this;
     }
 
-    /// <summary>Marks the most recently emitted <see cref="SdfOp.ShapeBlend"/> instruction's
-    /// <see cref="SdfInstruction.Secondary"/>, the authored participation flag (see <see cref="SdfInstruction"/>'s
-    /// remarks). Must chain directly onto
-    /// the shape method that emitted it, before any field op (<see cref="Dilate"/>/<see cref="Onion"/>) that would
-    /// append a later instruction and move "most recent" past it.</summary>
-    /// <exception cref="InvalidOperationException">The most recently emitted instruction is not a
-    /// <see cref="SdfOp.ShapeBlend"/>.</exception>
-    public SdfProgramBuilder MarkSecondary(bool secondary) {
-        var index = (m_instructions.Count - 1);
-
-        if (
-            (index < 0) ||
-            (m_instructions[index].Op != SdfOp.ShapeBlend)
-        ) {
-            throw new InvalidOperationException(message: "MarkSecondary must chain directly onto the shape method that emitted the most recent SdfOp.ShapeBlend instruction.");
-        }
-
-        m_instructions[index] = (m_instructions[index] with { Secondary = secondary });
-
-        return this;
-    }
-
     private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u, uint blend = 0u) {
         m_instructions.Add(item: new SdfInstruction(
             Blend: blend,

@@ -671,12 +671,6 @@ public sealed partial class SdfProgram {
                         paramName: instructionsParamName
                     );
                 }
-                if (!instruction.Secondary) {
-                    throw new ArgumentException(
-                        message: $"Instruction {index} carries Secondary=false but is not a ShapeBlend instruction; Secondary marks a shape's authored participation and is meaningful only on SdfOp.ShapeBlend.",
-                        paramName: instructionsParamName
-                    );
-                }
 
                 continue;   // Every other op's Shape/Blend/Material lanes carry op-specific data (a fold's axis, a jitter's noise flavor and variant count), not these domains.
             }

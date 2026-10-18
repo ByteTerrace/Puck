@@ -13,9 +13,6 @@ namespace Puck.SignedDistance;
 /// like any other shape but is excluded from contact (<c>SdfFieldEvaluator</c>'s contact queries skip it). The GPU
 /// encoding does not carry it. Meaningful only when <see cref="Op"/> is <see cref="SdfOp.ShapeBlend"/>; false
 /// elsewhere.</param>
-/// <param name="Secondary">Whether a <see cref="SdfOp.ShapeBlend"/> instruction participates in secondary effects: an
-/// authored participation flag the CPU analyses read (true, the default, for an ordinary shape). The GPU encoding does
-/// not carry it. Meaningful only when <see cref="Op"/> is <see cref="SdfOp.ShapeBlend"/>; true elsewhere.</param>
 public readonly record struct SdfInstruction(
     SdfOp Op,
     uint Shape,
@@ -23,6 +20,5 @@ public readonly record struct SdfInstruction(
     uint Material,
     Vector4 Data0,
     Vector4 Data1,
-    bool Detail = false,
-    bool Secondary = true
+    bool Detail = false
 );

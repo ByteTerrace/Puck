@@ -1595,14 +1595,6 @@
                   "default": null,
                   "description": "Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit \u2014 an unauthored Superellipsoid is a plain ellipsoid)."
                 },
-                "secondary": {
-                  "type": [
-                    "boolean",
-                    "null"
-                  ],
-                  "default": null,
-                  "description": "An authored participation flag (null = true) carried as Secondary, which the GPU encoding does not carry: the baked frame samples the shape like any other, and it carves the contact field and the collider like any ordinary shape, unlike Detail."
-                },
                 "bumps": {
                   "type": [
                     "array",

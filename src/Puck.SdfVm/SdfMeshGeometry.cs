@@ -104,6 +104,6 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         private readonly uint m_material = instruction.Material;
         private readonly Vector4 m_data0 = instruction.Data0;
         private readonly Vector4 m_data1 = instruction.Data1;
-        private readonly uint m_flags = ((instruction.Detail ? 1u : 0u) | (instruction.Secondary ? 2u : 0u));
+        private readonly uint m_flags = (instruction.Detail ? 1u : 0u);
     }
 }

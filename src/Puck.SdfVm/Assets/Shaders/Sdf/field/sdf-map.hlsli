@@ -745,7 +745,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 }
                 case SDF_OP_SHAPE_BLEND: {
                     // Consume the pending SDF_OP_LANE_ERODE effect (if any) FIRST, before every other skip path below,
-                    // so it never leaks onto a later, unrelated shape (a bound-culled or Detail/Secondary-skipped
+                    // so it never leaks onto a later, unrelated shape (a bound-culled
                     // shape still clears it here).
                     bool laneEroded = laneErodeSkipShape;
                     float laneErosion = laneErodeAmount;

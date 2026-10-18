@@ -107,10 +107,6 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// in [<see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, <see cref="SdfProgramBuilder.MaxSuperellipsoidExponent"/>]
 /// (null = <see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, the ellipsoid limit — an unauthored
 /// Superellipsoid is a plain ellipsoid).</param>
-/// <param name="Secondary">An authored participation flag (null = true) carried as
-/// <see cref="SdfInstruction.Secondary"/>, which the GPU encoding does not carry: the baked frame samples the shape like
-/// any other, and it carves the contact field and the collider like any ordinary shape, unlike
-/// <see cref="Detail"/>.</param>
 /// <param name="Bumps">The shape's Gaussian domain-push bumps (null = none), at most
 /// <see cref="ShapeBumpDocument.MaxBumps"/> — see <see cref="ShapeBumpDocument"/>. Applied to the shape's own local
 /// point after <see cref="Shear"/>, before the primitive's own scale. Render-only, like
@@ -155,7 +151,6 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Detail = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeFlareDocument? Flare = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Secondary = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeBumpDocument>? Bumps = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeShearDocument? Shear = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,

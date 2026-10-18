@@ -682,7 +682,7 @@ public sealed class SweepLawTests {
         }
         var shapeIndex = instructions.Count;
 
-        instructions.Add(item: original.Instructions[1] with { Blend = ((uint)blend), Detail = true, Secondary = false });
+        instructions.Add(item: original.Instructions[1] with { Blend = ((uint)blend), Detail = true });
         var words = new SdfProgram(
             instructions: instructions,
             materials: [new SdfMaterial(Albedo: Vector3.One)],

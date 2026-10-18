@@ -143,13 +143,10 @@ public sealed partial class SdfProgram {
             if (((SdfShapeType)shape.Shape) == SdfShapeType.Sweep) {
                 return false;
             }
-            // The authored participation flags stay part of the shape's identity, in bits no shape-type id reaches.
+            // The authored Detail flag stays part of the shape's identity, in a bit no shape-type id reaches.
             signature.Add(item: shape.Shape | (shape.Detail
                 ? 0x80000000u
-                : 0u)
-                | (shape.Secondary
-                ? 0u
-                : 0x40000000u));
+                : 0u));
             signature.Add(item: shape.Blend);
             var data0 = shape.Data0;
 

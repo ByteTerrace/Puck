@@ -278,7 +278,6 @@ template braidChain(chainIdx, baseId, positions, rotations) {
       position: positions[i]
       rotation: rotations[i]
       scale [0.014, 0.026, 0.016]
-      secondary: false
       smooth: 0
     }
   }
@@ -2004,7 +2003,6 @@ prototypes {
           material: charcoal
           parent: "torso"
           exponent: 3
-          secondary: false
         }
       }
 
@@ -2044,7 +2042,6 @@ prototypes {
         material: charcoal
         parent: "torso"
         rounding: 0.00125
-        secondary: false
       }
 
       shape Superellipsoid "helmet" {
@@ -2183,7 +2180,6 @@ prototypes {
         material: leather
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "nostril1" {
@@ -2193,7 +2189,6 @@ prototypes {
         material: leather
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Prism "socket-left" {
@@ -2240,7 +2235,6 @@ prototypes {
         material: umber
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "pupil-left" {
@@ -2250,7 +2244,6 @@ prototypes {
         material: jet
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlight-left" {
@@ -2260,7 +2253,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlightSmall-left" {
@@ -2270,7 +2262,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "upperLid-left" {
@@ -2285,7 +2276,6 @@ prototypes {
           radiusStart: 0.004
           radiusEnd: 0.004
         }
-        secondary: false
       }
 
       shape Sweep "lowerLid-left" {
@@ -2300,7 +2290,6 @@ prototypes {
           radiusStart: 0.0018
           radiusEnd: 0.0018
         }
-        secondary: false
       }
 
       shape Sweep "lash-left" {
@@ -2315,7 +2304,6 @@ prototypes {
           radiusStart: 0.003
           radiusEnd: 0.003
         }
-        secondary: false
       }
 
       shape Sweep "brow-left" {
@@ -2330,7 +2318,6 @@ prototypes {
           radiusStart: 0.005
           radiusEnd: 0.005
         }
-        secondary: false
       }
 
       shape Cylinder "earMount-left" {
@@ -2436,7 +2423,6 @@ prototypes {
         material: umber
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "pupil-right" {
@@ -2446,7 +2432,6 @@ prototypes {
         material: jet
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlight-right" {
@@ -2456,7 +2441,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Superellipsoid "catchlightSmall-right" {
@@ -2466,7 +2450,6 @@ prototypes {
         material: pearl
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "upperLid-right" {
@@ -2481,7 +2464,6 @@ prototypes {
           radiusStart: 0.004
           radiusEnd: 0.004
         }
-        secondary: false
       }
 
       shape Sweep "lowerLid-right" {
@@ -2496,7 +2478,6 @@ prototypes {
           radiusStart: 0.0018
           radiusEnd: 0.0018
         }
-        secondary: false
       }
 
       shape Sweep "lash-right" {
@@ -2511,7 +2492,6 @@ prototypes {
           radiusStart: 0.003
           radiusEnd: 0.003
         }
-        secondary: false
       }
 
       shape Sweep "brow-right" {
@@ -2526,7 +2506,6 @@ prototypes {
           radiusStart: 0.005
           radiusEnd: 0.005
         }
-        secondary: false
       }
 
       shape Cylinder "earMount-right" {
@@ -2911,7 +2890,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-1" {
@@ -2926,7 +2904,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-2" {
@@ -2941,7 +2918,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-left-3" {
@@ -2956,7 +2932,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "thumb-left" {
@@ -2971,7 +2946,6 @@ prototypes {
           radiusStart: 0.019
           radiusEnd: 0.019
         }
-        secondary: false
       }
 
       shape Superellipsoid "bracerSocket-left" {
@@ -3639,7 +3613,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-1" {
@@ -3654,7 +3627,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-2" {
@@ -3669,7 +3641,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "finger-right-3" {
@@ -3684,7 +3655,6 @@ prototypes {
           radiusStart: 0.013
           radiusEnd: 0.013
         }
-        secondary: false
       }
 
       shape Sweep "thumb-right" {
@@ -3699,7 +3669,6 @@ prototypes {
           radiusStart: 0.019
           radiusEnd: 0.019
         }
-        secondary: false
       }
 
       shape Superellipsoid "bracerSocket-right" {
@@ -4150,7 +4119,6 @@ prototypes {
         material: rust
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "blinkCrease-left" {
@@ -4165,7 +4133,6 @@ prototypes {
           radiusStart: 0.0017
           radiusEnd: 0.0017
         }
-        secondary: false
       }
 
       shape Superellipsoid "blinkCover-right" {
@@ -4175,7 +4142,6 @@ prototypes {
         material: rust
         parent: "helmet"
         exponent: softness
-        secondary: false
       }
 
       shape Sweep "blinkCrease-right" {
@@ -4190,7 +4156,6 @@ prototypes {
           radiusStart: 0.0017
           radiusEnd: 0.0017
         }
-        secondary: false
       }
       drivers [
         {

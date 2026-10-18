@@ -241,7 +241,7 @@ public static class CreationStampEmitter {
                     scale: shapeScale,
                     material: material,
                     detail: (shape.Detail ?? false)
-                ).MarkSecondary(secondary: (shape.Secondary ?? true));
+                );
 
                 if (wantsDilate) {
                     scoped = scoped.Dilate(radius: dilate);
@@ -312,7 +312,7 @@ public static class CreationStampEmitter {
                 blend: blend,
                 smooth: smooth,
                 detail: (shape.Detail ?? false)
-            ).MarkSecondary(secondary: (shape.Secondary ?? true));
+            );
 
             if (wantsDilate) {
                 afterShape = afterShape.Dilate(radius: dilate);
@@ -341,7 +341,7 @@ public static class CreationStampEmitter {
             scale: shapeScale,
             material: material,
             detail: (shape.Detail ?? false)
-        ).MarkSecondary(secondary: (shape.Secondary ?? true)).Dilate(radius: margin);
+        ).Dilate(radius: margin);
         _ = chain.PopField();
     }
     // The trim's own scope pops via Union into the SAME accumulator the host's own (unmodified) real shape already

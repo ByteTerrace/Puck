@@ -8394,10 +8394,6 @@ export type WorldPrototype = {
        */
       exponent?: number | null;
       /**
-       * An authored participation flag (null = true) carried as Secondary, which the GPU encoding does not carry: the baked frame samples the shape like any other, and it carves the contact field and the collider like any ordinary shape, unlike Detail.
-       */
-      secondary?: boolean | null;
-      /**
        * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
        */
       bumps?: ({

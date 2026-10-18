@@ -110,7 +110,7 @@ public sealed partial class SdfProgram {
                         accumulator: ref scopes[depth],
                         blend: ((SdfBlendOp)instruction.Blend),
                         candidate: new DistanceBound(Gain: (shapeGain * chain), Sag: 0f),
-                        optional: (instruction.Detail || !instruction.Secondary),
+                        optional: instruction.Detail,
                         smoothRadius: instruction.Data1.X
                     )) { return default; }
                     break;
