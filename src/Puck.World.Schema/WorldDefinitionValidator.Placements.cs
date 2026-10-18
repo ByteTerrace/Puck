@@ -467,6 +467,15 @@ public static partial class WorldDefinitionValidator {
 
             var signal = drivers[index].Signal;
 
+            if (
+                (drivers[index].Dynamics is { Length: > 0 } dynamics) &&
+                (Puck.State.StateRows.FindDynamics(
+                dynamics: definition.Dynamics,
+                name: dynamics
+            ) is null)
+            ) {
+                errors.Add(item: $"{path}.drivers[{index}].dynamics '{dynamics}' names no declared dynamics row.");
+            }
             if (Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
                 RequireNumericStateReference(
                     definition: definition,

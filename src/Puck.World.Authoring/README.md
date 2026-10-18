@@ -146,7 +146,7 @@ state signals work without an inhabitant. Such a placement has no body facts or
 body-index state key. Animated placements retain the pool's shape and registration
 limits and cannot use creation noise, distribution or mirror facets.
 
-A creation-level `drivers` list (≤ 8) declares the **driver**—a scalar signal
+A creation-level `drivers` list (≤ 16) declares the **driver**—a scalar signal
 read off the body the creation is stamped on, times a cadence, gated by a
 conjunction of condition tokens. Each driver yields a phase φ and an eased weight
 w ∈ [0, 1]; w eases toward 1 while every `when` token holds and toward 0
@@ -170,10 +170,26 @@ For example, a quick body pose and a slower wing assembly can read the same
 | `time` | elapsed presentation time, s | integrates |
 | `speed` | total rendered speed, m/s | sets φ = cadence · value |
 | `verticalSpeed` | rendered vertical speed, m/s (positive rises) | sets |
-| `turnRate` | rendered yaw rate about world up, rad/s | sets |
+| `turnRate` | rendered yaw rate about world up, rad/s (positive turns left) | sets |
+| `travelDirection` | direction of the eased planar travel off the rendered facing, rad in (−π, π]: 0 forward, π backpedal, positive to the body's left; holds its last value at rest | sets |
+| `lateralAcceleration` | eased planar acceleration across the facing, m/s² (positive left; speed × turn rate in a curving run) | sets |
+| `forwardAcceleration` | eased planar acceleration along the facing, m/s² (positive as a run starts, negative as it brakes) | sets |
+| `state.<row>[.<key>]` | the cell's value at the frame's tick | sets |
 
 An integrating driver charges at most `WorldGaitDrivers.MaxTravelPerFrame` of
-travel per frame, so a teleport cannot spin a limb through dozens of cycles.
+travel per frame, so a teleport cannot spin a limb through dozens of cycles. The
+direction and acceleration signals come from the body's planar velocity eased
+over 0.15 s (`WorldGaitKinematics`), in its own frame for the direction, so a
+stick sweep turns the direction over a few frames rather than in one.
+
+A setting driver may name a world `dynamics` row (`"dynamics": "body-turn"`): its
+phase then follows cadence × signal through that row's second-order response
+(frequency, damping, initial response) instead of tracking it exactly. A part
+swung against a `turnRate` follower trails a turn and overshoots a little as it
+settles; a lean on an acceleration follower builds and relaxes. A
+`travelDirection` follower eases the short way across the ±π seam. An
+integrating driver refuses `dynamics`, and the world validator refuses a row it
+does not declare.
 
 `when` is one token or an array of tokens that must all hold (a bare string reads
 as a one-token gate and canonicalizes to the array form; absent is ungated, ≤ 4
@@ -195,7 +211,7 @@ gated on `Grounded` alone it would hold its last stride pose instead.
 no fact is refused by the world validator, which alone sees both vocabularies,
 rather than gating the driver off silently.
 
-A shape's `swings` (≤ 4) and `slides` (≤ 4) name a driver and turn (φ, w) into
+A shape's `swings` (≤ 8) and `slides` (≤ 4) name a driver and turn (φ, w) into
 motion—the **joint**—through a **waveform**:
 
 ```json
@@ -238,6 +254,10 @@ Worked rigs, all built from the same three parts:
 | Fish tail | `time`, `when: ["InMedium"]` | swing, axis Y at the tail root |
 | Bobbing hull | `time`, `when: ["AtMediumBand"]` | slide, axis Y |
 | Breathing chest | `time`, `when: ["still"]` (an idle breath) | slide, axis Z, small amplitude |
+| Hips into a diagonal | `travelDirection`, cadence 2, `when: ["Grounded", "moving"]` | swing on the root shape, axis Y, `sine`: peaks on the diagonals, zero on a pure strafe or backpedal; the chest and head counter-swing part and all of it back toward the facing |
+| Stride in the plane of travel | the same driver | on each thigh, about the hip: Y `sine` (undo the hips), Y `linear` at −½ (turn to the travel direction), the stride swing, Y `linear` at +½, Y `sine` negated; a strafe abducts into a sidestep and a backpedal strides backward |
+| Trailing turn | `turnRate` through an underdamped `dynamics` row | root swing, axis Y, `linear`, negative amplitude; the chest and head swing positive so the upper body leads |
+| Lean into a turn or a start | `lateralAcceleration` / `forwardAcceleration` through a `dynamics` row | root swings about the ground point, axis Z and X, `linear` |
 
 Every one of these is presentation-only: the facets are read where a body-rooted
 stamp's per-frame transforms are packed (`Puck.World.Client.WorldStampPool`) and
@@ -313,6 +333,14 @@ opened. A quadruped's stance, a climber's hand on a hold, and a tentacle tip gri
 while the trunk sways are one mechanism with different windows. A teleport or a reused
 body slot drops every latch, exactly as it reseeds a follower.
 
+`plant.replant: { distance, seconds, height }` is the resting latch: while the plant's
+driver is at rest, the tip holds the world point it stands on, and once the point its
+target resolves to drifts more than `distance` from that hold it steps there over
+`seconds`, along a half-sine arc rising `height` against the probe direction. Effectors
+whose plants name the same driver step one at a time, so feet turning in place or
+settling into a stance after a stop take alternate steps instead of sliding. A gait that
+resumes mid-step latches afresh.
+
 | Rig | Chain | Target | Plant |
 |---|---|---|---|
 | Climber's hands | `["upperArmLeft", "forearmLeft"]`, tip the hand | `surface`, `direction: [0, 0, 1]` (the body's own front), reach 0.6, standoff the palm's thickness | one per hold, windowed on the reach driver |
@@ -335,7 +363,7 @@ whose solid placements carry render-only warps admits no fixed-point query at al
 probe there misses and every effector over one eases out.
 
 `body.rig [body]` is the read-back: per driver its phase and eased weight, per effector
-its weight, whether its latch is holding, and the world point its tip is being asked for
+its weight, whether its latch is holding (`planted=yes|no`, or `stepping` mid-step), and the world point its tip is being asked for
 (`target=(x, y, z)`, or `none` when nothing resolved). It reads the pool's latched
 values, never a fresh advance, so a piped run can fence twice and assert a planted
 target is unchanged while `body.where` moved.

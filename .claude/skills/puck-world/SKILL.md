@@ -213,6 +213,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | Render validation, stamp capacity, rigid/carry/tether facets | [documents-render.md](references/documents-render.md) |
 | Navigation, the tabletop primitive, records and pools | [documents-state.md](references/documents-state.md) |
 | Districts and the sculpting library | [documents-composition.md](references/documents-composition.md) |
+| How a body's look animates: creation drivers, swings, effectors and look followers, all read in `WorldStampPool.PackTransforms` (presentation only); the moth's turning, directional gait and stepping feet are authored there, never in client code | [documents-composition.md](references/documents-composition.md), [sdf-authoring rig](../sdf-authoring/references/rig.md#how-the-moth-moves) |
 | Extensions (`IPuckExtension`, `PuckExtensionSet`, installed `extensions/<name>/<name>.dll`), agent participants, the silo, MCP, release | [hosting-and-release.md](references/hosting-and-release.md) |
 | `captures`, `schedule`, verdict rows, `puck test` | [schedules-and-tests.md](references/schedules-and-tests.md) |
 

@@ -8767,11 +8767,11 @@ export type WorldPrototype = {
        */
       name: string;
       /**
-       * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, or SignalTurnRate. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The last three are instantaneous: φ is set to Cadence × the current value, so a facet reading them tracks rather than cycles.
+       * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, or a SignalStatePrefix state cell. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
        */
       signal: string;
       /**
-       * The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, and radians per radian-per-second for SignalTurnRate. Magnitude at most MaxCadence.
+       * The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, radians per radian-per-second for SignalTurnRate, radians per radian for SignalTravelDirection, and radians per metre-per-second-squared for the acceleration signals. Magnitude at most MaxCadence.
        */
       cadence: unknown;
       /**
@@ -8786,6 +8786,10 @@ export type WorldPrototype = {
        * Gate release's exponential time constant in seconds, on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
        */
       blendOutSeconds?: number | null;
+      /**
+       * The containing world's dynamics row (natural frequency, damping, initial response) an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare.
+       */
+      dynamics?: string | null;
     } | null)[] | null;
     /**
      * The inverse-kinematics effectors (null = none), at most MaxEffectors — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
@@ -8860,6 +8864,23 @@ export type WorldPrototype = {
          * The target influence outside the plant window while the driver is active, in [0, 1]. Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to rest, target influence returns to 1 so an idle limb can settle onto its surface.
          */
         swingWeight?: number | null;
+        /**
+         * The stepping latch the tip keeps while Driver is at rest (null = none, and a resting tip follows its target every frame) — see CreationReplantDocument.
+         */
+        replant?: {
+          /**
+           * The drift that starts a step, world units, in (0, MaxDistance].
+           */
+          distance: number;
+          /**
+           * The step's duration, seconds, in (0, MaxSeconds].
+           */
+          seconds: number;
+          /**
+           * The arc's peak lift, world units, in [0, MaxHeight].
+           */
+          height: number;
+        } | null;
       } | null;
     } | null)[] | null;
     /**
