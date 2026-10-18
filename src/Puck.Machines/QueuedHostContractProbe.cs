@@ -747,13 +747,17 @@ public static class QueuedHostContractProbe {
         var held = MachinePadState.Neutral with { Buttons = MachineButtons.South };
 
         foreach (var factor in ((int[])[1, FastForwardFactor])) {
+            // Each pass spans the same LongHorizon native frames: a factor-x submission runs factor frames' worth of
+            // ticks, so the cadence mismatch slips as often per native frame and the fast-forward pass needs only
+            // LongHorizon / factor submissions to cross as many slips as the 1x pass.
+            var submissions = (LongHorizon / factor);
             using var host = withContent();
             using var baseline = withContent();
 
             host.SetFastForward(factor: factor);
             host.SetRunahead(frames: RunaheadFrames);
 
-            for (var frame = 0; (frame < LongHorizon); ++frame) {
+            for (var frame = 0; (frame < submissions); ++frame) {
                 _ = host.Step(
                     deltaTicks: budget,
                     inputs: MachinePads.One(input: in held)
@@ -781,7 +785,7 @@ public static class QueuedHostContractProbe {
             host.SetRunahead(frames: 0);
             baseline.SetFastForward(factor: factor);
 
-            for (var frame = 0; (frame <= LongHorizon); ++frame) {
+            for (var frame = 0; (frame <= submissions); ++frame) {
                 _ = baseline.Step(
                     deltaTicks: budget,
                     inputs: MachinePads.One(input: in held)

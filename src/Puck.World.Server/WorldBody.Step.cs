@@ -398,13 +398,42 @@ public sealed partial class WorldBody {
             scratch: ref scratch
         )) {
             scratch.TargetVelocity = (direction * effectiveMoveSpeed);
+        } else {
+            var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
 
-            return;
+            scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveMoveSpeed);
         }
 
-        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+        if (m_bodyMotionProgram.PlanarTarget is { } planarTarget) {
+            scratch.TargetVelocity = ScaleAgainstHeading(
+                orientation: in scratch.Orientation,
+                parameters: in planarTarget,
+                target: scratch.TargetVelocity
+            );
+        }
+    }
+    // The program's planarTarget parameters: the target decomposes against the heading the frame operation resolved
+    // (scratch.Orientation, which under a World move frame is the heading attitude while Facing/Right are world
+    // axes), its lateral part scaled by Strafe and a part opposing the heading by Backward. The remainder (whatever
+    // lies along the heading's up) passes through untouched.
+    private static FixedVector3 ScaleAgainstHeading(in FixedQuaternion orientation, in FixedPlanarTarget parameters, FixedVector3 target) {
+        var facing = orientation.Rotate(vector: -FixedVector3.UnitZ);
+        var right = orientation.Rotate(vector: FixedVector3.UnitX);
+        var along = FixedVector3.Dot(
+            left: target,
+            right: facing
+        );
+        var across = FixedVector3.Dot(
+            left: target,
+            right: right
+        );
+        var rest = ((target - (facing * along)) - (right * across));
 
-        scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveMoveSpeed);
+        if (along < FixedQ4816.Zero) {
+            along *= parameters.Backward;
+        }
+
+        return (((facing * along) + (right * (across * parameters.Strafe))) + rest);
     }
     // The commanded WORLD movement direction laid onto the surface the body stands on, or false when the world does
     // not declare the triple or nothing is commanded.

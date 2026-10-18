@@ -60,6 +60,34 @@ public sealed class SeatViewStateLawTests {
             actual: state.Yaw
         );
     }
+    /// <summary>A frame between two fixed ticks presents the tick's look step at the fraction the body is drawn at,
+    /// while a pointer nudge between ticks shows whole at once and a recenter cuts the step.</summary>
+    [Fact]
+    public void PresentedLook_InterpolatesTheTickStepAndNothingElse() {
+        var views = Fixtures.BuildDocument().Views;
+        var feel = WorldSeatCameraFeel.Default;
+        var state = new WorldSeatViewState();
+
+        state.BeginTick();
+        // A full right look for one tick: the live yaw moves by -0.1 rad (the orbit turns opposite the look).
+        state.Nudge(input: new Vector2(x: 1f, y: 0f), yawScale: 0.1f, pitchScale: 0.1f, preference: feel, views: views);
+        state.CompleteTick();
+
+        Assert.Equal(expected: 0f, actual: state.PresentedLook(interpolationAlpha: 0f).Yaw, tolerance: 1e-6f);
+        Assert.Equal(expected: -0.05f, actual: state.PresentedLook(interpolationAlpha: 0.5f).Yaw, tolerance: 1e-6f);
+        Assert.Equal(expected: -0.1f, actual: state.PresentedLook(interpolationAlpha: 1f).Yaw, tolerance: 1e-6f);
+
+        // A pointer nudge outside a tick moves the presented look by its whole amount at every fraction.
+        state.Nudge(input: new Vector2(x: 0.2f, y: 0f), yawScale: 1f, pitchScale: 1f, preference: feel, views: views);
+
+        Assert.Equal(expected: -0.2f, actual: state.PresentedLook(interpolationAlpha: 0f).Yaw, tolerance: 1e-6f);
+        Assert.Equal(expected: -0.3f, actual: state.PresentedLook(interpolationAlpha: 1f).Yaw, tolerance: 1e-6f);
+
+        state.Recenter();
+
+        Assert.Equal(expected: 0f, actual: state.PresentedLook(interpolationAlpha: 0f).Yaw);
+        Assert.Equal(expected: 0f, actual: state.PresentedLook(interpolationAlpha: 0f).Pitch);
+    }
     [Fact]
     public void Recenter_BodyRelativeYaw_DoesNotDoubleBodyHeading() {
         var document = Fixtures.BuildDocument();
