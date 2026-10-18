@@ -20,9 +20,11 @@ namespace Puck.World.Server;
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. A slab's <c>Round</c> and a creation's boolean carving, smoothing, rounded box corners, and non-box primitive
 /// surfaces are deliberately not modelled. An isotropically scaled sphere is exact; every other finite placement
-/// primitive uses its world-axis bounding box, exact as a bound for an axis-aligned sharp box and conservative for
-/// rotated, rounded, or non-box geometry. No broadphase: O(bodies × colliders); a Y-sorted array with an AABB reject on
-/// the swept bounds is the cheap first cull if profiling ever demands one, behind this seam with no signature change.</para>
+/// primitive uses its own bounding box, turned with it (<see cref="FixedStaticCollider.Box"/>): exact for a sharp box
+/// at any yaw, conservative for rounded or non-box geometry, and axis-aligned whenever its axes land on world axes. A
+/// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. No broadphase:
+/// O(bodies × colliders); a Y-sorted array with an AABB reject on the swept bounds is the cheap first cull if profiling
+/// ever demands one, behind this seam with no signature change.</para>
 /// <para>A placement carrying both a solid and an attach facet compiles no static collider here — its origin/yaw are
 /// not the row's authored transform, they are a live body's resolved pose. <see cref="RefreshAttached"/> recomputes
 /// those colliders once per tick, before any body advances, so every body's <see cref="Resolve"/> call this tick
@@ -198,7 +200,23 @@ internal sealed class WorldColliderSet : IContactField {
         hash.Add(value: collider.Extent.X.Value);
         hash.Add(value: collider.Extent.Y.Value);
         hash.Add(value: collider.Extent.Z.Value);
+        hash.Add(value: collider.Rotation.X.Value);
+        hash.Add(value: collider.Rotation.Y.Value);
+        hash.Add(value: collider.Rotation.Z.Value);
+        hash.Add(value: collider.Rotation.W.Value);
     }
+    // A finite primitive's oriented bound, grown by the row's margin on every face. A copy whose axes land on world
+    // axes keeps the axis-aligned collider.
+    private static FixedStaticCollider PlacementBox(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) =>
+        FixedStaticCollider.Box(
+            center: copy.Center,
+            halfExtents: (copy.LocalHalfExtents + new FixedVector3(
+                X: margin,
+                Y: margin,
+                Z: margin
+            )),
+            rotation: copy.Rotation
+        );
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
@@ -356,13 +374,9 @@ internal sealed class WorldColliderSet : IContactField {
                             spheres++;
                             placementSpheres++;
                         } else {
-                            placementCollider = FixedStaticCollider.AxisAlignedBox(
-                                center: copy.Center,
-                                halfExtents: (copy.HalfExtents + new FixedVector3(
-                                    X: margin,
-                                    Y: margin,
-                                    Z: margin
-                                ))
+                            placementCollider = PlacementBox(
+                                copy: copy,
+                                margin: margin
                             );
                             boxes++;
                             placementBoxes++;
@@ -485,13 +499,9 @@ internal sealed class WorldColliderSet : IContactField {
                             hash: ref hash
                         );
                     } else {
-                        attached = FixedStaticCollider.AxisAlignedBox(
-                            center: copy.Center,
-                            halfExtents: (copy.HalfExtents + new FixedVector3(
-                                X: margin,
-                                Y: margin,
-                                Z: margin
-                            ))
+                        attached = PlacementBox(
+                            copy: copy,
+                            margin: margin
                         );
                         m_attachedColliders.Add(item: attached);
                         FoldCollider(

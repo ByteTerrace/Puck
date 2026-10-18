@@ -8,6 +8,8 @@ public enum FixedStaticColliderKind : byte {
     Sphere,
     /// <summary>A world-axis-aligned box.</summary>
     AxisAlignedBox,
+    /// <summary>A box turned by <see cref="FixedStaticCollider.Rotation"/>.</summary>
+    OrientedBox,
     /// <summary>A half-space whose normal points toward its permitted side.</summary>
     HalfSpace,
 }
@@ -16,12 +18,15 @@ public enum FixedStaticColliderKind : byte {
 /// <param name="Penetration">The distance to push along <paramref name="Normal"/>.</param>
 public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 Penetration);
 /// <summary>An analytic fixed-point static collider.</summary>
-/// <remarks>A sphere carries its radius in <see cref="Extent"/>.X, a box carries world-axis half-extents, and a
-/// half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
+/// <remarks>A sphere carries its radius in <see cref="Extent"/>.X, an axis-aligned box carries world-axis
+/// half-extents, an oriented box carries its own half-extents and the unit <see cref="Rotation"/> that turns its axes
+/// into world space, and a half-space carries its unit normal in <see cref="Extent"/> and one boundary point in
+/// <see cref="Center"/>. Only an oriented box reads <see cref="Rotation"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
 /// <param name="Extent">The radius carrier, box half-extents, or half-space normal.</param>
-public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent) {
+/// <param name="Rotation">An oriented box's box-to-world rotation; unread by every other kind.</param>
+public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default) {
     private static FixedQ4816 BoxMinimumProjection(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -118,6 +123,38 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
                 Penetration: overlapZ
             );
         }
+        return true;
+    }
+    // An oriented box is the axis-aligned box at the origin seen from the box's own frame: carry the body into that
+    // frame, push there, and turn the push back. Every volume kind then meets the box's true faces, and a face push
+    // points along the face's own normal.
+    private bool TryOrientedBoxPush(
+        FixedVector3 position,
+        in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume,
+        FixedQ4816 skin,
+        out FixedContactPush push
+    ) {
+        var local = AxisAlignedBox(
+            center: FixedVector3.Zero,
+            halfExtents: Extent
+        );
+
+        if (!local.TryBoxPush(
+            orientation: (Rotation.Conjugate() * orientation).Normalize(),
+            position: Rotation.RotateInverse(vector: (position - Center)),
+            push: out var localPush,
+            skin: skin,
+            volume: in volume
+        )) {
+            push = default;
+            return false;
+        }
+
+        push = new FixedContactPush(
+            Normal: Rotation.Rotate(vector: localPush.Normal),
+            Penetration: localPush.Penetration
+        );
         return true;
     }
     private bool TryHalfSpacePush(
@@ -236,6 +273,48 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             Extent: halfExtents,
             Kind: FixedStaticColliderKind.AxisAlignedBox
         );
+    /// <summary>Creates a static box turned by a rotation: an axis-aligned box when the rotation carries every box axis
+    /// exactly onto a world axis, so an unturned or quarter-turned box keeps the world-axis fast path, and an oriented
+    /// box otherwise.</summary>
+    /// <param name="center">The box center.</param>
+    /// <param name="rotation">The box-to-world rotation; normalized on entry.</param>
+    /// <param name="halfExtents">The box's own half-extents along its axes.</param>
+    /// <returns>The <see cref="FixedStaticColliderKind.AxisAlignedBox"/> or <see cref="FixedStaticColliderKind.OrientedBox"/>
+    /// collider.</returns>
+    public static FixedStaticCollider Box(FixedVector3 center, FixedQuaternion rotation, FixedVector3 halfExtents) {
+        var unit = rotation.Normalize();
+        var axisX = unit.Rotate(vector: FixedVector3.UnitX);
+        var axisY = unit.Rotate(vector: FixedVector3.UnitY);
+        var axisZ = unit.Rotate(vector: FixedVector3.UnitZ);
+
+        if (
+            !IsWorldAxis(axis: axisX) ||
+            !IsWorldAxis(axis: axisY) ||
+            !IsWorldAxis(axis: axisZ)
+        ) {
+            return new(
+                Center: center,
+                Extent: halfExtents,
+                Kind: FixedStaticColliderKind.OrientedBox,
+                Rotation: unit
+            );
+        }
+
+        // Each axis is a signed world unit, so the projection below only permutes the half-extents, exactly.
+        return AxisAlignedBox(
+            center: center,
+            halfExtents: new FixedVector3(
+                X: (((FixedQ4816.Abs(value: axisX.X) * halfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * halfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * halfExtents.Z)),
+                Y: (((FixedQ4816.Abs(value: axisX.Y) * halfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * halfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * halfExtents.Z)),
+                Z: (((FixedQ4816.Abs(value: axisX.Z) * halfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * halfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * halfExtents.Z))
+            )
+        );
+    }
+    // A rotated unit axis that lands exactly on a world axis: two of its components are exactly zero and the third is
+    // exactly one in magnitude.
+    private static bool IsWorldAxis(FixedVector3 axis) =>
+        ((((((axis.X == FixedQ4816.Zero) ? 1 : 0) + ((axis.Y == FixedQ4816.Zero) ? 1 : 0)) + ((axis.Z == FixedQ4816.Zero) ? 1 : 0)) == 2) &&
+         (((FixedQ4816.Abs(value: axis.X) + FixedQ4816.Abs(value: axis.Y)) + FixedQ4816.Abs(value: axis.Z)) == FixedQ4816.One));
     /// <summary>Creates a static half-space.</summary>
     public static FixedStaticCollider HalfSpace(FixedVector3 point, FixedVector3 normal) =>
         new(
@@ -276,6 +355,13 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         volume: in volume
     ),
         FixedStaticColliderKind.AxisAlignedBox => TryBoxPush(
+        orientation: in orientation,
+        position: position,
+        push: out push,
+        skin: skin,
+        volume: in volume
+    ),
+        FixedStaticColliderKind.OrientedBox => TryOrientedBoxPush(
         orientation: in orientation,
         position: position,
         push: out push,

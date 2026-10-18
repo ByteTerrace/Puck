@@ -33,13 +33,13 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// The nearest-surface-point primitive surface holds (attach/conform) and grappling (tether anchor selection)
 /// both resolve against — one deterministic query over the same analytic collider vocabulary
 /// <see cref="FixedStaticContactSolver"/> depenetrates a body out of: <see cref="FixedStaticColliderKind.Sphere"/>,
-/// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
+/// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>, and <see cref="FixedStaticColliderKind.HalfSpace"/>. A
 /// later slice reads a candidate's <see cref="FixedSurfaceAttachCandidate.Point"/> as the anchor and
 /// <see cref="FixedSurfaceAttachCandidate.Normal"/> as the surface-tangent-plane basis; nothing here decides grip,
 /// rope length, or reach — every distance and angle is caller-supplied, never a constant baked in.
 /// </summary>
 /// <remarks>
-/// <para><b>Exactness per collider kind.</b> A box's nearest point is an exact componentwise clamp — pure add/sub/
+/// <para><b>Exactness per collider kind.</b> An axis-aligned box's nearest point is an exact componentwise clamp — pure add/sub/
 /// compare, no rounding at all — for every face, edge, and corner case. Its normal is exact too on a face (the
 /// probe is outside on exactly one axis, so the normal is that axis's unit vector by construction); on an edge or
 /// corner (outside on two or three axes) the normal is <see cref="FixedVector3.Normalize"/>'s correctly-rounded
@@ -53,7 +53,8 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// operation does. A sphere's point and normal use the same correctly-rounded <see cref="FixedVector3.Normalize"/>
 /// as a box's edge/corner case, so it carries the same one-<see cref="FixedQ4816.Epsilon"/>-per-component bound; a
 /// probe exactly at a sphere's center has no defined gradient, so that degenerate case reports <c>+Y</c> rather
-/// than an arbitrary or discontinuous direction.</para>
+/// than an arbitrary or discontinuous direction. An oriented box runs the axis-aligned query in its own frame and
+/// turns the point and normal back, so each carries one more rounding per rotation.</para>
 /// <para><b>Tie-breaking.</b> <see cref="TryNearest"/> ranks candidates by ascending <c>Distance</c>; ties (and,
 /// for <see cref="TryNearestDirected"/>, ties on its two-key score — see that method) fall back to a total order
 /// over <c>(Source, ColliderIndex)</c>: <see cref="FixedSurfaceColliderSource.Static"/> before
@@ -257,6 +258,12 @@ public static class FixedSurfaceQuery {
         halfExtents: collider.Extent,
         probe: probe
     ),
+        FixedStaticColliderKind.OrientedBox => NearestOnOrientedBox(
+        center: collider.Center,
+        halfExtents: collider.Extent,
+        probe: probe,
+        rotation: collider.Rotation
+    ),
         FixedStaticColliderKind.HalfSpace => NearestOnHalfSpace(
         boundaryPoint: collider.Center,
         normal: collider.Extent,
@@ -264,6 +271,15 @@ public static class FixedSurfaceQuery {
     ),
         _ => throw new InvalidOperationException(message: $"Unknown collider kind {collider.Kind}."),
     };
+    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnOrientedBox(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation, FixedVector3 probe) {
+        var (point, normal) = NearestOnBox(
+            center: FixedVector3.Zero,
+            halfExtents: halfExtents,
+            probe: rotation.RotateInverse(vector: (probe - center))
+        );
+
+        return (Point: (center + rotation.Rotate(vector: point)), Normal: rotation.Rotate(vector: normal));
+    }
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnHalfSpace(FixedVector3 boundaryPoint, FixedVector3 normal, FixedVector3 probe) {
         // A plane projection: exact by construction, the same single-rounded dot/multiply/subtract every other
         // fixed-point vector operation already carries — no iteration, no square root.

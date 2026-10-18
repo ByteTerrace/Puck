@@ -333,8 +333,8 @@ public readonly struct FixedWorldCollider {
                             } else {
                                 volumes.Add(item: Box(
                                     center: copy.Center,
-                                    halfExtents: copy.HalfExtents,
-                                    rotation: FixedQuaternion.Identity
+                                    halfExtents: copy.LocalHalfExtents,
+                                    rotation: copy.Rotation
                                 ));
                             }
                         }
