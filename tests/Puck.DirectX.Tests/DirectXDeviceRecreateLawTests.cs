@@ -47,6 +47,29 @@ public sealed class DirectXDeviceRecreateLawTests {
         );
         Assert.True(condition: context.IsInitialized);
     }
+    /// <summary>A device removed on purpose (<c>gpu.faults remove</c>) reports a removal, and recreating it writes the
+    /// removed device's DRED record once, naming the reason, before the new device stands; a context with no device
+    /// removes nothing.</summary>
+    [Fact]
+    public void ARemovedDeviceWritesItsRemovalRecordOnceAsItIsRecreated() {
+        var output = new StringWriter();
+        using var context = DirectXTestDevices.Warp(debugOutput: output);
+
+        Assert.True(condition: context.RemoveDevice());
+        context.Recreate();
+
+        var lines = output.ToString().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Assert.StartsWith(expectedStartString: "[d3d12-dred] device removed, reason 0x887A0005;", actualString: Assert.Single(collection: lines, predicate: static line => line.Contains(value: "device removed", comparisonType: StringComparison.Ordinal)));
+        Assert.All(collection: lines, action: static line => Assert.StartsWith(expectedStartString: DirectXRemovalReport.LinePrefix, actualString: line));
+        Assert.True(condition: context.IsInitialized);
+        context.Recreate();
+        Assert.Equal(actual: output.ToString().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries).Length, expected: lines.Length);
+
+        using var idle = new Interop.DirectXDeviceContext(adapterLuid: 1L, deviceApi: new Apis.DirectXWarpDeviceApi(), minimumFeatureLevel: DirectXFeatureLevel.Level110);
+
+        Assert.False(condition: idle.RemoveDevice());
+    }
     [Fact]
     public void AnyOtherReinitializationFailureEndsTheRecovery() {
         using var context = DirectXTestDevices.Warp();
