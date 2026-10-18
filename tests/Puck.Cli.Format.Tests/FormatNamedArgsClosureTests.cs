@@ -13,7 +13,7 @@ namespace Puck.Cli.Format.Tests;
 /// resolves some types and leaves others unresolved. Binding against a set like that names arguments for whichever overload
 /// survived, which is how a rewrite ends up spelling a parameter the compiler never chose.
 /// </summary>
-public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : IClassFixture<BuiltSampleProject>, IDisposable {
+public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : IClassFixture<BuiltSampleProject> {
     private const string CallsAssertOnAReferenceType = """
         namespace Sample;
 
@@ -59,13 +59,6 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         """;
     private const string NamedForTheObjectOverload = "Xunit.Assert.NotNull(@object: found);";
 
-    private readonly TemporaryDirectory m_directory = PinnedScratch(prefix: "puck-cli-tests-named-args-");
-
-    private string Source => Path.Combine(
-        path1: m_directory.RootPath,
-        path2: "Probe.cs"
-    );
-
     /// <summary>Creates a scratch directory that resolves the repository SDK, so a project built in it binds the same
     /// compiler the suite runs under.</summary>
     /// <param name="prefix">The directory-name prefix.</param>
@@ -80,7 +73,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
 
     // Names `root`'s source in `configuration` and returns the exit code alongside everything the run reported, so a
     // case can pin both the refusal and the fact that it was announced.
-    private static (int Code, string Report) Format(string root, string configuration) {
+    internal static (int Code, string Report) Format(string root, string configuration) {
         var (code, _, report) = ConsoleCapture.RunSplit(run: () => SemanticPhases.Run(
             closures: new CompileClosures(),
             configuration: configuration,
@@ -104,15 +97,6 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
                     : ["build", "--disable-build-servers", project, "-c", configuration, "--no-restore"])
             ).GetAwaiter().GetResult().ExitCode,
             expected: 0
-        );
-
-    private void Build(string configuration) =>
-        Build(
-            configuration: configuration,
-            project: Path.Combine(
-                path1: m_directory.RootPath,
-                path2: "Sample.csproj"
-            )
         );
 
     /// <summary>
@@ -224,6 +208,81 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             expected: CallsAssertOnAnUnresolvedType
         );
     }
+    /// <summary>
+    /// With both configurations built, the requested one decides which assemblies resolve. The same source is named
+    /// where the assertion reference is part of the closure and left alone where it is not, so an output from the
+    /// other configuration can never supply a binding.
+    /// </summary>
+    [Fact]
+    public void TheRequestedConfigurationDecidesWhichClosureBinds() {
+        File.WriteAllText(
+            contents: CallsAssertOnAReferenceType,
+            path: sample.Source
+        );
+
+        var (code, report) = Format(
+            configuration: "Debug",
+            root: sample.Root
+        );
+
+        Assert.Equal(
+            actual: code,
+            expected: 0
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: sample.Source),
+            expected: CallsAssertOnAReferenceType
+        );
+        Assert.Contains(
+            actualString: report,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "could not be resolved"
+        );
+        Assert.Equal(
+            actual: Format(
+                configuration: "Release",
+                root: sample.Root
+            ).Code,
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: sample.Source),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: NamedForTheObjectOverload
+        );
+    }
+}
+/// <summary>
+/// The named-args laws over scratch projects of their own: a stale project reference, batched closure evaluation,
+/// granted internals, and sources shared or linked in from outside the project. Each case builds its own projects, so
+/// the class runs beside the cases over the shared built sample.
+/// </summary>
+public sealed class FormatNamedArgsProjectTests : IDisposable {
+    private readonly TemporaryDirectory m_directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-");
+
+    private string Source => Path.Combine(
+        path1: m_directory.RootPath,
+        path2: "Probe.cs"
+    );
+
+    private void Build(string configuration) =>
+        Build(
+            configuration: configuration,
+            project: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "Sample.csproj"
+            )
+        );
+    private static (int Code, string Report) Format(string root, string configuration) => FormatNamedArgsClosureTests.Format(
+        configuration: configuration,
+        root: root
+    );
+    private static void Build(string project, string configuration, bool restore = true) => FormatNamedArgsClosureTests.Build(
+        configuration: configuration,
+        project: project,
+        restore: restore
+    );
+
     /// <summary>Removes the scratch project directory.</summary>
     public void Dispose() {
         m_directory.Dispose();
@@ -666,49 +725,6 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             actualString: File.ReadAllText(path: Source),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "Shared.Join(left: \"a\", right: \"b\")"
-        );
-    }
-    /// <summary>
-    /// With both configurations built, the requested one decides which assemblies resolve. The same source is named
-    /// where the assertion reference is part of the closure and left alone where it is not, so an output from the
-    /// other configuration can never supply a binding.
-    /// </summary>
-    [Fact]
-    public void TheRequestedConfigurationDecidesWhichClosureBinds() {
-        File.WriteAllText(
-            contents: CallsAssertOnAReferenceType,
-            path: sample.Source
-        );
-
-        var (code, report) = Format(
-            configuration: "Debug",
-            root: sample.Root
-        );
-
-        Assert.Equal(
-            actual: code,
-            expected: 0
-        );
-        Assert.Equal(
-            actual: File.ReadAllText(path: sample.Source),
-            expected: CallsAssertOnAReferenceType
-        );
-        Assert.Contains(
-            actualString: report,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "could not be resolved"
-        );
-        Assert.Equal(
-            actual: Format(
-                configuration: "Release",
-                root: sample.Root
-            ).Code,
-            expected: 0
-        );
-        Assert.Contains(
-            actualString: File.ReadAllText(path: sample.Source),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: NamedForTheObjectOverload
         );
     }
 }
