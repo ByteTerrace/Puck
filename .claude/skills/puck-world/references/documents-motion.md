@@ -37,7 +37,18 @@ units/second) a
 grounded body on a curving surface is held against; it is independent of
 `Speed` — a kit's own resolved move speed measurably over-corrects a shallow
 slope climb (the bias converts to downhill drift under depenetration faster
-than to held contact) — and has its own schema default.
+than to held contact) — and has its own schema default. A fourth,
+`stepHeight` (world units, scaled with the body, default 0), is the tallest
+riser a grounded walker walks up onto: when the contact solve finds a step
+blocked by a non-walkable face, `WorldBody.ResolveProgramContacts` retries it
+through `Puck.Physics`' `FixedStepUp` (raise, move, bisect down onto the
+support) and keeps the retry only if it lands grounded on a walkable surface,
+no higher than `stepHeight`, further along than the blocked step. Never while
+airborne, held by a pull, or on a program that cedes the vertical contact
+channel. `body.motion` and `world.kits` echo it. The analytic provider's box
+contact reads every riser face as a wall (an axis push), so without a step
+height a walker crosses a kerb only when one tick's reach into it exceeds its
+height.
 In-medium locomotion is a kit authoring a `bond: "Medium"` hold row; a kart
 is a kit whose shaping table carries an `across` row.
 

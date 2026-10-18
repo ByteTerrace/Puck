@@ -1220,6 +1220,11 @@ broadphase's potential, narrowphase, and resolved pair counts are included in
 The fixed collider vocabulary and generic contact geometry live in
 `Puck.Physics`; World retains document compilation, authority, pair selection,
 grounding/walkability, obstruction reporting, and body-state writes.
+A walking kit's `motion.stepHeight` (default 0) is the tallest riser its body
+walks up onto instead of stopping against; the Moth authors 0.3 m, so she
+walks up onto the debug world's test-room floor, while the 1 m reference cube
+still stops her.
+`body.motion [body]` echoes the body's effective `stepHeight=`.
 
 A kit carrying a `rigid` facet is a passive physical entity—a billiard ball,
 a bowling pin, a domino—advanced by the rigid solver instead of a

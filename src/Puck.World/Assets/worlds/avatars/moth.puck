@@ -1193,6 +1193,8 @@ kits {
         speed {
           value: 5
         }
+        // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
+        stepHeight: 0.3
         turn {
           falloff: 1
           maxPitch: 1.2

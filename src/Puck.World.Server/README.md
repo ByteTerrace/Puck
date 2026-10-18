@@ -889,6 +889,18 @@ depenetration rather than held contact — a shipped world would need to author
 `GradientDerivedUp` to exercise the regression at all, and none does.
 `world.kits` echoes it alongside the other feel fields.
 
+A grounded walker steps up a riser no taller than its kit's
+`WorldMotion.StepHeight` (`stepHeight`, scaled with the body, zero by
+default). `ResolveProgramContacts` runs the ordinary sweep through a
+`BodyContactStep` bound to the body's pose and volumes; when the body was
+grounded last tick, the sweep reported a non-walkable push, the program owns
+the vertical contact channel and no pull hold owns it, `Puck.Physics`'
+`FixedStepUp` retries the step through that same sweep, so an entity-aware
+field resolves the retry against the other bodies too. The retry replaces the
+blocked step only when it lands grounded on a walkable surface, so a face
+steeper than `maxSlopeDegrees` is never stepped onto. `body.motion` echoes
+the body's effective `stepHeight=`, and `world.kits` the kit's.
+
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position
 and velocity raws, plus the previous commanded target the `r` term needs—

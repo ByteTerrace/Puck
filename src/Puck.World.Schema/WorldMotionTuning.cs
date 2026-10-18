@@ -49,6 +49,12 @@ namespace Puck.World;
 /// move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under
 /// depenetration faster than it converts into held contact. The default reproduces the engine's old hardcoded
 /// constant. Must remain positive after Q48.16 compilation.</param>
+/// <param name="StepHeight">The tallest riser, in world units scaled with the body, a grounded body walks up onto
+/// rather than stopping against (see <see cref="Puck.Physics.FixedStepUp"/>). A step the ordinary contact solve finds blocked is
+/// retried raised by this height, moved, and lowered back, and is kept only when it lands grounded on a walkable
+/// surface no higher than this above where it started. Read only by a program that owns the vertical contact
+/// channel, and never while the body is airborne or held by a pull. Zero, the default, never steps. Must be finite
+/// and non-negative, and a positive value must remain positive after Q48.16 compilation.</param>
 public sealed record WorldMotion(
     WorldSpeed Speed,
     WorldTurn Turn,
@@ -58,7 +64,8 @@ public sealed record WorldMotion(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHold>? Holds = null,
     [property: JsonPropertyName("upTurn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldUpTurnRates? UpTurnRaw = null,
     [property: JsonPropertyName("obstruction"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObstructionLatch? ObstructionRaw = null,
-    float GroundStick = 2f
+    float GroundStick = 2f,
+    float StepHeight = 0f
 ) {
     /// <summary>Gets the obstruction witness latch tuning, defaulted when the kit authors none.</summary>
     [JsonIgnore]
@@ -409,7 +416,8 @@ public static class WorldMotionTuningFactory {
                 IdleThreshold: FixedQ4816.FromDouble(value: tuning.Obstruction.IdleThreshold),
                 GraceTicks: obstructionGraceTicks
             ),
-            GroundStick: FixedQ4816.FromDouble(value: tuning.GroundStick)
+            GroundStick: FixedQ4816.FromDouble(value: tuning.GroundStick),
+            StepHeight: FixedQ4816.FromDouble(value: tuning.StepHeight)
         );
     }
 }

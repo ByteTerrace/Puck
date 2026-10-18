@@ -890,6 +890,9 @@ public sealed partial class WorldBody {
     /// <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/> with, or <see langword="null"/> for the full move speed
     /// in every direction.</summary>
     public FixedPlanarTarget? BodyMotionPlanarTarget => m_bodyMotionProgram.PlanarTarget;
+    /// <summary>Gets the tallest riser, in world units, this body walks up onto: its kit's
+    /// <see cref="WorldMotion.StepHeight"/> scaled by <see cref="Scale"/>. Zero never steps.</summary>
+    public FixedQ4816 StepHeight => (m_tuning.StepHeight * m_scale);
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, with the pointer
     /// ray the movement tier carried, retained for <c>body.channels</c> and the <c>$channel:</c> and <c>$pointer:</c>
     /// rule reads.</summary>

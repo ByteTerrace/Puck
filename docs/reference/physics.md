@@ -236,6 +236,22 @@ sweep, whose box reaches the end before any core's start does and proves no
 ground there; the refusal is met by a body already past that point, posed or
 arriving there.
 
+`FixedStepUp.TryStep` lifts a grounded body over a riser its ordinary step met
+as a wall. It runs every move through the caller's own `IFixedContactStep`, a
+sweep bound to one body's orientation, volumes and up axis, so it works over
+either provider. It raises the start by the step height, moves the step's
+planar displacement, and bisects downward (`LandingProbes`, 8 sweeps) for the
+shallowest descent that meets support, no lower than where the original step
+would have ended along up. The bisection is what lets an endpoint-only provider
+land: `FixedStaticContactSolver` pushes a capsule out of a box along the axis
+of least overlap, so one deep move reads a riser's side as the nearer face,
+while a landing that overlaps the top by less than the probe resolution
+resolves upward. The retry is kept only when the raised move gets further than
+the blocked step and the landing grounds on a walkable surface, no higher than
+the step height above the start and higher than the blocked step. A wall costs
+two sweeps; an accepted step costs `LandingProbes` plus four. The World calls
+it from the kit's `motion.stepHeight`, zero by default.
+
 Each sweep takes an explicit bounds-query budget
 (`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact
 tolerance, so a body pressed against a wall spends a handful of queries a tick.
@@ -561,7 +577,8 @@ thread-safe**.
 - **Contact geometry**—`FixedBodyColliderVolume`, `FixedDynamicBodyContacts`,
   `FixedStaticCollider`, `FixedContactPush`.
 - **The contact seam**—`IContactField`, `ContactResolution`,
-  `FixedStaticContactSolver`, `FixedFieldContactSolver`.
+  `FixedStaticContactSolver`, `FixedFieldContactSolver`, `FixedStepUp`,
+  `IFixedContactStep`, `FixedStepUpResult`.
 - **Surface-attach query**—`FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
   `FixedSurfaceColliderSource`.
 - **Rigid solver**—`FixedRigidSolver`, `FixedContactCandidate`.
