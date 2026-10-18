@@ -4965,6 +4965,7 @@ prototypes {
         rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
+        group: 27
         parent: "pod-left"
       }
 
@@ -6394,6 +6395,7 @@ prototypes {
         rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
+        group: 41
         parent: "pod-right"
       }
 
