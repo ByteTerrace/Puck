@@ -11,6 +11,10 @@ namespace Puck.Launcher;
 /// from its creation. A capture spans every frame between <c>BeginProgrammaticGpuCapture</c> and
 /// <c>EndProgrammaticGpuCapture</c> and is written to the <c>.wpix</c> path it was started with; the end answers
 /// <c>E_PENDING</c> while PIX is still writing, and is asked again on the next frame. PIX captures Direct3D 12 only.
+/// <para>The capturer's exports take what pix3's <c>PIXBeginCapture</c> and <c>PIXEndCapture</c> pass them:
+/// <c>BeginProgrammaticGpuCapture</c> the <c>PIXCaptureParameters</c> pointer alone (its prologue reads only its first
+/// argument), <c>EndProgrammaticGpuCapture</c> the <c>discard</c> flag. Analysing a capture in PIX, <c>pixtool</c>
+/// included, needs Windows developer mode on the analysing machine; taking one does not.</para>
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed unsafe class PixGpuCaptureTool : IGpuCaptureTool {

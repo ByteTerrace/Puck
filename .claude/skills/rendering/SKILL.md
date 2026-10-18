@@ -327,7 +327,15 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   renderdoc` (either backend), then `gpu.capture <path> [<frames>]` captures the
   next frames and narrates `[gpu.capture] <tool> wrote <file>`. A crossing lands
   on the same tick every run, so put `world.wait <ticks>` before the capture to
-  catch it; a steady frame is any frame after `[sdf.mesh-gi] done`. A removed
+  catch it; a steady frame is any frame after `[sdf.mesh-gi] done`. Launch
+  through `dotnet <dll>` or `dotnet run`, never `Puck.World.exe`. Read a capture
+  with RenderDoc on either backend: `renderdoccmd convert -f x.rdc -o
+  x.zip.xml -c zip.xml` exports every call of the frame with its parameters and
+  debug names, which is how submissions, barriers and copies are counted. PIX
+  analysis (`pixtool`, the PIX UI) needs Windows developer mode and a PIX
+  timing capture an answered UAC prompt; both are the owner's to grant. Pass
+  timestamps are recorded only under `world.gpu-timing`; read pass times there,
+  beside the capture. A removed
   Direct3D 12 device prints its DRED record as `[d3d12-dred]` lines;
   `gpu.faults remove` removes one on purpose.
 - Under `--debug-layers`, any `[vulkan-debug] validation`, `SYNC-HAZARD-*` or

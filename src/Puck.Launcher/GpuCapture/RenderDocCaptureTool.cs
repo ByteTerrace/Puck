@@ -9,7 +9,10 @@ namespace Puck.Launcher;
 /// loaded into the process before any graphics device or instance exists, so its Direct3D 12 hooks and its Vulkan layer
 /// see the device from its creation. It captures one frame at a time between <c>StartFrameCapture</c> and
 /// <c>EndFrameCapture</c> on whichever device is active, names each file from the path template with RenderDoc's own
-/// <c>_frame&lt;n&gt;.rdc</c> suffix, and its overlay is turned off so captures and screenshots carry none.
+/// suffix (<c>&lt;path&gt;_capture.rdc</c>, then <c>_capture_2.rdc</c> and on for the later frames of one arm), and its
+/// overlay is turned off so captures and screenshots carry none. The function table it binds is
+/// <c>RENDERDOC_API_1_6_0</c> as RenderDoc's <c>renderdoc_app.h</c> declares it: an alias of the 1.7.0 table, whose
+/// first 27 entries it reads.
 /// </summary>
 public sealed unsafe class RenderDocCaptureTool : IGpuCaptureTool {
     /// <summary><c>eRENDERDOC_API_Version_1_6_0</c>, the API version requested.</summary>
