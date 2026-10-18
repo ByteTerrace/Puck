@@ -27,7 +27,7 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane all
 
 | Lane | Rows selected | Use |
 |---|---|---|
-| `gate` | Recorded `pass`, unrecorded, and `unrunnable` rows | Developer loop, and every change through CI's runtime verification workflow (`verify.yml`). |
+| `gate` | Recorded `pass`, unrecorded, and `unrunnable` rows | Developer loop, and every change through CI's runtime verification workflow (`verify.yml`). The `tests/Puck.HumbleGamingBrick.Tests` suite runs it with an empty corpus cache, so its self-contained stages run in every CPU test pass and its corpus stages skip. |
 | `frontier` | Recorded `fail`, `inconclusive`, and `unrunnable` rows | Nightly or on-demand accuracy investigation. |
 | `all` | Every row | A landing that changes emulator accuracy. |
 
