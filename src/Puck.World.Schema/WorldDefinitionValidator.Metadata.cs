@@ -1141,7 +1141,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidatePlayerDefaults(WorldPlayerDefaults defaults, List<string> errors) {
         ValidateSeatLook(
             seatLook: defaults.SeatLook,
-            path: "seatDefaults.seatLook",
+            path: "seatDefaults.seatCameraFeel",
             errors: errors
         );
 
