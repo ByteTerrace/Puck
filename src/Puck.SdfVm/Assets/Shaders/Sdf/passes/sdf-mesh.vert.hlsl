@@ -48,11 +48,6 @@ MeshVertex VSMain(uint vertexId : SV_VertexID) {
         worldSurfaceNearDistance(view),
         w
     );
-    if (sdfLightCamera()) {
-        // Finite reversed-Z orthographic projection along the light, the cascade's parallel rays and their local depth.
-        output.position = float4(scaleX * dot(relative, view.right.xyz), scaleY * dot(relative, view.up.xyz),
-            (worldFarDistance(view) - w) / (worldFarDistance(view) - worldSurfaceNearDistance(view)), 1.0);
-    }
     output.world = world;
     output.triangleIndex = (vertexId / 3u);
 

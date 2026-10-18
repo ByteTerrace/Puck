@@ -19,14 +19,17 @@ public interface IGpuImageFactory {
     /// <summary>Creates the image a render pass's depth attachment draws into, in the attachment's format and cleared to its
     /// <see cref="GpuDepthAttachment.ClearDepth"/>: a backend that keeps an optimized clear with the image (Direct3D 12)
     /// creates it with that depth, so the render pass's clear takes the fast path and the debug layer reports no
-    /// mismatched clear. The image is only a depth attachment.</summary>
+    /// mismatched clear. The image is a depth attachment, and a sampled image too when <paramref name="sampled"/>: a later
+    /// pass reads the depth it holds (a shadow cascade) in <see cref="GpuImageLayout.ShaderReadOnly"/>, through its
+    /// <see cref="IGpuImage.ImageViewHandle"/>, as one float a texel in its first channel.</summary>
     /// <param name="attachment">The depth attachment the image is created for.</param>
     /// <param name="width">The width in pixels.</param>
     /// <param name="height">The height in pixels.</param>
+    /// <param name="sampled">Whether a shader samples the image's depth.</param>
     /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>).</param>
     /// <returns>The created image, owned by the caller.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the format is undefined, or the clear depth lies
     /// outside [0, 1].</exception>
     /// <exception cref="ArgumentException">The format is not a depth format.</exception>
-    IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name);
+    IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name);
 }

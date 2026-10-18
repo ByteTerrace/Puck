@@ -31,7 +31,7 @@ public static partial class WorldSessionLevers {
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
     public const string RenderScale = "render-scale";
-    /// <summary>Whether the shadow cascades render, nonzero in <see cref="WorldSessionLever.A"/> (<c>world.shadows</c>).</summary>
+    /// <summary>The shadow tier, a <see cref="ShadowTier"/> in <see cref="WorldSessionLever.A"/> (<c>world.shadows</c>).</summary>
     public const string Shadows = "shadows";
     /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
     public const string ShadowSlots = "shadow-slots";
@@ -80,7 +80,7 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: Shadows,
-            setter: lever => settings.Shadows = Flag(lever: lever)
+            setter: lever => settings.Shadows = ((ShadowTier)((int)lever.A))
         );
         sink.Register(
             name: AmbientOcclusion,

@@ -382,6 +382,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 device: gpu,
                 ledger: owned
             );
+            ShadowRaster = SdfTestPipelines.ShadowRaster(
+                device: gpu,
+                ledger: owned
+            );
             // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
             Pipelines = ((brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
@@ -405,6 +409,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 pipelines: Pipelines,
                 impostorRaster: ImpostorRaster,
                 meshRaster: MeshRaster,
+                shadowRaster: ShadowRaster,
                 regionCopy: RegionCopy.Compute!
             );
             Frame = new SdfFrame(
@@ -437,6 +442,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public GpuPassPipeline MeshRaster { get; }
         public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
+        public GpuPassPipeline ShadowRaster { get; }
 
         public void Dispose() {
             Engine.Dispose();
@@ -444,6 +450,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             RegionCopy.Dispose();
             MeshRaster.Dispose();
             ImpostorRaster.Dispose();
+            ShadowRaster.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfKernelSet kernels) {

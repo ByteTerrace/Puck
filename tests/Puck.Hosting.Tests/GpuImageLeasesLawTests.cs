@@ -164,7 +164,7 @@ public sealed class GpuImageLeasesLawTests {
         public int Disposed { get; private set; }
 
         public IGpuImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, in GpuObjectName name) => new Image(owner: this, handle: (m_next += 0x10), format: format, width: width, height: height, usage: usage);
-        public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) => new Image(owner: this, handle: (m_next += 0x10), format: attachment.Format, width: width, height: height, usage: GpuImageUsage.DepthAttachment);
+        public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) => new Image(owner: this, handle: (m_next += 0x10), format: attachment.Format, width: width, height: height, usage: (sampled ? (GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled) : GpuImageUsage.DepthAttachment));
 
         private sealed class Image(CountingImages owner, nint handle, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) : IGpuImage {
             public GpuPixelFormat Format => format;

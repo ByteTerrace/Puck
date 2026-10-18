@@ -9,6 +9,10 @@
         <OutputType>Exe</OutputType>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
+        <!-- A World can listen (host.listen's QUIC door, the control endpoint), so `dotnet run` starts it under the
+             shared dotnet host (Directory.Build.targets): one firewall decision for dotnet.exe covers every worktree,
+             where each worktree's apphost is a new path Windows Firewall asks about again. -->
+        <PuckRunUnderDotnetHost>true</PuckRunUnderDotnetHost>
         <!-- Prepare both desktop RIDs during restore, including the ReadyToRun compiler pack. Publishing moves
              first-use JIT work out of world startup; ordinary builds retain their portable IL output. -->
         <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>

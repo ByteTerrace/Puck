@@ -20,7 +20,7 @@ public enum GpuImageUsage : uint {
     ColorAttachment = 0x4,
     /// <summary>A render pass tests and writes the image as its depth attachment (Vulkan
     /// <c>DEPTH_STENCIL_ATTACHMENT</c>; Direct3D 12 <c>ALLOW_DEPTH_STENCIL</c>). Only a depth format declares it, and it
-    /// combines with no other usage.</summary>
+    /// combines only with <see cref="Sampled"/>, for a depth a later pass reads (a shadow cascade).</summary>
     DepthAttachment = 0x8,
 }
 /// <summary>
@@ -36,10 +36,13 @@ public static class GpuImageUsages {
     /// <param name="attachment">The depth attachment the image is created for.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
+    /// <param name="sampled">Whether a shader also samples the image.</param>
+    /// <returns>The usages the image declares: <see cref="GpuImageUsage.DepthAttachment"/>, with
+    /// <see cref="GpuImageUsage.Sampled"/> when <paramref name="sampled"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the format is undefined, or the clear depth lies
     /// outside [0, 1].</exception>
     /// <exception cref="ArgumentException">The format is not a depth format.</exception>
-    public static void ValidateDepth(in GpuDepthAttachment attachment, uint width, uint height) {
+    public static GpuImageUsage ValidateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled) {
         if (!(attachment.ClearDepth is >= 0f and <= 1f)) {
             throw new ArgumentOutOfRangeException(
                 actualValue: attachment.ClearDepth,
@@ -48,12 +51,16 @@ public static class GpuImageUsages {
             );
         }
 
+        var usage = (sampled ? (GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled) : GpuImageUsage.DepthAttachment);
+
         Validate(
             format: attachment.Format,
             height: height,
-            usage: GpuImageUsage.DepthAttachment,
+            usage: usage,
             width: width
         );
+
+        return usage;
     }
     /// <summary>Refuses an image request <see cref="IGpuImageFactory.Create"/> takes: one <see cref="Validate"/> refuses,
     /// or a depth attachment's, which is created from its attachment (<see cref="IGpuImageFactory.CreateDepth"/>) so that
@@ -89,8 +96,8 @@ public static class GpuImageUsages {
     /// <exception cref="ArgumentOutOfRangeException">The extent is zero, the usage is empty or undefined, or the format is
     /// undefined.</exception>
     /// <exception cref="ArgumentException">A depth format declares a usage other than
-    /// <see cref="GpuImageUsage.DepthAttachment"/>, a color format declares it, or a block-compressed format declares a
-    /// usage other than <see cref="GpuImageUsage.Sampled"/>.</exception>
+    /// <see cref="GpuImageUsage.DepthAttachment"/>, alone or with <see cref="GpuImageUsage.Sampled"/>, a color format
+    /// declares it, or a block-compressed format declares a usage other than <see cref="GpuImageUsage.Sampled"/>.</exception>
     public static void Validate(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) {
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
@@ -126,10 +133,10 @@ public static class GpuImageUsages {
 
         var depth = GpuPixelFormats.IsDepth(format: format);
 
-        if (depth != (usage == GpuImageUsage.DepthAttachment)) {
+        if (depth != ((usage & ~GpuImageUsage.Sampled) == GpuImageUsage.DepthAttachment)) {
             throw new ArgumentException(
                 message: (depth
-                    ? $"The depth format {format} is only a depth attachment; it declares {usage}."
+                    ? $"The depth format {format} is a depth attachment, sampled or not; it declares {usage}."
                     : $"The color format {format} cannot be a depth attachment; it declares {usage}."),
                 paramName: nameof(usage)
             );

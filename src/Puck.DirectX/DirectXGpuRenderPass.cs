@@ -112,10 +112,15 @@ public sealed unsafe class DirectXGpuFramebuffer : IGpuFramebuffer {
                 m_dsvHeap = ((nint)dsvHeap);
 
                 var view = GetCpuHeapStart(heap: dsvHeap);
+                // In the render pass's depth format, which a sampled depth's typeless texture needs stated.
+                var dsvDesc = new D3D12_DEPTH_STENCIL_VIEW_DESC {
+                    Format = renderPass.DepthFormat,
+                    ViewDimension = D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D,
+                };
 
                 device->CreateDepthStencilView(
                     DestDescriptor: view,
-                    pDesc: null,
+                    pDesc: &dsvDesc,
                     pResource: ((ID3D12Resource*)depth.ImageHandle)
                 );
                 DepthView = view.ptr;

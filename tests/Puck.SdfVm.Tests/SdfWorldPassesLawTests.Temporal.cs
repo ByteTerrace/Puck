@@ -209,7 +209,11 @@ public sealed partial class SdfWorldPassesLawTests {
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
 
-        Assert.Same(expected: SdfWorldPackage.TemporalFragment, actual: rig.Passes.FragmentOf(instance: "world"));
+        // The temporal fragment, its one stable shadow slot drawing no second slot's cascade.
+        Assert.Equal(
+            actual: rig.Passes.FragmentOf(instance: "world")!.Passes.Select(selector: static pass => pass.Name),
+            expected: SdfWorldPackage.TemporalFragment.Passes.Select(selector: static pass => pass.Name).Where(predicate: static name => (name != SdfWorldPackage.Parts.ShadowSecond))
+        );
         var plan = rig.World.Plan!;
 
         var resolve = plan.Passes.Single(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Resolve}"));

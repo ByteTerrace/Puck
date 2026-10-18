@@ -379,8 +379,9 @@ public sealed class GpuImageLeases {
             usage: usage,
             width: width
         ));
-        public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) => images.Own(image: inner.CreateDepth(
+        public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) => images.Own(image: inner.CreateDepth(
             attachment: in attachment,
+            sampled: sampled,
             height: height,
             name: in name,
             width: width

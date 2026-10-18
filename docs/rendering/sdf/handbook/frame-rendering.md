@@ -46,11 +46,13 @@ through the interpreter (`mapCore`), the frame's one walk of the SDF program. A
 frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
-**shadow-near**, **shadow-far** and **shadow-second** draw every mesh draw from
-the light cameras `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades))
-into their 2048-texel targets. A frame with no mesh draw, or whose view has no
-cascade, skips them; `shadow-second` runs only while a second stable shadow slot
-holds a directional light.
+**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`,
+`sdf-mesh-shadow.frag.hlsl`) draw every mesh draw from the light cameras
+`SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
+their depth alone. A frame with no mesh draw, or whose view has no cascade,
+skips them; `shadow-second` runs only while a second stable shadow slot holds a
+directional light, and a view whose world holds one stable slot has no
+`shadow-second` at all.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each (and the impostor cards a view records, through a second pipeline with
@@ -781,13 +783,26 @@ empty, and quads take their neighbours' materials.
 frame's first stable shadow slot): the near one around the view frustum's first
 16 metres, the far one to 120 metres or the far distance, each a bounding sphere
 of its slice snapped to whole texels. The `shadow-near` and `shadow-far` passes
-draw every mesh draw from their camera through the mesh pass's own pipeline,
-whose stages take their orthographic form under the pass block's `lightCamera`
-flag, into 2048-texel targets of the mesh target's format. The second shadow
-slot's light, when one holds it, gets one cascade over the first 40 metres,
-drawn by `shadow-second` and written into K's second slot. The cascade targets
-carry the mesh target's four floats a texel, which reuses the mesh pipeline at
-16 bytes a texel more than a depth-only pipeline needs.
+draw every mesh draw from their camera through the shadow pipeline
+(`SdfMeshRasterPass.ShadowKey`): the mesh pass's layout and triangle pull, an
+orthographic vertex stage along the light (`sdf-mesh-shadow.vert.hlsl`) and a
+fragment stage that writes no colour and only counts its fragments, in a render
+pass with the cascade's `D32Float` depth alone, cleared to zero and stored. The
+depth is reversed and linear, one at the cascade's near plane and zero at its
+far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and decodes
+the caster's light-space depth as `far - depth · (far - near)`; a texel nothing
+was drawn into reads as the far plane. The second shadow slot's light, when one
+holds it, gets one cascade over the first 40 metres, drawn by `shadow-second`
+and written into K's second slot.
+
+Every cascade is 2048 texels a side at the `high` shadow tier, 1024 at
+`medium` and 512 at `low` (`SdfViewQuality.ShadowResolution`,
+`WorldFramePresenter.ShadowResolutionOf`), 16 MB, 4 MB and 1 MB of depth each;
+the pass block's `meshShadowTexels` carries the size to the surface pass, and
+the fit snaps to that size's texels. The tier and whether the world holds a
+second stable slot choose the view's fragment (`SdfWorldPackage.WithShadows`),
+so changing either rebuilds the view's graph once; the slot count is the
+world's configured policy, so a handoff between lights allocates nothing.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and
@@ -907,16 +922,17 @@ view's passes are submitted and the fences do the pacing. A capture reads a
 view back through the render graph, which serves it from a frame it renders.
 
 A view's device-local scratch (the bake's instance masks and samples, the
-cascade targets, visibility records, the mesh target) is *retained*: one allocation
+cascade depths, visibility records, the mesh target) is *retained*: one allocation
 per instance, shared by every frame slot rather than duplicated. The planner
 orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other
 while still overlapping CPU production with GPU execution. Only the view's
 color output is kept per frame slot, so a consumer can read the previous
-frame's image while the next one renders. The three cascades' targets are 2048
-texels a side and take 252 MB together, so a view whose quality skips shadows
-(a portal window, a camera view) runs its fragment without them
-(`SdfWorldPackage.WithoutShadows`): no cascade pass, no cascade target, and a
+frame's image while the next one renders. A view holds only the cascades it
+draws: two at the debug world's `high` tier and one stable slot, 34 MB of its
+295 MB at 1280×900 temporal, and a view whose quality skips shadows (a portal
+window, a camera view, `world.shadows off`) runs its fragment without them
+(`SdfWorldPackage.WithoutShadows`): no cascade pass, no cascade depth, and a
 surface pass that binds the tables' filler in their place.
 
 ## Reading per-pass GPU cost

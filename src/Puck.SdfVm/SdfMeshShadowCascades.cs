@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
-using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -20,8 +19,8 @@ public readonly record struct SdfMeshShadowCamera(Vector3 Position, Vector3 Righ
 /// frame's first shadow slot), each enclosing a slice of the view's frustum that starts at its eye, the near cascade the
 /// first <see cref="NearSplit"/> metres and the far cascade up to <see cref="FarSplit"/> metres or the frame's far
 /// distance, and one along the second shadow slot's light over the first <see cref="SecondSplit"/> metres. Each cascade is a bounding sphere of its slice, so its
-/// extent does not change as the camera turns, and its plane's center snaps to a whole texel, so a still light's shadow
-/// does not crawl as the camera moves. The fit is a pure function of the camera, the light and the far distance, so every
+/// extent does not change as the camera turns, and its plane's center snaps to a whole texel of the view's cascade
+/// resolution (<see cref="SdfViewQuality.ShadowResolution"/>), so a still light's shadow does not crawl as the camera moves. The fit is a pure function of the camera, the light and the far distance, so every
 /// pass of a frame that fits it agrees.
 /// </summary>
 public readonly struct SdfMeshShadowCascades {
@@ -43,13 +42,14 @@ public readonly struct SdfMeshShadowCascades {
     private readonly SdfMeshShadowCamera m_far;
     private readonly SdfMeshShadowCamera m_second;
 
-    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, SdfMeshShadowCamera second, int count, float penumbraSlope, float secondSlope) {
+    private SdfMeshShadowCascades(SdfMeshShadowCamera near, SdfMeshShadowCamera far, SdfMeshShadowCamera second, int count, float penumbraSlope, float secondSlope, int texels) {
         m_near = near;
         m_far = far;
         m_second = second;
         Count = count;
         PenumbraSlope = penumbraSlope;
         SecondPenumbraSlope = secondSlope;
+        Texels = texels;
     }
 
     /// <summary>Gets the key light's cascades the frame renders: zero when it casts no shadow.</summary>
@@ -60,6 +60,8 @@ public readonly struct SdfMeshShadowCascades {
     /// <summary>Gets the second shadow slot's penumbra slope, zero when that slot holds no directional light, so its
     /// cascade (index 2) renders nothing.</summary>
     public float SecondPenumbraSlope { get; }
+    /// <summary>Gets the texels along each side of every cascade's depth, zero when the key light casts no shadow.</summary>
+    public int Texels { get; }
 
     /// <summary>Gets one cascade's camera.</summary>
     /// <param name="index">The cascade: zero the key light's near one, one its far one, two the second slot's.</param>
@@ -73,10 +75,13 @@ public readonly struct SdfMeshShadowCascades {
     /// <summary>Fits the cascades of a view of a frame.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
+    /// <param name="texels">The texels along each side of the cascade depths the fit is drawn into and read from, or
+    /// <see langword="null"/> for the view's <see cref="SdfViewQuality.ShadowResolution"/>: a pass that binds a cascade
+    /// depth passes the depth's own size, which differs from the quality's while a graph of the new size builds.</param>
     /// <returns>The cascades; none when the frame's first shadow slot holds no directional light or the view skips soft
     /// shadows.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static SdfMeshShadowCascades Fit(SdfFrame frame, int view) {
+    public static SdfMeshShadowCascades Fit(SdfFrame frame, int view, int? texels = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         var snapshot = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))];
@@ -90,26 +95,28 @@ public readonly struct SdfMeshShadowCascades {
         var light = lights[slot];
         var forward = -SdfLights.UnitDirection(direction: light.Direction);
         var camera = snapshot.Camera;
+        var side = (texels ?? SdfShadowResolutions.Texels(resolution: snapshot.Quality.ShadowResolution));
         var far = MathF.Min(FarSplit, frame.FarDistance);
         var secondSlot = ((lights.ShadowSlots.SlotCount > 1) ? lights.ShadowSlots[1] : -1);
         var hasSecond = ((secondSlot >= 0) && (secondSlot < lights.Count) && (lights[secondSlot].Kind == SdfLightKind.Directional));
         var second = (hasSecond
-            ? Cascade(camera: camera, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far))
+            ? Cascade(camera: camera, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far), texels: side)
             : default);
 
         return new SdfMeshShadowCascades(
             count: 2,
-            far: Cascade(camera: camera, forward: forward, depth: far),
-            near: Cascade(camera: camera, forward: forward, depth: MathF.Min(NearSplit, far)),
+            far: Cascade(camera: camera, forward: forward, depth: far, texels: side),
+            near: Cascade(camera: camera, forward: forward, depth: MathF.Min(NearSplit, far), texels: side),
             penumbraSlope: MathF.Max(light.Param, 1.0e-3f),
             second: second,
-            secondSlope: (hasSecond ? MathF.Max(lights[secondSlot].Param, 1.0e-3f) : 0f)
+            secondSlope: (hasSecond ? MathF.Max(lights[secondSlot].Param, 1.0e-3f) : 0f),
+            texels: side
         );
     }
 
     // The cascade enclosing the frustum slice from the eye to `depth`: the slice's bounding sphere, whose center lies on
-    // the view's forward axis, seen along the light, with its plane's center snapped to a whole texel.
-    private static SdfMeshShadowCamera Cascade(CameraSnapshot camera, Vector3 forward, float depth) {
+    // the view's forward axis, seen along the light, with its plane's center snapped to a whole one of its texels.
+    private static SdfMeshShadowCamera Cascade(CameraSnapshot camera, Vector3 forward, float depth, int texels) {
         var lateral = (camera.TanHalfFieldOfView * camera.TanHalfFieldOfView) * (1f + (camera.AspectRatio * camera.AspectRatio));
         var centerDepth = MathF.Min(depth, ((depth * (1f + lateral)) * 0.5f));
         var radius = MathF.Sqrt(((depth - centerDepth) * (depth - centerDepth)) + ((depth * depth) * lateral));
@@ -124,7 +131,7 @@ public readonly struct SdfMeshShadowCascades {
         // triangles keep their winding seen from the light.
         var right = Vector3.Normalize(Vector3.Cross(forward, reference));
         var up = Vector3.Cross(right, forward);
-        var texel = ((2f * radius) / SdfWorldPackage.MeshShadowResolution);
+        var texel = ((2f * radius) / texels);
         var alongRight = (MathF.Round(Vector3.Dot(center, right) / texel) * texel);
         var alongUp = (MathF.Round(Vector3.Dot(center, up) / texel) * texel);
         var alongForward = Vector3.Dot(center, forward);

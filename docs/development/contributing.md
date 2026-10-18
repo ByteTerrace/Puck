@@ -974,7 +974,7 @@ meant to establish.
   the repository starts locally that may listen runs under the shared host,
   `dotnet <assembly>.dll`, never a per-worktree apphost. `Directory.Build.targets`
   points `dotnet test` and `dotnet run` of every test project, and of an
-  executable that sets `PuckRunUnderDotnetHost` (the silo), at
+  executable that sets `PuckRunUnderDotnetHost` (the World and the silo), at
   `dotnet exec <assembly>.dll`; the apphost is still built, because xUnit v3
   requires one and a published executable ships its own, but every test
   assembly refuses to run under it (`tests/Shared/SharedTestHost.cs`, exit 87),

@@ -13,7 +13,5 @@ float4 PSMain(MeshVertex input) : SV_Target0 {
 
     puckCountFragmentWork(0u, 1u);
 
-    float3 offset = input.world - view.position.xyz;
-    float depth = sdfLightCamera() ? dot(offset, view.forward.xyz) : length(offset);
-    return float4(depth, float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
+    return float4(length(input.world - view.position.xyz), float(((pushedIndex.index & SdfMeshDrawMask) + 1u)), float(input.triangleIndex), 0.0);
 }

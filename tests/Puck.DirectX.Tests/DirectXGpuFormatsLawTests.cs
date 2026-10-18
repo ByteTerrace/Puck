@@ -34,6 +34,24 @@ public sealed class DirectXGpuFormatsLawTests {
             expected: expected,
             actual: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format)
         );
+    // A sampled depth's texture is typeless so one texture takes its depth-stencil view and a float shader resource view;
+    // every other image's texture and view keep its own format, and a sampled depth has no typeless form but D32's.
+    [Fact]
+    public void ASampledDepthIsTypelessAndReadAsFloat() {
+        Assert.Equal(
+            expected: (DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT),
+            actual: DirectXTextures.FormatsOf(format: DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT, usage: GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled)
+        );
+        Assert.Equal(
+            expected: (DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT),
+            actual: DirectXTextures.FormatsOf(format: DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT, usage: GpuImageUsage.DepthAttachment)
+        );
+        Assert.Equal(
+            expected: (DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT),
+            actual: DirectXTextures.FormatsOf(format: DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT, usage: GpuImageUsage.Sampled | GpuImageUsage.Storage)
+        );
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => DirectXTextures.FormatsOf(format: DXGI_FORMAT.DXGI_FORMAT_D16_UNORM, usage: GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled));
+    }
     [InlineData(DisplayColorSpace.Srgb, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)]
     [InlineData(DisplayColorSpace.Hdr10, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)]
     [InlineData(DisplayColorSpace.ScRgb, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709)]

@@ -11,6 +11,9 @@ public sealed partial class SdfWorldTables {
     // The impostor card pipeline, which draws in the same render pass beside it.
     private readonly IGpuPipeline m_impostorPipeline;
     private readonly IGpuRenderPass m_meshRenderPass;
+    // The shadow cascades' pipeline and the depth-only render pass it draws in.
+    private readonly IGpuPipeline m_shadowPipeline;
+    private readonly IGpuRenderPass m_shadowRenderPass;
 
     // The mesh pass's graphics pipeline.
     internal IGpuPipeline MeshPipeline => m_meshPipeline;
@@ -19,6 +22,10 @@ public sealed partial class SdfWorldTables {
     internal IGpuPipeline ImpostorPipeline => m_impostorPipeline;
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
     internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
+    // The shadow cascades' pipeline: the mesh pass's layout and vertex stage, writing depth alone.
+    internal IGpuPipeline ShadowPipeline => m_shadowPipeline;
+    // The depth-only render pass a view's cascades draw in, which its cascade framebuffers are created for.
+    internal IGpuRenderPass ShadowRenderPass => m_shadowRenderPass;
     // A frame waits for the views kernel, the one pipeline the tables are built without (SdfWorldPipelines.PollRequired):
     // null once it is built, the kernel otherwise, refused (PipelineRefusal) or still building.
     internal SdfKernel? FrameWaiting() =>
@@ -46,12 +53,17 @@ public sealed partial class SdfWorldTables {
                 Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
                 m_impostorPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_impostorPipeline.GroupLayoutHandles) &&
+                m_shadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_shadowPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
                         resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&
                 ReferenceEquals(
                     objA: m_meshRenderPass,
                     objB: other.m_meshRenderPass
+                ) &&
+                ReferenceEquals(
+                    objA: m_shadowRenderPass,
+                    objB: other.m_shadowRenderPass
                 )
             )
         );

@@ -402,11 +402,13 @@ at most 128x128x64 with 128 invocations; hosts with larger limits may supply an
 explicitly verified `ShaderPipelineLimits` policy.
 
 A `Depth` resource is a `D32Float` depth attachment. Only a
-[geometry pass](#geometry-passes) writes one, and nothing samples, publishes or
-retains it into the next frame; it declares no `initialization`, because the
-pass that writes it clears or loads it. The planner refuses each misuse by name:
-another format (`SHADERPIPE_DEPTH_FORMAT`), a pass input
-(`SHADERPIPE_DEPTH_SAMPLED`), a pipeline output (`SHADERPIPE_DEPTH_PUBLIC`),
+[geometry pass](#geometry-passes) writes one, and nothing publishes or retains
+it into the next frame; it declares no `initialization`, because the pass that
+writes it clears or loads it. Only a package pass samples one (the SDF world's
+shadow cascades, which its own raster passes draw and its surface pass reads),
+and the node then creates the depth image sampled as well. The planner refuses
+each misuse by name: another format (`SHADERPIPE_DEPTH_FORMAT`), an input of a
+document pass (`SHADERPIPE_DEPTH_SAMPLED`), a pipeline output (`SHADERPIPE_DEPTH_PUBLIC`),
 `history` (`SHADERPIPE_DEPTH_HISTORY`), an initialization
 (`SHADERPIPE_DEPTH_INITIALIZATION`), and a compute or fullscreen writer
 (`SHADERPIPE_DEPTH_WRITER`). A depth resource that forwards nothing may state

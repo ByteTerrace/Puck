@@ -148,7 +148,6 @@ public static partial class SdfFrameBlock {
 
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
         WritePreviousView(block: block, valid: false, view: default);
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightCamera), value: 0u);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;

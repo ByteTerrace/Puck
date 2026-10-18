@@ -352,19 +352,19 @@ public sealed partial class ShaderPipelineRenderNode {
         return carried;
     }
 
-    // The usages every instance of an image storage is created with. A depth storage is only a depth attachment. A color
-    // storage is sampled and a storage image, which compute writes, zero clears and a publication in General need, and a
-    // color attachment too when a planned access draws into it: a graphics pass's output or a package's color-attachment
-    // port.
+    // The usages every instance of an image storage is created with. A depth storage is a depth attachment, sampled too
+    // when a planned access reads it (a package's cascade the surface pass reads). A color storage is sampled and a
+    // storage image, which compute writes, zero clears and a publication in General need, and a color attachment too when
+    // a planned access draws into it: a graphics pass's output or a package's color-attachment port.
     public static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
-            ? GpuImageUsage.DepthAttachment
-            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => (
-                (access.Storage == storage.Index) &&
-                (access.Use.Layout == GpuImageLayout.RenderTarget)
-            )))
+            ? (GpuImageUsage.DepthAttachment | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.ShaderReadOnly) ? GpuImageUsage.Sampled : GpuImageUsage.None))
+            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.RenderTarget)
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+    // Whether a planned access takes a storage in a layout.
+    private static bool Accessed(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuImageLayout layout) =>
+        plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == storage.Index) && (access.Use.Layout == layout))));
 
     // The usages every instance of a buffer storage is created with: a storage buffer, and an indirect-argument buffer too
     // when a planned access reads it as an indirect dispatch's arguments.

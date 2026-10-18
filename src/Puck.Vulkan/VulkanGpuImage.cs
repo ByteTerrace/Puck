@@ -10,6 +10,10 @@ namespace Puck.Vulkan;
 /// the offscreen-image and framebuffer-set APIs on dispose.
 /// </summary>
 public sealed class VulkanGpuImage : IGpuImage {
+    // The live images of a depth format, by VkImage handle, so a layout transition covers the depth aspect in every
+    // layout a sampled depth image takes, not only DepthAttachment.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, byte> DepthImages = new();
+
     private readonly VulkanDeviceCommands m_device;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly nint m_memoryHandle;
@@ -30,7 +34,17 @@ public sealed class VulkanGpuImage : IGpuImage {
         Height = height;
         Usage = usage;
         Width = width;
+
+        if (GpuPixelFormats.IsDepth(format: format)) {
+            DepthImages[imageHandle] = 0;
+        }
     }
+
+    /// <summary>Returns whether a live image of this backend has a depth format, so its transitions cover the depth
+    /// aspect.</summary>
+    /// <param name="imageHandle">The native <c>VkImage</c> handle.</param>
+    /// <returns><see langword="true"/> for a live depth image; otherwise <see langword="false"/>.</returns>
+    public static bool IsDepth(nint imageHandle) => DepthImages.ContainsKey(key: imageHandle);
 
     /// <inheritdoc/>
     public GpuPixelFormat Format { get; }
@@ -119,6 +133,7 @@ public sealed class VulkanGpuImage : IGpuImage {
         }
 
         m_disposed = true;
+        _ = DepthImages.TryRemove(key: m_imageHandle, value: out _);
         m_framebufferSetApi.DestroyImageView(
             device: m_device,
             imageViewHandle: m_imageViewHandle
@@ -159,10 +174,11 @@ public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IV
     }
     /// <inheritdoc/>
     /// <remarks>Vulkan records a clear with the render pass that begins, so the image keeps no clear of its own.</remarks>
-    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
-        GpuImageUsages.ValidateDepth(
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) {
+        var usage = GpuImageUsages.ValidateDepth(
             attachment: in attachment,
             height: height,
+            sampled: sampled,
             width: width
         );
 
@@ -170,7 +186,7 @@ public sealed class VulkanGpuImageFactory(IVulkanDeviceContext deviceContext, IV
             format: attachment.Format,
             height: height,
             name: in name,
-            usage: GpuImageUsage.DepthAttachment,
+            usage: usage,
             width: width
         );
     }
