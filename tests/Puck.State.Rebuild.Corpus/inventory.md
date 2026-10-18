@@ -134,32 +134,32 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 |---|---:|---:|---|
 | `AddCellStatementNode` | 0 | 1 |  |
 | `AndPredicateNode` | 2 | 1 | `avatars/moth` |
-| `ArgumentNode` | 332 | 53 | `avatars/moth`, `debug`, `skies` |
-| `ArrayExpressionNode` | 1163 | 16 | `avatars/moth`, `debug`, `skies` |
+| `ArgumentNode` | 352 | 53 | `avatars/moth`, `debug`, `garden`, `skies` |
+| `ArrayExpressionNode` | 1157 | 16 | `avatars/moth`, `debug`, `garden`, `skies` |
 | `BinaryExpressionNode` | 5 | 1 | `avatars/moth` |
-| `BlockNode` | 405 | 34 | `avatars/moth`, `debug`, `quality`, `skies` |
-| `CallExpressionNode` | 149 | 8 | `avatars/moth`, `debug`, `skies` |
+| `BlockNode` | 381 | 34 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
+| `CallExpressionNode` | 159 | 8 | `avatars/moth`, `debug`, `garden`, `skies` |
 | `ColorExpressionNode` | 0 | 2 |  |
 | `ComparisonPredicateNode` | 6 | 8 | `avatars/moth` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 4 | 6 | `avatars/moth`, `debug`, `quality`, `skies` |
+| `DocumentNode` | 5 | 6 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
 | `EmbeddedBlockNode` | 0 | 1 |  |
-| `ExpressionStatementNode` | 22 | 1 | `avatars/moth`, `debug` |
-| `FlagStatementNode` | 4 | 1 | `avatars/moth`, `debug` |
+| `ExpressionStatementNode` | 23 | 1 | `avatars/moth`, `debug` |
+| `FlagStatementNode` | 6 | 1 | `avatars/moth`, `debug`, `garden` |
 | `ForStatementNode` | 3 | 0 | `avatars/moth` |
-| `IdentifierExpressionNode` | 520 | 31 | `avatars/moth`, `debug`, `quality`, `skies` |
+| `IdentifierExpressionNode` | 503 | 31 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
 | `IfStatementNode` | 0 | 1 |  |
 | `ImportNode` | 2 | 2 | `avatars/moth`, `debug` |
 | `IndexExpressionNode` | 7 | 2 | `avatars/moth` |
 | `InterpolatedStringNode` | 3 | 0 | `avatars/moth` |
-| `LetNode` | 30 | 8 | `avatars/moth` |
-| `LiteralExpressionNode` | 4985 | 173 | `avatars/moth`, `debug`, `quality`, `skies` |
+| `LetNode` | 42 | 8 | `avatars/moth`, `debug`, `garden` |
+| `LiteralExpressionNode` | 5013 | 173 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
 | `LocalStatementNode` | 0 | 1 |  |
 | `NotPredicateNode` | 0 | 1 |  |
-| `ObjectExpressionNode` | 255 | 15 | `avatars/moth`, `debug`, `skies` |
+| `ObjectExpressionNode` | 355 | 15 | `avatars/moth`, `debug`, `garden`, `skies` |
 | `OperandExpressionNode` | 21 | 39 | `avatars/moth` |
 | `OptionBlockNode` | 0 | 1 |  |
-| `PropertyNode` | 3062 | 115 | `avatars/moth`, `debug`, `quality`, `skies` |
+| `PropertyNode` | 3196 | 115 | `avatars/moth`, `debug`, `garden`, `quality`, `skies` |
 | `RangeExpressionNode` | 0 | 3 |  |
 | `RhsOperandNode` | 7 | 8 | `avatars/moth` |
 | `RhsTextNode` | 0 | 1 |  |
