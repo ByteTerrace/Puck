@@ -504,6 +504,232 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
+  // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
+  {
+    name: "shoulders-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -50.4])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -50.4]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [45.6, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -45.6])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -45.6]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50.4, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   // Eight hero cameras round the lower legs at the hero spawn, at 45-degree steps from the front, tiled by the legs-hero
   // layout. Each looks down about 20 degrees, so its frame tops out just under the horizon and shows only plain ground.
   {
@@ -4307,17 +4533,17 @@ prototypes {
         id: 206
         position [0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1412, 0.4158, 0.1275]
+        scale [0.1256, 0.4158, 0.1148]
         material: charcoal
         group: 60
         parent: "torso"
         exponent: 2.7
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4354,8 +4580,8 @@ prototypes {
 
       shape Box "podBottomRim-left" {
         id: 920
-        position [0.4265, 1.3886, -0.2919]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.4265, 1.315, -0.105]
+        rotation [0.2881, 0.066, -0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
@@ -4380,17 +4606,17 @@ prototypes {
         id: 903
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1518, 0.42, 0.15]
+        scale [0.135, 0.42, 0.135]
         material: violetPodLeft
         group: 61
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4403,15 +4629,15 @@ prototypes {
         id: 904
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.149, 0.15, 0.504]
+        scale [0.125, 0.123, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 61
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4423,7 +4649,7 @@ prototypes {
       shape Box "podCapSlice-left" {
         id: 905
         position [0.15, 1.5407, -0.269]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.1, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4446,7 +4672,7 @@ prototypes {
 
       shape Prism "podVent-left" {
         id: 918
-        position [0.1645, 1.517, -0.4136]
+        position [0.1645, 1.5149, -0.3999]
         rotation [0.0749, 0, 0, 0.9972]
         scale [0.048, 0.017, 0.018]
         material: charcoal
@@ -4464,17 +4690,17 @@ prototypes {
         id: 906
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1548, 0.42, 0.153]
+        scale [0.1377, 0.42, 0.1377]
         material: shinCream
         group: 62
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4487,15 +4713,15 @@ prototypes {
         id: 907
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.152, 0.153, 0.504]
+        scale [0.1275, 0.1255, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 62
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4507,7 +4733,7 @@ prototypes {
       shape Box "podBand1Slice-left" {
         id: 908
         position [0.1658, 1.3849, -0.2925]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -4520,17 +4746,17 @@ prototypes {
         id: 909
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1579, 0.42, 0.156]
+        scale [0.1404, 0.42, 0.1404]
         material: violetPodLeft
         group: 63
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4543,15 +4769,15 @@ prototypes {
         id: 910
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.155, 0.156, 0.504]
+        scale [0.13, 0.1279, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 63
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4563,7 +4789,7 @@ prototypes {
       shape Box "podMidSlice-left" {
         id: 911
         position [0.1778, 1.2663, -0.3104]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0625, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4576,17 +4802,17 @@ prototypes {
         id: 912
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1609, 0.42, 0.159]
+        scale [0.1431, 0.42, 0.1431]
         material: shinCream
         group: 64
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4599,15 +4825,15 @@ prototypes {
         id: 913
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1579, 0.159, 0.504]
+        scale [0.1325, 0.1304, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 64
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4619,7 +4845,7 @@ prototypes {
       shape Box "podBand2Slice-left" {
         id: 914
         position [0.1898, 1.1476, -0.3284]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -4632,17 +4858,17 @@ prototypes {
         id: 915
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1639, 0.42, 0.162]
+        scale [0.1458, 0.42, 0.1458]
         material: violetPodLeft
         group: 65
         parent: "pod-left"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -4655,15 +4881,15 @@ prototypes {
         id: 916
         position [0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1609, 0.162, 0.504]
+        scale [0.135, 0.1328, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 65
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -4675,7 +4901,7 @@ prototypes {
       shape Box "podSkirtSlice-left" {
         id: 917
         position [0.2095, 0.9524, -0.3579]
-        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        rotation [-0.1739, 0.0086, 0.0491, 0.9835]
         scale [0.45, 0.14, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4686,8 +4912,8 @@ prototypes {
 
       shape Box "podBottom-left" {
         id: 919
-        position [0.4265, 1.4024, -0.2899]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.4265, 1.3289, -0.103]
+        rotation [0.2881, 0.066, -0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: violetPodLeft
         blend: "SmoothIntersection"
@@ -4709,7 +4935,7 @@ prototypes {
       shape Superellipsoid "nozzle-left" {
         id: 213
         position [0.209, 0.9603, -0.3567]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 27
@@ -4719,8 +4945,8 @@ prototypes {
 
       shape Cylinder "nozzleBore-left" {
         id: 214
-        position [0.1946, 0.9309, -0.3611]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.1946, 0.9357, -0.3735]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
@@ -4730,8 +4956,8 @@ prototypes {
 
       shape Cylinder "nozzleGlow-left" {
         id: 215
-        position [0.2038, 0.9496, -0.3583]
-        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        position [0.2038, 0.9513, -0.3628]
+        rotation [0.2881, 0.0659, -0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-left"
@@ -5717,17 +5943,17 @@ prototypes {
         id: 274
         position [-0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1412, 0.4158, 0.1275]
+        scale [0.1256, 0.4158, 0.1148]
         material: charcoal
         group: 70
         parent: "torso"
         exponent: 2.7
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5764,8 +5990,8 @@ prototypes {
 
       shape Box "podBottomRim-right" {
         id: 947
-        position [-0.4265, 1.3886, -0.2919]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.4265, 1.315, -0.105]
+        rotation [0.2881, -0.066, 0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
@@ -5790,17 +6016,17 @@ prototypes {
         id: 930
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1518, 0.42, 0.15]
+        scale [0.135, 0.42, 0.135]
         material: violetPodRight
         group: 71
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5813,15 +6039,15 @@ prototypes {
         id: 931
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.149, 0.15, 0.504]
+        scale [0.125, 0.123, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 71
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5833,7 +6059,7 @@ prototypes {
       shape Box "podCapSlice-right" {
         id: 932
         position [-0.15, 1.5407, -0.269]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.1, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -5856,7 +6082,7 @@ prototypes {
 
       shape Prism "podVent-right" {
         id: 945
-        position [-0.1645, 1.517, -0.4136]
+        position [-0.1645, 1.5149, -0.3999]
         rotation [0.0749, 0, 0, 0.9972]
         scale [0.048, 0.017, 0.018]
         material: charcoal
@@ -5874,17 +6100,17 @@ prototypes {
         id: 933
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1548, 0.42, 0.153]
+        scale [0.1377, 0.42, 0.1377]
         material: shinCream
         group: 72
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5897,15 +6123,15 @@ prototypes {
         id: 934
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.152, 0.153, 0.504]
+        scale [0.1275, 0.1255, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 72
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5917,7 +6143,7 @@ prototypes {
       shape Box "podBand1Slice-right" {
         id: 935
         position [-0.1658, 1.3849, -0.2925]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -5930,17 +6156,17 @@ prototypes {
         id: 936
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1579, 0.42, 0.156]
+        scale [0.1404, 0.42, 0.1404]
         material: violetPodRight
         group: 73
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -5953,15 +6179,15 @@ prototypes {
         id: 937
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.155, 0.156, 0.504]
+        scale [0.13, 0.1279, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 73
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -5973,7 +6199,7 @@ prototypes {
       shape Box "podMidSlice-right" {
         id: 938
         position [-0.1778, 1.2663, -0.3104]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0625, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -5986,17 +6212,17 @@ prototypes {
         id: 939
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1609, 0.42, 0.159]
+        scale [0.1431, 0.42, 0.1431]
         material: shinCream
         group: 74
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -6009,15 +6235,15 @@ prototypes {
         id: 940
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1579, 0.159, 0.504]
+        scale [0.1325, 0.1304, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 74
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -6029,7 +6255,7 @@ prototypes {
       shape Box "podBand2Slice-right" {
         id: 941
         position [-0.1898, 1.1476, -0.3284]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
@@ -6042,17 +6268,17 @@ prototypes {
         id: 942
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1639, 0.42, 0.162]
+        scale [0.1458, 0.42, 0.1458]
         material: violetPodRight
         group: 75
         parent: "pod-right"
-        exponent: 2.7
+        exponent: 5.5
         flare {
-          amount: 0.1
-          bulge: 0.06
+          amount: 0
+          bulge: 0.49
           span: 0.84
           top: 0.42
-          startScale: 0.9
+          startScale: 0.51
         }
         shear {
           target: 0
@@ -6065,15 +6291,15 @@ prototypes {
         id: 943
         position [-0.18, 1.244, -0.3138]
         rotation [0.7581, 0, 0, 0.6521]
-        scale [0.1609, 0.162, 0.504]
+        scale [0.135, 0.1328, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.01
+        smooth: 0.006
         group: 75
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.28
+          cornerRadius: 0.34
         }
         shear {
           target: 0
@@ -6085,7 +6311,7 @@ prototypes {
       shape Box "podSkirtSlice-right" {
         id: 944
         position [-0.2095, 0.9524, -0.3579]
-        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        rotation [-0.1739, -0.0086, -0.0491, 0.9835]
         scale [0.45, 0.14, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -6096,8 +6322,8 @@ prototypes {
 
       shape Box "podBottom-right" {
         id: 946
-        position [-0.4265, 1.4024, -0.2899]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.4265, 1.3289, -0.103]
+        rotation [0.2881, -0.066, 0.2132, 0.9312]
         scale [0.5, 0.5, 0.5]
         material: violetPodRight
         blend: "SmoothIntersection"
@@ -6119,7 +6345,7 @@ prototypes {
       shape Superellipsoid "nozzle-right" {
         id: 281
         position [-0.209, 0.9603, -0.3567]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 41
@@ -6129,8 +6355,8 @@ prototypes {
 
       shape Cylinder "nozzleBore-right" {
         id: 282
-        position [-0.1946, 0.9309, -0.3611]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.1946, 0.9357, -0.3735]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
@@ -6140,8 +6366,8 @@ prototypes {
 
       shape Cylinder "nozzleGlow-right" {
         id: 283
-        position [-0.2038, 0.9496, -0.3583]
-        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        position [-0.2038, 0.9513, -0.3628]
+        rotation [0.2881, -0.0659, 0.2131, 0.9313]
         scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-right"
@@ -6751,6 +6977,71 @@ views {
       }
       {
         camera: "legs-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  // The shoulders from eight sides at once.
+  layout "shoulders-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "shoulders-front"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "shoulders-front-left"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "shoulders-left"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "shoulders-back-left"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "shoulders-back"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "shoulders-back-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "shoulders-right"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "shoulders-front-right"
         height: 0.5
         width: 0.25
         x: 0.75
