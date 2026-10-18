@@ -3382,7 +3382,7 @@ prototypes {
       shape Superellipsoid "shin-left" {
         id: 180
         position [0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
+        scale [0.119, 0.36, 0.131]
         material: shinCream
         group: 18
         parent: "thigh-left"
@@ -3417,8 +3417,8 @@ prototypes {
 
       shape Box "shinEnds-left" {
         id: 181
-        position [0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
         material: shinCream
         blend: "Intersection"
         group: 18
@@ -3428,7 +3428,7 @@ prototypes {
       shape Superellipsoid "shinCavity-left" {
         id: 182
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 18
@@ -3508,12 +3508,12 @@ prototypes {
       // ankle down to the toe, on a thick violet sole with bevelled top edges and angled front corners.
       shape Box "boot-left" {
         id: 195
-        position [0.2, 0.1515, 0.085]
-        scale [0.14, 0.11, 0.24]
+        position [0.2, 0.165, 0.095]
+        scale [0.115, 0.085, 0.195]
         material: skin
         group: 21
         parent: "shin-left"
-        chamfer: 0.045
+        chamfer: 0.035
         swings [
           {
             driver: "gait"
@@ -3544,8 +3544,8 @@ prototypes {
 
       shape Box "bootPlan-left" {
         id: 196
-        position [0.2, -0.294, 0.025]
-        rotation [0.2756, 0, 0, 0.9613]
+        position [0.2, -0.2696, -0.0018]
+        rotation [0.3007, 0, 0, 0.9537]
         scale [0.5, 0.5, 0.5]
         material: skin
         blend: "SmoothIntersection"
@@ -3556,19 +3556,19 @@ prototypes {
 
       shape Box "toe-left" {
         id: 199
-        position [0.2, 0.055, 0.075]
-        scale [0.168, 0.055, 0.27]
+        position [0.2, 0.055, 0.07]
+        scale [0.19, 0.055, 0.275]
         material: violet
         group: 23
         parent: "boot-left"
-        chamfer: 0.025
+        chamfer: 0.04
       }
 
       shape Prism "toePlan-left" {
         id: 200
-        position [0.2, 0.05, 0.075]
+        position [0.2, 0.055, 0.07]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.165, 0.27, 0.08]
+        scale [0.19, 0.275, 0.08]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
@@ -3582,9 +3582,9 @@ prototypes {
 
       shape Prism "sole-left" {
         id: 201
-        position [0.2, 0.006, 0.075]
+        position [0.2, 0.006, 0.07]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.23, 0.004]
+        scale [0.15, 0.245, 0.004]
         material: charcoal
         parent: "boot-left"
         profile {
@@ -4521,7 +4521,7 @@ prototypes {
       shape Superellipsoid "shin-right" {
         id: 248
         position [-0.2, 0.4265, 0.0125]
-        scale [0.119, 0.32, 0.131]
+        scale [0.119, 0.36, 0.131]
         material: shinCream
         group: 32
         parent: "thigh-right"
@@ -4556,8 +4556,8 @@ prototypes {
 
       shape Box "shinEnds-right" {
         id: 249
-        position [-0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
         material: shinCream
         blend: "Intersection"
         group: 32
@@ -4567,7 +4567,7 @@ prototypes {
       shape Superellipsoid "shinCavity-right" {
         id: 250
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
+        scale [0.097, 0.42, 0.109]
         material: charcoal
         blend: "Subtraction"
         group: 32
@@ -4647,12 +4647,12 @@ prototypes {
       // ankle down to the toe, on a thick violet sole with bevelled top edges and angled front corners.
       shape Box "boot-right" {
         id: 263
-        position [-0.2, 0.1515, 0.085]
-        scale [0.14, 0.11, 0.24]
+        position [-0.2, 0.165, 0.095]
+        scale [0.115, 0.085, 0.195]
         material: skin
         group: 35
         parent: "shin-right"
-        chamfer: 0.045
+        chamfer: 0.035
         swings [
           {
             driver: "gait"
@@ -4683,8 +4683,8 @@ prototypes {
 
       shape Box "bootPlan-right" {
         id: 264
-        position [-0.2, -0.294, 0.025]
-        rotation [0.2756, 0, 0, 0.9613]
+        position [-0.2, -0.2696, -0.0018]
+        rotation [0.3007, 0, 0, 0.9537]
         scale [0.5, 0.5, 0.5]
         material: skin
         blend: "SmoothIntersection"
@@ -4695,19 +4695,19 @@ prototypes {
 
       shape Box "toe-right" {
         id: 267
-        position [-0.2, 0.055, 0.075]
-        scale [0.168, 0.055, 0.27]
+        position [-0.2, 0.055, 0.07]
+        scale [0.19, 0.055, 0.275]
         material: violet
         group: 37
         parent: "boot-right"
-        chamfer: 0.025
+        chamfer: 0.04
       }
 
       shape Prism "toePlan-right" {
         id: 268
-        position [-0.2, 0.05, 0.075]
+        position [-0.2, 0.055, 0.07]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.165, 0.27, 0.08]
+        scale [0.19, 0.275, 0.08]
         material: violet
         blend: "SmoothIntersection"
         smooth: 0.01
@@ -4721,9 +4721,9 @@ prototypes {
 
       shape Prism "sole-right" {
         id: 269
-        position [-0.2, 0.006, 0.075]
+        position [-0.2, 0.006, 0.07]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.23, 0.004]
+        scale [0.15, 0.245, 0.004]
         material: charcoal
         parent: "boot-right"
         profile {
@@ -5496,7 +5496,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1515
+            standoff: 0.165
           }
           plant {
             driver: "stride"
@@ -5525,7 +5525,7 @@ prototypes {
             kind: "surface"
             direction [0, -1, 0]
             reach: 0.42
-            standoff: 0.1515
+            standoff: 0.165
           }
           plant {
             driver: "stride"
