@@ -117,13 +117,16 @@ public sealed class ToastWriter {
         return count;
     }
 
-    /// <summary>Emits this frame's toast, when one is live.</summary>
+    /// <summary>Emits this frame's toast, when one is live and the theme authors a chip: a theme with no chip height
+    /// (a world with no <c>theme</c> section resolves to <see cref="OverlayThemeValues.Zero"/>) composes no chrome, so
+    /// it shows no toast; every echo still reaches stderr and the console panel.</summary>
     /// <param name="builder">The frame builder.</param>
     /// <param name="renderTicks">The frame's continuous content clock (<c>FrameContext.RenderTicks</c>).</param>
     public void Emit(OverlayFrameBuilder builder, ulong renderTicks) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
         if (
+            (m_theme.Current.Space.HeightChip <= 0f) ||
             !m_source.TrySnapshot(frame: out var toast) ||
             (toast.Message.Length == 0)
         ) {
