@@ -375,8 +375,12 @@ prototypes {
   }
 }
 
+// The world's views boot reconstructing over time, as the shipped `world.quality high` preset renders: the jittered
+// samples resolve detail finer than a pixel, such as the shadowed crease under each reference cube's filleted foot,
+// which one sample a pixel catches only where the silhouette steps.
 render {
   farDistance: 200
+  temporal: true
   sky {
     clearDay(cloudiness: 0.3)
   }
