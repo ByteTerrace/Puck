@@ -708,6 +708,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
 
         var captureTick = m_clock.NowTicks;
+        // The signal addresses the issuing lane directly rather than resolving one from its device: every synthesized
+        // signal shares the default device id, and the roster's seating policy places a device on the first seat with
+        // no device of its kind, which is not the issuing seat once a physical device of that kind sits there.
+        var slot = context.Slot;
 
         if (TryMouseEvent(
             inputEvent: out var inputEvent,
@@ -728,12 +732,14 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             m_windowObservers()?.Observe(inputEvent: in inputEvent);
             m_router().Capture(signal: WindowInputMapper.ToInputSignal(inputEvent: in inputEvent) with {
                 CaptureTick = captureTick,
+                Slot = slot,
             });
         } else {
             m_router().Capture(signal: new InputSignal(
                 CaptureTick: captureTick,
                 DeviceId: default,
                 Phase: phase,
+                Slot: slot,
                 Source: source,
                 Value: value
             ));
@@ -744,7 +750,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             : args[1].ToString().ToLowerInvariant()
         );
 
-        return new CommandResult(Output: $"[player.signal: {source} {describedSample}]");
+        return new CommandResult(Output: $"[player.signal: p{PlayerRoster.DisplayNumber(slot: slot)} {source} {describedSample}]");
     }
     // The mouse half of player.signal: a mouse source is synthesized as the RAW WindowInputEvent the native window
     // would have emitted, so it can take the physical mouse's own door (see SignalHandler). Returns false for a
@@ -1005,7 +1011,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
-            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal folds into the NEXT simulation tick's snapshot exactly like device input and remains carried until a release/zero sample, matching the physical backend rather than bypassing its binding.",
+            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input and remains carried until a release/zero sample, or until the window loses OS focus, which releases every held input. Echoes [player.signal: p<seat> <source> <sample>].",
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );

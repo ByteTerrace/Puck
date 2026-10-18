@@ -379,7 +379,13 @@ binds `mouse.motion` outside the radial. The scripted twin honours that split:
 `mouse.button<n> press|release` synthesize the raw `WindowInputEvent` and hand
 it to the window-input observers before the router, exactly as the window pump
 does, so a piped drag orbits and steers like a physical one; every other source
-enters the router alone. `world.view.camera` echoes `orbit=`/`steer=` for the
+enters the router alone. The router half addresses the issuing seat's lane
+(`InputSignal.Slot`, seat 1 from stdin or MCP) instead of resolving one from a
+device: every synthesized signal shares the default device id, and the roster's
+seating policy would put that device on the first seat holding no device of its
+kind, so a seated physical pad would send a scripted stick to seat 2. A held
+synthesized stick or key is carried until its zero or release sample, or until
+OS window focus loss releases every held input. `world.view.camera` echoes `orbit=`/`steer=` for the
 two holds. A synthesized pointer never reports an absolute position, so
 `world.view.pointer` keeps answering `reason=no-position` under a scripted drag.
 
