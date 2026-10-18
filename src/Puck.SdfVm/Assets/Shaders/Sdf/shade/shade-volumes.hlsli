@@ -157,15 +157,20 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
             if (axial < 0.0 || axial >= 1.0) continue;
             // The radius runs linearly from width at the mouth to width times spread at the far end; the density falls
             // by the remaining share to the fade's power, and the noise modulates the noise depth's share of it. A unit
-            // fade or depth takes the share or the noise itself, which pow and lerp would not return bit-exactly.
+            // fade and depth take the linear product on its own branch: pow and lerp would not return it bit-exactly,
+            // and selected operands let the compiler reassociate the product.
             float remaining = 1.0 - axial;
             float spread = lerp(1.0, v.spread, axial);
             float radius = length(p.xz) / max(v.width * spread, 1.0e-6);
-            float fade = (v.fade == 1.0) ? remaining : pow(remaining, v.fade);
             float3 flow = ((p / v.noiseScale) + float3(0.0, v.advection, 0.0));
             float noise = 0.5 + 0.5 * sdfPeriodicNoise3(flow, v.seed);
-            noise = (v.noiseDepth == 1.0) ? noise : lerp(1.0, noise, v.noiseDepth);
-            density = saturate(exp(-radius * radius) * fade * noise * v.pulse);
+            float column;
+            if ((v.fade == 1.0) && (v.noiseDepth == 1.0)) {
+                column = exp(-radius * radius) * remaining * noise;
+            } else {
+                column = exp(-radius * radius) * pow(remaining, v.fade) * lerp(1.0, noise, v.noiseDepth);
+            }
+            density = saturate(column * v.pulse);
         }
         float3 emission = sdfVolumeRamp(v, density) * (density * v.intensity);
         float extinction = density * v.extinction;
