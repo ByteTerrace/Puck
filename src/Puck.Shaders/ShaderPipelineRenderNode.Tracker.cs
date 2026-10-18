@@ -311,6 +311,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 resource: published
             );
         }
+
+        ShaderPipelineBarrier? handBack = null;
+
         foreach (var resource in m_resources) {
             if (
                 !resource.Spec.IsExternal ||
@@ -319,17 +322,39 @@ public sealed partial class ShaderPipelineRenderNode {
                 continue;
             }
             var host = ShaderPipelineAccessState.Host(layout: m_externalImages[resource.Spec.Name].Layout);
+            var barrier = Present(
+                instance: 0,
+                resource: resource,
+                use: host
+            );
 
+            // A memory barrier names no image, so every hand-back that keeps its layout joins one barrier.
+            if (barrier.Kind == ShaderPipelineBarrierKind.Memory) {
+                handBack = ((handBack is { } joined)
+                    ? joined with {
+                        DestinationAccess = (joined.DestinationAccess | barrier.DestinationAccess),
+                        DestinationStage = (joined.DestinationStage | barrier.DestinationStage),
+                        SourceAccess = (joined.SourceAccess | barrier.SourceAccess),
+                        SourceStage = (joined.SourceStage | barrier.SourceStage),
+                    }
+                    : barrier);
+                continue;
+            }
             RecordBarrier(
-                barrier: Present(
-                    instance: 0,
-                    resource: resource,
-                    use: host
-                ),
+                barrier: barrier,
                 command: command,
                 instance: 0,
                 recorder: recorder,
                 resource: resource
+            );
+        }
+        if (handBack is { } memory) {
+            recorder.MemoryBarrier(
+                command,
+                memory.SourceAccess,
+                memory.DestinationAccess,
+                memory.SourceStage,
+                memory.DestinationStage
             );
         }
     }
