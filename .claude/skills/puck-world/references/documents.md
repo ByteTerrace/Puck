@@ -247,7 +247,7 @@ its whole authority surface.
 - `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".
-- `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
+- `CreationDocument.PaletteSize = 32` bounds `puck.creation.v1`'s `palette`
   array — see [documents-render.md](documents-render.md) for the entry shape
   (weathering/inset lanes), which is decision prose, not a bare catalog.
 - `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby

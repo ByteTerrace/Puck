@@ -1,15 +1,20 @@
 // Generic shading layers. Coordinates arrive in the winning instance frame.
 #ifndef SDF_SHADE_LAYERS_HLSLI
 #define SDF_SHADE_LAYERS_HLSLI
-// Paints the band (SdfBand): the albedo becomes the band's colour within its half-width of the centre plane, the edge
+// Paints one band (SdfBand): the albedo becomes the band's colour within its half-width of the centre plane, the edge
 // antialiased over `footprint`, the world size of the pixel at the hit. It reads the hit alone, never the field.
-void applyBand(float3 position, float footprint, inout SdfMaterialData material) {
-    float halfWidth = material.bandColorHalfWidth.w;
+void applyOneBand(float3 position, float footprint, float4 plane, float4 colorHalfWidth, inout SdfMaterialData material) {
+    float halfWidth = colorHalfWidth.w;
     if (halfWidth <= 0.0) return;
-    float distance = abs(dot(position, material.bandPlane.xyz) - material.bandPlane.w);
+    float distance = abs(dot(position, plane.xyz) - plane.w);
     float edge = max((0.5 * footprint), 1.0e-6);
     float coverage = (1.0 - smoothstep((halfWidth - edge), (halfWidth + edge), distance));
-    material.albedo = lerp(material.albedo, material.bandColorHalfWidth.rgb, coverage);
+    material.albedo = lerp(material.albedo, colorHalfWidth.rgb, coverage);
+}
+// Paints a material's bands, the second over the first.
+void applyBand(float3 position, float footprint, inout SdfMaterialData material) {
+    applyOneBand(position, footprint, material.bandPlane, material.bandColorHalfWidth, material);
+    applyOneBand(position, footprint, material.secondBandPlane, material.secondBandColorHalfWidth, material);
 }
 // Refract into the authored local plane, then sample its radial ramp. No view-facing frame is synthesized.
 void applyInset(float3 position, float3 normal, float3 ray, inout SdfMaterialData material) {

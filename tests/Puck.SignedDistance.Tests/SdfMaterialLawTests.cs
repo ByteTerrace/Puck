@@ -367,23 +367,25 @@ public sealed class SdfMaterialLawTests {
         }
     }
     /// <summary>A band packs its centre plane as a unit normal and the origin's offset along it, then its colour and
-    /// half-width (rows 20 and 21, which sdfMaterialLoad reads); a zero normal, a non-positive half-width, a non-finite
-    /// origin or a negative colour is refused at both doors.</summary>
+    /// half-width (rows 20 and 21 for the first band, 22 and 23 for the second, which sdfMaterialLoad reads); a zero
+    /// normal, a non-positive half-width, a non-finite origin or a negative colour in either band is refused at both
+    /// doors.</summary>
     [Fact]
-    public void ABandPacksItsCentrePlaneAndIsRefusedOutOfRangeAtBothDoors() {
+    public void BandsPackTheirCentrePlanesAndAreRefusedOutOfRangeAtBothDoors() {
         var valid = new SdfBand(Origin: new Vector3(x: 0f, y: 2f, z: 0f), Normal: new Vector3(x: 0f, y: 3f, z: 0f), HalfWidth: 0.02f, Color: new Vector3(x: 0.5f, y: 0.25f, z: 0.125f));
-        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Band: valid)]);
+        var second = new SdfBand(Origin: new Vector3(x: 0f, y: 0f, z: -1f), Normal: new Vector3(x: 0f, y: 0f, z: 2f), HalfWidth: 0.05f, Color: new Vector3(x: 0.75f, y: 0.5f, z: 0.25f));
+        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Band: valid, SecondBand: second)]);
         var row = ((((int)program.Words[3]) + 20) * 4);
 
-        Assert.Equal(expected: [0f, 1f, 0f, 2f, 0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(start: row, count: 8).Select(selector: index => BitConverter.UInt32BitsToSingle(value: program.Words[index])));
+        Assert.Equal(expected: [0f, 1f, 0f, 2f, 0.5f, 0.25f, 0.125f, 0.02f, 0f, 0f, 1f, -1f, 0.75f, 0.5f, 0.25f, 0.05f], actual: Enumerable.Range(start: row, count: 16).Select(selector: index => BitConverter.UInt32BitsToSingle(value: program.Words[index])));
         foreach (var band in new[] {
             valid with { Normal = Vector3.Zero }, valid with { HalfWidth = 0f },
             valid with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, valid with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
         }) {
-            var material = new SdfMaterial(Vector3.One, Band: band);
-
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
+            foreach (var material in new[] { new SdfMaterial(Vector3.One, Band: band), new SdfMaterial(Vector3.One, Band: valid, SecondBand: band) }) {
+                Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
+                Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
+            }
         }
     }
     [Fact]

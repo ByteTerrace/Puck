@@ -1,8 +1,8 @@
-# Palette, weathering, inset, band, lanes, and the render section
+# Palette, weathering, inset, bands, lanes, and the render section
 
 ## The palette
 
-`palette` holds at most 16 slots; `shapes[].material` is the index.
+`palette` holds at most 32 slots; `shapes[].material` is the index.
 
 | Field | Range | Default | What it does |
 |---|---|---|---|
@@ -20,7 +20,7 @@
 | `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
 | `weathering` | see below | absent | |
 | `inset` | see below | absent | |
-| `band` | see below | absent | |
+| `bands` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
 name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
@@ -119,14 +119,19 @@ reflect that material origin. Mirrored eyes generally need separate slots
 with separate frames; shared slots work only when their respective dynamic
 frames make the same local inset correct.
 
-## Band
+## Bands
 
-`palette[].band` paints a stripe across every surface of the slot: a hit within
-`halfWidth` of the plane through `origin` with normal `normal` takes `color`,
-its edge antialiased over the pixel's footprint. It changes no geometry, so the
-mesh bake never sees it and its edge stays as sharp as the pixel, where a stripe
-sculpted as a copy proud of its plate by less than the bake's cell (5 mm
-refined, 15 mm on smooth parts) frays into a jagged step and speckled material.
+`palette[].bands` holds up to two bands, each painting a stripe across every
+surface of the slot, the second over the first: a hit within `halfWidth` of the
+plane through `origin` with normal `normal` takes `color`, its edge antialiased
+over the pixel's footprint. It changes no geometry, so the mesh bake never sees
+it and its edge stays as sharp as the pixel, where a stripe sculpted as a copy
+proud of its plate by less than the bake's cell (5 mm refined, 15 mm on smooth
+parts) frays into a jagged step and speckled material. A band is an infinite
+slab: it paints the slot's sides and back wherever they cross it, and it cannot
+end, bend or outline a shape, so a paint detail whose footprint is not a slab
+(the Moth's helmet trim, shin trims and mouth) has no palette mechanism and stays
+sculpted. A third band is refused: `3 bands exceed the 2 a palette slot paints.`
 
 | Field | Range |
 |---|---|
@@ -141,7 +146,8 @@ converted by `CreationFrame`. On a body's part that frame is the slot its baked
 group rides: measured on the Moth, it sits at the group's first shape's
 authored position with the author frame's axes (+Z the front), so the
 shoulder pads' bands name `origin [0, -0.0125, 0]`, 12.5 mm below the pad
-prism's position, and an author-frame normal. Each slot carries one band, so
+prism's position, and an author-frame normal. A slot carries at most two bands
+(each back pod's two stripes share one), so
 mirrored stripes take mirrored slots. To find a frame, paint a test band and
 look before trusting the numbers.
 

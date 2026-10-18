@@ -41,21 +41,23 @@ public static class SdfMaterialLayers {
     private static bool Positive(float v) => (float.IsFinite(f: v) && (v > 0f));
     private static bool Surface(SdfSurface s) => (Color(v: s.Color) && Unit(v: s.Roughness) && Unit(v: s.Metal));
     private static bool Unit(float v) => (NonNegative(v: v) && (v <= 1f));
+    private static bool BandIsValid(SdfBand? band) => ((band is not { } stripe) || (
+        VectorFunctions.IsFinite(vector: stripe.Origin) &&
+        VectorFunctions.IsFinite(vector: stripe.Normal) &&
+        (stripe.Normal.LengthSquared() >= 1e-12f) &&
+        Positive(v: stripe.HalfWidth) &&
+        Color(v: stripe.Color)
+    ));
 
     /// <summary>Returns whether all layer inputs are finite and their bounded collections and ranges are valid.</summary>
     /// <param name="inset">The refractive paint layer, or <see langword="null"/> for none.</param>
     /// <param name="weathering">The coverage layer, or <see langword="null"/> for none.</param>
     /// <param name="band">The painted band, or <see langword="null"/> for none.</param>
+    /// <param name="secondBand">The second painted band, or <see langword="null"/> for none.</param>
     /// <returns><see langword="true"/> when every present layer is admissible.</returns>
-    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering, SdfBand? band) {
-        if (band is { } stripe) {
-            if (
-                !VectorFunctions.IsFinite(vector: stripe.Origin) ||
-                !VectorFunctions.IsFinite(vector: stripe.Normal) ||
-                (stripe.Normal.LengthSquared() < 1e-12f) ||
-                !Positive(v: stripe.HalfWidth) ||
-                !Color(v: stripe.Color)
-            ) { return false; }
+    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering, SdfBand? band, SdfBand? secondBand) {
+        if (!BandIsValid(band: band) || !BandIsValid(band: secondBand)) {
+            return false;
         }
         if (inset is { } layer) {
             if (

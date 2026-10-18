@@ -239,14 +239,16 @@ public sealed class PaletteAdmissionLawTests {
         );
     }
     [Fact]
-    public void ABandNeedsANonzeroNormalAPositiveHalfWidthAndAColor() {
+    public void BandsNeedANonzeroNormalAPositiveHalfWidthAColorAndAtMostTwoToASlot() {
         var band = new PaletteBandDocument(Origin: new System.Numerics.Vector3(x: 0f, y: -0.0125f, z: 0f), Normal: new System.Numerics.Vector3(x: 0.4f, y: 0.9f, z: 0f), HalfWidth: 0.02f, Color: "#EED3A6");
-        var entry = new PaletteEntryDocument("#9D66C6", null, null, null, Band: band);
+        var entry = new PaletteEntryDocument("#9D66C6", null, null, null, Bands: [band]);
 
         AssertAccepts(entry: entry);
-        AssertRefusesNaming(entry: entry with { Band = band with { Normal = System.Numerics.Vector3.Zero } }, needle: "Invalid inset, weathering or band");
-        AssertRefusesNaming(entry: entry with { Band = band with { HalfWidth = 0f } }, needle: "Invalid inset, weathering or band");
-        AssertRefusesNaming(entry: entry with { Band = band with { Color = "cream" } }, needle: "Layer colors");
+        AssertAccepts(entry: entry with { Bands = [band, band with { HalfWidth = 0.05f }] });
+        AssertRefusesNaming(entry: entry with { Bands = [band with { Normal = System.Numerics.Vector3.Zero }] }, needle: "Invalid inset, weathering or band");
+        AssertRefusesNaming(entry: entry with { Bands = [band, band with { HalfWidth = 0f }] }, needle: "Invalid inset, weathering or band");
+        AssertRefusesNaming(entry: entry with { Bands = [band with { Color = "cream" }] }, needle: "Layer colors");
+        AssertRefusesNaming(entry: entry with { Bands = [band, band, band] }, needle: "3 bands exceed the 2 a palette slot paints");
     }
     [Fact]
     public void WeatheringRequiresAuthoredRevealAndDepositSurfaces() {
