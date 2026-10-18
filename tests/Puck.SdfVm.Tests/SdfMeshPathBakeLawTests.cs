@@ -22,13 +22,21 @@ public sealed class SdfMeshPathBakeLawTests {
         new(Center: new Vector3(x: 8f, y: 0.5f, z: 0f), Half: new Vector3(value: 0.5f), Rotation: Quaternion.Identity, Material: 0),
     ];
 
-    [Fact]
-    public void AStaticCopyBakesAsOneUnionMeshKeepingItsSmallShapeAtItsOwnResolution() {
+    // The one bake both laws read, each its own group: a union's final lattice holds about a million samples, so the
+    // bake, and not the laws, is the class's cost.
+    private static readonly Lazy<(SdfMeshPathBake Bake, SdfFrame Frame)> Baked = new(valueFactory: static () => {
         var (program, materials) = Program();
         var bake = new SdfMeshPathBake { Residency = "copies" };
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
         Drive(bake: bake, frame: frame, materials: materials);
+
+        return (bake, frame);
+    });
+
+    [Fact]
+    public void AStaticCopyBakesAsOneUnionMeshKeepingItsSmallShapeAtItsOwnResolution() {
+        var (bake, frame) = Baked.Value;
 
         // The run of two shapes is one group, the lone block another.
         Assert.Contains(expectedSubstring: "groups=2 meshes=2", actualString: bake.Describe());
@@ -53,12 +61,7 @@ public sealed class SdfMeshPathBakeLawTests {
     }
     [Fact]
     public void ASharpEdgeShadesAsTheFacesMeetingAtIt() {
-        var (program, materials) = Program();
-        var bake = new SdfMeshPathBake { Residency = "edges" };
-        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
-
-        Drive(bake: bake, frame: frame, materials: materials);
-
+        var (bake, frame) = Baked.Value;
         var lone = bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).Single(predicate: static mesh => (mesh.Positions.Span[0].X > 6f));
         var positions = lone.Positions.ToArray();
         var normals = lone.Normals.ToArray();
@@ -89,7 +92,8 @@ public sealed class SdfMeshPathBakeLawTests {
             bent += ((Vector3.Dot(vector1: normal, vector2: truth) < MathF.Cos(x: (10f * (MathF.PI / 180f)))) ? size : 0f);
         }
 
-        Assert.True(condition: (bent < (0.03f * area)), userMessage: $"{bent / area:P2} of the cube's area shades more than 10 degrees off its face");    }
+        Assert.True(condition: (bent < (0.03f * area)), userMessage: $"{bent / area:P2} of the cube's area shades more than 10 degrees off its face");
+    }
 
     private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material);
 
