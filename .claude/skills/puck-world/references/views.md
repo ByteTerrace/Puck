@@ -223,6 +223,14 @@ For each fixed tick:
 5. The ordinary intent roles cross the wire; camera state never does.
 6. Local or traveler rendering resolves the authored rig through the same
    seat state. Visual smoothing and collision clearance never feed movement.
+   A frame between two ticks presents the last tick's look step at the
+   fraction the body is drawn at (`WorldSeatViewState.PresentedLook`, fed by
+   `BeginTick`/`CompleteTick` around step 1), so a steered body and the
+   camera turn together instead of the camera leading by a tick in tick-sized
+   steps. A pointer nudge between ticks shows at once; a recenter or crossing
+   cuts the step. The chase anchor is the body's interpolated render pose, the
+   pose a look without root `dynamics` draws the body at; a look that adds root
+   dynamics draws the body behind the anchor the camera frames.
 
 The standard right stick binds `player.look.steer`: horizontal input writes
 `FaceX`/`FaceZ`, vertical input only changes camera pitch, and neither writes

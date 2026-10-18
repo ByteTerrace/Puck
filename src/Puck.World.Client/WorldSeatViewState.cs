@@ -25,6 +25,12 @@ public sealed class WorldSeatViewState {
 
     private float m_pitch;
     private float m_yaw;
+    // What the last fixed tick's view advance moved the live look by, and where it started, so a frame between ticks
+    // can present the look where the body it frames is drawn (see PresentedLook).
+    private float m_tickPitchStep;
+    private float m_tickStartPitch;
+    private float m_tickStartYaw;
+    private float m_tickYawStep;
     private long m_cutRevision;
     private long m_observedBoomCut;
     private long m_observedRigRevision;
@@ -134,6 +140,49 @@ public sealed class WorldSeatViewState {
             m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
         }
     }
+    /// <summary>Opens a fixed tick's view advance: the look as it stands now is where this tick's step starts.</summary>
+    public void BeginTick() {
+        lock (m_gate) {
+            m_tickStartYaw = m_yaw;
+            m_tickStartPitch = m_pitch;
+        }
+    }
+    /// <summary>Closes a fixed tick's view advance: whatever the tick moved the look by (stick and gyro nudges, a
+    /// follow, a held recenter) is the step a frame between this tick and the next interpolates across.</summary>
+    public void CompleteTick() {
+        lock (m_gate) {
+            m_tickYawStep = Wrap(radians: (m_yaw - m_tickStartYaw));
+            m_tickPitchStep = (m_pitch - m_tickStartPitch);
+        }
+    }
+    /// <summary>
+    /// <para>Returns the live look a frame presents at <paramref name="interpolationAlpha"/> of the way from the
+    /// previous fixed tick to the current one.</para>
+    /// <para>Stick and gyro look integrate once per fixed tick, and that tick's yaw is the facing a steering seat
+    /// turns its body to. The body is drawn interpolated between its last two tick poses, so a camera on the live
+    /// yaw would sit a tick ahead of the body it frames and move in tick-sized steps. Taking back the part of the
+    /// last tick's step the frame has not reached puts the camera on the interpolation the body is drawn with.
+    /// Only the tick's own step is interpolated: a pointer nudge between ticks moves the live look and shows at
+    /// once.</para>
+    /// </summary>
+    /// <param name="interpolationAlpha">How far the frame sits between the last two fixed ticks, in <c>[0, 1]</c>.</param>
+    /// <returns>The presented live yaw and pitch, in radians.</returns>
+    public (float Yaw, float Pitch) PresentedLook(float interpolationAlpha) {
+        var lag = (1f - Math.Clamp(
+            value: interpolationAlpha,
+            min: 0f,
+            max: 1f
+        ));
+
+        lock (m_gate) {
+            return (Wrap(radians: (m_yaw - (m_tickYawStep * lag))), (m_pitch - (m_tickPitchStep * lag)));
+        }
+    }
+    // A cut has no tick step to interpolate across: the look lands where it was put.
+    private void CutTickStep() {
+        m_tickYawStep = 0f;
+        m_tickPitchStep = 0f;
+    }
     /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by
     /// <paramref name="dynamics"/> while this seat frames through its own chase rig.</summary>
     /// <param name="dynamics">The chase rig's reported response.</param>
@@ -221,6 +270,7 @@ public sealed class WorldSeatViewState {
             }
 
             m_boom.Rotate(rotation: turn);
+            CutTickStep();
         }
     }
     public void Recenter() {
@@ -228,6 +278,7 @@ public sealed class WorldSeatViewState {
             m_yaw = 0f;
             m_pitch = 0f;
             m_boom.Reseed();
+            CutTickStep();
         }
     }
     /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the resulting logical facing is
@@ -265,10 +316,12 @@ public sealed class WorldSeatViewState {
     /// <param name="definition">The routed world's live document.</param>
     /// <param name="mirror">The state mirror the rig's bound operands read through.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions.</param>
+    /// <param name="interpolationAlpha">How far the frame sits between the last two fixed ticks: the fraction the
+    /// framed body is drawn at (<see cref="PresentedLook"/>). <c>1</c>, the default, presents the latest tick's look.</param>
     /// <returns>The rig.</returns>
     /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
     /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
-    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) {
+    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, float interpolationAlpha = 1f) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -281,18 +334,15 @@ public sealed class WorldSeatViewState {
             program: views.SeatRig
         );
 
-        float yaw;
-        float pitch;
-
         lock (m_gate) {
             m_pitch = ClampLivePitch(
                 authoredPitch: AuthoredPitch(views: views),
                 control: views.SeatControl,
                 livePitch: m_pitch
             );
-            yaw = m_yaw;
-            pitch = m_pitch;
         }
+
+        var (yaw, pitch) = PresentedLook(interpolationAlpha: interpolationAlpha);
 
         rig.Look = WorldSeatCameraResolver.Look(
             bodyOrientation: bodyOrientation,

@@ -158,6 +158,28 @@
         ],
         "default": null,
         "title": "BodyTargetSource"
+      },
+      "planarTarget": {
+        "description": "The parameters of ComputePlanarTargetVelocity, or null for a target at the full move speed in every direction.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "strafe": {
+            "description": "The fraction of the move speed travel across the heading reaches, in [0, 1].",
+            "type": "number",
+            "default": 1
+          },
+          "backward": {
+            "description": "The fraction of the move speed travel against the heading reaches, in [0, 1].",
+            "type": "number",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "default": null,
+        "title": "BodyPlanarTarget"
       }
     },
     "required": [

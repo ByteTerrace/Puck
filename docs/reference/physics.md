@@ -107,8 +107,9 @@ spherical-harmonic expansion.
 
 `Motion/` holds the instruction vocabulary a body advances under and nothing that
 reads a document: `BodyMotionOp` (the closed opcode set), `CompiledBodyMotionProgram`
-(the compiler that validates a declared name/version/kind/opcode set and groups the
-selection into its intrinsic host phases), the per-body trigger and action-state IR
+(the compiler that validates a declared name/version/kind/opcode set and its
+operations' parameters, such as `ComputePlanarTargetVelocity`'s `FixedPlanarTarget`,
+and groups the selection into its intrinsic host phases), the per-body trigger and action-state IR
 (`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,

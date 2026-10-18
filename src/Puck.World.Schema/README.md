@@ -2878,6 +2878,23 @@ body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
 per-tick arc advance)—the seed the kart-track charter inherits.
 
+## The `bodyMotionPrograms` section—operations and their parameters
+
+A body-motion program (`BodyMotionProgram`) names the closed operations a kit
+runs each tick, and carries the parameters of those operations beside them:
+behaviour is authored as an operation or an operation's parameter on the
+program, never as a switch on the kit. `target` parameterizes
+`SenseNearestInCone`; `planarTarget` (`BodyPlanarTarget`: `strafe`,
+`backward`, each a fraction of the move speed in `[0, 1]`, default 1)
+parameterizes `ComputePlanarTargetVelocity`, which decomposes the commanded
+target against the heading `ResolveYawAttitudeAndPlanarFrame` resolves and
+scales its lateral part by `strafe` and a part opposing the heading by
+`backward`. A camera-framed strafe seat, whose heading follows the camera,
+therefore strafes and backpedals slower than it runs. The validator refuses a
+value outside `[0, 1]` by its path, and compilation refuses `planarTarget` on a
+program that does not select both operations (`ParameterUnknown`).
+`body.motion [body]` echoes the program a body runs and its `planarTarget`.
+
 ## The `navigation` section—bounded routes over world truth
 
 `navigation.domains` declares finite named grids consumed by a body-motion

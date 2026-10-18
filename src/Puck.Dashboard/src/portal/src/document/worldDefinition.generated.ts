@@ -815,6 +815,21 @@ export type BodyMotionProgram = {
    * The single source supplying the program's target, when it uses target-aware operations.
    */
   target?: BodyTargetSource | null;
+  /**
+   * The parameters of ComputePlanarTargetVelocity, or null for a target at the full move speed in every direction.
+   */
+  planarTarget?: BodyPlanarTarget | null;
+};
+
+export type BodyPlanarTarget = {
+  /**
+   * The fraction of the move speed travel across the heading reaches, in [0, 1].
+   */
+  strafe?: number;
+  /**
+   * The fraction of the move speed travel against the heading reaches, in [0, 1].
+   */
+  backward?: number;
 };
 
 export type BodyProgramKind = "Motion" | "Producer";

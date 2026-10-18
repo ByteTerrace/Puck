@@ -273,8 +273,15 @@ internal sealed partial class PlayerCommandModule {
             return new CommandResult(Output: $"[body.motion: body:{index} → {program}]");
         }
 
-        // No program: echo the target's current selection.
-        return new CommandResult(Output: $"[body.motion: body:{index} is {player!.BodyMotionProgram}]");
+        // No program: echo the target's current selection and the planar target it runs with.
+        var planarTarget = ((player!.BodyMotionPlanarTarget is { } target)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" planarTarget strafe={((double)target.Strafe):0.###} backward={((double)target.Backward):0.###}"
+            )
+            : string.Empty);
+
+        return new CommandResult(Output: $"[body.motion: body:{index} is {player.BodyMotionProgram}{planarTarget}]");
     }
     private CommandResult PoseHandler(CommandContext context, WireArgs args) {
         if (!TryStripInstanceToken(

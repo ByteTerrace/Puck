@@ -1651,18 +1651,7 @@ prototypes {
             {
               parent: "pod-left"
               type: "Prism"
-              position [0.01, 0.255, 0]
-              scale [0.044, 0.016, 0.2]
-              profile {
-                kind: "RoundedRectangle"
-                cornerRadius: 0.45
-              }
-              color: "#2A2530"
-            }
-            {
-              parent: "pod-left"
-              type: "Prism"
-              position [0.045, 0.02, 0]
+              position [0.0455, 0.045, 0]
               scale [0.036, 0.009, 0.2]
               profile {
                 kind: "RoundedRectangle"
@@ -1706,18 +1695,7 @@ prototypes {
             {
               parent: "pod-right"
               type: "Prism"
-              position [-0.01, 0.255, 0]
-              scale [0.044, 0.016, 0.2]
-              profile {
-                kind: "RoundedRectangle"
-                cornerRadius: 0.45
-              }
-              color: "#2A2530"
-            }
-            {
-              parent: "pod-right"
-              type: "Prism"
-              position [-0.045, 0.02, 0]
+              position [-0.0455, 0.045, 0]
               scale [0.036, 0.009, 0.2]
               profile {
                 kind: "RoundedRectangle"
@@ -3454,30 +3432,31 @@ prototypes {
         exponent: softness
       }
 
-      // The pod is a wing-case shell, like the reference thrusters: a big rounded superellipsoid that narrows to a tip
-      // turned in toward the spine, cut into armour plates (a violet cap, a cream band, a violet mid plate, a cream band and
-      // a violet skirt). Each plate is its own group: the shell, bevelled by a chamfered cutter run up its height and sliced
-      // to its band, each a step prouder than the plate above so they shingle. The dark rim shell beneath carries the
-      // swings, shows through the seams and borders the plates' bevelled sides. The right pod mirrors it.
+      // The pod is a wing-case shell, like the reference thrusters: a big, deep superellipsoid that narrows to a tip turned
+      // in toward the spine, cut into armour plates (a violet cap, a cream band, a violet mid plate, a cream band and a violet
+      // skirt). Each plate is its own group: the shell, bevelled by a chamfered cutter run up its height and sliced to its
+      // band, each a step prouder than the plate above so they shingle. The dark rim shell beneath carries the swings,
+      // shows through the seams and borders the plates' bevelled sides. The right pod mirrors it.
       shape Superellipsoid "pod-left" {
         id: 206
-        position [0.162, 1.28, -0.22]
-        scale [0.17, 0.3284, 0.108]
+        position [0.18, 1.2396, -0.2841]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.141, 0.4158, 0.1275]
         material: charcoal
         group: 60
         parent: "torso"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
         swings [
           {
@@ -3507,277 +3486,346 @@ prototypes {
         ]
       }
 
+      shape Box "podBottomRim-left" {
+        id: 920
+        position [0.4265, 1.3945, -0.2911]
+        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        scale [0.5, 0.5, 0.5]
+        material: charcoal
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 60
+        parent: "pod-left"
+      }
+
+      shape Box "podTopRim-left" {
+        id: 921
+        position [-0.0507, 1.1526, -0.3276]
+        rotation [0.0734, 0.0149, -0.1981, 0.9773]
+        scale [0.5, 0.5, 0.5]
+        material: charcoal
+        blend: "SmoothIntersection"
+        smooth: 0.055
+        group: 60
+        parent: "pod-left"
+      }
+
       shape Superellipsoid "podCap-left" {
         id: 903
-        position [0.162, 1.28, -0.24]
-        scale [0.165, 0.33, 0.12]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1516, 0.42, 0.15]
         material: violetPodLeft
         group: 61
         parent: "pod-left"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Prism "podCapBevel-left" {
         id: 904
-        position [0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.152, 0.104, 0.36]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.149, 0.15, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 61
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Box "podCapSlice-left" {
         id: 905
-        position [0.24, 1.54, -0.24]
-        rotation [0, 0, -0.1452, 0.9894]
-        scale [0.35, 0.07, 0.35]
+        position [0.15, 1.5407, -0.269]
+        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        scale [0.45, 0.1, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 61
         parent: "pod-left"
       }
 
+      shape Box "podTop-left" {
+        id: 922
+        position [-0.0507, 1.1447, -0.3288]
+        rotation [0.0734, 0.0149, -0.1981, 0.9773]
+        scale [0.5, 0.5, 0.5]
+        material: violetPodLeft
+        blend: "SmoothIntersection"
+        smooth: 0.055
+        group: 61
+        parent: "pod-left"
+      }
+
+      shape Prism "podVent-left" {
+        id: 918
+        position [0.1645, 1.517, -0.4136]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.048, 0.017, 0.018]
+        material: charcoal
+        blend: "SmoothSubtraction"
+        smooth: 0.004
+        group: 61
+        parent: "pod-left"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+      }
+
       shape Superellipsoid "podBand1-left" {
         id: 906
-        position [0.162, 1.28, -0.24]
-        scale [0.1676, 0.33, 0.1219]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1546, 0.42, 0.153]
         material: shinCream
         group: 62
         parent: "pod-left"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Prism "podBand1Bevel-left" {
         id: 907
-        position [0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1544, 0.1057, 0.36]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.152, 0.153, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 62
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Box "podBand1Slice-left" {
         id: 908
-        position [0.2079, 1.433, -0.24]
-        rotation [0, 0, -0.1452, 0.9894]
-        scale [0.35, 0.029, 0.35]
+        position [0.1658, 1.3849, -0.2925]
+        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 62
         parent: "pod-left"
       }
 
       shape Superellipsoid "podMid-left" {
         id: 909
-        position [0.162, 1.28, -0.24]
-        scale [0.1703, 0.33, 0.1238]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1577, 0.42, 0.156]
         material: violetPodLeft
         group: 63
         parent: "pod-left"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Prism "podMidBevel-left" {
         id: 910
-        position [0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1569, 0.1073, 0.36]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.155, 0.156, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 63
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Box "podMidSlice-left" {
         id: 911
-        position [0.1713, 1.311, -0.24]
-        rotation [0, 0, -0.1452, 0.9894]
-        scale [0.35, 0.085, 0.35]
+        position [0.1778, 1.2663, -0.3104]
+        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        scale [0.45, 0.0625, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 63
         parent: "pod-left"
       }
 
       shape Superellipsoid "podBand2-left" {
         id: 912
-        position [0.162, 1.28, -0.24]
-        scale [0.1729, 0.33, 0.1258]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1607, 0.42, 0.159]
         material: shinCream
         group: 64
         parent: "pod-left"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Prism "podBand2Bevel-left" {
         id: 913
-        position [0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1593, 0.109, 0.36]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.1579, 0.159, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 64
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Box "podBand2Slice-left" {
         id: 914
-        position [0.1341, 1.187, -0.24]
-        rotation [0, 0, -0.1452, 0.9894]
-        scale [0.35, 0.031, 0.35]
+        position [0.1898, 1.1476, -0.3284]
+        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 64
         parent: "pod-left"
       }
 
       shape Superellipsoid "podSkirt-left" {
         id: 915
-        position [0.162, 1.28, -0.24]
-        scale [0.1756, 0.33, 0.1277]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1637, 0.42, 0.162]
         material: violetPodLeft
         group: 65
         parent: "pod-left"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Prism "podSkirtBevel-left" {
         id: 916
-        position [0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1617, 0.1107, 0.36]
+        position [0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.1609, 0.162, 0.504]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 65
         parent: "pod-left"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Box "podSkirtSlice-left" {
         id: 917
-        position [0.0909, 1.043, -0.24]
-        rotation [0, 0, -0.1452, 0.9894]
-        scale [0.35, 0.105, 0.35]
+        position [0.2095, 0.9524, -0.3579]
+        rotation [0.0748, -0.0037, 0.0497, 0.996]
+        scale [0.45, 0.14, 0.45]
         material: violetPodLeft
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
+        group: 65
+        parent: "pod-left"
+      }
+
+      shape Box "podBottom-left" {
+        id: 919
+        position [0.4265, 1.4024, -0.2899]
+        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        scale [0.5, 0.5, 0.5]
+        material: violetPodLeft
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 65
         parent: "pod-left"
       }
@@ -3794,35 +3842,33 @@ prototypes {
 
       shape Superellipsoid "nozzle-left" {
         id: 213
-        position [0.097, 0.975, -0.255]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.064, 0.048, 0.062]
+        position [0.209, 0.9662, -0.3558]
+        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 27
         parent: "pod-left"
-        exponent: 2.5
+        exponent: 2.4
       }
 
       shape Cylinder "nozzleBore-left" {
         id: 214
-        position [0.097, 0.935, -0.259]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.042, 0.03, 0.042]
+        position [0.209, 0.9546, -0.3596]
+        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        scale [0.0297, 0.0225, 0.0297]
         material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.006
+        blend: "Subtraction"
         group: 27
         parent: "pod-left"
       }
 
-      shape Superellipsoid "nozzleGlow-left" {
+      shape Cylinder "nozzleGlow-left" {
         id: 215
-        position [0.097, 0.946, -0.26]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.036, 0.008, 0.036]
+        position [0.209, 0.9503, -0.3612]
+        rotation [0.073, 0.0167, -0.2225, 0.9721]
+        scale [0.0252, 0.005, 0.0252]
         material: cyan
         parent: "pod-left"
-        exponent: softness
       }
 
       shape Sweep "upperArm-right" {
@@ -4487,23 +4533,24 @@ prototypes {
 
       shape Superellipsoid "pod-right" {
         id: 274
-        position [-0.162, 1.28, -0.22]
-        scale [0.17, 0.3284, 0.108]
+        position [-0.18, 1.2396, -0.2841]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.141, 0.4158, 0.1275]
         material: charcoal
         group: 70
         parent: "torso"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
         swings [
           {
@@ -4533,277 +4580,346 @@ prototypes {
         ]
       }
 
+      shape Box "podBottomRim-right" {
+        id: 947
+        position [-0.4265, 1.3945, -0.2911]
+        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        scale [0.5, 0.5, 0.5]
+        material: charcoal
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 70
+        parent: "pod-right"
+      }
+
+      shape Box "podTopRim-right" {
+        id: 948
+        position [0.0507, 1.1526, -0.3276]
+        rotation [0.0734, -0.0149, 0.1981, 0.9773]
+        scale [0.5, 0.5, 0.5]
+        material: charcoal
+        blend: "SmoothIntersection"
+        smooth: 0.055
+        group: 70
+        parent: "pod-right"
+      }
+
       shape Superellipsoid "podCap-right" {
         id: 930
-        position [-0.162, 1.28, -0.24]
-        scale [0.165, 0.33, 0.12]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1516, 0.42, 0.15]
         material: violetPodRight
         group: 71
         parent: "pod-right"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Prism "podCapBevel-right" {
         id: 931
-        position [-0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.152, 0.104, 0.36]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.149, 0.15, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 71
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Box "podCapSlice-right" {
         id: 932
-        position [-0.24, 1.54, -0.24]
-        rotation [0, 0, 0.1452, 0.9894]
-        scale [0.35, 0.07, 0.35]
+        position [-0.15, 1.5407, -0.269]
+        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        scale [0.45, 0.1, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 71
         parent: "pod-right"
       }
 
+      shape Box "podTop-right" {
+        id: 949
+        position [0.0507, 1.1447, -0.3288]
+        rotation [0.0734, -0.0149, 0.1981, 0.9773]
+        scale [0.5, 0.5, 0.5]
+        material: violetPodRight
+        blend: "SmoothIntersection"
+        smooth: 0.055
+        group: 71
+        parent: "pod-right"
+      }
+
+      shape Prism "podVent-right" {
+        id: 945
+        position [-0.1645, 1.517, -0.4136]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.048, 0.017, 0.018]
+        material: charcoal
+        blend: "SmoothSubtraction"
+        smooth: 0.004
+        group: 71
+        parent: "pod-right"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+      }
+
       shape Superellipsoid "podBand1-right" {
         id: 933
-        position [-0.162, 1.28, -0.24]
-        scale [0.1676, 0.33, 0.1219]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1546, 0.42, 0.153]
         material: shinCream
         group: 72
         parent: "pod-right"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Prism "podBand1Bevel-right" {
         id: 934
-        position [-0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1544, 0.1057, 0.36]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.152, 0.153, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 72
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Box "podBand1Slice-right" {
         id: 935
-        position [-0.2079, 1.433, -0.24]
-        rotation [0, 0, 0.1452, 0.9894]
-        scale [0.35, 0.029, 0.35]
+        position [-0.1658, 1.3849, -0.2925]
+        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 72
         parent: "pod-right"
       }
 
       shape Superellipsoid "podMid-right" {
         id: 936
-        position [-0.162, 1.28, -0.24]
-        scale [0.1703, 0.33, 0.1238]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1577, 0.42, 0.156]
         material: violetPodRight
         group: 73
         parent: "pod-right"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Prism "podMidBevel-right" {
         id: 937
-        position [-0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1569, 0.1073, 0.36]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.155, 0.156, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 73
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Box "podMidSlice-right" {
         id: 938
-        position [-0.1713, 1.311, -0.24]
-        rotation [0, 0, 0.1452, 0.9894]
-        scale [0.35, 0.085, 0.35]
+        position [-0.1778, 1.2663, -0.3104]
+        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        scale [0.45, 0.0625, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 73
         parent: "pod-right"
       }
 
       shape Superellipsoid "podBand2-right" {
         id: 939
-        position [-0.162, 1.28, -0.24]
-        scale [0.1729, 0.33, 0.1258]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1607, 0.42, 0.159]
         material: shinCream
         group: 74
         parent: "pod-right"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Prism "podBand2Bevel-right" {
         id: 940
-        position [-0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1593, 0.109, 0.36]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.1579, 0.159, 0.504]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 74
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Box "podBand2Slice-right" {
         id: 941
-        position [-0.1341, 1.187, -0.24]
-        rotation [0, 0, 0.1452, 0.9894]
-        scale [0.35, 0.031, 0.35]
+        position [-0.1898, 1.1476, -0.3284]
+        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        scale [0.45, 0.0475, 0.45]
         material: shinCream
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
         group: 74
         parent: "pod-right"
       }
 
       shape Superellipsoid "podSkirt-right" {
         id: 942
-        position [-0.162, 1.28, -0.24]
-        scale [0.1756, 0.33, 0.1277]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.0749, 0, 0, 0.9972]
+        scale [0.1637, 0.42, 0.162]
         material: violetPodRight
         group: 75
         parent: "pod-right"
-        exponent: 2.6
+        exponent: 2.7
         flare {
-          amount: -0.5
-          bulge: 0.1
-          span: 0.66
-          top: 0.33
-          startScale: 1
+          amount: 0.1
+          bulge: 0.06
+          span: 0.84
+          top: 0.42
+          startScale: 0.9
         }
         shear {
           target: 0
           driver: 1
-          linear: 0.3
+          linear: -0.1
         }
       }
 
       shape Prism "podSkirtBevel-right" {
         id: 943
-        position [-0.162, 1.28, -0.24]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.1617, 0.1107, 0.36]
+        position [-0.18, 1.244, -0.3138]
+        rotation [0.7581, 0, 0, 0.6521]
+        scale [0.1609, 0.162, 0.504]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.008
+        smooth: 0.01
         group: 75
         parent: "pod-right"
         profile {
           kind: "ChamferedRectangle"
-          cornerRadius: 0.5
+          cornerRadius: 0.28
         }
         shear {
           target: 0
           driver: 2
-          linear: -0.3
+          linear: 0.1
         }
       }
 
       shape Box "podSkirtSlice-right" {
         id: 944
-        position [-0.0909, 1.043, -0.24]
-        rotation [0, 0, 0.1452, 0.9894]
-        scale [0.35, 0.105, 0.35]
+        position [-0.2095, 0.9524, -0.3579]
+        rotation [0.0748, 0.0037, -0.0497, 0.996]
+        scale [0.45, 0.14, 0.45]
         material: violetPodRight
         blend: "SmoothIntersection"
-        smooth: 0.004
+        smooth: 0.012
+        group: 75
+        parent: "pod-right"
+      }
+
+      shape Box "podBottom-right" {
+        id: 946
+        position [-0.4265, 1.4024, -0.2899]
+        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        scale [0.5, 0.5, 0.5]
+        material: violetPodRight
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 75
         parent: "pod-right"
       }
@@ -4820,35 +4936,33 @@ prototypes {
 
       shape Superellipsoid "nozzle-right" {
         id: 281
-        position [-0.097, 0.975, -0.255]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.064, 0.048, 0.062]
+        position [-0.209, 0.9662, -0.3558]
+        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        scale [0.045, 0.039, 0.045]
         material: charcoal
         group: 41
         parent: "pod-right"
-        exponent: 2.5
+        exponent: 2.4
       }
 
       shape Cylinder "nozzleBore-right" {
         id: 282
-        position [-0.097, 0.935, -0.259]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.042, 0.03, 0.042]
+        position [-0.209, 0.9546, -0.3596]
+        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        scale [0.0297, 0.0225, 0.0297]
         material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.006
+        blend: "Subtraction"
         group: 41
         parent: "pod-right"
       }
 
-      shape Superellipsoid "nozzleGlow-right" {
+      shape Cylinder "nozzleGlow-right" {
         id: 283
-        position [-0.097, 0.946, -0.26]
-        rotation [0.1097783, 0, 0, 0.9939561]
-        scale [0.036, 0.008, 0.036]
+        position [-0.209, 0.9503, -0.3612]
+        rotation [0.073, -0.0167, 0.2225, 0.9721]
+        scale [0.0252, 0.005, 0.0252]
         material: cyan
         parent: "pod-right"
-        exponent: softness
       }
 
       shape Superellipsoid "blinkCover-left" {
@@ -4998,17 +5112,17 @@ prototypes {
         {
           kind: "flow"
           parent: "nozzle-left"
-          position [0, -0.175, -0.035]
+          position [0, -0.27, 0]
           rotation [0, 0, 0, 1]
-          halfExtent [0.073, 0.19, 0.073]
-          axis: 0.38
-          width: 0.043
+          halfExtent [0.08, 0.24, 0.08]
+          axis: 0.48
+          width: 0.0405
           speed: 1.5
           seed: 31
-          steps: 40
-          intensity: 60
-          extinction: 1.2
-          pulseAmplitude: 0.1
+          steps: 64
+          intensity: 85
+          extinction: 1
+          pulseAmplitude: 0.04
           pulseFrequency: 14
           intensityLane: 1
           ramp [
@@ -5033,17 +5147,17 @@ prototypes {
         {
           kind: "flow"
           parent: "nozzle-right"
-          position [0, -0.175, -0.035]
+          position [0, -0.27, 0]
           rotation [0, 0, 0, 1]
-          halfExtent [0.073, 0.19, 0.073]
-          axis: 0.38
-          width: 0.043
+          halfExtent [0.08, 0.24, 0.08]
+          axis: 0.48
+          width: 0.0405
           speed: 1.5
           seed: 39
-          steps: 40
-          intensity: 60
-          extinction: 1.2
-          pulseAmplitude: 0.1
+          steps: 64
+          intensity: 85
+          extinction: 1
+          pulseAmplitude: 0.04
           pulseFrequency: 14
           intensityLane: 1
           ramp [
