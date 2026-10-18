@@ -154,7 +154,6 @@
                       "Viewports",
                       "DynamicTransforms",
                       "InstanceMaskWords",
-                      "InstanceGridWords",
                       "BrickPoolVoxels",
                       "RenderExtent"
                     ],

@@ -6,7 +6,7 @@ namespace Puck.Cli.Transpiler;
 public static partial class CompileCommand {
     // `--tree --check`: the tree run into a scratch directory, compared with --output instead of written to it. The
     // output holds exactly what a fresh run writes when every file the run writes is present with the same bytes and no
-    // file of a kind the run owns (documents, compiled worlds, the bake pack, stored packages) is present that the run
+    // file of a kind the run owns (documents, compiled worlds, stored packages) is present that the run
     // did not write. A shipped catalog built from the same sources is therefore a proof that the tree compile is
     // deterministic across processes, and a catalog that disagrees names every file that does.
     private static int RunTreeCheck(string tree, string output, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
@@ -24,9 +24,7 @@ public static partial class CompileCommand {
 
         var fresh = Path.Combine(path1: scratch, path2: "output");
         var report = Path.Combine(path1: scratch, path2: "written");
-        // The comparison is with a fresh run, so the check bakes every creation rather than reading a cache.
         var ran = RunTree(
-            bakeCache: null,
             bundle: bundle,
             output: fresh,
             paths: paths,
@@ -54,7 +52,7 @@ public static partial class CompileCommand {
             }
         }
 
-        var owned = ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension])
+        var owned = ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension])
             .SelectMany(selector: suffix => Directory.EnumerateFiles(path: catalog, searchOption: SearchOption.AllDirectories, searchPattern: ("*" + suffix)))
             // A package's lock beside its directory coordinates writers and ships nothing.
             .Concat(second: (Directory.Exists(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName))

@@ -15,7 +15,7 @@ namespace Puck.Cli.Creation;
 /// verbs: <c>sculpts</c> lists the registry, <c>sculpt &lt;name&gt; --world &lt;path&gt;</c> applies a sculpt's
 /// <see cref="SculptPatch"/> to a world file on disk (refusing and leaving it untouched on a validation failure),
 /// and <c>stats --world &lt;path&gt; [--prototype &lt;id&gt;]</c> reports a creation's shape budget and feature
-/// usage, field-scope clamps, chains and specialization vocabulary, then constructs the world's deterministic contact field. Exit codes: 0 succeeded,
+/// usage, field-scope clamps and segments, then constructs the world's deterministic contact field. Exit codes: 0 succeeded,
 /// 1 the patched document was refused (sculpt), or loading, render emission or contact compilation failed (stats),
 /// 2 a usage error (unknown sculpt/prototype name, missing file).
 /// </summary>
@@ -70,7 +70,7 @@ public static partial class CreationCommand {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Limit to one prototype id (default: every prototype carrying a creation document)." };
         var command = new Command(
-            description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps, segments, chains and specialization vocabulary for static and pooled rest geometry, then the union of every reported set. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.",
+            description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps and segments for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.",
             name: "stats"
         ) { worldOption, prototypeOption };
 
@@ -191,8 +191,6 @@ public static partial class CreationCommand {
             return 2;
         }
 
-        var union = new SpecializationUnion();
-
         foreach (var prototype in prototypes) {
             ReportPrototype(
                 document: prototype.Document!,
@@ -201,16 +199,13 @@ public static partial class CreationCommand {
             try {
                 ReportStepClamps(
                     definition: definition,
-                    prototype: prototype,
-                    union: union
+                    prototype: prototype
                 );
             } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException)) {
                 Console.Error.WriteLine(value: $"creation stats: '{prototype.Id}' step-clamp inspection failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
                 return 1;
             }
         }
-
-        Console.Out.WriteLine(value: $"specialization of every reported prototype, static and pooled: {union.Describe()}");
 
         try {
             if (!WorldSolidField.TryBuild(

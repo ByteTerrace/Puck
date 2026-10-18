@@ -75,7 +75,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.sdf.dump",
-            description: "Writes the live packed GPU program as little-endian uint32 words: world.sdf.dump <path>. Replaces the destination file. Excludes reserved capacity, dynamic transforms and the per-frame instance grid. Diagnostic output follows the current SdfProgram layout, not a loadable or durable asset format. Requires an initialized renderer; does not mutate the world.",
+            description: "Writes the live packed GPU program as little-endian uint32 words: world.sdf.dump <path>. Replaces the destination file. Excludes reserved capacity and dynamic transforms. Diagnostic output follows the current SdfProgram layout, not a loadable or durable asset format. Requires an initialized renderer; does not mutate the world.",
             handler: DumpHandler
         );
         yield return CommandDefinition.WithWireArgs(

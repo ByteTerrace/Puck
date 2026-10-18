@@ -432,7 +432,7 @@ The logical-device factory refuses a device, naming the feature, unless it repor
 `shaderSampledImageArrayDynamicIndexing` (the SDF screen shading indexes its sources and samplers),
 `shaderStorageImageExtendedFormats` (incoming shadow visibility writes use R8 or R8G8 storage images)
 and `shaderDemoteToHelperInvocation` (a fragment `discard`, which DXC compiles to
-`OpDemoteToHelperInvocation`; the SDF impostor card uses it). Before a shader module is created,
+`OpDemoteToHelperInvocation`). Before a shader module is created,
 `VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses, naming the module
 and the capability, any capability outside `VulkanShaderCapabilities.Enabled`: Vulkan core's
 `Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required feature grants,
@@ -450,8 +450,8 @@ callers still re-probe before relying on a path, and fall back otherwise:
   (compiled register counts, etc.); nothing reads them back yet.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
-- **Block-compressed textures**—`textureCompressionBC`, which a baked mesh's BC4, BC5,
-  BC6H and BC7 textures need; a device without it refuses their upload by name.
+- **Block-compressed textures**—`textureCompressionBC`, which a BC4, BC5, BC6H or BC7 surface
+  upload needs; a device without it refuses the upload by name.
 - **Shader capability floor**—half-precision arithmetic, 16-bit storage and
   subgroup-size control, enabled on a device that reports them for kernels that adopt them.
 - **External semaphores and timeline semaphores**—`VK_KHR_external_semaphore_win32` and the

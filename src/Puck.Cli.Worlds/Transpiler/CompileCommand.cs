@@ -29,8 +29,7 @@ public static partial class CompileCommand {
         bool validate,
         bool bundle,
         bool updateAssets = false,
-        IDictionary<string, string>? written = null,
-        BakePackPlan? pack = null
+        IDictionary<string, string>? written = null
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -53,7 +52,6 @@ public static partial class CompileCommand {
             return CompileDocument(
                 besidePath: (outputPath ?? fullPath),
                 documentPath: fullPath,
-                pack: pack,
                 written: written
             );
         }
@@ -62,7 +60,6 @@ public static partial class CompileCommand {
             return ExecuteCompilation(
                 bundle: bundle,
                 outputPath: outputPath,
-                pack: pack,
                 sourcePath: fullPath,
                 strict: strict,
                 updateAssets: updateAssets,
@@ -88,8 +85,7 @@ public static partial class CompileCommand {
         bool validate,
         bool bundle,
         bool updateAssets = false,
-        IDictionary<string, string>? written = null,
-        BakePackPlan? pack = null
+        IDictionary<string, string>? written = null
     ) {
         var diagnostics = new DiagnosticBag();
         string sourceText;
@@ -115,7 +111,7 @@ public static partial class CompileCommand {
         );
 
         if (!isCartridge) {
-            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, pack: pack, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
+            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
         }
         if (updateAssets) {
             Console.Error.WriteLine(value: "error: --update-assets applies to world asset references; cartridge sources do not use a world asset lock.");
@@ -398,10 +394,9 @@ public static partial class CompileCommand {
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
         var bundleOption = new Option<bool>(name: "--bundle") { Description = "Inline and bundle all imported .puck module ASTs into a single standalone document." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
-        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory. With no source paths, select every .puck and .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, the bakes they name ship once in one bake pack (bakes.puckbake) at the output's root, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb, *.puckbake and stored package under --output is removed, so the output holds exactly this run's worlds." };
-        var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world, bake pack or stored package --output holds that the run does not write. Writes nothing under --output." };
+        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory. With no source paths, select every .puck and .world.json under this directory recursively, in ordinal order. Each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb and stored package under --output is removed, so the output holds exactly this run's worlds." };
+        var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world or stored package --output holds that the run does not write. Writes nothing under --output." };
         var writtenOption = new Option<string?>(name: "--written") { Description = "With --tree, write the files the run left under --output to this file once it succeeds, one output-relative path with forward slashes per line, and remove it before the run starts, so it exists only for a whole run." };
-        var bakeCacheOption = new Option<string?>(name: "--bake-cache") { Description = "With --tree, read each creation bake from this content-addressed cache directory and keep every bake the run makes there, so a creation whose key (its pin, the bake code fingerprint and the tier) an earlier run kept is not baked again. The bake pack's bytes are the same with or without it." };
 
         var command = new Command(
             description: "Compile .puck source files into canonical JSON world or cartridge definitions, and each world document into its compiled world (.puckb) beside it.",
@@ -417,7 +412,6 @@ public static partial class CompileCommand {
             treeOption,
             writtenOption,
             checkOption,
-            bakeCacheOption,
         };
 
         command.Validators.Add(item: result => {
@@ -429,11 +423,6 @@ public static partial class CompileCommand {
                 if (result.GetValue(option: checkOption) && (result.GetValue(option: writtenOption) is not null)) {
                     result.AddError(errorMessage: "--check writes nothing, so it takes no --written report.");
                 }
-                if (result.GetValue(option: checkOption) && (result.GetValue(option: bakeCacheOption) is not null)) {
-                    result.AddError(errorMessage: "--check compares --output with a fresh run, so it reads no --bake-cache.");
-                }
-            } else if (result.GetValue(option: bakeCacheOption) is not null) {
-                result.AddError(errorMessage: "--bake-cache serves a --tree run and requires --tree.");
             } else if (result.GetValue(option: checkOption)) {
                 result.AddError(errorMessage: "--check compares a --tree run with its --output and requires --tree.");
             } else if (result.GetValue(option: writtenOption) is not null) {
@@ -467,7 +456,6 @@ public static partial class CompileCommand {
 
             if (parseResult.GetValue(option: treeOption) is { } tree) {
                 return RunTree(
-                    bakeCache: parseResult.GetValue(option: bakeCacheOption),
                     bundle: parseResult.GetValue(option: bundleOption),
                     output: parseResult.GetRequiredValue(option: outputOption)!,
                     paths: paths,

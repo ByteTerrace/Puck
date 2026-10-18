@@ -241,7 +241,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.ShapeBlend: {
-                        // A SHADING-ONLY shape (SdfInstruction.Detail) never reaches contact/gravity/collision — this
+                        // A detail shape (SdfInstruction.Detail) never reaches contact/gravity/collision — this
                         // evaluator has no shade-mode counterpart, so it is simply absent from every field it walks.
                         if (instruction.Detail) {
                             break;

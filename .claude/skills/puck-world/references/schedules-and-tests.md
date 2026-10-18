@@ -51,7 +51,8 @@ accepted request. Later requests receive fresh budgets; the calling gate bounds
 the whole run. Past either budget the capture is refused as `unserved`, naming the pipeline
 build and its progress when the build spent it, and the run steps on. A script
 that reads rendered work waits with `world.wait ready <seconds>`, and one that
-reads a drawn bake with `world.wait bakes <seconds>`, never a tick count. A
+reads the finished baked meshes with `world.wait bakes <seconds>`, never a tick
+count. A
 script that takes several `world.screenshot` captures fences each one with
 `world.wait captures <seconds>` before arming the next, since a pending capture
 refuses the next arm and a tick count is a race under load.

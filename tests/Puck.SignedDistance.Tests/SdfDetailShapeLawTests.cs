@@ -6,9 +6,8 @@ using Xunit;
 
 namespace Puck.SignedDistance.Tests;
 
-/// <summary>Laws over <see cref="SdfInstruction.Detail"/>: the packed-word flag bit, and its exclusion from both
-/// interpreters' march field (the GPU contract lives in field/sdf-point.hlsli/passes/sdf-light-stage.hlsli and is unverified by machine
-/// here — see <see cref="SdfFieldEvaluator"/>'s CPU mirror, which this file gates directly).</summary>
+/// <summary>Laws over <see cref="SdfInstruction.Detail"/>: its validation and its exclusion from
+/// <see cref="SdfFieldEvaluator"/>'s contact field.</summary>
 public sealed class SdfDetailShapeLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];
 
@@ -18,13 +17,6 @@ public sealed class SdfDetailShapeLawTests {
         materials: OneMaterial,
         screenSurfaces: null
     );
-    private static uint ShadingFlags(SdfProgram program) {
-        var words = program.Words;
-        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
-        var instances = ((segment + 4) + (8 * ((int)words[segment])));
-
-        return words[(instances + 2)];
-    }
     private static SdfInstruction Shape(bool detail, uint shape = ((uint)SdfShapeType.Sphere), uint blend = ((uint)SdfBlendOp.Union), uint material = 0u) => new(
         Blend: blend,
         Data0: new Vector4(
@@ -41,8 +33,7 @@ public sealed class SdfDetailShapeLawTests {
     );
 
     /// <summary>The packed contract refuses a hand-assembled stream that carries Detail on anything but a ShapeBlend
-    /// instruction — the flag is meaningless anywhere else, so a caller reaching it directly is told rather than
-    /// silently packing a bit nothing decodes.</summary>
+    /// instruction — the flag is meaningless anywhere else, so a caller reaching it directly is told.</summary>
     [Fact]
     public void ConstructorRefusesDetailOnANonShapeInstruction() {
         var translate = new SdfInstruction(
@@ -71,12 +62,6 @@ public sealed class SdfDetailShapeLawTests {
 
         _ = Build(instructions: [plainTranslate, Shape(detail: false)]);
     }
-    /// <summary>An empty program still carries a complete directory header and needs no detail resolve.</summary>
-    [Fact]
-    public void EmptyProgramAdmitsVisibilityRecordReuse() => Assert.Equal(
-        expected: 1u,
-        actual: ShadingFlags(program: Build(instructions: []))
-    );
     /// <summary>A detail shape composed alongside real geometry never changes the contact field it would otherwise
     /// win: a Detail sphere placed EXACTLY at the query point (so an included copy would report zero and win the
     /// material) leaves both the distance and the material exactly as the base plate alone reports.</summary>
@@ -205,82 +190,8 @@ public sealed class SdfDetailShapeLawTests {
             radius: FixedQ4816.FromDouble(value: 0.1)
         ));
     }
-    /// <summary>The flag packs into the Shape lane's high bit, and the shape id stays readable underneath it — the
-    /// two halves of one word.</summary>
-    [Fact]
-    public void PackingOrsTheDetailFlagOntoTheShapeLaneHighBit() {
-        var detailed = Build(instructions: [Shape(
-                detail: true,
-                shape: ((uint)SdfShapeType.Box)
-            )]);
-        // Header word 0 is (instructionCount, ...); instruction headers start one uvec4 in, lane 1 = the shape.
-        var packedShape = detailed.Words[5];
-
-        Assert.Equal(
-            actual: packedShape & 0x80000000u,
-            expected: 0x80000000u
-        );
-        Assert.Equal(
-            actual: packedShape & 0x7FFFFFFFu,
-            expected: ((uint)SdfShapeType.Box)
-        );
-
-        // Control: the same shape without Detail packs the bare id, no high bit.
-        var plain = Build(instructions: [Shape(
-                detail: false,
-                shape: ((uint)SdfShapeType.Box)
-            )]);
-
-        Assert.Equal(
-            actual: plain.Words[5],
-            expected: ((uint)SdfShapeType.Box)
-        );
-    }
-    /// <summary>Hit reuse is admitted only when the entire program is free of shading-only geometry.
-    /// Instance culling, parking and secondary-ray participation cannot hide a Detail declaration.</summary>
-    [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(false, true, false, false)]
-    [InlineData(false, true, true, false)]
-    [InlineData(false, true, false, true)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, false, false)]
-    [InlineData(true, true, true, false)]
-    [InlineData(true, true, false, true)]
-    public void VisibilityRecordReuseAdmissionIncludesAllShapes(bool detail, bool instanced, bool parked, bool secondary) {
-        var program = new SdfProgram(
-            instructions: [Shape(detail: false), new SdfInstruction(
-                    SdfOp.ResetPoint,
-                    0,
-                    0,
-                    0,
-                    Vector4.Zero,
-                    Vector4.Zero
-                ),
-                Shape(detail: detail) with { Secondary = secondary }],
-            materials: OneMaterial,
-            instances: (instanced
-            ? [new SdfInstanceRange(
-                        First: 1,
-                        End: 3,
-                        IsDynamic: false,
-                        Center: Vector3.Zero,
-                        Radius: 1f,
-                        Slot: 0,
-                        Active: !parked
-                    )]
-            : null)
-        );
-
-        Assert.Equal(
-            expected: (detail
-            ? 0u
-            : 1u),
-            actual: ShadingFlags(program: program)
-        );
-    }
-    /// <summary>Superellipsoids preserve Detail at every exponent, the ellipsoid's exponent 2 included. The
-    /// common packed flag does not depend on a shape-specific lane.</summary>
+    /// <summary>Superellipsoids preserve Detail at every exponent, the ellipsoid's exponent 2 included: the flag does
+    /// not depend on a shape-specific lane.</summary>
     [Theory]
     [InlineData(2f)]
     [InlineData(4f)]
@@ -302,10 +213,7 @@ public sealed class SdfDetailShapeLawTests {
 
         var program = builder.Build();
 
-        Assert.Equal(
-            expected: 0x80000000u | ((uint)SdfShapeType.Superellipsoid),
-            actual: program.Words[5]
-        );
+        Assert.True(condition: program.Instructions[0].Detail);
         var evaluator = new SdfFieldEvaluator(program: program);
 
         Assert.False(condition: evaluator.TryDistance(

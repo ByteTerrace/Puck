@@ -166,7 +166,7 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
-/// surface with the one manifold dual contouring the prototype baker uses, placing each vertex by the tangent planes of
+/// surface by manifold dual contouring, placing each vertex by the tangent planes of
 /// its crossings: each crossing's gradient and value are measured where the edge crosses, and the plane passes through
 /// the crossing moved back onto the surface by that value, so a sharp edge between two faces stays sharp at any cell
 /// size, its vertex reaching up to half a cell past its own cell where the next cell holds the edge but not the crossings
@@ -179,7 +179,7 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// <para>The lattice is answered in stages: <see cref="Refine"/> names the fine samples to measure and
 /// <see cref="AnswerRefinement"/> takes their values; <see cref="GradientPoints"/> names the samples the contour reads a
 /// gradient at, the corners its vertex normals interpolate and the crossings its tangent planes pass through, and
-/// <see cref="AnswerGradients"/> takes them. Unlike a prototype bake, a sampled lattice's values come
+/// <see cref="AnswerGradients"/> takes them. A sampled lattice's values come
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
 /// reaches simulation state.</para>
 /// </summary>
@@ -792,7 +792,7 @@ public sealed class SdfSampledLattice {
         for (var quad = 0; (quad < materials.Length); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SdfSurfaceTextures.SplitsAlongFirstDiagonal(
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(
                 n0: Vertex(values: normals, vertex: quads[at]),
                 n1: Vertex(values: normals, vertex: quads[(at + 1)]),
                 n2: Vertex(values: normals, vertex: quads[(at + 2)]),
@@ -818,6 +818,44 @@ public sealed class SdfSampledLattice {
         };
 
         static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    }
+
+    // Whether quad (v0, v1, v2, v3), with corner normals n0 to n3, splits along its first diagonal, v0 to v2, rather than
+    // its second: the diagonal whose two triangles both face the way the corner normals point, else the shorter one.
+    // Every quad of a contour splits by this one rule.
+    private static bool SplitsAlongFirstDiagonal(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 n0, Vector3 n1, Vector3 n2, Vector3 n3) {
+        var outward = (
+            X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
+            Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
+            Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
+        );
+        var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
+        var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
+
+        return ((alongFirst == alongSecond)
+            ? (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3))
+            : alongFirst);
+    }
+    // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
+    private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
+        var ux = (((double)b.X) - a.X);
+        var uy = (((double)b.Y) - a.Y);
+        var uz = (((double)b.Z) - a.Z);
+        var vx = (((double)c.X) - a.X);
+        var vy = (((double)c.Y) - a.Y);
+        var vz = (((double)c.Z) - a.Z);
+        var nx = ((uy * vz) - (uz * vy));
+        var ny = ((uz * vx) - (ux * vz));
+        var nz = ((ux * vy) - (uy * vx));
+
+        return ((((nx * outward.X) + (ny * outward.Y)) + (nz * outward.Z)) >= 0.0);
+    }
+    private static double DistanceSquared(Vector3 a, Vector3 b) {
+        var dx = (((double)b.X) - a.X);
+        var dy = (((double)b.Y) - a.Y);
+        var dz = (((double)b.Z) - a.Z);
+
+        return (((dx * dx) + (dy * dy)) + (dz * dz));
     }
 
     // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut

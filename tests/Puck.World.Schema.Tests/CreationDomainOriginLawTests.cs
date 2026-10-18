@@ -80,7 +80,7 @@ public sealed class CreationDomainOriginLawTests {
             )
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static bool IsInside(SdfProgram program, Vector3 point) {
         var evaluator = new SdfFieldEvaluator(program: program);

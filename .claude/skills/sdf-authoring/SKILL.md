@@ -274,14 +274,9 @@ but are omitted from creation contact geometry (cells keep the base primitive).
 These authoring omissions are distinct from low-level VM interpreter support.
 See [shapes](references/shapes.md#contact-admission).
 
-A creation's bake (its mesh, textures and impostor) is the deterministic contact
-field's view of it: detail shapes, sweeps, text, noise relief, volumes and the
-omitted warp facets are absent from the bake, and a creation the fixed-point
-evaluator refuses (a residual nonuniform `Scale`, a wallpaper fold) has none and
-has none. No view draws a prototype bake: every view renders the residency's
-own baked meshes ([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)),
-and prototype bakes are compiled and held for their pack alone. See
-[prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes).
+Every view renders the residency's baked meshes, which the frame bakes from the
+program itself, so a shape contact omits still draws
+([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)).
 
 ## Verifying
 

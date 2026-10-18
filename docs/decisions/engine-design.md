@@ -193,6 +193,5 @@ A format's own magic and version are what refuse data it cannot read. The codec
 that owns a wire, checkpoint, tape or cache writes them in its header or
 handshake and refuses any other by name before any state changes, and a change
 to its layout raises the version in the same change. No ledger records a
-layout. A store identified by its content, such as a bake keyed by the
-fingerprint of the compiled code that baked it, already rejects by content and
+layout. A store identified by its content already rejects by content and
 needs no header.

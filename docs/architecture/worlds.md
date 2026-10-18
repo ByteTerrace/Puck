@@ -116,17 +116,13 @@ A chunk records the version of its derivation and the content hash of every
 input it read beyond the definition, and a boot keeps a stored chunk only while
 its version is the derivation's own, every input still reads as recorded, and
 no chunk it depends on was derived afresh. Otherwise the boot derives that chunk
-and keeps the rest, except a chunk too heavy for a boot's critical path, which
-declares that it does not derive on boot: a boot that finds no compiled world
-holding it leaves it out of the boot and of the compiled world it writes, and
-names it as deferred. Nothing is repaired or adapted.
+and keeps the rest. Nothing is repaired or adapted.
 
 | Code | Holds | Inputs |
 |---|---|---|
 | `DEFN` | The drawn, resolved definition as compact canonical JSON: the composed definition after its first-fill draws and the state references they fill, before host overrides, which every boot applies. Loading it parses the JSON in place of drawing again. | None |
 | `ASST` | For every music, table, tune, and patch row, in order of family then name: the family, row name, authored source, and the source file's 64-bit content hash, or its absence. | Each distinct asset source, by its authored spelling, read beside the document ([paths a document names](#paths-a-document-names)) |
 | `CURV` | Each drawn curve's exact compiled coefficients, stations and arc tables, in document order. `CompiledCurvatureSpline` reads and writes the binary form and refuses a foreign magic. Loading seeds the shared curve cache before admission. | None; it reads `DEFN` |
-| `BAKE` | The path of the bake pack relative to the document's directory, then every distinct bake key of the drawn definition's prototypes at the standard tier, as the key's pin, in ordinal order. The outcomes live in the pack, not here ([creation bakes](#creation-bakes)). Its version is the baker's. It does not derive on boot. | None; it reads `DEFN` |
 
 `CompiledWorldChunks` lists the derivations in the order they derive and load,
 `DEFN` first; a later package registers its chunk with `With`, and the
@@ -139,7 +135,11 @@ document it writes, and a `.world.json` path given to it contributes its compile
 world alone. The game's build runs the same compile over every shipped world
 (`build/WorldAssets.targets`) and ships each compiled world beside its document
 in `Assets/worlds`. A module fragment, which does not parse and draw as a world
-on its own, has none. A boot looks beside its document first and then in the
+on its own, has none. `puck compile --tree` also writes the
+[package store](../reference/shaders.md#the-builds-package-store), `packages/`,
+at the root of its output, holding the compiled shader package of every source
+its worlds' `views.graphs` rows name, so a released world compiles no shader on
+the player's device. A boot looks beside its document first and then in the
 per-user `compiled-worlds` cache, which every boot on the device shares whatever
 its [state root](../../src/Puck.World/README.md), takes the first compiled world
 whose header is its own, and, when it derived any chunk, writes the whole
@@ -147,8 +147,8 @@ compiled world into that cache, named by the `sha256-64` hex of
 the document's full path; it never writes beside the document. A file that
 cannot be read or written costs a derivation and nothing else. The boot prints
 one `[world] compiled world:` line after its `[world] definition:` line, naming
-where it read the compiled world, the chunks it kept, derived and deferred, and
-where it wrote one.
+where it read the compiled world, the chunks it kept and derived, and where it
+wrote one.
 
 **What a boot counts.** The `world.boot` work source counts
 `world.boot.compiled-hits`, one per boot whose drawn definition came from a
@@ -168,50 +168,6 @@ definition hash. A held composition saves the merge, `DEFN` saves the draw, and
 asynchronous load and the replay drive draw without a compiled world. The work
 still open, and the chunks that follow, are in
 [the runtime and delivery plan](../plans/runtime-and-delivery.md#compiled-worlds).
-
-### Creation bakes
-
-A creation bake is a prototype's presentation assets: an indexed mesh, its
-surface textures, and an octahedral impostor
-([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
-keyed by the creation's pin (the prototype row's hash), the bake code fingerprint, and
-the quality tier, and one key is one set of bytes. Bakes are presentation only:
-contact, queries and simulation keep reading the field. No view draws a
-creation bake: every view renders the residency's own meshes, which the engine
-bakes from the frame's program on the GPU
-([the bake](../rendering/sdf/handbook/frame-rendering.md#the-bake)). Creation
-bakes are compiled, packed and held as described below, and a presentation
-still resolves the ones its cache lacks.
-
-A build output ships each bake once. `puck compile --tree` writes one bake pack,
-`bakes.puckbake`, at the root of its output: a chunk container
-(`WorldBakePack`, magic `PWBK`) holding, for each key the run's compiled worlds
-name, the encoded bake or the refusal of a creation that has none. Each
-compiled world's `BAKE` chunk names only its keys and the pack's path, so a
-creation many worlds share is baked once per run and stored once. A tree run
-given `--bake-cache` reads each outcome from that content-addressed cache and
-keeps there every one it bakes, so the game's build, which passes the per-user
-`bakes` cache every checkout shares,
-bakes a prototype only when its key is new. A compile
-without `--tree` writes the pack beside the compiled world and keeps the
-outcomes an earlier compile left in it. The same tree run writes the
-[package store](../reference/shaders.md#the-builds-package-store), `packages/`,
-holding the compiled shader package of every source its worlds'
-`views.graphs` rows name, so a released world compiles no shader on the
-player's device either.
-
-One cache, `WorldBakeStore`, is filled two ways. A boot that keeps a `BAKE` chunk
-holds, in memory and without copying, every outcome it names that the pack
-beside it carries, so a released world bakes nothing on the player's device. A
-key the pack lacks, or a pack that is missing or unreadable, is left to the
-presentation. A presentation's `WorldBakeSchedule` looks up every prototype's
-key whenever the delivered definition changes and queues each one the cache
-lacks. It resolves the queue one key at a time on the thread pool: a key an
-earlier run kept in the per-user `bakes` cache is read back, and any
-other is baked and kept there, so editing one prototype bakes that prototype
-alone. The `sdf.bakes` work source counts the keys the cache held, the keys
-scheduled, the bakes made, the refusals and the field evaluations spent;
-every kind is pacing-class, because what the cache already holds decides it.
 
 ## World relationships
 

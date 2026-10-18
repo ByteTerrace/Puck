@@ -37,7 +37,7 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
                 _ = builder.EndInstance();
             }
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         AssertSameAnswer(culled: Build(reference: false), reference: Build(reference: true), position: Position(x: 10L, y: 10L));
@@ -68,7 +68,7 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
                 _ = builder.EndInstance();
             }
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         AssertSameAnswer(culled: Build(reference: false), reference: Build(reference: true), position: Position(x: -30L, y: 0L));
@@ -107,7 +107,7 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
                 _ = builder.EndInstance();
             }
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         AssertSameAnswer(culled: Build(reference: false), reference: Build(reference: true), position: Position(x: 100_000L, y: 0L));
@@ -126,7 +126,7 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
             _ = builder.Translate(offset: Vector3.UnitX);
             _ = builder.Sphere(radius: 1f, material: sphere);
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         AssertSameAnswer(culled: Build(reference: false), reference: Build(reference: true), position: Position(x: 16_777_217L, y: 0L));
@@ -146,7 +146,7 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
             _ = builder.Rotate(rotation: new Quaternion(w: 0.9238795f, x: 0f, y: 0f, z: 0.38268343f));
             _ = builder.Sphere(radius: 1f, material: material);
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         var culledField = Build(reference: false);
@@ -271,8 +271,8 @@ public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
             }
         }
 
-        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
-        var cullOff = new SdfFieldEvaluator(program: referenceBuilder.Build(buildInstanceGrid: false));
+        var culled = new SdfFieldEvaluator(program: culledBuilder.Build());
+        var cullOff = new SdfFieldEvaluator(program: referenceBuilder.Build());
 
         for (var sample = 0; (sample < 400); sample++) {
             var far = ((sample % 4) == 0);

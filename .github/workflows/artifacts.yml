@@ -37,14 +37,6 @@ jobs:
         uses: ./.github/actions/shader-cache
         with:
           mode: restore
-      # Puck.World's build compiles the world tree through the per-user bake cache, which this restores: a creation whose
-      # bake an earlier run of the same bake code kept is read rather than baked, which is most of a cold build's world
-      # compile.
-      - id: bake-cache
-        name: Restore the creation bake cache
-        uses: ./.github/actions/bake-cache
-        with:
-          mode: restore
       - name: Restore locked dependencies
         run: dotnet restore Puck.slnx --locked-mode
       - name: Compile the platform bootstrap program without running it
@@ -66,12 +58,6 @@ jobs:
         uses: ./.github/actions/shader-cache
         with:
           key: ${{ steps.shader-cache.outputs.key }}
-          mode: save
-      - if: steps.bake-cache.outputs.cache-hit != 'true'
-        name: Save the creation bake cache
-        uses: ./.github/actions/bake-cache
-        with:
-          key: ${{ steps.bake-cache.outputs.key }}
           mode: save
       # The shaders the build just compiled with the pinned DXC, at their repository paths, for the Linux job that holds
       # its own DXC build of this commit to them byte for byte (verify.yml, shader-bytecode).

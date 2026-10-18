@@ -192,7 +192,7 @@ public sealed class SdfDistanceGridLawTests {
         );
         _ = builder.ResetPoint();
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static FixedQ4816 Exact(SdfFieldEvaluator evaluator, FixedPosition position) {
         Assert.True(condition: evaluator.TryDistance(
@@ -241,7 +241,7 @@ public sealed class SdfDistanceGridLawTests {
             offset: 0f
         );
 
-        var planeOnly = builder.Build(buildInstanceGrid: false);
+        var planeOnly = builder.Build();
 
         Assert.Null(@object: SdfDistanceGrid.TryCover(
             cellSize: FixedQ4816.FromDouble(value: CellSize),
@@ -254,7 +254,7 @@ public sealed class SdfDistanceGridLawTests {
 
         _ = empty.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        var shapeless = empty.Build(buildInstanceGrid: false);
+        var shapeless = empty.Build();
 
         Assert.Null(@object: SdfDistanceGrid.TryCoverBox(
             cellSize: FixedQ4816.One,

@@ -94,11 +94,10 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// none), at most <see cref="ShapeTrimDocument.MaxTrims"/> — see <see cref="ShapeTrimDocument"/>. Render-only, like
 /// <see cref="Panel"/>; refused by name on a shape carrying <see cref="Domain"/> ops, a non-zero
 /// <see cref="Group"/>, or on a creation that otherwise needs its own field scope.</param>
-/// <param name="Detail">Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it
-/// never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at
-/// an already-found hit, where its own material and its perturbation of the surface normal paint its footprint — a
-/// seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance
-/// instead of dotting out. Refused by name alongside <see cref="Panel"/> or <see cref="Trims"/> on the same
+/// <param name="Detail">Whether this shape is a detail shape (null = false): excluded from contact (it never carves the
+/// contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin
+/// subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the
+/// bake's point-sampled materials. Refused by name alongside <see cref="Panel"/> or <see cref="Trims"/> on the same
 /// shape.</param>
 /// <param name="Flare">The shape's radial flare warp (null = none) — see <see cref="ShapeFlareDocument"/>. Admitted
 /// on every primitive; applies to the shape's own local point after <see cref="Twist"/>/<see cref="Bend"/>, in that
@@ -108,11 +107,6 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// in [<see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, <see cref="SdfProgramBuilder.MaxSuperellipsoidExponent"/>]
 /// (null = <see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, the ellipsoid limit — an unauthored
 /// Superellipsoid is a plain ellipsoid).</param>
-/// <param name="Secondary">Whether this shape casts soft shadows and contributes ambient occlusion (null = true).
-/// False excludes it from ONLY the soft-shadow and ambient-occlusion field walks — it still carves the silhouette,
-/// the contact field, and the collider like any ordinary shape, unlike <see cref="Detail"/> (which excludes from
-/// every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet,
-/// a groove) — see <see cref="SdfInstruction.Secondary"/>.</param>
 /// <param name="Bumps">The shape's Gaussian domain-push bumps (null = none), at most
 /// <see cref="ShapeBumpDocument.MaxBumps"/> — see <see cref="ShapeBumpDocument"/>. Applied to the shape's own local
 /// point after <see cref="Shear"/>, before the primitive's own scale. Render-only, like
@@ -157,7 +151,6 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Detail = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeFlareDocument? Flare = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Secondary = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeBumpDocument>? Bumps = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeShearDocument? Shear = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,

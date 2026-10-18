@@ -6,7 +6,7 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // One residency's leases on the pipelines its tables record with, from its composition's SdfWorldPipelineCatalog: the
-// kernel variants (SdfWorldPipelines), the region copy, the mesh pass and its impostor card pass, every one an entry of the pass-pipeline cache.
+// kernel variants (SdfWorldPipelines), the region copy, the mesh pass and the shadow pass, every one an entry of the pass-pipeline cache.
 // A holder supplying kernels takes its leases on the frame thread; one loading deployed kernels takes them on the
 // thread pool. Every pipeline builds on the pool, so a cold driver cache delays the first frame instead of freezing
 // the pump that drains the console. The leases outlive the tables built from them (a capacity or
@@ -21,7 +21,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private SdfWorldPipelines? m_lease;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_meshRaster;
-    private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_impostorRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_shadowRaster;
     // Whether every pipeline the tables need has been seen ready: all of the leased set but the views kernel, which a
     // frame waits for itself (SdfWorldTables.FrameWaiting).
@@ -40,8 +39,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     public IGpuComputePipeline? RegionCopy => m_regionCopy?.Current?.Compute;
     // The device's ready mesh pass pipeline, or null before it has built.
     public GpuPassPipeline? MeshRaster => m_meshRaster?.Current;
-    // The device's ready impostor card pipeline, or null before it has built.
-    public GpuPassPipeline? ImpostorRaster => m_impostorRaster?.Current;
     // The device's ready shadow cascade pipeline, or null before it has built.
     public GpuPassPipeline? ShadowRaster => m_shadowRaster?.Current;
 
@@ -65,7 +62,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_lease = leases.Set;
             m_regionCopy = leases.RegionCopy;
             m_meshRaster = leases.MeshRaster;
-            m_impostorRaster = leases.ImpostorRaster;
             m_shadowRaster = leases.ShadowRaster;
         }
         if (m_lease is null) {
@@ -91,13 +87,12 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_lease = leases!.Set;
             m_regionCopy = leases.RegionCopy;
             m_meshRaster = leases.MeshRaster;
-            m_impostorRaster = leases.ImpostorRaster;
             m_shadowRaster = leases.ShadowRaster;
         }
 
         m_ready = m_lease.PollRequired();
 
-        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_impostorRaster!.Poll() is null) || (m_shadowRaster!.Poll() is null))
+        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_shadowRaster!.Poll() is null))
             ? null
             : m_lease
         );
@@ -133,7 +128,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
         waited |= m_regionCopy!.WaitFinished(cancellationToken: cancellationToken);
         waited |= m_meshRaster!.WaitFinished(cancellationToken: cancellationToken);
-        waited |= m_impostorRaster!.WaitFinished(cancellationToken: cancellationToken);
         waited |= m_shadowRaster!.WaitFinished(cancellationToken: cancellationToken);
 
         return waited;
@@ -150,8 +144,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         m_regionCopy = null;
         m_meshRaster?.Release();
         m_meshRaster = null;
-        m_impostorRaster?.Release();
-        m_impostorRaster = null;
         m_shadowRaster?.Release();
         m_shadowRaster = null;
         m_refusal = null;
@@ -179,7 +171,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             HostsOnDirectX: hostsOnDirectX,
             IncludeBrickPipelines: includeBrickPipelines,
             Kernels: kernels,
-            ImpostorRaster: ImpostorRaster,
             MeshRaster: MeshRaster,
             RegionCopy: RegionCopy,
             Set: Current,
@@ -224,7 +215,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             var engine = construct(
                 arg1: pipelines,
                 arg2: new SdfWorldPassPipelines(
-                    ImpostorRaster: ImpostorRaster!,
                     MeshRaster: MeshRaster!,
                     RegionCopy: RegionCopy!,
                     ShadowRaster: ShadowRaster!
@@ -251,7 +241,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_refusedHeapRevision = heapRevision;
             m_refusedKey = (key with {
                 FaultsRevision = (device.Services.Faults?.Revision ?? 0L),
-                ImpostorRaster = ImpostorRaster,
                 MeshRaster = MeshRaster,
                 RegionCopy = RegionCopy,
                 Set = Current,
@@ -268,7 +257,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? ImpostorRaster, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, SdfKernelSet? SetKernels);
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
@@ -289,22 +278,18 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? meshRaster = null;
-        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? impostorRaster = null;
 
         try {
             regionCopy = catalog.RegionCopy.Acquire(device: device);
             meshRaster = catalog.MeshRaster.Acquire(device: device);
-            impostorRaster = catalog.MeshRaster.AcquireImpostor(device: device);
 
             return new Leases(
-                ImpostorRaster: impostorRaster,
                 MeshRaster: meshRaster,
                 RegionCopy: regionCopy,
                 Set: set,
                 ShadowRaster: catalog.MeshRaster.AcquireShadow(device: device)
             );
         } catch {
-            impostorRaster?.Release();
             meshRaster?.Release();
             regionCopy?.Release();
             set.Dispose();
@@ -313,16 +298,15 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     }
 
     // The leases one acquire takes.
-    private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> ImpostorRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> ShadowRaster) {
+    private sealed record Leases(SdfWorldPipelines Set, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> RegionCopy, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> MeshRaster, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> ShadowRaster) {
         public void Release() {
             Set.Dispose();
             RegionCopy.Release();
             MeshRaster.Release();
-            ImpostorRaster.Release();
             ShadowRaster.Release();
         }
     }
 }
-// The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass, the
-// impostor card pass that draws beside it, and the shadow cascades' depth-only pass.
-internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ImpostorRaster, GpuPassPipeline ShadowRaster);
+// The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass and the
+// shadow cascades' depth-only pass.
+internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ShadowRaster);

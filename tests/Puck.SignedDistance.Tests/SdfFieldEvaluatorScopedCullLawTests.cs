@@ -104,8 +104,8 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
         }
 
         return (
-            new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false)),
-            new SdfFieldEvaluator(program: referenceBuilder.Build(buildInstanceGrid: false))
+            new SdfFieldEvaluator(program: culledBuilder.Build()),
+            new SdfFieldEvaluator(program: referenceBuilder.Build())
         );
     }
     private static FixedPosition Position(double x, double y, double z) =>
@@ -210,8 +210,8 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
             );
         }
 
-        var witnessed = new SdfFieldEvaluator(program: witnessedBuilder.Build(buildInstanceGrid: false));
-        var nearOnly = new SdfFieldEvaluator(program: nearOnlyBuilder.Build(buildInstanceGrid: false));
+        var witnessed = new SdfFieldEvaluator(program: witnessedBuilder.Build());
+        var nearOnly = new SdfFieldEvaluator(program: nearOnlyBuilder.Build());
 
         foreach (var (x, y, z) in ((ValueTuple<double, double, double>[])[(0.0, 0.0, 0.0), (0.5, 0.25, 1.0), (-2.0, 1.0, 0.0),])) {
             var position = Position(x: x, y: y, z: z);
@@ -256,7 +256,7 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
 
             _ = builder.PopField();
 
-            return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+            return new SdfFieldEvaluator(program: builder.Build());
         }
 
         var union = Build(blend: SdfBlendOp.Union);
@@ -293,7 +293,7 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
             });
         }
 
-        var evaluator = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
 
         foreach (var (x, y, z) in ((ValueTuple<double, double, double>[])[(7.0, 2.5, -3.0), (9.0, 0.0, -3.0), (7.0, 0.0, 0.5), (8.5, 1.5, -1.5),])) {
             Assert.True(condition: evaluator.TryDistance(distance: out _, material: out var material, position: Position(x: x, y: y, z: z)));
@@ -335,8 +335,8 @@ public sealed class SdfFieldEvaluatorScopedCullLawTests {
             _ = builder.Sphere(material: material, radius: 1f);
         }
 
-        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
-        var reference = new SdfFieldEvaluator(program: referenceBuilder.Build(buildInstanceGrid: false));
+        var culled = new SdfFieldEvaluator(program: culledBuilder.Build());
+        var reference = new SdfFieldEvaluator(program: referenceBuilder.Build());
 
         foreach (var x in ((double[])[-3.0, 0.0, 4.0, 17.5, 20.0,])) {
             var position = Position(x: x, y: 0.5, z: 0.0);

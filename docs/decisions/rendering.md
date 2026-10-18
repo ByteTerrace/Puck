@@ -657,8 +657,8 @@ it.
   proportion to volume rather than surface area.
 - **Per-pixel path tracing with reservoir reuse.** Several traces a pixel a
   frame, per view, is beyond the floor device's budget.
-- **Indirect light baked into prototype bakes or lightmaps.** A bake is per
-  prototype and static, while lights key on clocks, worlds are edited live and a
+- **Indirect light baked per prototype or into lightmaps.** Either bake is
+  static, while lights key on clocks, worlds are edited live and a
   bounce depends on a placement's neighbours, not its prototype.
 
 **Off is the image without it.** With indirect light off a view takes the

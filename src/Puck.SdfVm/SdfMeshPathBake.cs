@@ -92,7 +92,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// <para>A group is the instances one rigid frame moves: every active instance riding one dynamic-transform slot, or one
 /// static copy, the run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>),
 /// so shapes of one copy that share a face bake as their union. Each group's field is sampled through the frame's own
-/// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices round robin across the groups within a frame's share of field
+/// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices taken in the groups' order within a frame's share of field
 /// evaluations (<see cref="FrameTaps"/>): a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
 /// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
@@ -155,7 +155,6 @@ public sealed class SdfMeshPathBake {
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
-    private int m_cursor;
     private IReadOnlyList<SdfMeshDraw>? m_frameDraws;
     private long m_frameDrawsRevision = -1;
     private long m_revision;
@@ -246,8 +245,10 @@ public sealed class SdfMeshPathBake {
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
     private readonly List<object> m_takenTickets = [];
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
-    /// owes one and has none in flight, round robin across the groups, up to a batch, and every later call of the same
-    /// frame answers the same, so the frame's mask and bake passes agree.</summary>
+    /// owes one and has none in flight, in the groups' order, up to a batch, and every later call of the same frame answers
+    /// the same, so the frame's mask and bake passes agree. Taking them in order rather than round robin finishes the groups
+    /// first in order first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a
+    /// body crossing into another world) leaves the groups it finished there for the residency it reaches.</summary>
     /// <param name="frame">The package frame (<see cref="SdfWorldResidency.PackageFrame"/>).</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>.</param>
@@ -267,10 +268,7 @@ public sealed class SdfMeshPathBake {
                 tickets.Clear();
                 var samples = 0;
                 var taps = 0;
-                var start = m_cursor;
-
-                for (var step = 0; (step < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch); step++) {
-                    var index = ((start + step) % m_groups.Count);
+                for (var index = 0; (index < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch); index++) {
                     var group = m_groups[index];
 
                     if (group.Done || group.InFlight || group.Contouring || (group.Next is not { } next)) { continue; }
@@ -279,7 +277,6 @@ public sealed class SdfMeshPathBake {
                     // lattice holds more than a share.
                     if ((lattices.Count > 0) && ((taps + next.Taps) > FrameTaps)) { break; }
                     group.InFlight = true;
-                    m_cursor = ((index + 1) % m_groups.Count);
                     samples += next.Samples;
                     taps += next.Taps;
                     lattices.Add(item: next);
@@ -448,7 +445,6 @@ public sealed class SdfMeshPathBake {
 
         m_program = frame.Program;
         m_groups.Clear();
-        m_cursor = 0;
 
         var bySlot = new Dictionary<int, Group>();
         var instances = frame.Program.Instances;
@@ -460,7 +456,7 @@ public sealed class SdfMeshPathBake {
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
 
-            if (!instance.Active || instance.CameraHidden) { continue; }
+            if (!instance.Active) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its

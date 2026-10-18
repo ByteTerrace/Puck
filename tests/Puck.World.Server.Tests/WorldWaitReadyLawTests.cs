@@ -6,8 +6,8 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <c>world.wait ready &lt;seconds&gt;</c> holds only its issuing session until the engine
 /// readiness it was composed with reads ready, whatever the tick, and a host that composes no renderer refuses it by
-/// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the bake readiness reads settled, and a host
-/// that bakes nothing refuses it by name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed
+/// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the mesh-bake readiness reads settled, and a host
+/// that composes no renderer refuses it by name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed
 /// capture has landed, and a host that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
 /// run a real engine.
 /// </summary>
@@ -34,6 +34,7 @@ public sealed partial class WorldWaitReadyLawTests {
     }
     private sealed class FlagBakes : IWorldBakeReadiness {
         public bool IsSettled { get; set; }
+        public string? PendingReason => (IsSettled ? null : "still baking: world");
     }
     // Answers at once, so its answer shows whether the session behind a wait was drained.
     private sealed class ProbeModule : ICommandModule {
@@ -178,7 +179,7 @@ public sealed partial class WorldWaitReadyLawTests {
 
         Assert.Equal(
             actual: bakelessAnswers.Select(selector: static answer => (answer.Result.IsError, answer.Result.Output)),
-            expected: [(true, "[world.wait: refused (this host bakes nothing, so no bake will ever settle)]")]
+            expected: [(true, "[world.wait: refused (this host composes no renderer, so no mesh bake will ever settle)]")]
         );
     }
     [Fact]

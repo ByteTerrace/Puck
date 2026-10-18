@@ -667,13 +667,7 @@ public sealed partial class SdfProgram {
             if (instruction.Op != SdfOp.ShapeBlend) {
                 if (instruction.Detail) {
                     throw new ArgumentException(
-                        message: $"Instruction {index} carries Detail but is not a ShapeBlend instruction; Detail marks a shape as shading-only and is meaningful only on SdfOp.ShapeBlend.",
-                        paramName: instructionsParamName
-                    );
-                }
-                if (!instruction.Secondary) {
-                    throw new ArgumentException(
-                        message: $"Instruction {index} carries Secondary=false but is not a ShapeBlend instruction; Secondary marks a shape's shadow/AO participation and is meaningful only on SdfOp.ShapeBlend.",
+                        message: $"Instruction {index} carries Detail but is not a ShapeBlend instruction; Detail marks a shape excluded from contact and is meaningful only on SdfOp.ShapeBlend.",
                         paramName: instructionsParamName
                     );
                 }

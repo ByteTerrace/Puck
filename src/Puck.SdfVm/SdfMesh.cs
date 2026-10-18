@@ -6,8 +6,8 @@ namespace Puck.SdfVm;
 /// <summary>An indexed triangle list in object space: opaque geometry a frame draws beside its SDF program.</summary>
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its
-/// placements and stamps, and so does a prototype's baked mesh, which also carries each vertex's normal and texture
-/// coordinate, each triangle's palette entry, and its surface textures. The mesh pass rasterizes it.</remarks>
+/// placements and stamps, and so does each group the mesh-path bake contours (<see cref="SdfMeshPathBake"/>), which also
+/// carries each vertex's normal and each triangle's palette entry. The mesh pass rasterizes it.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
@@ -15,16 +15,13 @@ public sealed record SdfMesh {
     /// <param name="indices">Three vertex indices per triangle.</param>
     /// <param name="normals">One object-space normal per vertex, which the hit's normal interpolates across a triangle,
     /// or empty for each triangle's face normal.</param>
-    /// <param name="uvs">One texture coordinate per vertex, or empty for none.</param>
     /// <param name="triangleMaterials">One palette entry per triangle, added to its draw's material, or empty for the
     /// draw's material on every triangle.</param>
-    /// <param name="textures">The surface textures the texture coordinates address, or <see langword="null"/> for
-    /// none.</param>
     /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, the mesh has more than
-    /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or texture coordinate is not
-    /// finite, an attribute is neither empty nor one per vertex (one per triangle for
-    /// <paramref name="triangleMaterials"/>), or the mesh has textures but no texture coordinates.</exception>
-    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<Vector2> uvs = default, ReadOnlyMemory<uint> triangleMaterials = default, SdfMeshTextures? textures = null) {
+    /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position or normal is not finite, or an
+    /// attribute is neither empty nor one per vertex (one per triangle for
+    /// <paramref name="triangleMaterials"/>).</exception>
+    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default) {
         if (
             indices.IsEmpty ||
             ((indices.Length % 3) != 0)
@@ -65,12 +62,6 @@ public sealed record SdfMesh {
             per: "vertex"
         );
         RequireAttribute(
-            count: uvs.Length,
-            expected: positions.Length,
-            name: nameof(uvs),
-            per: "vertex"
-        );
-        RequireAttribute(
             count: triangleMaterials.Length,
             expected: (indices.Length / 3),
             name: nameof(triangleMaterials),
@@ -85,28 +76,11 @@ public sealed record SdfMesh {
                 );
             }
         }
-        foreach (var uv in uvs.Span) {
-            if (!(float.IsFinite(f: uv.X) && float.IsFinite(f: uv.Y))) {
-                throw new ArgumentException(
-                    message: "Every mesh texture coordinate must be finite.",
-                    paramName: nameof(uvs)
-                );
-            }
-        }
-
-        if ((textures is not null) && uvs.IsEmpty) {
-            throw new ArgumentException(
-                message: "A mesh with surface textures carries a texture coordinate per vertex to address them.",
-                paramName: nameof(textures)
-            );
-        }
 
         Positions = positions;
         Indices = indices;
         Normals = normals;
-        Uvs = uvs;
         TriangleMaterials = triangleMaterials;
-        Textures = textures;
     }
 
     /// <summary>The most triangles a mesh holds: the mesh pass writes a covered pixel's triangle as a float, which holds
@@ -121,12 +95,8 @@ public sealed record SdfMesh {
     public ReadOnlyMemory<Vector3> Positions { get; }
     /// <summary>Gets the triangle count.</summary>
     public int TriangleCount => (Indices.Length / 3);
-    /// <summary>Gets the surface textures the texture coordinates address, or <see langword="null"/>.</summary>
-    public SdfMeshTextures? Textures { get; }
     /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
     public ReadOnlyMemory<uint> TriangleMaterials { get; }
-    /// <summary>Gets one texture coordinate per vertex, or none.</summary>
-    public ReadOnlyMemory<Vector2> Uvs { get; }
 
     private static bool IsFinite(Vector3 value) => (
         float.IsFinite(f: value.X) &&
@@ -159,36 +129,12 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>
     public int? FrameSlot { get; init; }
-
-    /// <summary>Gets the draw's level of detail when it is one of a baked placement's two representations, the mesh or the
-    /// impostor (<see cref="SdfMeshLod"/>): a view records the draw of the pair its projected size selects. Null for a draw
-    /// every view records.</summary>
-    public SdfMeshLod? Lod { get; init; }
-    /// <summary>Gets the impostor a card draw shows: the draw's mesh is then the card (<see cref="SdfMeshCard.Mesh"/>),
-    /// which the mesh pass places in front of the impostor's sphere facing each view, and the views pass finds the surface
-    /// behind each of its pixels in the impostor's views. Null for a mesh draw.</summary>
-    public SdfMeshImpostor? Impostor { get; init; }
-}
-/// <summary>The mesh every impostor draw uses: a unit quad of two triangles, whose vertex positions are the card's corners
-/// as fractions of its half extent. The mesh pass reads only their signs, so one mesh serves every impostor.</summary>
-public static class SdfMeshCard {
-    /// <summary>Gets the card's mesh: corners <c>(-1, -1)</c>, <c>(1, -1)</c>, <c>(1, 1)</c> and <c>(-1, 1)</c> in the plane
-    /// of zero <c>z</c>, wound counter-clockwise.</summary>
-    public static SdfMesh Mesh { get; } = new(
-        indices: new uint[] { 0u, 1u, 2u, 0u, 2u, 3u },
-        positions: new Vector3[] {
-            new(x: -1f, y: -1f, z: 0f),
-            new(x: 1f, y: -1f, z: 0f),
-            new(x: 1f, y: 1f, z: 0f),
-            new(x: -1f, y: 1f, z: 0f),
-        }
-    );
 }
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
 /// backend reads the same word offsets: first one record a draw (<see cref="DrawWords"/> words), then each distinct
 /// <see cref="SdfMesh"/> once, however many draws share it, as its vertices (<see cref="VertexWords"/> words each:
-/// position, normal and texture coordinate), its triangle materials (one word each, for a mesh that has them) and its
+/// position and normal), its triangle materials (one word each, for a mesh that has them) and its
 /// indices (one word each). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
 /// materials, then all indices, in the order their first draw names them; a residency's tables place each mesh whole
 /// past a reserve of draw records, where it stays until the arena packs again (<see cref="SdfMeshRegionArena"/>). A record names
@@ -196,27 +142,21 @@ public static class SdfMeshCard {
 /// <para>
 /// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
 /// material, then its mesh: the word its first index sits at, its index count, the word its first vertex sits at, its
-/// attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>, <see cref="TexturesFlag"/>), and the word
-/// its first triangle material
+/// attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>), and the word its first triangle material
 /// sits at (words 16 to 21), then its normal matrix, the inverse transpose of the matrix's upper 3×3, row by row (words
 /// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
-/// (a singular matrix, which draws no area, writes its own upper 3×3 instead), then its impostor (words 31 to 40, zero
-/// for a draw without one, <see cref="ImpostorFlag"/> clear): the bounding sphere's object-space center (31 to 33) and
-/// radius (34), the views along each side of the view grid (35), the texels along each side of a view (36), and where
-/// the impostor's rectangle sits in the impostor atlases (37 to 40, the scale then the offset,
-/// <see cref="SdfMeshAtlas.Placement"/>). Its word offsets are counted from the
-/// region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the word at <c>indexWord + k</c>, and names the vertex whose eight words
-/// start at <c>vertexWord + (8 * index)</c>. A vertex without a normal or texture coordinate holds zeros there, and
-/// the flags say which a mesh has. A mesh whose textures the mesh atlases hold (<see cref="SdfMeshAtlas"/>) carries
-/// <see cref="TexturesFlag"/>, and its vertices' texture coordinates are written moved into the atlases, so a reader
-/// samples them as they stand. Word 41 is the dynamic-transform slot whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. The record is forty-two whole words, so it has no padding a structured-buffer reader
-/// could disagree on.
+/// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Word 31 is the dynamic-transform slot
+/// whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. Its word offsets are counted from
+/// the region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the
+/// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
+/// vertex without a normal holds zeros there, and the flags say which a mesh has. The record is thirty-two whole words,
+/// so it has no padding a structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
     /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh, its normal matrix and its
-    /// impostor.</summary>
-    public const int DrawWords = 42;
+    /// frame slot.</summary>
+    public const int DrawWords = 32;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -225,19 +165,14 @@ public static class SdfMeshRegion {
     public const int MaxDraws = (1 << SdfKernelInterfaces.MeshViewShift);
     /// <summary>The bytes of one index.</summary>
     public const int IndexBytes = sizeof(uint);
-    /// <summary>The words of one vertex: its position, its normal and its texture coordinate, as floats.</summary>
-    public const int VertexWords = 8;
+    /// <summary>The words of one vertex: its position and its normal, as floats.</summary>
+    public const int VertexWords = 6;
     /// <summary>The bytes of one vertex.</summary>
     public const int VertexBytes = (VertexWords * sizeof(float));
     /// <summary>The flag a record carries when its mesh has <see cref="SdfMesh.Normals"/>.</summary>
     public const uint NormalsFlag = 1u;
     /// <summary>The flag a record carries when its mesh has <see cref="SdfMesh.TriangleMaterials"/>.</summary>
     public const uint MaterialsFlag = 2u;
-    /// <summary>The flag a record carries when the mesh atlases hold its mesh's <see cref="SdfMesh.Textures"/>.</summary>
-    public const uint TexturesFlag = 4u;
-    /// <summary>The flag a record carries when it is an impostor card (<see cref="SdfMeshDraw.Impostor"/>) whose views the
-    /// impostor atlases hold.</summary>
-    public const uint ImpostorFlag = 8u;
 
     /// <summary>Counts the region a list of draws needs.</summary>
     /// <param name="draws">The draws.</param>
@@ -331,24 +266,17 @@ public static class SdfMeshRegion {
     /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
     /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them, and only
     /// those are written.</param>
-    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/> when it binds none: a mesh whose
-    /// textures they hold is written with <see cref="TexturesFlag"/> and its texture coordinates moved into them.</param>
-    /// <param name="impostors">The impostor atlases the frame binds, or <see langword="null"/> when it binds none: a card
-    /// draw whose impostor they hold is written with <see cref="ImpostorFlag"/> and its atlas rectangle.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null) {
+    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination) {
         RequireDestination(destination: destination, layout: layout);
         WriteDraws(
-            atlas: atlas,
             destination: destination,
             draws: draws,
-            impostors: impostors,
             meshes: meshes
         );
         WriteMeshes(
-            atlas: atlas,
             destination: destination,
             layout: layout,
             meshes: meshes
@@ -360,13 +288,11 @@ public static class SdfMeshRegion {
     /// <param name="draws">The draws.</param>
     /// <param name="meshes">The placements of every mesh the draws name.</param>
     /// <param name="destination">The draw records' words; at least <see cref="DrawWords"/> a draw.</param>
-    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>.</param>
-    /// <param name="impostors">The impostor atlases the frame binds, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the records.</exception>
     /// <exception cref="KeyNotFoundException">A draw names a mesh <paramref name="meshes"/> does not place.</exception>
-    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, Span<uint> destination, SdfMeshAtlas? atlas = null, SdfMeshAtlas? impostors = null) {
+    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, Span<uint> destination) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
         if (destination.Length < (draws.Count * DrawWords)) {
@@ -375,9 +301,6 @@ public static class SdfMeshRegion {
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var (mesh, matrix, material, _) = draws[draw];
-            var impostor = (((draws[draw].Impostor is { } shown) && (impostors?.Holds(textures: shown) ?? false))
-                ? shown
-                : null);
             var placement = meshes[mesh];
             var record = destination.Slice(
                 length: DrawWords,
@@ -404,18 +327,13 @@ public static class SdfMeshRegion {
             record[17] = ((uint)placement.IndexWord);
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)placement.VertexWord);
-            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u) | ((impostor is null) ? 0u : ImpostorFlag);
+            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag));
             record[21] = ((uint)placement.MaterialWord);
             WriteNormalMatrix(
                 matrix: matrix,
                 record: record[22..]
             );
-            WriteImpostor(
-                atlas: impostors,
-                impostor: impostor,
-                record: record[31..]
-            );
-            record[41] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
+            record[31] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
         }
     }
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
@@ -423,17 +341,14 @@ public static class SdfMeshRegion {
     /// <param name="meshes">The placements <see cref="Plan"/> wrote.</param>
     /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
     /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them.</param>
-    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>: a mesh whose textures they hold
-    /// has its texture coordinates moved into them.</param>
     /// <exception cref="ArgumentNullException"><paramref name="meshes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void WriteMeshes(Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination, SdfMeshAtlas? atlas = null) {
+    public static void WriteMeshes(Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination) {
         ArgumentNullException.ThrowIfNull(meshes);
         RequireDestination(destination: destination, layout: layout);
 
         foreach (var (mesh, placement) in meshes) {
             WriteMesh(
-                atlas: atlas,
                 destination: destination,
                 mesh: mesh,
                 placement: placement
@@ -445,21 +360,13 @@ public static class SdfMeshRegion {
     /// <param name="placement">Where the mesh's sections lie, in words from the start of
     /// <paramref name="destination"/>.</param>
     /// <param name="destination">The words the placement counts from.</param>
-    /// <param name="atlas">The mesh atlases the frame binds, or <see langword="null"/>: a mesh whose textures they hold
-    /// has its texture coordinates moved into them.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static void WriteMesh(SdfMesh mesh, SdfMeshRegionMesh placement, Span<uint> destination, SdfMeshAtlas? atlas = null) {
+    public static void WriteMesh(SdfMesh mesh, SdfMeshRegionMesh placement, Span<uint> destination) {
         ArgumentNullException.ThrowIfNull(mesh);
 
         var positions = mesh.Positions.Span;
         var normals = mesh.Normals.Span;
-        var uvs = mesh.Uvs.Span;
         var vertexWords = destination[placement.VertexWord..];
-        var atlasPlacement = (Textured(atlas: atlas, mesh: mesh)
-            ? atlas!.Placement(textures: mesh.Textures!)
-            : new Vector4(w: 0f, x: 1f, y: 1f, z: 0f));
-        var uvScale = new Vector2(x: atlasPlacement.X, y: atlasPlacement.Y);
-        var uvOffset = new Vector2(x: atlasPlacement.Z, y: atlasPlacement.W);
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             var words = vertexWords.Slice(
@@ -467,7 +374,6 @@ public static class SdfMeshRegion {
                 start: (vertex * VertexWords)
             );
             var normal = (normals.IsEmpty ? Vector3.Zero : normals[vertex]);
-            var uv = (uvs.IsEmpty ? Vector2.Zero : ((uvs[vertex] * uvScale) + uvOffset));
 
             words[0] = BitConverter.SingleToUInt32Bits(value: positions[vertex].X);
             words[1] = BitConverter.SingleToUInt32Bits(value: positions[vertex].Y);
@@ -475,8 +381,6 @@ public static class SdfMeshRegion {
             words[3] = BitConverter.SingleToUInt32Bits(value: normal.X);
             words[4] = BitConverter.SingleToUInt32Bits(value: normal.Y);
             words[5] = BitConverter.SingleToUInt32Bits(value: normal.Z);
-            words[6] = BitConverter.SingleToUInt32Bits(value: uv.X);
-            words[7] = BitConverter.SingleToUInt32Bits(value: uv.Y);
         }
 
         mesh.TriangleMaterials.Span.CopyTo(destination: destination[placement.MaterialWord..]);
@@ -491,30 +395,7 @@ public static class SdfMeshRegion {
             );
         }
     }
-    // A draw's impostor words: the sphere, the view grid and the atlas rectangle, or zeros.
-    private static void WriteImpostor(SdfMeshImpostor? impostor, SdfMeshAtlas? atlas, Span<uint> record) {
-        record[..10].Clear();
 
-        if ((impostor is null) || (atlas is null)) {
-            return;
-        }
-
-        var placement = atlas.Placement(textures: impostor);
-
-        record[0] = BitConverter.SingleToUInt32Bits(value: impostor.Center.X);
-        record[1] = BitConverter.SingleToUInt32Bits(value: impostor.Center.Y);
-        record[2] = BitConverter.SingleToUInt32Bits(value: impostor.Center.Z);
-        record[3] = BitConverter.SingleToUInt32Bits(value: impostor.Radius);
-        record[4] = ((uint)impostor.Views);
-        record[5] = ((uint)impostor.ViewTexels);
-        record[6] = BitConverter.SingleToUInt32Bits(value: placement.X);
-        record[7] = BitConverter.SingleToUInt32Bits(value: placement.Y);
-        record[8] = BitConverter.SingleToUInt32Bits(value: placement.Z);
-        record[9] = BitConverter.SingleToUInt32Bits(value: placement.W);
-    }
-    // Whether a mesh's textures are in the atlases a frame binds.
-    private static bool Textured(SdfMesh mesh, SdfMeshAtlas? atlas) =>
-        ((mesh.Textures is not null) && (atlas is not null) && atlas.Holds(textures: mesh.Textures));
     // A draw's normal matrix: the inverse transpose of its matrix's upper 3×3, row by row, in the row-vector convention
     // (n_world = n.x row0 + n.y row1 + n.z row2). A singular matrix writes its own upper 3×3.
     private static void WriteNormalMatrix(Matrix4x4 matrix, Span<uint> record) {

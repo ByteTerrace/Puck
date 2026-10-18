@@ -5,9 +5,9 @@ using Puck.World.Server;
 namespace Puck.Cli.Determinism;
 
 /// <summary>One document-level hash of a scenario: the world's fingerprint, its compiled-world key, one asset's
-/// canonical hash, or one creation's bake key.</summary>
+/// canonical hash.</summary>
 /// <param name="Name">The hash's name, unique in its scenario: <c>fingerprint</c>, <c>definition</c>,
-/// <c>catalog</c>, <c>&lt;family&gt;:&lt;row&gt;</c> or <c>bake:&lt;prototype&gt;</c>.</param>
+/// <c>catalog</c> or <c>&lt;family&gt;:&lt;row&gt;</c>.</param>
 /// <param name="Value">The hash's text.</param>
 public sealed record DeterminismDocumentHash(string Name, string Value);
 /// <summary>One recorded scenario: its document-level hashes, then one hash vector per simulation tick, in
@@ -70,9 +70,8 @@ public sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Determi
     /// compiled world's definition hash and catalog fingerprint.</summary>
     public static IReadOnlyList<string> RequiredDocuments { get; } = ["fingerprint", "definition", "catalog"];
     /// <summary>Gets the families of the document hashes that may follow the required ones, each named
-    /// <c>&lt;family&gt;:&lt;row&gt;</c>: an asset row's canonical hash, a creation's canonical hash, or its bake
-    /// key.</summary>
-    public static IReadOnlyList<string> DocumentFamilies { get; } = ["patch", "tune", "music", "table", "creation", "bake"];
+    /// <c>&lt;family&gt;:&lt;row&gt;</c>: an asset row's canonical hash or a creation's canonical hash.</summary>
+    public static IReadOnlyList<string> DocumentFamilies { get; } = ["patch", "tune", "music", "table", "creation"];
 
     // Why a scenario's document hashes are not this version's attestation, or null: the required three first and in
     // order, then only the known families, each naming a row.

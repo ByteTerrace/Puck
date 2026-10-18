@@ -109,7 +109,7 @@ public sealed class CreationDomainParentLawTests {
             slotBase: 0
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     // The follow law's rig: DefaultRig plus the unparented control shape, and a part on the fold and the torso so
     // the part-pose readers can be asked about each.

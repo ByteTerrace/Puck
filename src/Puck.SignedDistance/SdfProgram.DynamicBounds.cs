@@ -31,7 +31,7 @@ public sealed partial class SdfProgram {
 
             // An unskippable chain may still have its enclosing instance's certified cull bound. Read its actual
             // transform dependencies; an unrelated static plane must not make every dynamic slot unbounded.
-            var radius = ((owner >= 0) ? m_instanceBinning[owner].Radius : float.PositiveInfinity);
+            var radius = ((owner >= 0) ? m_instanceRadii[owner] : float.PositiveInfinity);
             var finiteOwner = ((owner >= 0) && m_instances[owner].IsDynamic && (radius >= 0f) && (radius < UnmaskableBoundRadius));
 
             for (var instruction = first; (instruction < end); instruction++) {

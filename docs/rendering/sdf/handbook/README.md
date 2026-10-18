@@ -17,7 +17,7 @@ course, but each chapter can also be revisited on its own.
 | [Motion and views](motion-and-views.md) | Presentation anchors, camera rigs, views as render-graph instances, transitions, and screen views. |
 | [Queries and determinism](queries-and-determinism.md) | `IWorldQuery`, exact fixed-point evaluation, probes, raycasts, and derived gravity. |
 | [SDF performance](performance.md) | Live cost measurement, occupancy, culling, and render-scale choices. |
-| [Bricks and baking](bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle; prototype meshes, textures, and impostors baked from the field. |
+| [Bricks and baking](bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle; the frame's mesh bake beside them. |
 
 If you're focused on rendering, read [SDF frame rendering](frame-rendering.md),
 then [Lighting and shading](lighting-and-shading.md), then

@@ -250,11 +250,6 @@ which only skip their SECOND copy), while the baked frame samples it like any ot
 seam) or a small union carrying its own material (a rivet) bakes into the view's mesh and paints its footprint through
 the bake's point-sampled materials. Refused by name alongside `panel` or
 `trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
-`secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
-ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`, gated on
-`sdfSecondaryMarchActive`) — it still marches for the camera, still carves the silhouette, and
-`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` still hold it as ordinary contact geometry. No Panel/
-Trims restriction, since it packs its own bit on the SAME instruction rather than composing a second shape. A shape's
 `curve` (`ShapeCurveDocument`) is a quadratic Bezier — control points `a`/`b`/`c` (each `state.<row>[.<key>]`-bindable),
 a radius tapering linearly between `radiusStart`/`radiusEnd` plus a mid-span `bulge`, optionally 1-4 `strands` orbiting
 the curve at `strandOffset` with rate `twist` — admitted ONLY on, and required on, `type: sweep` (refused elsewhere,

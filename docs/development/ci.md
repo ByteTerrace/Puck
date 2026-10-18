@@ -13,10 +13,9 @@ the pins; a version tag by itself prevents the workflow from starting.
 The composite actions under `.github/actions/` are the only steps that run before
 a CLI exists: `setup-dotnet` installs the SDK, `setup-dxc` and `setup-quic` the
 pinned native dependencies, `setup-puck` the run's candidate CLI,
-`shader-cache` restores, looks up and saves the shader compiler cache,
-`bake-cache` restores and saves the creation bake cache, and
+`shader-cache` restores, looks up and saves the shader compiler cache, and
 `azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, the
-shader and bake cache keys and the OIDC federation therefore each live in one place. Mapping keys in
+shader cache keys and the OIDC federation therefore each live in one place. Mapping keys in
 workflow and action files are alphabetized, as in the bicep, and steps carry no
 blank lines between them. Release logic runs as `puck` verbs; a workflow step
 holds a shell script only to glue a container or a step summary.
@@ -164,20 +163,6 @@ that holds every output prints `0 compiled` on each project's shader build line.
 The formatting job restores the same cache and saves nothing. Both jobs' timeouts
 cover a cold run, which every output's key change forces (a DXC or compiler
 change): a run that timed out before saving would leave every later run cold.
-
-The creation bake cache, which `Puck.World`'s world compile reads and fills
-([`WorldAssets.targets`](../../build/WorldAssets.targets)), is restored and saved
-the same way by the `bake-cache` composite action. A bake's own key carries the
-fingerprint of the compiled bake code (`CreationBakeDerivation.Fingerprint`,
-computed by the running build from `Puck.World.Authoring` and the Puck
-assemblies it references), so the action's key leads with a hash of those
-projects' sources and restores only caches of the same sources, then a hash of the
-world sources under `src/Puck.World/Assets/worlds`, which decides when a run
-saves a new cache. A restored cache makes the world compile read every unchanged
-creation's bake rather than bake it; baking every creation measured four to six
-minutes of the hosted runner's solution build, one process on the build's
-critical path. The build prints `baked 0 creations` when every bake was a hit. The
-producer saves on a miss of its exact key; the formatting job only restores.
 
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries

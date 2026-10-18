@@ -108,28 +108,20 @@ public static class WorldSourceLoader {
     }
     /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryReadAuthored"/>) and derives its
     /// compiled world fresh for the boot instance (<see cref="CompiledWorld.TryCompile"/>): the file <c>puck compile</c>
-    /// and the build write beside a document. It carries the standard chunks and the <c>BAKE</c> chunk
-    /// (<see cref="WorldBakeChunk"/>), whose outcomes the derivation leaves in <paramref name="bakes"/> for the caller's
-    /// bake pack.</summary>
+    /// and the build write beside a document, carrying the standard chunks.</summary>
     /// <param name="path">The full path the document is read as; its basis and imports resolve beside it.</param>
     /// <param name="document">The document, UTF-8.</param>
-    /// <param name="bakes">The bake cache the derivation reads each outcome from and bakes a missing one into
-    /// (<see cref="WorldBakeStore.GetOrBake"/>).</param>
     /// <param name="compiledWorld">The compiled world, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">Why the document has no compiled world, or empty on success.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog, or <see langword="null"/> to defer provider checks.</param>
-    /// <param name="bakePack">Where the bake pack lies relative to the directory the compiled world ships in
-    /// (<see cref="WorldBakePack.Reference"/>), or <see langword="null"/> for <see cref="WorldBakePack.FileName"/>
-    /// beside it.</param>
     /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns><see langword="true"/> when the document composed, parsed, drew, and every chunk derived.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="bakes"/> is
-    /// <see langword="null"/>.</exception>
-    public static bool TryCompileWorld(string path, byte[] document, WorldBakeStore bakes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? bakePack = null, WorldCompiledSource? sourceCompilation = null) {
-        ArgumentNullException.ThrowIfNull(argument: bakes);
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static bool TryCompileWorld(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? compiledWorld, out string reason,
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldCompiledSource? sourceCompilation = null) {
+        ArgumentNullException.ThrowIfNull(argument: document);
 
         compiledWorld = null;
 
@@ -145,11 +137,7 @@ public static class WorldSourceLoader {
             authored: authored,
             bytes: out compiledWorld,
             catalogFingerprint: catalogFingerprint,
-            chunks: WorldBakeChunk.Register(
-                chunks: CompiledWorldChunks.Standard,
-                packReference: bakePack,
-                store: bakes
-            ),
+            chunks: CompiledWorldChunks.Standard,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             reason: out reason,
             sourceName: path

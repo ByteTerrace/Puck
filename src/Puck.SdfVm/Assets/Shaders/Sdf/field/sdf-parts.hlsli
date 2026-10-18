@@ -40,7 +40,7 @@ float sdfInstanceGap(uint instanceOffset, uint instance, float3 worldPosition) {
 // segment walk's skip sphere. Outside the bound the instance's field is at least the gap times its distance gain
 // (sdfPartDistanceGain: its scopes' rescales, its gauges' and non-uniform scales' slower growth, its smooth unions' sag
 // absorbed by the packed radius), so a scaled gap at least the incumbent loses a hard union's strict test exactly and skipping the instance changes no
-// distance, material or seam. A zero gain (an approximate primitive, a warp, an optional clipper) is never rejected.
+// distance or material. A zero gain (an approximate primitive, a warp, an optional clipper) is never rejected.
 // It asks only where the instance joins as a hard union: a compiled part always does, and a generic instance does
 // under the root-union certificate (sdfCanTracePartsIndependently). Inside the bound nothing is skipped.
 bool sdfInstanceCannotWin(float gap, float gain, float incumbent) {
@@ -57,13 +57,6 @@ bool sdfInstanceCannotWin(float gap, float gain, float incumbent) {
 // (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
 void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
-    float parentWeight = sdfMaterialBlendWeight;
-    int parentOther = sdfMaterialBlendOther;
-    if (trackMaterial) {
-        sdfMaterialBlendWeight = 0.0;
-        sdfMaterialBlendOther = 0;
-    }
-
     SdfHit child;
     child.distance = SDF_FAR_DISTANCE;
     child.material = 0;
@@ -131,26 +124,14 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
 
         float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x));
         float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u));
-        float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
+        float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape), localPosition, shapeData0, shapeData1) * distanceScale;
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
     }
 
-    // Same hard-union PopField semantics as the generic scalar walk. Losing scopes retain the parent's seam;
-    // a winning scope carries its internal material seam through its baked candidate scale.
+    // Same hard-union PopField semantics as the generic scalar walk, through its baked candidate scale.
     float candidate = child.distance * asfloat(part.w);
-    bool wins = candidate < parent.distance;
-    float childWeight = sdfMaterialBlendWeight;
-    int childOther = sdfMaterialBlendOther;
-    if (trackMaterial) {
-        sdfMaterialBlendWeight = parentWeight;
-        sdfMaterialBlendOther = parentOther;
-    }
     sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.lanes, child.instanceIndex, child.frameSlot, 0.0, trackMaterial);
-    if (trackMaterial && wins) {
-        sdfMaterialBlendWeight = childWeight;
-        sdfMaterialBlendOther = childOther;
-    }
 }
 
 #endif

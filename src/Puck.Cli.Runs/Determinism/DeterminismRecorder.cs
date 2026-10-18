@@ -108,14 +108,6 @@ public static class DeterminismRecorder {
         foreach (var prototype in definition.Creations) {
             hashes.Add(item: new DeterminismDocumentHash(Name: $"creation:{prototype.Id}", Value: CreationCanonicalizer.Canonicalize(document: prototype.Document, source: prototype.Id).Hash));
         }
-        foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: WorldBakeChunk.Quality)) {
-            var name = $"bake:{request.PrototypeId}";
-
-            if (!hashes.Any(predicate: hash => (hash.Name == name))) {
-                hashes.Add(item: new DeterminismDocumentHash(Name: name, Value: request.Key.Pin.Hex));
-            }
-        }
-
         if (hashes.FirstOrDefault(predicate: static hash => (!IsToken(text: hash.Name) || !IsToken(text: hash.Value))) is { } unspellable) {
             error = $"document hash '{unspellable.Name}' cannot be written as one token; rename the row";
 

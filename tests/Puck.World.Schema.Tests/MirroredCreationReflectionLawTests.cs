@@ -88,7 +88,7 @@ public sealed class MirroredCreationReflectionLawTests {
             materialFor: _ => material
         );
 
-        return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        return new SdfFieldEvaluator(program: builder.Build());
     }
     private static FixedVector3 Reflect(FixedVector3 point, FixedVector3 normal) {
         var projection = FixedVector3.Dot(

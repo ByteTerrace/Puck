@@ -53,8 +53,8 @@ public sealed partial class SdfWorldTables {
             set: set
         );
 
-    // Writes a ring slot's World set: each table's buffer in the slot, the brick pool, the samplers, the glyph atlas and
-    // the mesh and impostor atlases, with the sampled filler at an image not set.
+    // Writes a ring slot's World set: each table's buffer in the slot, the brick pool, the samplers and the glyph atlas,
+    // with the sampled filler at an image not set.
     private void WriteWorldSet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: set);
         WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
@@ -90,47 +90,11 @@ public sealed partial class SdfWorldTables {
                 ? m_glyphAtlasView
                 : m_sampledFiller.ImageViewHandle)
         );
-
-        for (var usage = 0; (usage < SdfWorldPackage.MeshAtlases.Count); usage++) {
-            m_bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: WorldBinding(member: SdfWorldPackage.MeshAtlases[usage]),
-                descriptorSetHandle: set,
-                imageViewHandle: ((MeshAtlasView(usage: usage) != 0)
-                    ? MeshAtlasView(usage: usage)
-                    : m_sampledFiller.ImageViewHandle)
-            );
-        }
-
-        for (var usage = 0; (usage < SdfWorldPackage.ImpostorAtlases.Count); usage++) {
-            m_bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: WorldBinding(member: SdfWorldPackage.ImpostorAtlases[usage]),
-                descriptorSetHandle: set,
-                imageViewHandle: ((ImpostorAtlasView(usage: usage) != 0)
-                    ? ImpostorAtlasView(usage: usage)
-                    : m_sampledFiller.ImageViewHandle)
-            );
-        }
     }
 
     // Writes a ring slot's mesh region into a mesh pass set of the mesh interface.
     internal void WriteMeshTables(nint set, int slot) =>
         WriteInterfaceBuffer(buffer: m_meshRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: set);
-    // Writes the impostor depth atlas a mesh pass's card fragments search into a mesh pass set, with the sampled filler
-    // while the frame draws no impostor.
-    internal void WriteMeshImpostorDepth(nint set) {
-        var view = ImpostorAtlasView(usage: ImpostorDepthUsage);
-
-        m_bindings.WriteSampledImage(
-            arrayElement: 0,
-            binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.ImpostorDepth),
-            descriptorSetHandle: set,
-            imageViewHandle: ((view != 0)
-                ? view
-                : m_sampledFiller.ImageViewHandle)
-        );
-    }
     // Writes the work counters a mesh pass's fragments count into, at the mesh interface's binding.
     internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters) =>
         WriteInterfaceBuffer(buffer: counters, layout: SdfWorldInterfaces.MeshLayout, member: ShaderWorkCounters.Buffer, set: set);

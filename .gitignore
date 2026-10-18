@@ -98,7 +98,6 @@ docs/.obsidian
 *.dxil.*.tmp
 *.hash.*.tmp
 *.dxbc
-# Compiled worlds and bake packs are derived products; the build and the runtime write them.
+# Compiled worlds are derived products; the build and the runtime write them.
 *.puckb
-*.puckbake
 scratch

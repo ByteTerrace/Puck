@@ -128,13 +128,6 @@ band. Renormalizing a unit value in float would move its last bits, so the
 band is what makes the form a fixed point. `CreationCanonicalFormLawTests`
 holds every prototype a shipped world boots to both laws.
 
-The pin also keys a creation's bakes: `CreationBakeKey` pairs it with the
-bake code fingerprint (`CreationBakeDerivation`, computed from the compiled
-baker) and a quality tier, `CreationBaker` bakes the creation through
-the contact emission (`CreationStampEmitter.EmitFixed`), and `CreationBakeCodec`
-encodes the outcome, a bake or the creation's refusal
-([prototype bakes](../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
-
 ## Animation: drivers, waveforms, joints
 
 A creation animates itself from three composable parts, none of which names a

@@ -22,12 +22,11 @@ public sealed class SdfMeshLawTests {
             indices: Indices,
             normals: new Vector3[] { Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ },
             positions: Positions,
-            triangleMaterials: new uint[] { 1 },
-            uvs: new Vector2[] { Vector2.Zero, Vector2.UnitX, Vector2.UnitY }
+            triangleMaterials: new uint[] { 1 }
         );
 
-        Assert.True(condition: (plain.Normals.IsEmpty && plain.Uvs.IsEmpty && plain.TriangleMaterials.IsEmpty));
-        Assert.Equal(expected: (3, 3, 1), actual: (full.Normals.Length, full.Uvs.Length, full.TriangleMaterials.Length));
+        Assert.True(condition: (plain.Normals.IsEmpty && plain.TriangleMaterials.IsEmpty));
+        Assert.Equal(expected: (3, 1), actual: (full.Normals.Length, full.TriangleMaterials.Length));
     }
     /// <summary>The mesh target writes a covered pixel's triangle and its draw plus one as floats, exact up to 2^24: the
     /// last triangle and the last draw plus one both round-trip, a mesh one triangle past <see cref="SdfMesh.MaxTriangles"/>
@@ -54,10 +53,8 @@ public sealed class SdfMeshLawTests {
     [Fact]
     public void AnAttributeOfTheWrongLengthOrANonFiniteOneIsRefusedByName() {
         Assert.Equal(expected: "normals", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, normals: new Vector3[] { Vector3.UnitZ }, positions: Positions)).ParamName);
-        Assert.Equal(expected: "uvs", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, positions: Positions, uvs: new Vector2[] { Vector2.Zero, Vector2.Zero })).ParamName);
         Assert.Equal(expected: "triangleMaterials", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, positions: Positions, triangleMaterials: new uint[] { 0, 1 })).ParamName);
         Assert.Equal(expected: "normals", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, normals: new Vector3[] { Vector3.UnitZ, new(x: float.NaN, y: 0f, z: 1f), Vector3.UnitZ }, positions: Positions)).ParamName);
-        Assert.Equal(expected: "uvs", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, positions: Positions, uvs: new Vector2[] { Vector2.Zero, new(x: float.PositiveInfinity, y: 0f), Vector2.Zero })).ParamName);
     }
 
     // A draw list that only counts: the region refuses it on its count before reading any draw.

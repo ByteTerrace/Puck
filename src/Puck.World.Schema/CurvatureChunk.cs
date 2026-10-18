@@ -15,8 +15,6 @@ public sealed class CurvatureChunk : ICompiledWorldChunk {
     /// <inheritdoc />
     public IReadOnlyList<ChunkCode> DependsOn => [DefinitionChunk.Instance.Code];
     /// <inheritdoc />
-    public bool DerivesOnBoot => true;
-    /// <inheritdoc />
     public uint Version => 1;
 
     /// <inheritdoc />

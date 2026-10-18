@@ -165,7 +165,6 @@ public sealed partial class SdfProgramBuilder {
     // both sides (SDF_OP_RESET_POINT zeroes parityMaterialDelta).
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
-    private bool m_openInstanceCameraHidden;
     private bool m_openInstanceBakesWithPrevious;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
@@ -260,7 +259,7 @@ public sealed partial class SdfProgramBuilder {
         // segment) re-checks against this smaller value, so repeated shapes never re-widen a clamp a scope required.
         m_positionalFold = (fold.InstructionIndex, fold.ReachPerUnit, clampedRaw);
     }
-    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true, bool cameraHidden = false) {
+    private void BeginInstanceCore(bool isDynamic, Vector3 center, float radius, int slot, bool active = true) {
         if (
             isDynamic &&
             ((slot < 0) || (slot > SdfProgram.MaxDynamicTransformSlot))
@@ -282,7 +281,6 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceFirst = m_instructions.Count;
         m_openInstanceIsDynamic = isDynamic;
         m_openInstanceActive = active;
-        m_openInstanceCameraHidden = cameraHidden;
         m_openInstanceBakesWithPrevious = false;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
@@ -1087,28 +1085,6 @@ public sealed partial class SdfProgramBuilder {
         return this;
     }
 
-    /// <summary>Marks the most recently emitted <see cref="SdfOp.ShapeBlend"/> instruction's
-    /// <see cref="SdfInstruction.Secondary"/> — false excludes it from a soft-shadow/AO march while it still marches
-    /// for the camera and every other consumer (see <see cref="SdfInstruction"/>'s remarks). Must chain directly onto
-    /// the shape method that emitted it, before any field op (<see cref="Dilate"/>/<see cref="Onion"/>) that would
-    /// append a later instruction and move "most recent" past it.</summary>
-    /// <exception cref="InvalidOperationException">The most recently emitted instruction is not a
-    /// <see cref="SdfOp.ShapeBlend"/>.</exception>
-    public SdfProgramBuilder MarkSecondary(bool secondary) {
-        var index = (m_instructions.Count - 1);
-
-        if (
-            (index < 0) ||
-            (m_instructions[index].Op != SdfOp.ShapeBlend)
-        ) {
-            throw new InvalidOperationException(message: "MarkSecondary must chain directly onto the shape method that emitted the most recent SdfOp.ShapeBlend instruction.");
-        }
-
-        m_instructions[index] = (m_instructions[index] with { Secondary = secondary });
-
-        return this;
-    }
-
     private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u, uint blend = 0u) {
         m_instructions.Add(item: new SdfInstruction(
             Blend: blend,
@@ -1123,12 +1099,7 @@ public sealed partial class SdfProgramBuilder {
     }
 
     /// <summary>Compiles the authored instructions/instances/materials/screens into a packed <see cref="SdfProgram"/>.</summary>
-    /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (default
-    /// <see langword="true"/>). Pass <see langword="false"/> to force the beam's flat per-instance fallback over the same
-    /// instances — the reference the grid-cull gate compares against; see <see cref="SdfProgram"/>.</param>
-    /// <param name="gridWorkspace">Forwarded to <see cref="SdfProgram"/>'s constructor — see its
-    /// <c>gridWorkspace</c> parameter. <see langword="null"/> (the default) keeps the allocating grid-build path.</param>
-    public SdfProgram Build(bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null) {
+    public SdfProgram Build() {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -1240,9 +1211,7 @@ public sealed partial class SdfProgramBuilder {
         }
 
         return new SdfProgram(
-            buildInstanceGrid: buildInstanceGrid,
             convexPolygonProfiles: m_convexPolygonProfiles,
-            gridWorkspace: gridWorkspace,
             instances: m_instances,
             instructions: m_instructions,
             materials: m_materials,

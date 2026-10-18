@@ -142,7 +142,7 @@ public sealed class SdfWorldResidencyReportLawTests {
 
         Assert.Equal(expected: 0, actual: residency.LiveProgramWords);
         Assert.Empty(collection: residency.LiveProgramFieldScopeClamps);
-        Assert.Null(@object: residency.LiveProgramSpecialization);
+        Assert.Equal(expected: 0, actual: residency.LiveProgramSegments);
 
         residency.ProduceFirstFrame(context: Context());
 
@@ -155,8 +155,8 @@ public sealed class SdfWorldResidencyReportLawTests {
             expected: program.FieldScopeClamps
         );
         Assert.Equal(
-            actual: (residency.LiveProgramSegments, residency.LiveProgramRigidSegments, residency.LiveProgramChains, residency.LiveProgramSpecialization),
-            expected: (program.SkipSegmentCount, program.RigidSegmentCount, program.ChainCount, program.Specialization)
+            actual: (residency.LiveProgramSegments, residency.LiveProgramRigidSegments),
+            expected: (program.SkipSegmentCount, program.RigidSegmentCount)
         );
     }
     [Fact]

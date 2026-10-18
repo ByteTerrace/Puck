@@ -8,13 +8,13 @@ using Puck.World.Client;
 namespace Puck.Cli.Creation;
 
 public static partial class CreationCommand {
-    private static void ReportStepClamps(WorldDefinition definition, WorldPrototype prototype, SpecializationUnion union) {
+    private static void ReportStepClamps(WorldDefinition definition, WorldPrototype prototype) {
         if (prototype.Document.TextRuns is { Count: > 0 }) {
             Console.Out.WriteLine(value: "  step clamps unavailable: text runs require the render host's resolved font atlas; inspect world.budget.");
             return;
         }
 
-        Console.Out.WriteLine(value: "  step clamps and chains: unit-scale rest geometry; field bounds, not measured march/GPU cost");
+        Console.Out.WriteLine(value: "  step clamps and segments: unit-scale rest geometry; field bounds, not measured march/GPU cost");
         if (!WorldPlacementStamper.IsAnimated(creation: prototype)) {
             var builder = new SdfProgramBuilder();
 
@@ -32,8 +32,7 @@ public static partial class CreationCommand {
             );
             ReportProgram(
                 path: "static",
-                program: builder.Build(buildInstanceGrid: false),
-                union: union
+                program: builder.Build()
             );
         }
 
@@ -61,20 +60,18 @@ public static partial class CreationCommand {
         );
         ReportProgram(
             path: "pooled",
-            program: pooled.Build(buildInstanceGrid: false),
-            union: union
+            program: pooled.Build()
         );
     }
-    private static void ReportProgram(string path, SdfProgram program, SpecializationUnion union) {
+    private static void ReportProgram(string path, SdfProgram program) {
         Console.Out.WriteLine(value: string.Create(
             CultureInfo.InvariantCulture,
             $"    {path}: globalStepScale {program.StepScale:G6}, scoped clamps {program.FieldScopeClamps.Count} ({program.FieldScopeClamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)"
         ));
         Console.Out.WriteLine(value: string.Create(
             CultureInfo.InvariantCulture,
-            $"      segments {program.SkipSegmentCount} ({program.RigidSegmentCount} rigid) running {program.ChainCount} chain(s); specialization {program.Specialization.Describe()}"
+            $"      segments {program.SkipSegmentCount} ({program.RigidSegmentCount} rigid)"
         ));
-        union.Add(set: program.Specialization);
         foreach (var clamp in program.FieldScopeClamps.OrderBy(keySelector: static clamp => clamp.StepScale)) {
             Console.Out.WriteLine(value: string.Create(
                 CultureInfo.InvariantCulture,
@@ -83,26 +80,5 @@ public static partial class CreationCommand {
                 : string.Empty)}"
             ));
         }
-    }
-
-    // The union of every reported program's specialization set: the chains and vocabulary one set covering them all
-    // would hold.
-    private sealed class SpecializationUnion {
-        private readonly SortedSet<SdfBlendOp> m_blends = [];
-        private readonly HashSet<SdfChain> m_chains = [];
-        private readonly SortedSet<SdfBlendOp> m_composes = [];
-        private readonly SortedSet<SdfShapeType> m_shapes = [];
-
-        public void Add(SdfSpecializationSet set) {
-            m_chains.UnionWith(other: set.Chains);
-            m_shapes.UnionWith(other: set.Shapes);
-            m_blends.UnionWith(other: set.Blends);
-            m_composes.UnionWith(other: set.Composes);
-        }
-        public string Describe() =>
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"{m_chains.Count} distinct chain(s), shapes {m_shapes.Count} ({string.Join(separator: ' ', values: m_shapes)}), blends {m_blends.Count} ({string.Join(separator: ' ', values: m_blends)}), composes {m_composes.Count} ({string.Join(separator: ' ', values: m_composes)})"
-            );
     }
 }
