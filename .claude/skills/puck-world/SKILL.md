@@ -159,8 +159,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - **The drain barrier.** A following immediate verb waits for pending
   simulation traffic, so write-then-read pairs need no polling.
   `world.wait <ticks>` holds the issuing session; a windowed script that reads
-  rendered work waits on `world.wait ready <seconds>`, and one that reads a
-  capture on `world.wait captures <seconds>`. Each form needs its seconds deadline: a
+  rendered work waits on `world.wait ready <seconds>`, one that reads the baked
+  frame (every residency's mesh-path bake done) on `world.wait bakes <seconds>`,
+  and one that reads a capture on `world.wait captures <seconds>`. Each form needs its seconds deadline: a
   bare `world.wait ready` is refused as not a tick count, and the script then
   runs on without waiting. End a script with `quit`. Blank lines and `#`
   comments are skipped.

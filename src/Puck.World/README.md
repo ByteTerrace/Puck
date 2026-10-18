@@ -899,7 +899,11 @@ Facts a script needs:
   frames (offscreen, every tick is a frame of its own), or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
-  cache can hold the first frame back for many ticks. `world.wait captures
+  cache can hold the first frame back for many ticks. `world.wait bakes
+  <seconds>` holds until every residency the presentation renders (the world's
+  own, each session view's, routed scene's and infinity layer's) has baked every
+  group of the program it last drew, and reports `[bakes: settled at tick T]`,
+  or on the deadline the residencies still baking. `world.wait captures
   <seconds>` holds until every capture `world.screenshot` armed on the render
   graph's root has written its file or been refused, and reports
   `[captures: settled at tick T]` on standard error. A script that takes one

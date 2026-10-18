@@ -6,9 +6,10 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <c>world.wait ready &lt;seconds&gt;</c> holds only its issuing session until the engine
 /// readiness it was composed with reads ready, whatever the tick, and a host that composes no renderer refuses it by
-/// name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed capture has landed, and a host
-/// that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the
-/// deadline path is left to the canaries that run a real engine.
+/// name; <c>world.wait bakes &lt;seconds&gt;</c> holds the same way until the mesh-bake readiness reads settled, and a host
+/// that composes no renderer refuses it by name; <c>world.wait captures &lt;seconds&gt;</c> holds the same way until every armed
+/// capture has landed, and a host that composes no renderer refuses it by name. The readiness here is a flag the law sets, so nothing is timed; the deadline path is left to the canaries that
+/// run a real engine.
 /// </summary>
 public sealed partial class WorldWaitReadyLawTests {
     // Resolves every invocation to the fixture's one row, as the desktop's boot console authority does.
@@ -31,6 +32,10 @@ public sealed partial class WorldWaitReadyLawTests {
             : "the engine's pipeline set is building (0 of 12 pipelines created)"
         );
     }
+    private sealed class FlagBakes : IWorldBakeReadiness {
+        public bool IsSettled { get; set; }
+        public string? PendingReason => (IsSettled ? null : "still baking: world");
+    }
     // Answers at once, so its answer shows whether the session behind a wait was drained.
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
@@ -43,13 +48,14 @@ public sealed partial class WorldWaitReadyLawTests {
         }
     }
 
-    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness) {
+    private static (TextCommandSource Source, TextCommandSession Session, List<(string Line, CommandResult Result)> Answered) Console(HostRow row, IWorldEngineReadiness? readiness, IWorldBakeReadiness? bakes = null) {
         var answered = new List<(string Line, CommandResult Result)>();
         var source = new TextCommandSource(registry: new CommandRegistry(modules: [
             new WorldWaitCommandModule(
                 authority: new FixedAuthority(instance: row.Instance),
                 gates: new FixedGate(gate: new WorldConsoleWaitGate()),
-                readiness: readiness
+                readiness: readiness,
+                bakes: bakes
             ),
             new ProbeModule(),
         ]));
@@ -126,6 +132,54 @@ public sealed partial class WorldWaitReadyLawTests {
                 (true, "[world.wait: '0' is not a whole number of seconds in 1..600]"),
                 (true, "[world.wait: '601' is not a whole number of seconds in 1..600]"),
             ]
+        );
+    }
+    [Fact]
+    public void ABakesWaitHoldsItsSessionUntilTheBakesAreSettledAndRefusesWithoutThem() {
+        using var row = HostRow.Build(
+            definition: Fixtures.BuildDocument(),
+            name: "boot"
+        );
+        var bakes = new FlagBakes();
+
+        var (source, session, answered) = Console(
+            bakes: bakes,
+            readiness: null,
+            row: row
+        );
+        var (bakeless, bakelessSession, bakelessAnswers) = Console(
+            readiness: null,
+            row: row
+        );
+
+        session.Enqueue(line: "world.wait bakes 600");
+        session.Enqueue(line: "probe");
+
+        for (var drain = 0; (drain < 8); drain++) {
+            source.Collect();
+        }
+
+        var armed = Assert.Single(collection: answered);
+
+        Assert.Equal(
+            actual: (armed.Line, armed.Result.IsError, armed.Result.Output),
+            expected: ("world.wait bakes 600", false, "[world.wait: holding until the bakes are settled, at most 600 seconds, from tick 0]")
+        );
+
+        bakes.IsSettled = true;
+        source.Collect();
+
+        Assert.Equal(
+            actual: answered.Select(selector: static answer => answer.Line),
+            expected: ["world.wait bakes 600", "probe"]
+        );
+
+        bakelessSession.Enqueue(line: "world.wait bakes 5");
+        bakeless.Collect();
+
+        Assert.Equal(
+            actual: bakelessAnswers.Select(selector: static answer => (answer.Result.IsError, answer.Result.Output)),
+            expected: [(true, "[world.wait: refused (this host composes no renderer, so no mesh bake will ever settle)]")]
         );
     }
     [Fact]
