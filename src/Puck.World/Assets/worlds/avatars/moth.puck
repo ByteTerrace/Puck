@@ -1864,7 +1864,7 @@ prototypes {
           {
             driver: "stride"
             axis [0, 0, 1]
-            amplitude: 0.028
+            amplitude: 0.05
             pivot [0, 1.0765, 0]
             wave: "sine"
             phase: 0
@@ -1925,6 +1925,14 @@ prototypes {
             pivot [0, 1.0765, 0]
             wave: "sine"
             phase: 0
+          }
+          {
+            driver: "bob"
+            axis [1, 0, 0]
+            amplitude: -0.025
+            pivot [0, 1.0765, 0]
+            wave: "sine"
+            phase: -1.0708
           }
           {
             driver: "heading"
@@ -2164,6 +2172,14 @@ prototypes {
         exponent: softness
         // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
         swings [
+          {
+            driver: "stride"
+            axis [0, 1, 0]
+            amplitude: 0.08
+            pivot [0, 1.5715, 0]
+            wave: "sine"
+            phase: 0.3
+          }
           {
             driver: "heading"
             axis [0, 1, 0]
@@ -2948,6 +2964,14 @@ prototypes {
             phase: 0
           }
           {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: 0.25
+            pivot [0.39, 1.1765, 0.005]
+            wave: "sine"
+            phase: 3.6416
+          }
+          {
             driver: "flight"
             axis [1, 0, 0]
             amplitude: -0.25
@@ -3386,6 +3410,14 @@ prototypes {
         parent: "shin-left"
         exponent: 2.6
         swings [
+          {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: 0.2
+            pivot [0.2, 0.1715, 0.0075]
+            wave: "sine"
+            phase: 0
+          }
           {
             driver: "stride"
             axis [1, 0, 0]
@@ -4066,6 +4098,14 @@ prototypes {
             phase: 0
           }
           {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: 0.25
+            pivot [-0.39, 1.1765, 0.005]
+            wave: "sine"
+            phase: 0.5
+          }
+          {
             driver: "flight"
             axis [1, 0, 0]
             amplitude: -0.25
@@ -4501,6 +4541,14 @@ prototypes {
         parent: "shin-right"
         exponent: 2.6
         swings [
+          {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: 0.2
+            pivot [-0.2, 0.1715, 0.0075]
+            wave: "sine"
+            phase: 3.1416
+          }
           {
             driver: "stride"
             axis [1, 0, 0]
