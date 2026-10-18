@@ -209,7 +209,6 @@ capture instead of treating the nominal radii as the visible radii.
 | Field | Default | Meaning |
 |---|---|---|
 | `detail` | false | visual only — excluded from the contact field and colliders; the bake samples it like any other shape. Cannot combine with a panel or trims |
-| `secondary` | true | false excludes the shape from soft-shadow and ambient-occlusion walks only |
 
 ### Motion
 

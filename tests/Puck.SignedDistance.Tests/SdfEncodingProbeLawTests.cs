@@ -6,12 +6,12 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>
 /// Laws for <see cref="SdfEncodingProbe"/>, the instruction set's encoding exercised for its fingerprint: every probe
 /// call builds, and every call stays valid with each input raised; together they carry every operation, shape type and
-/// blend, both lifts, the shape flags, and every member of each enum an instruction lane carries, in the lane that
+/// blend, both lifts, and every member of each enum an instruction lane carries, in the lane that
 /// carries it (every wallpaper group a program accepts; SdfWallpaperFoldLawTests holds the refused groups' refusal),
 /// and they pack every side table and flag (compiled part programs traced independently, a material with
 /// every layer, sweep and path tables); the description moves when the builder or packer puts any field elsewhere,
 /// whether a float lane, a bitfield inside a word, a material layer's field or a table entry; and the packer writes each
-/// header lane and the chain table where the model's lane constants place them.
+/// header lane where the model's lane constants place it.
 /// </summary>
 public sealed class SdfEncodingProbeLawTests {
     private static readonly IReadOnlyList<SdfEncodingProbeCall> Calls = SdfEncodingProbe.Calls();
@@ -32,7 +32,7 @@ public sealed class SdfEncodingProbeLawTests {
             expected: Enum.GetValues<SdfOp>().ToHashSet()
         );
         Assert.Equal(
-            actual: Emitted(op: SdfOp.ShapeBlend).Select(selector: static instruction => ((SdfShapeType)(instruction.Shape & SdfProgram.ShapeTypeMask))).ToHashSet(),
+            actual: Emitted(op: SdfOp.ShapeBlend).Select(selector: static instruction => ((SdfShapeType)instruction.Shape)).ToHashSet(),
             expected: Enum.GetValues<SdfShapeType>().ToHashSet()
         );
         Assert.Equal(
@@ -43,8 +43,6 @@ public sealed class SdfEncodingProbeLawTests {
             action: static lift => Assert.Contains(collection: Built, filter: built => built.Call.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $" {lift}")),
             collection: Enum.GetValues<SdfLift>()
         );
-        Assert.Contains(collection: Emitted(op: SdfOp.ShapeBlend), filter: static instruction => instruction.Detail);
-        Assert.Contains(collection: Emitted(op: SdfOp.ShapeBlend), filter: static instruction => !instruction.Secondary);
     }
     [Fact]
     public void TheProbeCarriesEveryMemberOfEachLaneEnumInItsLane() {
@@ -150,52 +148,13 @@ public sealed class SdfEncodingProbeLawTests {
                 var data = ((((int)words[SdfProgram.ProgramDataOffsetLane]) + (SdfProgram.InstructionDataVectors * index)) * 4);
 
                 Assert.Equal(expected: ((uint)instruction.Op), actual: words[(header + SdfProgram.InstructionOpLane)]);
-                Assert.Equal(expected: instruction.Shape, actual: words[(header + SdfProgram.InstructionShapeLane)] & ((instruction.Op == SdfOp.ShapeBlend) ? SdfProgram.ShapeTypeMask : uint.MaxValue));
+                Assert.Equal(expected: instruction.Shape, actual: words[(header + SdfProgram.InstructionShapeLane)]);
                 Assert.Equal(expected: instruction.Blend, actual: words[(header + SdfProgram.InstructionBlendLane)]);
                 Assert.Equal(expected: instruction.Material, actual: words[(header + SdfProgram.InstructionMaterialLane)]);
                 Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: instruction.Data1.X), actual: words[(data + 4)]);
             }
         }
     }
-    // The packer writes the chain table where the model's lane constants place it: the world-segment list header names
-    // the table, whose header counts every segment's chains and names the identity list that follows the segment
-    // entries, and each segment's entry and identities are the chains the program reports for it. The chain-table call
-    // runs two chains in one segment, shares a chain between two segments, and ends chains at a shape, a pop and a cut.
-    [Fact]
-    public void ThePackerWritesTheChainTableWhereTheModelPlacesIt() {
-        foreach (var (_, program) in Built) {
-            var words = program.Words;
-            var table = ((int)words[((WorldSegmentHeaderOf(program: program) * 4) + SdfProgram.ChainTableLane)]);
-            var entries = (table + SdfProgram.DirectoryHeaderVectors);
-            var identities = ((int)words[((table * 4) + SdfProgram.ChainIdentitiesLane)]);
-            var chain = 0;
-
-            Assert.Equal(expected: ((uint)program.ChainCount), actual: words[((table * 4) + SdfProgram.ChainCountLane)]);
-            Assert.Equal(expected: (entries + ((program.SkipSegmentCount + (SdfProgram.ChainSegmentsPerVector - 1)) / SdfProgram.ChainSegmentsPerVector)), actual: identities);
-
-            for (var segment = 0; (segment < program.SkipSegmentCount); segment++) {
-                var entry = (((entries + (segment / SdfProgram.ChainSegmentsPerVector)) * 4) + ((segment % SdfProgram.ChainSegmentsPerVector) * SdfProgram.ChainSegmentWords));
-                var chains = program.ChainsOf(segment: segment);
-
-                Assert.Equal(expected: ((uint)chain), actual: words[(entry + SdfProgram.ChainSegmentFirstWord)]);
-                Assert.Equal(expected: ((uint)chains.Length), actual: words[(entry + SdfProgram.ChainSegmentCountWord)]);
-
-                foreach (var expected in chains) {
-                    Assert.Equal(expected: expected.Identity, actual: words[(((identities + (chain / SdfProgram.ChainIdentitiesPerVector)) * 4) + (chain % SdfProgram.ChainIdentitiesPerVector))]);
-                    chain++;
-                }
-            }
-
-            Assert.Equal(expected: program.ChainCount, actual: chain);
-        }
-
-        var chained = SdfEncodingProbe.Build(call: Named(name: "chain table"));
-
-        Assert.Contains(collection: Enumerable.Range(start: 0, count: chained.SkipSegmentCount), filter: segment => (chained.ChainsOf(segment: segment).Length > 1));
-        Assert.True(condition: (chained.Specialization.Chains.Count < chained.ChainCount));
-        Assert.Equal(expected: Enum.GetValues<SdfChainEnd>().ToHashSet(), actual: chained.Specialization.Chains.Select(selector: static chain => chain.End).ToHashSet());
-    }
-
     // The vector offset of a program's instance directory, after the segment directory.
     private static int InstanceDirectoryOf(SdfProgram program) {
         var words = program.Words;
@@ -207,10 +166,4 @@ public sealed class SdfEncodingProbeLawTests {
     // The vector offset of a program's part table: the instance directory header's part-programs lane.
     private static int PartTableOf(SdfProgram program) =>
         ((int)program.Words[((InstanceDirectoryOf(program: program) * 4) + SdfProgram.InstancePartProgramsLane)]);
-    // The vector offset of a program's world-segment list header, after the instance directory.
-    private static int WorldSegmentHeaderOf(SdfProgram program) {
-        var instances = InstanceDirectoryOf(program: program);
-
-        return ((instances + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)program.Words[((instances * 4) + SdfProgram.InstanceCountLane)])));
-    }
 }

@@ -38,12 +38,9 @@ them, and holds every detail sum to its pass total and each frame to its own
 labels. `SdfSkyEvaluationDeviceLawTests` binds the sky's named rows and checks
 that covered pixels evaluate no layer.
 
-`BakeSamplingDeviceLawTests` uploads the bake sampling fixture's BC7, BC5 and
-BC6H textures with every mip level through the image upload and samples each
-probe texel at its level with `Assets/Shaders/bake-sampling.comp.hlsl`, on the
-first Vulkan device with a graphics queue, the first Direct3D 12 adapter and
-WARP, skipping by name on a host without one. `StagedRegionDeviceLawTests` runs
-an uploaded source's conversion on the same three devices with its region
+`StagedRegionDeviceLawTests` runs an uploaded source's conversion on the first
+Vulkan device with a graphics queue, the first Direct3D 12 adapter and WARP,
+skipping by name on a host without one, with its region
 staged, chosen by handing the runtime the device's own memory profile with no
 host-visible device-local bytes, and holds a capture of each tick's image to the
 CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/a549675beaa8dc140bd1c3e8a86018a5b33cd7f8cf7fa0ae746662f626133532). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/6508b5d31785bdd9b20c2ac41249505b5bc561be7c25855db7eea3b8639a8572). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -94,8 +94,7 @@ struct SdfMeshPass {
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);
-[[vk::binding(2, 3)]] Texture2D<float4> sdfImpostorDepth : register(t2, space3);
-[[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
+[[vk::binding(2, 3)]] RWStructuredBuffer<uint> workCounters : register(u2, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfMeshPushedIndex {

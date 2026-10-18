@@ -250,8 +250,8 @@ public static class SdfSolidGeometry {
     /// native shape; a Prism's chamfer bevels its profile's cap rims instead (see
     /// <see cref="SdfProgramBuilder.Trapezoid"/>/<see cref="SdfProgramBuilder.RoundedRectangle"/>'s
     /// <c>capChamfer</c>). Clamped by <see cref="MaxChamfer"/>.</param>
-    /// <param name="detail">Whether the emitted shape instruction is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>)
-    /// — skipped by every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the emitted shape instruction is a detail shape (<see cref="SdfInstruction.Detail"/>):
+    /// baked like any other shape and excluded from contact.</param>
     /// <param name="exponent">Superellipsoid only: the generalizing exponent; ignored by every other
     /// primitive.</param>
     public static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent) {
@@ -453,8 +453,8 @@ public static class SdfSolidGeometry {
     /// <param name="chamfer">The 45-degree edge-chamfer radius in world units; admitted on Box, Cylinder, and Prism
     /// (an extrude only) and ignored elsewhere. Clamped by <see cref="MaxChamfer"/>; scales the same way
     /// <paramref name="rounding"/> does.</param>
-    /// <param name="detail">Whether the emitted shape instruction is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>)
-    /// — skipped by every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the emitted shape instruction is a detail shape (<see cref="SdfInstruction.Detail"/>):
+    /// baked like any other shape and excluded from contact.</param>
     /// <param name="exponent">Superellipsoid only: the generalizing exponent; ignored by every other
     /// primitive.</param>
     /// <param name="curve">Required for, and only meaningful for, <see cref="SdfSolidPrimitive.Sweep"/>: the curve's

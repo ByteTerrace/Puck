@@ -30,8 +30,8 @@ namespace Puck.World;
 /// no exotic op) x placement {Clustered (the whole count packed into one fixed ~2.2-unit footprint — the worst-tile
 /// case), Uniform (a centered 3D grid, spacing grows with N), FarCorners (N split across eight local clusters ~8
 /// units from the origin)} x {static (baked, grid-invariant) or moving (one dynamic-transform slot per instance,
-/// orbiting every produced frame — forces <c>SdfProgram.RequiresFrameInstanceGridRebuild</c>'s per-frame CPU
-/// rebuild)}. Resolution 1280x800 (the host extent the island authors). Quality
+/// orbiting every produced frame, which the measured harness answered with a per-frame CPU instance-grid rebuild)}.
+/// Resolution 1280x800 (the host extent the island authors). Quality
 /// preset: <c>SdfFrame</c>'s own defaults, unmodified (soft shadows on, ambient occlusion on, exact — not fast —
 /// shadow/AO march; the harness overrides nothing) — i.e. the full production-quality shading path, not a cheapened
 /// one. Both backends (Vulkan and Direct3D 12). Medians over >=300 sampled frames (20 warm-up frames discarded)
@@ -70,8 +70,8 @@ namespace Puck.World;
 /// <c>UseFastAmbientOcclusion</c>), a smaller render target (a split-screen
 /// pane is well under 1280x800), or accepting the policy is a GPU-bound ceiling of 0 additional instances at this
 /// preset — this file states the fact measured, not a recommendation between those.</para>
-/// <para><b>The CPU ceiling is not binding.</b> The worst measured per-frame instance-grid rebuild
-/// (<c>Puck.SdfVm.SdfWorldTables.LastInstanceGridRebuildMilliseconds</c>) at the top of the tested range,
+/// <para><b>The CPU ceiling is not binding.</b> The worst measured per-frame instance-grid rebuild at the top of the
+/// tested range,
 /// N=16384 (uniform, moving, Direct3D 12) was 0.252 ms raw — derated x2 = 0.504 ms, a hair over the 0.5 ms policy
 /// at the very top of the tested instance cap (<c>SdfProgramBuilder.MaxInstances</c> = 16384). The measured
 /// per-instance CPU rate is ~1.54e-5 ms/instance (0.252 ms / 16384); solving for the derated-0.25ms-raw crossing

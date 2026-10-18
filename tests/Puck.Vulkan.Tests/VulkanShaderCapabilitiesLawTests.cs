@@ -8,8 +8,8 @@ namespace Puck.Vulkan.Tests;
 /// <summary>Laws for the SPIR-V capabilities a Vulkan device runs (<see cref="VulkanShaderCapabilities"/>): a module's
 /// declared capabilities read in order, a capability outside <see cref="VulkanShaderCapabilities.Enabled"/> refused by
 /// name before the module is created, and a malformed module refused. Every module the World ships declares only enabled
-/// capabilities, the SDF impostor card's <c>DemoteToHelperInvocation</c> among them, and every device is created with the
-/// feature that capability needs (<c>shaderDemoteToHelperInvocation</c>) or refused naming it.</summary>
+/// capabilities, and every device is created with the feature <c>DemoteToHelperInvocation</c> needs
+/// (<c>shaderDemoteToHelperInvocation</c>) or refused naming it.</summary>
 public sealed class VulkanShaderCapabilitiesLawTests {
     // OpCapability, OpMemoryModel and the Logical addressing and GLSL450 memory models.
     private const uint CapabilityOpcode = 17u;
@@ -65,7 +65,6 @@ public sealed class VulkanShaderCapabilitiesLawTests {
         var modules = Directory.EnumerateFiles(path: shaders, searchOption: SearchOption.AllDirectories, searchPattern: "*.spv")
             .Order(comparer: StringComparer.Ordinal)
             .ToArray();
-        var demoting = new List<string>();
 
         // The World's Release build ships every engine kernel; far fewer would mean the scan read the wrong directory.
         Assert.True(condition: (modules.Length >= 20), userMessage: $"{modules.Length} SPIR-V modules under {shaders}");
@@ -74,14 +73,7 @@ public sealed class VulkanShaderCapabilitiesLawTests {
             var name = Path.GetRelativePath(path: path, relativeTo: shaders).Replace(newChar: '/', oldChar: '\\');
 
             VulkanShaderCapabilities.Require(module: name, spirv: spirv);
-
-            if (VulkanShaderCapabilities.Declared(spirv: spirv).Contains(value: VulkanShaderCapabilities.DemoteToHelperInvocation)) {
-                demoting.Add(item: name);
-            }
         }
-
-        // The impostor card's discard demotes: the capability is enabled because a shipped kernel needs it.
-        Assert.Contains(collection: demoting, filter: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: "sdf-mesh-impostor.frag.spv"));
     }
     [Fact]
     public void Every_device_is_created_with_shaderDemoteToHelperInvocation_or_refused_naming_it() {

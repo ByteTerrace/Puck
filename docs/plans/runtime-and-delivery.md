@@ -37,9 +37,8 @@ reasoning behind every decision is in
   the ledger's first and fourth steps (the cartridge's image tooling deleted,
   `puck cartridge-cost`, and the `tetromino` cartridge renamed and re-themed);
   and, of compiled worlds, the one validated load, the container with its
-  header, and the `DEFN`, `ASST` and `BAKE` chunks (owned by
-  [the worlds manual](../architecture/worlds.md#compiled-worlds)); `BAKE` is the
-  rendering programme's creation bakes.
+  header, and the `DEFN`, `ASST` and `CURV` chunks (owned by
+  [the worlds manual](../architecture/worlds.md#compiled-worlds)).
 - **Not started:** the product tree, the rest of the ledger, the rest of the
   compiled-world chunks, and the evidence package. Release-pair qualification
   (`puck world release qualify`) exists; only metadata-only definition deltas
@@ -202,7 +201,6 @@ projections and neighbour solids, and the live scene program are never stored.
 |---|---|---|
 | `DEFN` | the drawn, resolved definition, as compact canonical JSON | header only |
 | `ASST` | content hashes of every asset file read | asset files |
-| `BAKE` | the keys of the creation bakes at the shipped tier and the path of the build's one bake pack that holds them; not derived on boot | `DEFN` |
 | `PLCE` | placement frames, spatial index, distribution offsets | `DEFN` |
 | `SOLD` | the server solid program, evaluator, and a fully baked distance grid | `DEFN`, kits |
 | `NAVB` | navigation bake arrays per domain | `SOLD` |
@@ -223,10 +221,9 @@ not yet reference one by its header hash. Every package that adds a chunk
 carries the same law: for every shipped world, each product derived fresh equals
 the product loaded from the compiled world byte for byte, and a deliberate
 change to a derivation moves that chunk's version and re-records its pin
-(`CompiledWorldLawTests`; `CreationBakeLawTests` for `BAKE`) in the same change. A chunk's version is set by hand for
-`DEFN` and `ASST` (`CompiledWorldChunks.cs`); for `BAKE` it is the fingerprint of
-the compiled baking code (`CreationBakeDerivation`), which every build computes. The
-[derivation keys](#derivation-keys) package owns moving the rest onto fingerprints.
+(`CompiledWorldLawTests`) in the same change. A chunk's version is set by hand
+(`CompiledWorldChunks.cs`); the [derivation keys](#derivation-keys) package
+owns moving versions onto fingerprints.
 
 **One validated load (landed).** Owns `WorldDefinitionValidator.ValidateCore`'s
 callers and `WorldServer.RecompileRules`'s. One validation receipt reaches the
@@ -322,14 +319,12 @@ canary and `puck parity` from compiled worlds on both backends.
 
 A derived product is keyed by the code that makes it, so a deliberate change to
 that code moves the key and nothing is served stale. The running build computes
-it: `CreationBakeDerivation.Fingerprint` is the content fingerprint of
-`Puck.World.Authoring` and every Puck assembly it reaches
-(`AssemblyReach.ContentFingerprint`), which the bake keys and the `BAKE` chunk's
-version read. Nothing records it, so nothing goes stale. Two other products are
-not yet keyed this way. Each slice reuses that machinery: the producer's assembly
-roots the reach, and the reach's fingerprint is the key.
+the key, so nothing records it and nothing goes stale: the producer's assembly
+roots the reach (`AssemblyReach.Of`, every Puck assembly it reaches), and the
+content fingerprint of that reach is the key. No product is keyed this way yet;
+the first slice that keys one adds the fingerprint over the reach.
 
-**Owns:** `AssemblyReach`, `CreationBakeDerivation`, and the two products below.
+**Owns:** `AssemblyReach` and the two products below.
 
 **Delivers, as two independent slices:**
 
@@ -339,9 +334,7 @@ roots the reach, and the reach's fingerprint is the key.
    from `Puck.World.Schema` (`CompiledWorld.EngineBuild`). `DEFN` and `ASST`
    derive wholly inside that reach, and carry hand-set integers (2 and 1) that
    `CompiledWorldChunks.Holds` compares only after the header has matched, so
-   they can never decide anything the engine build has not. `BAKE` is the one
-   chunk whose producer, `Puck.World.Authoring`, lies outside the reach, which
-   is why its version is a fingerprint. The rule is that a chunk's `Version` is
+   they can never decide anything the engine build has not. The rule is that a chunk's `Version` is
    the fingerprint of its derivation exactly when the derivation's assemblies
    are outside the engine build's reach, and carries nothing when they are
    inside: `DEFN` and `ASST` drop their integers, `ICompiledWorldChunk.Version`

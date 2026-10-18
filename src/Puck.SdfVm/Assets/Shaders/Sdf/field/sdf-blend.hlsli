@@ -56,9 +56,9 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
     return result;
 }
 
-// The scalar interpreter and the host-compiled rigid-leaf path meet here. Keeping the material winner, smooth seam
-// channel, and distance compose in one helper prevents the fast path from becoming a subtly different VM. DXC sees
-// trackMaterial as a literal at every call and erases this whole material half for the bake's gradient taps.
+// The scalar interpreter and the host-compiled rigid-leaf path meet here. Keeping the material winner and distance
+// compose in one helper prevents the fast path from becoming a subtly different VM. DXC sees trackMaterial as a
+// literal at every call and erases this whole material half for the bake's gradient taps.
 void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int instanceIndex, int frameSlot, float smooth, bool trackMaterial) {
     if (trackMaterial) {
         bool candidateWins;
@@ -73,33 +73,6 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
             case SDF_BLEND_GROOVE_SUBTRACTION:
             case SDF_BLEND_PIPE_SUBTRACTION:     { candidateWins = (-candidate > result.distance); break; }
             default:                             { candidateWins = (candidate < result.distance); break; }
-        }
-
-        int incumbentMaterial = result.material;
-
-        switch (blend) {
-            case SDF_BLEND_SMOOTH_UNION:
-            case SDF_BLEND_SMOOTH_INTERSECTION:
-            case SDF_BLEND_SMOOTH_SUBTRACTION: {
-                float smoothK = max(smooth, SDF_SMOOTH_RADIUS_MIN);
-                float signedGap = ((blend == SDF_BLEND_SMOOTH_UNION) ? (candidate - result.distance)
-                                : ((blend == SDF_BLEND_SMOOTH_INTERSECTION) ? (result.distance - candidate)
-                                : ((-result.distance) - candidate)));
-                float h = clamp((0.5 + ((0.5 * signedGap) / smoothK)), 0.0, 1.0);
-                int loserMaterial = (candidateWins ? incumbentMaterial : material);
-                bool tableSeam = ((incumbentMaterial < SDF_SCREEN_MATERIAL) && (material < SDF_SCREEN_MATERIAL));
-
-                sdfMaterialBlendWeight = (tableSeam ? min(h, (1.0 - h)) : 0.0);
-                sdfMaterialBlendOther = loserMaterial;
-                break;
-            }
-            default: {
-                if (candidateWins) {
-                    sdfMaterialBlendWeight = 0.0;
-                }
-
-                break;
-            }
         }
 
         if (candidateWins) {

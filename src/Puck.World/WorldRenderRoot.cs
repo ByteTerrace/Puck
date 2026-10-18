@@ -58,7 +58,6 @@ public static class WorldRenderRoot {
 
         frameSource.ResizeDisplay(height: height, width: width);
 
-        var bakes = sp.GetService<WorldBakeSchedule>();
         var client = sp.GetRequiredService<WorldClient>();
         var device = sp.GetRequiredService<IGpuDeviceContext>();
         var definition = sp.GetRequiredService<WorldDefinition>();
@@ -281,7 +280,6 @@ public static class WorldRenderRoot {
             Holdings = [compareCapture, host, binder, residency],
             Prepare = (in FrameContext context) => {
                 compareCapture.Poll();
-                bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
                 timing.Tick();
             },

@@ -48,8 +48,7 @@ staged region of frame data owes, copied into its device-local buffer; see
 selection and field samples, only while a bake is pending) → the shadow
 cascades (`sdf-mesh-shadow.vert`/`.frag`, rasterizing the frame's mesh draws
 from each cascade's light camera into its depth alone) and the mesh pass
-(`sdf-mesh.vert`/`.frag` from the view's camera, and `sdf-mesh-impostor.frag`
-the impostor cards a view records) →
+(`sdf-mesh.vert`/`.frag` from the view's camera) →
 `sdf-world-surface.comp` (each pixel's visibility record from the mesh target:
 the hit, its normal, a screen-space ambient occlusion and the stable shadow
 slots' cascade visibility) → `sdf-world-views.comp` (materials, lighting, the
@@ -123,7 +122,7 @@ interface through the same kernel-set transaction as the other SDF kernels.
 Scalar bake samples can execute a complete compiled part instead of revisiting
 its scope and individual VM segments. `SdfProgram` shares its leaf program by
 geometry identity and supplies separate pose/material bindings per placement.
-The direct walk retains internal cuts, blend order, material seams and the
+The direct walk retains internal cuts, blend order, the material winner and the
 scope's distance correction; unsupported parts use the generic interpreter.
 The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 

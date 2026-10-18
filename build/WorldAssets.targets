@@ -1,8 +1,7 @@
 <Project>
     <!-- The game's shipped worlds. The build hands every .puck source and every .world.json document under Assets/worlds
          to one tree-mode run of the CLI's compile verb (Puck.Cli.Worlds, the world-authoring verbs' own executable), which writes the documents the game ships, beside each that
-         draws as a world its compiled world (<name>.puckb), and at the root the one bake pack (bakes.puckbake) holding
-         the creation bakes those compiled worlds name and the package store (packages/) holding one compiled shader
+         draws as a world its compiled world (<name>.puckb), and at the root the package store (packages/) holding one compiled shader
          package per graph source their views.graphs rows name, so no device compiles a shipped pipeline and the
          run needs dxc as the shader build does, into this project's intermediate directory; the output's
          Assets/worlds carries exactly those. Nothing is written into the source tree, and neither the sources nor the
@@ -13,22 +12,14 @@
          it from the sources' names. The CLI is a build-time tool here, never a runtime dependency. -->
     <PropertyGroup>
         <PuckWorldSourceDirectory>$(MSBuildProjectDirectory)/Assets/worlds</PuckWorldSourceDirectory>
-        <!-- The bake cache is the per-user one (PuckUserDirectory.Resolve("bakes"): Puck under the local application data
-             folder, or under the temporary directory where the platform names none), which `puck parity` and the World
-             read and fill too, so every checkout on the machine bakes a creation once per configuration. That is safe
-             because a bake's key carries the fingerprint of the compiled bake code (CreationBakeDerivation.Fingerprint),
-             so builds whose bake code differs never share a key. -p:PuckWorldBakeCache=<dir> names another. -->
-        <PuckUserLocalData>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))</PuckUserLocalData>
-        <PuckUserLocalData Condition="'$(PuckUserLocalData)' == ''">$([System.IO.Path]::GetTempPath())</PuckUserLocalData>
-        <PuckWorldBakeCache Condition="'$(PuckWorldBakeCache)' == ''">$([System.IO.Path]::TrimEndingDirectorySeparator('$(PuckUserLocalData)'))/Puck/bakes</PuckWorldBakeCache>
     </PropertyGroup>
     <ItemGroup>
         <PuckWorldSource Include="$(PuckWorldSourceDirectory)/**/*.puck;$(PuckWorldSourceDirectory)/**/*.world.json" />
         <!-- The pipeline sources the shipped worlds' rows can name, so an edited shader re-runs the tree run that packages
              it. They ship as content too: a World keys a row's package by the closure it reads beside the document. -->
         <PuckWorldPipelineSource Include="Assets/**/*.hlsl;Assets/**/*.hlsli;Assets/**/*.graph.json" Exclude="Assets/worlds/**" />
-        <!-- Every world document, compiled world and bake pack under Assets/worlds ships from the tree run's report instead. -->
-        <Content Include="Assets/**" Exclude="Assets/worlds/**/*.puck;Assets/worlds/**/*.world.json;Assets/worlds/**/*.puckb;Assets/worlds/**/*.puckbake" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Every world document and compiled world under Assets/worlds ships from the tree run's report instead. -->
+        <Content Include="Assets/**" Exclude="Assets/worlds/**/*.puck;Assets/worlds/**/*.world.json;Assets/worlds/**/*.puckb" CopyToOutputDirectory="PreserveNewest" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)../src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
@@ -77,10 +68,8 @@
             Inputs="@(PuckWorldSource);@(PuckWorldPipelineSource);$(PuckWorldCompilerPath);@(PuckWorldCompilerAssembly);$(MSBuildThisFileFullPath)"
             Outputs="$(PuckWorldReport)">
         <!-- One process for the whole tree pays compiler, JIT and schema initialization once. The tree run also
-             removes any document or compiled world under the directory that no source writes any more. A run bakes
-             only the creations whose keys the bake cache lacks, so an engine change reruns the compile without
-             rebaking an unchanged prototype. -->
-        <Exec Command="dotnet &quot;$(PuckWorldCompilerPath)&quot; compile --tree &quot;$(PuckWorldSourceDirectory)&quot; --output &quot;$(PuckWorldDocumentDirectory)&quot; --written &quot;$(PuckWorldReport)&quot; --bake-cache &quot;$(PuckWorldBakeCache)&quot; @(PuckWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
+             removes any document or compiled world under the directory that no source writes any more. -->
+        <Exec Command="dotnet &quot;$(PuckWorldCompilerPath)&quot; compile --tree &quot;$(PuckWorldSourceDirectory)&quot; --output &quot;$(PuckWorldDocumentDirectory)&quot; --written &quot;$(PuckWorldReport)&quot; @(PuckWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
     </Target>
     <!-- The files to ship are known only once a tree run has written them, so they are read from its report, whether it
          ran in this build or an earlier one. -->

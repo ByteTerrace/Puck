@@ -43,7 +43,6 @@ internal static class SdfTestPipelines {
         return new(
             meshRaster: new SdfMeshRasterPass(
                 fragment: new byte[] { 1 },
-                impostorFragment: new byte[] { 1 },
                 pipelines: pipelines,
                 shadowFragment: new byte[] { 1 },
                 shadowVertex: new byte[] { 1 },
@@ -79,16 +78,6 @@ internal static class SdfTestPipelines {
         GpuPassPipelineCache.Build(
             device: device,
             key: SdfMeshRasterPass.ShadowKeyOf(
-                fragment: new byte[] { 1 },
-                vertex: new byte[] { 1 }
-            ),
-            ledger: ledger
-        );
-    // Builds the impostor card pipeline from one-byte stages on the calling thread, as MeshRaster builds the mesh pass's.
-    public static GpuPassPipeline ImpostorRaster(IGpuDeviceContext device, GpuWorkLedger ledger) =>
-        GpuPassPipelineCache.Build(
-            device: device,
-            key: SdfMeshRasterPass.ImpostorKeyOf(
                 fragment: new byte[] { 1 },
                 vertex: new byte[] { 1 }
             ),

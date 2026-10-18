@@ -191,12 +191,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets how many of the last uploaded program's directory segments carry a rigid-leaf plan, or 0 before the
     /// first upload.</summary>
     public int LiveProgramRigidSegments { get; private set; }
-    /// <summary>Gets the number of chains the last uploaded program's segments run (<see cref="SdfProgram.ChainCount"/>),
-    /// or 0 before the first upload.</summary>
-    public int LiveProgramChains { get; private set; }
-    /// <summary>Gets the last uploaded program's specialization set (<see cref="SdfProgram.Specialization"/>), or
-    /// <see langword="null"/> before the first upload.</summary>
-    public SdfSpecializationSet? LiveProgramSpecialization { get; private set; }
     /// <summary>Gets the current program-word capacity, or the initial reserve before the tables are built.</summary>
     public int ProgramWordCapacity => (m_tables?.ProgramWordCapacity ?? m_programWordCapacity);
     /// <summary>Gets the bytes the tables' mesh region holds (<see cref="SdfWorldTables.MeshRegionBytes"/>), or zero before
@@ -764,7 +758,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = m_pipelines.TryBuild(
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
-                impostorRaster: passes.ImpostorRaster,
                 shadowRaster: passes.ShadowRaster,
                 meshRaster: passes.MeshRaster,
                 options: inputs.Options,
@@ -902,7 +895,5 @@ public sealed partial class SdfWorldResidency : IDisposable {
         LiveProgramFieldScopeClamps = program.FieldScopeClamps;
         LiveProgramSegments = program.SkipSegmentCount;
         LiveProgramRigidSegments = program.RigidSegmentCount;
-        LiveProgramChains = program.ChainCount;
-        LiveProgramSpecialization = program.Specialization;
     }
 }

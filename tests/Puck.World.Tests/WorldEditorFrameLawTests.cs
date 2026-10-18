@@ -133,7 +133,7 @@ public sealed class WorldEditorFrameLawTests {
             placements: drawn.Placements
         );
 
-        return new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        return new SdfFieldEvaluator(program: builder.Build());
     }
     private static WorldDefinition Destination(WorldDefinition basis) => (basis with {
         CreationsRaw = [Crate, SlabCreation],

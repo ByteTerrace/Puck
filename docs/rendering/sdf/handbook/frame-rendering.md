@@ -55,8 +55,7 @@ directional light, and a view whose world holds one stable slot has no
 `shadow-second` at all.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
-each (and the impostor cards a view records, through a second pipeline with
-`sdf-mesh-impostor.frag.hlsl`, after the meshes), into the mesh visibility target at the view's extent: per pixel the ray parameter,
+each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
 the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. The draw plus one and the triangle are
 stored as floats, so a region holds at most 2^24 draws and a mesh at most 2^24 triangles, each refused by name past
 that. A frame with no mesh draws skips the pass, its target's and depth's barriers included. The target and its depth
@@ -85,8 +84,7 @@ search and filter disks) by its cell of a 4×4 ordered-dither tile
 index, and views filters them.
 
 **views** (`sdf-world-views.comp.hlsl`) calls no field query either. It reads
-each record and computes materials (a textured mesh's atlas texel, an impostor's
-surface, or the draw's palette entry), lighting, the irradiance volume's
+each record and computes materials (the draw's palette entry), lighting, the irradiance volume's
 indirect light and the bounded volumes. Before shading, each 8×8 group gathers
 its pixels' records with a two-pixel apron into group-shared memory, and each
 pixel averages the surface pass's occlusion and K over the 4×4 window around it
@@ -540,7 +538,7 @@ demands nothing of its writer, and device loss starts from none.
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a screen covers the pixel, and,
 since the material model cannot tell steady emission from animated, the share of
-the pixel's color it emits after material layers and mesh-atlas sampling.
+the pixel's color it emits after material layers.
 Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
@@ -632,7 +630,14 @@ word), and the bake pass runs
 interpreter, one call site, with only the group's instances in the walk
 (`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
 lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`,
-a gradient sample counting five), so a frame that bakes keeps its budget. A
+a gradient sample counting five), so a frame that bakes keeps its budget. A frame
+takes its lattices in the groups' order, not round robin, so the groups finish in
+order and each lands in the shared mesh library (`SdfMeshLibrary`) as it finishes: a
+body that crosses into another world mid-bake leaves the groups it finished there,
+and the world it reaches, or returns to, takes them rather than baking them again. On
+the debug world, a crossing into the garden five seconds into the bake and straight
+back leaves 36 of the body's 177 groups to bake again on return, where round robin,
+which finished none before the end, rebaked all 177. A
 group refines from a coarse lattice over its bounding sphere to the box its
 surface can cross, then samples a final lattice of at most 65 samples a side, no
 finer than 1.5 cm, in slabs of whole planes, values alone. A static copy of
@@ -648,9 +653,15 @@ refinement measures at that spacing whatever its samples show
 (`SdfMeshPathBake.UnionFinal`, `SdfSampledLattice.Refine`'s regions). On the
 debug world the room bakes at 5.5 cm with its smaller block refined to 2.7 cm,
 and the groups drop from 193 to 187. The samples are read
-back and contoured on the thread pool by `SdfSampledLattice`, the prototype
-baker's dual contouring (`SdfDualContouring`) over a lattice whose spacing may
-differ per axis. A sample whose material no shape of the group carries reads as
+back and contoured on the thread pool by `SdfSampledLattice`, manifold dual
+contouring (`SdfDualContouring`) over a lattice whose spacing may differ per
+axis. A crossed cell holds one vertex for each patch of the surface inside it:
+its patches are the connected pieces of the marching-cubes surface, found from
+the eight corner signs alone by joining the sign-changing cube edges along each
+face's marching-squares segments, so a cell two sheets cross holds a vertex for
+each and no edge of the mesh is shared by more than two quads. A face whose
+diagonal corners agree is cut to separate its inside corners whichever cell
+reads it, so the two cells that share a face agree and the mesh has no crack. A sample whose material no shape of the group carries reads as
 outside, since the walk can answer with a shape of another instance where
 compiled parts are shared.
 
@@ -720,7 +731,7 @@ that frame, and `sdf-mesh-bake` carries each sample through the slot's transform
 in the frame that dispatches it, so a body that moves while it bakes is sampled
 where it is rather than where it stood when the bake began. Its mesh stays in
 that frame and draws at the slot's live transform, and its draw names that slot
-(`SdfMeshDraw.FrameSlot`, the draw record's word 41), which the surface pass
+(`SdfMeshDraw.FrameSlot`, the draw record's word 31), which the surface pass
 writes into the visibility record so views places material layers in the body's
 frame and reads its lanes; a static group's mesh is in world space.
 
@@ -737,7 +748,7 @@ Meshes a list newly places land within a frame's share of words
 mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
 few frames. Every mesh is written again at once only when the arena outgrows
-its draw reserve or packs, or the mesh atlases change; a region that grows, to
+its draw reserve or packs; a region that grows, to
 twice its need, takes the words it held without waiting for the device: the
 next upload clears the new buffer and copies the old one into it on the GPU,
 and the old buffer is disposed once that upload has completed. The bake keys each group by its
@@ -895,10 +906,10 @@ from its memory profile and the table's size, with a reader always in flight:
 
 Every pass of every view reads the tables through one descriptor set, the
 `sdf.world` interface's World group at set 1: each ring slot's buffers, the
-brick pool, the glyph atlas, the samplers and the mesh and impostor atlases. The tables own
+brick pool, the glyph atlas and the samplers. The tables own
 one such set per ring slot; a frame binds the slot its upload wrote. A slot's
 set is rewritten the first time a view binds it after what it binds moved (a
-region grows, or the glyph, mesh or impostor atlases change), without waiting
+region grows, or the glyph atlas changes), without waiting
 for the device: the upload that took the slot waited the fence that signals
 after every view that bound the slot's set before.
 

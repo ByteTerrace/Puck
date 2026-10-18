@@ -280,7 +280,7 @@ public sealed partial class WorldStampPool {
     // prefix) rather than after the plate's shape instruction, whose emission may leave a persistent Scale op on the
     // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
     // in, and is the Scale op a domain-bearing shape's chain carries (above).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, bool secondary = true, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null) {
+    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null) {
         if (probeWorstCase) { builder.ReservePathTables(shapeCount: 1); }
         // The worst-case reservation for a Sweep's fixed 3-uvec4 curve table entry — any admitted curve costs the
         // SAME table words (unlike ConvexPolygon's variable vertex count), so one representative curve inside the
@@ -446,7 +446,7 @@ public sealed partial class WorldStampPool {
                 taper: taper, profile: profile,
                 lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
                 curve: effectiveCurve
-            ).MarkSecondary(secondary: secondary);
+            );
 
             if (wantsDilate) {
                 scoped = scoped.Dilate(radius: (probeWorstCase
@@ -531,7 +531,7 @@ public sealed partial class WorldStampPool {
             material: material, profile: profile,
             rounding: rounding, scale: scale, smooth: smooth, taper: taper,
             type: type
-        ).MarkSecondary(secondary: secondary);
+        );
 
         if (wantsDilate) {
             afterShape = afterShape.Dilate(radius: (probeWorstCase

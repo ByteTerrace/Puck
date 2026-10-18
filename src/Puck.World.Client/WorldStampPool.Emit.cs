@@ -75,7 +75,6 @@ public sealed partial class WorldStampPool {
                 rounding: ((shape.Rounding ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
                 chamfer: ((shape.Chamfer ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
                 exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                secondary: (shape.Secondary ?? true),
                 curve: shape.Curve?.Parameters()
             );
         }
@@ -303,7 +302,6 @@ public sealed partial class WorldStampPool {
                 allShapes: shapes,
                 paletteIds: paletteIds,
                 exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-                secondary: (placed?.Secondary ?? true),
                 curve: placed?.Curve?.Parameters()
             );
             if (!hasText) { _ = builder.EndInstance(); }

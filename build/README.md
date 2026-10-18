@@ -31,20 +31,9 @@ stale one, and collects the rest.
 `WorldAssets.targets`, imported by the game, hands every `.puck` source and
 `.world.json` document under `src/Puck.World/Assets/worlds` to one
 `puck compile --tree` run into the game's `obj/` directory. The run writes the
-documents the game ships, their compiled worlds, and the one bake pack holding
-the creation bakes those compiled worlds name there, and reports what it
+documents the game ships and their compiled worlds there, and reports what it
 wrote (`--written`); the build copies exactly the reported files into the
-output's `Assets/worlds`. The run reads and keeps its bakes in the
-content-addressed `bakes` cache under the per-user Puck directory
-(`--bake-cache`), which every checkout shares with `puck parity` and the
-World, and `dotnet clean` keeps, so a run bakes only the creations whose keys no
-build on the machine has baked: a new worktree bakes nothing another has baked
-in the same configuration, and an edited prototype bakes that prototype alone.
-A bake's key carries the fingerprint of the compiled bake code
-(`CreationBakeDerivation.Fingerprint`: Puck.World.Authoring and every Puck
-assembly it reaches, without their checkout paths), so two builds whose bake
-code differs never share a key, and an edit to any of those assemblies rebakes. `-p:PuckWorldBakeCache=<dir>`
-names another cache. The run's one incremental output is the
+output's `Assets/worlds`. The run's one incremental output is the
 report, which every run writes last; a reported file that is gone removes the
 report, so the next build runs again. Only a compile knows which sources emit documents: a
 module library emits none, so a `.world.json` named like it ships, while a

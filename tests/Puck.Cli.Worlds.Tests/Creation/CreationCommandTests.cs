@@ -300,12 +300,7 @@ public sealed class CreationCommandTests {
         );
         Assert.Matches(
             actualString: output,
-            expectedRegexPattern: @"segments \d+ \(\d+ rigid\) running \d+ chain\(s\); specialization \d+ distinct chain\(s\), shapes "
-        );
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "specialization of every reported prototype, static and pooled: "
+            expectedRegexPattern: @"segments \d+ \(\d+ rigid\)"
         );
         Assert.Equal(
             before,

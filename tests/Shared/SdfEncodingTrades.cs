@@ -59,7 +59,7 @@ internal static class SdfEncodingTrades {
     public static uint[] PathRadiiSwapped(SdfProgram program) {
         var words = program.Words.ToArray();
 
-        foreach (var instruction in program.Instructions.Where(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && ((instruction.Shape & SdfProgram.ShapeTypeMask) == ((uint)SdfShapeType.Path))))) {
+        foreach (var instruction in program.Instructions.Where(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Path))))) {
             var table = ((int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X));
             var edges = ((int)instruction.Data0.Y);
 

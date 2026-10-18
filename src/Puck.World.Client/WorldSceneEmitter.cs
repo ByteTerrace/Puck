@@ -467,7 +467,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
     /// <c>puck.sdf.v1</c> document (see <see cref="WorldSdfDocumentEmitter"/>) is currently loaded — see
     /// <see cref="Puck.World.Client.WorldFramePresenter"/>'s joint measurer. The packed tables a program carries (the
-    /// instance grid, segment directory, world-segment list, rigid plan) are computed over the whole composed
+    /// segment directory, world-segment list, rigid plan, part programs) are computed over the whole composed
     /// program and are not additive across emitters, so measuring this emitter alone in a throwaway builder would let
     /// a mutation spend capacity a loaded document already holds.</summary>
     /// <param name="builder">The shared program builder under construction. Opens and closes its own material scope

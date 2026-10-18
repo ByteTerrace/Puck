@@ -13,8 +13,7 @@ namespace Puck.Cli.Worlds.Tests;
 /// trees hold only sources, a renamed source leaves nothing behind that a document name can still reach, and the
 /// output the game ships carries every document a source emits exactly once, under the name the source emits it by and
 /// byte for byte what the source compiles to, every hand-authored document it ships byte for byte as authored,
-/// beside every document that draws as a world its compiled world, byte for byte what the document derives fresh, and
-/// at its root one bake pack holding each bake those compiled worlds name once, byte for byte what they bake
+/// and beside every document that draws as a world its compiled world, byte for byte what the document derives
 /// fresh.</summary>
 /// <remarks>What an output must hold is what a tree compile reports writing (<c>--written</c>), the report
 /// <c>build/WorldAssets.targets</c> ships, since only a compile knows what a source emits: a composition emits the
@@ -187,9 +186,9 @@ public sealed class WorldDocumentOutputLawTests {
             Report: [.. report]
         );
     }
-    // The world documents, compiled worlds, bake packs and pipeline packages under a catalog, as forward-slashed
-    // catalog-relative paths.
-    private static string[] ShippedFiles(string catalog) => [.. ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension])
+    // The world documents, compiled worlds and pipeline packages under a catalog, as forward-slashed catalog-relative
+    // paths.
+    private static string[] ShippedFiles(string catalog) => [.. ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension])
         .SelectMany(selector: suffix => FilesUnder(
             suffix: suffix,
             tree: catalog
@@ -234,9 +233,8 @@ public sealed class WorldDocumentOutputLawTests {
         ));
     }
     // Beside each shipped document that draws as a world, the catalog holds its compiled world, byte for byte what the
-    // document derives fresh where its source composes it, naming the pack at the catalog's root; the catalog holds no
-    // other compiled world; and that pack holds each key the compiled worlds name once, byte for byte what the fresh
-    // derivations baked, or is absent when they name none. Returns the compiled worlds derived.
+    // document derives fresh where its source composes it, and the catalog holds no other compiled world. Returns the
+    // compiled worlds derived.
     private static IReadOnlySet<string> AssertEveryShippedCompiledWorldIsWhatItsDocumentDerivesFresh(string catalog, Shipment shipment) {
         var machines = CliWorldVocabulary.EnsureInstalled();
         var shipped = FilesUnder(
@@ -247,15 +245,9 @@ public sealed class WorldDocumentOutputLawTests {
             root: catalog
         )).ToHashSet(comparer: StringComparer.OrdinalIgnoreCase);
         var derived = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var packPath = Path.Combine(path1: catalog, path2: WorldBakePack.FileName);
-        var keys = new HashSet<Puck.Assets.ContentPin>();
-        // Memory-only, so every outcome is baked fresh here whatever cache the catalog's build read.
-        var store = new WorldBakeStore();
 
         foreach (var document in shipment.Documents) {
             if (!WorldSourceLoader.TryCompileWorld(
-                bakePack: WorldBakePack.Reference(documentPath: Path.Combine(path1: catalog, path2: document.Relative), packPath: packPath),
-                bakes: store,
                 catalog: machines,
                 catalogFingerprint: CliWorldVocabulary.Fingerprint(catalog: machines),
                 compiledWorld: out var fresh,
@@ -274,28 +266,10 @@ public sealed class WorldDocumentOutputLawTests {
                 condition: File.ReadAllBytes(path: Path.Combine(path1: catalog, path2: file)).AsSpan().SequenceEqual(other: fresh),
                 userMessage: $"{file} in the catalog is not what {document.Origin} derives fresh"
             );
-            Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: fresh, header: out _, reason: out var reason), userMessage: reason);
-            Assert.True(condition: container.TryFind(chunk: out var bakes, code: WorldBakeChunk.BakeCode), userMessage: $"{file} names no bakes");
-            Assert.True(condition: WorldBakeChunk.TryRead(keys: out var named, packReference: out _, payload: bakes.Payload.Span, reason: out reason), userMessage: reason);
-            keys.UnionWith(other: named);
+            Assert.True(condition: CompiledWorld.TryDecode(container: out _, content: fresh, header: out _, reason: out var reason), userMessage: reason);
         }
 
         Assert.Empty(collection: shipped.Except(second: derived, comparer: StringComparer.OrdinalIgnoreCase));
-
-        if (keys.Count == 0) {
-            Assert.False(condition: File.Exists(path: packPath), userMessage: $"the catalog carries a bake pack no compiled world names a bake in");
-        } else {
-            var fresh = WorldBakePack.Encode(outcomes: keys.Select(selector: key => {
-                Assert.True(condition: store.TryGetHeld(key: key, outcome: out var outcome), userMessage: $"no fresh outcome for {key.Hex}");
-
-                return KeyValuePair.Create(key: key, value: outcome);
-            }));
-
-            Assert.True(
-                condition: File.ReadAllBytes(path: packPath).AsSpan().SequenceEqual(other: fresh),
-                userMessage: $"the catalog's {WorldBakePack.FileName} is not the pack of the bakes its compiled worlds derive fresh"
-            );
-        }
 
         return derived;
     }

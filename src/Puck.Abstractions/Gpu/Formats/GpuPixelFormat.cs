@@ -3,8 +3,7 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// The one pixel-format vocabulary: the layout of an image's texels wherever they live. A GPU resource (a storage
 /// image, a render target, a sampled texture, a swapchain image) is created in one, a presented or captured
-/// <see cref="Presentation.Surface"/> declares one, and a baked texture's levels and the block codecs of
-/// <c>Puck.Assets.Textures</c> are stored in one. Each backend maps a member to its native format value, and
+/// <see cref="Presentation.Surface"/> declares one. Each backend maps a member to its native format value, and
 /// <see cref="GpuPixelFormats"/> states each member's byte layout once.
 /// </summary>
 public enum GpuPixelFormat : uint {
@@ -48,7 +47,7 @@ public enum GpuPixelFormat : uint {
 }
 /// <summary>
 /// The byte layout of <see cref="GpuPixelFormat"/> images: the one statement of each format's texel or block size, and
-/// the level and mip-chain lengths an upload, a block codec and a bake read from it.
+/// the level and mip-chain lengths an upload reads from it.
 /// </summary>
 public static class GpuPixelFormats {
     /// <summary>The texels along each edge of a block-compressed format's block.</summary>

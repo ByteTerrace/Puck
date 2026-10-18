@@ -349,7 +349,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     // projects the CPU candidate once. The render graph owns map dispatches, descriptors and kernel counter readbacks;
     // the separate environment laws run that actual producer. The first upload includes the 256-byte packed sky block.
     private const string FirstUpload =
-        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork bricks skipped\nwork upload executed: dispatches=12 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=16 binds.pipeline=12 binds.descriptor-set=12 push-constants=0 descriptor-writes=24 uploads.host-visible=7151448 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork environment executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=1 environment.projection-texels=4096 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\n";
+        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork bricks skipped\nwork upload executed: dispatches=12 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=16 binds.pipeline=12 binds.descriptor-set=12 push-constants=0 descriptor-writes=24 uploads.host-visible=7151280 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork environment executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=1 environment.projection-texels=4096 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0 environment.projections=0 environment.projection-texels=0 environment.skipped=0 shapes.evaluated=0 shapes.gradients=0\n";
     // A still upload that writes one queued 2x2x2 brick: the bricks pass binds the copy pipeline and the brick staging's
     // set and dispatches its copy between the pool's two barriers, and counts the staging's host writes, the eight voxels
     // behind their header and one run-table entry.
@@ -378,10 +378,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 device: gpu,
                 ledger: owned
             );
-            ImpostorRaster = SdfTestPipelines.ImpostorRaster(
-                device: gpu,
-                ledger: owned
-            );
             ShadowRaster = SdfTestPipelines.ShadowRaster(
                 device: gpu,
                 ledger: owned
@@ -407,7 +403,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
-                impostorRaster: ImpostorRaster,
                 meshRaster: MeshRaster,
                 shadowRaster: ShadowRaster,
                 regionCopy: RegionCopy.Compute!
@@ -438,7 +433,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
-        public GpuPassPipeline ImpostorRaster { get; }
         public GpuPassPipeline MeshRaster { get; }
         public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
@@ -449,7 +443,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             Pipelines.Dispose();
             RegionCopy.Dispose();
             MeshRaster.Dispose();
-            ImpostorRaster.Dispose();
             ShadowRaster.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.

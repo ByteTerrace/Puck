@@ -73,7 +73,7 @@ public sealed class PalettePaintEmissionLawTests {
             placements: definition.Placements
         );
 
-        var paint = Assert.Single(collection: PaintsOf(program: builder.Build(buildInstanceGrid: false)));
+        var paint = Assert.Single(collection: PaintsOf(program: builder.Build()));
 
         Assert.Equal(expected: SdfPaint.WinningFrame, actual: paint.Slot);
         Assert.Equal(expected: 0.02f, actual: paint.Stroke);

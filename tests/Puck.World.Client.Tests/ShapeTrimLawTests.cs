@@ -69,7 +69,7 @@ public sealed class ShapeTrimLawTests {
             : trimMaterial)
         );
 
-        return (builder.Build(buildInstanceGrid: false), hostMaterial, trimMaterial);
+        return (builder.Build(), hostMaterial, trimMaterial);
     }
     // A program's field scopes, each as the instructions from its PushField through its matching PopField (no
     // nesting, so a plain stack-depth walk finds every top-level pair).

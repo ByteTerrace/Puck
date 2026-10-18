@@ -105,8 +105,6 @@ public enum ShaderPipelineCountBasis : byte {
     DynamicTransforms = 6,
     /// <summary>Per word of one instance mask, which the host derives from its instances.</summary>
     InstanceMaskWords = 7,
-    /// <summary>Per word of the instance grid, which the host derives from its instances.</summary>
-    InstanceGridWords = 8,
     /// <summary>Per voxel of the SDF brick pool the host provisions for its world.</summary>
     BrickPoolVoxels = 9,
     /// <summary>Per pixel of the package's allocated render extent.</summary>

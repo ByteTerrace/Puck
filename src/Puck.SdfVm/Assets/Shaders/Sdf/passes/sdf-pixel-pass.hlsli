@@ -13,7 +13,6 @@
 #define SDF_GLYPH_ATLAS
 #endif
 #include "sdf-world.hlsli"
-#include "../frame/sdf-mesh-impostor-surface.hlsli"
 #include "../frame/sdf-pixel.hlsli"
 
 #endif

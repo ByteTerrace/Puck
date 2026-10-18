@@ -72,8 +72,7 @@ public static class SdfDomainExpansion {
     }
     // The fold plane's (u, v) world-axis indices, the untouched axial index, and the sign carrying a +angle rotation
     // from u toward v into a right-handed rotation about the axis: (x, z) is left-handed about +Y, the other two pairs
-    // right-handed. KEEP IN SYNC with SDF_OP_REPEAT_POLAR's plane selection in Assets/Shaders/Sdf/field/sdf-map.hlsli
-    // and field/sdf-map-grad.hlsli.
+    // right-handed. KEEP IN SYNC with SDF_OP_REPEAT_POLAR's plane selection in Assets/Shaders/Sdf/field/sdf-map.hlsli.
     private static (int U, int V, int W, double Sign) PlaneAxes(SdfAxis axis) {
         return axis switch {
             SdfAxis.X => (U: 1, V: 2, W: 0, Sign: 1d),

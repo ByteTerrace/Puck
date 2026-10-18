@@ -3,12 +3,11 @@ using System.Numerics;
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
-/// A surface extracted from an <see cref="SdfBakeGrid"/>: one vertex per surface patch of each cell the surface crosses,
+/// A surface extracted from an <see cref="ISdfContourLattice"/>: one vertex per surface patch of each cell the surface crosses,
 /// and one quad per sign-changing lattice edge joining the vertices of the four cells around it. Positions and normals
 /// are world-space doubles; quads list four vertex indices, wound counter-clockwise seen from outside.
 /// </summary>
 internal sealed class SdfSurface {
-    public required double CellSize { get; init; }
     public required double[] Normals { get; init; }
     public required double[] Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
@@ -191,7 +190,6 @@ internal static class SdfDualContouring {
         var (quads, quadCorners, quadInsideCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
         return new SdfSurface {
-            CellSize = grid.CellSize,
             Features = [.. features],
             Normals = [.. normals],
             Positions = [.. positions],
@@ -737,7 +735,6 @@ internal static class SdfDualContouring {
         }
 
         return new SdfSurface {
-            CellSize = grid.CellSize,
             Features = [.. mergedFeatures],
             Normals = [.. mergedNormals],
             Positions = [.. mergedPositions],

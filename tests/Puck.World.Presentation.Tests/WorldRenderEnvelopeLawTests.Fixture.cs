@@ -199,7 +199,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
                 );
             }
 
-            var boot = bootBuilder.Build(buildInstanceGrid: false);
+            var boot = bootBuilder.Build();
 
             Definition = definition;
             BootWords = boot.Words.Length;
@@ -246,7 +246,7 @@ public sealed partial class WorldRenderEnvelopeLawTests {
                 candidate: candidate
             );
 
-            var measured = builder.Build(buildInstanceGrid: false);
+            var measured = builder.Build();
 
             return (measured.Words.Length, measured.Instances.Count);
         }

@@ -1,10 +1,9 @@
 // The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
-// nothing on a miss. It samples a bound screen, loads the material (a textured mesh's texel or an impostor's surface
-// standing in for its albedo and emission), lights the surface through the one light interface (sdf-light.hlsli), each
+// nothing on a miss. It samples a bound screen, loads the material, lights the surface through the one light interface (sdf-light.hlsli), each
 // slotted light under its own shadow, adds the irradiance volume's indirect light, applies the editor grid, and reports
 // the pixel's coverage: one for a hit, zero on a miss. It also reports the pixel's reactivity for a temporal view's
 // resolve: one for a screen, whose content changes on its own, and for emission, which the material model cannot tell
-// animated from steady, the share of the color the material and atlas texel that actually shaded the pixel emit. The sky,
+// animated from steady, the share of the color the material that actually shaded the pixel emits. The sky,
 // the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
 #define PASSES_SDF_LIGHT_STAGE_HLSLI
@@ -20,33 +19,9 @@ static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
 static const float ScreenGlassBase = 0.85;
 static const float ScreenGlassSunTint = 0.15;
 
-// A shaded mesh pixel's surface: a textured mesh's atlas texel, whose material the pixel shades with, or an impostor
-// card's views.
-struct SdfLightMesh {
-    bool textured;
-    bool impostor;
-    SdfMeshTexel texel;
-    SdfImpostorSurface impostorSurface;
-};
-
-SdfLightMesh sdfLightMeshAt(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, inout int material) {
-    SdfLightMesh mesh = (SdfLightMesh)0;
-
-    if (sdfMeshIsImpostor(s.meshDraw)) {
-        mesh.impostor = true;
-        mesh.impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, p.pixelFootprint);
-    } else if (sdfMeshTextured(s.meshDraw)) {
-        mesh.textured = true;
-        mesh.texel = sdfMeshTexelAt(s.meshDraw, s.meshTriangle, surfacePoint, (p.pixelFootprint * s.t));
-        material = sdfMeshTexelMaterial(s.meshDraw, mesh.texel);
-    }
-
-    return mesh;
-}
-
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit's surface point, whether the
-// view shades finally, and a shaded mesh pixel's surface (sdfLightMeshAt) with the material it shades with.
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, SdfLightMesh mesh, int material, out float coverage, out float reactivity) {
+// view shades finally, and the material the pixel shades with.
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
     float3 emission = float3(0.0, 0.0, 0.0);
 
@@ -87,28 +62,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // screenIndex and never indexes the material table.
             color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
         } else {
-            // A mesh pixel's surface is its triangle's: a textured mesh reads its texel's material, albedo and emission
-            // from the atlases, and an impostor its views' (sdfLightMeshAt).
-            bool meshTextured = mesh.textured;
-            bool meshImpostor = mesh.impostor;
-            SdfMeshTexel meshTexel = mesh.texel;
-            SdfImpostorSurface impostorSurface = mesh.impostorSurface;
             SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
-
-            // A textured mesh's texel carries its albedo and the light it emits; the emission joins the shade in place of
-            // the material's albedo times its emissive strength, which the bake already multiplied.
-            float3 meshEmission = float3(0.0, 0.0, 0.0);
-
-            if (meshTextured) {
-                shadeMaterial.albedo = sdfMeshTexelAlbedo(meshTexel);
-                meshEmission = sdfMeshTexelEmission(meshTexel);
-                shadeMaterial.emissive = 0.0;
-            } else if (meshImpostor) {
-                shadeMaterial.albedo = impostorSurface.albedo;
-                meshEmission = impostorSurface.emission;
-                shadeMaterial.emissive = 0.0;
-            }
-
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
             float3 layerRay = p.rayDirection;
@@ -166,7 +120,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 attenuation *= response.attenuation;
             }
 
-            color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
+            color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0);
 
             if (meshIndirect) {
                 color += sdfMeshIndirect(surfacePoint, normal) * shadeMaterial.albedo
@@ -195,9 +149,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             color += rim;
             color += specular;
 
-            float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
+            float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
             color = selfEmission + (color - selfEmission) * attenuation;
-            // Use the material and atlas texel that actually shaded this pixel, after its layers.
+            // Use the material that actually shaded this pixel, after its layers.
             emission = selfEmission;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline).

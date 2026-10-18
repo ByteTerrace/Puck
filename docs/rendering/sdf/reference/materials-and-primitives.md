@@ -7,24 +7,15 @@ corresponding material rule.
 ## Material composition
 
 Hard operations use a strict winner comparison so ties are deterministic.
-Smooth composition blends distance over an authored radius and records the
-information for material interpolation, which the interpreter tracks but no
-view draws: the bake point-samples each quad's winning material. The
-interpolation state must never change the field.
+Smooth composition blends distance over an authored radius; its material is the
+strict comparison's winner, as for a hard operation. The bake point-samples each
+quad's winning material, so no view interpolates materials across a seam.
 
 Scoped fields isolate operations such as intersection, onion, dilation, and
 displacement from the parent accumulator, then compose the scoped result back
 through `PopField`. Their outward reach must be included in instance bounds.
-
-Material interpolation state belongs to that accumulator too. `PushField` saves
-the parent's secondary material and blend weight, then starts the scope without
-a seam. A losing scope restores the parent's state; a winning hard-union scope
-keeps its internal material seam. A smooth outer composition creates a new
-two-material seam. Without this isolation, a smooth join inside a character can
-tint unrelated ground pixels even when the ground wins the distance comparison.
-To check a change here, render contrasting scoped materials beside an unrelated
-ground surface: a losing scope must not tint the ground, and a winning
-hard-union scope must keep its internal seam.
+`PushField` saves the parent's distance and material; the scope's result joins
+the parent through the pop's blend and the same winner rule.
 
 ## Primitive contract
 

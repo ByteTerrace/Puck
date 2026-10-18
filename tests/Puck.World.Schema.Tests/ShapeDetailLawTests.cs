@@ -9,8 +9,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// THE LAW: <see cref="ShapeDocument.Detail"/> — a shading-only shape, skipped by the march and included only at an
-/// already-found hit — is admitted on any primitive type, refused by name alongside <see cref="ShapeDocument.Panel"/>
+/// THE LAW: <see cref="ShapeDocument.Detail"/> — a shape excluded from contact that bakes like any other — is admitted on any primitive type, refused by name alongside <see cref="ShapeDocument.Panel"/>
 /// or <see cref="ShapeDocument.Trims"/> on the same shape (both emit a second, independently-composed copy Detail
 /// cannot describe), reaches the packed program's ShapeBlend instruction unchanged on both emission paths, and never
 /// reaches the deterministic fixed-point contact evaluator either path feeds — so a detail shape's presence never

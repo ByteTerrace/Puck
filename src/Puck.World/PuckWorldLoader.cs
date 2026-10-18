@@ -9,15 +9,11 @@ namespace Puck.World;
 /// <summary>Transparent runtime boot loader and compiler for Puck DSL (.puck) files.</summary>
 internal static class PuckWorldLoader {
     // A boot reads its compiled world beside its document, else from the compiled-world cache, and writes one there
-    // on a miss. The bakes a compiled world names fill the bake cache from the bake pack beside it, and the
-    // presentation reads that cache. Like the compile cache, both hold a pure function of the source, the build and
-    // the machine catalog, never of a run's state, so every boot handed the same roots shares them whatever its
-    // --state-dir; both stores write atomically, so concurrent boots may fill them together.
+    // on a miss. Like the compile cache, it holds a pure function of the source, the build and the machine catalog,
+    // never of a run's state, so every boot handed the same roots shares it whatever its --state-dir; it writes
+    // atomically, so concurrent boots may fill it together.
     private static CompiledWorldCache CompiledWorlds(WorldCacheRoots caches) => new(
-        chunks: WorldBakeChunk.Register(
-            chunks: CompiledWorldChunks.Standard,
-            store: WorldBakeStore.Open(directory: caches.Bakes)
-        ),
+        chunks: CompiledWorldChunks.Standard,
         directory: caches.CompiledWorlds
     );
     // A composition source declares several worlds that reach each other across their borders by document name, and

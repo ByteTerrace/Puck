@@ -190,20 +190,16 @@ holds for the document: the `<name>.puckb` beside it, which the build ships for
 every world in `Assets/worlds` and `puck compile` writes, or the one a previous
 boot wrote into the per-user `compiled-worlds` cache, which every boot shares
 whatever its `--state-dir`. A boot that finds none, or finds chunks that no
-longer hold, derives them and writes the whole compiled world into that cache,
-leaving out the creation bakes: those a
-compiled world names fill the bake cache from the build's bake pack
-(`Assets/worlds/bakes.puckbake`), and a presentation bakes any that are
-missing in the background and keeps them in the per-user `bakes` cache
-([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
-entry point names these three per-user caches and hands them to the boot as
+longer hold, derives them and writes the whole compiled world into that cache.
+The entry point names the per-user caches a boot reads and fills
+(`compiled-worlds` and the `.puck` `compilations`) and hands them to the boot as
 `WorldCacheRoots`, so a host or test that composes World services uses
 directories of its own.
 
 Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/debug.world.json`, compiled from `debug.puck`), one
 `[world] compiled world:` line naming the compiled world it read, the chunks it
-kept, derived and deferred, and where it wrote one, one naming
+kept and derived, and where it wrote one, one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
 flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
@@ -420,8 +416,8 @@ presentation scales to the window.
 Both rendered hosts, windowed and offscreen, hold their clock for captures:
 neither steps past an armed capture's tick, a scheduled row's or a
 `world.screenshot`'s, until that capture is served or refused. Whatever keeps the render chain from serving the capture
-(the engine's pipelines still building on a cold driver shader cache, the
-creation bakes still settling, or a device being rebuilt), the host keeps
+(the engine's pipelines still building on a cold driver shader cache, or a
+device being rebuilt), the host keeps
 producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
 so serving the capture releases no burst. The offscreen host's own hold on a
@@ -893,9 +889,7 @@ Facts a script needs:
   pending simulation traffic applies, so a scripted write-then-read pair
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
-  `world.wait` are the explicit waits. `world.wait bakes <seconds>` holds until
-  the presentation's creation bakes are settled (none queued or baking).
-  `world.wait ready <seconds>` waits for
+  `world.wait` are the explicit waits. `world.wait ready <seconds>` waits for
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
   and its first frame captured), the render graph's root has rendered over
@@ -905,7 +899,11 @@ Facts a script needs:
   frames (offscreen, every tick is a frame of its own), or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
-  cache can hold the first frame back for many ticks. `world.wait captures
+  cache can hold the first frame back for many ticks. `world.wait bakes
+  <seconds>` holds until every residency the presentation renders (the world's
+  own, each session view's, routed scene's and infinity layer's) has baked every
+  group of the program it last drew, and reports `[bakes: settled at tick T]`,
+  or on the deadline the residencies still baking. `world.wait captures
   <seconds>` holds until every capture `world.screenshot` armed on the render
   graph's root has written its file or been refused, and reports
   `[captures: settled at tick T]` on standard error. A script that takes one
@@ -2110,8 +2108,7 @@ facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
-their frozen envelopes, the Lipschitz step scale and march multiplier, its segments,
-chains and specialization vocabulary, the far
+their frozen envelopes, the Lipschitz step scale and march multiplier, its segments, the far
 distance with its reach multiplier, horizon-ray step tax, far-plane fog
 remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—
@@ -2145,11 +2142,7 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 `shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its
 `pipeline-cache.<backend>` and `memory.<backend>` (device-local bytes
 allocated and released at their allocation sizes, and the peak held; swapchain
-images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
-shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
-mesh draws (`near`) and impostor cards (`far`) of baked placements the views
-recorded. The
+images are never counted), and Vulkan adds `procedures.vulkan`. The
 client registers `presentation.mirror`, the cells its state mirror read. A
 presented host registers `sdf.transforms`: pacing counts of the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the

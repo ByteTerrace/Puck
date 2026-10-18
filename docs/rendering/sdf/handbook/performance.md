@@ -48,10 +48,8 @@ world.budget
   report from before a change to one from after it, pass by pass; see the
   [CLI reference](../../../reference/cli.md#puck-counterswork-counter-collector).
 - **`world.budget`** prints the compose-time cost sheet: live program words and
-  instances, the global step scale, volumes, scoped field clamps, and the
-  program's directory segments (rigid ones counted), the chains they run and its
-  [specialization set](../../../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs):
-  distinct chains, shape types, blends and compose forms, and the mesh region's
+  instances, the global step scale, volumes, scoped field clamps, the
+  program's directory segments (rigid ones counted), and the mesh region's
   bytes and draws. Confirm that the scene submits the geometry you think it
   does before you believe a count.
 

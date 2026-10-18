@@ -13,20 +13,17 @@ public static partial class CompileCommand {
     // `puck compile --tree <root> --output <directory> [--written <report>] <sources…>`: the build's one generation
     // step. Each source's documents land at the same relative place under the output directory that the source holds
     // under the tree, so a document's relative basis, import, reference and asset paths resolve there as they do beside
-    // its source; each document that draws as a world has its compiled world beside it, the bakes every compiled
-    // world names ship once, in one bake pack at the output's root, and every pipeline source a compiled world names
-    // ships as a package in the store beside the pack (WritePipelinePackages). Every name resolves first, as the
+    // its source; each document that draws as a world has its compiled world beside it, and every pipeline source a
+    // compiled world names ships as a package in the store at the output's root (WritePipelinePackages). Every name resolves first, as the
     // composer resolves it: to the source that emits it, whatever its stem, and to its document otherwise. A
     // hand-authored `.world.json` given as a source ships as it stands, with its compiled world, unless the `.puck`
     // source of its exact name emits that name, which wins; a composition beside it that declares other worlds leaves it shipping, and a source of
     // another stem emitting its name is refused with it before anything is written. The output directory is the tree's
-    // alone: after every source compiled, a world document, compiled world or bake pack there that this run did not
+    // alone: after every source compiled, a world document or compiled world there that this run did not
     // write belongs to a source that was renamed or deleted, and is removed so nothing can load it. Which documents a
     // source emits is not its file name, so the
-    // run reports what it wrote rather than leaving a build to derive it from the sources' names. The bakes are read from
-    // and kept in the content-addressed bake cache under `bakeCache` when the caller names one, so a creation whose key
-    // an earlier run kept there is not baked again; without one, the run bakes every creation its worlds name.
-    private static int RunTree(string tree, string output, string? report, string? bakeCache, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
+    // run reports what it wrote rather than leaving a build to derive it from the sources' names.
+    private static int RunTree(string tree, string output, string? report, IReadOnlyList<string> paths, bool strict, bool validate, bool bundle) {
         var root = Path.GetFullPath(path: tree);
         var directory = Path.GetFullPath(path: output);
         // Each file this run wrote and the source that wrote it, so a second source claiming a document is refused.
@@ -63,17 +60,6 @@ public static partial class CompileCommand {
                 return 2;
             }
         }
-
-        // Every compiled world of the run names its bakes in one pack at the output's root, written once every source
-        // has compiled, so a bake the worlds share ships once.
-        var pack = new BakePackPlan(
-            keepsEarlier: false,
-            path: Path.Combine(
-                path1: directory,
-                path2: WorldBakePack.FileName
-            ),
-            store: new WorldBakeStore(directory: bakeCache)
-        );
 
         // Every name the tree carries resolves before anything is written, by the one rule the composer resolves a name
         // by (PuckDocumentComposer.TryCarriers over the name index): the source that emits it, whatever its stem, and
@@ -123,7 +109,6 @@ public static partial class CompileCommand {
                         path1: directory,
                         path2: relative
                     ),
-                    pack: pack,
                     relative: relative,
                     source: source,
                     written: written
@@ -137,7 +122,6 @@ public static partial class CompileCommand {
                             path: relative
                         )
                     ),
-                    pack: pack,
                     path: source,
                     strict: strict,
                     validate: validate,
@@ -148,16 +132,6 @@ public static partial class CompileCommand {
             if (exitCode != 0) {
                 return exitCode;
             }
-        }
-
-        var packed = WriteBakePack(
-            owner: root,
-            pack: pack,
-            written: written
-        );
-
-        if (packed != 0) {
-            return packed;
         }
 
         var pipelines = WritePipelinePackages(
@@ -176,7 +150,7 @@ public static partial class CompileCommand {
                 comparer: PuckPaths.Comparer
             );
 
-            foreach (var stale in ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension]).SelectMany(selector: suffix => Directory.EnumerateFiles(
+            foreach (var stale in ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension]).SelectMany(selector: suffix => Directory.EnumerateFiles(
                 path: directory,
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: ("*" + suffix)
@@ -413,7 +387,7 @@ public static partial class CompileCommand {
     // its name among the tree's carriers (`carrierOf`, resolved before anything was written): a source emitting the
     // name wins only beside the document of its own exact stem, and carries the document, which is skipped. A document
     // file the run already wrote, given twice, is two claims to one name, refused in the words every door uses.
-    private static int ShipDocument(string source, string relative, string destination, IReadOnlyDictionary<string, string> carrierOf, Dictionary<string, string> written, BakePackPlan pack) {
+    private static int ShipDocument(string source, string relative, string destination, IReadOnlyDictionary<string, string> carrierOf, Dictionary<string, string> written) {
         var target = Path.GetFullPath(path: destination);
         var name = WorldDocumentName.OfDocumentFile(path: relative.Replace(
             newChar: '/',
@@ -468,7 +442,6 @@ public static partial class CompileCommand {
         return CompileDocument(
             besidePath: target,
             documentPath: source,
-            pack: pack,
             written: written
         );
     }

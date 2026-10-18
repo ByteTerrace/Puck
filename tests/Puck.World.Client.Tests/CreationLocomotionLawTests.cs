@@ -70,7 +70,7 @@ public sealed class CreationLocomotionLawTests {
             round: 0f
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static ShapeDocument Bone(int id, string name, float side, float y, float z, string? parent, Vector3? pivot) => new(
         Id: id,
