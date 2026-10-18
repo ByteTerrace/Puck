@@ -73,10 +73,8 @@ internal static class DirectXTestDevices {
     /// <summary>Returns a context whose device is a software device, created; skips the calling test when the host has
     /// none that meets the floor.</summary>
     /// <param name="memory">The memory counts the context records into, or <see langword="null"/> for none.</param>
-    /// <param name="debugOutput">The writer the context writes its debug and removal lines to, or
-    /// <see langword="null"/> for the standard error.</param>
     /// <returns>The context, owned by the caller.</returns>
-    internal static DirectXDeviceContext Warp(GpuDeviceMemoryWork? memory = null, TextWriter? debugOutput = null) {
+    internal static DirectXDeviceContext Warp(GpuDeviceMemoryWork? memory = null) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Direct3D 12 exists only on Windows."); }
 
         var context = new DirectXDeviceContext(
@@ -84,7 +82,6 @@ internal static class DirectXTestDevices {
             deviceApi: new DirectXWarpDeviceApi(),
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         ) {
-            DebugOutput = debugOutput,
             Memory = memory,
         };
 
