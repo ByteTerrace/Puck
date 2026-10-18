@@ -969,9 +969,14 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationInstance: hostSettings);
         // Read by either backend's registration when it creates the device; a headless boot creates none.
         services.AddSingleton(implementationInstance: new GpuDeviceOptions {
-            NameObjects = (inputs.Validation != GpuValidation.Off),
+            NameObjects = ((inputs.Validation != GpuValidation.Off) || (inputs.CaptureTool is not null)),
             Validation = inputs.Validation,
         });
+        // The operator's gpu.capture, over the capture tool the boot loaded, if any; a GPU host drives it every frame.
+        services.AddSingleton(implementationInstance: new GpuFrameCapture(
+            narrate: static line => Console.Error.WriteLine(value: line),
+            tool: inputs.CaptureTool
+        ));
         // Registered before the launcher terminal block (reached through AddWorldBootShape) so the launcher's
         // TryAddSingleton<LauncherOptions> defers to this one in every boot shape: --exit-after-seconds applies to the
         // headless tick host exactly like the windowed one. A null target selects automatic display pacing from
@@ -1168,6 +1173,7 @@ public static class WorldBootComposition {
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
         services.AddGpuCreationFaults();
+        services.AddGpuCaptureCommand();
         // The render levers need only the render settings, the session-lever submit and the render probe registered
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
@@ -1335,6 +1341,7 @@ public static class WorldBootComposition {
         AddWorldShaderWork(services: services);
         AddWorldBakes(services: services);
         services.AddGpuCreationFaults();
+        services.AddGpuCaptureCommand();
 
         // The world speaker device: the hosted service owning the mixer + the WASAPI governor/pump threads. One
         // dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown; a

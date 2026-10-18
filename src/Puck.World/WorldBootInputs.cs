@@ -32,6 +32,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the capture output directory (<c>--capture-dir</c>) laid over the document's own, or
     /// <see langword="null"/> to let the document decide.</summary>
     public string? CaptureDirectory { get; init; }
+    /// <summary>Gets the GPU capture tool the boot loaded before any device (<c>--capture-tool</c>), which
+    /// <c>gpu.capture</c> drives, or <see langword="null"/> for none.</summary>
+    public IGpuCaptureTool? CaptureTool { get; init; }
     /// <summary>Gets the subject a <c>--authentication-config-file</c> connection signs as, which the boot server
     /// takes as its authority identity, or <see langword="null"/> to keep the document's own.</summary>
     public string? ConnectionSubject { get; init; }

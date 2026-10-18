@@ -709,7 +709,10 @@ registered in both GPU presentation shapes by `AddGpuCreationFaults`) arms the
 host's `GpuCreationFaults`; an armed creation fails `installed` with
 `GPU_CREATION_FAULT`, `lose` loses the device on its nth counted frame through the host's device-loss (`remove` removes it for real where the backend can, Direct3D 12)
 policy, and every form prints `armed=… <kind>=<seen> … frames=<seen>` for a
-canary's `response` extraction. A paused
+canary's `response` extraction. `gpu.capture [<path> [<frames>]]` (Immediate,
+`CommandAudience.Operator`, `AddGpuCaptureCommand` in the same shapes) arms
+`GpuFrameCapture` over the tool `--capture-tool` loaded; the GPU hosts bracket
+each frame with its `BeginFrame` and `EndFrame`. A paused
 reset's initialization frame never consumes a pending `pipeline.step`; the step
 renders one frame beyond it. A reload, a row upsert or a resize is not a step:
 a paused (or time-scale-zero) instance installs it without rendering, so

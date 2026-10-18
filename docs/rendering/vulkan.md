@@ -629,6 +629,19 @@ instance's writer as their `pUserData` (`VulkanDebugOutput`): the
 when it is given none, as the Direct3D 12 context's `DebugOutput` does. `VulkanInstanceCreateChainLawTests` holds the chain
 and the extension without a loader.
 
+## GPU captures
+
+`--capture-tool renderdoc` loads RenderDoc's `renderdoc.dll` (`librenderdoc.so`
+off Windows) and binds its in-application API before the instance is created
+(`RenderDocCaptureTool`): loading the library turns on RenderDoc's implicit
+Vulkan layer for the process, so the instance and device it captures are the
+ones the World creates. Its overlay is off, and the run names its objects
+through `VK_EXT_debug_utils`, which also carries every pass's label. PIX
+captures Direct3D 12 only, so `--capture-tool pix` refuses a Vulkan boot.
+`gpu.capture <path> [<frames>]` captures the next frames, one
+`<path>_frame<n>.rdc` a frame, each bracketed by `StartFrameCapture` and
+`EndFrameCapture` around the frame's work and present (`GpuFrameCapture`).
+
 ## Debug names
 
 Every object the backend creates carries a debug name taken from its creator,
@@ -642,7 +655,7 @@ on every run.
 
 `VulkanGpuObjectNaming` applies names through `vkSetDebugUtilsObjectNameEXT`,
 and only when the renderer names objects (`VulkanRendererOptions.NameObjects`,
-which any `--debug-layers` level turns on) and the instance has
+which any `--debug-layers` level and any `--capture-tool` turn on) and the instance has
 `VK_EXT_debug_utils`. Otherwise naming returns before it formats anything, so a
 normal run builds no strings. The validation layer prints the name in
 brackets after the handle, so a leak report reads

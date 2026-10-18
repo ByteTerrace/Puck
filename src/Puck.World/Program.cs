@@ -91,6 +91,13 @@ var debugLayersOption = new Option<GpuValidation>(name: "--debug-layers") {
     DefaultValueFactory = static _ => GpuValidation.Off,
     Description = "Create the GPU device with its backend's validation. A bare flag (or 'basic') is the API layer: [vulkan-debug] lines with synchronization validation on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. 'full' adds GPU-based validation with state tracking and synchronized queue validation on Direct3D 12, GPU-assisted validation and best-practices checks (NVIDIA's included) on Vulkan, and makes pipeline creation and every frame much slower. Every level names the device's objects. On some Direct3D 12 configurations the layer makes device creation fail.",
 };
+// A developer diagnostic, never world-authored: a capture tool hooks the graphics API from inside the process, so it
+// loads before anything can create a device, and gpu.capture then captures the frames the operator asks for.
+var captureToolOption = new Option<string?>(name: "--capture-tool") {
+    DefaultValueFactory = static _ => null,
+    Description = "Load a GPU capture tool into the process before the device exists, so gpu.capture <path> [<frames>] captures the next frames: pix (PIX on Windows' WinPixGpuCapturer.dll, Direct3D 12 only) or renderdoc (RenderDoc's in-application API, either backend). Also names the device's objects. Refused when the tool is not installed.",
+};
+captureToolOption.AcceptOnlyFromAmong(values: [.. GpuCaptureTools.Names]);
 var unpacedOption = new Option<bool>(name: "--unpaced") {
     DefaultValueFactory = static _ => false,
     Description = "Advance a headless world on its fixed simulation tick grid without wall-clock pacing. Intended for an armed authored schedule or another offline run; refused for presented hosts.",
@@ -148,6 +155,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
+    captureToolOption,
     debugLayersOption,
     scheduleDirOption,
     unpacedOption,
@@ -404,6 +412,24 @@ if (
 if (hostSettings.BackendDowngraded) {
     Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }
+// The capture tool loads here, after the backend is settled and before anything below can create a device.
+IGpuCaptureTool? captureTool = null;
+if (parseResult.GetValue(option: captureToolOption) is { } captureToolName) {
+    var captureFailure = "a headless boot creates no device to capture";
+
+    if (hostSettings.Headless || !GpuCaptureTools.TryLoad(
+        directX: hostSettings.HostsOnDirectX,
+        failure: out captureFailure,
+        name: captureToolName,
+        tool: out captureTool
+    )) {
+        Console.Error.WriteLine(value: $"[world.host: refused: --capture-tool {captureToolName}: {captureFailure}]");
+
+        return 1;
+    }
+
+    Console.Error.WriteLine(value: $"{GpuFrameCapture.LinePrefix} {captureTool!.Name} loaded; gpu.capture <path> [<frames>] captures the next frames");
+}
 var builder = Host.CreateApplicationBuilder(args: args);
 // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
 // and whichever thread writes it, goes to standard error beside the narration.
@@ -439,6 +465,7 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     StateRoot: stateRoot
 ) {
     CaptureDirectory = parseResult.GetValue(option: captureDirOption),
+    CaptureTool = captureTool,
     ConnectionSubject = connectionSubject,
     Control = parseResult.GetValue(option: controlOption),
     // The parser hands a bare flag its default rather than its custom parser, so a present flag with no value is read

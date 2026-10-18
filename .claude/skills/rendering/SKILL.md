@@ -318,6 +318,13 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
   (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. `puck parity
   --world <file>` compares Vulkan and Direct3D 12 on one world.
+- GPU captures: boot with `--capture-tool pix` (Direct3D 12) or `--capture-tool
+  renderdoc` (either backend), then `gpu.capture <path> [<frames>]` captures the
+  next frames and narrates `[gpu.capture] <tool> wrote <file>`. A crossing lands
+  on the same tick every run, so put `world.wait <ticks>` before the capture to
+  catch it; a steady frame is any frame after `[sdf.mesh-gi] done`. A removed
+  Direct3D 12 device prints its DRED record as `[d3d12-dred]` lines;
+  `gpu.faults remove` removes one on purpose.
 - Under `--debug-layers`, any `[vulkan-debug] validation`, `SYNC-HAZARD-*` or
   `[d3d12-debug]` line is a bug to fix in the engine, never a message to filter.
   `--debug-layers full` adds Direct3D 12 GPU-based validation and Vulkan

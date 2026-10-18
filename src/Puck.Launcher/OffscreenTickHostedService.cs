@@ -36,6 +36,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly IDeviceRebuild? m_deviceRebuild;
     private readonly GpuCreationFaults? m_faults;
+    private readonly GpuFrameCapture? m_gpuCapture;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -71,6 +72,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         StandardInputBacklog inputBacklog,
         IEnumerable<IDeviceRebuild> deviceRebuilds,
         IEnumerable<GpuCreationFaults> faults,
+        IEnumerable<GpuFrameCapture> gpuCaptures,
         TimeProvider time
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
@@ -78,6 +80,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(deviceRebuilds);
         ArgumentNullException.ThrowIfNull(faults);
+        ArgumentNullException.ThrowIfNull(gpuCaptures);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -102,6 +105,11 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         m_faults = LauncherHostLoop.SingleOrDefault(
             items: faults,
             name: nameof(GpuCreationFaults),
+            hostDescription: "offscreen host"
+        );
+        m_gpuCapture = LauncherHostLoop.SingleOrDefault(
+            items: gpuCaptures,
+            name: nameof(GpuFrameCapture),
             hostDescription: "offscreen host"
         );
         m_inputClock = inputClock;
@@ -298,9 +306,12 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                         // included, so a loss raised before the hand-off leaves the retry carrying the step and one the
                         // root raises after it leaves the retry advancing nothing.
                         composedTick = true;
+                        // The operator's gpu.capture brackets exactly the frame's GPU work.
+                        m_gpuCapture?.BeginFrame();
 
                         var produced = m_root.ProduceFrame(context: in frameContext);
 
+                        m_gpuCapture?.EndFrame();
                         deviceLoss.NoteFrameProduced();
                         holding = HoldsTick(
                             completion: produced.Render.Completion,

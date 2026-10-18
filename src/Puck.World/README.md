@@ -216,7 +216,13 @@ API layer (on Vulkan with synchronization validation), which `puck canary
 (Direct3D 12 GPU-based validation, Vulkan GPU-assisted validation and best
 practices), at the cost of minutes of pipeline instrumentation and much slower
 frames ([Direct3D 12](../../docs/rendering/directx.md#validation),
-[Vulkan](../../docs/rendering/vulkan.md#validation)).
+[Vulkan](../../docs/rendering/vulkan.md#validation)). `--capture-tool pix|renderdoc`
+loads a GPU capture tool into the process before the device exists (PIX for
+Direct3D 12 only, RenderDoc for either backend) and names the device's objects,
+so `gpu.capture` can capture chosen frames
+([Direct3D 12](../../docs/rendering/directx.md#gpu-captures),
+[Vulkan](../../docs/rendering/vulkan.md#gpu-captures)); a tool that is not
+installed refuses the boot.
 
 `--help` (or `-h`) and `--version` exit before host setup: they do not load a
 world, open a window, or initialize storage. Use `--version` alone; the parser
@@ -749,6 +755,13 @@ armed removal, or `armed=none`), one
 `<kind>=<count>` field per kind, the creations since the last disarm, and
 `frames=<count>`, the frames counted since then. Only the operator's console
 runs it; a seat, binding, schedule step or world document cannot.
+`gpu.capture <path> [<frames>]` captures the next 1 to 16 frames with the GPU
+capture tool the boot loaded (`--capture-tool pix|renderdoc`): PIX writes one
+`.wpix` holding them all, RenderDoc one `<path>_frame<n>.rdc` a frame, and each
+written file is narrated on stderr as `[gpu.capture] <tool> wrote <file>`. A bare
+`gpu.capture` describes the tool and what is armed; with no tool loaded it
+refuses. A crossing lands on the same tick on every run of one document and
+input, so `world.wait` positions a capture on it.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
 

@@ -6,3 +6,8 @@
 # The screen binder's device work: what needs a GPU device or its shared resources, the frame presenter, the render
 # graph's running instances, or a camera or capture handing over frames. WorldScreenBinderLawTests covers the rest.
 src/Puck.World/WorldScreenBinder.Device.
+# The GPU capture tools' native bindings and their loading, which only an installed PIX or RenderDoc answers, beside
+# a GPU device. GpuFrameCaptureLawTests and GpuCaptureToolsLawTests cover the frame bracketing and the refusals.
+src/Puck.Launcher/GpuCapture/GpuCaptureTools.Load.
+src/Puck.Launcher/GpuCapture/PixGpuCaptureTool.
+src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.

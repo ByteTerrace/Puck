@@ -23,6 +23,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly FrameCaptureController? m_capture;
     private readonly ExternalClockRegistry m_externalClocks;
     private readonly GpuCreationFaults? m_faults;
+    private readonly GpuFrameCapture? m_gpuCapture;
     private readonly IInputClock m_inputClock;
     private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
@@ -63,6 +64,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         StandardInputBacklog inputBacklog,
         INativeWindowFactory windowFactory,
         IEnumerable<GpuCreationFaults> faults,
+        IEnumerable<GpuFrameCapture> gpuCaptures,
         TimeProvider time,
         HostFrameTimeline timeline
     ) {
@@ -73,6 +75,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
         ArgumentNullException.ThrowIfNull(faults);
+        ArgumentNullException.ThrowIfNull(gpuCaptures);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -98,6 +101,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_faults = LauncherHostLoop.SingleOrDefault(
             items: faults,
             name: nameof(GpuCreationFaults),
+            hostDescription: "windowed host"
+        );
+        m_gpuCapture = LauncherHostLoop.SingleOrDefault(
+            items: gpuCaptures,
+            name: nameof(GpuFrameCapture),
             hostDescription: "windowed host"
         );
         m_inputClock = inputClock;
@@ -587,6 +595,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             width: width
                         );
                         m_timeline.Mark(phase: HostFramePhase.Begin);
+                        // The operator's gpu.capture brackets the frame's GPU work and its present.
+                        m_gpuCapture?.BeginFrame();
 
                         if (
                             (width > 0) &&
@@ -618,6 +628,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             m_timeline.Mark(phase: HostFramePhase.Present);
                         }
 
+                        m_gpuCapture?.EndFrame();
                         deviceLoss.NoteFrameProduced();
                     } catch (DeviceLostException deviceLost) {
                         if (!deviceLoss.TryRecover(

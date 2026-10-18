@@ -486,6 +486,27 @@ drain leaves out two messages the layer raises by design: a pipeline-library
 miss, which `gpu.pipeline-cache.misses` counts, and the full level's
 startup-options notice, which the live line already states.
 
+## GPU captures
+
+`--capture-tool pix` loads the newest installed `WinPixGpuCapturer.dll` (under
+`Program Files/Microsoft PIX/<version>`, as pix3's
+`PIXLoadLatestWinPixGpuCapturerLibrary` does) before the device is created, so
+PIX sees the device from its creation (`PixGpuCaptureTool`). `--capture-tool
+renderdoc` loads RenderDoc's `renderdoc.dll` and its in-application API
+instead (`RenderDocCaptureTool`), with its overlay off. Either tool names the
+device's objects, so a capture shows `sdf.world/program[1]` rather than a bare
+resource, and every pass already carries its PIX event label
+(`DirectXDebugLabel`).
+
+`gpu.capture <path> [<frames>]` arms a capture of the next frames
+(`GpuFrameCapture`): the host starts it after `BeginFrame` has waited for the
+previous frame and ends it after the frame presents, so the capture holds
+exactly the armed frames. PIX writes one `.wpix` through
+`BeginProgrammaticGpuCapture` and `EndProgrammaticGpuCapture`, asking again on
+the next frame while the end answers `E_PENDING`; RenderDoc writes one `.rdc` a
+frame. Open a `.wpix` in PIX (`pixtool open-capture`, or the application) for its
+timeline, occupancy and the barriers each event recorded.
+
 ## Debug names
 
 Every object the backend creates carries a debug name taken from its creator,
@@ -499,7 +520,7 @@ on every run.
 
 `DirectXGpuObjectNaming` applies names through `ID3D12Object::SetName`, and
 only when the context names objects (`DirectXDeviceContext.NameObjects`, which
-any `--debug-layers` level turns on). It names resources,
+any `--debug-layers` level and any `--capture-tool` turn on). It names resources,
 pipeline states, command allocators and command lists; views, descriptor pools
 and sets, and render passes are not Direct3D 12 objects, so they carry no
 name. Otherwise naming returns before it formats anything, so a normal run
