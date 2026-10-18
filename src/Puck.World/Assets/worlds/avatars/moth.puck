@@ -3583,44 +3583,44 @@ prototypes {
       shape Prism "shoulder-left" {
         id: 150
         position [0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.2]
+        scale [0.26, 0.25, 0.2]
         material: violetBandLeft
         group: 14
         parent: "upperArm-left"
         profile {
           kind: "Convex"
           vertices [
-            [-0.25, 0.2222222]
-            [0.1666667, 0.4444444]
-            [0.6041667, 0.2222222]
-            [1, -1]
-            [0.25, -0.5333333]
+            [-0.42, 0.39]
+            [0.08, 0.67]
+            [0.62, 0.39]
+            [0.96, -0.81]
+            [-0.12, -0.33]
           ]
-          cornerRadius: 0.12
+          cornerRadius: 0.22
         }
       }
 
       shape Superellipsoid "shoulderCurve-left" {
         id: 151
-        position [0.3, 1.5015, 0.0075]
-        scale [0.25, 0.4, 0.155]
+        position [0.29, 1.43, 0.0075]
+        scale [0.33, 0.28, 0.155]
         material: violetBandLeft
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 14
         parent: "upperArm-left"
-        exponent: 2.6
+        exponent: 2
       }
 
       shape Superellipsoid "shoulderUnderside-left" {
         id: 152
-        position [0.295, 1.4565, 0.0075]
-        scale [0.12, 0.075, 0.125]
+        position [0.27, 1.33, 0.0075]
+        scale [0.21, 0.2, 0.115]
         material: charcoal
         blend: "Subtraction"
         group: 14
         parent: "upperArm-left"
-        exponent: softness
+        exponent: 2
       }
 
       shape Superellipsoid "shoulderSaddle-left" {
@@ -3634,20 +3634,20 @@ prototypes {
 
       shape Cylinder "shoulderBadge-left" {
         id: 157
-        position [0.3, 1.4915, 0.161]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.079, 0.02, 0.079]
-        material: violet
+        position [0.32, 1.55, 0.165]
+        rotation [0.5406, 0, -0.1822, 0.8213]
+        scale [0.062, 0.02, 0.062]
+        material: skin
         parent: "upperArm-left"
         rounding: 0.003
       }
 
       shape Cylinder "shoulderStud-left" {
         id: 158
-        position [0.3, 1.4915, 0.1865]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.031, 0.006, 0.031]
-        material: skin
+        position [0.3266, 1.5577, 0.1845]
+        rotation [0.5406, 0, -0.1822, 0.8213]
+        scale [0.036, 0.006, 0.036]
+        material: violet
         parent: "upperArm-left"
         rounding: 0.003
       }
@@ -5020,44 +5020,44 @@ prototypes {
       shape Prism "shoulder-right" {
         id: 218
         position [-0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.2]
+        scale [0.26, 0.25, 0.2]
         material: violetBandRight
         group: 28
         parent: "upperArm-right"
         profile {
           kind: "Convex"
           vertices [
-            [-0.25, -0.5333333]
-            [-1, -1]
-            [-0.6041667, 0.2222222]
-            [-0.1666667, 0.4444444]
-            [0.25, 0.2222222]
+            [0.12, -0.33]
+            [-0.96, -0.81]
+            [-0.62, 0.39]
+            [-0.08, 0.67]
+            [0.42, 0.39]
           ]
-          cornerRadius: 0.12
+          cornerRadius: 0.22
         }
       }
 
       shape Superellipsoid "shoulderCurve-right" {
         id: 219
-        position [-0.3, 1.5015, 0.0075]
-        scale [0.25, 0.4, 0.155]
+        position [-0.29, 1.43, 0.0075]
+        scale [0.33, 0.28, 0.155]
         material: violetBandRight
         blend: "SmoothIntersection"
         smooth: 0.012
         group: 28
         parent: "upperArm-right"
-        exponent: 2.6
+        exponent: 2
       }
 
       shape Superellipsoid "shoulderUnderside-right" {
         id: 220
-        position [-0.295, 1.4565, 0.0075]
-        scale [0.12, 0.075, 0.125]
+        position [-0.27, 1.33, 0.0075]
+        scale [0.21, 0.2, 0.115]
         material: charcoal
         blend: "Subtraction"
         group: 28
         parent: "upperArm-right"
-        exponent: softness
+        exponent: 2
       }
 
       shape Superellipsoid "shoulderSaddle-right" {
@@ -5071,20 +5071,20 @@ prototypes {
 
       shape Cylinder "shoulderBadge-right" {
         id: 225
-        position [-0.3, 1.4915, 0.161]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.079, 0.02, 0.079]
-        material: violet
+        position [-0.32, 1.55, 0.165]
+        rotation [0.5406, 0, 0.1822, 0.8213]
+        scale [0.062, 0.02, 0.062]
+        material: skin
         parent: "upperArm-right"
         rounding: 0.003
       }
 
       shape Cylinder "shoulderStud-right" {
         id: 226
-        position [-0.3, 1.4915, 0.1865]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.031, 0.006, 0.031]
-        material: skin
+        position [-0.3266, 1.5577, 0.1845]
+        rotation [0.5406, 0, 0.1822, 0.8213]
+        scale [0.036, 0.006, 0.036]
+        material: violet
         parent: "upperArm-right"
         rounding: 0.003
       }
