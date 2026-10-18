@@ -561,8 +561,9 @@ internal static class SdfDualContouring {
 
         return Merge(features: features, grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quadInsideCorners: quadInsideCorners, quads: quads, vertexPlanes: vertexPlanes);
     }
-    // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at their mean,
-    // with the field's normal there, and drops the quads that collapse to fewer than three vertices. Two fine vertices of
+    // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at the feature
+    // point their crossings' planes meet at (MergedFeature) or else their mean, with their mean normal, and drops the quads
+    // that collapse to fewer than three vertices. Two fine vertices of
     // one cell are one piece when a quad joins them.
     // The point of a merged piece every one of its fine vertices' tangent planes passes through (within FeatureResidual of
     // a fine cell, root mean square), solved toward the piece's mean along the planes' common null space, or null where
@@ -573,10 +574,7 @@ internal static class SdfDualContouring {
         var (b0, b1, b2) = ((planes[6] + (FeatureBias * mean.X)), (planes[7] + (FeatureBias * mean.Y)), (planes[8] + (FeatureBias * mean.Z)));
         var det = (((a00 * ((a11 * a22) - (a12 * a12))) - (a01 * ((a01 * a22) - (a12 * a02)))) + (a02 * ((a01 * a12) - (a11 * a02))));
 
-        if (Math.Abs(value: det) < 1e-12) {
-            return null;
-        }
-
+        // A singular system's point is not finite, and fails the residual below.
         var x = ((((b0 * ((a11 * a22) - (a12 * a12))) - (a01 * ((b1 * a22) - (a12 * b2)))) + (a02 * ((b1 * a12) - (a11 * b2)))) / det);
         var y = ((((a00 * ((b1 * a22) - (a12 * b2))) - (b0 * ((a01 * a22) - (a12 * a02)))) + (a02 * ((a01 * b2) - (b1 * a02)))) / det);
         var z = ((((a00 * ((a11 * b2) - (b1 * a12))) - (a01 * ((a01 * b2) - (b1 * a02)))) + (b0 * ((a01 * a12) - (a11 * a02)))) / det);
@@ -586,10 +584,6 @@ internal static class SdfDualContouring {
             (2.0 * (((planes[6] * x) + (planes[7] * y)) + (planes[8] * z)))) + planes[9]);
         var count = (planes[0] + planes[3] + planes[5]);
         var tolerance = (MergedResidual * grid.CellSize);
-
-        if (!(residual <= ((tolerance * tolerance) * count))) {
-            return null;
-        }
 
         var factor = grid.Refinement;
         var coarseX = (grid.CellsX / factor);
@@ -602,7 +596,10 @@ internal static class SdfDualContouring {
 
         var (rx, ry, rz) = ((FeatureOvershoot * (high.X - low.X)), (FeatureOvershoot * (high.Y - low.Y)), (FeatureOvershoot * (high.Z - low.Z)));
 
-        return (((x >= (low.X - rx)) && (x <= (high.X + rx)) && (y >= (low.Y - ry)) && (y <= (high.Y + ry)) && (z >= (low.Z - rz)) && (z <= (high.Z + rz))) ? (x, y, z) : null);
+        return (((Math.Abs(value: det) >= 1e-12) && (residual <= ((tolerance * tolerance) * count)) &&
+            (x >= (low.X - rx)) && (x <= (high.X + rx)) && (y >= (low.Y - ry)) && (y <= (high.Y + ry)) && (z >= (low.Z - rz)) && (z <= (high.Z + rz)))
+            ? (x, y, z)
+            : null);
     }
     private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<int> owners, List<int> quads, List<int> quadCorners, List<int> quadInsideCorners, Dictionary<int, double[]> vertexPlanes) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
@@ -689,30 +686,23 @@ internal static class SdfDualContouring {
             // A lattice whose fine vertices lie on its features (CrossingNormals) keeps a sharp edge or corner through a
             // merged piece: the vertex is the point every fine vertex's tangent plane passes through, where one lies in the
             // coarse cell, and the vertices' mean otherwise.
-            if ((sum.Count > 1) && planeSums.TryGetValue(key: root, value: out var rootPlanes) && (MergedFeature(grid: grid, mean: (x, y, z), owner: owners[root], planes: rootPlanes) is { } feature)) {
-                (x, y, z) = feature;
-                mergedFeatures[remap[root]] = pieceFeatures.Contains(item: root);
-            } else if (sum.Count == 1) {
-                mergedFeatures[remap[root]] = features[root];
-            }
+            var feature = (((sum.Count > 1) && planeSums.TryGetValue(key: root, value: out var rootPlanes)) ? MergedFeature(grid: grid, mean: (x, y, z), owner: owners[root], planes: rootPlanes) : null);
+
+            (x, y, z) = (feature ?? (x, y, z));
+            mergedFeatures[remap[root]] = ((feature is not null) ? pieceFeatures.Contains(item: root) : ((sum.Count == 1) && features[root]));
 
             mergedPositions[at] = x;
             mergedPositions[(at + 1)] = y;
             mergedPositions[(at + 2)] = z;
-            // A lattice whose vertices take their crossings' normals merges theirs; any other reads the field there.
-            if (grid.CrossingNormals) {
-                var (sx, sy, sz) = normalSums[root];
-                var length = Math.Sqrt(d: (((sx * sx) + (sy * sy)) + (sz * sz)));
 
-                if (length > 1e-12) {
-                    mergedNormals[at] = (sx / length);
-                    mergedNormals[(at + 1)] = (sy / length);
-                    mergedNormals[(at + 2)] = (sz / length);
-                }
-            } else if (grid.TryNormal(nx: out var nx, ny: out var ny, nz: out var nz, x: x, y: y, z: z)) {
-                mergedNormals[at] = nx;
-                mergedNormals[(at + 1)] = ny;
-                mergedNormals[(at + 2)] = nz;
+            // The merged vertex's normal is its fine vertices' mean normal.
+            var (sx, sy, sz) = normalSums[root];
+            var length = Math.Sqrt(d: (((sx * sx) + (sy * sy)) + (sz * sz)));
+
+            if (length > 1e-12) {
+                mergedNormals[at] = (sx / length);
+                mergedNormals[(at + 1)] = (sy / length);
+                mergedNormals[(at + 2)] = (sz / length);
             }
         }
 
@@ -1108,17 +1098,11 @@ internal static class SdfDualContouring {
             var (r0, r1, r2) = ((b0 + (bias * mean.X)), (b1 + (bias * mean.Y)), (b2 + (bias * mean.Z)));
             var det = (((m00 * ((m11 * m22) - (a12 * a12))) - (a01 * ((a01 * m22) - (a12 * a02)))) + (a02 * ((a01 * a12) - (m11 * a02))));
 
-            if (Math.Abs(value: det) < 1e-12) {
-                (x, y, z) = (0.0, 0.0, 0.0);
-
-                return false;
-            }
-
             x = ((((r0 * ((m11 * m22) - (a12 * a12))) - (a01 * ((r1 * m22) - (a12 * r2)))) + (a02 * ((r1 * a12) - (m11 * r2)))) / det);
             y = ((((m00 * ((r1 * m22) - (a12 * r2))) - (r0 * ((a01 * m22) - (a12 * a02)))) + (a02 * ((a01 * r2) - (r1 * a02)))) / det);
             z = ((((m00 * ((m11 * r2) - (r1 * a12))) - (a01 * ((a01 * r2) - (r1 * a02)))) + (r0 * ((a01 * a12) - (m11 * a02)))) / det);
 
-            return true;
+            return (Math.Abs(value: det) >= 1e-12);
         }
     }
     // The cube edge of a cell that a lattice edge along `axis` is, from the edge's offsets (u, v) within the cell along the

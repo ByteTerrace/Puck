@@ -40,10 +40,6 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var vertexCount = (positions.Length / 3);
         var cosine = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
 
-        if (quadCount == 0) {
-            return this;
-        }
-
         Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
 
         // Each quad's area-weighted facing: its two triangles along its first diagonal.
