@@ -228,7 +228,11 @@ no collider.
 | `ramp` | 1 to 4 `{ density, color }` stops, density strictly increasing in [0, 1], color `#RRGGBB` only | required |
 | `parent` | the `name` of a shape in the same creation | null, the creation root |
 | `axis` | > 0; flow only | 2 × halfExtent.Y |
-| `width` | > 0; a cloud's noise-cell size | halfExtent.X |
+| `width` | > 0; a flow's radius at the mouth, a cloud's noise-cell size | halfExtent.X |
+| `spread` | ≥ 0; flow only: the radius at the far end as a share of `width` (0 tapers to a point, 1 a straight column, > 1 a widening cone) | 0 |
+| `fade` | ≥ 0; flow only: density falls by the remaining axial share to this power (0 holds, 1 linear, 2 faster) | 1 |
+| `noiseScale` | > 0; flow only: the noise-cell size, so a narrow jet stays continuous | `width` |
+| `noiseDepth` | [0, 1]; flow only: the share of the density the noise modulates; below 1 the axis at the mouth reaches density 1, so the ramp's top stop draws a core | 1 |
 | `speed` | finite | 1 |
 | `seed` | uint | 0 |
 | `steps` | [8, 64] | 32 |

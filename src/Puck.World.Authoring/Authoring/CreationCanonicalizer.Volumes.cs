@@ -125,14 +125,61 @@ public static partial class CreationCanonicalizer {
                     Message: "coverage and softness are cloud-only controls."
                 ));
             }
-            if (
-                (volume.Kind == VolumeDocument.CloudKind) &&
-                (volume.Axis is not null)
-            ) {
-                errors.Add(item: new(
-                    Message: "axis is a flow-only control; a cloud uses halfExtent.",
-                    Path: (path + ".axis")
-                ));
+            ValidateNonNegative(
+                value: volume.Spread,
+                name: "spread",
+                errors: errors,
+                path: path
+            );
+            ValidateNonNegative(
+                value: volume.Fade,
+                name: "fade",
+                errors: errors,
+                path: path
+            );
+            ValidatePositive(
+                value: volume.NoiseScale,
+                name: "noiseScale",
+                errors: errors,
+                path: path
+            );
+            ValidateUnitRange(
+                volume.NoiseDepth,
+                "noiseDepth",
+                errors,
+                (path + ".noiseDepth")
+            );
+            if (volume.Kind == VolumeDocument.CloudKind) {
+                if (volume.Axis is not null) {
+                    errors.Add(item: new(
+                        Message: "axis is a flow-only control; a cloud uses halfExtent.",
+                        Path: (path + ".axis")
+                    ));
+                }
+                if (volume.Spread is not null) {
+                    errors.Add(item: new(
+                        Message: "spread is a flow-only control; a cloud's envelope fills halfExtent.",
+                        Path: (path + ".spread")
+                    ));
+                }
+                if (volume.Fade is not null) {
+                    errors.Add(item: new(
+                        Message: "fade is a flow-only control; a cloud's envelope fills halfExtent.",
+                        Path: (path + ".fade")
+                    ));
+                }
+                if (volume.NoiseScale is not null) {
+                    errors.Add(item: new(
+                        Message: "noiseScale is a flow-only control; a cloud's width is its noise-cell size.",
+                        Path: (path + ".noiseScale")
+                    ));
+                }
+                if (volume.NoiseDepth is not null) {
+                    errors.Add(item: new(
+                        Message: "noiseDepth is a flow-only control; a cloud's coverage and softness shape its noise.",
+                        Path: (path + ".noiseDepth")
+                    ));
+                }
             }
             if (
                 (volume.Speed is { } speed) &&

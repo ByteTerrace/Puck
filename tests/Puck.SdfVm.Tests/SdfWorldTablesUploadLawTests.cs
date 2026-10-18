@@ -539,7 +539,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             Seed: 7u,
             Speed: 2f,
             Steps: 16,
-            Width: 0.25f
+            Width: 0.25f,
+            Spread: 2.5f,
+            Fade: 2f,
+            NoiseScale: 0.5f,
+            NoiseDepth: 0.25f
         );
         var cloud = new SdfVolume(
             Axis: 2f,
@@ -568,7 +572,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // ticks): position and dynamic slot; rotation; half extent and axis; width, the advection (none yet), the seed's
         // bits and the steps; intensity, extinction and the pulse's gain (one at phase zero); the intensity lane, the
         // ramp's length, the kind and a cloud's Z advection; four ramp rows, color and density; then coverage, softness
-        // and the share of the bodies' light it scatters.
+        // and the share of the bodies' light it scatters; then a flow's spread and fade, the noise cell (the width where
+        // none is authored) and the noise's depth.
         float[] flowRows = [
             1f, 2f, 3f, 1f,
             0f, 0f, 0f, 1f,
@@ -581,6 +586,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0f, 0f, 0f, 0f,
             0f, 0f, 0f, 0f,
             0.55f, 0.18f, 0f, 0f,
+            2.5f, 2f, 0.5f, 0.25f,
         ];
         float[] cloudRows = [
             -4f, 5f, -6f, -1f,
@@ -594,6 +600,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0f, 0f, 0f, 0f,
             0f, 0f, 0f, 0f,
             0.4f, 0.3f, 0.65f, 0f,
+            0f, 1f, 1f, 1f,
         ];
 
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));

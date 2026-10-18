@@ -8904,6 +8904,10 @@ export type WorldPrototype = {
       coverage?: number | null;
       softness?: number | null;
       scatter?: number | null;
+      spread?: number | null;
+      fade?: number | null;
+      noiseScale?: number | null;
+      noiseDepth?: number | null;
       /**
        * Whether the family is supported.
        */

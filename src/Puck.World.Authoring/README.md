@@ -596,9 +596,19 @@ density to emission before integration. `axis`, `width`, `speed`,
 Optional `intensityLane` selects anonymous render lane 0..3; omission
 uses unit gain. Zero extinction uses the transparent integration limit.
 
+A flow is a Gaussian column along `axis`. Its radius runs linearly from
+`width` at the mouth to `width × spread` at the far end: `spread` (default 0)
+tapers it to a point, 1 keeps a straight column, and more widens a cone. Its
+density falls by the remaining axial share raised to `fade` (default 1, falling
+linearly to nothing; 0 holds it). `noiseScale` is its noise-cell size (default
+`width`), so a narrow jet with larger cells stays continuous instead of breaking
+into dots. `noiseDepth` (default 1) is the share of the density the noise
+modulates, in [0, 1]. Below 1 the density on the axis at the mouth reaches 1,
+so the ramp's top stop draws a bright core there.
+
 For clouds, `width` is the noise-cell size, `coverage` (default 0.55) is in
-[0, 1], and `softness` (default 0.18) is in (0, 1]. `axis` is flow-only;
-`coverage` and `softness` are cloud-only. Clouds use the ramp and a height tint
+[0, 1], and `softness` (default 0.18) is in (0, 1]. `axis`, `spread`, `fade`,
+`noiseScale` and `noiseDepth` are flow-only; `coverage` and `softness` are cloud-only. Clouds use the ramp and a height tint
 for illumination, without cloud shadows or multiple scattering. They are
 bounded media, independent of the sky's two-dimensional cloud layer.
 

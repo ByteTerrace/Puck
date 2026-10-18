@@ -161,8 +161,9 @@ read zero. Erosion is render-only and uses the same scope as the shape's warps.
 A creation's `volumes` list declares `flow` media with `position`,
 `rotation`, positive `halfExtent`, optional `parent`, and a required
 `ramp` of 1..4 ascending `{density,color}` stops. Controls are `axis`,
-`width`, `speed`, `seed`, `steps`, `intensity`, `extinction`,
-`pulseAmplitude`, `pulseFrequency`, and optional `intensityLane`
+`width`, `spread`, `fade`, `noiseScale`, `noiseDepth`, `speed`, `seed`, `steps`,
+`intensity`, `extinction`, `pulseAmplitude`, `pulseFrequency`, and optional
+`intensityLane`
 (0..3; absent means unit gain). Media composite behind opaque-depth clipping
 and have no collider. See the authoring README's volume reference.
 
