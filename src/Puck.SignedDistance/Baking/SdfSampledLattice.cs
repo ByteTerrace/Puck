@@ -199,6 +199,9 @@ public sealed class SdfSampledLattice {
 
     private int m_factor = 1;
     private bool[] m_measured = [];
+    // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
+    // closes sheets in.
+    private bool[] m_thin = [];
     private bool[] m_refined = [];
     private readonly Dictionary<int, int> m_fineSlots = [];
     private int[] m_fineKeys = [];
@@ -209,6 +212,8 @@ public sealed class SdfSampledLattice {
     private long[] m_crossingKeys = [];
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
+    // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
+    private readonly Dictionary<int, float> m_closed = [];
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -295,6 +300,7 @@ public sealed class SdfSampledLattice {
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
         var measured = new bool[((cellsX * cellsY) * cellsZ)];
+        var thin = new bool[measured.Length];
         int[] samples = [m_samplesX, m_samplesY, m_samplesZ];
         int[] cells = [cellsX, cellsY, cellsZ];
         float[] spacing = [m_cell.X, m_cell.Y, m_cell.Z];
@@ -317,6 +323,7 @@ public sealed class SdfSampledLattice {
                         continue;
                     }
                     measured[CellIndex(x: cell[0], y: cell[1], z: cell[2])] = true;
+                    thin[CellIndex(x: cell[0], y: cell[1], z: cell[2])] = true;
                     any = true;
                 }
             }
@@ -436,19 +443,15 @@ public sealed class SdfSampledLattice {
                             continue;
                         }
 
-                        var a = MathF.Abs(value);
-                        var b = MathF.Abs(after);
-                        var fallA = (MathF.Abs(before) - a);
-                        var fallB = (MathF.Abs(further) - b);
+                        at[axis] = i;
 
-                        if ((fallA <= (0.5f * h)) || (fallB <= (0.5f * h))) {
-                            continue;
-                        }
+                        var slope = Slope(x: at[0], y: at[1], z: at[2]);
 
-                        var t = Math.Clamp(value: (((a - b) + fallB) / (fallA + fallB)), min: 0f, max: 1f);
+                        at[axis] = (i + 1);
+                        slope = MathF.Max(slope, Slope(x: at[0], y: at[1], z: at[2]));
+                        at[axis] = i;
 
-                        if ((a - (fallA * t)) < (0.1f * h)) {
-                            at[axis] = i;
+                        if (PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
@@ -523,6 +526,7 @@ public sealed class SdfSampledLattice {
 
         m_factor = factor;
         m_measured = measured;
+        m_thin = thin;
         m_refined = refined;
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
@@ -543,6 +547,59 @@ public sealed class SdfSampledLattice {
         }
 
         return points;
+    }
+    // Whether a sheet passed between two samples of one sign, `value` and `after`, whose neighbours `before` and `further`
+    // lie a step out on either side, all as magnitudes: the field falls toward the pair from both sides by over half
+    // `reach`, the most it changes over a step there, and the falls, extended, meet within a tenth of `reach` of the
+    // surface. `reach` carries the field's own scale, since a field that is no true distance (a scope, a flare, a
+    // non-uniform scale) changes by less, or more, than a step's length over a step.
+    private static bool PassesBetween(float before, float value, float after, float further, float reach) {
+        var fallA = (before - value);
+        var fallB = (further - after);
+
+        if (!(reach > 0f) || (fallA <= (0.5f * reach)) || (fallB <= (0.5f * reach))) {
+            return false;
+        }
+
+        var t = Math.Clamp(value: (((value - after) + fallB) / (fallA + fallB)), min: 0f, max: 1f);
+
+        return ((value - (fallA * t)) < (0.1f * reach));
+    }
+    // The most the field changes per world unit between a coarse sample and any of its six neighbours: the scale of the
+    // field there, which a step's change is measured against (PassesBetween).
+    private float Slope(int x, int y, int z) {
+        var value = m_values[Index(x: x, y: y, z: z)];
+        var slope = 0f;
+
+        if (x > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: (x - 1), y: y, z: z)]) / m_cell.X)); }
+        if ((x + 1) < m_samplesX) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: (x + 1), y: y, z: z)]) / m_cell.X)); }
+        if (y > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: (y - 1), z: z)]) / m_cell.Y)); }
+        if ((y + 1) < m_samplesY) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: (y + 1), z: z)]) / m_cell.Y)); }
+        if (z > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z - 1))]) / m_cell.Z)); }
+        if ((z + 1) < m_samplesZ) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z + 1))]) / m_cell.Z)); }
+
+        return slope;
+    }
+    // The field's typical change per world unit across its surface: the median, over the coarse lattice edges that change
+    // sign, of the change along the edge over its length. A field that is no true distance changes by less, or more,
+    // than one.
+    private float SurfaceSlope() {
+        var slopes = new List<float>();
+
+        for (var z = 0; (z < m_samplesZ); z++) {
+            for (var y = 0; (y < m_samplesY); y++) {
+                for (var x = 0; (x < m_samplesX); x++) {
+                    var value = m_values[Index(x: x, y: y, z: z)];
+
+                    if (((x + 1) < m_samplesX) && ((value < 0f) != (m_values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: (x + 1), y: y, z: z)]) / m_cell.X)); }
+                    if (((y + 1) < m_samplesY) && ((value < 0f) != (m_values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: x, y: (y + 1), z: z)]) / m_cell.Y)); }
+                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (m_values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z + 1))]) / m_cell.Z)); }
+                }
+            }
+        }
+        slopes.Sort();
+
+        return ((slopes.Count > 0) ? slopes[(slopes.Count / 2)] : 1f);
     }
     /// <summary>Answers a run of the fine samples <see cref="Refine"/> named.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="Refine"/>'s order.</param>
@@ -566,6 +623,8 @@ public sealed class SdfSampledLattice {
     /// <returns>The samples, in the lattice's frame, in the order <see cref="AnswerGradients"/> takes their
     /// answers.</returns>
     public Vector3[] GradientPoints() {
+        CloseSheets();
+
         var keys = new List<int>();
         var seen = new HashSet<int>();
         var cellsX = (m_samplesX - 1);
@@ -650,6 +709,255 @@ public sealed class SdfSampledLattice {
 
         return points;
     }
+    // Closes the sheets thinner than the fine cell in the cells Refine saw one cross, which the fine samples alone leave
+    // holed, fray into slivers where they thin to a knife edge, and contour as two faces closer than a vertex's placement
+    // can tell apart. A measured fine sample inside such a sheet reads as inside by half the field's change over a fine
+    // step, so the sheet contours one fine cell thick about it; where one passed between two measured fine samples of a
+    // line, both outside, the nearer reads as far inside as it lay outside (a quarter step at least), so the sheet's face
+    // stays where it passed; and a sheet one sample thick stepping diagonally across the lattice is joined along the faces
+    // its steps share. Lattice.TryCrossingNormal keeps the crossings beside a closed sample where the values put them.
+    private void CloseSheets() {
+        if (m_factor < 2) {
+            return;
+        }
+
+        var factor = m_factor;
+        int[] fine = [(((m_samplesX - 1) * factor) + 1), (((m_samplesY - 1) * factor) + 1), (((m_samplesZ - 1) * factor) + 1)];
+        var cell = ContourCell;
+        float[] spacing = [cell.X, cell.Y, cell.Z];
+        var step = MathF.Min(cell.X, MathF.Min(cell.Y, cell.Z));
+        var closing = new Dictionary<int, float>();
+        Span<int> p = stackalloc int[3];
+
+        int Key(Span<int> at) => (at[0] + (fine[0] * (at[1] + (fine[1] * at[2]))));
+        bool Coarse(Span<int> at) => (((at[0] % factor) == 0) && ((at[1] % factor) == 0) && ((at[2] % factor) == 0));
+        bool Within(Span<int> at) => ((at[0] >= 0) && (at[1] >= 0) && (at[2] >= 0) && (at[0] < fine[0]) && (at[1] < fine[1]) && (at[2] < fine[2]));
+        bool Real(Span<int> at) => (Within(at: at) && (Coarse(at: at) || m_fineSlots.ContainsKey(key: Key(at: at))));
+        var neighbour = new int[3];
+        // The field's scale at a fine sample: the most it changes per world unit to any of its six neighbours that was
+        // measured (Slope's fine counterpart).
+        float FineSlope(Span<int> at) {
+            var value = FineValue(x: at[0], y: at[1], z: at[2]);
+            var slope = 0f;
+
+            for (var axis = 0; (axis < 3); axis++) {
+                for (var direction = -1; (direction <= 1); direction += 2) {
+                    neighbour[0] = at[0];
+                    neighbour[1] = at[1];
+                    neighbour[2] = at[2];
+                    neighbour[axis] += direction;
+                    if (Real(at: neighbour)) {
+                        slope = MathF.Max(slope, (MathF.Abs(value - FineValue(x: neighbour[0], y: neighbour[1], z: neighbour[2])) / spacing[axis]));
+                    }
+                }
+            }
+
+            return slope;
+        }
+        void Close(int key, float slope, float depth) => closing.TryAdd(key: key, value: -MathF.Max(depth, MathF.Max((0.25f * step * slope), 1.0e-7f)));
+        var around = new int[3];
+        // The deepest inside value among a fine sample's six neighbours, zero for none inside.
+        float Deepest(Span<int> at) {
+            var deepest = 0f;
+
+            for (var axis = 0; (axis < 3); axis++) {
+                for (var direction = -1; (direction <= 1); direction += 2) {
+                    around[0] = at[0];
+                    around[1] = at[1];
+                    around[2] = at[2];
+                    around[axis] += direction;
+                    deepest = (Within(at: around) ? MathF.Min(deepest, FineValue(x: around[0], y: around[1], z: around[2])) : deepest);
+                }
+            }
+
+            return deepest;
+        }
+        var side = new int[3];
+        var clear = (0.1f * step * SurfaceSlope());
+        // Whether a fine sample lies inside a sheet: inside, outside a step to either side along some axis by more than a
+        // tenth of the field's typical change over a step, which a surface grazing the line within its samples' noise is
+        // not, and no neighbour deeper inside than those two lie outside, as a solid's edge or corner, which a line near it
+        // also crosses twice within a step, would hold; with `thinner`, a sheet whose crossings on that line lie less than a
+        // step apart.
+        bool Sheet(Span<int> at, bool thinner) {
+            var value = FineValue(x: at[0], y: at[1], z: at[2]);
+
+            if (!(value < 0f)) {
+                return false;
+            }
+
+            var deepest = Deepest(at: at);
+
+            for (var axis = 0; (axis < 3); axis++) {
+                side[0] = at[0];
+                side[1] = at[1];
+                side[2] = at[2];
+                side[axis]--;
+                var low = (Within(at: side) ? FineValue(x: side[0], y: side[1], z: side[2]) : -1f);
+                side[axis] += 2;
+                var high = (Within(at: side) ? FineValue(x: side[0], y: side[1], z: side[2]) : -1f);
+
+                if ((low > clear) && (high > clear) && (deepest > -MathF.Max(low, high)) && (!thinner || (((-value / (low - value)) + (-value / (high - value))) < 1f))) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        foreach (var key in m_fineKeys) {
+            var (x, y, z) = FineCoordinates(key: key);
+            var (cx, cy, cz, _, _, _) = Interpolant(x: x, y: y, z: z);
+
+            // Only where the coarse samples saw a sheet or gap thinner than a cell: elsewhere a line grazing a solid's
+            // edge falls toward its samples as a sheet's does.
+            if (!m_thin[(cx + ((m_samplesX - 1) * (cy + ((m_samplesY - 1) * cz))))]) {
+                continue;
+            }
+
+            p[0] = x;
+            p[1] = y;
+            p[2] = z;
+
+            // A sheet a sample caught, thinner than the fine cell along a line: its two faces, a fraction of a cell
+            // apart, cross where the tangent planes misplace a vertex by as much, so it too contours a cell thick.
+            if (Sheet(at: p, thinner: true)) {
+                Close(depth: (0.5f * step * FineSlope(at: p)), key: key, slope: 0f);
+            }
+
+            for (var axis = 0; (axis < 3); axis++) {
+                // The measured sample as the first of the pair, then as the second.
+                for (var shift = 0; (shift > -2); shift--) {
+                    p[0] = x;
+                    p[1] = y;
+                    p[2] = z;
+                    p[axis] += (shift - 1);
+                    // The pair's outer neighbours may lie in a cell that interpolates its coarse corners, beside a sheet
+                    // at the measured cells' edge.
+                    if (!Within(at: p)) { continue; }
+                    var before = FineValue(x: p[0], y: p[1], z: p[2]);
+                    p[axis]++;
+                    if (!Real(at: p)) { continue; }
+                    var first = FineValue(x: p[0], y: p[1], z: p[2]);
+                    var firstKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    var firstSlope = FineSlope(at: p);
+                    var deepest = Deepest(at: p);
+                    p[axis]++;
+                    if (!Real(at: p)) { continue; }
+                    var second = FineValue(x: p[0], y: p[1], z: p[2]);
+                    var secondKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    var secondSlope = FineSlope(at: p);
+                    deepest = MathF.Min(deepest, Deepest(at: p));
+                    p[axis]++;
+                    if (!Within(at: p)) { continue; }
+                    var further = FineValue(x: p[0], y: p[1], z: p[2]);
+
+                    // A solid's edge the line grazes falls toward the pair from both sides as a sheet does, but holds
+                    // a neighbour of the pair deeper inside than half a step, which a sheet thinner than a step cannot.
+                    if ((before < 0f) || (first < 0f) || (second < 0f) || (further < 0f) ||
+                        (deepest < (-0.5f * spacing[axis] * MathF.Max(firstSlope, secondSlope))) ||
+                        !PassesBetween(after: second, before: before, further: further, reach: (spacing[axis] * MathF.Max(firstSlope, secondSlope)), value: first)) {
+                        continue;
+                    }
+
+                    var nearer = ((((first <= second) && (firstKey >= 0)) || (secondKey < 0)) ? (Key: firstKey, Value: first, Slope: firstSlope) : (Key: secondKey, Value: second, Slope: secondSlope));
+
+                    // A sheet that passed between the pair lies within half a step of the nearer: one farther off is a
+                    // surface the samples beyond the pair, interpolated across a coarse cell, misread as falling.
+                    // It reads as far inside as it lay outside, which puts the sheet's face toward the pair where the
+                    // sheet passed and moves a surface a grazed edge misread by no more than the sample's own distance.
+                    if ((nearer.Key >= 0) && (nearer.Value <= (0.5f * spacing[axis] * nearer.Slope))) { Close(depth: nearer.Value, key: nearer.Key, slope: nearer.Slope); }
+                }
+            }
+        }
+
+        foreach (var (key, value) in closing) {
+            m_closed.TryAdd(key: key, value: value);
+        }
+
+        // A sheet one sample thick that steps across the lattice diagonally holds its inside samples at the opposite
+        // corners of a face, which the contour cuts apart (an ambiguous face separates its inside corners), leaving a slit
+        // along every step. Where both inside corners lie in a sheet (outside on either side along some axis), the face's
+        // outside corner nearer the sheet closes, so the steps join along a face.
+        Span<int> corner = stackalloc int[3];
+        Span<int> chosenAt = stackalloc int[3];
+        Span<int> keys = stackalloc int[4];
+        Span<float> values = stackalloc float[4];
+
+        for (var pass = 0; (pass < 2); pass++) {
+            closing.Clear();
+            foreach (var key in m_fineKeys) {
+                var (x, y, z) = FineCoordinates(key: key);
+
+                // Each face the sample is a corner of, as the face's lowest corner shifted by (du, dv) on its two axes.
+                for (var normal = 0; (normal < 3); normal++) {
+                    var u = ((normal + 1) % 3);
+                    var v = ((normal + 2) % 3);
+
+                    for (var du = -1; (du <= 0); du++) {
+                        for (var dv = -1; (dv <= 0); dv++) {
+                            corner[0] = x;
+                            corner[1] = y;
+                            corner[2] = z;
+                            corner[u] += du;
+                            corner[v] += dv;
+
+                            // The face's corners in order: (0, 0), (1, 0), (0, 1), (1, 1) along (u, v).
+                            var real = true;
+
+                            for (var at = 0; (at < 4) && real; at++) {
+                                p[0] = corner[0];
+                                p[1] = corner[1];
+                                p[2] = corner[2];
+                                p[u] += (at & 1);
+                                p[v] += (at >> 1);
+                                real = Real(at: p);
+                                keys[at] = (real ? (Coarse(at: p) ? -1 : Key(at: p)) : -1);
+                                values[at] = (real ? FineValue(x: p[0], y: p[1], z: p[2]) : 0f);
+                            }
+                            if (!real) { continue; }
+
+                            // Inside on one diagonal, outside on the other.
+                            var diagonal = (((values[0] < 0f) && (values[3] < 0f) && (values[1] >= 0f) && (values[2] >= 0f)) ? 0 :
+                                (((values[1] < 0f) && (values[2] < 0f) && (values[0] >= 0f) && (values[3] >= 0f)) ? 1 : -1));
+
+                            if (diagonal < 0) { continue; }
+
+                            var (inA, inB, outA, outB) = ((diagonal == 0) ? (0, 3, 1, 2) : (1, 2, 0, 3));
+                            var sheet = true;
+
+                            foreach (var inner in (ReadOnlySpan<int>)[inA, inB]) {
+                                p[0] = corner[0];
+                                p[1] = corner[1];
+                                p[2] = corner[2];
+                                p[u] += (inner & 1);
+                                p[v] += (inner >> 1);
+                                sheet &= Sheet(at: p, thinner: false);
+                            }
+                            if (!sheet) { continue; }
+
+                            var (near, far) = ((values[outA] <= values[outB]) ? (outA, outB) : (outB, outA));
+                            var chosen = ((keys[near] >= 0) ? near : far);
+
+                            if (keys[chosen] < 0) { continue; }
+                            chosenAt[0] = corner[0];
+                            chosenAt[1] = corner[1];
+                            chosenAt[2] = corner[2];
+                            chosenAt[u] += (chosen & 1);
+                            chosenAt[v] += (chosen >> 1);
+                            Close(depth: values[chosen], key: keys[chosen], slope: FineSlope(at: chosenAt));
+                        }
+                    }
+                }
+            }
+            if (closing.Count == 0) {
+                break;
+            }
+            foreach (var (key, value) in closing) {
+                m_closed.TryAdd(key: key, value: value);
+            }
+        }
+    }
     // Every sign-changing lattice edge the contour places a vertex by: the edges of each crossed cell that contours whole,
     // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
     // where the edge crosses the surface, since its corners' gradients, inside a solid near a sharp edge, point to the
@@ -733,8 +1041,11 @@ public sealed class SdfSampledLattice {
     /// <summary>Answers a run of the samples <see cref="GradientPoints"/> named with the field's value and gradient
     /// there.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="GradientPoints"/>'s order.</param>
-    /// <param name="values">The field's value at each sample, in world units: negative inside.</param>
-    /// <param name="gradients">Three components per sample, in any scale consistent across the lattice.</param>
+    /// <param name="values">The field's value at each sample: negative inside.</param>
+    /// <param name="gradients">Three components per sample: the field's derivative, in field units per world unit. A
+    /// field need not be a true distance (a scope, a flare or a non-uniform scale bounds it below the distance, a
+    /// superellipsoid only approximates one), so the contour reads a value as a distance only through the gradient's
+    /// magnitude.</param>
     /// <exception cref="ArgumentException">The run is not whole samples, its values and gradients name different samples,
     /// or it reaches past the samples.</exception>
     public void AnswerGradients(int first, ReadOnlySpan<float> values, ReadOnlySpan<float> gradients) {
@@ -964,7 +1275,7 @@ public sealed class SdfSampledLattice {
         var fineY = (((m_samplesY - 1) * factor) + 1);
 
         if (m_fineSlots.TryGetValue(key: (x + (fineX * (y + (fineY * z)))), value: out var slot)) {
-            return m_fineValues[slot];
+            return (m_closed.TryGetValue(key: (x + (fineX * (y + (fineY * z)))), value: out var closed) ? closed : m_fineValues[slot]);
         }
 
         var (cx, cy, cz, u, v, w) = Interpolant(x: x, y: y, z: z);
@@ -1077,15 +1388,24 @@ public sealed class SdfSampledLattice {
         // A crossing's own measured gradient and value, or the gradient its edge's samples interpolate, on the surface.
         public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
             var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
+            var end = (start + ((axis == 0) ? length : ((axis == 1) ? (length * (CellsX + 1)) : (length * (CellsX + 1) * (CellsY + 1)))));
+            // A crossing beside a closed sample lies where the samples put it, a cell's thickness from the sheet's other
+            // face (CloseSheets); moved onto the sheet it would cross it.
+            var closed = ((owner.m_closed.Count > 0) && (owner.m_closed.ContainsKey(key: start) || owner.m_closed.ContainsKey(key: end)));
 
             if (owner.m_crossingGradients.TryGetValue(key: owner.CrossingKey(axis: axis, length: length, start: start), value: out var measured)) {
                 var gradient = new Vector3(x: measured.X, y: measured.Y, z: measured.Z);
                 var magnitude = gradient.Length();
 
                 if (magnitude > 1.0e-12f) {
+                    var (ex, ey, ez) = (CellExtent ?? (CellSize, CellSize, CellSize));
+                    var reach = (length * Math.Max(val1: ex, val2: Math.Max(val1: ey, val2: ez)));
+
                     gradient /= magnitude;
                     (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
-                    offset = measured.W;
+                    // The distance to the surface to first order, the value over the gradient's magnitude, which a field
+                    // that is no true distance would misstate as the value alone; never past the edge's own length.
+                    offset = (closed ? 0.0 : Math.Clamp(value: (measured.W / magnitude), min: -reach, max: reach));
 
                     return true;
                 }

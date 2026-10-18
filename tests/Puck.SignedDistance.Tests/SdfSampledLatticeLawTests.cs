@@ -34,7 +34,8 @@ public sealed class SdfSampledLatticeLawTests {
     private static float Carved(Vector3 point) => MathF.Max(Box(point: point, turn: 0.3f), -(Vector3.Distance(value1: point, value2: new Vector3(value: 0.03f)) - 0.05f));
     private static Vector3 Position(SdfContour contour, int vertex) =>
         new(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)]);
-    // The bake kernel's gradient (sdf-mesh-bake.comp.hlsl): four tetrahedral taps a sixty-fourth of a cell out.
+    // The bake kernel's gradient (sdf-mesh-bake.comp.hlsl): four tetrahedral taps a sixty-fourth of a cell out, summed
+    // into the field's derivative.
     private static Vector3 Gradient(Func<Vector3, float> field, Vector3 point) {
         const float Spacing = (Cell / 64f);
         ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
@@ -44,7 +45,7 @@ public sealed class SdfSampledLatticeLawTests {
             gradient += (tap * field(arg: (point + (tap * Spacing))));
         }
 
-        return gradient;
+        return (gradient * (0.25f / Spacing));
     }
     private static SdfContour Bake(bool refine) => Bake(field: Field, refine: refine);
     private static SdfContour Bake(Func<Vector3, float> field, bool refine) => Bake(field: field, material: null, refine: refine, regions: []);
@@ -272,6 +273,34 @@ public sealed class SdfSampledLatticeLawTests {
         }
 
         Assert.True(condition: (worst <= (0.05f * Cell)), userMessage: $"a vertex lies {worst} from the box, {(worst / Cell)} cells");
+    }
+
+    // A tilted disc thinner than the fine cell, which the fine samples alone catch in places and step over in others,
+    // contours as one closed two-manifold, and no vertex strays from the disc by more than a fine cell. A field that
+    // reads at a fifth of the distance (a scoped or flared shape's bound) contours the same, since the lattice measures
+    // a step's change against the field's own slope.
+    [InlineData(1f)]
+    [InlineData(0.2f)]
+    [Theory]
+    public void ASheetThinnerThanTheFineCellContoursWhole(float scale) {
+        static float Sheet(Vector3 point) => MathF.Max((MathF.Abs(Vector3.Dot(vector1: point, vector2: Normal)) - 0.0008f), (point.Length() - 0.18f));
+
+        var contour = Bake(field: point => (scale * Sheet(point: point)), material: null, refine: true, regions: []);
+        var uses = new Dictionary<(int, int), int>();
+
+        foreach (var (a, b, c) in Triangles(contour: contour)) {
+            foreach (var (from, to) in new[] { (a, b), (b, c), (c, a) }) {
+                var key = ((from < to) ? (from, to) : (to, from));
+
+                uses[key] = (uses.GetValueOrDefault(key: key) + 1);
+            }
+        }
+
+        Assert.Equal(expected: 1, actual: Pieces(contour: contour));
+        Assert.All(collection: uses, action: static use => Assert.Equal(expected: 2, actual: use.Value));
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            Assert.True(condition: (MathF.Abs(Sheet(point: Position(contour: contour, vertex: vertex))) <= (Cell / Factor)), userMessage: $"vertex {vertex} lies {Sheet(point: Position(contour: contour, vertex: vertex))} from the sheet");
+        }
     }
 
     // A region refines the surface it holds though no sample asks it to: a sphere refines where a region names it.

@@ -211,6 +211,8 @@ public sealed class SdfMeshPathBakeLawTests {
                     foreach (var tap in taps) {
                         gradient += (tap * Union(count: lattice.Instances, first: first, point: (position + (tap * spacing))));
                     }
+                    // The four taps sum to four times the spacing times the gradient.
+                    gradient *= (0.25f / spacing);
                 }
 
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));

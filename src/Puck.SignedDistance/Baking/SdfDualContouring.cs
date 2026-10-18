@@ -99,10 +99,6 @@ internal static class SdfDualContouring {
     private const double MergedResidual = 0.05;
     // The cosine within which every crossing of a flat patch faces its first (fifteen degrees).
     private const double FlatCosine = 0.966;
-    // How far past its cell, in cells, a point every plane passes through stays a feature (Place, MergedFeature): a
-    // crease whose crossings only this cell sees, held to a quarter cell, past which a concave crease's vertex folds the
-    // quads it shares with its neighbours.
-    private const double FeatureOvershoot = 0.25;
     // The cosine of the least turn between two crossings' planes that makes their meeting line a crease (thirty degrees);
     // planes that turn less (a curved face's) meet along a line far from the surface.
     private const double CreaseCosine = 0.866;
@@ -592,10 +588,8 @@ internal static class SdfDualContouring {
         var low = grid.World(x: (cx * factor), y: (cy * factor), z: (cz * factor));
         var high = grid.World(x: ((cx + 1) * factor), y: ((cy + 1) * factor), z: ((cz + 1) * factor));
 
-        var (rx, ry, rz) = ((FeatureOvershoot * (high.X - low.X)), (FeatureOvershoot * (high.Y - low.Y)), (FeatureOvershoot * (high.Z - low.Z)));
-
         return (((Math.Abs(value: det) >= 1e-12) && (residual <= ((tolerance * tolerance) * count)) &&
-            (x >= (low.X - rx)) && (x <= (high.X + rx)) && (y >= (low.Y - ry)) && (y <= (high.Y + ry)) && (z >= (low.Z - rz)) && (z <= (high.Z + rz)))
+            (x >= low.X) && (x <= high.X) && (y >= low.Y) && (y <= high.Y) && (z >= low.Z) && (z <= high.Z))
             ? (x, y, z)
             : null);
     }
@@ -1040,10 +1034,11 @@ internal static class SdfDualContouring {
             // toward the crossings' mean by a few hundredths of a cell, which along a crease between two faces leaves the
             // vertices stepping off the crease from cell to cell. Only a lattice whose crossings lie on the surface
             // (FeatureReach) can tell a point every plane passes through from planes that merely meet. A point that two of
-            // its planes reach turned by more than the crease angle is a crease or corner of the surface (`feature`), which
-            // may lie up to FeatureOvershoot past the cell; planes that hardly turn (a curved face's) meet along a line far
-            // from the surface, so their point stays in the cell. A curved face's crossings that turn more (a tube a cell
-            // or two across) do not all pass through one point, and none of this applies.
+            // its planes reach turned by more than the crease angle is a crease or corner of the surface (`feature`). The
+            // point is taken only inside the cell: one past it, which a crease the next cell holds or a thin wedge's tip
+            // gives, folds the quads the vertex shares with its neighbours into teeth along the edge. A curved face's
+            // crossings that turn more (a tube a cell or two across) do not all pass through one point, and none of this
+            // applies.
             if ((grid.FeatureReach > 0.0) && Solve(bias: FeatureBias, x: out var fx, y: out var fy, z: out var fz) &&
                 Meets(x: fx, y: fy, z: fz, planes: planes[..(4 * planeCount)])) {
                 for (var first = 0; (first < planeCount) && !feature; first++) {
@@ -1056,7 +1051,7 @@ internal static class SdfDualContouring {
                 }
 
                 // A crease farther off still marks the vertex, whose placement falls back below.
-                if (Math.Max(val1: Math.Abs(value: (fx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (fy - 0.5)), val2: Math.Abs(value: (fz - 0.5)))) <= (0.5 + (feature ? FeatureOvershoot : 0.0))) {
+                if (Math.Max(val1: Math.Abs(value: (fx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (fy - 0.5)), val2: Math.Abs(value: (fz - 0.5)))) <= 0.5) {
                     result = (fx, fy, fz);
                     placed = true;
                 }

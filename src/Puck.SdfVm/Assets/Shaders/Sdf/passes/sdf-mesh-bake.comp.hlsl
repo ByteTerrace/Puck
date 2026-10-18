@@ -7,8 +7,10 @@
 // the slot's frame. The host meshes the samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame
 // dispatches it only while a bake is pending.
 //
-// The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the unnormalized
-// tetrahedral gradient (zero without gradients). KEEP IN SYNC with SdfMeshPathBake's reader and SdfFrameBlock.WriteMeshBake.
+// The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the field's
+// gradient from the tetrahedral taps in field units per world unit (zero without gradients), whose magnitude the contour
+// divides a value by to read it as a distance (SdfSampledLattice.AnswerGradients). KEEP IN SYNC with SdfMeshPathBake's
+// reader and SdfFrameBlock.WriteMeshBake.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_INSTANCE_MASKS
 #define SDF_SAMPLED_REGIONS
@@ -90,6 +92,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             }
             sdfWorkSteps += 1u;
         }
+
+        // The four taps sum to four times the spacing times the gradient.
+        gradient *= (0.25 / spacing);
 
         uint word = (sample * 5u);
 

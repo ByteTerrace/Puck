@@ -677,7 +677,10 @@ samples cannot resolve the surface (`SdfSampledLattice.Refine`):
   a run of one sample between two of the other sign whose crossings lie less
   than a cell apart, or two samples of one sign whose values fall steeply toward
   each other from both sides and meet below the surface, a sheet that passed
-  between them;
+  between them. "Steeply" is measured against the field's own change over a
+  step there, since a scoped, flared or non-uniformly scaled shape's field reads
+  well under the distance (a fifth of it on the Moth's shins), and a test in
+  world units misses every sheet such a field holds;
 - a crossed cell whose outside corners report different materials;
 - a crossed cell whose corner signs hold more than one surface patch, two sheets
   in one cell.
@@ -687,7 +690,17 @@ split into as many parts as bring it to 5 mm (`FineCell`), at most four along
 each axis. Every cell touching one is contoured at the fine spacing too, from
 its coarse corners' interpolation, and merges each connected piece of its fine
 surface into one vertex, so it adds no triangles and the mesh has no crack where
-the resolution changes (`SdfDualContouring.ExtractRefined`). Every other cell
+the resolution changes (`SdfDualContouring.ExtractRefined`). A sheet thinner
+than the fine cell is closed before it contours (`SdfSampledLattice.CloseSheets`),
+in the cells the coarse samples saw a thin sheet or gap cross: a fine sample
+inside one reads as inside by half the field's change over a fine step; where
+one passed between two fine samples of a line, the nearer reads as far inside as
+it lay outside, unless a neighbour lies deeper inside than half a step, as beside
+a solid's edge the line grazes; and a sheet one sample thick stepping diagonally
+across the lattice is joined along the faces its steps share. Its samples alone
+leave it holed, its two faces closer than a vertex's placement can tell apart,
+and its thinning end frayed into slivers and specks: the white fringe and the
+hole along the top of the Moth's shins where the shell thins against the knee. Every other cell
 contours whole. The gradients are then measured at the samples the contour reads
 one at: the corners of every crossed cell that contours whole, the coarse
 corners of every refined cell, whose unmeasured fine samples interpolate them,
@@ -695,12 +708,18 @@ and the measured corners of every crossed fine cell. On the debug world about
 8,000 cells refine, and the bake makes about 700,000 triangles from about
 21 M field evaluations.
 
-A cell's vertex is the point its crossings' tangent planes meet at. Where every
+A cell's vertex is the point its crossings' tangent planes meet at. Each plane
+passes through its crossing moved back onto the surface by the field's value
+there over the gradient's magnitude, the distance to first order, which a field
+that is no true distance misstates as the value alone (the bake kernel writes
+the gradient in field units per world unit for this). Where every
 plane passes through one point and two of them turn apart by more than thirty
 degrees, the point is a crease or corner (a feature): it is solved again with a
 bias only the planes' common null space feels, so it lies on the crease rather
-than drawn a few hundredths of a cell toward the crossings' mean, and it may sit
-up to a quarter cell past its cell (`SdfDualContouring.Place`). A merged piece
+than drawn a few hundredths of a cell toward the crossings' mean, and it is taken
+only inside its cell (`SdfDualContouring.Place`): a point past it, as a thin
+wedge's tip or a crease the next cell holds gives, folds the quads the vertex
+shares with its neighbours into teeth along the edge. A merged piece
 of a refined cell that measured nothing is placed the same way from its fine
 crossings' planes (`MergedFeature`), so an edge keeps its line through the cells
 around a refined run (a seam between two materials). A feature vertex takes its

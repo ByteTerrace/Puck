@@ -187,9 +187,18 @@ owns the explanation.
   Moth) bakes about 8 M triangles in 20 s.
 - **Features are placed and shaded as features.** A vertex whose crossings'
   planes all meet and turn by over 30 degrees is a feature: it lies on the
-  crease (up to a quarter cell past its cell; half a cell folds a concave
-  crease's quads), takes its crossings' normals, and `SdfContour.SplitAtCreases`
-  splits it per side. Only features and single-face cells read crossing
+  crease, inside its cell (a point past the cell folds the quads around it into
+  teeth along the edge), takes its crossings' normals, and
+  `SdfContour.SplitAtCreases` splits it per side.
+- **The bake's field is no true distance.** Scopes, flares and non-uniform
+  scales read well under the distance (a fifth of it on the Moth's shins). A
+  value becomes a distance only over the gradient's magnitude (the bake kernel
+  writes the gradient in field units per world unit), and a test of how a value
+  changes over a step is measured against the field's own slope there, never
+  against the step's length (`SdfSampledLattice.PassesBetween`).
+- **Sheets thinner than the fine cell are closed before they contour**
+  (`SdfSampledLattice.CloseSheets`): left to their samples they hole, fray into
+  slivers where they thin, and their two faces cross. Only features and single-face cells read crossing
   normals: elsewhere (a fillet under the cell) they smudge flat faces, so other
   vertices keep the interpolated gradients.
 - **A static copy is one group.** Its shapes bake as their union
