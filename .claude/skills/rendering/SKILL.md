@@ -334,6 +334,15 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   best-practices` lines are advice to triage, not failures, and the layer's own
   `validation WARNING` notices at device creation (adjusted features, core plus
   GPU-assisted being slow) are not about the engine.
+- A World run that dies with `Fatal error. Internal CLR error. (0x80131506)`
+  is first checked against the pinned JIT's GC hole around inline P/Invoke
+  ([toolchain cautions](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)):
+  a CsWin32 COM call in an optimized loop can hit it, and the debug layer makes
+  it likelier because each call stays in native code longer. The managed stack
+  it prints is whichever thread allocated, not the culprit.
+  `DirectXCommandListRecorder.RecordBackBuffer` keeps
+  `[MethodImpl(MethodImplOptions.NoOptimization)]` until that note says the JIT
+  is fixed.
 
 ## References
 

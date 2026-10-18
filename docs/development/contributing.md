@@ -758,6 +758,29 @@ unverified when no device run exists.
   pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
+- The pinned .NET 11 JIT (`11.0.100-rc.1.26425.128`) can emit GC info that
+  reports a GC pointer live in a callee-saved register (`rbx`, `rsi`, `rdi`,
+  `r12` to `r15`) at the return address of an inline P/Invoke, which the
+  runtime's rule forbids: a thread inside the call is walked from its
+  `InlinedCallFrame`, whose callee-saved register locations are null. A
+  collection that lands while the thread is in that native call ends the
+  process with `Fatal error. Internal CLR error. (0x80131506)` and exit code
+  `0xC0000005`, on whichever thread allocated, so the printed managed stack
+  names an innocent allocator. A dump's native stack shows
+  `coreclr!GcEnumObject` (inlined `PromoteCarefully`) under
+  `GcScanRoots`/`StackWalkFrames` reading address zero. The shape that
+  triggers it is a CsWin32 COM call (`list->Method(...)`, whose inlined `this`
+  is a byref) in an optimized loop under register pressure; the .NET 10 JIT
+  compiles the same code correctly. `DirectXCommandListRecorder.RecordBackBuffer`
+  is the one method a debug-world run jits with that GC info, so it carries
+  `[MethodImpl(MethodImplOptions.NoOptimization)]` until the pinned SDK moves to
+  a JIT without the defect. To check a build: capture a running `Puck.World`
+  with `dotnet-dump collect --type Heap`, disassemble each jitted method with
+  SOS `!u -gcinfo <MethodDesc>` in a debugger engine (`dotnet-dump analyze`
+  has no disassembler on Windows), and look at each inline P/Invoke: a
+  `mov byte ptr [rN+4],0` (the frame going preemptive) followed by `call`. A
+  callee-saved register listed live at the instruction after that call is the
+  defect. Remove the attribute only when no such site remains with it gone.
 - Incremental builds can retain corrupted reference assemblies. Confirm
   suspicious behavior in a fresh worktree before attributing it to source
   changes, then clean only the affected `bin`/`obj` directories.

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D;
@@ -14,6 +15,13 @@ namespace Puck.DirectX.Presentation;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecorder {
     /// <inheritdoc/>
+    /// <remarks>Compiled without optimization. The pinned .NET 11 JIT optimizes this loop into code whose GC info
+    /// reports the command list's <c>this</c> byref live in a callee-saved register across the inline P/Invoke
+    /// transition of a COM call, and a collection that walks the thread while it is inside that call reads the register
+    /// through a null location and ends the process with <c>Internal CLR error (0x80131506)</c>. Unoptimized code keeps
+    /// no GC pointer in a register across the call. The contributing guide's toolchain hazards say how to check a
+    /// build for the pattern before removing the attribute.</remarks>
+    [MethodImpl(MethodImplOptions.NoOptimization)]
     public void RecordBackBuffer(
         nint commandListHandle,
         nint backBufferHandle,
