@@ -2,11 +2,13 @@
     "mcpServers": {
         "puck": {
             "args": [
-                "mcp",
-                "--profile",
-                "operator"
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                ".claude/hooks/puck-mcp.ps1"
             ],
-            "command": "puck"
+            "command": "pwsh"
         }
     }
 }

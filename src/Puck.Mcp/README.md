@@ -91,22 +91,25 @@ world.control start
 It prints an attachment file path. A World launched with `--control` starts the
 same endpoint at boot and prints the same line on stderr, so a script or agent
 that launches World needs no console line. Without either, no endpoint exists.
-The MCP client launches:
+The checkout's MCP configurations (`.mcp.json`, `.codex/config.toml`,
+`.vscode/mcp.json`) start the adapter through `.claude/hooks/puck-mcp.ps1`,
+which runs `puck mcp --profile operator` from the checkout's own Release build
+of `src/Puck.Cli`. It copies the build to `.claude/mcp-cli/<build stamp>/`
+first, so a running adapter never locks the build output, and a rebuilt CLI
+reaches agents the next time the client restarts the server (`/mcp` in Claude
+Code). With no Release build of `src/Puck.Cli` it falls back to the installed
+`puck` and says so on stderr. Other clients launch the same adapter directly:
 
 ```text
 puck mcp --profile operator
 ```
 
-The client runs the installed `puck`, not the checkout's code, so an install
-from an earlier revision serves that revision's adapter. `puck --version` prints
-the commit the tool was built at (`0.1.0-alpha+<commit>`), and both it and
-`puck mcp --profile operator` print a `puck: this CLI was built at …` warning on
-stderr when run inside a Puck checkout whose HEAD is another commit. An MCP
-client shows that line in its server log. When the server misbehaves (for
-example it closes the connection as soon as it starts), reinstall the tool from
-the checkout as the [CLI reference](../../docs/reference/cli.md#installing-the-checkouts-cli-on-path)
-describes, closing the MCP client first, since it holds the installed tool. The
-check needs no checkout: outside one, or without git, the tool says nothing.
+`puck --version` prints the commit a CLI was built at
+(`0.1.0-alpha+<commit>`), and both it and `puck mcp --profile operator` print a
+`puck: this CLI was built at …` warning on stderr when run inside a Puck
+checkout whose HEAD is another commit. An MCP client shows that line in its
+server log. The check needs no checkout: outside one, or without git, the tool
+says nothing.
 
 Without `--attach`, an unnamed call runs on the adapter's current World: the
 newest running World that answers, kept until its attachment closes, so one

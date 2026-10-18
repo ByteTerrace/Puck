@@ -2,11 +2,13 @@
     "servers": {
         "puck": {
             "args": [
-                "mcp",
-                "--profile",
-                "operator"
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}/.claude/hooks/puck-mcp.ps1"
             ],
-            "command": "puck",
+            "command": "pwsh",
             "type": "stdio"
         }
     }
