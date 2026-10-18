@@ -9,14 +9,19 @@ public sealed record VolumeDensityStopDocument(float Density, string Color);
 /// <summary>A bounded participating medium carried beside a creation's shapes. Its parent names a shape frame,
 /// or null for the creation root. Ramp is evaluated against local density before ray integration.
 /// Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size;
-/// Coverage and Softness control their density threshold and transition width. Axis is a flow-only control. Scatter, in
-/// [0, 1], is the share of the medium's extinction that scatters the light-casting bodies' light toward the eye; absent
-/// scatters none.</summary>
+/// Coverage and Softness control their density threshold and transition width. Scatter, in [0, 1], is the share of the
+/// medium's extinction that scatters the light-casting bodies' light toward the eye; absent scatters none. Axis, Spread,
+/// Fade, NoiseScale and NoiseDepth are flow-only controls: a flow's Width is its radius at the mouth, Spread its radius at
+/// the far end as a share of Width (absent, zero: the column tapers to a point), Fade the power of the remaining axial
+/// share its density falls by (absent, one: linearly to nothing), NoiseScale its noise-cell size in creation units
+/// (absent, Width), and NoiseDepth, in [0, 1], the share of its density the noise modulates (absent, one: all of
+/// it).</summary>
 public sealed record VolumeDocument(string Kind, DocumentVector3 Position, DocumentQuaternion Rotation,
     DocumentVector3 HalfExtent, IReadOnlyList<VolumeDensityStopDocument> Ramp, string? Parent = null,
     float? Axis = null, float? Width = null, float? Speed = null, uint? Seed = null, int? Steps = null,
     float? Intensity = null, float? Extinction = null, float? PulseAmplitude = null, float? PulseFrequency = null,
-    int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null) {
+    int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null,
+    float? Spread = null, float? Fade = null, float? NoiseScale = null, float? NoiseDepth = null) {
     /// <summary>The bounded three-dimensional cloud density family.</summary>
     public const string CloudKind = "cloud";
     /// <summary>The default absorption coefficient.</summary>
@@ -72,6 +77,10 @@ public sealed record VolumeDocument(string Kind, DocumentVector3 Position, Docum
         IntensityLane,
         (Coverage ?? 0.55f),
         (Softness ?? 0.18f),
-        (Scatter ?? 0f)
+        (Scatter ?? 0f),
+        (Spread ?? 0f),
+        (Fade ?? 1f),
+        (NoiseScale * scale),
+        (NoiseDepth ?? 1f)
     );
 }

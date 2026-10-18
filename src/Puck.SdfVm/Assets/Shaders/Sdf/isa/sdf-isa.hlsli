@@ -224,6 +224,7 @@
 #define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5
 #define SDF_MINIMUM_NEAR                0.02
 #define SDF_NOISE_PERIOD_CELLS          4096u
+#define SDF_VOLUME_VECTORS_PER_ENTRY    12u
 
 // Puck.Abstractions.Gpu.GpuSamplerFilter.
 #define SDF_FILTER_NEAREST 0u

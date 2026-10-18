@@ -13,11 +13,11 @@ namespace Puck.SdfVm;
 public readonly record struct SdfVolumeMotion(float Advection, float AdvectionZ, float Pulse) {
     /// <summary>Returns a medium's motion at a presented tick: its speed and pulse frequency integrated from engine tick
     /// zero (<see cref="PresentedTick.Integrate"/>).</summary>
-    /// <param name="volume">The medium; its width is positive, as <see cref="SdfVolume.Validate"/> requires.</param>
+    /// <param name="volume">The medium; its noise cell is positive, as <see cref="SdfVolume.Validate"/> requires.</param>
     /// <param name="clock">The presented tick.</param>
     /// <returns>The motion.</returns>
     public static SdfVolumeMotion At(in SdfVolume volume, PresentedTick clock) {
-        var cellsPerSecond = (volume.Speed / ((double)volume.Width));
+        var cellsPerSecond = (volume.Speed / ((double)volume.NoiseCell));
         var pulsePhase = clock.Integrate(
             modulus: 1d,
             ratePerSecond: volume.PulseFrequency

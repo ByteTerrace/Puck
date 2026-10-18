@@ -133,7 +133,7 @@ public sealed partial class SdfWorldTables {
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
 
-    // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
+    // SdfVolume.VectorsPerEntry float4 rows, paired with shade-volumes.hlsli's sdfLoadVolume. Unused trailing slots carry zero bounds.
     private void PackVolumes(SdfFrame frame) {
         Array.Clear(array: m_volumeScratch);
 
@@ -170,6 +170,7 @@ public sealed partial class SdfWorldTables {
             floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
             floats[(b + 22)] = ((float)volume.Kind); floats[(b + 23)] = motion.AdvectionZ;
             floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness; floats[(b + 42)] = volume.Scatter;
+            floats[(b + 44)] = volume.Spread; floats[(b + 45)] = volume.Fade; floats[(b + 46)] = volume.NoiseCell; floats[(b + 47)] = volume.NoiseDepth;
             for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
                 var row = ((b + 24) + (stop * 4));
                 var value = volume.Ramp[stop];

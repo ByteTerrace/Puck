@@ -6,7 +6,8 @@ namespace Puck.SignedDistance;
 
 /// <summary>The bounded participating medium's density family.</summary>
 public enum SdfVolumeKind {
-    /// <summary>An advected scalar density field inside a tapered column.</summary>
+    /// <summary>An advected scalar density field inside a column whose radius and density run along its axis by
+    /// <see cref="SdfVolume.Spread"/> and <see cref="SdfVolume.Fade"/>.</summary>
     Flow,
     /// <summary>A bounded, advected cloud with a three-dimensional noise density.</summary>
     Cloud,
@@ -15,8 +16,13 @@ public enum SdfVolumeKind {
 public readonly record struct SdfDensityStop(float Density, Vector3 Color);
 /// <summary>A bounded participating medium, separate from the distance-field tape. Position and Rotation are
 /// relative to DynamicSlot, or world space for <see cref="SdfProgram.NoDynamicTransformSlot"/>. A flow column runs
-/// from the box's +Y face toward -Y; a cloud fills an ellipsoidal envelope inside the box, with Width setting its
-/// noise-cell size. Ramp contains one to four ascending density stops, evaluated at each sample before integration.
+/// from the box's +Y face toward -Y along Axis: its Gaussian radius runs from Width at the mouth to Width times Spread at
+/// the far end (zero tapers to a point, one keeps a straight column, more widens a cone), and its density falls by the
+/// remaining axial share raised to Fade (zero holds it, one falls linearly to nothing). A cloud fills an ellipsoidal
+/// envelope inside the box. NoiseScale is either kind's noise-cell size in world units; null uses Width
+/// (<see cref="NoiseCell"/>), so a flow narrower than its noise stays continuous. NoiseDepth, in [0, 1], is the share
+/// of a flow's density its noise modulates: one multiplies by the noise, zero leaves a smooth column whose density peaks
+/// at one on the axis at the mouth, where the ramp's top stop colours a core. Ramp contains one to four ascending density stops, evaluated at each sample before integration.
 /// PulseAmplitude is in [0, 1]; PulseFrequency is cycles per second. IntensityLane selects [0, 3], or null
 /// for constant gain. An authored lane on a static volume reads zero. Seed preserves all 32 bits.
 /// Coverage is in [0, 1]; Softness is the cloud density transition width in (0, 1]. Scatter, in [0, 1], is the
@@ -26,7 +32,8 @@ public readonly record struct SdfDensityStop(float Density, Vector3 Color);
 public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Quaternion Rotation, Vector3 HalfExtent,
     int DynamicSlot, float Axis, float Width, float Speed, uint Seed, int Steps, IReadOnlyList<SdfDensityStop> Ramp,
     float Intensity, float Extinction, float PulseAmplitude = 0f, float PulseFrequency = 0f, int? IntensityLane = null,
-    float Coverage = 0.55f, float Softness = 0.18f, float Scatter = 0f) {
+    float Coverage = 0.55f, float Softness = 0.18f, float Scatter = 0f, float Spread = 0f, float Fade = 1f,
+    float? NoiseScale = null, float NoiseDepth = 1f) {
     /// <summary>The Henyey-Greenstein anisotropy a bounded medium scatters the bodies' light by: mildly forward, as a
     /// cloud's droplets scatter. KEEP IN SYNC with <c>SdfVolumeScatterAnisotropy</c> in
     /// <c>shade/shade-volumes.hlsli</c>.</summary>
@@ -42,8 +49,12 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
     public const int MaxSteps = 64;
     /// <summary>The smallest admitted integration step count.</summary>
     public const int MinSteps = 8;
-    /// <summary>The packed float4 stride, paired with shade-volumes.hlsli.</summary>
-    public const int VectorsPerEntry = 11;
+    /// <summary>The packed float4 stride, paired with shade-volumes.hlsli through the generated
+    /// <c>SDF_VOLUME_VECTORS_PER_ENTRY</c>.</summary>
+    public const int VectorsPerEntry = 12;
+
+    /// <summary>Gets the noise-cell size in world units: <see cref="NoiseScale"/>, else <see cref="Width"/>.</summary>
+    public float NoiseCell => (NoiseScale ?? Width);
 
     /// <summary>Refuses invalid engine inputs before they reach the GPU.</summary>
     public void Validate(int dynamicTransformCount) {
@@ -80,7 +91,12 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
             (Softness == 0f) ||
             (Softness > 1f) ||
             !NonNegative(v: Scatter) ||
-            (Scatter > 1f)
+            (Scatter > 1f) ||
+            !NonNegative(v: Spread) ||
+            !NonNegative(v: Fade) ||
+            ((NoiseScale is { } noiseScale) && (!NonNegative(v: noiseScale) || (noiseScale == 0f))) ||
+            !NonNegative(v: NoiseDepth) ||
+            (NoiseDepth > 1f)
         ) {
             throw new ArgumentOutOfRangeException(
                 nameof(SdfVolume),

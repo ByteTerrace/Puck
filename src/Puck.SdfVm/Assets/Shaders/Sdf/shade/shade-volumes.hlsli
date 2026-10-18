@@ -1,5 +1,5 @@
 // Bounded flow/cloud volumes (Puck.SignedDistance.SdfVolume, a participating medium, never a distance-field shape):
-// sdfVolumes, eleven float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
+// sdfVolumes, SDF_VOLUME_VECTORS_PER_ENTRY float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
 // the frame's presented tick, so no pass reads a clock. The composite pass alone integrates them, after the surface and
 // the sky, clipping the pixel's surface share at its surface and its sky share at the far distance. A medium with a
 // scatter scatters the light-casting bodies' light toward the eye, the sky block's air lights by a mildly forward phase
@@ -33,10 +33,14 @@ struct SdfVolumeData {
     float coverage;
     float softness;
     float scatter;      // the share of each sample's extinction that scatters the bodies' light toward the eye
+    float spread;       // a flow's radius at the far end of its axis, as a share of its width at the mouth
+    float fade;         // the power of the remaining axial share a flow's density falls by
+    float noiseScale;   // the noise-cell size in world units
+    float noiseDepth;   // the share of a flow's density its noise modulates
     float4 ramp[4];
 };
 SdfVolumeData sdfLoadVolume(uint index) {
-    uint b = index * 11u;
+    uint b = index * SDF_VOLUME_VECTORS_PER_ENTRY;
     SdfVolumeData v;
     float4 r0 = sdfVolumes[b];
     v.position = r0.xyz; v.dynamicSlot = (int)r0.w;
@@ -50,6 +54,8 @@ SdfVolumeData sdfLoadVolume(uint index) {
     float4 r5 = sdfVolumes[b + 5u];
     v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z; v.advectionZ = r5.w;
     v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y; v.scatter = sdfVolumes[b + 10u].z;
+    float4 r11 = sdfVolumes[b + 11u];
+    v.spread = r11.x; v.fade = r11.y; v.noiseScale = r11.z; v.noiseDepth = r11.w;
     [unroll] for (uint i = 0u; i < 4u; i++) v.ramp[i] = sdfVolumes[b + 6u + i];
     return v;
 }
@@ -116,14 +122,14 @@ float3 sdfVolumeRamp(SdfVolumeData v, float density) {
     }
     return color;
 }
-// A true 3D medium, clipped smoothly inside its own bound. Width is the noise-cell size in world units;
+// A true 3D medium, clipped smoothly inside its own bound. noiseScale is the noise-cell size in world units;
 // coverage moves a density threshold, not a screen-space alpha. The ramp and height tint provide art-directed
 // illumination; this does not trace cloud shadows or multiple scattering. The octaves scale by whole numbers, so each
 // stays periodic in the lattice's period and the host-reduced advection never shows a seam.
 float sdfCloudDensity(SdfVolumeData v, float3 p) {
     float3 unit = p / v.halfExtent;
     float envelope = smoothstep(0.0, 0.3, 1.0 - dot(unit, unit));
-    float3 q = ((p / v.width) + float3(v.advection, 0.0, v.advectionZ));
+    float3 q = ((p / v.noiseScale) + float3(v.advection, 0.0, v.advectionZ));
     float noise = 0.5 + 0.5 * (
         0.57 * sdfPeriodicNoise3(q, v.seed) +
         0.28 * sdfPeriodicNoise3(q * 2.0 + 7.1, v.seed + 19u) +
@@ -149,11 +155,22 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
         } else {
             float axial = (v.halfExtent.y - p.y) / v.axis;
             if (axial < 0.0 || axial >= 1.0) continue;
-            float taper = 1.0 - axial;
-            float radius = length(p.xz) / max(v.width * taper, 1.0e-6);
-            float3 flow = ((p / v.width) + float3(0.0, v.advection, 0.0));
+            // The radius runs linearly from width at the mouth to width times spread at the far end; the density falls
+            // by the remaining share to the fade's power, and the noise modulates the noise depth's share of it. A unit
+            // fade and depth take the linear product on its own branch: pow and lerp would not return it bit-exactly,
+            // and selected operands let the compiler reassociate the product.
+            float remaining = 1.0 - axial;
+            float spread = lerp(1.0, v.spread, axial);
+            float radius = length(p.xz) / max(v.width * spread, 1.0e-6);
+            float3 flow = ((p / v.noiseScale) + float3(0.0, v.advection, 0.0));
             float noise = 0.5 + 0.5 * sdfPeriodicNoise3(flow, v.seed);
-            density = saturate(exp(-radius * radius) * taper * noise * v.pulse);
+            float column;
+            if ((v.fade == 1.0) && (v.noiseDepth == 1.0)) {
+                column = exp(-radius * radius) * remaining * noise;
+            } else {
+                column = exp(-radius * radius) * pow(remaining, v.fade) * lerp(1.0, noise, v.noiseDepth);
+            }
+            density = saturate(column * v.pulse);
         }
         float3 emission = sdfVolumeRamp(v, density) * (density * v.intensity);
         float extinction = density * v.extinction;

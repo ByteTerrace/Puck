@@ -388,6 +388,32 @@ public sealed class VolumeLawTests {
         AssertRefusesNaming(document: Document(Flow() with { Scatter = -0.1f }), needle: "volumes[0].scatter");
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (lit.ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 1f) with { Scatter = 2f }).Validate(dynamicTransformCount: 0));
     }
+    // A flow's profile carries scaled where it is a length: spread and fade are shares, the noise cell is creation units.
+    // Absent, the column tapers to a point, its density falls linearly, and its noise cell is its width.
+    [Fact]
+    public void AFlowProfileCarriesToTheVolumeAndItsRefusalsNameTheControl() {
+        var cone = Flow() with { Width = 0.05f, Spread = 3f, Fade = 2f, NoiseScale = 0.1f, NoiseDepth = 0.4f };
+        var volume = cone.ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 2f);
+        var plain = Flow().ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 2f);
+
+        Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(cone)));
+        Assert.Equal(expected: (3f, 2f, 0.2f, 0.2f, 0.4f), actual: (volume.Spread, volume.Fade, volume.NoiseScale!.Value, volume.NoiseCell, volume.NoiseDepth));
+        Assert.Equal(expected: (0f, 1f, (float?)null, plain.Width, 1f), actual: (plain.Spread, plain.Fade, plain.NoiseScale, plain.NoiseCell, plain.NoiseDepth));
+        AssertRefusesNaming(document: Document(Flow() with { Spread = -1f }), needle: "volumes[0].spread");
+        AssertRefusesNaming(document: Document(Flow() with { Fade = float.NaN }), needle: "volumes[0].fade");
+        AssertRefusesNaming(document: Document(Flow() with { NoiseScale = 0f }), needle: "volumes[0].noiseScale");
+        AssertRefusesNaming(document: Document(Flow() with { NoiseDepth = 1.5f }), needle: "volumes[0].noiseDepth");
+        var cloud = Flow(kind: VolumeDocument.CloudKind) with { IntensityLane = null };
+
+        AssertRefusesNaming(document: Document(cloud with { Spread = 1f }), needle: "volumes[0].spread");
+        AssertRefusesNaming(document: Document(cloud with { Fade = 1f }), needle: "volumes[0].fade");
+        AssertRefusesNaming(document: Document(cloud with { NoiseScale = 1f }), needle: "volumes[0].noiseScale");
+        AssertRefusesNaming(document: Document(cloud with { NoiseDepth = 1f }), needle: "volumes[0].noiseDepth");
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (volume with { Spread = -1f }).Validate(dynamicTransformCount: 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (volume with { Fade = -1f }).Validate(dynamicTransformCount: 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (volume with { NoiseScale = 0f }).Validate(dynamicTransformCount: 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (volume with { NoiseDepth = 2f }).Validate(dynamicTransformCount: 0));
+    }
     [Fact]
     public void StepsPastTheCeilingAreRefusedByName() =>
         AssertRefusesNaming(

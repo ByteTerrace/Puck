@@ -292,6 +292,7 @@ public static class SdfIsaHlsl {
             name: "SDF_NOISE_PERIOD_CELLS",
             value: SdfVolume.NoisePeriodCells
         );
+        declarations.Count(name: "SDF_VOLUME_VECTORS_PER_ENTRY", value: SdfVolume.VectorsPerEntry);
         declarations.Members<GpuSamplerFilter>(prefix: "SDF_FILTER");
         declarations.Members<GridOverlayFlags>(prefix: "SDF_GRID");
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
