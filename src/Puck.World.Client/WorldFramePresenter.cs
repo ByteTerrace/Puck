@@ -580,10 +580,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var definition = route.Endpoint.Definition;
         var state = RouteState(route: route);
         var view = (m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller"));
+        // The seat's look advances on the same fixed ticks as the body it steers, so the frame presents it at the
+        // fraction the body above was interpolated at.
         var chase = view.ResolveChase(
             bodyOrientation: bodyOrientation,
             definition: definition,
             domains: m_domains,
+            interpolationAlpha: interpolationAlpha,
             mirror: state,
             views: views
         );
