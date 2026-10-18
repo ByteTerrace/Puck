@@ -5,7 +5,7 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     private static QualityTier InfinityTier(SdfSky sky) => sky.Quality switch {
         SdfSkyTier.High => QualityTier.High,
         SdfSkyTier.Medium => QualityTier.Medium,

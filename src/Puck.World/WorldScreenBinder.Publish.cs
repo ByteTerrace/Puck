@@ -5,7 +5,7 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     /// <inheritdoc/>
     public void ConfigureViews(SdfWorldPipelineCatalog pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight, WorldSeatViewports viewports) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);

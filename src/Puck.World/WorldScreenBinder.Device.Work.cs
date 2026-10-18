@@ -4,7 +4,7 @@ using Puck.SdfVm;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     private readonly WorldRenderProbe? m_renderProbe;
 
     // Every view name registered with the render probe, so disposal withdraws each one.

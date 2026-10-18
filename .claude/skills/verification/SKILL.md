@@ -30,7 +30,13 @@ owns each verb's flags. When this file and the code disagree, the code wins.
    `build/CoverageGpuOnly.txt`, the one exclusion list. To see a suite's
    coverage locally, run it as
    `dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
-   and merge with `puck artifacts coverage --results <dir>`.
+   and merge with `puck artifacts coverage --results <dir>`. A line counts where
+   a sequence point starts: a branch body, a lambda body on a line of its own
+   and a switch-expression arm are lines of their own, and a method ending in a
+   null-conditional call (`x?.M();`) or returning from inside a `foreach` can
+   leave its closing brace unhit. Code that keeps its device work in a listed
+   file reaches it from the CPU side through one expression (a conditional or
+   `&&` over a helper there), not a guarded statement.
 
 A change to simulation state stays deterministic; `puck test --reproduce` shows
 two runs agree. Gates, parity, canaries, counters and `puck laws prove` are

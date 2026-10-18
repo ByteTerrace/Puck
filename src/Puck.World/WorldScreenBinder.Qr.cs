@@ -14,9 +14,9 @@ namespace Puck.World;
 /// <param name="QuietZoneModules">The rendered quiet-zone width in modules on every side.</param>
 /// <param name="Width">The rasterized buffer's width in pixels.</param>
 /// <param name="Height">The rasterized buffer's height in pixels.</param>
-internal readonly record struct WorldScreenQrAuthoring(string Payload, QrErrorCorrectionLevel Level, int Version,
+public readonly record struct WorldScreenQrAuthoring(string Payload, QrErrorCorrectionLevel Level, int Version,
     int Mask, int QuietZoneModules, uint Width, uint Height);
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     // A one-line preview for a QR echo — a link payload runs to hundreds of characters, which would otherwise flood the
     // console mirror's 64-line ring.
     private static string ElideForEcho(string payload) {

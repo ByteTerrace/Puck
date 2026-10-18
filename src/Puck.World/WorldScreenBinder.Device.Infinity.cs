@@ -10,7 +10,7 @@ namespace Puck.World;
 
 // Infinity layers use the same admitted mirrors, scene emitters, nested screens and residency retirement as session
 // screens. A plan owns at most eight scenes; the cameras showing it add fitted outputs, never another scene or session.
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     private readonly Dictionary<(WorldSessionMirror Mirror, int Depth), InfinityRoot> m_infinityRoots = [];
     private readonly Dictionary<string, InfinityOutput> m_infinityOutputs = new(comparer: StringComparer.Ordinal);
 

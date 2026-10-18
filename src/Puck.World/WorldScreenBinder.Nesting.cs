@@ -1,10 +1,7 @@
 using System.Numerics;
-using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.SdfVm;
-using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -18,13 +15,7 @@ namespace Puck.World;
 // scene while its session discloses everything, which every seat presented there and every other such feed at any depth
 // shares, or a residency of its own. Each view of a residency binds the screens of the level it renders
 // (ISdfScreenSources.ReadOf takes the view), so one world seen at two depths shows each level's own images.
-internal sealed partial class WorldScreenBinder {
-    // Every screen index a program may declare, which a residency of another world binds.
-    private static readonly int[] AllScreens = [.. Enumerable.Range(
-        count: SdfProgramBuilder.MaxScreenSurfaces,
-        start: 0
-    )];
-
+public sealed partial class WorldScreenBinder {
     // The presentation's nesting depth (the boot world's views.nestingDepth), read each produced frame.
     private int m_nestingDepth = RenderGraphInstanceSet.DefaultNestingDepth;
     // The screens of each world seats are presented in, by its scene.
@@ -86,72 +77,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        if (Presenter is { } presenter) {
-            foreach (var scene in presenter.RoutedScenes) {
-                if (
-                    (scene.ViewCount != 0) &&
-                    !m_routedScreens.ContainsKey(key: scene)
-                ) {
-                    var screens = new WorldNestedScreens<SessionFeed>(
-                        definition: () => scene.Endpoint.Definition,
-                        depth: 0,
-                        head: WorldViewNames.Routed(authority: scene.Endpoint.Identity),
-                        shares: SharesProducer,
-                        world: scene.Endpoint.Identity
-                    );
-
-                    m_routedScreens.Add(
-                        key: scene,
-                        value: screens
-                    );
-                    m_nestedOwners.Add(
-                        key: screens,
-                        value: new NestedOwner(
-                            Eye: () => (scene.TrySeatCamera(camera: out var camera)
-                                ? camera.Position
-                                : null),
-                            Feed: null,
-                            Instance: scene.Endpoint.Identity,
-                            Local: () => scene.Endpoint.Definition,
-                            Scene: scene
-                        )
-                    );
-                    moved = true;
-                }
-            }
-
-            foreach (var (scene, screens) in m_routedScreens) {
-                if (
-                    !presenter.Presents(scene: scene) ||
-                    (scene.ViewCount == 0)
-                ) {
-                    m_retiredRoutedScreens.Add(item: scene);
-                }
-            }
-        }
-
-        foreach (var scene in m_retiredRoutedScreens) {
-            if (m_routedScreens.Remove(
-                key: scene,
-                value: out var retired
-            )) {
-                retired.Close(sessions: sessions);
-                _ = m_nestedOwners.Remove(key: retired);
-                moved = true;
-            }
-        }
-
-        m_retiredRoutedScreens.Clear();
-
-        foreach (var screens in m_routedScreens.Values) {
-            moved |= ReconcileLevel(
-                screens: screens,
-                sessions: sessions
-            );
-        }
-        foreach (var entry in InfinityEntries()) {
-            if (entry.Screens is { } screens) { moved |= ReconcileLevel(screens: screens, sessions: sessions); }
-        }
+        moved |= ReconcilePresentedLevels(sessions: sessions);
 
         if (!(moved || m_feedsMoved)) {
             return;
@@ -193,10 +119,10 @@ internal sealed partial class WorldScreenBinder {
             );
             feed.Nested = screens;
             m_nestedOwners[screens] = new NestedOwner(
-                Eye: () => CameraOf(feed: feed).Position,
+                Eye: EyeOf(feed: feed),
                 Feed: feed,
                 Instance: feed.InstanceName,
-                Local: () => feed.Mirror.Definition,
+                Local: DestinationOf(feed: feed),
                 Scene: null
             );
             moved = true;
@@ -224,15 +150,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        foreach (var screens in m_routedScreens.Values) {
-            for (var index = 0; (index < screens.Views.Count); index++) {
-                AddFeed(feed: screens.Views[index]);
-            }
-        }
-        foreach (var entry in InfinityEntries()) {
-            if (entry.Screens is not { } screens) { continue; }
-            foreach (var feed in screens.Views) { AddFeed(feed: feed); }
-        }
+        AddPresentedFeeds();
 
         m_feedsMoved = false;
     }
@@ -250,24 +168,11 @@ internal sealed partial class WorldScreenBinder {
     // view of a world the display shows reads, and every other level's beside the views, which only the session whose
     // screens show them reads.
     private void PublishNesting() {
-        var routed = new List<RenderGraphInstance>();
-
-        foreach (var screens in m_routedScreens.Values) {
-            foreach (var source in screens.Sources) {
-                if (!WorldSourceInstances.Holds(
-                    instances: routed,
-                    name: source.Name
-                )) {
-                    routed.Add(item: source);
-                }
-            }
-        }
-
-        Mappings.ReconcileRouted(sources: routed);
+        Mappings.ReconcileRouted(sources: RoutedSources());
 
         var nested = new List<RenderGraphInstance>();
 
-        foreach (var screens in m_feeds.Select(selector: feed => feed.Nested).Concat(second: InfinityEntries().Select(selector: entry => entry.Screens)).OfType<WorldNestedScreens<SessionFeed>>()) {
+        foreach (var screens in m_feeds.Select(selector: static feed => feed.Nested).OfType<WorldNestedScreens<SessionFeed>>().Concat(second: InfinityLevels())) {
             foreach (var source in screens.Sources) {
                 if (
                     !WorldSourceInstances.Holds(
@@ -286,87 +191,6 @@ internal sealed partial class WorldScreenBinder {
 
         m_nestedSources = nested;
     }
-    // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
-    // has no answer and for a camera projection.
-    private CameraSnapshot CameraOf(SessionFeed feed) {
-        if (
-            (feed.Projection == WorldScreenProjection.Window) &&
-            (feed.WindowFit?.Invoke() is { } fitted)
-        ) {
-            return fitted;
-        }
-
-        return WorldSessionSceneEmitter.ResolveCamera(
-            cameraName: feed.EffectiveCamera,
-            domains: m_domains,
-            height: ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
-            mirror: feed.Mirror,
-            width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
-        );
-    }
-    // The feed rendering a window view of a scene, by its index in the scene's frame.
-    private SessionFeed? WindowFeedOf(WorldRoutedScene scene, int view) {
-        foreach (var feed in m_feeds) {
-            if (
-                (feed.Route.Window is { } window) &&
-                ReferenceEquals(
-                    objA: window.Scene,
-                    objB: scene
-                ) &&
-                (window.Index == view)
-            ) {
-                return feed;
-            }
-        }
-
-        return null;
-    }
-    // The screens a view of a scene shows: a seat's, the routed world's own; a window's, its feed's destination's; a
-    // camera's, the level that films it.
-    private WorldNestedScreens<SessionFeed>? ScreensOf(WorldRoutedScene scene, int view) => ((view < scene.SeatViewCount)
-        ? m_routedScreens.GetValueOrDefault(key: scene)
-        : (WindowFeedOf(
-            scene: scene,
-            view: view
-        )?.Nested ?? FilmedLevelOf(
-            scene: scene,
-            view: view
-        )));
-    // The screens a world view instance shows when its seat is presented in another world, or null for the boot world's.
-    private WorldNestedScreens<SessionFeed>? RoutedScreensOf(string instance) {
-        if (
-            (Presenter is { } presenter) &&
-            (string.Equals(
-                a: instance,
-                b: WorldViewGraphs.WorldInstance,
-                comparisonType: StringComparison.Ordinal
-            ) || (WorldViewNames.ViewOf(instance: instance) is not null)) &&
-            presenter.TryRoutedView(
-                index: out _,
-                scene: out var scene,
-                view: (WorldViewNames.ViewOf(instance: instance) ?? 0)
-            )
-        ) {
-            return m_routedScreens.GetValueOrDefault(key: scene);
-        }
-
-        return null;
-    }
-    // Whether a world view instance's seat is presented in another world.
-    private bool IsRouted(string instance) => (
-        (Presenter is { } presenter) &&
-        (string.Equals(
-            a: instance,
-            b: WorldViewGraphs.WorldInstance,
-            comparisonType: StringComparison.Ordinal
-        ) || (WorldViewNames.ViewOf(instance: instance) is not null)) &&
-        presenter.TryRoutedView(
-            index: out _,
-            scene: out _,
-            view: (WorldViewNames.ViewOf(instance: instance) ?? 0)
-        )
-    );
-
     /// <summary>Describes every level the presentation nests, one segment each: the nesting depth, then each world seats
     /// are presented in (<c>routed$&lt;digest&gt; depth 0 world &lt;authority&gt;</c>) and each session view, at every
     /// depth, by name — its
@@ -386,17 +210,7 @@ internal sealed partial class WorldScreenBinder {
             handler: $"depth {BootNestingDepth()}"
         );
 
-        foreach (var screens in m_routedScreens.Values) {
-            _ = builder.Append(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" | {screens.Head} depth 0 world {m_nestedOwners[screens].Instance}"
-            );
-            AppendScreens(
-                builder: builder,
-                screens: screens,
-                textFault: m_nestedOwners[screens].Scene?.TextFault
-            );
-        }
+        AppendRoutedLevels(builder: builder);
 
         foreach (var feed in m_feeds) {
             var via = (feed.Home
@@ -425,40 +239,28 @@ internal sealed partial class WorldScreenBinder {
     }
 
     private void AppendScreens(System.Text.StringBuilder builder, WorldNestedScreens<SessionFeed> screens, string? textFault) {
-        _ = builder.Append(value: " screens");
-
-        if (screens.Rows.Count == 0) {
-            _ = builder.Append(value: " none");
-        }
+        _ = builder.Append(value: ((screens.Rows.Count == 0)
+            ? " screens none"
+            : " screens"));
 
         foreach (var row in screens.Rows) {
             var instance = screens.InstanceOf(screen: row.Index);
             var shown = (instance ?? ((row.Source is WorldScreenSource.Text)
                 ? "text"
                 : "none"));
+            var fault = (((instance is not null) && (SourceFault(instance: instance) is { } reason))
+                ? $" ({reason})"
+                : "");
 
             _ = builder.Append(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" {row.Index}:{shown}"
-            );
-
-            if (
-                (instance is not null) &&
-                (SourceFault(instance: instance) is { } fault)
-            ) {
-                _ = builder.Append(
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    handler: $" ({fault})"
-                );
-            }
-        }
-
-        if (textFault is not null) {
-            _ = builder.Append(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" text-fault {textFault}"
+                handler: $" {row.Index}:{shown}{fault}"
             );
         }
+
+        _ = builder.Append(value: ((textFault is null)
+            ? ""
+            : $" text-fault {textFault}"));
     }
 
     /// <inheritdoc/>
@@ -467,36 +269,19 @@ internal sealed partial class WorldScreenBinder {
     public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
         ArgumentNullException.ThrowIfNull(argument: view);
 
-        if (m_infinityOutputs.TryGetValue(key: view, value: out var infinity)) {
-            placements = (infinity.Entry.Screens?.Mappings.Mappings ?? []);
-            return true;
+        var (known, level) = PresentedLevelOf(view: view);
+
+        if (!known && (SessionFeedOf(name: view) is { } feed)) {
+            (known, level) = (true, feed.Nested);
         }
 
-        if (SessionFeedOf(name: view) is { } feed) {
-            placements = ((feed.Nested is { } screens)
-                ? screens.Mappings.Mappings
-                : []);
-
-            return true;
+        if (!known && (NestedCameraLevel(name: view) is { } filmed)) {
+            (known, level) = (true, filmed);
         }
 
-        if (IsRouted(instance: view)) {
-            placements = ((RoutedScreensOf(instance: view) is { } routed)
-                ? routed.Mappings.Mappings
-                : []);
+        placements = (level?.Mappings.Mappings ?? []);
 
-            return true;
-        }
-
-        if (NestedCameraLevel(name: view) is { } filmed) {
-            placements = filmed.Mappings.Mappings;
-
-            return true;
-        }
-
-        placements = [];
-
-        return false;
+        return known;
     }
     /// <inheritdoc/>
     /// <remarks>A session's screen stands in its parent's destination, a routed world's in that world, one a camera view
@@ -512,43 +297,31 @@ internal sealed partial class WorldScreenBinder {
             return WorldPortalGlass.None;
         }
 
-        WorldNestedScreens<SessionFeed>? world;
+        var (known, world) = PresentedLevelOf(view: consumer);
 
-        if (m_infinityOutputs.TryGetValue(key: consumer, value: out var infinity)) {
-            world = infinity.Entry.Screens;
-        } else if (m_feedsByName.TryGetValue(
+        if (!known && m_feedsByName.TryGetValue(
             key: consumer,
             value: out var parent
         )) {
-            world = parent.Nested;
-        } else if (NestedCameraLevel(name: consumer) is { } filmed) {
-            world = filmed;
-        } else if (IsRouted(instance: consumer)) {
-            world = RoutedScreensOf(instance: consumer);
-        } else if (
-            string.Equals(
+            (known, world) = (true, parent.Nested);
+        }
+
+        if (!known && (NestedCameraLevel(name: consumer) is { } filmed)) {
+            (known, world) = (true, filmed);
+        }
+
+        // A consumer that is no level renders the boot world, when it is one of its views or a camera view of it.
+        if (!known) {
+            return ((string.Equals(
                 a: consumer,
                 b: WorldViewGraphs.WorldInstance,
                 comparisonType: StringComparison.Ordinal
-            ) ||
-            (WorldViewNames.ViewOf(instance: consumer) is not null) ||
-            m_cameraViews.ContainsKey(key: consumer)
-        ) {
-            if (
-                (shown.ParentFeed is not null) ||
-                (shown.RootScene is not null) ||
-                (shown.ParentInfinity is not null)
-            ) {
-                return WorldPortalGlass.Elsewhere;
-            }
-
-            glass = RowOf(screen: shown.ScreenIndex);
-
-            return ((glass is null)
-                ? WorldPortalGlass.None
-                : WorldPortalGlass.Found);
-        } else {
-            return WorldPortalGlass.None;
+            ) || (WorldViewNames.ViewOf(instance: consumer) is not null) || m_cameraViews.ContainsKey(key: consumer))
+                ? BootGlass(
+                    glass: out glass,
+                    shown: shown
+                )
+                : WorldPortalGlass.None);
         }
 
         if (
@@ -570,7 +343,25 @@ internal sealed partial class WorldScreenBinder {
             ? WorldPortalGlass.None
             : WorldPortalGlass.Found);
     }
-    /// <inheritdoc/>
+    // Where a boot world's view shows a session's glass: the boot world's own row for one of its screens, elsewhere for a
+    // screen of another level.
+    private WorldPortalGlass BootGlass(SessionFeed shown, out WorldScreen? glass) {
+        glass = null;
+
+        if (
+            (shown.ParentFeed is not null) ||
+            (shown.RootScene is not null) ||
+            (shown.ParentInfinity is not null)
+        ) {
+            return WorldPortalGlass.Elsewhere;
+        }
+
+        glass = RowOf(screen: shown.ScreenIndex);
+
+        return ((glass is null)
+            ? WorldPortalGlass.None
+            : WorldPortalGlass.Found);
+    }    /// <inheritdoc/>
     /// <remarks>Reads the residency the session already renders, the World's own, its endpoint scene's or its own, and
     /// creates none.</remarks>
     public bool Bakes(string view) {
@@ -602,33 +393,15 @@ internal sealed partial class WorldScreenBinder {
     private sealed class NestedImages(WorldScreenBinder binder, WorldNestedScreens<SessionFeed> screens) : IWorldScreenImages {
         /// <inheritdoc/>
         public bool TryExtent(int screen, out int width, out int height) {
-            (width, height) = (0, 0);
-
-            if (screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine }) {
-                if (binder.MachinesOf(world: screens.World)?.VideoOutput(
+            (width, height) = ((screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine })
+                ? ExtentOf(output: binder.MachinesOf(world: screens.World)?.VideoOutput(
                     instance: machine.Instance,
                     output: machine.Output
-                ) is { } output) {
-                    (width, height) = (output.Width, output.Height);
-                }
-            } else if (
-                (screens.Mappings.InstanceOf(screen: screen) is { } instance) &&
-                (binder.FeedOf(instance: instance) is { } source)
-            ) {
-                (width, height) = (((int)source.Descriptor.Width), ((int)source.Descriptor.Height));
-            }
+                ))
+                : binder.FeedExtentOf(instance: screens.Mappings.InstanceOf(screen: screen)));
 
             return ((width > 0) && (height > 0));
         }
-    }
-
-    private static bool Emits(WorldNestedScreens<SessionFeed>? screens, int screen) {
-        if (screens is null) { return false; }
-        return screens.RowOf(screen: screen)?.Source switch {
-            WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
-            WorldScreenSource.Session => (screens.Children.TryGetValue(key: screen, value: out var child) && (child.InstanceName != screens.World)),
-            _ => false,
-        };
     }
     // Publishes every level's mappings for this frame at the extents their images now have.
     private void PublishNestedMappings() {
@@ -691,7 +464,10 @@ internal sealed partial class WorldScreenBinder {
                 ParentFeed = owner.Feed,
                 ParentInfinity = owner.Infinity,
                 RootScene = owner.Scene,
-                Row = () => screens.RowOf(screen: screen),
+                Row = LevelRowOf(
+                    screen: screen,
+                    screens: screens
+                ),
             };
 
             if (binder.m_viewPipelines is not null) {
@@ -720,78 +496,24 @@ internal sealed partial class WorldScreenBinder {
             );
         }
     }
-    // What each screen of a session feed's own residency shows, in every view of it, the session's and its destination's
-    // cameras' alike: its destination's screens as the feed shows them.
-    private sealed class FeedScreenSources(SessionFeed feed) : ISdfScreenSources {
-        /// <inheritdoc/>
-        public IReadOnlyList<int> Screens => AllScreens;
+    // The level whose screens show a camera view of another world, by the view's name, or null.
+    private WorldNestedScreens<SessionFeed>? NestedCameraLevel(string name) => (PresentedCameraLevel(name: name) ?? FeedCameraLevel(name: name));
+    // The level a session's destination's screens make up that shows a camera view of that world, or null.
+    private WorldNestedScreens<SessionFeed>? FeedCameraLevel(string name) {
+        EnsureFeeds();
 
-        /// <inheritdoc/>
-        public bool Emits(int screen) => WorldScreenBinder.Emits(
-            screen: screen,
-            screens: feed.Nested
-        );
-        /// <inheritdoc/>
-        public SourceMapping? MappingOf(int screen) => (((feed.Nested is { } screens) && screens.Mappings.TryGet(
-            mapping: out var mapping,
-            screen: screen
-        ))
-            ? mapping
-            : null);
-        /// <inheritdoc/>
-        public string? ReadOf(int view, int screen) => feed.Nested?.InstanceOf(screen: screen);
-    }
-    // What each screen of a routed scene's residency shows in each of its views: a seat's view shows the world's own
-    // screens, a window's its feed's level, a camera's the level that films it. A screen draws from the first mapping a
-    // level publishes for it, which every level publishes alike for one row, and lights the room from the routed world's
-    // own level, every level's being the same world.
-    private sealed class RoutedScreenSources(WorldScreenBinder binder, WorldRoutedScene scene) : ISdfScreenSources {
-        /// <inheritdoc/>
-        public IReadOnlyList<int> Screens => AllScreens;
-
-        /// <inheritdoc/>
-        public bool Emits(int screen) => WorldScreenBinder.Emits(
-            screen: screen,
-            screens: binder.m_routedScreens.GetValueOrDefault(key: scene)
-        );
-        /// <inheritdoc/>
-        public SourceMapping? MappingOf(int screen) {
+        foreach (var feed in m_feeds) {
             if (
-                binder.m_routedScreens.TryGetValue(
-                    key: scene,
-                    value: out var routed
-                ) &&
-                routed.Mappings.TryGet(
-                    mapping: out var mapping,
-                    screen: screen
+                (feed.Nested is { } level) &&
+                level.TryCamera(
+                    camera: out _,
+                    name: name
                 )
             ) {
-                return mapping;
+                return level;
             }
-
-            foreach (var feed in binder.m_feeds) {
-                if (
-                    (feed.Route.Window is { } window) &&
-                    ReferenceEquals(
-                        objA: window.Scene,
-                        objB: scene
-                    ) &&
-                    (feed.Nested is { } screens) &&
-                    screens.Mappings.TryGet(
-                        mapping: out mapping,
-                        screen: screen
-                    )
-                ) {
-                    return mapping;
-                }
-            }
-
-            return null;
         }
-        /// <inheritdoc/>
-        public string? ReadOf(int view, int screen) => binder.ScreensOf(
-            scene: scene,
-            view: view
-        )?.InstanceOf(screen: screen);
+
+        return null;
     }
 }

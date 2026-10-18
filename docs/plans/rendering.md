@@ -3633,7 +3633,7 @@ Each commit is marked with what it waits on.
       pixels outside the set (`RenderGraphRuntime.CreateConverter`, sharing the
       instance's region binding), since a camera's tier is chosen per device at
       run time and the HUD reads a camera or a capture outside the set. The
-      binder's `ConvertedPixels` converts a camera's or a capture's CPU tier,
+      `WorldConvertedPixels` converts a camera's or a capture's CPU tier,
       and each capture fill once as a static 1x1 source, hands the image out
       under a counted lease, and disposes a converter a new extent replaced, or
       its owner retired, after the last lease. `CpuSurfaceSource` is deleted,

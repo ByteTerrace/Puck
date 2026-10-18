@@ -88,7 +88,7 @@ internal sealed class FakeGpuDevice :
     // The images created with a handle of their own, while DistinctImages is set.
     private int m_distinctImages;
 
-    public long AdapterLuid => 0L;
+    public long AdapterLuid { get; init; }
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
     /// <summary>Gets or sets optional observations of the actual direct dispatch group counts.</summary>
     public Action<uint, uint, uint>? OnDispatch { get; set; }

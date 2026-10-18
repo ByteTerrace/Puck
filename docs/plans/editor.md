@@ -471,7 +471,7 @@ only in the main world residency.
    previous mode, following `view.override`'s convention.
 2. **Every residency.** The mode reaches the main world residency (whose
    camera views already show it) and every session and routed residency the
-   screen binder creates (`WorldScreenBinder.Views.cs`, `WorldScreenBinder.Routed.cs`),
+   screen binder creates (`WorldScreenBinder.Device.Views.cs`, `WorldScreenBinder.Device.Routed.cs`),
    including one created after the switch.
 3. **The screen-lights lever.** `world.screen-lights`, in
    `WorldRenderLeverCommandModule` beside `world.shadows` and `world.ao`,
@@ -490,7 +490,7 @@ Debug views and shading levers are session levers: `world.save` never folds
 them into the document.
 
 **Touches:** `src/Puck.World` (`WorldRenderLeverCommandModule`,
-`WorldScreenBinder.Views.cs`), `Puck.SdfVm` (`DebugViewModes`,
+`WorldScreenBinder.Device.Views.cs`), `Puck.SdfVm` (`DebugViewModes`,
 `SdfWorldResidency`, the debug and lever kernels), `Puck.World.Client`
 (`WorldFramePresenter`).
 
