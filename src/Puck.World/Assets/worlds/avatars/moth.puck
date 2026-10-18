@@ -3538,7 +3538,7 @@ prototypes {
         parent: "shin-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.07
           vertices [
             [-1, -0.1979]
             [-1, 0.4617]
@@ -3576,19 +3576,15 @@ prototypes {
         ]
       }
 
-      shape Prism "bootPlan-left" {
+      shape Superellipsoid "bootPlan-left" {
         id: 196
         position [0.2, 0.1315, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.135, 0.235, 0.12]
+        scale [0.145, 0.15, 0.265]
         material: skin
         blend: "Intersection"
         group: 21
         parent: "boot-left"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3
       }
 
       shape Prism "toe-left" {
@@ -3601,7 +3597,7 @@ prototypes {
         parent: "boot-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.07
           vertices [
             [-0.9804, -0.1647]
             [-0.9804, 0.1373]
@@ -3613,19 +3609,15 @@ prototypes {
         }
       }
 
-      shape Prism "toePlan-left" {
+      shape Superellipsoid "toePlan-left" {
         id: 200
         position [0.2, 0.05, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.14, 0.255, 0.08]
+        scale [0.15, 0.09, 0.28]
         material: violet
         blend: "Intersection"
         group: 23
         parent: "boot-left"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3.5
       }
 
       shape Prism "sole-left" {
@@ -4704,7 +4696,7 @@ prototypes {
         parent: "shin-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.07
           vertices [
             [-1, -0.1979]
             [-1, 0.4617]
@@ -4742,19 +4734,15 @@ prototypes {
         ]
       }
 
-      shape Prism "bootPlan-right" {
+      shape Superellipsoid "bootPlan-right" {
         id: 264
         position [-0.2, 0.1315, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.135, 0.235, 0.12]
+        scale [0.145, 0.15, 0.265]
         material: skin
         blend: "Intersection"
         group: 35
         parent: "boot-right"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3
       }
 
       shape Prism "toe-right" {
@@ -4767,7 +4755,7 @@ prototypes {
         parent: "boot-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.04
+          cornerRadius: 0.07
           vertices [
             [-0.9804, -0.1647]
             [-0.9804, 0.1373]
@@ -4779,19 +4767,15 @@ prototypes {
         }
       }
 
-      shape Prism "toePlan-right" {
+      shape Superellipsoid "toePlan-right" {
         id: 268
         position [-0.2, 0.05, 0.085]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.14, 0.255, 0.08]
+        scale [0.15, 0.09, 0.28]
         material: violet
         blend: "Intersection"
         group: 37
         parent: "boot-right"
-        profile {
-          kind: "ChamferedRectangle"
-          cornerRadius: 0.45
-        }
+        exponent: 3.5
       }
 
       shape Prism "sole-right" {
