@@ -182,9 +182,10 @@ public sealed record ShapeDocument(
     public const int MaxSlides = 4;
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
     public const float MaxSmooth = 0.5f;
-    /// <summary>The most entries <see cref="Swings"/> carries — one shape is one limb segment, and four covers a
-    /// two-driver limb hinging on two axes.</summary>
-    public const int MaxSwings = 4;
+    /// <summary>The most entries <see cref="Swings"/> carries — one shape is one limb segment, and eight covers a
+    /// stride swing steered into the travel direction (a yaw in, the swing, the yaw back out, each against the hip's
+    /// own turn) beside a second driver's pose.</summary>
+    public const int MaxSwings = 8;
     /// <summary>The largest twist rate, in radians per unit of local Y (not an isometry, so this stays moderate —
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
@@ -529,7 +530,7 @@ public sealed record CreationDocument(
     public const string CurrentSchema = "puck.creation.v1";
     /// <summary>The most entries <see cref="Drivers"/> carries — the width of the per-body phase/weight table a
     /// consuming client keeps per stamped creation.</summary>
-    public const int MaxDrivers = 8;
+    public const int MaxDrivers = 16;
     /// <summary>The most entries <see cref="Effectors"/> carries — the width of the per-body effector weight/latch
     /// table a consuming client keeps per stamped creation. Eight covers a spider's legs.</summary>
     public const int MaxEffectors = 8;

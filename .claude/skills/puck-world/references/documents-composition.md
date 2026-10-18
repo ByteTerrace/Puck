@@ -166,14 +166,14 @@ A creation's `volumes` list declares `flow` media with `position`,
 (0..3; absent means unit gain). Media composite behind opaque-depth clipping
 and have no collider. See the authoring README's volume reference.
 
-A creation also carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 8 —
+A creation also carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 16 —
 `{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
-`speed`/`verticalSpeed`/`turnRate` (instantaneous) and `when` is one token or an array of ≤ 4 that
+`speed`/`verticalSpeed`/`turnRate`/`travelDirection`/`lateralAcceleration`/`forwardAcceleration` (instantaneous, optionally followed through a world `dynamics` row) and `when` is one token or an array of ≤ 4 that
 must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, the client-derived `moving`/
 `still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), or a `state.<row>[.<key>]`
 reference that holds while the cell's STORED value is nonzero — so a walker gated
 `["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
-per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
+per-shape `swings` (≤ 8) and `slides` (≤ 4) naming a driver, an `axis` (plus a
 `pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
 `constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `HoldingUnwalkable` gate;
 `curve:<row>` samples the world's `curves` row by arc fraction, Z as the value — see
@@ -189,7 +189,7 @@ signal, a gate token, an effector's `state` target, and a look's `motion.poses`,
 only contains that text (`$bodyguard`, `air$body`) names the cell spelled that way
 (`WorldGaitDrivers.TryResolveBodyKey`). A body with no such cell reads 0. A look's `motion.poses` maps a creation frame name to such a reference: the frame holds
 while the cell's STORED value is nonzero (a pose is a truth, never an eased sample) and overrides the
-cue and replay cursor (a blink a `scheduleState`/`generate` rule pair schedules). The world validator refuses an undeclared curve, a non-numeric signal, gate, or pose
+cue and replay cursor (a blink a `scheduleState`/`generate` rule pair schedules). The world validator refuses an undeclared curve or driver `dynamics` row, a non-numeric signal, gate, or pose
 row, and a pose naming no frame (`ValidateCreationBindings`, `ValidateLooks`). A look's `motion.lanes` is an array of up to four optional
 `ExpressionProgram` entries. Indices 0..3 map directly to
 `DynamicTransform.Lanes` on every dynamic slot owned by the look.

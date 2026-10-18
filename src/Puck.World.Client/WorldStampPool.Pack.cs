@@ -289,6 +289,7 @@ public sealed partial class WorldStampPool {
                 }
 
                 Array.Clear(array: live.EffectorPlanted);
+                Array.Clear(array: live.EffectorStepping);
             }
         }
 
@@ -326,6 +327,10 @@ public sealed partial class WorldStampPool {
         var drivers = document.Drivers;
 
         live.PoseFrame = SelectPose(live: live);
+        live.Kinematics.Resolve(
+            drivers: drivers,
+            rows: client.Definition.Dynamics
+        );
 
         WorldGaitDrivers.Advance(
             address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
@@ -341,7 +346,8 @@ public sealed partial class WorldStampPool {
             position: rootPosition,
             seeded: ref live.DriverSeeded,
             weights: live.DriverWeight,
-            reads: live.Reads
+            reads: live.Reads,
+            kinematics: live.Kinematics
         );
 
         var shapes = (document.Shapes ?? []);
