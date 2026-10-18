@@ -34,50 +34,8 @@
         verbs) compiles and collects nothing here. It builds no project reference, so the generator it would run may not
         exist, and a workspace needs no bytecode.
     -->
-    <UsingTask AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll" TaskFactory="RoslynCodeTaskFactory" TaskName="PuckShaderBuild">
-        <ParameterGroup>
-            <Host ParameterType="System.String" Required="true" />
-            <Tool ParameterType="System.String" Required="true" />
-            <Mode ParameterType="System.String" Required="true" />
-            <ProjectDirectory ParameterType="System.String" Required="true" />
-            <LockFile ParameterType="System.String" Required="true" />
-            <RequestFile ParameterType="System.String" Required="true" />
-            <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <CacheDirectory ParameterType="System.String" />
-            <DxcCommand ParameterType="System.String" />
-            <InputsFile ParameterType="System.String" />
-        </ParameterGroup>
-        <Task>
-            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderBuild.cs" Type="Class" />
-        </Task>
-    </UsingTask>
-
-    <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
-        TaskFactory="RoslynCodeTaskFactory"
-        TaskName="PuckCompileDirect3D11Kernels"
-    >
-        <ParameterGroup>
-            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
-            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
-        </ParameterGroup>
-        <Task>
-            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckDirect3D11KernelBytecode.cs" Type="Class" />
-        </Task>
-    </UsingTask>
-    <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
-        TaskFactory="RoslynCodeTaskFactory"
-        TaskName="PuckCollectDirect3D11Kernels"
-    >
-        <ParameterGroup>
-            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
-            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
-        </ParameterGroup>
-        <Task>
-            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckDirect3D11KernelBytecode.cs" Type="Class" />
-        </Task>
-    </UsingTask>
+    <!-- The shader build and the Direct3D 11 kernels run as operations of the repository's one inline task
+         (PuckBuildTasks.targets). -->
 
     <PropertyGroup>
         <!-- The lock belongs to the source-tree bytecode, which all configurations and intermediate-output paths share. -->
@@ -173,7 +131,7 @@
          *.interface.hlsli): the generator writes those as it builds, which ResolveProjectReferences finishes first. -->
     <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool;_PuckReadShaderBuildInputs"
             Inputs="@(_PuckShaderBuildRead);@(_PuckShaderBuildProduct);@(_PuckExistingShaderBytecode);$(PuckShaderBuildTool);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)" Outputs="$(_PuckShaderBuildInputs)">
-        <PuckShaderBuild CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" InputsFile="$(_PuckShaderBuildInputs)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
+        <PuckBuildTask Operation="shaders" CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" InputsFile="$(_PuckShaderBuildInputs)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
         <PropertyGroup>
             <_PuckShadersCompiled>true</_PuckShadersCompiled>
         </PropertyGroup>
@@ -183,7 +141,7 @@
          skips the build (CI packs over a finished build) instead checks that each is on disk with the sidecar its
          current closure and options publish, compiling nothing, so it ships exactly what a build would. -->
     <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool">
-        <PuckShaderBuild Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
+        <PuckBuildTask Operation="shaders" Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
         <ItemGroup>
             <Content Include="@(PuckShaderOutput)" CopyToOutputDirectory="PreserveNewest" RemoveMetadata="Stage;Backend;SourcePath" />
         </ItemGroup>
@@ -203,15 +161,15 @@
          cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
          from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
          bytecode. Compilation is a build operation; packing collects and validates existing outputs separately. -->
-    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
-        <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true' and '@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))">
+        <PuckBuildTask Operation="d3d11-compile" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
-        </PuckCompileDirect3D11Kernels>
+        </PuckBuildTask>
     </Target>
-    <Target Name="CollectDirect3D11KernelBytecode" AfterTargets="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true'">
-        <PuckCollectDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
+    <Target Name="CollectDirect3D11KernelBytecode" AfterTargets="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true' and '@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))">
+        <PuckBuildTask Operation="d3d11-collect" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckCollectedDirect3D11KernelBytecode" TaskParameter="Bytecode" />
-        </PuckCollectDirect3D11Kernels>
+        </PuckBuildTask>
         <ItemGroup>
             <Content Include="@(_PuckCollectedDirect3D11KernelBytecode)" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>

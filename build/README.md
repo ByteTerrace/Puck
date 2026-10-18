@@ -56,7 +56,7 @@ document in its output that no source compiles to any more, so a renamed or
 deleted source leaves nothing behind. A copy never deletes, so after copying,
 the build also removes every file in the output's `Assets/worlds/packages`
 store that it no longer deploys, with the directories that leaves empty
-(`PuckRemoveStaleWorldPackages.cs`), and prints one line per file. The CLI is a build-time tool of the game,
+(the `remove-stale-world-packages` operation of `PuckBuildTasks.cs`), and prints one line per file. The CLI is a build-time tool of the game,
 never an assembly or runtime dependency.
 
 A new world needs no build edit: add its `.puck` source under
