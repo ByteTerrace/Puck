@@ -129,6 +129,8 @@ public sealed class SdfMeshLibraryLawTests {
         for (var index = 0; (index < program.Instructions.Count); index++) {
             builder.AppendInstruction(index: index, program: program, transforms: []);
         }
+        // The world group bakes over a box the frame's reach wide, which its geometry holds.
+        builder.AppendReach(reach: SdfFrame.DefaultFarDistance);
 
         var library = new SdfMeshLibrary();
 

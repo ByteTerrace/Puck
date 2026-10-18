@@ -754,7 +754,8 @@ a blend group as one instance on its first shape's slot (or the creation's
 root) while each of its shapes rides its own slot, so the frame's transforms,
 not the instructions, place and turn every shape after the first. A world
 group is keyed by every instruction outside an instance, the transforms ahead
-of its first shape included. A dynamic group's bound center is left out, since
+of its first shape included, and by the frame's reach, the box it bakes over;
+a group whose bound passes the reach is keyed by the reach too. A dynamic group's bound center is left out, since
 it is offset along world axes by the body's pose when the program was emitted.
 The key is taken when a program arrives, from that frame's transforms, so a
 group whose shapes move against one another afterwards (a part follower) keeps
@@ -765,9 +766,21 @@ back (a body that left the world and returned, an instance at another index) or
 arrives from another world (a body crossing between the debug world and the
 garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
+The World's library also keeps every mesh it stores between runs, in the
+`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to a gibibyte by
+the caches' one retention, `CacheRetention`), keyed by the group's geometry and
+the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s build
+and the hash of the bake's own sources in `Puck.SdfVm` (their list is
+`PuckMeshBakeSource` in its project). A program's group the store holds loads
+from disk on the thread pool instead of baking, so an unchanged world reboots
+without baking and a changed creation bakes only its own groups; an entry that
+fails its checksum, names another key or is no mesh is refused by name
+(`[sdf.mesh-bake] group … store refused: …`), deleted, and its group bakes.
+The store is presentation's alone: no simulation state reads it.
 Only new geometry bakes. The bake reports its residency, groups,
-dispatches, samples, triangles, vertices and wall time on stderr when it
-starts and finishes (`[sdf.mesh-bake] start residency=…`, `done residency=…`).
+dispatches, samples, groups loaded, triangles, vertices and wall time on stderr
+when it starts and finishes (`[sdf.mesh-bake] start residency=… baking=…
+loading=…`, `done residency=… loaded=…`).
 It counts a batch as work when a bake pass records it: a frame that takes a
 batch no pass records, as while the boot's pipelines build, dispatches nothing,
 and its lattices go to the next frame. A batch remembers the bake that took it,

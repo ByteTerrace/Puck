@@ -153,8 +153,9 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     private SdfWorldPipelineCatalog? m_viewPipelines;
 
     /// <summary>Gets the library every residency rendering a world of the presentation shares its baked meshes through:
-    /// the world's own, each routed scene's, each session's and each infinity view's.</summary>
-    public SdfMeshLibrary MeshLibrary { get; } = new();
+    /// the world's own, each routed scene's, each session's and each infinity view's. The boot gives it the store of
+    /// meshes kept between runs (<see cref="WorldCacheRoots.Meshes"/>); without one it keeps them for the run.</summary>
+    public SdfMeshLibrary MeshLibrary { get; init; } = new();
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();

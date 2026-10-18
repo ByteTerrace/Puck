@@ -1,0 +1,68 @@
+<Project>
+    <!--
+        The repository's one inline task, PuckBuildTask (build/PuckBuildTasks.cs), which runs every build operation the
+        tree implements in its own code: the architecture gates (Puck.Architecture.targets), the shader build and the
+        Direct3D 11 kernels (Shaders.targets), and the World's stale package sweep (WorldAssets.targets). Each call names
+        its Operation.
+
+        RoslynCodeTaskFactory compiles a task's source once per task name in each build node, by starting the C# compiler,
+        a second or more each time, and a build that reuses no node starts every node cold. Separate task names over these
+        sources compiled up to five times a node, twice before the first project (Puck.Analyzers, which every project
+        waits for) could finish; one name compiles once a node.
+
+        RoslynCodeTaskFactory's own defaults (Microsoft.Build.Framework, Microsoft.Build.Utilities.Core, mscorlib,
+        netstandard) are UNIONED with whatever a task adds via <Reference>, never replaced — but the mscorlib and
+        netstandard it resolves them to are the classic .NET Framework facades bundled at $(MSBuildToolsPath)/ref/. Adding
+        the modern .NET-Core shared-framework System.Reflection.Metadata.dll conflicts with that pair: it is built against
+        System.Private.CoreLib, a DIFFERENT corlib than the one this compilation already committed to, so Object and
+        IDisposable stop resolving and every type the facades also carry becomes ambiguous between the two corlibs. The SDK
+        also carries a .NET Framework build of the same library, bundled for its own net472-hosted tooling; that build
+        targets the SAME classic mscorlib the two defaults already use, so it is the one that resolves cleanly alongside
+        them. The denied-API gate reads an assembly's references through it.
+    -->
+    <PropertyGroup>
+        <PuckBuildTasksNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))/</PuckBuildTasksNetFrameworkToolsDirectory>
+    </PropertyGroup>
+
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckBuildTask"
+    >
+        <ParameterGroup>
+            <Operation ParameterType="System.String" Required="true" />
+            <AssemblyPath ParameterType="System.String" />
+            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+            <CacheDirectory ParameterType="System.String" />
+            <DeclaredReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <DeniedApis ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Deployed ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <DxcCommand ParameterType="System.String" />
+            <Host ParameterType="System.String" />
+            <InputsFile ParameterType="System.String" />
+            <Kind ParameterType="System.String" />
+            <Kinds ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Layer ParameterType="System.String" />
+            <Layers ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <LockFile ParameterType="System.String" />
+            <Mode ParameterType="System.String" />
+            <OutputDirectory ParameterType="System.String" />
+            <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <PackageDirectory ParameterType="System.String" />
+            <Profiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <ProjectDirectory ParameterType="System.String" />
+            <ProjectFile ParameterType="System.String" />
+            <ProjectName ParameterType="System.String" />
+            <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <RequestFile ParameterType="System.String" />
+            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Tool ParameterType="System.String" />
+            <TransitiveReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Reference Include="$(PuckBuildTasksNetFrameworkToolsDirectory)System.Collections.Immutable.dll" />
+            <Reference Include="$(PuckBuildTasksNetFrameworkToolsDirectory)System.Reflection.Metadata.dll" />
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckBuildTasks.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+</Project>

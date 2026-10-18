@@ -8,8 +8,8 @@ public static class FormatFileProject {
     // The disposable project is built here and nowhere else, so the semantic passes resolve against the
     // configuration this build just produced.
     private const string Configuration = "Release";
-    // The disposable project is no project of the architecture map, so the repository's architecture gate (two inline
-    // tasks compiled on every build) has nothing to hold it to.
+    // The disposable project is no project of the architecture map, so the repository's architecture gate (an operation of
+    // the inline task every build node compiles) has nothing to hold it to.
     private const string NoArchitectureGate = "-p:PuckArchitectureGateEnabled=false";
     // The item the injected target copies @(Compile) into once the reference set is resolved. The build adds its own
     // generated sources (assembly info and attributes) to @(Compile) just before compiling, so the copy is what a

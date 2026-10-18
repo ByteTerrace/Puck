@@ -105,7 +105,10 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// frame that dispatches it, so a body moving while it bakes is sampled where it is. Its vertices stay in that frame, and
 /// its draw follows the slot's live transform; a static group's are in world space.</para>
 /// <para>A new program restarts the bake; the meshes of the last finished bake keep drawing until each group's new mesh
-/// lands. The bake reports its counted work and the wall time it took (<see cref="Describe"/>).</para>
+/// lands. A group whose geometry the library holds takes that mesh, and one its store kept from an earlier run under the
+/// bake's <see cref="Identity"/> loads from disk off the frame's thread (<see cref="SdfMeshStore"/>), baking only when the
+/// store refuses the entry. The bake reports its counted work, the groups it loaded and the wall time it took
+/// (<see cref="Describe"/>).</para>
 /// </summary>
 public sealed class SdfMeshPathBake {
     /// <summary>The field evaluations one frame's bake dispatch makes at most, past its first lattice: the bake pass's
@@ -141,6 +144,10 @@ public sealed class SdfMeshPathBake {
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
     public SdfMeshLibrary Library { get; init; } = new();
+    /// <summary>Gets or sets the identity of the bake on the kernels it dispatches (<see cref="SdfMeshStore.IdentityOf"/>),
+    /// under which a new program's groups load from the library's store and its meshes are written there; the residency
+    /// sets it from its kernel set. A group keeps the identity its program started under.</summary>
+    public UInt128 Identity { get; set; }
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
@@ -160,6 +167,7 @@ public sealed class SdfMeshPathBake {
     private long m_refinedCells;
     private double m_seconds;
     private bool m_reported;
+    private long m_loaded;
 
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, or a contour still runs.</summary>
     public bool Pending {
@@ -428,7 +436,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} loaded={m_loaded} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -491,11 +499,14 @@ public sealed class SdfMeshPathBake {
                 group.Members.Add(item: (instance.Center, radius));
             }
             staticRun = (instance.IsDynamic ? null : group);
+            // A bound past the reach bakes over the reach instead, which the geometry then holds.
+            group.Clamped |= (radius != instance.Radius);
 
             group.Geometry.AppendInstance(instance: index, program: frame.Program, transforms: frame.DynamicTransforms);
         }
 
         foreach (var group in m_groups) {
+            if (group.Clamped) { group.Geometry.AppendReach(reach: reach); }
             group.Seal();
         }
 
@@ -510,7 +521,7 @@ public sealed class SdfMeshPathBake {
 
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
         // cube the frame's far distance wide about the origin.
-        if (WorldInstructions(frame: frame) is { } world) {
+        if (WorldInstructions(frame: frame, reach: reach) is { } world) {
             m_groups.Add(item: world);
             world.High = new Vector3(value: reach);
             world.Low = new Vector3(value: -reach);
@@ -519,6 +530,7 @@ public sealed class SdfMeshPathBake {
         // A program rebuilt with a group's instructions unchanged keeps that group, its bake and any lattice in flight; only
         // a group whose geometry moved bakes again.
         var rebaked = 0;
+        var loading = 0;
 
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
@@ -548,28 +560,40 @@ public sealed class SdfMeshPathBake {
                 group.DrawnPosition = old.DrawnPosition;
                 group.DrawnOrientation = old.DrawnOrientation;
             }
+            group.Identity = Identity;
+            // Geometry the library's store kept from an earlier run loads from disk off the frame's thread, and bakes only
+            // when the store refuses its entry.
+            if (Library.Holds(geometry: group.Sealed, identity: group.Identity)) {
+                group.Deferred = group.Next;
+                group.Next = null;
+                group.Contouring = true;
+                loading++;
+                _ = Task.Run(action: () => Load(group: group));
+                continue;
+            }
             rebaked++;
         }
-        if (rebaked > 0) {
+        if ((rebaked + loading) > 0) {
             m_dispatches = 0;
             m_samples = 0;
             m_taps = 0;
             m_discarded = 0;
             m_refinedCells = 0;
+            m_loaded = 0;
             m_reported = false;
             m_clock.Restart();
-            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} dynamic={bySlot.Count} instances={instances.Count}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={bySlot.Count} instances={instances.Count}");
         }
         // The draws name their groups, so they are rebuilt only when a group was replaced or dropped; a program change
         // that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
-        if ((rebaked > 0) || (previous.Count != m_groups.Count)) {
+        if (((rebaked + loading) > 0) || (previous.Count != m_groups.Count)) {
             m_drawnMeshes = -1;
         }
     }
     // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
     // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
-    // drawn shape.
-    private static Group? WorldInstructions(SdfFrame frame) {
+    // drawn shape. Its box is the reach about the origin, which its geometry holds.
+    private static Group? WorldInstructions(SdfFrame frame, float reach) {
         var program = frame.Program;
         var instructions = program.Instructions;
         var owned = new bool[instructions.Count];
@@ -592,6 +616,7 @@ public sealed class SdfMeshPathBake {
             if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, transforms: frame.DynamicTransforms); }
         }
 
+        world.Geometry.AppendReach(reach: reach);
         world.Seal();
 
         return world;
@@ -950,7 +975,7 @@ public sealed class SdfMeshPathBake {
         }
 
         if (mesh is not null) {
-            Library.Store(geometry: group.Sealed, materials: group.MaterialOrder, mesh: mesh);
+            Library.Store(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
 
         lock (m_gate) {
@@ -961,6 +986,26 @@ public sealed class SdfMeshPathBake {
             group.Contour = null;
             group.Points = null;
             group.PointMaterials = [];
+            Finish();
+        }
+    }
+    // Takes a group's mesh from the library's store; a group whose entry the store refuses or no longer holds bakes from
+    // its coarse lattice.
+    private void Load(Group group) {
+        var loaded = Library.TryLoad(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
+
+        lock (m_gate) {
+            group.Contouring = false;
+            if (refusal is not null) {
+                Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} store refused: {refusal}");
+            }
+            if (!loaded) {
+                group.Next = group.Deferred;
+                return;
+            }
+            m_loaded++;
+            group.Done = true;
+            group.Mesh = mesh;
             Finish();
         }
     }
@@ -982,7 +1027,7 @@ public sealed class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} loaded={m_loaded} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
@@ -1136,6 +1181,11 @@ public sealed class SdfMeshPathBake {
         public FinalLattice? Final { get; set; }
         // Why a finished group has no mesh, or null.
         public string? Outcome { get; set; }
+        // Whether a member's bound passed the reach, so the group's box, and its geometry, hold the reach.
+        public bool Clamped { get; set; }
+        // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
+        public UInt128 Identity { get; set; }
+        public SdfMeshBakeRequest? Deferred { get; set; }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from
     // them and the stage of points it is answering: its refinement's fine samples, then the samples its contour reads a

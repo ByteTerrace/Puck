@@ -192,6 +192,7 @@ public sealed partial class SdfWorldResidency {
                 var previous = m_kernels;
 
                 m_kernels = reload!.Kernels; // Device-loss recovery must reconstruct the last successful set too.
+                MeshPathBake.Identity = SdfMeshStore.IdentityOf(kernels: m_kernels);
                 m_reloadChanged += changed;
 
                 if (changed > 0) {

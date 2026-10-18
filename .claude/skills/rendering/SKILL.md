@@ -261,7 +261,7 @@ owns the explanation.
   Groups are keyed by geometry (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion
-  lanes) and every meshed group is stored in the `SdfMeshLibrary` all of a
+  lanes, the reach of a box it clamps) and every meshed group is stored in the `SdfMeshLibrary` all of a
   presentation's residencies share, so a rebuild, a returning body or a body
   crossing from another world takes its mesh; only new geometry bakes. The key
   has two failure modes. A field the hash reads that a program assigns by
@@ -273,7 +273,12 @@ owns the explanation.
   own slots, so their places and turns are frame transforms; the symptom of a
   miss is an edit that shows only once the group's first shape changes. The key
   is taken from the frame a program arrives in, so shapes that move against one
-  another later keep the mesh of that pose.
+  another later keep the mesh of that pose. The World's library persists across
+  runs (`SdfMeshStore`, the `meshes` device cache), keyed by geometry and the
+  bake's identity (bake kernels' bytecode, `Puck.SignedDistance`'s build, the
+  hash of `PuckMeshBakeSource` in `Puck.SdfVm.csproj`): a new file the bake's CPU
+  code reads joins that list, or an edit to it reads stale meshes. A boot that
+  bakes nothing shows `done … loaded=N` with `dispatches=0`.
 - **A view without shadows holds no cascade.** A view whose quality skips shadows
   (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
   the cascades' passes and their 252 MB of targets go, and the surface pass binds
@@ -325,8 +330,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - Run it and look: `dotnet run --project src/Puck.World -c Release --
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at. Every boot bakes the mesh path (15 to 20 s on the debug world on an
-  RTX 4070, longer on a slower card) and then traces the irradiance volume (about
+  looked at. A boot bakes the groups the mesh store does not hold (the whole debug
+  world takes 15 to 20 s on an RTX 4070, longer on a slower card; a reboot of an
+  unchanged world loads them instead) and then traces the irradiance volume (about
   2 s): a script that captures the finished image waits on `world.wait 2400` or
   longer and checks for `[sdf.mesh-gi] done` in the log before the capture line.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`

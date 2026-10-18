@@ -65,6 +65,9 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
             new XElement(content: "true", name: "PuckShaderSpirvEnabled"),
             new XElement("DxcCommand", CompilerPath),
             new XElement("PuckShaderCacheDirectory", PathOf(path: "cache"))));
+        // The shader build runs as an operation of the repository's one inline task, which Directory.Build.targets declares
+        // for every project; this project imports neither, so it declares the task itself.
+        project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/PuckBuildTasks.targets"))));
         project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
         project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
         Write(path: "fixture.proj", text: project.ToString());

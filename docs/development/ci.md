@@ -150,7 +150,7 @@ The [shader compiler cache](../reference/shaders.md#freshness) is restored and
 saved by the `shader-cache` composite action, the one place that names its key:
 `shaders-<OS>-` and a hash of every `.hlsl` and `.hlsli` source, every project
 file and `Directory.Build` file, the shader build (`build/Shaders.targets`,
-`build/PuckShaderBuild.cs`), the compiler and its build host
+`build/PuckBuildTasks.cs`), the compiler and its build host
 (`Puck.Shaders.Model`, `Puck.Shaders.Generator`), the comparison verb, and the
 `setup-dxc` action that pins both hosts' DXC. Entries are addressed by their own
 content, so a restore falls back to the newest cache with the OS prefix and

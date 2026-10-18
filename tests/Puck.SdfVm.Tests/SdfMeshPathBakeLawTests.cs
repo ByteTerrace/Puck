@@ -95,6 +95,47 @@ public sealed class SdfMeshPathBakeLawTests {
         Assert.True(condition: (bent < (0.03f * area)), userMessage: $"{bent / area:P2} of the cube's area shades more than 10 degrees off its face");
     }
 
+    [Fact]
+    public void ABakeOfGroupsItsStoreKeptLoadsThemAndRebakesOnlyAGroupWhoseEntryIsDamaged() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var (program, materials) = Program();
+        // A reach just inside the plate's bound, which the union's box, and so its geometry, holds.
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 4.25f };
+        var directory = scratch.PathOf(name: "meshes");
+        // Each run is a process of its own: a library of its own over the one store.
+        SdfMeshPathBake Run(string name) {
+            var bake = new SdfMeshPathBake { Identity = 5, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
+
+            Drive(bake: bake, frame: frame, materials: materials);
+
+            return bake;
+        }
+        Vector3[][] Meshes(SdfMeshPathBake bake) => [.. bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh.Positions.ToArray())];
+
+        var baked = Run(name: "first");
+        var entries = Directory.GetFiles(path: directory).OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
+
+        Assert.Equal(expected: 2, actual: entries.Length);
+        Assert.Contains(expectedSubstring: "loaded=0", actualString: baked.Describe());
+
+        // An unchanged program bakes nothing: every group's mesh is the one the first run meshed.
+        var loaded = Run(name: "second");
+
+        Assert.Contains(expectedSubstring: "dispatches=0 ", actualString: loaded.Describe());
+        Assert.Contains(expectedSubstring: "loaded=2", actualString: loaded.Describe());
+        Assert.Equal(expected: Meshes(bake: baked), actual: Meshes(bake: loaded));
+
+        // A damaged entry is refused and its group alone bakes, its mesh kept again.
+        File.WriteAllBytes(bytes: [1, 2, 3], path: entries[0]);
+
+        var mended = Run(name: "third");
+
+        Assert.Contains(expectedSubstring: "loaded=1", actualString: mended.Describe());
+        Assert.DoesNotContain(expectedSubstring: "dispatches=0 ", actualString: mended.Describe());
+        Assert.True(condition: (new FileInfo(fileName: entries[0]).Length > 3));
+        Assert.Equal(expected: Meshes(bake: baked), actual: Meshes(bake: mended));
+    }
+
     private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material);
 
     private static float Field(Shape shape, Vector3 point) {

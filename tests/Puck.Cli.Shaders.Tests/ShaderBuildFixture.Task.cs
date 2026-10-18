@@ -6,8 +6,9 @@ using Xunit;
 
 namespace Puck.Cli.Testing;
 
-// The task is shipped as source for MSBuild's inline compiler. Compile that exact source so cancellation and the
-// engine's failure/late-grant cases can use controlled public IBuildEngine9 behavior without an MSBuild scheduler.
+// The task is shipped as source for MSBuild's inline compiler, one operation of the repository's one inline task
+// (build/PuckBuildTasks.cs). Compile that exact source so cancellation and the engine's failure/late-grant cases can use
+// controlled public IBuildEngine9 behavior without an MSBuild scheduler.
 internal sealed partial class ShaderBuildFixture {
     private static readonly Lazy<Type> BuildTask = new(valueFactory: () => {
         var references = ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!).Split(separator: Path.PathSeparator)
@@ -19,7 +20,7 @@ internal sealed partial class ShaderBuildFixture {
             assemblyName: ("ShaderBuildTaskLaw" + Guid.NewGuid().ToString(format: "N")),
             options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary),
             references: references,
-            syntaxTrees: [CSharpSyntaxTree.ParseText(text: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/PuckShaderBuild.cs")))]
+            syntaxTrees: [CSharpSyntaxTree.ParseText(text: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "build/PuckBuildTasks.cs")))]
         );
         using var output = new MemoryStream();
         var result = compilation.Emit(peStream: output);

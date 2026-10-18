@@ -71,6 +71,9 @@
          @(ProjectReference) is already populated when the ItemGroup condition is evaluated. -->
     <Import Project="$(MSBuildThisFileDirectory)src/Puck.Platform.Windows/WindowsCaptureProjection.targets" />
 
+    <!-- The repository's one inline task, which the gate, the shader build and the World's asset targets below call. -->
+    <Import Project="$(MSBuildThisFileDirectory)build/PuckBuildTasks.targets" />
+
     <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
          transitively-arriving edge is checked the same as a declared one. -->
     <Import Project="$(MSBuildThisFileDirectory)build/Puck.Architecture.targets" />
