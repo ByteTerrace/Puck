@@ -4288,25 +4288,42 @@ prototypes {
         exponent: softness
       }
 
-      shape Cylinder "ankleJoint-left" {
-        id: 193
-        position [0.345, 0.2, -0.03]
+      // The ankle hub: the joint the foot turns about, a dark gunmetal drum on the greave's outer face at the heel, with a
+      // violet bezel round a dark glass lens, after the model sheet's side views.
+      shape Cylinder "ankleHub-left" {
+        id: 1000
+        position [0.412, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.06, 0.016, 0.06]
-        material: charcoal
+        scale [0.082, 0.022, 0.082]
+        material: gunmetal
+        parent: "shin-left"
+        rounding: 0.008
+      }
+
+      shape Cylinder "ankleBezel-left" {
+        id: 1001
+        position [0.432, 0.175, -0.07]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.064, 0.008, 0.064]
+        material: violet
+        parent: "shin-left"
+        rounding: 0.004
+      }
+
+      shape Cylinder "ankleLens-left" {
+        id: 1002
+        position [0.438, 0.175, -0.07]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.044, 0.006, 0.044]
+        material: jet
         parent: "shin-left"
         rounding: 0.003
       }
 
-      shape Cylinder "ankleDisc-left" {
-        id: 194
-        position [0.357, 0.2, -0.03]
-        rotation [0, 0, diagonal, diagonal]
-        scale [0.042, 0.008, 0.042]
-        material: violet
-        parent: "shin-left"
-        rounding: 0.003
-      }
+
+
+
+
 
       // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
       // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
@@ -5705,25 +5722,42 @@ prototypes {
         exponent: softness
       }
 
-      shape Cylinder "ankleJoint-right" {
-        id: 261
-        position [-0.345, 0.2, -0.03]
-        rotation [0, 0, -diagonal, diagonal]
-        scale [0.06, 0.016, 0.06]
-        material: charcoal
+      // The ankle hub: the joint the foot turns about, a dark gunmetal drum on the greave's outer face at the heel, with a
+      // violet bezel round a dark glass lens, after the model sheet's side views.
+      shape Cylinder "ankleHub-right" {
+        id: 1006
+        position [-0.412, 0.175, -0.07]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.082, 0.022, 0.082]
+        material: gunmetal
+        parent: "shin-right"
+        rounding: 0.008
+      }
+
+      shape Cylinder "ankleBezel-right" {
+        id: 1007
+        position [-0.432, 0.175, -0.07]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.064, 0.008, 0.064]
+        material: violet
+        parent: "shin-right"
+        rounding: 0.004
+      }
+
+      shape Cylinder "ankleLens-right" {
+        id: 1008
+        position [-0.438, 0.175, -0.07]
+        rotation [0, 0, diagonal, diagonal]
+        scale [0.044, 0.006, 0.044]
+        material: jet
         parent: "shin-right"
         rounding: 0.003
       }
 
-      shape Cylinder "ankleDisc-right" {
-        id: 262
-        position [-0.357, 0.2, -0.03]
-        rotation [0, 0, -diagonal, diagonal]
-        scale [0.042, 0.008, 0.042]
-        material: violet
-        parent: "shin-right"
-        rounding: 0.003
-      }
+
+
+
+
 
       // The boot, after the reference's side view: a cream toe cap whose top curves from the ankle down to the toe, on a
       // violet sole that is thickest at the heel and rolls up at the toe; rounded plan cutters soften every edge.
