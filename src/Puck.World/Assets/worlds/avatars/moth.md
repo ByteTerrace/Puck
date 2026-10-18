@@ -120,7 +120,9 @@ eye sockets, plate boundaries and ankle arches. Detail that is colour rather tha
 form is paint (`palette[].paints`), drawn crisp at the pixel and absent from the
 bake: the hood's cream trim, each shin's arch ring and side panel (the shins
 take their own slot, `shinCream`, so the rings stop at the shin), the boot rims,
-the mouth, and the stripes on the shoulder plates, pods and breastplate. The near-ellipsoidal forms use
+the bracers' ovals, the mouth, the stripes on the shoulder plates, pods and
+breastplate, and the upper lids and lashes where their tubes cross the eye
+whites. The near-ellipsoidal forms use
 exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
 the rebuilt world was verified at `stepScale 1`.
 

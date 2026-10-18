@@ -1301,6 +1301,26 @@ prototypes {
               scale [0.3, 0.025, 0.4]
               color: "#9D66C6"
             }
+            // Each bracer's violet ovals, front and back, in the forearm's frame: an ellipse projected through the
+            // bracer, where the forearm once poked 2 mm through the bracer's flat faces along a shallow, lumpy line.
+            {
+              parent: "forearm-left"
+              type: "Prism"
+              scale [0.033, 0.052, 0.2]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#9D66C6"
+            }
+            {
+              parent: "forearm-right"
+              type: "Prism"
+              scale [0.033, 0.052, 0.2]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#9D66C6"
+            }
           ]
         }
         {
@@ -1394,6 +1414,58 @@ prototypes {
           specular: 0.04
           emissive: 0
           coat: 0
+          // Where each eye's upper lid and lash meet its white, in the eye's frame: their own curves, half a millimetre
+          // wider than the tubes, so the white under a tube's edge reads as the tube rather than two meshes trading pixels.
+          paints [
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a [-0.047, 0, 0.027]
+                b [0, 0.066, 0.052]
+                c [0.047, 0.004, 0.027]
+                radiusStart: 0.0045
+                radiusEnd: 0.0045
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-left"
+              type: "Sweep"
+              curve {
+                a [0.04, 0.017, 0.03]
+                b [0.05, 0.023, 0.023]
+                c [0.059, 0.023, 0.016]
+                radiusStart: 0.0035
+                radiusEnd: 0.0035
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a [0.047, 0, 0.027]
+                b [0, 0.066, 0.052]
+                c [-0.047, 0.004, 0.027]
+                radiusStart: 0.0045
+                radiusEnd: 0.0045
+              }
+              color: "#171210"
+            }
+            {
+              parent: "eye-right"
+              type: "Sweep"
+              curve {
+                a [-0.04, 0.017, 0.03]
+                b [-0.05, 0.023, 0.023]
+                c [-0.059, 0.023, 0.016]
+                radiusStart: 0.0035
+                radiusEnd: 0.0035
+              }
+              color: "#171210"
+            }
+          ]
         }
         {
           color: "#2ED6EC"
@@ -2659,7 +2731,7 @@ prototypes {
       shape Prism "shoulder-left" {
         id: 150
         position [0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.155]
+        scale [0.24, 0.225, 0.2]
         material: violetBandLeft
         group: 14
         parent: "upperArm-left"
@@ -2681,7 +2753,8 @@ prototypes {
         position [0.3, 1.5015, 0.0075]
         scale [0.25, 0.4, 0.155]
         material: violetBandLeft
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 14
         parent: "upperArm-left"
         exponent: 2.6
@@ -2762,7 +2835,7 @@ prototypes {
         id: 161
         position [0.5427616, 1.0708781, 0.0075]
         rotation [0, 0, 0.1147467, 0.9933948]
-        scale [0.132, 0.26, 0.11]
+        scale [0.132, 0.26, 0.125]
         material: skin
         blend: "SmoothIntersection"
         smooth: 0.009
@@ -3386,7 +3459,7 @@ prototypes {
       shape Prism "shoulder-right" {
         id: 218
         position [-0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.155]
+        scale [0.24, 0.225, 0.2]
         material: violetBandRight
         group: 28
         parent: "upperArm-right"
@@ -3408,7 +3481,8 @@ prototypes {
         position [-0.3, 1.5015, 0.0075]
         scale [0.25, 0.4, 0.155]
         material: violetBandRight
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 28
         parent: "upperArm-right"
         exponent: 2.6
@@ -3489,7 +3563,7 @@ prototypes {
         id: 229
         position [-0.5427616, 1.0708781, 0.0075]
         rotation [0, 0, -0.1147467, 0.9933948]
-        scale [0.132, 0.26, 0.11]
+        scale [0.132, 0.26, 0.125]
         material: skin
         blend: "SmoothIntersection"
         smooth: 0.009
