@@ -1447,6 +1447,20 @@ prototypes {
           }
           paints [
             {
+              parent: "bootPlan-left"
+              type: "Box"
+              position [0, 0, 0.04]
+              scale [0.0025, 0.2, 0.17]
+              color: "#CDB794"
+            }
+            {
+              parent: "bootPlan-right"
+              type: "Box"
+              position [0, 0, 0.04]
+              scale [0.0025, 0.2, 0.17]
+              color: "#CDB794"
+            }
+            {
               parent: "boot-left"
               type: "Box"
               position [0, -0.08, 0]
@@ -1515,6 +1529,50 @@ prototypes {
           // The helmet's cream trim, in the helmet's frame: a horseshoe round the face opening, its ellipse projected
           // along the face's forward axis; the throat opening leaves the helmet no surface below it.
           paints [
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-left"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.02, 0.29]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "sole-right"
+              type: "Prism"
+              position [0, 0.022, -0.115]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.0065, 0.0065, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
             {
               parent: "helmet"
               type: "Prism"
@@ -1937,56 +1995,67 @@ prototypes {
               metal: 0
             }
           }
-          // Each greave's cream trims, in the shin's own frame: a ring round the arch, its ellipse projected front to
-          // back, and a pentagonal panel on the outer side.
+          // A panel line and two rivets on each greave's outer side; its cream arch band and side panel are raised plates.
           paints [
             {
               parent: "shin-left"
-              type: "Prism"
-              position [0, -0.29, 0]
-              scale [0.174, 0.174, 0.45]
-              profile {
-                kind: "Ellipse"
-              }
-              stroke: 0.023
-              color: "#EED3A6"
+              type: "Box"
+              position [0.12, -0.06, 0.05]
+              rotation [0.3827, 0, 0, 0.9239]
+              scale [0.06, 0.0022, 0.16]
+              color: "#6F4B9A"
             }
             {
               parent: "shin-left"
               type: "Prism"
-              position [0.15, 0.02, 0]
+              position [0.12, 0.2, 0.075]
               rotation [0, diagonal, 0, diagonal]
-              scale [0.13, 0.18, 0.08]
-              profile {
-                kind: "Convex"
-                vertices: shinPanelOutline
-                cornerRadius: 0.12
-              }
-              color: "#EED3A6"
-            }
-            {
-              parent: "shin-right"
-              type: "Prism"
-              position [0, -0.29, 0]
-              scale [0.174, 0.174, 0.45]
+              scale [0.006, 0.006, 0.3]
               profile {
                 kind: "Ellipse"
               }
-              stroke: 0.023
-              color: "#EED3A6"
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-left"
+              type: "Prism"
+              position [0.12, -0.12, -0.07]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-right"
+              type: "Box"
+              position [-0.12, -0.06, 0.05]
+              rotation [0.3827, 0, 0, 0.9239]
+              scale [0.06, 0.0022, 0.16]
+              color: "#6F4B9A"
             }
             {
               parent: "shin-right"
               type: "Prism"
-              position [-0.15, 0.02, 0]
-              rotation [0, -diagonal, 0, diagonal]
-              scale [0.13, 0.18, 0.08]
+              position [-0.12, 0.2, 0.075]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
               profile {
-                kind: "Convex"
-                vertices: shinPanelOutline
-                cornerRadius: 0.12
+                kind: "Ellipse"
               }
-              color: "#EED3A6"
+              color: "#7550A3"
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [-0.12, -0.12, -0.07]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.006, 0.006, 0.3]
+              profile {
+                kind: "Ellipse"
+              }
+              color: "#7550A3"
             }
           ]
         }
@@ -3489,6 +3558,99 @@ prototypes {
         }
       }
 
+      shape Superellipsoid "archBand-left" {
+        id: 950
+        position [0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 76
+        parent: "shin-left"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandEnds-left" {
+        id: 951
+        position [0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 76
+        parent: "shin-left"
+      }
+
+      shape Prism "archBandOuter-left" {
+        id: 952
+        position [0.2, 0.1365, 0.0125]
+        scale [0.197, 0.196, 0.45]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 76
+        parent: "shin-left"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Prism "archBandInner-left" {
+        id: 953
+        position [0.2, 0.1365, 0.0125]
+        scale [0.151, 0.15, 0.45]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.012
+        group: 76
+        parent: "shin-left"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Superellipsoid "sidePanel-left" {
+        id: 954
+        position [0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 77
+        parent: "shin-left"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Prism "sidePanelCut-left" {
+        id: 955
+        position [0.35, 0.4465, 0.0125]
+        rotation [0, diagonal, 0, diagonal]
+        scale [0.13, 0.18, 0.2]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 77
+        parent: "shin-left"
+        profile {
+          kind: "Convex"
+          vertices: shinPanelOutline
+          cornerRadius: 0.12
+        }
+      }
+
       shape Sweep "shinCore-left" {
         id: 191
         position [0.2, 0.2415, 0.0075]
@@ -3544,7 +3706,7 @@ prototypes {
         parent: "shin-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.1
+          cornerRadius: 0.05
           vertices [
             [-1, -0.4699]
             [-1, 0.4458]
@@ -3583,16 +3745,20 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "bootPlan-left" {
+      shape Prism "bootPlan-left" {
         id: 196
         position [0.2, 0.19, 0.0775]
-        scale [0.135, 0.25, 0.22]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.22, 0.25]
         material: skin
         blend: "SmoothIntersection"
-        smooth: 0.02
+        smooth: 0.008
         group: 21
         parent: "boot-left"
-        exponent: 2.8
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.38
+        }
       }
 
       shape Prism "toe-left" {
@@ -3605,7 +3771,7 @@ prototypes {
         parent: "boot-left"
         profile {
           kind: "Convex"
-          cornerRadius: 0.08
+          cornerRadius: 0.03
           vertices [
             [-1, -0.1792]
             [-1, 0.1415]
@@ -3617,29 +3783,39 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "toePlan-left" {
+      shape Prism "toePlan-left" {
         id: 200
         position [0.2, 0.05, 0.065]
-        scale [0.152, 0.2, 0.265]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.152, 0.265, 0.2]
         material: violet
         blend: "SmoothIntersection"
-        smooth: 0.015
+        smooth: 0.006
         group: 23
         parent: "boot-left"
-        exponent: 3.2
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.36
+        }
       }
 
-      shape Prism "sole-left" {
+      shape Box "soleGap-left" {
+        id: 956
+        position [0.2, 0.055, -0.045]
+        scale [0.2, 0.065, 0.04]
+        material: violet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 23
+        parent: "boot-left"
+      }
+
+      shape Box "sole-left" {
         id: 201
-        position [0.2, 0.006, 0.05]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.105, 0.19, 0.004]
+        position [0.2, 0.055, -0.045]
+        scale [0.12, 0.055, 0.05]
         material: charcoal
         parent: "boot-left"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.43
-        }
       }
 
       shape Cylinder "heelHousing-left" {
@@ -4645,6 +4821,99 @@ prototypes {
         }
       }
 
+      shape Superellipsoid "archBand-right" {
+        id: 957
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 78
+        parent: "shin-right"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Box "archBandEnds-right" {
+        id: 958
+        position [-0.2, 0.407, 0.0125]
+        scale [0.3, 0.302, 0.4]
+        material: shinCream
+        blend: "Intersection"
+        group: 78
+        parent: "shin-right"
+      }
+
+      shape Prism "archBandOuter-right" {
+        id: 959
+        position [-0.2, 0.1365, 0.0125]
+        scale [0.197, 0.196, 0.45]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 78
+        parent: "shin-right"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Prism "archBandInner-right" {
+        id: 960
+        position [-0.2, 0.1365, 0.0125]
+        scale [0.151, 0.15, 0.45]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.012
+        group: 78
+        parent: "shin-right"
+        profile {
+          kind: "Ellipse"
+        }
+      }
+
+      shape Superellipsoid "sidePanel-right" {
+        id: 961
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.119, 0.36, 0.131]
+        material: shinCream
+        group: 79
+        parent: "shin-right"
+        exponent: 3
+        dilate: 0.01
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
+      shape Prism "sidePanelCut-right" {
+        id: 962
+        position [-0.35, 0.4465, 0.0125]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.13, 0.18, 0.2]
+        material: shinCream
+        blend: "SmoothIntersection"
+        smooth: 0.012
+        group: 79
+        parent: "shin-right"
+        profile {
+          kind: "Convex"
+          vertices: shinPanelOutline
+          cornerRadius: 0.12
+        }
+      }
+
       shape Sweep "shinCore-right" {
         id: 259
         position [-0.2, 0.2415, 0.0075]
@@ -4700,7 +4969,7 @@ prototypes {
         parent: "shin-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.1
+          cornerRadius: 0.05
           vertices [
             [-1, -0.4699]
             [-1, 0.4458]
@@ -4739,16 +5008,20 @@ prototypes {
         ]
       }
 
-      shape Superellipsoid "bootPlan-right" {
+      shape Prism "bootPlan-right" {
         id: 264
         position [-0.2, 0.19, 0.0775]
-        scale [0.135, 0.25, 0.22]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.22, 0.25]
         material: skin
         blend: "SmoothIntersection"
-        smooth: 0.02
+        smooth: 0.008
         group: 35
         parent: "boot-right"
-        exponent: 2.8
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.38
+        }
       }
 
       shape Prism "toe-right" {
@@ -4761,7 +5034,7 @@ prototypes {
         parent: "boot-right"
         profile {
           kind: "Convex"
-          cornerRadius: 0.08
+          cornerRadius: 0.03
           vertices [
             [-1, -0.1792]
             [-1, 0.1415]
@@ -4773,29 +5046,39 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "toePlan-right" {
+      shape Prism "toePlan-right" {
         id: 268
         position [-0.2, 0.05, 0.065]
-        scale [0.152, 0.2, 0.265]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.152, 0.265, 0.2]
         material: violet
         blend: "SmoothIntersection"
-        smooth: 0.015
+        smooth: 0.006
         group: 37
         parent: "boot-right"
-        exponent: 3.2
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.36
+        }
       }
 
-      shape Prism "sole-right" {
+      shape Box "soleGap-right" {
+        id: 963
+        position [-0.2, 0.055, -0.045]
+        scale [0.2, 0.065, 0.04]
+        material: violet
+        blend: "SmoothSubtraction"
+        smooth: 0.006
+        group: 37
+        parent: "boot-right"
+      }
+
+      shape Box "sole-right" {
         id: 269
-        position [-0.2, 0.006, 0.05]
-        rotation [diagonal, 0, 0, diagonal]
-        scale [0.105, 0.19, 0.004]
+        position [-0.2, 0.055, -0.045]
+        scale [0.12, 0.055, 0.05]
         material: charcoal
         parent: "boot-right"
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.43
-        }
       }
 
       shape Cylinder "heelHousing-right" {
