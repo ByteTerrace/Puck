@@ -3315,7 +3315,7 @@ prototypes {
           {
             driver: "gait"
             axis [1, 0, 0]
-            amplitude: 0.62
+            amplitude: 0.7
             pivot [0.145, 1.0265, 0]
             wave: "sine"
             phase: 0
@@ -4481,7 +4481,7 @@ prototypes {
           {
             driver: "gait"
             axis [1, 0, 0]
-            amplitude: 0.62
+            amplitude: 0.7
             pivot [-0.145, 1.0265, 0]
             wave: "sine"
             phase: 3.1415927
