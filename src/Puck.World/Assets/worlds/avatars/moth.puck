@@ -946,6 +946,124 @@ collision {
   requirements []
 }
 
+// The moth's gait as curves of her pace in metres per second (X), each knot's tangent and curvature those of the
+// function it samples. moth-stride is radians of stride per metre, π(1.25 + 0.5v)/v: her step rate rises linearly
+// from 1.5 steps a second at 0.5 m/s to 3.75 at 5 m/s while her stride opens from 0.7 m to 2.7 m. moth-gait scales
+// every stride swing from half at a walk to whole at a run, and moth-run fades in what only a run has: the bob, the
+// forward lean and the bent elbows.
+curves [
+  {
+    name: "moth-stride"
+    knots [
+      {
+        position [0.5, 0, 9.42478]
+        tangentYaw: -1.50722
+        curvature: 0.016113
+      }
+      {
+        position [0.75, 0, 6.80678]
+        tangentYaw: -1.428525
+        curvature: 0.053072
+      }
+      {
+        position [1, 0, 5.49779]
+        tangentYaw: -1.321448
+        curvature: 0.118027
+      }
+      {
+        position [1.5, 0, 4.18879]
+        tangentYaw: -1.050498
+        curvature: 0.285923
+      }
+      {
+        position [2, 0, 3.53429]
+        tangentYaw: -0.776188
+        curvature: 0.356734
+      }
+      {
+        position [2.5, 0, 3.14159]
+        tangentYaw: -0.560982
+        curvature: 0.305147
+      }
+      {
+        position [3, 0, 2.87979]
+        tangentYaw: -0.41143
+        curvature: 0.223972
+      }
+      {
+        position [4, 0, 2.55254]
+        tangentYaw: -0.240679
+        curvature: 0.11241
+      }
+      {
+        position [5, 0, 2.35619]
+        tangentYaw: -0.155806
+        curvature: 0.060576
+      }
+    ]
+  }
+  {
+    name: "moth-gait"
+    knots [
+      {
+        position [1, 0, 0.5]
+        tangentYaw: 0
+        curvature: 0.244898
+      }
+      {
+        position [1.875, 0, 0.57812]
+        tangentYaw: 0.159352
+        curvature: 0.117854
+      }
+      {
+        position [2.75, 0, 0.75]
+        tangentYaw: 0.211093
+        curvature: 0
+      }
+      {
+        position [3.625, 0, 0.92188]
+        tangentYaw: 0.159352
+        curvature: -0.117854
+      }
+      {
+        position [4.5, 0, 1]
+        tangentYaw: 0
+        curvature: -0.244898
+      }
+    ]
+  }
+  {
+    name: "moth-run"
+    knots [
+      {
+        position [1.5, 0, 0]
+        tangentYaw: 0
+        curvature: 0.666667
+      }
+      {
+        position [2.25, 0, 0.15625]
+        tangentYaw: 0.358771
+        curvature: 0.27363
+      }
+      {
+        position [3, 0, 0.5]
+        tangentYaw: 0.463648
+        curvature: 0
+      }
+      {
+        position [3.75, 0, 0.84375]
+        tangentYaw: 0.358771
+        curvature: -0.27363
+      }
+      {
+        position [4.5, 0, 1]
+        tangentYaw: 0
+        curvature: -0.666667
+      }
+    ]
+  }
+]
+
 defaultSeatKit: "walker"
 
 dynamics [
@@ -979,6 +1097,13 @@ dynamics [
     name: "body-lean"
     r: 0
     zeta: 0.75
+  }
+  // Her pace, the speed her gait curves read, settles without overshoot so a stick sweep eases the stride open.
+  {
+    f: 3
+    name: "gait-pace"
+    r: 0
+    zeta: 1
   }
 ]
 
@@ -1846,7 +1971,7 @@ prototypes {
         // its planar acceleration, sideways into a curving run and forward into a start.
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [0, 1, 0]
             amplitude: 0.08
             pivot [0, 1.0765, 0]
@@ -1854,7 +1979,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "run"
             axis [1, 0, 0]
             amplitude: 0.1
             pivot [0, 0, 0]
@@ -1862,7 +1987,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [0, 0, 1]
             amplitude: 0.05
             pivot [0, 1.0765, 0]
@@ -1919,7 +2044,7 @@ prototypes {
         // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [0, 1, 0]
             amplitude: -0.16
             pivot [0, 1.0765, 0]
@@ -2173,7 +2298,7 @@ prototypes {
         // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [0, 1, 0]
             amplitude: 0.08
             pivot [0, 1.5715, 0]
@@ -2839,7 +2964,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "run"
             axis [0, 0, 1]
             amplitude: -0.15
             pivot [0.295, 1.4515, 0]
@@ -2847,7 +2972,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.6
             pivot [0.295, 1.4515, 0]
@@ -2956,7 +3081,7 @@ prototypes {
         exponent: 2.6
         swings [
           {
-            driver: "stride"
+            driver: "run"
             axis [1, 0, 0]
             amplitude: -0.9
             pivot [0.39, 1.1765, 0.005]
@@ -2964,7 +3089,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.25
             pivot [0.39, 1.1765, 0.005]
@@ -3188,7 +3313,7 @@ prototypes {
             wave: "linear"
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.62
             pivot [0.145, 1.0265, 0]
@@ -3298,7 +3423,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 1.25
             pivot [0.19, 0.7465, 0]
@@ -3425,7 +3550,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.2
             pivot [0.2, 0.1715, 0.0075]
@@ -3433,7 +3558,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: -0.25
             pivot [0.2, 0.1715, 0.0075]
@@ -4008,7 +4133,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "run"
             axis [0, 0, 1]
             amplitude: 0.15
             pivot [-0.295, 1.4515, 0]
@@ -4016,7 +4141,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.6
             pivot [-0.295, 1.4515, 0]
@@ -4125,7 +4250,7 @@ prototypes {
         exponent: 2.6
         swings [
           {
-            driver: "stride"
+            driver: "run"
             axis [1, 0, 0]
             amplitude: -0.9
             pivot [-0.39, 1.1765, 0.005]
@@ -4133,7 +4258,7 @@ prototypes {
             phase: 0
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.25
             pivot [-0.39, 1.1765, 0.005]
@@ -4354,7 +4479,7 @@ prototypes {
             wave: "linear"
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.62
             pivot [-0.145, 1.0265, 0]
@@ -4464,7 +4589,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 1.25
             pivot [-0.19, 0.7465, 0]
@@ -4591,7 +4716,7 @@ prototypes {
         }
         swings [
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: 0.2
             pivot [-0.2, 0.1715, 0.0075]
@@ -4599,7 +4724,7 @@ prototypes {
             phase: 3.1416
           }
           {
-            driver: "stride"
+            driver: "gait"
             axis [1, 0, 0]
             amplitude: -0.25
             pivot [-0.2, 0.1715, 0.0075]
@@ -5205,10 +5330,54 @@ prototypes {
         secondary: false
       }
       drivers [
+        // Her pace in metres per second, the X every gait curve reads.
+        {
+          name: "pace"
+          cadence: 1
+          signal: "speed"
+          dynamics: "gait-pace"
+          "when" [
+            "always"
+          ]
+        }
+        // The one stride cycle her feet plant on and every gait driver below rides; its radians per metre fall as her
+        // pace rises, so her stride lengthens and her step rate climbs more slowly than her speed.
         {
           name: "stride"
-          cadence: 2.7
+          cadence: 1
           signal: "planarTravel"
+          cadenceBy {
+            driver: "pace"
+            curve: "moth-stride"
+          }
+          "when" [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // The stride swings, half their amplitude at a walk and whole at a run.
+        {
+          name: "gait"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-gait"
+          }
+          "when" [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // What only a run has: the forward lean and the bent elbows, and at twice the stride's rate, the bob.
+        {
+          name: "run"
+          cadence: 1
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-run"
+          }
           "when" [
             "Grounded"
             "moving"
@@ -5216,8 +5385,12 @@ prototypes {
         }
         {
           name: "bob"
-          cadence: 5.4
-          signal: "planarTravel"
+          cadence: 2
+          signal: "driver.stride"
+          weightBy {
+            driver: "pace"
+            curve: "moth-run"
+          }
           "when" [
             "Grounded"
             "moving"
