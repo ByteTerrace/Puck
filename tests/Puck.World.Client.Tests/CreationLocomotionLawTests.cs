@@ -349,7 +349,7 @@ public sealed class CreationLocomotionLawTests {
             }],
         });
 
-        Assert.Contains(expectedSubstring: "cannot follow the integrating signal", actualString: Refusal(document: integrating));
+        Assert.Contains(expectedSubstring: "dynamics cannot follow the signal 'planarTravel'", actualString: Refusal(document: integrating));
         Assert.Contains(expectedSubstring: "dynamics is empty", actualString: Refusal(document: empty));
         Assert.Contains(expectedSubstring: "replant.distance", actualString: Refusal(document: replant));
         Assert.Contains(expectedSubstring: "replant.seconds", actualString: Refusal(document: replant));

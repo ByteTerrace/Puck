@@ -8778,7 +8778,7 @@ export type WorldPrototype = {
        */
       name: string;
       /**
-       * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, or a SignalStatePrefix state cell. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
+       * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a SignalStatePrefix state cell, or a SignalDriverPrefix earlier driver. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
        */
       signal: string;
       /**
@@ -8790,17 +8790,43 @@ export type WorldPrototype = {
        */
       when?: (string | null)[] | null;
       /**
-       * Gate activation's exponential time constant in seconds; null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta.
+       * The exponential time constant in seconds the weight rises over (the gate opening, or a WeightBy level climbing); null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta.
        */
       blendInSeconds?: number | null;
       /**
-       * Gate release's exponential time constant in seconds, on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
+       * The exponential time constant in seconds the weight falls over (the gate releasing, or a WeightBy level dropping), on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
        */
       blendOutSeconds?: number | null;
       /**
-       * The containing world's dynamics row (natural frequency, damping, initial response) an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare.
+       * The containing world's dynamics row (natural frequency, damping, initial response) an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare.
        */
       dynamics?: string | null;
+      /**
+       * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
+       */
+      cadenceBy?: {
+        /**
+         * A driver declared before the one this curve modulates.
+         */
+        driver: string;
+        /**
+         * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
+         */
+        curve: string;
+      } | null;
+      /**
+       * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
+       */
+      weightBy?: {
+        /**
+         * A driver declared before the one this curve modulates.
+         */
+        driver: string;
+        /**
+         * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
+         */
+        curve: string;
+      } | null;
     } | null)[] | null;
     /**
      * The inverse-kinematics effectors (null = none), at most MaxEffectors — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.

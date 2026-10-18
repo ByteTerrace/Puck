@@ -168,6 +168,27 @@ For example, a quick body pose and a slower wing assembly can read the same
 | `lateralAcceleration` | eased planar acceleration across the facing, m/s² (positive left; speed × turn rate in a curving run) | sets |
 | `forwardAcceleration` | eased planar acceleration along the facing, m/s² (positive as a run starts, negative as it brakes) | sets |
 | `state.<row>[.<key>]` | the cell's value at the frame's tick | sets |
+| `driver.<name>` | the phase an earlier driver reached this frame | sets |
+
+Drivers advance in declaration order, and a driver reads only drivers declared
+before it. A `driver.<name>` driver rides another's cycle at a multiple of its
+rate: a walk set and a run set of swings on one stride, or a bob at twice it,
+never leave step with it.
+
+`cadenceBy` and `weightBy` (`{ "driver": "pace", "curve": "moth-stride" }`) read
+an earlier driver's phase through the world's `curves` row as a function: the
+row's height (Z) where its X equals the phase, held at the end knots outside the
+row. `cadenceBy` multiplies the cadence every frame. `weightBy`, clamped to
+[0, 1], replaces 1 as the level the weight eases toward while the gate holds,
+over `blendInSeconds` while the level rises and `blendOutSeconds` while it
+falls. With a `speed` driver as the X, a stride on `planarTravel` whose radians
+per metre fall with speed lengthens its stride as it speeds up, and a run's
+swings fade in by speed. The world validator refuses a row the world does not
+declare and one not drawn left to right (open, each knot further along X than
+the last, each tangent toward +X). Author each knot's `tangentYaw` as
+`atan(f′)` and its `curvature` as `f″/(1+f′²)^1.5` of the function it samples; a
+straight segment at a slant does not compile, because its fixed-point tangents
+never lie exactly along its chord.
 
 An integrating driver charges at most `WorldGaitDrivers.MaxTravelPerFrame` of
 travel per frame, so a teleport cannot spin a limb through dozens of cycles. The
@@ -181,8 +202,8 @@ phase then follows cadence × signal through that row's second-order response
 swung against a `turnRate` follower trails a turn and overshoots a little as it
 settles; a lean on an acceleration follower builds and relaxes. A
 `travelDirection` follower eases the short way across the ±π seam. An
-integrating driver refuses `dynamics`, and the world validator refuses a row it
-does not declare.
+integrating driver and a `driver.<name>` driver refuse `dynamics`, and the world
+validator refuses a row it does not declare.
 
 `when` is one token or an array of tokens that must all hold (a bare string reads
 as a one-token gate and canonicalizes to the array form; absent is ungated, ≤ 4
@@ -251,6 +272,8 @@ Worked rigs, all built from the same three parts:
 | Stride in the plane of travel | the same driver | on each thigh, about the hip: Y `sine` (undo the hips), Y `linear` at −½ (turn to the travel direction), the stride swing, Y `linear` at +½, Y `sine` negated; a strafe abducts into a sidestep and a backpedal strides backward |
 | Trailing turn | `turnRate` through an underdamped `dynamics` row | root swing, axis Y, `linear`, negative amplitude; the chest and head swing positive so the upper body leads |
 | Lean into a turn or a start | `lateralAcceleration` / `forwardAcceleration` through a `dynamics` row | root swings about the ground point, axis Z and X, `linear` |
+| Stride that lengthens with speed | `pace` on `speed`; `stride` on `planarTravel`, cadence 1, `cadenceBy` a falling curve of `pace` in radians per metre | the stride swings, or the drivers below |
+| Walk into run | `driver.stride` drivers weighted by curves of `pace`: one rising from half to whole, one from none to whole, and a bob at cadence 2 on the second | the stride swings on the first; the lean, bent elbows and bob on the others |
 
 Every one of these is presentation-only: the facets are read where a body-rooted
 stamp's per-frame transforms are packed (`Puck.World.Client.WorldStampPool`) and

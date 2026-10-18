@@ -41,7 +41,9 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 ## Drivers
 
 `drivers` is up to 16 named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds, dynamics }`. Everything animated names one.
+blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
+They advance in declaration order, and a driver reads only drivers declared
+before it, the rule a shape's `parent` follows.
 
 | Signal | Behavior |
 |---|---|
@@ -50,10 +52,27 @@ blendOutSeconds, dynamics }`. Everything animated names one.
 | `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
 | `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
 | `state.<row>[.<key>]` | read a state row |
+| `driver.<name>` | set directly: cadence × the phase an earlier driver reached this frame, so several drivers ride one cycle (cadence 2 is twice its rate) and never leave step |
 
 `dynamics` names a world `dynamics` row a setting driver's phase follows through
-(second-order: trail, overshoot, settle). An integrating driver refuses it; the
-world validator refuses an undeclared row.
+(second-order: trail, overshoot, settle). An integrating driver and a
+`driver.<name>` driver refuse it; the world validator refuses an undeclared row.
+
+`cadenceBy` and `weightBy` are each `{ driver, curve }`: the height (Z) of a
+world `curves` row where its X equals that earlier driver's phase, held at the
+end knots outside the row. `cadenceBy` multiplies the cadence every frame, so a
+stride on `planarTravel` whose radians per metre fall as a `speed` driver rises
+lengthens its stride with speed. `weightBy`, clamped to [0, 1], is the level the
+weight eases toward while the gate holds instead of 1, through the blend times
+(in while it rises, out while it falls); a `driver.<name>` driver weighted by a
+rising curve of speed fades a run's swings in on the same cycle a walk's ride.
+The curve row must be open and drawn left to right, each knot further along X
+than the last with its tangent toward +X, or the world validator refuses it.
+Author each knot's `tangentYaw` and `curvature` from the function it samples
+(`atan(f′)` and `f″/(1+f′²)^1.5`): a straight segment at a slant does not
+compile, because its fixed-point tangents never line up exactly with its chord.
+A driver with neither keeps its authored cadence and eases its weight toward 1.
+`CreationCharacterLawTests` pins the three.
 
 `cadence` is capped at 256 in magnitude. `when` takes up to 4 gate tokens from
 the body-facts vocabulary plus `moving`, `still`, and `always`; `always` may not
@@ -105,7 +124,11 @@ Every part of the moth's motion is a driver, a swing or an effector in
 
 | Motion | Driver | Where |
 |---|---|---|
-| Stride, arm swing, knee and ankle | `stride` (`planarTravel`, `Grounded` + `moving`) | thighs, shins, boots, upper arms; pelvis waddle |
+| Pace, the X every gait curve reads | `pace` (`speed` through `gait-pace`) | none |
+| Stride cycle, its length opening with pace | `stride` (`planarTravel`, `Grounded` + `moving`, `cadenceBy` `moth-stride`: 1.5 steps/s and 0.7 m strides at 0.5 m/s, 2 at 1.5 m/s, 3.75 and 2.7 m at 5 m/s) | the feet's plant windows; every gait driver rides its phase |
+| Stride, arm swing, knee fold and ankle, hip and chest counter-yaw, head steady | `gait` (`driver.stride`, `weightBy` `moth-gait`: half at a walk, whole from 4.5 m/s) | thighs, shins, boots, upper arms, forearms; pelvis yaw and roll, torso, helmet |
+| Forward lean, arms carried out, elbows bent | `run` (`driver.stride`, `weightBy` `moth-run`: none to 1.5 m/s, whole from 4.5 m/s) | pelvis, upper arms, forearms (`constant` waves) |
+| Bob and chest dip, twice per stride | `bob` (`driver.stride`, cadence 2, `weightBy` `moth-run`) | pelvis slide, torso |
 | Hips into a forward diagonal, chest and head back to the facing | `heading` (`travelDirection`, cadence 2, `sine`) | pelvis +0.7, torso −0.4, helmet −0.3 |
 | Stride plane steered to the travel direction (sidestep, backpedal) | `heading`, `linear` ±0.5 between `sine` ±0.7 | each thigh, about the hip, around its stride swing |
 | Hips trail a turn, chest and head lead | `trail` (`turnRate` through `body-turn`) | pelvis −0.12, torso +0.08, helmet +0.07 |

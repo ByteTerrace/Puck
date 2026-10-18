@@ -347,7 +347,8 @@ public sealed partial class WorldStampPool {
             seeded: ref live.DriverSeeded,
             weights: live.DriverWeight,
             reads: live.Reads,
-            kinematics: live.Kinematics
+            kinematics: live.Kinematics,
+            definition: client.Definition
         );
 
         var shapes = (document.Shapes ?? []);
