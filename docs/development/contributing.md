@@ -758,7 +758,7 @@ unverified when no device run exists.
   pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
-- The pinned .NET 11 JIT (`11.0.100-rc.1.26425.128`) can emit GC info that
+- The pinned .NET 11 JIT (`11.0.100-rc.2.26504.105`, as RC1 before it) can emit GC info that
   reports a GC pointer live in a callee-saved register (`rbx`, `rsi`, `rdi`,
   `r12` to `r15`) at the return address of an inline P/Invoke, which the
   runtime's rule forbids: a thread inside the call is walked from its

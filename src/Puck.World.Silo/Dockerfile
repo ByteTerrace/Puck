@@ -3,7 +3,7 @@
 # shader compiles.
 FROM scratch AS shader-cache
 
-FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.2 AS build
 WORKDIR /source
 # The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
 # binaries' content, so a different DXC here would miss every entry CI restores.

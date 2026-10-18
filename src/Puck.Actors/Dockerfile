@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.1 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.2 AS build
 WORKDIR /source
 # Build from the repository root: shared targets, analyzers, and Puck.Maths are required.
 COPY . .
