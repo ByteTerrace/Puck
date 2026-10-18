@@ -745,10 +745,21 @@ geometry (`SdfMeshGeometryBuilder`), a 128-bit hash of what determines its
 surface independent of where its program places it: its instructions, a convex
 polygon's, sweep's or path's side-table values in place of the offset its
 program packed them at, its shapes' materials by their place among the group's
-materials, a static group's bound, and a dynamic group's transform into its own
-slot by that role rather than the slot's number. A dynamic group's bound is left
-out, since it is offset along world axes by the body's pose when the program was
-emitted. A program rebuild keeps every group whose geometry held, and every
+materials, a static group's bound, a dynamic group's bound radius, its
+transform into its own slot by that role rather than the slot's number, a
+transform into any other slot by that slot's pose in the group's frame (rounded
+to a millimetre and to a 16384th of each quaternion component), and the lanes a
+lane erosion reads. The other slots' poses matter because the stamp pool emits
+a blend group as one instance on its first shape's slot (or the creation's
+root) while each of its shapes rides its own slot, so the frame's transforms,
+not the instructions, place and turn every shape after the first. A world
+group is keyed by every instruction outside an instance, the transforms ahead
+of its first shape included, and by the frame's reach, the box it bakes over;
+a group whose bound passes the reach is keyed by the reach too. A dynamic group's bound center is left out, since
+it is offset along world axes by the body's pose when the program was emitted.
+The key is taken when a program arrives, from that frame's transforms, so a
+group whose shapes move against one another afterwards (a part follower) keeps
+the mesh of the pose it was keyed at. A program rebuild keeps every group whose geometry held, and every
 meshed group is stored by its geometry in an `SdfMeshLibrary` every residency of
 a presentation shares (`WorldScreenBinder.MeshLibrary`), so geometry that comes
 back (a body that left the world and returned, an instance at another index) or

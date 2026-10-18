@@ -259,18 +259,26 @@ owns the explanation.
   `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame, so a
   view that leaves the frame or follows another residency never strands a bake.
   Groups are keyed by geometry (`SdfMeshGeometryBuilder`: instructions with
-  side-table values for offsets, materials by place, no dynamic bound) and every
-  meshed group is stored in the `SdfMeshLibrary` all of a presentation's
-  residencies share, so a rebuild, a returning body or a body crossing from
-  another world takes its mesh; only new geometry bakes. A field the hash reads
-  that a program assigns by position (a slot, a table offset, a palette index)
-  breaks sharing silently: canonicalize it in the builder. The World's library
-  persists across runs (`SdfMeshStore`, the `meshes` device cache), keyed by
-  geometry and the bake's identity (bake kernels' bytecode,
-  `Puck.SignedDistance`'s build, the hash of `PuckMeshBakeSource` in
-  `Puck.SdfVm.csproj`): a new file the bake's CPU code reads joins that list, or
-  an edit to it reads stale meshes. A boot that bakes nothing shows
-  `done … loaded=N` with `dispatches=0`.
+  side-table values for offsets, materials by place, a dynamic bound's radius
+  alone, other slots by their rounded pose in the group's frame, lane-erosion
+  lanes, the reach of a box it clamps) and every meshed group is stored in the `SdfMeshLibrary` all of a
+  presentation's residencies share, so a rebuild, a returning body or a body
+  crossing from another world takes its mesh; only new geometry bakes. The key
+  has two failure modes. A field the hash reads that a program assigns by
+  position (a slot, a table offset, a palette index) breaks sharing silently:
+  canonicalize it in the builder. Anything the bake samples that the
+  instructions do not hold (another slot's transform, a lane, a table) leaves a
+  stale mesh drawing after an edit: hash it in the builder. A stamp-pool blend
+  group is one instance on its first shape's slot whose later shapes ride their
+  own slots, so their places and turns are frame transforms; the symptom of a
+  miss is an edit that shows only once the group's first shape changes. The key
+  is taken from the frame a program arrives in, so shapes that move against one
+  another later keep the mesh of that pose. The World's library persists across
+  runs (`SdfMeshStore`, the `meshes` device cache), keyed by geometry and the
+  bake's identity (bake kernels' bytecode, `Puck.SignedDistance`'s build, the
+  hash of `PuckMeshBakeSource` in `Puck.SdfVm.csproj`): a new file the bake's CPU
+  code reads joins that list, or an edit to it reads stale meshes. A boot that
+  bakes nothing shows `done … loaded=N` with `dispatches=0`.
 - **A view without shadows holds no cascade.** A view whose quality skips shadows
   (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
   the cascades' passes and their 252 MB of targets go, and the surface pass binds

@@ -3335,7 +3335,7 @@ prototypes {
         id: 206
         position [0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.141, 0.4158, 0.1275]
+        scale [0.1412, 0.4158, 0.1275]
         material: charcoal
         group: 60
         parent: "torso"
@@ -3382,12 +3382,12 @@ prototypes {
 
       shape Box "podBottomRim-left" {
         id: 920
-        position [0.4265, 1.3945, -0.2911]
+        position [0.4265, 1.3886, -0.2919]
         rotation [0.073, 0.0167, -0.2225, 0.9721]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
-        smooth: 0.012
+        smooth: 0.005
         group: 60
         parent: "pod-left"
       }
@@ -3408,7 +3408,7 @@ prototypes {
         id: 903
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1516, 0.42, 0.15]
+        scale [0.1518, 0.42, 0.15]
         material: violetPodLeft
         group: 61
         parent: "pod-left"
@@ -3492,7 +3492,7 @@ prototypes {
         id: 906
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1546, 0.42, 0.153]
+        scale [0.1548, 0.42, 0.153]
         material: shinCream
         group: 62
         parent: "pod-left"
@@ -3548,7 +3548,7 @@ prototypes {
         id: 909
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1577, 0.42, 0.156]
+        scale [0.1579, 0.42, 0.156]
         material: violetPodLeft
         group: 63
         parent: "pod-left"
@@ -3604,7 +3604,7 @@ prototypes {
         id: 912
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1607, 0.42, 0.159]
+        scale [0.1609, 0.42, 0.159]
         material: shinCream
         group: 64
         parent: "pod-left"
@@ -3660,7 +3660,7 @@ prototypes {
         id: 915
         position [0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1637, 0.42, 0.162]
+        scale [0.1639, 0.42, 0.162]
         material: violetPodLeft
         group: 65
         parent: "pod-left"
@@ -3736,7 +3736,7 @@ prototypes {
 
       shape Superellipsoid "nozzle-left" {
         id: 213
-        position [0.209, 0.9662, -0.3558]
+        position [0.209, 0.9603, -0.3567]
         rotation [0.073, 0.0167, -0.2225, 0.9721]
         scale [0.045, 0.039, 0.045]
         material: charcoal
@@ -3747,9 +3747,9 @@ prototypes {
 
       shape Cylinder "nozzleBore-left" {
         id: 214
-        position [0.209, 0.9546, -0.3596]
+        position [0.1946, 0.9309, -0.3611]
         rotation [0.073, 0.0167, -0.2225, 0.9721]
-        scale [0.0297, 0.0225, 0.0297]
+        scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
         group: 27
@@ -3758,9 +3758,9 @@ prototypes {
 
       shape Cylinder "nozzleGlow-left" {
         id: 215
-        position [0.209, 0.9503, -0.3612]
+        position [0.2038, 0.9496, -0.3583]
         rotation [0.073, 0.0167, -0.2225, 0.9721]
-        scale [0.0252, 0.005, 0.0252]
+        scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-left"
       }
@@ -4400,7 +4400,7 @@ prototypes {
         id: 274
         position [-0.18, 1.2396, -0.2841]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.141, 0.4158, 0.1275]
+        scale [0.1412, 0.4158, 0.1275]
         material: charcoal
         group: 70
         parent: "torso"
@@ -4447,12 +4447,12 @@ prototypes {
 
       shape Box "podBottomRim-right" {
         id: 947
-        position [-0.4265, 1.3945, -0.2911]
+        position [-0.4265, 1.3886, -0.2919]
         rotation [0.073, -0.0167, 0.2225, 0.9721]
         scale [0.5, 0.5, 0.5]
         material: charcoal
         blend: "SmoothIntersection"
-        smooth: 0.012
+        smooth: 0.005
         group: 70
         parent: "pod-right"
       }
@@ -4473,7 +4473,7 @@ prototypes {
         id: 930
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1516, 0.42, 0.15]
+        scale [0.1518, 0.42, 0.15]
         material: violetPodRight
         group: 71
         parent: "pod-right"
@@ -4557,7 +4557,7 @@ prototypes {
         id: 933
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1546, 0.42, 0.153]
+        scale [0.1548, 0.42, 0.153]
         material: shinCream
         group: 72
         parent: "pod-right"
@@ -4613,7 +4613,7 @@ prototypes {
         id: 936
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1577, 0.42, 0.156]
+        scale [0.1579, 0.42, 0.156]
         material: violetPodRight
         group: 73
         parent: "pod-right"
@@ -4669,7 +4669,7 @@ prototypes {
         id: 939
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1607, 0.42, 0.159]
+        scale [0.1609, 0.42, 0.159]
         material: shinCream
         group: 74
         parent: "pod-right"
@@ -4725,7 +4725,7 @@ prototypes {
         id: 942
         position [-0.18, 1.244, -0.3138]
         rotation [0.0749, 0, 0, 0.9972]
-        scale [0.1637, 0.42, 0.162]
+        scale [0.1639, 0.42, 0.162]
         material: violetPodRight
         group: 75
         parent: "pod-right"
@@ -4801,7 +4801,7 @@ prototypes {
 
       shape Superellipsoid "nozzle-right" {
         id: 281
-        position [-0.209, 0.9662, -0.3558]
+        position [-0.209, 0.9603, -0.3567]
         rotation [0.073, -0.0167, 0.2225, 0.9721]
         scale [0.045, 0.039, 0.045]
         material: charcoal
@@ -4812,9 +4812,9 @@ prototypes {
 
       shape Cylinder "nozzleBore-right" {
         id: 282
-        position [-0.209, 0.9546, -0.3596]
+        position [-0.1946, 0.9309, -0.3611]
         rotation [0.073, -0.0167, 0.2225, 0.9721]
-        scale [0.0297, 0.0225, 0.0297]
+        scale [0.0297, 0.018, 0.0297]
         material: charcoal
         blend: "Subtraction"
         group: 41
@@ -4823,9 +4823,9 @@ prototypes {
 
       shape Cylinder "nozzleGlow-right" {
         id: 283
-        position [-0.209, 0.9503, -0.3612]
+        position [-0.2038, 0.9496, -0.3583]
         rotation [0.073, -0.0167, 0.2225, 0.9721]
-        scale [0.0252, 0.005, 0.0252]
+        scale [0.0324, 0.0036, 0.0324]
         material: cyan
         parent: "pod-right"
       }
