@@ -757,7 +757,7 @@ armed removal, or `armed=none`), one
 runs it; a seat, binding, schedule step or world document cannot.
 `gpu.capture <path> [<frames>]` captures the next 1 to 16 frames with the GPU
 capture tool the boot loaded (`--capture-tool pix|renderdoc`): PIX writes one
-`.wpix` holding them all, RenderDoc one `<path>_frame<n>.rdc` a frame, and each
+`.wpix` holding them all, RenderDoc one `.rdc` a frame (`<path>_capture.rdc`, then `<path>_capture_2.rdc` and on), and each
 written file is narrated on stderr as `[gpu.capture] <tool> wrote <file>`. A bare
 `gpu.capture` describes the tool and what is armed; with no tool loaded it
 refuses. A crossing lands on the same tick on every run of one document and

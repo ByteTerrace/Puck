@@ -638,9 +638,21 @@ Vulkan layer for the process, so the instance and device it captures are the
 ones the World creates. Its overlay is off, and the run names its objects
 through `VK_EXT_debug_utils`, which also carries every pass's label. PIX
 captures Direct3D 12 only, so `--capture-tool pix` refuses a Vulkan boot.
-`gpu.capture <path> [<frames>]` captures the next frames, one
-`<path>_frame<n>.rdc` a frame, each bracketed by `StartFrameCapture` and
-`EndFrameCapture` around the frame's work and present (`GpuFrameCapture`).
+`gpu.capture <path> [<frames>]` captures the next frames, one `.rdc` a frame
+(`<path>_capture.rdc`, then `<path>_capture_2.rdc` and on), each bracketed by
+`StartFrameCapture` and `EndFrameCapture` around the frame's work and present
+(`GpuFrameCapture`). A capture holds every submission of its frame: on the
+debug world five in a steady frame from the spawn camera (the residency's
+upload, its environment, the world view, the main graph and the display
+encode) and nine in the chase layout with the portal windows in view.
+
+Read a capture in `qrenderdoc` for its events, textures and per-event GPU
+durations, or export it with `renderdoccmd convert -f <file>.rdc -o
+<file>.zip.xml -c zip.xml`: the XML holds every API call of the frame with its
+parameters and the objects' debug names, so a script counts submissions,
+barriers by stage and access, copies and query copies without opening the UI
+(`-c chrome.json` writes each call's CPU time instead). Delete the `.rdc` once
+read: a frame of the debug world is 70 to 110 MB.
 
 ## Debug names
 

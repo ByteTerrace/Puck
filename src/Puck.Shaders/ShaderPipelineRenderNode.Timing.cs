@@ -160,11 +160,32 @@ public sealed partial class ShaderPipelineRenderNode {
         var first = checked((uint)(pass * 2));
 
         pool.Write(command: command, index: (first + 1));
-        pool.Resolve(command: command, first: first, count: 2, destination: target.Readback!.BufferHandle, offset: (((ulong)pass) * 16));
-        m_gpu.Recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: target.Readback.BufferHandle,
-            sourceStageMask: GpuStage.Transfer, sourceAccessMask: GpuAccess.TransferWrite,
-            destinationStageMask: GpuStage.Host, destinationAccessMask: GpuAccess.HostRead);
         target.Recorded[pass] = true;
+    }
+    // Copies every pair the submission wrote into the slot's readback, one copy per run of adjacent timed passes, after
+    // the last command that writes one. A copy waits for its timestamps to land (VK_QUERY_RESULT_WAIT_BIT on Vulkan), so
+    // a copy between passes would drain the queue at every pass boundary.
+    private void ResolveTimings(nint command, int slot) {
+        if (!TimingActive || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
+        var target = m_timingSlots[slot];
+        var recorded = target.Recorded;
+        var resolved = false;
+
+        for (var pass = 0; (pass < recorded.Length);) {
+            if (!recorded[pass]) { pass++; continue; }
+            var end = pass;
+
+            while ((end < recorded.Length) && recorded[end]) { end++; }
+            pool.Resolve(command: command, first: checked((uint)(pass * 2)), count: checked((uint)((end - pass) * 2)),
+                destination: target.Readback!.BufferHandle, offset: (((ulong)pass) * 16));
+            resolved = true;
+            pass = end;
+        }
+        if (resolved) {
+            m_gpu.Recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: target.Readback!.BufferHandle,
+                sourceStageMask: GpuStage.Transfer, sourceAccessMask: GpuAccess.TransferWrite,
+                destinationStageMask: GpuStage.Host, destinationAccessMask: GpuAccess.HostRead);
+        }
     }
     private void SubmitTiming(int slot, IGpuSubmissionFence fence) {
         if (TimingActive && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {

@@ -508,8 +508,23 @@ previous frame and ends it after the frame presents, so the capture holds
 exactly the armed frames. PIX writes one `.wpix` through
 `BeginProgrammaticGpuCapture` and `EndProgrammaticGpuCapture`, asking again on
 the next frame while the end answers `E_PENDING`; RenderDoc writes one `.rdc` a
-frame. Open a `.wpix` in PIX (`pixtool open-capture`, or the application) for its
-timeline, occupancy and the barriers each event recorded.
+frame. A frame of the debug world is about 140 MB as a `.wpix` and 110 MB as an
+`.rdc`; delete each once read.
+
+PIX analyses a capture (`pixtool open-capture <file>.wpix save-event-list`,
+`collect-occupancy`, `save-high-frequency-counters`, or the application's
+timeline, occupancy and warnings) only on a machine with Windows developer
+mode on; without it every analysis refuses with
+`E_PIX_FEATURE_REQUIRES_DEVELOPER_MODE`, while taking a capture works. A PIX
+timing capture of a running World (`pixtool attach <pid>
+take-new-timing-capture <file>.wpix --duration=<ms>`) starts PIX's elevated
+service, so it waits on a UAC prompt and fails with `0x800704C7` when nobody
+answers it. RenderDoc reads a Direct3D 12 capture with neither: open it in
+`qrenderdoc`, or export it with `renderdoccmd convert -f <file>.rdc -o
+<file>.zip.xml -c zip.xml`, whose XML lists every call of the frame
+(`ExecuteCommandLists`, `ResourceBarrier` with each transition's states,
+`ResolveQueryData`, copies) with the objects' debug names, as
+[Vulkan's captures](vulkan.md#gpu-captures) describe.
 
 ## Debug names
 

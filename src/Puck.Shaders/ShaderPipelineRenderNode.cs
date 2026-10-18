@@ -1774,6 +1774,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             exported: exported,
             slot: slotIndex
         );
+        // The region copies' list runs first in the submission, so the frame's list resolves its timestamps too.
+        ResolveTimings(command: command, slot: slotIndex);
         m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
         commands.Add(item: command);
         exported?.BeginWrite();
