@@ -1,28 +1,17 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Sources;
-using Puck.DirectX;
-using Puck.DirectX.Apis;
-using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
-using Puck.Hosting;
 using Puck.Shaders;
-using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     // One feed per declared probe that writes a texture, keyed by probe id. The probes host declares the feed at its
     // own construction and asks for a ring of the kind's output extent when its kernel run starts; the ring is
     // provisioned here, on the render thread, at the next publish (the exportable targets need the render device).
     private readonly Dictionary<string, ProbeFeed> m_probeFeeds = new(comparer: StringComparer.Ordinal);
-
-    // The format of a camera view's export and of the probe ring that reads it: the view's own working color, which the
-    // node copies into the export as it is.
-    private static readonly GpuPixelFormat ViewExportFormat = RenderGraphPackageCatalog.WorkingFormat;
 
     // One export state per named camera whose view a probe socket reads, shared by every probe socket naming the
     // same camera (mirrors ProbeFeed's own id-keyed sharing). Reference counting keeps the export alive until the
@@ -57,24 +46,18 @@ internal sealed partial class WorldScreenBinder {
 
         feed.Request = (Width: width, Height: height);
 
-        if (
-            (feed.Targets is { } targets) &&
-            (feed.Output is { } provisioned) &&
-            (provisioned.Width == width) &&
-            (provisioned.Height == height)
-        ) {
-            output = provisioned;
-            generation = targets;
-            fault = "";
+        var provisioned = feed.TryProvisioned(
+            generation: out generation,
+            height: height,
+            output: out output,
+            width: width
+        );
 
-            return true;
-        }
+        fault = (provisioned
+            ? ""
+            : (feed.Fault ?? "probe output awaiting provisioning"));
 
-        output = default;
-        generation = null;
-        fault = (feed.Fault ?? "probe output awaiting provisioning");
-
-        return false;
+        return provisioned;
     }
     /// <summary>Returns the render adapter's own kernel host, which runs a probe whose trigger socket reads a rendered
     /// source, opening it on the adapter the render device reported the first time one asks.</summary>
@@ -82,38 +65,24 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="fault">Why no host is available, set only when this returns <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when the host is open.</returns>
     public bool TryGetRenderedKernelHost([NotNullWhen(true)] out IProbeKernelHost? host, out string fault) {
-        if (m_renderedKernels is { } open) {
-            host = open;
-            fault = "";
+        host = null;
 
-            return true;
-        }
         if (m_disposed) {
-            host = null;
             fault = "binder disposed";
 
             return false;
         }
         if (m_renderAdapterLuid is not { } adapterLuid) {
-            host = null;
             fault = "the render adapter reports no LUID yet";
 
             return false;
         }
-        if (!m_probeKernelHosts.TryOpen(
+
+        return TryOpenRenderedKernels(
             adapterLuid: adapterLuid,
             fault: out fault,
-            host: out var opened
-        )) {
-            host = null;
-
-            return false;
-        }
-
-        m_renderedKernels = opened;
-        host = opened;
-
-        return true;
+            host: out host
+        );
     }
     /// <summary>Retires a probe's output ring and drops its pending request; the feed goes dark until the next
     /// <see cref="TryGetProbeOutput"/>.</summary>
@@ -185,60 +154,33 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (!OperatingSystem.IsWindowsVersionAtLeast(
-            major: 10,
-            minor: 0,
-            build: 10240
-        )) {
-            fault = "view export needs Windows 10";
-
-            return false;
-        }
-
         if (m_viewPipelines is null) {
             fault = "the views are not configured";
 
             return false;
         }
 
-        var feed = GetOrAddViewExport(camera: camera);
-        var image = Runtime?.NodeOf(instance: feed.Name)?.ExportedImage;
-        var handle = (image?.SharedHandle ?? 0);
+        var feed = (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
+            ? GetOrAddViewExport(camera: camera)
+            : null);
+        var image = ((feed is null)
+            ? null
+            : Runtime?.NodeOf(instance: feed.Name)?.ExportedImage);
 
         generation = image;
+        ring = ((image is null)
+            ? null
+            : ReadyRing(
+                feed: feed!,
+                image: image
+            ));
+        fault = ((ring is not null)
+            ? ""
+            : ((feed is null)
+                ? "view export needs Windows 10"
+                : "view export awaiting a first rendered frame"));
 
-        if (
-            (0 == handle) ||
-            !feed.Slots.HasCompletedFrame ||
-            !ReferenceEquals(
-            objA: feed.CompletedGeneration,
-            objB: generation
-        )
-        ) {
-            fault = "view export awaiting a first rendered frame";
-
-            return false;
-        }
-
-        if (!ReferenceEquals(
-            objA: feed.InputGeneration,
-            objB: generation
-        )) {
-            feed.Input = new ProbeKernelInput.Ring(
-                Format: ViewExportFormat,
-                Height: ((int)feed.Height),
-                SharedFenceHandle: image!.SharedFenceHandle,
-                SharedTargetHandles: [handle],
-                Slots: feed.Slots,
-                Width: ((int)feed.Width)
-            );
-            feed.InputGeneration = generation;
-        }
-
-        ring = feed.Input!;
-        fault = "";
-
-        return true;
+        return (ring is not null);
     }
     /// <summary>Retains one live probe instance's use of a named view export.</summary>
     public void RetainViewExport(string cameraName) {
@@ -338,17 +280,10 @@ internal sealed partial class WorldScreenBinder {
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
         var feed = new ViewExportFeed(
-            create: (m_hostsOnDirectX
-                ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
-                    format: ViewExportFormat,
-                    height: height,
-                    width: width
-                )
-                : device => CreateImportedViewExport(
-                    device: device,
-                    height: height,
-                    width: width
-                )),
+            create: ExportFactory(
+                height: height,
+                width: width
+            ),
             height: height,
             name: name,
             width: width
@@ -359,54 +294,6 @@ internal sealed partial class WorldScreenBinder {
         ReconcileViews();
 
         return feed;
-    }
-    // The Vulkan host's view export: a Direct3D 12 simultaneous-access texture and a shared fence made on the binder's
-    // headless Direct3D 12 device on the render adapter, which the render device imports to write and to signal, as the
-    // camera route imports the targets it samples. The export owns all three and holds the headless device until it goes.
-    [SupportedOSPlatform("windows10.0.10240")]
-    private ImportedViewExport CreateImportedViewExport(IGpuDeviceContext device, uint width, uint height) {
-        var adapterLuid = (m_renderAdapterLuid ?? throw new InvalidOperationException(message: "a view export needs the render adapter's LUID"));
-        var targetDevice = (m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
-            adapterLuid: adapterLuid,
-            deviceApi: new DirectXNativeDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        )));
-        var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetDevice.Resource));
-        var texture = export.CreateSharedComputeImage(
-            format: ViewExportFormat,
-            height: height,
-            width: width
-        );
-        IGpuExportableFence? fence = null;
-
-        try {
-            fence = export.CreateExportableFence();
-
-            if (!device.Services.SurfaceTransferFactory.TryImportWritable(
-                format: texture.Format,
-                height: height,
-                image: out var imported,
-                refusal: out var refusal,
-                sharedFenceHandle: fence.SharedHandle,
-                sharedHandle: texture.SharedHandle,
-                usage: texture.Usage,
-                width: width
-            )) {
-                throw new InvalidOperationException(message: $"the render device cannot write a view export: {refusal}");
-            }
-
-            return new ImportedViewExport(
-                fence: fence,
-                imported: imported,
-                targetDevice: targetDevice,
-                texture: texture
-            );
-        } catch {
-            fence?.Dispose();
-            texture.Dispose();
-
-            throw;
-        }
     }
     private ProbeFeed GetOrAddProbeFeed(string id) {
         if (!m_probeFeeds.TryGetValue(
@@ -446,70 +333,20 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        m_renderedKernels?.Signal();
+        SignalRenderedKernels();
     }
     private void ProvisionProbeOutput(IGpuDeviceContext deviceContext, ProbeFeed feed, int width, int height) {
         feed.Release();
-
-        if (m_renderAdapterLuid is not { } adapterLuid) {
-            feed.Fault = "the render adapter reports no LUID";
-            feed.Refusal = feed.Fault;
-
-            return;
-        }
-        if (!OperatingSystem.IsWindowsVersionAtLeast(
-            major: 10,
-            minor: 0,
-            build: 10240
-        )) {
-            feed.Fault = "shared probe textures need Windows 10";
-            feed.Refusal = feed.Fault;
-
-            return;
-        }
-        if (!TryProvisionSharedRing(
-            adapterLuid: adapterLuid,
-            deviceContext: deviceContext,
-            fault: out var fault,
-            fence: out var fence,
-            format: GpuPixelFormat.R8G8B8A8Unorm,
-            height: height,
-            images: out var images,
-            importedSurfaces: out var surfaces,
-            imports: out var imports,
-            sharedFence: true,
-            width: width
-        )) {
-            feed.Fault = fault;
-            feed.Refusal = fault;
-
-            return;
-        }
-
-        var slots = new LatestSlotPublication();
-
-        slots.Configure(targetCount: images.Count);
-
-        var targets = new SharedTargetRing(
-            fence: fence,
-            images: images,
-            importedSurfaces: surfaces,
-            imports: imports,
-            ring: slots,
-            targetDevice: m_cameraTargetDevice
-        );
-
-        feed.Targets = targets;
-        feed.Output = new ProbeKernelOutput(
-            Width: width,
-            Height: height,
-            TargetFormat: GpuPixelFormat.R8G8B8A8Unorm,
-            SharedTargetHandles: targets.SharedHandles,
-            Slots: slots,
-            SharedFenceHandle: targets.ProducerFenceHandle
-        );
-        feed.Fault = null;
-        feed.Refusal = null;
+        feed.Fault = ((m_renderAdapterLuid is { } adapterLuid)
+            ? ProvisionProbeRing(
+                adapterLuid: adapterLuid,
+                deviceContext: deviceContext,
+                feed: feed,
+                height: height,
+                width: width
+            )
+            : "the render adapter reports no LUID");
+        feed.Refusal = feed.Fault;
     }
     // Retires every probe's ring on the current device and keeps each feed's request, so after a device loss the next
     // publish provisions a fresh ring (a new generation) on the replacement. The render adapter's kernel host goes first,
@@ -533,188 +370,53 @@ internal sealed partial class WorldScreenBinder {
         m_viewExportReferences.Clear();
     }
 
+    // Retires a shared ring, when there is one; disposed once no submitted frame samples it.
+    private static void RetireRing(SharedTargetRing? ring) => ring?.Retire();
+
     // One probe output's feed: the ring its kernel publishes into and the render resources behind it, the run that
     // writes it, plus the pending extent request and live/fault state.
-    private sealed class ProbeFeed(string id) {
+    private sealed partial class ProbeFeed(string id) {
         public bool Declared { get; set; }
         public string? Fault { get; set; }
         // Why the probe's ring could not be provisioned, until a later provision succeeds.
         public string? Refusal { get; set; }
         public string Id { get; } = id;
         public bool Live { get; set; }
-        // How the kernel's writes reach the render device: the ring's shared fence unless the render device refused it,
-        // then as the kernel opened it.
-        public SharedFenceOrder Order => ((Targets is { FenceRefusal.Length: > 0 } targets)
-            ? new SharedFenceOrder(
-                Reason: targets.FenceRefusal,
-                SharedFence: false
-            )
-            : (Run?.Order ?? SharedFenceOrder.Pending));
         public ProbeKernelOutput? Output { get; set; }
         public (int Width, int Height)? Request { get; set; }
         public IProbeKernelRun? Run { get; set; }
         public SharedTargetRing? Targets { get; set; }
 
-        public GpuImageLease AcquireFrame() {
-            if (
-                !Live ||
-                (Targets is not { } targets)
-            ) {
-                return 0;
-            }
-
-            return (targets.TryAcquire(frame: out var frame)
-                ? frame
-                : 0
-            );
-        }
-        public nint Handle() {
-            if (
-                !Live ||
-                (Output is not { } output) ||
-                (Targets is not { } targets)
-            ) {
-                return 0;
-            }
-
-            return targets.Handle(slot: output.Slots.LatestSlot);
-        }
         public void Release() {
             var targets = Targets;
 
             Targets = null;
             Output = null;
             Live = false;
-            targets?.Retire();
+            RetireRing(ring: targets);
         }
-    }
-    // A probe output as a source instance's feed: an imported source whose image the probe's kernel writes on its host's
-    // device, published with the value it signals on the ring's shared fence, which the adapter hands out through the
-    // capture gate as external content. The binder provisions and services the ring each publish, and retires it on
-    // device loss, so the feed publishes, recovers and releases nothing of its own. A probe lights nothing.
-    private sealed class ProbeSourceFeed(ProbeFeed feed) : IWorldImportFeed {
-        private ImageSourceDescriptor m_descriptor = new(
-            Cadence: ImageSourceCadence.Tick,
-            Color: ImageColorEncoding.Srgb,
-            Content: ImageContentClass.External,
-            Format: ImagePixelFormat.R8G8B8A8Unorm,
-            Height: 0,
-            Producer: WorldImageProducerSettings.ProbeId,
-            Transport: ImageSourceTransport.Imported,
-            Width: 0
-        );
+        // Reads the ring provisioned at an extent, and its identity, when one is.
+        public bool TryProvisioned(int width, int height, out ProbeKernelOutput output, out object? generation) {
+            var ready = ((Targets is not null) && (Output is { } provisioned) && (provisioned.Width == width) && (provisioned.Height == height));
 
-        // The extent is the provisioned ring's, zero on both axes while none is; the descriptor is a new record only when
-        // it moves.
-        public ImageSourceDescriptor Descriptor {
-            get {
-                var (width, height) = ((feed.Output is { } output)
-                    ? (((uint)output.Width), ((uint)output.Height))
-                    : (0U, 0U));
+            output = (ready
+                ? Output!.Value
+                : default);
+            generation = (ready
+                ? Targets
+                : null);
 
-                if (
-                    (width != m_descriptor.Width) ||
-                    (height != m_descriptor.Height)
-                ) {
-                    m_descriptor = (m_descriptor with {
-                        Height = height,
-                        Width = width,
-                    });
-                }
-
-                return m_descriptor;
-            }
-        }
-        public FrameRender Answer => (feed.Live
-            ? FrameRender.Rendered
-            : ((feed.Refusal is { } refusal)
-                ? FrameRender.Refused(reason: refusal)
-                : FrameRender.Waiting(reason: (feed.Fault ?? "probe awaiting a first frame"))));
-        public string? Fault => (feed.Live
-            ? null
-            : (feed.Fault ?? "probe awaiting a first frame")
-        );
-        public ProbeFeed Feed => feed;
-        public Vector3 Light => Vector3.Zero;
-
-        public GpuImageLease AcquireFrame() => feed.AcquireFrame();
-        public void Dispose() { }
-        public nint Handle() => feed.Handle();
-        public void NotifyDeviceLost() { }
-        // The binder services the ring each publish; a probe whose ring could not be provisioned refuses until a later
-        // provision succeeds, and one provisioned waits for its kernel's first frame.
-        public FrameRender Publish(in FrameContext context) => Answer;
-    }
-    // A view export on the Vulkan host: the render device's import of a texture and a fence the binder's headless
-    // Direct3D 12 device made, which the engine writes and signals as it would an image of its own. The import goes first,
-    // then the fence and the texture, and the headless device last of all.
-    private sealed class ImportedViewExport : IGpuExportableImage {
-        private readonly IGpuExportableFence m_fence;
-        private readonly IGpuExportableImage m_imported;
-        private readonly DisposeAfterDependents<IDisposable> m_targetDevice;
-        private readonly IGpuExportableImage m_texture;
-
-        private bool m_disposed;
-
-        public ImportedViewExport(IGpuExportableImage imported, IGpuExportableImage texture, IGpuExportableFence fence, DisposeAfterDependents<IDisposable> targetDevice) {
-            m_fence = fence;
-            m_imported = imported;
-            m_targetDevice = targetDevice;
-            m_texture = texture;
-            targetDevice.AddDependent();
-        }
-
-        public GpuPixelFormat Format => m_imported.Format;
-        public uint Height => m_imported.Height;
-        public nint ImageHandle => m_imported.ImageHandle;
-        public nint ImageViewHandle => m_imported.ImageViewHandle;
-        public nint SharedFenceHandle => m_imported.SharedFenceHandle;
-        public nint SharedHandle => m_imported.SharedHandle;
-        public GpuImageUsage Usage => m_imported.Usage;
-        public uint Width => m_imported.Width;
-
-        public void BeginWrite() => m_imported.BeginWrite();
-        public ulong CompleteWrite() => m_imported.CompleteWrite();
-        public void Dispose() {
-            if (m_disposed) {
-                return;
-            }
-
-            m_disposed = true;
-            m_imported.Dispose();
-            m_fence.Dispose();
-            m_texture.Dispose();
-            m_targetDevice.RemoveDependent();
+            return ready;
         }
     }
     // A camera view's export: the image its node copies each frame into, created on the render device, which a probe's
     // kernel host reads through the ring's latest completed slot.
-    private sealed class ViewExportFeed(string name, uint width, uint height, Func<IGpuDeviceContext, IGpuExportableImage> create) : IShaderPipelineOutputExport {
-        public object? CompletedGeneration { get; private set; }
-
+    private sealed partial class ViewExportFeed(string name, uint width, uint height, Func<IGpuDeviceContext, IGpuExportableImage> create) : IShaderPipelineOutputExport {
         public uint Height { get; } = height;
-
-        public ProbeKernelInput.Ring? Input { get; set; }
-        public object? InputGeneration { get; set; }
-
         public string Name { get; } = name;
         public SingleSlotPublication Slots { get; } = new();
         public uint Width { get; } = width;
 
-        public IGpuExportableImage Create(IGpuDeviceContext device) => create(arg: device);
-        public bool TryBeginWrite() => Slots.TryBeginWrite();
-        // Publishes the image a completed frame rendered into before the ring's ready state. A failed first submission
-        // after device loss may preserve an older readable image, but it must never bless the replacement image as
-        // completed.
-        public void EndWrite(bool written, IGpuExportableImage? image, ulong writtenValue) {
-            if (written) {
-                CompletedGeneration = image;
-            }
-
-            Slots.EndWrite(
-                completed: written,
-                fenceValue: writtenValue
-            );
-        }
+        private Func<IGpuDeviceContext, IGpuExportableImage> Factory { get; } = create;
     }
 }

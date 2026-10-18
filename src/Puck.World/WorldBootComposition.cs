@@ -454,6 +454,7 @@ public static class WorldBootComposition {
                 // router, which the boot order registers after this factory runs.
                 perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
                 facts: () => sp.GetRequiredService<WorldOverlayFacts>(),
+                speech: sp.GetRequiredService<WorldSpeechClock>(),
                 // On the D3D12 host the window/monitor capture feeds publish GPU-side into shared textures the
                 // screens sample directly; the Vulkan host keeps the CPU-pixel transport for THOSE. The shared
                 // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless

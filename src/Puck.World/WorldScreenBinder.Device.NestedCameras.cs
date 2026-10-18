@@ -12,7 +12,7 @@ namespace Puck.World;
 // destination's scene, or a session's own residency. The dresser of that residency films each camera into its frame
 // after its own views, through the world's own mirror (WorldSessionSceneEmitter.ResolveCamera), and the binder records
 // the index each one landed at, which the camera's instance renders.
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     // Where each camera view of another world rendered at its residency's last dress, by its view name: a dress drops
     // the views of its residency it no longer films, and a nesting move drops those no live level shows
     // (PruneNestedFilms).
@@ -74,8 +74,8 @@ internal sealed partial class WorldScreenBinder {
             });
         }
     }
-    // The level whose screens show a camera view of another world, by the view's name, or null.
-    private WorldNestedScreens<SessionFeed>? NestedCameraLevel(string name) {
+    // The infinity layer's or routed world's level whose screens show a camera view of another world, or null.
+    private WorldNestedScreens<SessionFeed>? PresentedCameraLevel(string name) {
         foreach (var entry in InfinityEntries()) {
             if ((entry.Screens is { } screens) && screens.TryCamera(camera: out _, name: name)) { return screens; }
         }
@@ -85,20 +85,6 @@ internal sealed partial class WorldScreenBinder {
                 name: name
             )) {
                 return routed;
-            }
-        }
-
-        EnsureFeeds();
-
-        foreach (var feed in m_feeds) {
-            if (
-                (feed.Nested is { } level) &&
-                level.TryCamera(
-                    camera: out _,
-                    name: name
-                )
-            ) {
-                return level;
             }
         }
 
@@ -149,9 +135,9 @@ internal sealed partial class WorldScreenBinder {
                     host: host,
                     scene: window.Scene
                 );
-            } else if (SessionResidencyOf(feed: feed) is { } own) {
+            } else if (feed.Registered) {
                 target = feed;
-                residency = own;
+                residency = SessionResidencyOf(feed: feed);
             } else {
                 return false;
             }

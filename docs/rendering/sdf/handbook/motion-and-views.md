@@ -36,7 +36,7 @@ bool TryResolveAnchor(int anchorId, out SdfAnchor anchor);
 `Puck.World.Client`'s `WorldClient` is the main source: an anchor id is an
 entity slot, and it resolves to that entity's interpolated render pose.
 `FixedAnchorSource` (in `WorldCameraRigCompiler.cs`) always returns one pose,
-and `WorldScreenBinder.CameraViews.cs` adds sources for an entity part and a
+and `WorldScreenBinder.Device.CameraViews.cs` adds sources for an entity part and a
 ranked camera candidate. `SdfAnchorTable`, a name-keyed source, has no users.
 
 The rule this produces is simple and central: **an id whose subject is gone
@@ -369,4 +369,4 @@ screen source is pure shading fed by a wire. A booted cabinet's CRT is a
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
   `src/Puck.SdfVm/Views/ViewTransition.cs`,
   `src/Puck.World.Client/Sources/WorldViewInstances.cs`,
-  `src/Puck.World/WorldScreenBinder.{CameraViews,Session,Views}.cs`.
+  `src/Puck.World/WorldScreenBinder.{CameraViews,Session,Views}.cs` and their device work,

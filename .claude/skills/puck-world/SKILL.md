@@ -111,6 +111,13 @@ the composition root.
 **Mint generated names through `GeneratedName`** (`$` inside a document, `~` in
 a path), never by concatenation.
 
+**The screen binder's device work lives in `WorldScreenBinder.Device.*`**, the
+prefix `build/CoverageGpuOnly.txt` lists: what needs a GPU device or its shared
+resources, the frame presenter, the render graph's running instances, or a
+camera or capture handing over frames. `WorldScreenBinderLawTests` reaches every
+line of the other binder files on the CPU, so a binder member that needs no
+device lands there with a test.
+
 **Adding an authorable feature owes, in one change:**
 
 1. Search `src/Puck.World.Schema` for existing vocabulary first (a camera

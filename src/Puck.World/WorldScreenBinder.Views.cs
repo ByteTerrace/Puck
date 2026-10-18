@@ -10,7 +10,7 @@ namespace Puck.World;
 // the world's residency (FilmViews); a session screen renders a residency of its own, which the binder creates when the
 // render graph's package first resolves the instance and releases once the session is gone. The binder hands the
 // instances to its mappings, which the view graph host composes into the running set.
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     // The kernels every view's residency records with, read once from the composition's pipeline cache.
     private SdfKernelSet? m_viewKernels;
     // What the views are composed with: the host world's frame source, whose glyph atlas, decals and moving screens a
@@ -51,7 +51,7 @@ internal sealed partial class WorldScreenBinder {
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
         ReconcileRoutedResidencies();
-        CrossingCapture?.Present(previousFrame: (Runtime?.Render ?? FrameRender.Waiting(reason: "the renderer is not built")));
+        PresentCrossing();
     }
     /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, a session
     /// screen's residency, created the first time the render graph's package asks for it once the views are configured,
@@ -97,39 +97,21 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
-        // A session of the boot world renders as a view of the World's own residency, filmed after its seats' views.
-        if (feed.Home) {
-            if (ViewHost is not { } world) {
-                return false;
-            }
+        // A session the presentation routed renders as a view of a residency it shares; any other renders a residency of
+        // its own.
+        var resolved = ((feed.Home || (feed.Route.Window is not null))
+            ? SharedSessionView(
+                feed: feed,
+                name: name
+            )
+            : new SdfWorldView(
+                Residency: SessionResidencyOf(feed: feed),
+                View: 0
+            ));
 
-            view = new SdfWorldView(
-                Residency: world,
-                View: m_homeViewIndices.GetValueOrDefault(key: name)
-            );
+        view = resolved.GetValueOrDefault();
 
-            return true;
-        }
-
-        // A session joined to its destination's endpoint scene renders its view there, from the one residency that
-        // scene's seats and windows share; never a residency of its own it would leave at the next frame.
-        if (feed.Route.Window is { } window) {
-            return TryResolveWindowView(
-                view: out view,
-                window: window
-            );
-        }
-
-        if (SessionResidencyOf(feed: feed) is not { } residency) {
-            return false;
-        }
-
-        view = new SdfWorldView(
-            Residency: residency,
-            View: 0
-        );
-
-        return true;
+        return resolved.HasValue;
     }
     /// <summary>Returns the view a render-graph instance of the world's package renders this frame: a view this binder
     /// registered (<see cref="TryResolveView"/>), the routed view of a seat presented in another world, or else one of the
@@ -160,13 +142,9 @@ internal sealed partial class WorldScreenBinder {
             ));
     }
 
-    // A session's own residency, rendering its frame source, created the first time a view resolves to it and made again
-    // when its frame source is another; null before the views are configured.
-    private SdfWorldResidency? SessionResidencyOf(SessionFeed feed) {
-        if (!feed.Registered) {
-            return null;
-        }
-
+    // A registered session's own residency, rendering its frame source, created the first time a view resolves to it and
+    // made again when its frame source is another.
+    private SdfWorldResidency SessionResidencyOf(SessionFeed feed) {
         var source = OwnSourceOf(feed: feed);
         var name = feed.RegistrationName;
 
@@ -192,46 +170,6 @@ internal sealed partial class WorldScreenBinder {
 
         return session.Residency;
     }
-    // A session screen's residency, rendering the session feed's frame source on its own clock, its destination's screens
-    // showing what the feed's level shows.
-    private ViewResidency CreateSessionResidency(SessionFeed feed, string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
-        var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
-            screenSources: new FeedScreenSources(
-                feed: feed
-            ),
-            dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
-            frameSource: new WorldSessionFrameSource(
-                captureHostFirst: CaptureHostFirst,
-                inner: source,
-                resolution: resolution,
-                resolveResolution: (view, width, height) => ResolveResolution(height: height, name: name, view: view, width: width)
-            ),
-            height: ((uint)resolution.Height),
-            instanceCapacity: source.WorstCaseInstanceCapacity,
-            kernels: ViewKernels(),
-            name: name,
-            meshLibrary: MeshLibrary,
-            pipelines: m_viewPipelines!,
-            programWordCapacity: source.WorstCaseProgramWordCapacity,
-            width: ((uint)resolution.Width)
-        );
-
-        RegisterViewWork(
-            lifetime: residency.WorkLifetime,
-            name: name,
-            transforms: source.MovedTransforms,
-            work: residency.Work
-        );
-        Console.Error.WriteLine(value: $"[world.view: {name} renders a residency of its own of '{feed.InstanceName}': its session does not disclose everything that world holds]");
-
-        return new ViewResidency(
-            Residency: residency,
-            Source: source
-        );
-    }
-    private SdfKernelSet ViewKernels() =>
-        (m_viewKernels ??= m_viewPipelines!.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_viewHostsOnDirectX)));
     // Releases every session residency whose frame source differs from its session's: the view's instance leaves the
     // render graph, whose passes give back their holds once the device
     // has finished with them.

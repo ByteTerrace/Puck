@@ -19,7 +19,7 @@ namespace Puck.World;
 /// frames.
 /// </summary>
 public sealed class WorldCapturePixels : IDisposable {
-    private readonly WorldScreenBinder.ConvertedPixels m_pixels;
+    private readonly WorldConvertedPixels m_pixels;
     private readonly string m_uncaptured;
 
     /// <summary>Initializes a new instance of the <see cref="WorldCapturePixels"/> class, which has captured no frame.</summary>
@@ -28,7 +28,7 @@ public sealed class WorldCapturePixels : IDisposable {
     public WorldCapturePixels(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        m_pixels = new WorldScreenBinder.ConvertedPixels(
+        m_pixels = new WorldConvertedPixels(
             content: ImageContentClass.External,
             name: name,
             producer: WorldImageProducerSettings.CaptureId

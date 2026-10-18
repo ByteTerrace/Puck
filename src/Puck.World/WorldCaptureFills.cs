@@ -18,7 +18,7 @@ namespace Puck.World;
 /// </summary>
 public sealed class WorldCaptureFills : IDisposable {
     private readonly Func<bool> m_consumesExternal;
-    private readonly Dictionary<uint, WorldScreenBinder.ConvertedPixels> m_fills = new();
+    private readonly Dictionary<uint, WorldConvertedPixels> m_fills = new();
 
     private bool m_disposed;
 
@@ -129,7 +129,7 @@ public sealed class WorldCaptureFills : IDisposable {
             key: rgba,
             value: out var fill
         )) {
-            fill = new WorldScreenBinder.ConvertedPixels(
+            fill = new WorldConvertedPixels(
                 content: ImageContentClass.Presentation,
                 name: $"fill:{rgba:x8}",
                 producer: "fill"

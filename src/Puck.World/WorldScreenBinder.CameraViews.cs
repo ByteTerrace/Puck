@@ -1,12 +1,10 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.Shaders;
-using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -14,7 +12,7 @@ namespace Puck.World;
 // Camera views: each camera a screen, a HUD frame or a probe export shows is a registration here, which the render graph
 // runs as an sdf.world instance of that name. The instance renders a view of the world's own frame from the world's
 // residency: the presentation's dress films each registration's camera into the frame after its own views (FilmViews).
-internal sealed partial class WorldScreenBinder : IWorldViewScenes {
+public sealed partial class WorldScreenBinder : IWorldViewScenes {
     // The camera each view last rendered from, which a hit on a screen showing it continues through.
     private readonly Dictionary<string, CameraSnapshot> m_viewCameras = new(comparer: StringComparer.Ordinal);
     // Each camera view's index in the world's frame this frame, and how many views the presentation dressed before them.
@@ -28,13 +26,6 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     private readonly Dictionary<string, CameraSnapshot> m_homeCameras = new(comparer: StringComparer.Ordinal);
     private readonly List<WorldNestedScreens<SessionFeed>?> m_hostLevels = [];
     private readonly object m_homeFilms = new();
-
-    /// <summary>Gets the restrictions a camera view adds to the world's quality: a low-resolution diegetic display skips
-    /// ambient occlusion and soft shadows.</summary>
-    public static SdfViewQuality CameraViewQuality { get; } = new() {
-        DisableAmbientOcclusion = true,
-        DisableSoftShadows = true,
-    };
 
     // A same-kind pose/aim/FOV/rig/anchor/extent edit re-wires the live registration in place (a freshly compiled rig plus
     // its anchor sources); its instance and every wired slot survive untouched. The registration's row snapshot advances
@@ -182,7 +173,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     // A removed camera row: every slot filming it unbinds (a slot whose DECLARED source still names it — possible only
     // transiently inside one delivery, the validator rejects a durable dangling reference — keeps a visible fault), and
     // the registration is released so its instance leaves the render graph.
-    private void ReleaseCameraRow(string name) {
+    private void ReleaseCameraRow(string name, CameraRegistration registration) {
         foreach (var slot in m_slots.Values) {
             if (
                 (slot.View is { } view) &&
@@ -195,18 +186,12 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 slot.View = null;
 
                 if (slot.DeclaredSource is WorldScreenSource.View) {
-                    slot.DeclaredFault = $"camera '{name}' not declared";
+                    slot.DeclaredFault = $"camera '{registration.Row.Name}' not declared";
                 }
             }
         }
 
-        if (m_cameraViews.TryGetValue(
-            key: name,
-            value: out var registration
-        )) {
-            RetireViewExportForRecreation(cameraName: registration.Row.Name);
-        }
-
+        RetireViewExportForRecreation(cameraName: registration.Row.Name);
         ReleaseView(name: name);
         Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
     }
@@ -285,88 +270,6 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
             )
             : Vector3.Zero
         );
-    private bool TryResolveRankedAnchor(WorldCamera camera, int slot, out SdfAnchor anchor) {
-        var selected = WorldSeatAnchors.SelectAnchor(
-            camera: camera,
-            candidateIndex: out _,
-            evaluator: m_facts(),
-            slot: slot
-        );
-
-        switch (selected) {
-            case null:
-                anchor = new SdfAnchor(
-                    Position: Vector3.Zero,
-                    Orientation: Quaternion.Identity
-                );
-
-                return true;
-            case WorldAnchor.Entity entity:
-                return m_anchors.TryResolveAnchor(
-                    anchor: out anchor,
-                    anchorId: entity.Index
-                );
-            case WorldAnchor.EntityPart part:
-                return TryResolveEntityPart(
-                    anchor: out anchor,
-                    part: part
-                );
-            case WorldAnchor.Placement placement:
-                anchor = new SdfAnchor(
-                    Position: (((m_anchors is WorldClient client) && m_stamps.TryShapePosition(
-                        client: client,
-                        placementId: placement.PlacementId,
-                        position: out var live,
-                        shapeId: placement.ShapeId
-                    ))
-                    ? live
-                    : StaticAnchorPosition(placement: placement)),
-                    Orientation: Quaternion.Identity
-                );
-
-                return true;
-            case WorldAnchor.Group group:
-                anchor = new SdfAnchor(
-                    Position: GroupCentroid(group: group),
-                    Orientation: Quaternion.Identity
-                );
-
-                return true;
-            default:
-                if (m_anchors is WorldClient seatClient) {
-                    return WorldSeatAnchors.TryResolve(
-                        anchor: selected,
-                        client: seatClient,
-                        perception: m_perception,
-                        pose: out anchor,
-                        slot: slot,
-                        speech: m_facts().Speech,
-                        stamps: m_stamps,
-                        transforms: m_viewTransforms
-                    );
-                }
-
-                anchor = default;
-
-                return false;
-        }
-    }
-    private bool TryResolveEntityPart(WorldAnchor.EntityPart part, out SdfAnchor anchor) {
-        if (m_anchors is WorldClient client) {
-            return WorldEntityPartResolver.TryPackedPose(
-                client: client,
-                stamps: m_stamps,
-                entityIndex: part.Index,
-                partId: part.PartId,
-                transforms: m_viewTransforms,
-                pose: out anchor
-            );
-        }
-
-        anchor = default;
-
-        return false;
-    }
     // The set of screen indices currently wired to a camera name.
     private HashSet<int> WiredScreensFor(string name) {
         var indices = new HashSet<int>();
@@ -413,7 +316,10 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
             var registration = m_cameraViews[name];
 
             if (ResolveCamera(name: registration.Row.Name) is not { } next) {
-                ReleaseCameraRow(name: name);
+                ReleaseCameraRow(
+                    name: name,
+                    registration: registration
+                );
 
                 continue;
             }
@@ -425,16 +331,26 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 continue;
             }
 
+            var renamed = m_registrationNames.Of(
+                camera: next,
+                seat: registration.Seat
+            );
+
             if (!string.Equals(
-                a: m_registrationNames.Of(
-                    camera: next,
-                    seat: registration.Seat
-                ),
+                a: renamed,
                 b: name,
                 comparisonType: StringComparison.Ordinal
             )) {
                 RetireViewExportForRecreation(cameraName: registration.Row.Name);
                 ReleaseView(name: name);
+
+                // The screens filming the camera film the registration its new name runs under.
+                foreach (var slot in m_slots.Values) {
+                    if (slot.View?.Name == name) {
+                        slot.View = new ViewFeed(Name: renamed);
+                    }
+                }
+
                 RegisterCameraView(
                     camera: next,
                     seat: registration.Seat
@@ -545,169 +461,40 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     /// a session's, the one its last frame rendered from
     /// in the destination's space (<see cref="WorldSessionSceneEmitter.TryCamera"/>), so a hit on a portal's window
     /// continues into the destination along the ray the window rendered.</remarks>
-    public bool TryCamera(string view, out CameraSnapshot camera) {
-        if (
-            m_viewCameras.TryGetValue(
-                key: view,
-                value: out camera
-            ) ||
-            TryNestedCamera(
+    public bool TryCamera(string view, out CameraSnapshot camera) => (
+        m_viewCameras.TryGetValue(
+            key: view,
+            value: out camera
+        ) ||
+        TryNestedCamera(
+            camera: out camera,
+            name: view
+        ) ||
+        ((SessionFeedOf(name: view) is { } feed) && ((feed.Home || (RoutedWindowOf(feed: feed) is not null))
+            ? TryPresentedSessionCamera(
                 camera: out camera,
-                name: view
+                feed: feed,
+                view: view
             )
-        ) {
-            return true;
-        }
-
-        if (SessionFeedOf(name: view) is { } feed) {
-            if (feed.Home) {
-                return m_homeCameras.TryGetValue(
-                    key: view,
-                    value: out camera
-                );
-            }
-            if (RoutedWindowOf(feed: feed) is { } window) {
-                return window.Scene.TryCamera(
-                    camera: out camera,
-                    view: window.Index
-                );
-            }
-            if (feed.Emitter is { } session) {
-                return session.TryCamera(camera: out camera);
-            }
-        }
-
-        camera = default;
-
-        return false;
-    }
-    /// <inheritdoc/>
+            : ((feed.Emitter is { } session) && session.TryCamera(camera: out camera))))
+    );    /// <inheritdoc/>
     /// <remarks>A session answers from the program its last frame rendered (<see cref="WorldSessionSceneEmitter.TrySurface(Commands.SourceRay, out Maths.FixedVector3)"/>),
     /// so a pick through a portal lands on the destination's surface it shows; a camera view answers nothing.</remarks>
     public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
-        if (SessionFeedOf(name: view) is { } feed) {
-            if (
-                feed.Home &&
-                m_homeCameras.TryGetValue(
-                    key: view,
-                    value: out var camera
-                ) &&
-                (Presenter is { } presenter)
-            ) {
-                return presenter.TrySurface(
-                    from: camera.Position,
-                    point: out point,
-                    ray: ray
-                );
-            }
-            if (RoutedWindowOf(feed: feed) is { } window) {
-                return window.Scene.TrySurface(
-                    point: out point,
-                    ray: ray,
-                    view: window.Index
-                );
-            }
-            if (feed.Emitter is { } session) {
-                return session.TrySurface(
-                    point: out point,
-                    ray: ray
-                );
-            }
-        }
-
         point = default;
 
-        return false;
-    }
-    /// <inheritdoc/>
-    /// <remarks>Each camera view is a view of the frame after the presentation's own, at the quality of its first view
-    /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
-    /// may add restrictions to the world's quality but never lift one. The view's instance renders it from the world's
-    /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node.</remarks>
-    public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views) {
-        ArgumentNullException.ThrowIfNull(argument: transforms);
-        ArgumentNullException.ThrowIfNull(argument: views);
-
-        m_viewTransforms = transforms;
-        m_viewAuthoritativeTick = authoritativeTick;
-        m_hostViewCount = views.Count;
-        m_cameraViewIndices.Clear();
-        m_hostLevels.Clear();
-
-        var quality = ((views.Count > 0)
-            ? views[0].Quality.Restrict(other: CameraViewQuality)
-            : CameraViewQuality
-        );
-
-        foreach (var (name, registration) in m_cameraViews) {
-            m_cameraViewIndices[name] = views.Count;
-            views.Add(item: new SdfViewSnapshot(
-                Camera: FilmCamera(
-                    name: name,
-                    presentationSeconds: presentationSeconds,
-                    registration: registration
-                ),
-                Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-            ) {
-                CutRevision = registration.CutRevision,
-                Quality = quality,
-            });
-
-            views[^1] = ResolveResolution(views[^1], name, registration.Row.RenderWidth, registration.Row.RenderHeight);
-            m_hostLevels.Add(item: null);
-
-            if (Runtime?.NodeOf(instance: name) is { } node) {
-                node.Export = registration.Export;
-            }
-        }
-
-        FilmHomeViews(views: views);
-    }
-    // Films every session of the boot world, at any depth, as a view of the world's own frame after its camera views
-    // (SettleSessionRoutes), then the cameras of each level those sessions show: the world is resident once, however many
-    // windows show it. Each view records the level whose screens it shows (ReadOf).
-    private void FilmHomeViews(List<SdfViewSnapshot> views) {
-        m_homeViewIndices.Clear();
-        m_homeCameras.Clear();
-        EnsureFeeds();
-
-        foreach (var feed in m_feeds) {
-            if (!(feed.Home && feed.Registered)) {
-                continue;
-            }
-
-            var view = SharedViewOf(feed: feed);
-
-            m_homeViewIndices[feed.RegistrationName] = views.Count;
-            m_homeCameras[feed.RegistrationName] = view.Camera;
-            m_hostLevels.Add(item: feed.Nested);
-            views.Add(item: view);
-        }
-
-        m_nestedFilms.Begin(target: m_homeFilms);
-
-        foreach (var feed in m_feeds) {
-            if (!(feed.Home && feed.Registered) || (feed.Nested is not { } level)) {
-                continue;
-            }
-
-            var first = views.Count;
-
-            FilmLevel(
-                level: level,
-                mirror: feed.Mirror,
-                target: m_homeFilms,
-                views: views
-            );
-
-            for (var index = first; (index < views.Count); index++) {
-                m_hostLevels.Add(item: level);
-            }
-        }
-
-        m_nestedFilms.End(target: m_homeFilms);
-    }
-    /// <summary>Returns the view of the world's frame an instance numbered for one of the presentation's own views renders:
+        return ((SessionFeedOf(name: view) is { } feed) && ((feed.Home || (RoutedWindowOf(feed: feed) is not null))
+            ? TryPresentedSessionSurface(
+                feed: feed,
+                point: out point,
+                ray: ray,
+                view: view
+            )
+            : ((feed.Emitter is { } session) && session.TrySurface(
+                point: out point,
+                ray: ray
+            ))));
+    }    /// <summary>Returns the view of the world's frame an instance numbered for one of the presentation's own views renders:
     /// the numbered view, or the last of the presentation's own views when the frame has fewer, never a camera view's.</summary>
     /// <param name="view">The view the instance's name numbers.</param>
     /// <returns>The view's index in the world's frame.</returns>
@@ -720,81 +507,6 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         value: view
     );
 
-    // The camera a registration films from this frame: its anchor, then its rig, at the frame's presentation time and
-    // authoritative tick. A camera whose anchor does not resolve this frame (a companion shape not yet packed, a placement
-    // that just despawned) keeps the camera it last filmed from; one that has never filmed frames from its rig at the
-    // default anchor, and one with no rig (no client to compile against) from the world origin.
-    private CameraSnapshot FilmCamera(string name, CameraRegistration registration, float presentationSeconds) {
-        var anchor = default(SdfAnchor);
-        var resolved = (
-            (registration.AnchorSource is not { } source) ||
-            (
-                (registration.AnchorIdSource?.Invoke() is { } anchorId) &&
-                source.TryResolveAnchor(
-                    anchor: out anchor,
-                    anchorId: anchorId
-                )
-            )
-        );
-
-        if (
-            !resolved &&
-            m_viewCameras.TryGetValue(
-                key: name,
-                value: out var last
-            )
-        ) {
-            return last;
-        }
-
-        var (eye, target, fovRadians) = ((registration.Rig is { } rig)
-            ? rig.Resolve(
-                anchor: in anchor,
-                clock: new SdfCameraClock(
-                    AuthoritativeTick: m_viewAuthoritativeTick,
-                    PresentationSeconds: presentationSeconds
-                )
-            )
-            : (Vector3.Zero, -Vector3.UnitZ, (MathF.PI / 3f))
-        );
-        // The declared extent sets the aspect, whatever extent the render graph schedules the view at.
-        var camera = CameraSnapshot.LookAt(
-            fieldOfViewRadians: fovRadians,
-            position: eye,
-            target: target,
-            viewportHeight: registration.Row.RenderHeight,
-            viewportWidth: registration.Row.RenderWidth
-        );
-
-        m_viewCameras[name] = camera;
-
-        return camera;
-    }
-
-    private sealed class EntityPartAnchorSource(WorldScreenBinder owner, WorldAnchor.EntityPart part) : ISdfAnchorSource {
-        public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
-            _ = anchorId;
-
-            return owner.TryResolveEntityPart(
-                anchor: out anchor,
-                part: part
-            );
-        }
-    }
-    // Resolves a camera's anchor every frame: the winning ranked candidate (or the bare seat-relative anchor) for the
-    // registration's seat, then that anchor's pose through the same resolvers the configure-time sources use. A
-    // frame with no holding candidate rides the world frame.
-    private sealed class RankedAnchorSource(WorldScreenBinder owner, WorldCamera camera, int slot) : ISdfAnchorSource {
-        public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
-            _ = anchorId;
-
-            return owner.TryResolveRankedAnchor(
-                anchor: out anchor,
-                camera: camera,
-                slot: slot
-            );
-        }
-    }
     // One camera view's registration: the WorldCamera row it embodies (advanced by edits in place) — the diff baseline
     // ReconcileCameras works against — the 1-based seat a seat-relative registration resolves for (1 for a shared
     // registration), the rig and anchor that pose it, and the probe export its view's node renders into.

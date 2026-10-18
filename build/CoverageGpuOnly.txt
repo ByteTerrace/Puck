@@ -3,3 +3,6 @@
 # directory listed here may go unloaded. A prefix earns its place only when every line under it runs on a device alone:
 # code that a CPU test can reach is tested or deleted instead. The GPU-trait test classes
 # ([Trait("Category", "Gpu")]) are the evidence for what is listed here.
+# The screen binder's device work: what needs a GPU device or its shared resources, the frame presenter, the render
+# graph's running instances, or a camera or capture handing over frames. WorldScreenBinderLawTests covers the rest.
+src/Puck.World/WorldScreenBinder.Device.

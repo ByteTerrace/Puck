@@ -44,8 +44,12 @@ namespace Puck.World;
 /// prove both streams live before it replaces the established feed. Thus N camera screens sample at most two feeds. Single-threaded:
 /// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
 /// lock guards this state.</para>
+/// <para>The binder's device work, what needs a GPU device or its shared resources, the frame presenter, the render
+/// graph's running instances, or a camera or capture handing over frames, lives in the <c>WorldScreenBinder.Device.*</c>
+/// files, which <c>build/CoverageGpuOnly.txt</c> leaves out of the CPU suites' line coverage; every other line is reached
+/// by a CPU test.</para>
 /// </remarks>
-internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
+public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
     public WorldSkyAudition? SkyLayers { get; init; }
 
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
@@ -79,7 +83,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly WorldStampPool m_stamps;
     private readonly WorldPerceptionAnchor m_perception;
     // Resolved lazily: the facts read the input router, which the composition root registers after this binder.
-    private readonly Func<WorldOverlayFacts> m_facts;
+    private readonly Func<IOverlayPredicateEvaluator> m_facts;
+    private readonly WorldSpeechClock m_speech;
     // Keeps external images out of captures; see WorldCaptureGate.
     private readonly WorldCaptureGate m_captureGate;
     // The one delegate the gate resolves fills through (cached so a resolve allocates nothing), and the static converted
@@ -92,7 +97,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
     /// <summary>Gets the image producers the binder opens screen sources through, which the render root registers with its
     /// render-graph packages so a source instance opens through the same producers.</summary>
-    internal WorldImageProducers Producers => m_producers;
+    public WorldImageProducers Producers => m_producers;
 
     // Whether the host exports shared Direct3D 12 surfaces: a Direct3D 12 host on a platform that has them.
     private readonly bool m_exportsSurfaces;
@@ -197,6 +202,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="stamps">The compiled creation-look pool supplying authored entity parts.</param>
     /// <param name="perception">The per-seat perception anchor a seat-relative camera anchor resolves through.</param>
     /// <param name="facts">The overlay facts a ranked camera anchor list selects through (resolved on first use).</param>
+    /// <param name="speech">The speech clock a seat-relative camera anchor resolves a speaker's pose through.</param>
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
     /// window/monitor captures (the Vulkan host keeps their CPU-pixel path). The shared camera rides its GPU tier on
     /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
@@ -215,7 +221,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
     /// transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;
@@ -229,6 +235,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         ArgumentNullException.ThrowIfNull(argument: stamps);
         ArgumentNullException.ThrowIfNull(argument: perception);
         ArgumentNullException.ThrowIfNull(argument: facts);
+        ArgumentNullException.ThrowIfNull(argument: speech);
         ArgumentNullException.ThrowIfNull(argument: instanceHost);
         ArgumentNullException.ThrowIfNull(argument: roster);
 
@@ -245,6 +252,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_stamps = stamps;
         m_perception = perception;
         m_facts = facts;
+        m_speech = speech;
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
         m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
@@ -259,7 +267,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_seatCameraControls = ResolveSeatCameraControls(screens: screens);
         m_captureGate = new WorldCaptureGate(
             alwaysFills: alwaysFillsCaptures,
-            captureArmed: () => (Runtime?.PendingCapturePath is not null)
+            captureArmed: CaptureArmed
         );
         m_fills = new WorldCaptureFills(consumesExternal: ConsumesExternal);
         m_fillImage = m_fills.Acquire;
@@ -353,7 +361,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         slot.DeclaredFault = null;
 
         var outcome = source switch {
-            WorldScreenSource.None => (Ok: true, Message: $"screen {index} unbound"),
             WorldScreenSource.Machine => (Ok: true, Message: $"screen {index} machine (host-owned)"),
             WorldScreenSource.Producer producer => (Ok: true, Message: $"screen {index} showing producer '{producer.Id}'"),
             WorldScreenSource.Probe probe => ApplyProbeSource(
@@ -368,14 +375,15 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             // The document's own authored session record, verbatim, projection and resolution included.
             WorldScreenSource.Session session => ApplySessionSource(
             index: index,
-            session: session
+            session: session,
+            slot: slot
         ),
             WorldScreenSource.Text text => ApplyTextSource(
             index: index,
             slot: slot,
             text: text
         ),
-            _ => (Ok: false, Message: $"screen {index} source applies at next boot"),
+            _ => (Ok: true, Message: $"screen {index} unbound"),
         };
 
         if (source is not WorldScreenSource.View) {
@@ -418,17 +426,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         return (Ok: true, Message: $"screen {index} text ({text.Lines.Count} line(s))");
     }
-    // Whether the incoming screen list still declares a slot index — a linear scan over the tiny screen list (a handful
-    // of rows), so the removal pass needs no per-call HashSet allocation.
-    private static bool DeclaresIndex(IReadOnlyList<WorldScreen> screens, int index) {
-        foreach (var screen in screens) {
-            if (screen.Index == index) {
-                return true;
-            }
-        }
 
-        return false;
-    }
     // Retires the Vulkan camera route's headless device after the feeds retired their target sets: it is disposed once
     // the last image made on it is released, which a submitted frame's lease can defer.
     private void RetireCameraTargetDevice() {
@@ -546,10 +544,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_reconcileRemovals.Clear();
 
         foreach (var index in m_slots.Keys) {
-            if (!DeclaresIndex(
-                index: index,
-                screens: screens
-            )) {
+            if (RowOf(
+                rows: screens,
+                screen: index
+            ) is null) {
                 m_reconcileRemovals.Add(item: index);
             }
         }

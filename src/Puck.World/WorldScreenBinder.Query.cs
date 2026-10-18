@@ -1,7 +1,6 @@
 using Puck.Abstractions.Machines;
 using Puck.Platform;
 using Puck.SdfVm;
-using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -20,9 +19,9 @@ namespace Puck.World;
 /// <param name="Fault">A slot's live fault (a missing content file, no camera device, a window not found), or <see langword="null"/>.</param>
 /// <param name="Cartridge">The cartridge document the machine's content was compiled from, or <see langword="null"/>
 /// for content booted as read.</param>
-internal readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
+public readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
     long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null);
-internal sealed partial class WorldScreenBinder {
+public sealed partial class WorldScreenBinder {
     /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> — a facade over
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -50,21 +49,9 @@ internal sealed partial class WorldScreenBinder {
     /// and why. Only a camera on its GPU tier, a capture on its GPU route and a probe output cross devices.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The order, or <see langword="null"/> when the screen's source crosses no devices.</returns>
-    public SharedFenceOrder? FenceOrderAt(int index) {
-        var feed = ((InstanceOf(screen: index) is { } instance)
-            ? FeedOf(instance: instance)
-            : null);
-
-        return (feed switch {
-            WorldCameraSourceFeed camera => CameraFenceOrderFor(
-                seat: camera.Seat,
-                sensor: camera.Sensor
-            ),
-            CaptureSlotFeed { Feed: { RidesGpu: true, Source: { } source } } => source.GpuFenceOrder,
-            ProbeSourceFeed probe => probe.Feed.Order,
-            _ => null,
-        });
-    }
+    public SharedFenceOrder? FenceOrderAt(int index) => (((InstanceOf(screen: index) is { } instance) && (FeedOf(instance: instance) is { } feed))
+        ? FenceOrderOf(feed: feed)
+        : null);
     /// <summary>Returns a one-line description of every live cable link — a facade over
     /// <see cref="Server.WorldMachineHost.DescribeLinks"/>.</summary>
     public string DescribeLinks() => m_machines.DescribeLinks();
@@ -182,15 +169,5 @@ internal sealed partial class WorldScreenBinder {
     public bool TryReadOptions(int index, out string options) => m_machines.TryReadOptions(
         index: index,
         options: out options
-    );
-    /// <summary>Reconfigures a screen's live machine across the engine's options vocabulary — a facade over
-    /// <see cref="Server.WorldMachineHost.TryReconfigure"/>. Presentation calls that need this go through
-    /// <c>ScreenCommandModule</c>'s <c>WorldScreenOp.SetOptions</c> submission instead; this facade remains for
-    /// symmetry with the type's other read-through members.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The engine-specific options string to retarget to.</param>
-    public (bool Ok, string Message) TryReconfigure(int index, string? options) => m_machines.TryReconfigure(
-        index: index,
-        options: options
     );
 }
