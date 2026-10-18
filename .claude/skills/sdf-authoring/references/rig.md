@@ -89,7 +89,7 @@ resolves to `limb` when there are exactly three shapes, and a `limb` with any
 other count demotes to `spine`. A chain naming a missing shape id is dropped.
 
 `effectors` is up to 8 CCD solvers, `{ name, chain, tip, target, when, weight,
-plant }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
+plant, align }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
 over 64 iterations.
 
 A `target` is `{ kind }` of `surface`, `body`, or `state`:
@@ -117,6 +117,21 @@ resolved target once it drifts past `distance`, over `seconds`, along an arc
 `height` high. Effectors sharing a plant driver step one at a time; `body.rig`
 prints `planted=stepping` mid-step. `CreationLocomotionLawTests` pins it.
 
+`align` in [0, 1] (omitted = 0) keeps a planted tip's sole on the contact. The
+solve moves only the tip's origin, and the tip inherits the turn the chain made,
+so without it a boot planted off its rest offset tilts with its shin (toe in the
+ground, heel lifted). With it the solved tip turns about its own origin, the
+shortest way, until its rest axis against the probe `direction` (creation up for
+a `body` or `state` target) lies along the surface normal at the target: the
+probe's field gradient, latched with the plant and turned over a replant step,
+world up when there is no surface. It scales by the eased weight the goal blends
+by, so with `swingWeight: 0` the swing's own toe-off and heel lift are untouched
+off the ground, while the tip's own swings are levelled with the rest of its tilt
+on the ground. `standoff` stays measured to the tip's origin, since an aligned
+tip's origin sits exactly its rest height above the sole. `body.rig` appends
+`align=w normal=(x, y, z)` for an effector that authors it.
+`CreationLocomotionLawTests` pins it.
+
 ## How the moth moves
 
 Every part of the moth's motion is a driver, a swing or an effector in
@@ -133,7 +148,7 @@ Every part of the moth's motion is a driver, a swing or an effector in
 | Stride plane steered to the travel direction (sidestep, backpedal) | `heading`, `linear` ±0.5 between `sine` ±0.7 | each thigh, about the hip, around its stride swing |
 | Hips trail a turn, chest and head lead | `trail` (`turnRate` through `body-turn`) | pelvis −0.12, torso +0.08, helmet +0.07 |
 | Lean into a curving run, a start or a stop | `lean`, `surge` (accelerations through `body-lean`) | pelvis, pivoting about the ground point |
-| Feet plant while walking, step when turning in place or settling | `foot-left`/`foot-right` effectors, `stride` windows plus `replant` | thigh–shin chains, boot tips |
+| Feet plant while walking, step when turning in place or settling, soles flat on the ground | `foot-left`/`foot-right` effectors, `stride` windows plus `replant`, `align: 1` with `standoff` the boot centre's rest height | thigh–shin chains, boot tips |
 | Breath, flight pose, wings, airborne bank and cruise | `breath`, `flight`, `wings`, `bank`, `cruise` | torso, limbs, pods |
 
 The root shape is the pelvis, so a swing on it carries the whole body; the

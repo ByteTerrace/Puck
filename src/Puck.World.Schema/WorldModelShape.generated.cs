@@ -1526,6 +1526,7 @@ public static partial class WorldModelShape {
                 M("when", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.Authoring.CreationEffectorDocument), "When", Read | Write, static value => ((global::Puck.World.Authoring.CreationEffectorDocument)value).When),
                 M("weight", typeof(global::Puck.Assets.Documents.DocumentScalar), typeof(global::Puck.World.Authoring.CreationEffectorDocument), "Weight", Read | Write, static value => ((global::Puck.World.Authoring.CreationEffectorDocument)value).Weight),
                 M("plant", typeof(global::Puck.World.Authoring.CreationPlantDocument), typeof(global::Puck.World.Authoring.CreationEffectorDocument), "Plant", Read | Write, static value => ((global::Puck.World.Authoring.CreationEffectorDocument)value).Plant),
+                M("align", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.CreationEffectorDocument), "Align", Read | Write, static value => ((global::Puck.World.Authoring.CreationEffectorDocument)value).Align),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.CreationEffectorTargetDocument), true, JsonTypeInfoKind.Object, null,

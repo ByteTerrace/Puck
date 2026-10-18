@@ -5521,6 +5521,9 @@ prototypes {
             "shin-left"
           ]
           tip: "boot-left"
+          // The sole stays flat on the ground however far the planted boot sits from its rest offset, so the boot
+          // centre's rest height is the standoff that puts the whole sole on the surface.
+          align: 1
           "when" [
             "Grounded"
           ]
@@ -5550,6 +5553,7 @@ prototypes {
             "shin-right"
           ]
           tip: "boot-right"
+          align: 1
           "when" [
             "Grounded"
           ]

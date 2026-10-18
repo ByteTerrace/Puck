@@ -557,6 +557,9 @@ public static partial class CreationCanonicalizer {
                     Path: $"{path}.weight"
                 ));
             }
+            if ((effector.Align is { } align) && (!float.IsFinite(f: align) || (align < 0f) || (align > 1f))) {
+                errors.Add(item: new(Message: $"align {align} is outside [0, 1].", Path: $"{path}.align"));
+            }
 
             ValidateEffectorChain(
                 effector: effector,
