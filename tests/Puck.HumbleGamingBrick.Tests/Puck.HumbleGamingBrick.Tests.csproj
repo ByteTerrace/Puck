@@ -12,7 +12,8 @@
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The battery executable is the subject: the facts launch it and read its exit code and summary. -->
-        <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
+        <!-- The layout laws read the Humble components; the hang-guard laws drive the shared battery runner. -->
+        <ProjectReference Include="../../src/Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="../../src/Puck.Machines.Post/Puck.Machines.Post.csproj" />
     </ItemGroup>
 </Project>

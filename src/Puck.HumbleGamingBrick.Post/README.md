@@ -68,7 +68,7 @@ hand:
 
 | Lane | Rows | Cost | Where it runs |
 |---|---|---|---|
-| `gate` | recorded `pass`, unrecorded, and `unrunnable` | a passing case exits at its signature after a few frames | every change, and `dotnet test` (`tests/Puck.HumbleGamingBrick.Tests`) |
+| `gate` | recorded `pass`, unrecorded, and `unrunnable` | a passing case exits at its signature after a few frames | every change, through CI's runtime verification workflow (`verify.yml`); no CPU test suite runs it |
 | `frontier` | recorded `fail` and `inconclusive`, and `unrunnable` | every case runs to its frame cap | nightly, and on demand while working on accuracy |
 | `all` | every row | both | a landing that touches accuracy |
 
