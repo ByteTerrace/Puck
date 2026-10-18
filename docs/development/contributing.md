@@ -271,6 +271,32 @@ A Windows build of one project builds DXIL alone, so a Vulkan run
 build ([shader freshness](../reference/shaders.md#freshness)). Restore again
 (drop `--no-restore`) after changing a package or project reference.
 
+What the C# loop costs:
+
+- **Warm build nodes.** `dotnet build` and `dotnet run` leave their MSBuild
+  nodes running for the next build (node reuse is on by default), which then
+  starts with every node's tasks loaded, jitted and compiled. A cold build
+  starts every node afresh and pays that in each: a no-op build of
+  `src/Puck.World` took 32 to 48 s cold and 8 to 9 s warm on the reference
+  machine, under 60 to 90% load from other work. Idle nodes exit after a while,
+  so the first build after a long pause is cold. The `-nodeReuse:false` every
+  agent build passes ([verification](../../.claude/skills/verification/SKILL.md))
+  keeps shared agent machines free of lingering nodes and makes every agent
+  build cold; an agent timing this loop says which it measured.
+- **One compile.** An edit that keeps its project's public surface keeps its
+  reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
+  compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
+  other projects the World reaches, 64 in all with the world compiler's.
+- **One inline task.** Every build operation the tree implements in its own
+  code (the architecture gates, the shader build, the Direct3D 11 kernels, the
+  stale package sweep) is one inline task (`build/PuckBuildTasks.targets`), so
+  a cold node compiles it once rather than once per operation.
+- **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
+  in the `meshes` device cache), keyed by geometry and by the bake's own code
+  and kernels, so a reboot after an edit outside the bake loads every mesh
+  (`[sdf.mesh-bake] done … dispatches=0 … loaded=N`) and a changed creation
+  bakes its own groups alone.
+
 **HLSL** (an SDF kernel module under `src/Puck.SdfVm/Assets/Shaders/Sdf`): keep
 the World running, save the file, and type in its console or stdin:
 
