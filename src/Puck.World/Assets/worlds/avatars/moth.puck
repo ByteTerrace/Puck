@@ -3401,14 +3401,28 @@ prototypes {
         rounding: 0.003
       }
 
-      shape Superellipsoid "boot-left" {
+      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
+      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      shape Prism "boot-left" {
         id: 195
         position [0.2, 0.1315, 0.085]
-        scale [0.165, 0.125, 0.24]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.235, 0.235, 0.235]
         material: skin
         group: 21
         parent: "shin-left"
-        exponent: 2.6
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.04
+          vertices [
+            [-1, -0.1979]
+            [-1, 0.4617]
+            [0.1489, 0.4617]
+            [0.7872, -0.0489]
+            [0.8723, -0.134]
+            [0.8723, -0.1979]
+          ]
+        }
         swings [
           {
             driver: "stride"
@@ -3437,48 +3451,69 @@ prototypes {
         ]
       }
 
-      shape Box "footBase-left" {
+      shape Prism "bootPlan-left" {
         id: 196
-        position [0.2, 0.2515, 0.085]
-        scale [0.3, 0.215, 0.4]
+        position [0.2, 0.1315, 0.085]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.235, 0.12]
         material: skin
         blend: "Intersection"
         group: 21
         parent: "boot-left"
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.45
+        }
       }
 
-      shape Superellipsoid "toe-left" {
+      shape Prism "toe-left" {
         id: 199
-        position [0.2, 0.0915, 0.1]
-        scale [0.166, 0.075, 0.24]
+        position [0.2, 0.05, 0.085]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.255, 0.255, 0.255]
         material: violet
         group: 23
         parent: "boot-left"
-        exponent: 2.8
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.04
+          vertices [
+            [-0.9804, -0.1647]
+            [-0.9804, 0.1373]
+            [0.451, 0.1765]
+            [0.8431, 0.1373]
+            [1, 0]
+            [0.9216, -0.1647]
+          ]
+        }
       }
 
-      shape Box "toeFront-left" {
+      shape Prism "toePlan-left" {
         id: 200
-        position [0.2, 0.0715, 0.35]
-        scale [0.3, 0.085, 0.15]
+        position [0.2, 0.05, 0.085]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.14, 0.255, 0.08]
         material: violet
         blend: "Intersection"
         group: 23
         parent: "boot-left"
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.45
+        }
       }
 
       shape Prism "sole-left" {
         id: 201
-        position [0.2, 0.0255, 0.085]
+        position [0.2, 0.006, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.163, 0.237, 0.018]
+        scale [0.125, 0.235, 0.004]
         material: charcoal
         parent: "boot-left"
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 0.43
         }
-        rounding: 0.006
       }
 
       shape Cylinder "heelHousing-left" {
@@ -4532,14 +4567,28 @@ prototypes {
         rounding: 0.003
       }
 
-      shape Superellipsoid "boot-right" {
+      // The shoe, after the model sheet: a cream instep wedge sloping from the ankle down to the toe, trimmed in plan to
+      // a chamfered toe, on a chunky violet sole that chamfers up round the front, with a thin dark tread beneath.
+      shape Prism "boot-right" {
         id: 263
         position [-0.2, 0.1315, 0.085]
-        scale [0.165, 0.125, 0.24]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.235, 0.235, 0.235]
         material: skin
         group: 35
         parent: "shin-right"
-        exponent: 2.6
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.04
+          vertices [
+            [-1, -0.1979]
+            [-1, 0.4617]
+            [0.1489, 0.4617]
+            [0.7872, -0.0489]
+            [0.8723, -0.134]
+            [0.8723, -0.1979]
+          ]
+        }
         swings [
           {
             driver: "stride"
@@ -4568,48 +4617,69 @@ prototypes {
         ]
       }
 
-      shape Box "footBase-right" {
+      shape Prism "bootPlan-right" {
         id: 264
-        position [-0.2, 0.2515, 0.085]
-        scale [0.3, 0.215, 0.4]
+        position [-0.2, 0.1315, 0.085]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.135, 0.235, 0.12]
         material: skin
         blend: "Intersection"
         group: 35
         parent: "boot-right"
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.45
+        }
       }
 
-      shape Superellipsoid "toe-right" {
+      shape Prism "toe-right" {
         id: 267
-        position [-0.2, 0.0915, 0.1]
-        scale [0.166, 0.075, 0.24]
+        position [-0.2, 0.05, 0.085]
+        rotation [0, -diagonal, 0, diagonal]
+        scale [0.255, 0.255, 0.255]
         material: violet
         group: 37
         parent: "boot-right"
-        exponent: 2.8
+        profile {
+          kind: "Convex"
+          cornerRadius: 0.04
+          vertices [
+            [-0.9804, -0.1647]
+            [-0.9804, 0.1373]
+            [0.451, 0.1765]
+            [0.8431, 0.1373]
+            [1, 0]
+            [0.9216, -0.1647]
+          ]
+        }
       }
 
-      shape Box "toeFront-right" {
+      shape Prism "toePlan-right" {
         id: 268
-        position [-0.2, 0.0715, 0.35]
-        scale [0.3, 0.085, 0.15]
+        position [-0.2, 0.05, 0.085]
+        rotation [diagonal, 0, 0, diagonal]
+        scale [0.14, 0.255, 0.08]
         material: violet
         blend: "Intersection"
         group: 37
         parent: "boot-right"
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.45
+        }
       }
 
       shape Prism "sole-right" {
         id: 269
-        position [-0.2, 0.0255, 0.085]
+        position [-0.2, 0.006, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.163, 0.237, 0.018]
+        scale [0.125, 0.235, 0.004]
         material: charcoal
         parent: "boot-right"
         profile {
           kind: "RoundedRectangle"
           cornerRadius: 0.43
         }
-        rounding: 0.006
       }
 
       shape Cylinder "heelHousing-right" {
