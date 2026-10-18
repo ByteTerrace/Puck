@@ -481,6 +481,10 @@ bodyMotionPrograms [
       IntegratePlanarAndVerticalVelocity
       CommitPose
     ]
+    planarTarget {
+      backward: 0.7
+      strafe: 0.85
+    }
     version: "puck.body.program.v1"
   }
 ]
@@ -946,7 +950,7 @@ defaultSeatKit: "walker"
 
 dynamics [
   {
-    f: 2.2
+    f: 4
     name: "camera-boom"
     r: 0
     zeta: 1
@@ -1041,7 +1045,10 @@ kits {
         moveFrame: World
         shaping [
           {
-            along {}
+            along {
+              engage: 40
+              release: 50
+            }
             turnScale: 1
           }
         ]
@@ -5152,7 +5159,7 @@ seatDefaults {
     invertPitch: false
     invertYaw: false
     pitchSensitivity: 0.001
-    stickLookRate: 2.6
+    stickLookRate: 3.5
     yawSensitivity: 0.001
   }
 }
