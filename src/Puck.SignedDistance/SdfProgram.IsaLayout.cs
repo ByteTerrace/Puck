@@ -93,8 +93,9 @@ public sealed partial class SdfProgram {
     public const int MaterialVectorsPerEntry = 21;
     /// <summary>The paint table's float4 stride, written by PackPaints and read by the views pass's paint layer
     /// (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>): the frame origin and shape, the rotation, the residual scale, the shape's
-    /// two data vectors, the color and stroke, the slot and reach, then <see cref="PaintTableVectors"/> of side table.</summary>
-    public const int PaintVectorsPerEntry = (7 + PaintTableVectors);
+    /// two data vectors, the color and stroke, the slot and bound center, the bound half-extents, then
+    /// <see cref="PaintTableVectors"/> of side table.</summary>
+    public const int PaintVectorsPerEntry = (8 + PaintTableVectors);
     /// <summary>The side-table vectors a paint carries inline: a convex polygon's eight vertices or a sweep's curve
     /// (<c>SDF_PAINT_TABLE_VECTORS</c>).</summary>
     public const int PaintTableVectors = 4;

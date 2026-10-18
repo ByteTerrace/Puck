@@ -392,14 +392,14 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: [0f, 0f, 0f, 1f], actual: Enumerable.Range(start: (first + 4), count: 4).Select(selector: Lane));
         Assert.Equal(expected: [0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(start: (first + 20), count: 4).Select(selector: Lane));
         Assert.Equal(expected: SdfProgram.PaintWinningFrame, actual: program.Words[(first + 24)]);
-        Assert.Equal(expected: float.PositiveInfinity, actual: Lane(first + 25));
+        Assert.Equal(expected: [float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity], actual: Enumerable.Range(start: (first + 28), count: 3).Select(selector: Lane));
 
         var second = ((paintVector + SdfProgram.PaintVectorsPerEntry) * 4);
 
         Assert.Equal(expected: (uint)SdfShapeType.Sweep, actual: program.Words[(second + 3)]);
-        Assert.Equal(expected: (uint)((paintVector + SdfProgram.PaintVectorsPerEntry) + 7), actual: program.Words[(second + 12)]);
+        Assert.Equal(expected: (uint)((paintVector + SdfProgram.PaintVectorsPerEntry) + 8), actual: program.Words[(second + 12)]);
         Assert.Equal(expected: 5u, actual: program.Words[(second + 24)]);
-        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 28), count: 12).Select(selector: Lane));
+        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 32), count: 12).Select(selector: Lane));
         foreach (var paint in new[] {
             plane with { Rotation = default }, plane with { Stroke = -1f },
             plane with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, plane with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
@@ -429,6 +429,16 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: SdfShapeType.ConvexPolygon, actual: polygon.Type);
         Assert.Equal(expected: 3u, actual: BitConverter.SingleToUInt32Bits(value: polygon.Data0.X));
         Assert.Equal(expected: 6, actual: polygon.Table.Count);
+        // Bounds: the canonical box at the scale, a revolve's reach on every axis, a sweep's control points widened by
+        // its radius, and a plane unbounded.
+        Assert.Equal(expected: (SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Torus).HalfExtents * new Vector3(x: 1f, y: 2f, z: 1f)), actual: torus.Bound.HalfExtents);
+        Assert.Equal(expected: new Vector3(value: 0.5f * 1.0001f), actual: polygon.Bound.HalfExtents);
+        var revolve = SdfPaintShape.Of(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism);
+        Assert.Equal(expected: new Vector3(value: SdfSolidGeometry.Reach(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism)), actual: revolve.Bound.HalfExtents);
+        var sweep = SdfPaintShape.Of(curve: new SdfSweepParameters(A: Vector3.Zero, B: new Vector3(x: 0.5f, y: 0.5f, z: 0f), Bulge: 0f, C: Vector3.UnitX, RadiusEnd: 0.25f, RadiusStart: 0.25f, StrandOffset: 0f, Strands: 1, Twist: 0f), scale: new Vector3(value: 2f), type: SdfSolidPrimitive.Sweep);
+        Assert.Equal(expected: new Vector3(x: 1f, y: 0.5f, z: 0f), actual: sweep.Bound.Center);
+        Assert.Equal(expected: new Vector3(x: 1.5f, y: 1f, z: 0.5f), actual: sweep.Bound.HalfExtents);
+        Assert.True(condition: SdfPaintShape.Of(scale: Vector3.One, type: SdfSolidPrimitive.Plane).Bound.IsUnbounded);
         Assert.Throws<ArgumentException>(testCode: () => SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Path), scale: Vector3.One, type: SdfSolidPrimitive.Prism));
     }
     [Fact]

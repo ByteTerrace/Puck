@@ -183,11 +183,11 @@ public sealed partial class SdfProgram {
     }
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
-    // 3..4 the shape's data vectors, a side-table shape's offset naming row 7; 5 color, stroke;
-    // 6 (dynamic slot as uint bits, reach, 0, 0); 7.. the side table.
+    // 3..4 the shape's data vectors, a side-table shape's offset naming row 8; 5 color, stroke;
+    // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, 0); 8.. the side table.
     private void PackPaint(SdfPaint paint, int paintVector) {
         var shape = paint.Shape;
-        var tableVector = (paintVector + 7);
+        var tableVector = (paintVector + 8);
         var data0 = shape.Type switch {
             SdfShapeType.ConvexPolygon => shape.Data0 with {
                 X = BitConverter.UInt32BitsToSingle(value: ((((uint)tableVector) << 4) | (BitConverter.SingleToUInt32Bits(value: shape.Data0.X) & 0xFu))),
@@ -214,10 +214,11 @@ public sealed partial class SdfProgram {
         Row(row: 5, value: new(value: paint.Color, w: paint.Stroke));
         Row(row: 6, value: new(
             x: BitConverter.UInt32BitsToSingle(value: ((paint.Slot == SdfPaint.WinningFrame) ? PaintWinningFrame : (uint)paint.Slot)),
-            y: shape.Reach,
-            z: 0f,
-            w: 0f
+            y: shape.Bound.Center.X,
+            z: shape.Bound.Center.Y,
+            w: shape.Bound.Center.Z
         ));
+        Row(row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: 0f));
         for (var index = 0; (index < shape.Table.Count); index++) {
             m_words[((tableVector * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);
         }

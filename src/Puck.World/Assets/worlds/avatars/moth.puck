@@ -25,12 +25,21 @@ let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
 let violetPodLeft = 14 // violet under the left back pod's two #EED3A6 bands
 let violetPodRight = 15 // violet under the right back pod's two #EED3A6 bands
 let violetChest = 16 // violet under the breastplate's #EED3A6 lower band
+let shinCream = 17 // #EED3A6 under the shins' violet trims
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
 let diagonal = 0.7071068 // sin/cos of 45 degrees, the quarter-turn quaternion component
 let braidTwist = 0.247404 // sin of the braid's half-angle
 let braidUntwist = 0.9689124 // cos of the same
+// The shin's pentagonal side panel, in the panel prism's local XY.
+let shinPanelOutline = [
+  [-0.5, 1]
+  [0.2692308, 1]
+  [0.5384615, 0.1944444]
+  [-0.1730769, -1]
+  [-1, -0.4166667]
+]
 
 let braidParent = [
   "braid-root-0"
@@ -1275,6 +1284,24 @@ prototypes {
               metal: 0
             }
           }
+          // Each boot's violet rim, in the boot's frame: the band of its surface between 2.65 and 7.65 cm above the
+          // ground.
+          paints [
+            {
+              parent: "boot-left"
+              type: "Box"
+              position [0, -0.08, 0]
+              scale [0.3, 0.025, 0.4]
+              color: "#9D66C6"
+            }
+            {
+              parent: "boot-right"
+              type: "Box"
+              position [0, -0.08, 0]
+              scale [0.3, 0.025, 0.4]
+              color: "#9D66C6"
+            }
+          ]
         }
         {
           color: "#9D66C6"
@@ -1306,6 +1333,21 @@ prototypes {
               metal: 0
             }
           }
+          // The helmet's cream trim, in the helmet's frame: a horseshoe round the face opening, its ellipse projected
+          // along the face's forward axis; the throat opening leaves the helmet no surface below it.
+          paints [
+            {
+              parent: "helmet"
+              type: "Prism"
+              position [0, -0.0198, 0.21575]
+              scale [0.24265, 0.26245, 0.2]
+              profile {
+                kind: "Ellipse"
+              }
+              stroke: 0.0227
+              color: "#EED3A6"
+            }
+          ]
         }
         {
           color: "#252630"
@@ -1322,6 +1364,21 @@ prototypes {
           coat: 0
           wrap: 0.15
           fill: "#4B2318"
+          // The mouth, in the face's frame: a line where the face crosses a thin quadratic sweep laid on it.
+          paints [
+            {
+              parent: "face"
+              type: "Sweep"
+              curve {
+                a [-0.05808, -0.088389, 0.1068]
+                b [0, -0.1141765, 0.1082]
+                c [0.05808, -0.0862981, 0.1078]
+                radiusStart: 0.0015
+                radiusEnd: 0.0015
+              }
+              color: "#754137"
+            }
+          ]
         }
         {
           color: "#171210"
@@ -1591,6 +1648,89 @@ prototypes {
               position [0, -0.0865, 0]
               stroke: 0.0865
               color: "#EED3A6"
+            }
+          ]
+        }
+        {
+          color: "#EED3A6"
+          roughness: 0.36
+          specular: 0.08
+          emissive: 0
+          coat: 0.28
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 31
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#D7C9B7"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          // Each shin's violet trims, in the shin's own frame: a ring round the arch, its ellipse projected front to
+          // back, and a pentagonal panel on the outer side.
+          paints [
+            {
+              parent: "shin-left"
+              type: "Prism"
+              position [0, -0.29, 0]
+              scale [0.174, 0.174, 0.45]
+              profile {
+                kind: "Ellipse"
+              }
+              stroke: 0.023
+              color: "#9D66C6"
+            }
+            {
+              parent: "shin-left"
+              type: "Prism"
+              position [0.15, 0.02, 0]
+              rotation [0, diagonal, 0, diagonal]
+              scale [0.13, 0.18, 0.08]
+              profile {
+                kind: "Convex"
+                vertices: shinPanelOutline
+                cornerRadius: 0.12
+              }
+              color: "#9D66C6"
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [0, -0.29, 0]
+              scale [0.174, 0.174, 0.45]
+              profile {
+                kind: "Ellipse"
+              }
+              stroke: 0.023
+              color: "#9D66C6"
+            }
+            {
+              parent: "shin-right"
+              type: "Prism"
+              position [-0.15, 0.02, 0]
+              rotation [0, -diagonal, 0, diagonal]
+              scale [0.13, 0.18, 0.08]
+              profile {
+                kind: "Convex"
+                vertices: shinPanelOutline
+                cornerRadius: 0.12
+              }
+              color: "#9D66C6"
             }
           ]
         }
@@ -1887,63 +2027,6 @@ prototypes {
         blend: "Subtraction"
         group: 4
         parent: "helmet"
-      }
-
-      shape Superellipsoid "helmetTrim" {
-        id: 27
-        position [0, 1.7603, -0.01575]
-        scale [0.2892, 0.3024, 0.2485]
-        material: skin
-        group: 5
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Superellipsoid "trimInner" {
-        id: 28
-        position [0, 1.7559, 0.009]
-        scale [0.2442, 0.25828, 0.2205]
-        material: charcoal
-        blend: "Subtraction"
-        group: 5
-        parent: "helmet"
-        exponent: softness
-      }
-
-      shape Prism "trimFaceOpening" {
-        id: 29
-        position [0, 1.7405, 0.2475]
-        scale [0.2222, 0.24112, 0.23175]
-        material: charcoal
-        blend: "Subtraction"
-        group: 5
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Box "trimThroatOpening" {
-        id: 30
-        position [0, 1.37, 0]
-        scale [0.6, 0.197, 0.6]
-        material: charcoal
-        blend: "Subtraction"
-        group: 5
-        parent: "helmet"
-      }
-
-      shape Prism "trimPaint" {
-        id: 31
-        position [0, 1.7405, 0.27]
-        scale [0.26532, 0.2838, 0.2475]
-        material: skin
-        blend: "Intersection"
-        group: 5
-        parent: "helmet"
-        profile {
-          kind: "Ellipse"
-        }
       }
 
       shape Superellipsoid "face" {
@@ -2430,70 +2513,6 @@ prototypes {
             [0.1142857, 1]
           ]
           cornerRadius: 0.12
-        }
-      }
-
-      shape Sweep "smile0" {
-        id: 72
-        position [-0.05808, 1.652111, 0.2131931]
-        material: leather
-        blend: "Subtraction"
-        group: 6
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.01452, -0.0064469, 0.0007248]
-          c [0.02904, -0.0095396, 0.0007993]
-          radiusStart: 0.0015
-          radiusEnd: 0.0015
-        }
-      }
-
-      shape Sweep "smile1" {
-        id: 73
-        position [-0.02904, 1.6425714, 0.2139924]
-        material: leather
-        blend: "Subtraction"
-        group: 6
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.01452, -0.0030928, 8.57E-05]
-          c [0.02904, -0.0028314, 0.0001682]
-          radiusStart: 0.0015
-          radiusEnd: 0.0015
-        }
-      }
-
-      shape Sweep "smile2" {
-        id: 74
-        position [0, 1.63974, 0.2141605]
-        material: leather
-        blend: "Subtraction"
-        group: 6
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.01452, 0.0002614, 0.0002306]
-          c [0.02904, 0.0038768, 0.0004237]
-          radiusStart: 0.0015
-          radiusEnd: 0.0015
-        }
-      }
-
-      shape Sweep "smile3" {
-        id: 75
-        position [0.02904, 1.6436168, 0.2145843]
-        material: leather
-        blend: "Subtraction"
-        group: 6
-        parent: "helmet"
-        curve {
-          a [0, 0, 0]
-          b [0.01452, 0.0036155, 0.0002033]
-          c [0.02904, 0.0105851, -0.0003351]
-          radiusStart: 0.0015
-          radiusEnd: 0.0015
         }
       }
 
@@ -2998,7 +3017,7 @@ prototypes {
         id: 180
         position [0.2, 0.4265, 0.0125]
         scale [0.119, 0.32, 0.131]
-        material: skin
+        material: shinCream
         group: 18
         parent: "thigh-left"
         exponent: 3
@@ -3034,7 +3053,7 @@ prototypes {
         id: 181
         position [0.2, 0.42775, 0.0125]
         scale [0.3, 0.28125, 0.4]
-        material: skin
+        material: shinCream
         blend: "Intersection"
         group: 18
         parent: "shin-left"
@@ -3069,119 +3088,6 @@ prototypes {
         parent: "shin-left"
         profile {
           kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "archTrim-left" {
-        id: 184
-        position [0.2, 0.4265, 0.0125]
-        scale [0.1205, 0.32, 0.1325]
-        material: violet
-        group: 19
-        parent: "shin-left"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "trimEnds-left" {
-        id: 185
-        position [0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: skin
-        blend: "Intersection"
-        group: 19
-        parent: "shin-left"
-      }
-
-      shape Superellipsoid "trimCavity-left" {
-        id: 186
-        position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
-        material: charcoal
-        blend: "Subtraction"
-        group: 19
-        parent: "shin-left"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "trimArch-left" {
-        id: 187
-        position [0.2, 0.1365, 0.0125]
-        scale [0.151, 0.15, 0.45]
-        material: charcoal
-        blend: "Subtraction"
-        group: 19
-        parent: "shin-left"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Prism "archTrimMask-left" {
-        id: 188
-        position [0.2, 0.1365, 0.0125]
-        scale [0.197, 0.198, 0.45]
-        material: violet
-        blend: "Intersection"
-        group: 19
-        parent: "shin-left"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "shinPanel-left" {
-        id: 189
-        position [0.2, 0.4265, 0.0125]
-        scale [0.1205, 0.32, 0.1325]
-        material: violet
-        group: 20
-        parent: "shin-left"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "shinPanelMask-left" {
-        id: 190
-        position [0.35, 0.4465, 0.0125]
-        rotation [0, diagonal, 0, diagonal]
-        scale [0.13, 0.18, 0.08]
-        material: violet
-        blend: "Intersection"
-        group: 20
-        parent: "shin-left"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.5, 1]
-            [0.2692308, 1]
-            [0.5384615, 0.1944444]
-            [-0.1730769, -1]
-            [-1, -0.4166667]
-          ]
-          cornerRadius: 0.12
         }
       }
 
@@ -3263,26 +3169,6 @@ prototypes {
         material: skin
         blend: "Intersection"
         group: 21
-        parent: "boot-left"
-      }
-
-      shape Superellipsoid "footRim-left" {
-        id: 197
-        position [0.2, 0.1315, 0.085]
-        scale [0.166, 0.126, 0.241]
-        material: violet
-        group: 22
-        parent: "boot-left"
-        exponent: 2.6
-      }
-
-      shape Box "footRimBand-left" {
-        id: 198
-        position [0.2, 0.0515, 0.085]
-        scale [0.3, 0.025, 0.4]
-        material: violet
-        blend: "Intersection"
-        group: 22
         parent: "boot-left"
       }
 
@@ -3858,7 +3744,7 @@ prototypes {
         id: 248
         position [-0.2, 0.4265, 0.0125]
         scale [0.119, 0.32, 0.131]
-        material: skin
+        material: shinCream
         group: 32
         parent: "thigh-right"
         exponent: 3
@@ -3894,7 +3780,7 @@ prototypes {
         id: 249
         position [-0.2, 0.42775, 0.0125]
         scale [0.3, 0.28125, 0.4]
-        material: skin
+        material: shinCream
         blend: "Intersection"
         group: 32
         parent: "shin-right"
@@ -3929,119 +3815,6 @@ prototypes {
         parent: "shin-right"
         profile {
           kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "archTrim-right" {
-        id: 252
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.1205, 0.32, 0.1325]
-        material: violet
-        group: 33
-        parent: "shin-right"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Box "trimEnds-right" {
-        id: 253
-        position [-0.2, 0.42775, 0.0125]
-        scale [0.3, 0.28125, 0.4]
-        material: skin
-        blend: "Intersection"
-        group: 33
-        parent: "shin-right"
-      }
-
-      shape Superellipsoid "trimCavity-right" {
-        id: 254
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.38, 0.109]
-        material: charcoal
-        blend: "Subtraction"
-        group: 33
-        parent: "shin-right"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "trimArch-right" {
-        id: 255
-        position [-0.2, 0.1365, 0.0125]
-        scale [0.151, 0.15, 0.45]
-        material: charcoal
-        blend: "Subtraction"
-        group: 33
-        parent: "shin-right"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Prism "archTrimMask-right" {
-        id: 256
-        position [-0.2, 0.1365, 0.0125]
-        scale [0.197, 0.198, 0.45]
-        material: violet
-        blend: "Intersection"
-        group: 33
-        parent: "shin-right"
-        profile {
-          kind: "Ellipse"
-        }
-      }
-
-      shape Superellipsoid "shinPanel-right" {
-        id: 257
-        position [-0.2, 0.4265, 0.0125]
-        scale [0.1205, 0.32, 0.1325]
-        material: violet
-        group: 34
-        parent: "shin-right"
-        exponent: 3
-        flare {
-          amount: 0.7
-          bulge: 0.1
-          span: 0.56
-          top: 0.28
-          axis: 1
-          startScale: 1
-        }
-      }
-
-      shape Prism "shinPanelMask-right" {
-        id: 258
-        position [-0.35, 0.4465, 0.0125]
-        rotation [0, -diagonal, 0, diagonal]
-        scale [0.13, 0.18, 0.08]
-        material: violet
-        blend: "Intersection"
-        group: 34
-        parent: "shin-right"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.5, 1]
-            [0.2692308, 1]
-            [0.5384615, 0.1944444]
-            [-0.1730769, -1]
-            [-1, -0.4166667]
-          ]
-          cornerRadius: 0.12
         }
       }
 
@@ -4123,26 +3896,6 @@ prototypes {
         material: skin
         blend: "Intersection"
         group: 35
-        parent: "boot-right"
-      }
-
-      shape Superellipsoid "footRim-right" {
-        id: 265
-        position [-0.2, 0.1315, 0.085]
-        scale [0.166, 0.126, 0.241]
-        material: violet
-        group: 36
-        parent: "boot-right"
-        exponent: 2.6
-      }
-
-      shape Box "footRimBand-right" {
-        id: 266
-        position [-0.2, 0.0515, 0.085]
-        scale [0.3, 0.025, 0.4]
-        material: violet
-        blend: "Intersection"
-        group: 36
         parent: "boot-right"
       }
 

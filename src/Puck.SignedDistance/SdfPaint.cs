@@ -16,9 +16,9 @@ namespace Puck.SignedDistance;
 /// <param name="Scale">The residual per-axis scale the shape is evaluated under: the point divides by it and the
 /// distance multiplies by its smallest component, as the field's scale transform does. One for a shape whose
 /// dimensions carry its size.</param>
-/// <param name="Reach">How far the shape reaches from its local origin, in the paint frame's units; positive
-/// infinity for an unbounded shape (a plane).</param>
-public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Data1, IReadOnlyList<float> Table, Vector3 Scale, float Reach) {
+/// <param name="Bound">The box the shape lies in, in its local frame and the paint frame's units; unbounded for a plane.
+/// The views pass evaluates the shape only where the hit lies within the box widened by the stroke and the pixel.</param>
+public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Data1, IReadOnlyList<float> Table, Vector3 Scale, SdfSolidBounds Bound) {
     /// <summary>Captures the shape <see cref="SdfSolidGeometry.AppendScaledPrimitive"/> emits for a document
     /// primitive: the one emission path a creation's shapes take, so a paint covers exactly the solid a shape with the
     /// same fields would.</summary>
@@ -54,25 +54,29 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
             type: type
         );
 
-        var reach = ((type == SdfSolidPrimitive.Plane)
-            ? float.PositiveInfinity
-            : ((type == SdfSolidPrimitive.Sweep) && (curve is { } sweep))
-                ? SdfSolidGeometry.SweepReach(
-                    a: sweep.A,
-                    b: sweep.B,
-                    bulge: sweep.Bulge,
-                    c: sweep.C,
-                    radiusEnd: sweep.RadiusEnd,
-                    radiusStart: sweep.RadiusStart,
-                    strandOffset: sweep.StrandOffset
-                ) * MathF.Max(x: MathF.Abs(x: scale.X), y: SdfSolidGeometry.MinimumScale)
-                : SdfSolidGeometry.Reach(
-                    lift: lift,
-                    scale: scale,
-                    type: type
-                ));
+        return builder.CapturePaintShape(bound: BoundOf(curve: curve, lift: lift, scale: scale, type: type));
+    }
+    // The primitive's local box: a sweep's control points widened by its thickest reach, a revolved prism's reach on
+    // every axis, and otherwise the canonical bounds at the scale.
+    private static SdfSolidBounds BoundOf(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, SdfSweepParameters? curve) {
+        var magnitude = Vector3.Max(value1: Vector3.Abs(value: scale), value2: new Vector3(value: SdfSolidGeometry.MinimumScale));
 
-        return builder.CapturePaintShape(reach: reach);
+        if ((type == SdfSolidPrimitive.Sweep) && (curve is { } sweep)) {
+            var low = Vector3.Min(value1: sweep.A, value2: Vector3.Min(value1: sweep.B, value2: sweep.C));
+            var high = Vector3.Max(value1: sweep.A, value2: Vector3.Max(value1: sweep.B, value2: sweep.C));
+            var thickness = new Vector3(value: (MathF.Max(x: sweep.RadiusStart, y: sweep.RadiusEnd) + MathF.Abs(x: sweep.Bulge) + sweep.StrandOffset));
+
+            return new SdfSolidBounds(Center: (((low + high) * 0.5f) * magnitude.X), HalfExtents: ((((high - low) * 0.5f) + thickness) * magnitude.X));
+        }
+        if ((type == SdfSolidPrimitive.Prism) && (lift == SdfLift.Revolve)) {
+            return new SdfSolidBounds(Center: Vector3.Zero, HalfExtents: new Vector3(value: SdfSolidGeometry.Reach(lift: lift, scale: scale, type: type)));
+        }
+
+        var canonical = SdfSolidGeometry.GetLocalBounds(type: type);
+
+        return (canonical.IsUnbounded
+            ? canonical
+            : new SdfSolidBounds(Center: (canonical.Center * magnitude), HalfExtents: (canonical.HalfExtents * magnitude)));
     }
 }
 
@@ -109,7 +113,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         (shape.Table is { Count: <= (SdfProgram.PaintTableVectors * 4) }) &&
         VectorFunctions.IsFinite(vector: shape.Scale) &&
         (shape.Scale.X > 0f) && (shape.Scale.Y > 0f) && (shape.Scale.Z > 0f) &&
-        !float.IsNaN(f: shape.Reach) && (shape.Reach >= 0f) &&
+        (shape.Bound.IsUnbounded || (VectorFunctions.IsFinite(vector: shape.Bound.Center) && VectorFunctions.IsFinite(vector: shape.Bound.HalfExtents) && (shape.Bound.HalfExtents.X >= 0f) && (shape.Bound.HalfExtents.Y >= 0f) && (shape.Bound.HalfExtents.Z >= 0f))) &&
         VectorFunctions.IsFinite(vector: paint.Origin) &&
         float.IsFinite(f: paint.Rotation.LengthSquared()) &&
         (paint.Rotation.LengthSquared() >= 1e-12f) &&

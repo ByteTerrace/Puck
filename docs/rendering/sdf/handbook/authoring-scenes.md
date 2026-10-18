@@ -278,8 +278,8 @@ A paint rides its `Slot`'s frame, so a body part's paint moves with that part
 whatever slot the hit's mesh rides, and two parts can share a material: a paint
 only colours the surface near it. A material carries up to
 `SdfProgram.MaxPaintsPerMaterial` paints, drawn in order, each over the one
-before. The views pass skips a paint whose reach the hit lies beyond after one
-rotation. A path profile, a glyph, a sampled region and a screen slab are
+before. The views pass skips a paint, after one rotation, wherever the hit lies
+outside the shape's local bound box. A path profile, a glyph, a sampled region and a screen slab are
 refused (`SdfPaint.Admits`).
 
 Most of the time that's the whole story for a material. It gets more

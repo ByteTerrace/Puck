@@ -5,7 +5,8 @@
 // shape dispatch (evaluateShape) and never through the field, gives the albedo the paint's colour inside the shape, or
 // within its stroke of the shape's surface, the edge antialiased over `footprint`, the world size of the pixel at the
 // hit. `worldPoint` is the hit in world space and `layerPoint` in the winning frame; a paint riding a slot reads that
-// slot's frame. A paint whose reach the hit lies beyond costs one rotation. KEEP IN SYNC with SdfProgram.PackPaint.
+// slot's frame. A hit outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. KEEP IN
+// SYNC with SdfProgram.PackPaint.
 void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, inout SdfMaterialData material) {
     uint count = min(material.paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
     if ((count == 0u) || !sdfProgramRange(material.paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
@@ -15,8 +16,8 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, inout
         uint base = (material.paintFirst + (i * SDF_PAINT_VECTORS_PER_ENTRY));
         float4 frame = asfloat(sdfWords[base]);
         float4 colorStroke = asfloat(sdfWords[base + 5u]);
-        float4 slotReach = asfloat(sdfWords[base + 6u]);
-        uint slot = asuint(slotReach.x);
+        float4 slotCenter = asfloat(sdfWords[base + 6u]);
+        uint slot = asuint(slotCenter.x);
         float3 p = layerPoint;
 
         if (slot != SDF_PAINT_WINNING_FRAME) {
@@ -26,7 +27,7 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, inout
         }
 
         float3 local = rotatePointByInverseQuaternion((p - frame.xyz), asfloat(sdfWords[base + 1u]));
-        if (length(local) > (slotReach.y + colorStroke.w + footprint)) continue;
+        if (any(abs(local - slotCenter.yzw) > (asfloat(sdfWords[base + 7u]).xyz + (colorStroke.w + footprint)))) continue;
         float4 scale = asfloat(sdfWords[base + 2u]);
         float d = (evaluateShape(asuint(frame.w), (local / scale.xyz), asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
         if (colorStroke.w > 0.0) d = (abs(d) - colorStroke.w);
