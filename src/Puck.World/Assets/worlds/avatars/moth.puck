@@ -1847,6 +1847,22 @@ prototypes {
         swings [
           {
             driver: "stride"
+            axis [0, 1, 0]
+            amplitude: 0.08
+            pivot [0, 1.0765, 0]
+            wave: "sine"
+            phase: 0
+          }
+          {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: 0.1
+            pivot [0, 0, 0]
+            wave: "constant"
+            phase: 0
+          }
+          {
+            driver: "stride"
             axis [0, 0, 1]
             amplitude: 0.028
             pivot [0, 1.0765, 0]
@@ -1882,6 +1898,15 @@ prototypes {
             wave: "linear"
           }
         ]
+        slides [
+          {
+            driver: "bob"
+            axis [0, 1, 0]
+            amplitude: 0.022
+            phase: -1.5708
+            wave: "sine"
+          }
+        ]
       }
 
       shape Superellipsoid "torso" {
@@ -1893,6 +1918,14 @@ prototypes {
         exponent: softness
         // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
         swings [
+          {
+            driver: "stride"
+            axis [0, 1, 0]
+            amplitude: -0.16
+            pivot [0, 1.0765, 0]
+            wave: "sine"
+            phase: 0
+          }
           {
             driver: "heading"
             axis [0, 1, 0]
@@ -2791,8 +2824,16 @@ prototypes {
         swings [
           {
             driver: "stride"
+            axis [0, 0, 1]
+            amplitude: -0.15
+            pivot [0.295, 1.4515, 0]
+            wave: "constant"
+            phase: 0
+          }
+          {
+            driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.34
+            amplitude: 0.6
             pivot [0.295, 1.4515, 0]
             wave: "sine"
             phase: 3.1415927
@@ -2898,6 +2939,14 @@ prototypes {
         parent: "upperArm-left"
         exponent: 2.6
         swings [
+          {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: -0.9
+            pivot [0.39, 1.1765, 0.005]
+            wave: "constant"
+            phase: 0
+          }
           {
             driver: "flight"
             axis [1, 0, 0]
@@ -3117,7 +3166,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: 0.62
             pivot [0.145, 1.0265, 0]
             wave: "sine"
             phase: 0
@@ -3227,10 +3276,10 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.88
+            amplitude: 1.25
             pivot [0.19, 0.7465, 0]
             wave: "halfSine"
-            phase: 3.1415927
+            phase: 5.184
           }
           {
             driver: "flight"
@@ -3340,10 +3389,10 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.18
+            amplitude: -0.25
             pivot [0.2, 0.1715, 0.0075]
             wave: "halfSine"
-            phase: 3.1415927
+            phase: 5.184
           }
           {
             driver: "flight"
@@ -3893,8 +3942,16 @@ prototypes {
         swings [
           {
             driver: "stride"
+            axis [0, 0, 1]
+            amplitude: 0.15
+            pivot [-0.295, 1.4515, 0]
+            wave: "constant"
+            phase: 0
+          }
+          {
+            driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.34
+            amplitude: 0.6
             pivot [-0.295, 1.4515, 0]
             wave: "sine"
             phase: 6.2831853
@@ -4000,6 +4057,14 @@ prototypes {
         parent: "upperArm-right"
         exponent: 2.6
         swings [
+          {
+            driver: "stride"
+            axis [1, 0, 0]
+            amplitude: -0.9
+            pivot [-0.39, 1.1765, 0.005]
+            wave: "constant"
+            phase: 0
+          }
           {
             driver: "flight"
             axis [1, 0, 0]
@@ -4216,7 +4281,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.44
+            amplitude: 0.62
             pivot [-0.145, 1.0265, 0]
             wave: "sine"
             phase: 3.1415927
@@ -4326,10 +4391,10 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.88
+            amplitude: 1.25
             pivot [-0.19, 0.7465, 0]
             wave: "halfSine"
-            phase: 6.2831853
+            phase: 2.0424
           }
           {
             driver: "flight"
@@ -4439,10 +4504,10 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.18
+            amplitude: -0.25
             pivot [-0.2, 0.1715, 0.0075]
             wave: "halfSine"
-            phase: 6.2831853
+            phase: 2.0424
           }
           {
             driver: "flight"
@@ -5024,7 +5089,16 @@ prototypes {
       drivers [
         {
           name: "stride"
-          cadence: 5.8
+          cadence: 2.7
+          signal: "planarTravel"
+          "when" [
+            "Grounded"
+            "moving"
+          ]
+        }
+        {
+          name: "bob"
+          cadence: 5.4
           signal: "planarTravel"
           "when" [
             "Grounded"
