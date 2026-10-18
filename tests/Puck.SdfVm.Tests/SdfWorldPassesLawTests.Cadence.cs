@@ -4,6 +4,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -196,9 +197,18 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
             SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake))));
-        // The view stands once the rebuilt graph installs and the bake settles.
-        for (var frame = 0; (frame < 16); frame++) { rig.Produce(); }
-        Assert.True(condition: rig.Stood());
+        // The view stands once the rebuilt graph installs and the bake it dispatches again settles. The rebuild compiles
+        // on the thread pool, so no count of frames bounds it: until it installs, a frame stands only because the
+        // candidate has not rendered, and the bake's passes run on the first frame after it does.
+        TestLiveness.Until(
+            reason: () => $"building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} {rig.Selected.NotReadyReason}",
+            step: () => {
+                rig.Produce();
+
+                return (!rig.World.IsBuildingCandidate && !rig.Selected.MeshPathBake.Pending && rig.Stood());
+            },
+            wait: rig.Selected.WaitPipelineBuilds
+        );
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
