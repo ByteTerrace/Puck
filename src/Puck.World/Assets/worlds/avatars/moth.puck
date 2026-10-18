@@ -4277,6 +4277,9 @@ prototypes {
         position [0.2, 0.14, 0.03]
         scale [0.14, 0.085, 0.15]
         material: charcoal
+        blend: "SmoothUnion"
+        smooth: 0.006
+        group: 18
         parent: "shin-left"
         exponent: softness
       }
@@ -4289,6 +4292,9 @@ prototypes {
         rotation [0, 0, diagonal, diagonal]
         scale [0.082, 0.022, 0.082]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.01
+        group: 18
         parent: "shin-left"
         rounding: 0.008
       }
@@ -4299,16 +4305,20 @@ prototypes {
         rotation [0, 0, diagonal, diagonal]
         scale [0.064, 0.008, 0.064]
         material: violet
+        blend: "Union"
+        group: 18
         parent: "shin-left"
         rounding: 0.004
       }
 
       shape Cylinder "ankleLens-left" {
         id: 1002
-        position [0.414, 0.175, -0.07]
+        position [0.418, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.044, 0.006, 0.044]
+        scale [0.038, 0.006, 0.038]
         material: jet
+        blend: "Subtraction"
+        group: 18
         parent: "shin-left"
         rounding: 0.003
       }
@@ -4474,6 +4484,9 @@ prototypes {
         position [0.2, 0.036, -0.165]
         scale [0.06, 0.036, 0.055]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.006
+        group: 23
         parent: "boot-left"
         chamfer: 0.016
       }
@@ -4483,6 +4496,9 @@ prototypes {
         position [0.2, 0.055, -0.045]
         scale [0.12, 0.055, 0.05]
         material: charcoal
+        blend: "SmoothUnion"
+        smooth: 0.004
+        group: 23
         parent: "boot-left"
       }
 
@@ -4492,6 +4508,9 @@ prototypes {
         rotation [diagonal, 0, 0, diagonal]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.008
+        group: 23
         parent: "boot-left"
         rounding: 0.01
       }
@@ -4502,6 +4521,8 @@ prototypes {
         rotation [diagonal, 0, 0, diagonal]
         scale [0.085, 0.016, 0.085]
         material: steel
+        blend: "Union"
+        group: 23
         parent: "boot-left"
         rounding: 0.006
       }
@@ -5717,6 +5738,9 @@ prototypes {
         position [-0.2, 0.14, 0.03]
         scale [0.14, 0.085, 0.15]
         material: charcoal
+        blend: "SmoothUnion"
+        smooth: 0.006
+        group: 32
         parent: "shin-right"
         exponent: softness
       }
@@ -5729,6 +5753,9 @@ prototypes {
         rotation [0, 0, diagonal, diagonal]
         scale [0.082, 0.022, 0.082]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.01
+        group: 32
         parent: "shin-right"
         rounding: 0.008
       }
@@ -5739,16 +5766,20 @@ prototypes {
         rotation [0, 0, diagonal, diagonal]
         scale [0.064, 0.008, 0.064]
         material: violet
+        blend: "Union"
+        group: 32
         parent: "shin-right"
         rounding: 0.004
       }
 
       shape Cylinder "ankleLens-right" {
         id: 1008
-        position [-0.414, 0.175, -0.07]
+        position [-0.418, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
-        scale [0.044, 0.006, 0.044]
+        scale [0.038, 0.006, 0.038]
         material: jet
+        blend: "Subtraction"
+        group: 32
         parent: "shin-right"
         rounding: 0.003
       }
@@ -5914,6 +5945,9 @@ prototypes {
         position [-0.2, 0.036, -0.165]
         scale [0.06, 0.036, 0.055]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.006
+        group: 37
         parent: "boot-right"
         chamfer: 0.016
       }
@@ -5923,6 +5957,9 @@ prototypes {
         position [-0.2, 0.055, -0.045]
         scale [0.12, 0.055, 0.05]
         material: charcoal
+        blend: "SmoothUnion"
+        smooth: 0.004
+        group: 37
         parent: "boot-right"
       }
 
@@ -5932,6 +5969,9 @@ prototypes {
         rotation [diagonal, 0, 0, diagonal]
         scale [0.1, 0.03, 0.1]
         material: gunmetal
+        blend: "SmoothUnion"
+        smooth: 0.008
+        group: 37
         parent: "boot-right"
         rounding: 0.01
       }
@@ -5942,6 +5982,8 @@ prototypes {
         rotation [diagonal, 0, 0, diagonal]
         scale [0.085, 0.016, 0.085]
         material: steel
+        blend: "Union"
+        group: 37
         parent: "boot-right"
         rounding: 0.006
       }
