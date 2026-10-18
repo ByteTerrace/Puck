@@ -26,12 +26,13 @@ public static class VulkanGpuFormats {
         : ColorAspect
     );
     /// <summary>Converts declared image usages to <c>VkImageUsageFlags</c>. A color image is also a transfer source and
-    /// destination, which readbacks, uploads and zero clears need; a depth image is only a depth attachment.</summary>
+    /// destination, which readbacks, uploads and zero clears need; a depth image is a depth attachment, sampled when it
+    /// declares <see cref="GpuImageUsage.Sampled"/>.</summary>
     /// <param name="usage">The declared usages.</param>
     /// <returns>The Vulkan usage flags.</returns>
     public static uint ToVkImageUsage(GpuImageUsage usage) {
-        if (usage == GpuImageUsage.DepthAttachment) {
-            return VulkanImageUsageFlags.DepthStencilAttachment;
+        if ((usage & GpuImageUsage.DepthAttachment) != 0) {
+            return (VulkanImageUsageFlags.DepthStencilAttachment | (((usage & GpuImageUsage.Sampled) != 0) ? VulkanImageUsageFlags.Sampled : 0u));
         }
 
         var flags = VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination;

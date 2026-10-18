@@ -96,10 +96,11 @@ public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) :
     }
     /// <inheritdoc/>
     /// <remarks>The texture is created with the attachment's clear depth as its optimized clear value.</remarks>
-    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
-        GpuImageUsages.ValidateDepth(
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) {
+        var usage = GpuImageUsages.ValidateDepth(
             attachment: in attachment,
             height: height,
+            sampled: sampled,
             width: width
         );
 
@@ -108,7 +109,7 @@ public sealed class DirectXGpuImageFactory(DirectXDeviceContext deviceContext) :
             format: attachment.Format,
             height: height,
             name: in name,
-            usage: GpuImageUsage.DepthAttachment,
+            usage: usage,
             width: width
         );
     }

@@ -396,11 +396,11 @@ public sealed partial class ShaderPipelineCompiler {
                         $"Pass '{pass.Name}' reads undeclared resource '{input.Name}'.",
                         input.Name
                     );
-                } else if (resource.Kind == ShaderPipelineResourceKind.Depth) {
+                } else if (!package && (resource.Kind == ShaderPipelineResourceKind.Depth)) {
                     Add(
                         diagnostics,
                         "SHADERPIPE_DEPTH_SAMPLED",
-                        $"Pass '{pass.Name}' reads depth version '{input.Name}'; a depth attachment is tested and written by geometry passes and never sampled.",
+                        $"Pass '{pass.Name}' reads depth version '{input.Name}'; only a package pass samples a depth, which a package pass drew through its own render pass.",
                         input.Name
                     );
                 } else if (

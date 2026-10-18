@@ -492,11 +492,12 @@ file sealed class FaultingImageFactory(IGpuImageFactory inner, GpuCreationFaults
             width: width
         );
     }
-    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Image);
 
         return inner.CreateDepth(
             attachment: in attachment,
+            sampled: sampled,
             height: height,
             name: name,
             width: width

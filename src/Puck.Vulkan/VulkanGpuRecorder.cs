@@ -326,11 +326,13 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
     /// <inheritdoc/>
-    /// <remarks>A transition into or out of <see cref="GpuImageLayout.DepthAttachment"/> covers the depth aspect, since only
-    /// a depth image takes that layout; every other transition covers the color aspect.</remarks>
+    /// <remarks>A transition of a depth image covers the depth aspect: one into or out of
+    /// <see cref="GpuImageLayout.DepthAttachment"/>, which only a depth image takes, or of any image
+    /// <see cref="VulkanGpuImage.IsDepth"/> names, such as a sampled depth moving between reads; every other transition
+    /// covers the color aspect.</remarks>
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
         recordingApi.TransitionImageLayout(
-            aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment))
+            aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment) || VulkanGpuImage.IsDepth(imageHandle: imageHandle))
                 ? VulkanGpuFormats.DepthAspect
                 : VulkanGpuFormats.ColorAspect),
             baseMipLevel: 0,

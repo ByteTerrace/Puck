@@ -627,10 +627,11 @@ file sealed class CountingImageFactory(IGpuImageFactory inner, GpuWorkLedger led
             ),
             lifetimeIndex: GpuWork.ImagesCreatedIndex
         );
-    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) =>
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) =>
         Created(
             created: inner.CreateDepth(
                 attachment: in attachment,
+                sampled: sampled,
                 height: height,
                 name: name,
                 width: width

@@ -51,6 +51,21 @@ public static unsafe class DirectXTextures {
 
         return (flags, clearValue);
     }
+    /// <summary>Gets the format a texture with declared usages is created in and the format its shader resource view reads
+    /// it through: the image's own format for both, except for a sampled depth, whose texture is typeless so that one
+    /// texture takes both its depth-stencil view (in the render pass's depth format) and a float shader resource
+    /// view.</summary>
+    /// <param name="format">The image's DXGI format.</param>
+    /// <param name="usage">The declared usages.</param>
+    /// <returns>The texture's format and its shader resource view's format.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A sampled depth image's format has no typeless form here.</exception>
+    public static (DXGI_FORMAT Resource, DXGI_FORMAT View) FormatsOf(DXGI_FORMAT format, GpuImageUsage usage) =>
+        ((usage == (GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled))
+            ? (format switch {
+                DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT => (DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS, DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT),
+                _ => throw new ArgumentOutOfRangeException(actualValue: format, message: "A sampled depth image is D32Float.", paramName: nameof(format)),
+            })
+            : (format, format));
     /// <summary>Gets the state a texture with declared usages is created in, and rests in until its first barrier: a
     /// storage image in <c>UNORDERED_ACCESS</c>, a render target in <c>RENDER_TARGET</c>, a depth stencil in
     /// <c>DEPTH_WRITE</c>, and a texture only ever sampled in the shader-read state.</summary>

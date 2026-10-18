@@ -610,11 +610,12 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
-    IGpuImage IGpuImageFactory.CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
+    IGpuImage IGpuImageFactory.CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) {
         Hit(key: "IGpuImageFactory.CreateDepth");
-        GpuImageUsages.ValidateDepth(
+        _ = GpuImageUsages.ValidateDepth(
             attachment: in attachment,
             height: height,
+            sampled: sampled,
             width: width
         );
 

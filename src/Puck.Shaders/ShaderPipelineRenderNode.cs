@@ -441,7 +441,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var format = ParseFormat(format: declaration.Format);
         // A depth storage's images are created for the depth attachment a pass draws it as: a graphics pass's planned
         // attachment, or the one a package pass drawing it through its own render pass declares.
-        GpuDepthAttachment? depth = ((usage == GpuImageUsage.DepthAttachment)
+        GpuDepthAttachment? depth = (((usage & GpuImageUsage.DepthAttachment) != 0)
             ? DepthOf(
                 format: format,
                 plan: plan,
@@ -461,6 +461,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     attachment: in attachment,
                     height: extent.Height,
                     name: in name,
+                    sampled: ((usage & GpuImageUsage.Sampled) != 0),
                     width: extent.Width
                 )
                 : gpu.ImageFactory.Create(

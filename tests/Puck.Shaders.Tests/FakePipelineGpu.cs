@@ -458,17 +458,18 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             width: width
         );
     }
-    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, in GpuObjectName name) {
-        GpuImageUsages.ValidateDepth(
+    public IGpuImage CreateDepth(in GpuDepthAttachment attachment, uint width, uint height, bool sampled, in GpuObjectName name) {
+        var usage = GpuImageUsages.ValidateDepth(
             attachment: in attachment,
             height: height,
+            sampled: sampled,
             width: width
         );
 
         return Image(
             format: attachment.Format,
             height: height,
-            usage: GpuImageUsage.DepthAttachment,
+            usage: usage,
             width: width
         );
     }

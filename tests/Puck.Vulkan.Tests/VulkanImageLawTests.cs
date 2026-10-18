@@ -19,6 +19,7 @@ public sealed class VulkanImageLawTests {
     [InlineData(GpuPixelFormat.R8G8B8A8Unorm, GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled, 0x00000017u, 0x1u)]
     [InlineData(GpuPixelFormat.R16G16B16A16Float, GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled | GpuImageUsage.Storage, 0x0000001Fu, 0x1u)]
     [InlineData(GpuPixelFormat.D32Float, GpuImageUsage.DepthAttachment, 0x00000020u, 0x2u)]
+    [InlineData(GpuPixelFormat.D32Float, GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled, 0x00000024u, 0x2u)]
     [Theory]
     public void AnImageIsCreatedWithTheVulkanUsageAndAspectItsDeclaredUsagesNeed(GpuPixelFormat format, GpuImageUsage usage, uint vulkanUsage, uint aspect) {
         var images = new RecordingOffscreenImageApi();
@@ -40,6 +41,10 @@ public sealed class VulkanImageLawTests {
             actual: (Usage: images.Requests.Single().UsageFlags, Aspect: views.Requests.Single().AspectMask, image.Format, image.Usage, image.ImageHandle, image.ImageViewHandle),
             expected: (Usage: vulkanUsage, Aspect: aspect, format, usage, Image, View)
         );
+        // A live depth image's transitions cover its depth aspect in every layout, a sampled one's between reads too.
+        if (GpuPixelFormats.IsDepth(format: format)) {
+            Assert.True(condition: VulkanGpuImage.IsDepth(imageHandle: Image));
+        }
     }
     [Fact]
     public void AnImageWhoseViewFailsIsDestroyedWithItsMemory() {
@@ -80,7 +85,7 @@ public sealed class VulkanImageLawTests {
             instance: null!,
             offscreenImageApi: images,
             physicalDeviceHandle: 1,
-            usage: GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled,
+            usage: GpuImageUsage.DepthAttachment | GpuImageUsage.Storage,
             width: 8
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => VulkanGpuImage.Create(
