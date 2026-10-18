@@ -339,7 +339,8 @@ script, and never as inline PowerShell in a workflow. Workflows orchestrate
 CI job installs the run's own candidate CLI. Formatting of PR branches is
 appended by CI; install no Git hooks and change no Git configuration during
 builds. `.claude/hooks/` holds Claude Code harness hooks, registered in the
-shared `.claude/settings.json`, which run inside the agent's harness rather than
-as repository automation, so the script rule does not cover them. [CI and releases](docs/development/ci.md) owns these rules, and
+shared `.claude/settings.json`, and the MCP launcher the checkout's MCP
+configurations start (`puck-mcp.ps1`); they run inside the agent's harness
+rather than as repository automation, so the script rule does not cover them. [CI and releases](docs/development/ci.md) owns these rules, and
 [C# file apps](docs/development/contributing.md#c-file-apps) owns the
 conventions for `src/Puck.Azure.Resources/bootstrap.cs`, the one file-based app.

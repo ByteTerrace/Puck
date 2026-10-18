@@ -52,9 +52,11 @@ macOS, and nothing here is verified there.
   not `pwsh`; on Linux, install PowerShell from Microsoft's package feed.
 - **The global `puck` tool, installed from the checkout**, as
   [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
-  describes. An installed tool keeps its commit while the checkout moves on:
-  `puck --version` and `puck mcp` warn on stderr when the two differ, so
-  reinstall after pulling.
+  describes, for running verbs by hand. An installed tool keeps its commit while
+  the checkout moves on: `puck --version` warns on stderr when the two differ, so
+  reinstall after pulling. The agents' MCP server does not use it: it runs the
+  checkout's Release build of `src/Puck.Cli` through `.claude/hooks/puck-mcp.ps1`
+  ([the MCP adapter](../../src/Puck.Mcp/README.md)).
 - **Claude Code.** The project's settings are shared and versioned:
   `.claude/settings.json` turns auto memory off, selects the Concise output
   style, enables the `puck` server from `.mcp.json` and the Codex plugin, names
