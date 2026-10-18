@@ -200,6 +200,18 @@ owns the explanation.
   that ring: a whole cell next to measured fine samples cracks
   (`SdfSampledLatticeLawTests`). Refining every cell instead (5 mm across the
   Moth) bakes about 8 M triangles in 20 s.
+- **Features are placed and shaded as features.** A vertex whose crossings'
+  planes all meet and turn by over 30 degrees is a feature: it lies on the
+  crease (up to a quarter cell past its cell; half a cell folds a concave
+  crease's quads), takes its crossings' normals, and `SdfContour.SplitAtCreases`
+  splits it per side. Only features and single-face cells read crossing
+  normals: elsewhere (a fillet under the cell) they smudge flat faces, so other
+  vertices keep the interpolated gradients.
+- **A static copy is one group.** Its shapes bake as their union
+  (`SdfInstanceRange.BakesWithPrevious`) on a cubic lattice past the per-axis
+  cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
+  serial contour of about a million samples is the bake's long pole on the
+  debug world, so unions take each frame's first lattices.
 - **The bake samples through the interpreter**, in the fragment's `mask` and
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as

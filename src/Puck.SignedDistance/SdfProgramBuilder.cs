@@ -166,6 +166,7 @@ public sealed partial class SdfProgramBuilder {
     private (int InstructionIndex, int ReachPerUnit, SdfOp Op)? m_materialRecolor;
     private bool m_openInstanceActive;
     private bool m_openInstanceCameraHidden;
+    private bool m_openInstanceBakesWithPrevious;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;
     private bool m_openInstanceIsDynamic;
@@ -282,6 +283,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceIsDynamic = isDynamic;
         m_openInstanceActive = active;
         m_openInstanceCameraHidden = cameraHidden;
+        m_openInstanceBakesWithPrevious = false;
         m_openInstanceCenter = center;
         m_openInstanceRadius = radius;
         m_openInstanceSlot = slot;

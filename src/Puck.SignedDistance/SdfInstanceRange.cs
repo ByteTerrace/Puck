@@ -28,6 +28,10 @@ namespace Puck.SignedDistance;
 /// mask, so primary never marches it, while shadows and ambient occlusion, which gather their own occluders, still
 /// read it. A placement whose baked mesh draws in its place keeps its field this way, so its shadows and occlusion
 /// stay (<see cref="SdfProgram.CameraHiddenInstanceFlag"/>).</param>
+/// <param name="BakesWithPrevious">Whether a static instance bakes into one mesh with the static instance just before
+/// it: the baked-mesh path's group of one rigid copy is the run of instances it heads, so shapes that share a face
+/// bake as their union rather than as meshes fighting over the face. Meaningless for a dynamic instance, whose group is
+/// its slot's.</param>
 public readonly record struct SdfInstanceRange(
     int First,
     int End,
@@ -36,5 +40,6 @@ public readonly record struct SdfInstanceRange(
     float Radius,
     int Slot,
     bool Active = true,
-    bool CameraHidden = false
+    bool CameraHidden = false,
+    bool BakesWithPrevious = false
 );

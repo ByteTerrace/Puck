@@ -264,8 +264,8 @@ prototypes {
 
   // A Cornell-style room for judging indirect light: red and green side walls, a white back wall between them, ceiling
   // and raised floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open
-  // sky elsewhere in this world hides them. The plates abut without overlapping: each bakes as its own mesh, and two
-  // meshes sharing a face fight over it.
+  // sky elsewhere in this world hides them. The plates abut without overlapping, and the copy bakes as their one union
+  // mesh.
   prototype "gi-corner" {
     document {
       name: "gi-corner"

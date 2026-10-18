@@ -72,8 +72,9 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + 32), value: ((uint)lattice.Dims.X));
             WriteUInt32(block: block, offset: (row + 36), value: ((uint)lattice.Dims.Y));
             WriteUInt32(block: block, offset: (row + 40), value: ((uint)lattice.Dims.Z));
-            // The lattice's mode: three samples the point table with gradients, two without, zero a grid.
-            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)));
+            // The lattice's mode in the low half (three samples the point table with gradients, two without, zero a grid)
+            // and, in the high half, the run of instances a static selector names.
+            WriteUInt32(block: block, offset: (row + 44), value: ((lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)lattice.Instances) << 16)));
             first += ((uint)lattice.Samples);
         }
     }

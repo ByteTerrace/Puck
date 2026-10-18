@@ -1,8 +1,9 @@
 // The mesh bake's instance masks: one workgroup per lattice of the dispatch's batch (the pass block's meshBakeLattices),
 // writing lattice `lattice`'s mask words, which select the instances that lattice samples, so the bake pass's field walk
 // (sdf-mesh-bake.comp.hlsl) evaluates that group alone. A non-negative selector names a dynamic-transform slot, every
-// active instance riding it; a negative one names the single instance -(selector + 1). Each workgroup strides its words,
-// then writes the summary the walk skips empty words by.
+// active instance riding it; a negative one names the run of instances from -(selector + 1) on, as many as the high half
+// of the lattice's mode word (SdfFrameBlock.WriteMeshBake). Each workgroup strides its words, then writes the summary
+// the walk skips empty words by.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "sdf-world.hlsli"
 
@@ -15,6 +16,7 @@ void CSMain(uint threadIndex : SV_GroupIndex, uint3 group : SV_GroupID) {
     uint instanceCount = sdfInstanceCountClamped();
     uint instanceOffset = sdfInstanceDirectoryOffset();
     int selector = (active ? asint(passGroup.meshBakeLattices[(lattice * 3u) + 1u].w) : 0);
+    uint run = (active ? max((asuint(passGroup.meshBakeLattices[(lattice * 3u) + 2u].w) >> 16u), 1u) : 1u);
 
     if (active) {
         [loop]
@@ -29,7 +31,7 @@ void CSMain(uint threadIndex : SV_GroupIndex, uint3 group : SV_GroupID) {
                 uint4 meta = sdfProgramWord(entryBase + 1u);
                 bool chosen = ((selector >= 0)
                     ? ((meta.x == SDF_BOUND_DYNAMIC) && (meta.y == (uint)selector) && (bound.w >= 0.0))
-                    : (index == (uint)(-(selector + 1))));
+                    : ((index - (uint)(-(selector + 1))) < run));
 
                 bits |= (chosen ? (1u << (index & 31u)) : 0u);
             }

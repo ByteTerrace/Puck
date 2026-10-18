@@ -47,9 +47,9 @@ public sealed class SdfSampledLatticeLawTests {
         return gradient;
     }
     private static SdfContour Bake(bool refine) => Bake(field: Field, refine: refine);
-    private static SdfContour Bake(Func<Vector3, float> field, bool refine) => Bake(field: field, material: null, refine: refine);
+    private static SdfContour Bake(Func<Vector3, float> field, bool refine) => Bake(field: field, material: null, refine: refine, regions: []);
     // The lattice's samples of `field` and, when given, `material`; refined `Factor` to a cell when asked.
-    private static SdfContour Bake(Func<Vector3, float> field, Func<Vector3, int>? material, bool refine) {
+    private static SdfContour Bake(Func<Vector3, float> field, Func<Vector3, int>? material, bool refine, SdfLatticeRegion[] regions) {
         var count = ((Samples * Samples) * Samples);
         var values = new float[count];
         var materials = new int[count];
@@ -64,7 +64,7 @@ public sealed class SdfSampledLatticeLawTests {
         var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: materials, origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
 
         if (refine) {
-            var fine = lattice.Refine(factor: Factor);
+            var fine = lattice.Refine(factor: Factor, regions: regions);
 
             Assert.NotEmpty(collection: fine);
             lattice.AnswerRefinement(first: 0, materials: [.. fine.Select(selector: point => (material?.Invoke(arg: point) ?? 0))], values: [.. fine.Select(selector: field)]);
@@ -257,7 +257,7 @@ public sealed class SdfSampledLatticeLawTests {
     // mean once cut a notch into every edge it crossed.
     [Fact]
     public void ASeamBetweenTwoMaterialsKeepsTheBoxSharpWhereItsCellsMerge() {
-        var contour = Bake(field: static point => Box(point: point, turn: 0.3f), material: static point => ((point.X < 0f) ? 1 : 2), refine: true);
+        var contour = Bake(field: static point => Box(point: point, turn: 0.3f), material: static point => ((point.X < 0f) ? 1 : 2), refine: true, regions: []);
         var rotation = Quaternion.CreateFromAxisAngle(angle: 0.3f, axis: Vector3.UnitY);
         var worst = 0f;
 
@@ -272,6 +272,25 @@ public sealed class SdfSampledLatticeLawTests {
         }
 
         Assert.True(condition: (worst <= (0.05f * Cell)), userMessage: $"a vertex lies {worst} from the box, {(worst / Cell)} cells");
+    }
+
+    // A region refines the surface it holds though no sample asks it to: a sphere refines where a region names it.
+    [Fact]
+    public void ARegionRefinesTheSurfaceItHolds() {
+        var values = new float[((Samples * Samples) * Samples)];
+
+        for (var index = 0; (index < values.Length); index++) {
+            values[index] = ((Origin + (new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples))) * Cell)).Length() - 0.15f);
+        }
+
+        SdfSampledLattice Lattice() => new(cell: new Vector3(value: Cell), materials: new int[values.Length], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: [.. values]);
+
+        var plain = Lattice();
+        var refined = Lattice();
+
+        _ = plain.Refine(factor: Factor);
+        Assert.NotEmpty(collection: refined.Refine(factor: Factor, regions: [new SdfLatticeRegion(High: new Vector3(value: 0.2f), Low: new Vector3(x: 0.1f, y: -0.2f, z: -0.2f))]));
+        Assert.True(condition: (refined.MeasuredCells > (plain.MeasuredCells + 50)), userMessage: $"{refined.MeasuredCells} cells measured with the region, {plain.MeasuredCells} without");
     }
 
     // A speck apart from the surface, as a sheet thinning to a knife edge leaves, is dropped; a surface that small on its

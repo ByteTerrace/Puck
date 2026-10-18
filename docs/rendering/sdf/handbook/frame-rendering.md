@@ -619,9 +619,13 @@ require a GPU and run in the merge selection on Vulkan and Direct3D 12.
 `SdfMeshPathBake`, one per residency, bakes the residency's program into meshes
 while a bake is pending, and the mask and bake passes run only then. A group is
 the instances one rigid frame moves: every active instance riding one
-dynamic-transform slot, or one static instance; the segments no instance owns
-form one more group. The mask pass runs `sdf-mesh-bake-mask`, which writes each
-lattice's group selection into its instance mask words, and the bake pass runs
+dynamic-transform slot, or one static copy, the run of a placement copy's shape
+instances that bake with the first (`SdfInstanceRange.BakesWithPrevious`, which
+the static stamper sets on every shape of a copy after its first); the segments
+no instance owns form one more group. The mask pass runs `sdf-mesh-bake-mask`,
+which writes each lattice's group selection into its instance mask words (a run
+selected as `-(first + 1)`, its length in the high half of the lattice's mode
+word), and the bake pass runs
 `sdf-mesh-bake`, which samples up to sixteen lattices a frame through the
 interpreter, one call site, with only the group's instances in the walk
 (`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
@@ -629,7 +633,19 @@ lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`
 a gradient sample counting five), so a frame that bakes keeps its budget. A
 group refines from a coarse lattice over its bounding sphere to the box its
 surface can cross, then samples a final lattice of at most 65 samples a side, no
-finer than 1.5 cm, in slabs of whole planes, values alone. The samples are read
+finer than 1.5 cm, in slabs of whole planes, values alone. A static copy of
+several shapes bakes as their union, so plates that share a face (the test
+room's walls on its floor and under its ceiling) make one surface with a crease
+where they meet rather than two meshes fighting over the face. Its final lattice
+keeps each shape at the resolution its own lattice would give it: a cubic lattice
+past the per-axis cap at the finest shape's spacing, coarsened until it holds at
+most about a million samples (never coarser than the capped lattice over the
+union's box), and every shape whose own spacing (its bounding sphere's box at 65
+a side, no finer than 1.5 cm) stays finer than that by half again is a region the
+refinement measures at that spacing whatever its samples show
+(`SdfMeshPathBake.UnionFinal`, `SdfSampledLattice.Refine`'s regions). On the
+debug world the room bakes at 5.5 cm with its smaller block refined to 2.7 cm,
+and the groups drop from 193 to 187. The samples are read
 back and contoured on the thread pool by `SdfSampledLattice`, the prototype
 baker's dual contouring (`SdfDualContouring`) over a lattice whose spacing may
 differ per axis. A sample whose material no shape of the group carries reads as

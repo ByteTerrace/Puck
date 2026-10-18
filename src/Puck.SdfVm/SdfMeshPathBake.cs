@@ -12,8 +12,8 @@ namespace Puck.SdfVm;
 /// non-negative <paramref name="Selector"/>.</param>
 /// <param name="Cell">The spacing between samples along each axis, in world units.</param>
 /// <param name="Dims">The samples along each axis.</param>
-/// <param name="Selector">A dynamic-transform slot whose instances the bake samples when non-negative, the one instance
-/// <c>-(Selector + 1)</c> otherwise.</param>
+/// <param name="Selector">A dynamic-transform slot whose instances the bake samples when non-negative, the run of
+/// <see cref="Instances"/> instances from <c>-(Selector + 1)</c> on otherwise.</param>
 /// <param name="Gradients">Whether the sampler measures the field's gradient at each sample: a points lattice's, at the
 /// samples of the final lattice its contour reads one at.</param>
 public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (int X, int Y, int Z) Dims, int Selector, bool Gradients) {
@@ -28,6 +28,10 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid, in the frame
     /// <see cref="Origin"/> is in; empty for a grid lattice.</summary>
     public ReadOnlyMemory<Vector4> Points { get; init; }
+    /// <summary>Gets the run of instances a static selector names, from the instance <c>-(Selector + 1)</c> on: the
+    /// instances of one rigid copy, which bake as one mesh (<see cref="SdfInstanceRange.BakesWithPrevious"/>). One for
+    /// every other selector.</summary>
+    public int Instances { get; init; } = 1;
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -86,11 +90,13 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// The baked-mesh path's bake of one residency's program: a mesh per bake group, sampled from the program on the GPU and
 /// contoured on the CPU, drawn in the frame's mesh draws by every view of the residency.
 /// <para>A group is the instances one rigid frame moves: every active instance riding one dynamic-transform slot, or one
-/// static instance. Each group's field is sampled through the frame's own interpreter (<c>sdf-mesh-bake.comp.hlsl</c>)
-/// with only its instances in the walk's mask, lattices round robin across the groups within a frame's share of field
+/// static copy, the run of static instances that bake with the first (<see cref="SdfInstanceRange.BakesWithPrevious"/>),
+/// so shapes of one copy that share a face bake as their union. Each group's field is sampled through the frame's own
+/// interpreter (<c>sdf-mesh-bake.comp.hlsl</c>) with only its instances in the walk's mask, lattices round robin across the groups within a frame's share of field
 /// evaluations (<see cref="FrameTaps"/>): a coarse lattice over the group's bounding sphere, refinements over the box of
 /// the cells the surface can cross until the box stops shrinking, then a final lattice of at most 65 samples a side
-/// whose spacing follows the box's own proportions, sampled in slabs of whole planes, values alone; then the fine samples
+/// whose spacing follows the box's own proportions (a union's cubic, keeping each of its shapes at the resolution its own
+/// lattice would give it), sampled in slabs of whole planes, values alone; then the fine samples
 /// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
 /// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
 /// the thread pool (<see cref="SdfSampledLattice"/>) and split at their creases (<see cref="SdfContour.SplitAtCreases"/>).
@@ -123,6 +129,10 @@ public sealed class SdfMeshPathBake {
     // along each axis (SdfSampledLattice.Refine).
     private const float FineCell = 0.005f;
     private const int MaxRefinement = 4;
+    // The samples a union's final lattice holds at most before it coarsens (UnionFinal), and how much finer than that
+    // lattice a member's own spacing is before its region refines.
+    private const float UnionSamples = 1_048_576f;
+    private const float RegionRatio = 1.5f;
 
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
@@ -422,8 +432,9 @@ public sealed class SdfMeshPathBake {
         }
     }
 
-    // Starts the bake of a new program: one group per dynamic slot and per static instance, each starting at the coarse
-    // lattice over its bounding sphere. The meshes of the previous program keep drawing until their group's new mesh lands.
+    // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one
+    // rigid copy), each starting at the coarse lattice over its bounding box. The meshes of the previous program keep
+    // drawing until their group's new mesh lands.
     private void Restart(SdfFrame frame) {
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
 
@@ -434,6 +445,9 @@ public sealed class SdfMeshPathBake {
         var bySlot = new Dictionary<int, Group>();
         var instances = frame.Program.Instances;
         var reach = MathF.Max(1f, frame.FarDistance);
+        // The static group the last instance joined, which a following instance that bakes with its previous one
+        // extends while the run stays unbroken.
+        Group? staticRun = null;
 
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
@@ -461,6 +475,11 @@ public sealed class SdfMeshPathBake {
                     group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
                     group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
                 }
+            } else if (instance.BakesWithPrevious && (staticRun is { } run) && ((-(run.Selector + 1) + run.Instances) == index)) {
+                group = run;
+                group.Instances++;
+                group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
+                group.High = Vector3.Max(value1: group.High, value2: (instance.Center + new Vector3(value: radius)));
             } else {
                 group = new Group(selector: -(index + 1), dynamic: false) {
                     Low = (instance.Center - new Vector3(value: radius)),
@@ -468,12 +487,25 @@ public sealed class SdfMeshPathBake {
                 };
                 m_groups.Add(item: group);
             }
+            if (!instance.IsDynamic) {
+                group.Members.Add(item: (instance.Center, radius));
+            }
+            staticRun = (instance.IsDynamic ? null : group);
 
             group.Geometry.AppendInstance(instance: index, program: frame.Program);
         }
 
         foreach (var group in m_groups) {
             group.Seal();
+        }
+
+        // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
+        // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.
+        var unions = m_groups.Where(predicate: static group => (group.Members.Count > 1)).ToArray();
+
+        if (unions.Length > 0) {
+            _ = m_groups.RemoveAll(match: static group => (group.Members.Count > 1));
+            m_groups.InsertRange(index: 0, collection: unions);
         }
 
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
@@ -570,7 +602,7 @@ public sealed class SdfMeshPathBake {
         var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
         var cell = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
 
-        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector);
+        return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
     }
     // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign, and every sample whose
     // value is within half the lattice's finest spacing of the surface, widened by one cell along each axis. A group with no
@@ -627,14 +659,65 @@ public sealed class SdfMeshPathBake {
         var converged = ((after.X >= (Converged * before.X)) && (after.Y >= (Converged * before.Y)) && (after.Z >= (Converged * before.Z)));
 
         if (converged || (group.Refinements >= MaxRefinements)) {
-            var final = Lattice(group: group, longest: FinalSamples, minimum: FinalMinimum, gradients: true);
-
-            group.Final = new FinalLattice(lattice: final with { Gradients = false });
+            group.Final = ((group.Members.Count > 1)
+                ? UnionFinal(group: group)
+                : new FinalLattice(lattice: (Lattice(group: group, longest: FinalSamples, minimum: FinalMinimum, gradients: true) with { Gradients = false })));
             group.Next = SlabOf(group: group);
             return;
         }
         group.Next = Lattice(group: group, longest: CoarseSamples, minimum: RefineMinimum, gradients: false);
     }
+    // The final lattice of a union of static shapes (a copy's run), which keeps each shape at the resolution its own final
+    // lattice would give it: a cubic lattice past the per-axis cap, at the finest member's spacing where that fits
+    // UnionSamples and coarser where it does not, never coarser than the capped lattice over the union's box; a member
+    // whose own spacing stays finer than that by more than RegionRatio is a region its refinement measures at its own
+    // spacing (SdfSampledLattice.Refine). A member's own spacing is its bounding sphere's box at FinalSamples a side.
+    private static FinalLattice UnionFinal(Group group) {
+        var extent = Vector3.Max(value1: (group.High - group.Low), value2: new Vector3(value: 1.0e-4f));
+        var longest = MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
+        var finest = float.PositiveInfinity;
+
+        foreach (var (_, radius) in group.Members) {
+            finest = MathF.Min(finest, MemberCell(radius: radius));
+        }
+
+        // A slab is whole planes along Z, so one plane stays within a frame's taps: half of them, leaving room for each
+        // axis's end sample.
+        var cell = MathF.Max(
+            MathF.Min((longest / (FinalSamples - 1)), MathF.Max(finest, MathF.Cbrt(x: (((extent.X * extent.Y) * extent.Z) / UnionSamples)))),
+            MathF.Sqrt(x: ((extent.X * extent.Y) / (0.5f * FrameTaps)))
+        );
+
+        int Samples(float length) => Math.Max(val1: FinalMinimum, val2: (((int)MathF.Ceiling(length / cell)) + 1));
+
+        var dims = (X: Samples(length: extent.X), Y: Samples(length: extent.Y), Z: Samples(length: extent.Z));
+
+        var spacing = new Vector3(x: (extent.X / (dims.X - 1)), y: (extent.Y / (dims.Y - 1)), z: (extent.Z / (dims.Z - 1)));
+        var coarse = MathF.Max(spacing.X, MathF.Max(spacing.Y, spacing.Z));
+        var regions = new List<SdfLatticeRegion>();
+        var target = float.PositiveInfinity;
+
+        foreach (var (center, radius) in group.Members) {
+            var own = MemberCell(radius: radius);
+
+            if ((own * RegionRatio) >= coarse) { continue; }
+            regions.Add(item: new SdfLatticeRegion(
+                High: Vector3.Min(value1: group.High, value2: (center + new Vector3(value: radius))),
+                Low: Vector3.Max(value1: group.Low, value2: (center - new Vector3(value: radius)))
+            ));
+            target = MathF.Min(target, own);
+        }
+
+        var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { Instances = group.Instances };
+
+        return new FinalLattice(lattice: lattice) {
+            Factor = ((regions.Count > 0) ? Math.Clamp(value: (int)MathF.Ceiling(coarse / target), min: 2, max: MaxRefinement) : 0),
+            Regions = [.. regions],
+        };
+    }
+    // The spacing a static member's own final lattice would have: its bounding sphere's box at FinalSamples a side, no finer
+    // than MinimumCell.
+    private static float MemberCell(float radius) => MathF.Max(MinimumCell, ((2f * radius) / (FinalSamples - 1)));
     // The next slab of a group's final lattice: whole planes along Z, as many as a frame's share of field evaluations
     // takes, at least one.
     private static SdfMeshBakeRequest SlabOf(Group group) {
@@ -704,10 +787,12 @@ public sealed class SdfMeshPathBake {
                 values: final.Values
             );
 
-            var factor = Math.Min(val1: MaxRefinement, val2: (int)MathF.Ceiling(MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)) / FineCell));
+            var factor = ((final.Factor > 0)
+                ? final.Factor
+                : Math.Min(val1: MaxRefinement, val2: (int)MathF.Ceiling(MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)) / FineCell)));
 
             if (factor >= 2) {
-                points = Homogeneous(points: final.Sampled.Refine(factor: factor));
+                points = Homogeneous(points: final.Sampled.Refine(factor: factor, regions: final.Regions));
             }
             if ((points is null) || (points.Length == 0)) {
                 final.Stage = FinalStage.Gradients;
@@ -753,6 +838,7 @@ public sealed class SdfMeshPathBake {
         var count = Math.Clamp(value: (FrameTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
+            Instances = group.Instances,
             Points = final.Points.AsMemory(length: count, start: final.Answered),
         };
     }
@@ -828,6 +914,7 @@ public sealed class SdfMeshPathBake {
         var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: FrameTaps);
 
         return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
+            Instances = group.Instances,
             Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
         };
     }
@@ -1005,6 +1092,9 @@ public sealed class SdfMeshPathBake {
     private sealed class Group(int selector, bool dynamic) {
         public int Selector { get; } = selector;
         public bool Dynamic { get; } = dynamic;
+        // A static group's run of instances from -(Selector + 1) on, and each one's bounding sphere.
+        public int Instances { get; set; } = 1;
+        public List<(Vector3 Center, float Radius)> Members { get; } = [];
         public int Slot => Selector;
         // The geometry the group bakes while its instances are appended, then sealed: a world group's names its segments'
         // materials as they are, an instance group's by their place in MaterialOrder.
@@ -1051,6 +1141,10 @@ public sealed class SdfMeshPathBake {
         public FinalStage Stage { get; set; }
         public Vector4[] Points { get; set; } = [];
         public int Answered { get; set; }
+        // A union's refinement: the fine cells a coarse cell splits into (zero for the FineCell rule) and the members'
+        // regions it measures whatever their samples show.
+        public int Factor { get; init; }
+        public SdfLatticeRegion[] Regions { get; init; } = [];
     }
     private enum FinalStage {
         Refinement,

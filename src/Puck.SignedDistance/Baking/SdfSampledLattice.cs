@@ -162,6 +162,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], Quads = quads }));
     }
 }
+/// <summary>An axis-aligned box of a sampled lattice's frame whose surface <see cref="SdfSampledLattice.Refine"/> contours
+/// at the fine spacing.</summary>
+/// <param name="Low">The box's lowest corner.</param>
+/// <param name="High">The box's highest corner.</param>
+public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
@@ -271,15 +276,19 @@ public sealed class SdfSampledLattice {
     /// to a cell along each axis: a cell next to a lattice edge a sheet or gap thinner than a cell crosses (a run of one
     /// sample between two of the other sign whose crossings lie less than a cell apart, or two samples of one sign whose
     /// values fall steeply toward each other from both sides and meet below the surface), a crossed cell whose outside
-    /// corners report different owned materials, and a crossed cell whose corner signs hold more than one surface patch.
+    /// corners report different owned materials, a crossed cell whose corner signs hold more than one surface patch, and
+    /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
+    /// <paramref name="regions"/>.
     /// </summary>
     /// <param name="factor">The fine cells along each axis of a coarse cell, at least two.</param>
+    /// <param name="regions">The boxes, in the lattice's frame, whose surface is contoured at the fine spacing wherever
+    /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
     /// their answers; empty when no cell needs refining or the refinement would measure too many, and the lattice then
     /// contours at its own spacing.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
-    public Vector3[] Refine(int factor) {
+    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
 
         if (m_factor != 1) {
@@ -342,6 +351,40 @@ public sealed class SdfSampledLattice {
                     if (mixed || (SdfDualContouring.PatchesOf(mask: mask) > 1)) {
                         measured[CellIndex(x: x, y: y, z: z)] = true;
                         any = true;
+                    }
+                }
+            }
+        }
+
+        // Cells of a region the surface can enter: a corner lies within half the cell's diagonal of it.
+        if (!regions.IsEmpty) {
+            var reach = (0.5f * m_cell.Length());
+
+            for (var z = 0; (z < cellsZ); z++) {
+                for (var y = 0; (y < cellsY); y++) {
+                    for (var x = 0; (x < cellsX); x++) {
+                        var low = (m_origin + (new Vector3(x: x, y: y, z: z) * m_cell));
+                        var high = (low + m_cell);
+                        var overlaps = false;
+
+                        foreach (var region in regions) {
+                            overlaps |= ((low.X <= region.High.X) && (high.X >= region.Low.X) &&
+                                (low.Y <= region.High.Y) && (high.Y >= region.Low.Y) &&
+                                (low.Z <= region.High.Z) && (high.Z >= region.Low.Z));
+                        }
+                        if (!overlaps) {
+                            continue;
+                        }
+
+                        var nearest = float.PositiveInfinity;
+
+                        for (var offset = 0; (offset < 8); offset++) {
+                            nearest = MathF.Min(nearest, MathF.Abs(m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
+                        }
+                        if (nearest <= reach) {
+                            measured[CellIndex(x: x, y: y, z: z)] = true;
+                            any = true;
+                        }
                     }
                 }
             }

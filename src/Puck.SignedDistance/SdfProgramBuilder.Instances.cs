@@ -117,10 +117,13 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
     /// <param name="cameraHidden">Whether the camera never sees the instance, while shadows and ambient occlusion still
     /// read it (<see cref="SdfInstanceRange.CameraHidden"/>).</param>
+    /// <param name="bakesWithPrevious">Whether the instance bakes into one mesh with the instance declared just before
+    /// it, when that one is static too (<see cref="SdfInstanceRange.BakesWithPrevious"/>): the shapes of one rigid
+    /// copy, each with its own tight bound, baked as their union.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false, bool bakesWithPrevious = false) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -134,6 +137,7 @@ public sealed partial class SdfProgramBuilder {
             radius: boundRadius,
             slot: 0
         );
+        m_openInstanceBakesWithPrevious = bakesWithPrevious;
 
         return this;
     }
@@ -245,7 +249,8 @@ public sealed partial class SdfProgramBuilder {
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
             Active: m_openInstanceActive,
-            CameraHidden: m_openInstanceCameraHidden
+            CameraHidden: m_openInstanceCameraHidden,
+            BakesWithPrevious: m_openInstanceBakesWithPrevious
         ));
 
         m_openInstanceFirst = -1;

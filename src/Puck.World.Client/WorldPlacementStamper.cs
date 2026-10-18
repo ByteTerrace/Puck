@@ -408,7 +408,10 @@ public static class WorldPlacementStamper {
                         )
                     );
 
+                    // The copy's shapes keep their tight instances but bake as one mesh, their union, so two plates
+                    // that share a face draw it once rather than fighting over it.
                     _ = builder.BeginInstance(
+                        bakesWithPrevious: (shapeIndex > 0),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin)
                     );
