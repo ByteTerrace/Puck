@@ -25,6 +25,10 @@ static const float SdfMeshShadowMaxTexels = 14.0;
 // which the light's cone governs instead (sdfMeshShadowGap).
 static const float SdfMeshShadowSlopeBias = 2.5;
 static const float SdfMeshShadowNearTexels = 1.5;
+// How far, in texels of depth, a filter tap's caster must pass its clearance to occlude fully (sdfMeshShadow): a tap
+// occludes in proportion to its excess up to this, so the clearance cone around a caster texel fades out rather than
+// cutting a hard-edged disc, which a jagged silhouette standing a little above its receiver prints as a row of discs.
+static const float SdfMeshShadowSoftTexels = 1.0;
 static const float SdfGoldenAngle = 2.39996323;
 
 // The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
@@ -206,7 +210,8 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
             float angle = ((float(tap) * SdfGoldenAngle) + rotation);
-            lit += ((sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone) > 0.0) ? 0.0 : 1.0);
+            float excess = sdfMeshShadowGap(cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone);
+            lit += (1.0 - saturate(excess / (SdfMeshShadowSoftTexels * texelWorld)));
         }
 
         return (lit / float(SdfMeshShadowFilterTaps));
