@@ -3555,10 +3555,11 @@ prototypes {
         position [0.2, 0.1315, 0.085]
         scale [0.145, 0.15, 0.265]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 21
         parent: "boot-left"
-        exponent: 3
+        exponent: 2.6
       }
 
       shape Prism "toe-left" {
@@ -3586,19 +3587,20 @@ prototypes {
       shape Superellipsoid "toePlan-left" {
         id: 200
         position [0.2, 0.05, 0.085]
-        scale [0.15, 0.09, 0.28]
+        scale [0.15, 0.058, 0.28]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 23
         parent: "boot-left"
-        exponent: 3.5
+        exponent: 2.8
       }
 
       shape Prism "sole-left" {
         id: 201
         position [0.2, 0.006, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.105, 0.2, 0.004]
         material: charcoal
         parent: "boot-left"
         profile {
@@ -4708,10 +4710,11 @@ prototypes {
         position [-0.2, 0.1315, 0.085]
         scale [0.145, 0.15, 0.265]
         material: skin
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 35
         parent: "boot-right"
-        exponent: 3
+        exponent: 2.6
       }
 
       shape Prism "toe-right" {
@@ -4739,19 +4742,20 @@ prototypes {
       shape Superellipsoid "toePlan-right" {
         id: 268
         position [-0.2, 0.05, 0.085]
-        scale [0.15, 0.09, 0.28]
+        scale [0.15, 0.058, 0.28]
         material: violet
-        blend: "Intersection"
+        blend: "SmoothIntersection"
+        smooth: 0.012
         group: 37
         parent: "boot-right"
-        exponent: 3.5
+        exponent: 2.8
       }
 
       shape Prism "sole-right" {
         id: 269
         position [-0.2, 0.006, 0.085]
         rotation [diagonal, 0, 0, diagonal]
-        scale [0.125, 0.235, 0.004]
+        scale [0.105, 0.2, 0.004]
         material: charcoal
         parent: "boot-right"
         profile {
