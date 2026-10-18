@@ -323,7 +323,7 @@
                   "default": null,
                   "description": "The finite nonnegative gain on received indirect light; null means one."
                 },
-                "bands": {
+                "paints": {
                   "type": [
                     "array",
                     "null"
@@ -334,34 +334,403 @@
                       "null"
                     ],
                     "properties": {
-                      "origin": {
-                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
-                        "description": "A point on the band\u0027s centre plane."
-                      },
-                      "normal": {
-                        "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
-                        "description": "The centre plane\u0027s normal; any length but zero."
-                      },
-                      "halfWidth": {
-                        "type": "number",
-                        "description": "The band\u0027s half-width along the normal; positive."
+                      "type": {
+                        "enum": [
+                          "Sphere",
+                          "Box",
+                          "Torus",
+                          "Cylinder",
+                          "Capsule",
+                          "Ellipsoid",
+                          "RoundCone",
+                          "Plane",
+                          "Cone",
+                          "Prism",
+                          "Superellipsoid",
+                          "Sweep"
+                        ],
+                        "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile.",
+                        "x-enumDescriptions": {
+                          "Sphere": "A sphere.",
+                          "Box": "A box.",
+                          "Torus": "A torus.",
+                          "Cylinder": "A cylinder.",
+                          "Capsule": "A capsule.",
+                          "Ellipsoid": "An ellipsoid.",
+                          "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+                          "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+                          "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+                          "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+                          "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                          "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+                        }
                       },
                       "color": {
                         "type": "string",
-                        "description": "The band\u0027s color, #RRGGBB or a state binding."
+                        "description": "The paint\u0027s color, #RRGGBB or a state binding."
+                      },
+                      "position": {
+                        "default": null,
+                        "description": "The primitive\u0027s position (null = the frame\u0027s origin)."
+                      },
+                      "rotation": {
+                        "default": null,
+                        "description": "The primitive\u0027s rotation (null = identity)."
+                      },
+                      "scale": {
+                        "default": null,
+                        "description": "The primitive\u0027s size, as a shape\u0027s scale (null = one)."
+                      },
+                      "stroke": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The half-width of the band painted about the primitive\u0027s surface, in the frame\u0027s units; null or zero fills the primitive."
+                      },
+                      "parent": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The shape whose frame carries the paint, in that shape\u0027s local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint."
+                      },
+                      "taper": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "Prism only: the top-to-bottom width ratio."
+                      },
+                      "profile": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "Trapezoid",
+                              "RoundedRectangle",
+                              "Polygon",
+                              "Ellipse",
+                              "ChamferedRectangle",
+                              "Convex",
+                              "Path"
+                            ],
+                            "description": "The profile family.",
+                            "x-enumDescriptions": {
+                              "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+                              "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+                              "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+                              "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+                              "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+                              "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+                              "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
+                            }
+                          },
+                          "cornerRadius": {
+                            "type": "number",
+                            "default": 0.15,
+                            "description": "A fraction of the profile\u0027s smaller half-extent, in [0, 1]: RoundedRectangle\u0027s corner radius, ChamferedRectangle\u0027s chamfer radius, or Convex\u0027s uniform corner rounding."
+                          },
+                          "sides": {
+                            "type": "integer",
+                            "default": 6,
+                            "description": "Polygon side count, from 3 through 32."
+                          },
+                          "vertices": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind."
+                          },
+                          "path": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "contours": {
+                                "type": "array",
+                                "items": {
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "start": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 2,
+                                      "maxItems": 2
+                                    },
+                                    "segments": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ],
+                                        "properties": {
+                                          "end": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "number"
+                                            },
+                                            "minItems": 2,
+                                            "maxItems": 2
+                                          },
+                                          "control": {
+                                            "default": null
+                                          },
+                                          "control2": {
+                                            "default": null
+                                          },
+                                          "arcCenter": {
+                                            "default": null
+                                          },
+                                          "clockwise": {
+                                            "type": "boolean",
+                                            "default": false
+                                          }
+                                        },
+                                        "required": [
+                                          "end"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame."
+                                      }
+                                    },
+                                    "closed": {
+                                      "type": "boolean",
+                                      "default": false
+                                    }
+                                  },
+                                  "required": [
+                                    "start",
+                                    "segments"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed."
+                                }
+                              },
+                              "tolerance": {
+                                "type": "number",
+                                "default": 0.001
+                              },
+                              "stroke": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "radiusStart": {
+                                    "type": "number"
+                                  },
+                                  "radiusEnd": {
+                                    "type": "number"
+                                  },
+                                  "smooth": {
+                                    "type": "boolean",
+                                    "default": false
+                                  },
+                                  "from": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "to": {
+                                    "type": "number",
+                                    "default": 1
+                                  }
+                                },
+                                "required": [
+                                  "radiusStart",
+                                  "radiusEnd"
+                                ],
+                                "additionalProperties": false,
+                                "default": null
+                              },
+                              "shear": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "linear": {
+                                    "type": "number"
+                                  },
+                                  "quadratic": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "cubic": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "offset": {
+                                    "type": "number",
+                                    "default": 0
+                                  },
+                                  "from": {
+                                    "type": "number",
+                                    "default": -1
+                                  },
+                                  "to": {
+                                    "type": "number",
+                                    "default": 1
+                                  },
+                                  "target": {
+                                    "type": "integer",
+                                    "default": 0
+                                  }
+                                },
+                                "required": [
+                                  "linear"
+                                ],
+                                "additionalProperties": false,
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "contours"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "description": "Required only for Path; its points are normalized profile coordinates."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "description": "Prism only: the cross-section; a path profile is refused."
+                      },
+                      "lift": {
+                        "enum": [
+                          "Revolve",
+                          "Extrude",
+                          null
+                        ],
+                        "default": null,
+                        "description": "Prism only: extrude or revolve.",
+                        "x-enumDescriptions": {
+                          "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+                          "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+                        }
+                      },
+                      "rounding": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The edge-rounding radius, as a shape\u0027s."
+                      },
+                      "chamfer": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The cap chamfer radius, as a shape\u0027s."
+                      },
+                      "exponent": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "Superellipsoid only: the exponent."
+                      },
+                      "curve": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "a": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The curve\u0027s first control point, in the shape\u0027s local (workbench) frame \u2014 creation units, or a state.\u003Crow\u003E[.\u003Ckey\u003E] reference."
+                          },
+                          "b": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The curve\u0027s middle control point."
+                          },
+                          "c": {
+                            "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                            "description": "The curve\u0027s last control point."
+                          },
+                          "radiusStart": {
+                            "type": "number",
+                            "description": "The sweep radius at t = 0; finite and strictly positive."
+                          },
+                          "radiusEnd": {
+                            "type": "number",
+                            "description": "The sweep radius at t = 1; finite and strictly positive."
+                          },
+                          "bulge": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The mid-span radius bulge amplitude (null = 0), added by bulge\u00B7sin(\u03C0\u00B7t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd)."
+                          },
+                          "strands": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only \u2014 refused for deterministic field contact by name, matching Sweep\u0027s own status."
+                          },
+                          "twist": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The strand orbit rate, in turns along the curve (null = 0); finite."
+                          },
+                          "strandOffset": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd)."
+                          }
+                        },
+                        "required": [
+                          "a",
+                          "b",
+                          "c",
+                          "radiusStart",
+                          "radiusEnd"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "description": "Sweep only: the curve, in the frame\u0027s units."
                       }
                     },
                     "required": [
-                      "origin",
-                      "normal",
-                      "halfWidth",
+                      "type",
                       "color"
                     ],
                     "additionalProperties": false,
-                    "description": "A band of paint across the surface, in the winning dynamic frame, or world space when no slot owns the hit: the points within HalfWidth of the plane through Origin with normal Normal take Color."
+                    "description": "A paint over the palette slot\u0027s surface: a primitive of the shape vocabulary, placed like a shape, whose inside (or, with a Stroke, the band within that distance of its surface) takes Color. It never changes the field or the bake; the views pass draws it crisp at the pixel. A plane stroked at a half-width paints a stripe, an extruded ellipse prism stroked paints a ring projected along its axis, and a thin sweep paints a curved line where it crosses the surface."
                   },
                   "default": null,
-                  "description": "Up to MaxPaletteBands painted bands, each drawn over the one before; null or empty paints none."
+                  "description": "Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none."
                 }
               },
               "required": [

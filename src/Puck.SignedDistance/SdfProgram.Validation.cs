@@ -313,11 +313,11 @@ public sealed partial class SdfProgram {
                 !VectorFunctions.IsFinite(vector: bleed) ||
                 (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
                 !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
+                (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,
-                band: material.Band,
-                secondBand: material.SecondBand
+                paints: material.Paints
             )
             ) {
                 throw new ArgumentOutOfRangeException(

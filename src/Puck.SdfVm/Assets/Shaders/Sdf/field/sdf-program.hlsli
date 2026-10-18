@@ -30,8 +30,9 @@ float4 sdfDynamicTransformRow(uint index) {
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
 //   words[dataOffset ..]  = instruction data, 2 uint4 per instruction (data0, data1 as float bits)
-//   words[matOffset ..] = materials, 20 uint4 each; see SdfProgram.Materials.cs and sdfMaterialLoad.
-//   words[matOffset + 20*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
+//   words[dataOffset + 2*instructionCount ..] = paints, SDF_PAINT_VECTORS_PER_ENTRY uint4 each (sdfApplyPaints).
+//   words[matOffset ..] = materials, SDF_MATERIAL_VECTORS_PER_ENTRY uint4 each; see SdfProgram.Materials.cs and sdfMaterialLoad.
+//   words[matOffset + SDF_MATERIAL_VECTORS_PER_ENTRY*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances): one

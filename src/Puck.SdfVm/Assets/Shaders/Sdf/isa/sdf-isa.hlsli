@@ -202,7 +202,10 @@
 
 // Program capacities, strides and floors.
 #define SDF_MAX_INSTANCES               65536u
-#define SDF_MATERIAL_VECTORS_PER_ENTRY  24u
+#define SDF_MATERIAL_VECTORS_PER_ENTRY  21u
+#define SDF_PAINT_VECTORS_PER_ENTRY     11u
+#define SDF_MAX_PAINTS_PER_MATERIAL     8u
+#define SDF_PAINT_WINNING_FRAME         0xFFFFFFFFu
 #define SDF_GRID_HEADER_WORDS           16u
 #define SDF_GRID_MAX_DIM                64u
 #define SDF_MAX_FIELD_SCOPE_DEPTH       2u

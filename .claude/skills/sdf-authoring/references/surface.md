@@ -1,4 +1,4 @@
-# Palette, weathering, inset, bands, lanes, and the render section
+# Palette, weathering, inset, paints, lanes, and the render section
 
 ## The palette
 
@@ -20,7 +20,7 @@
 | `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
 | `weathering` | see below | absent | |
 | `inset` | see below | absent | |
-| `bands` | see below | absent | |
+| `paints` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
 name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
@@ -71,9 +71,9 @@ Two cross-rules the validator enforces together:
   something to reveal.
 - `settle > 0` **requires** `deposit`.
 
-Both fail with one message: `Invalid inset, weathering or band: check frames,
-ordered stops, surfaces, ranges, lane [0, 3], a nonzero band normal and a
-positive band half-width.`
+Both fail with one message: `Invalid inset, weathering or paint: check frames,
+ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive
+paint scale and a non-negative stroke.`
 
 The live amount is `max(saturate(lane), floor)`, and the edge mask comes from the
 level-set mean curvature measured at the hit, positive side only, scaled by
@@ -119,36 +119,56 @@ reflect that material origin. Mirrored eyes generally need separate slots
 with separate frames; shared slots work only when their respective dynamic
 frames make the same local inset correct.
 
-## Bands
+## Paints
 
-`palette[].bands` holds up to two bands, each painting a stripe across every
-surface of the slot, the second over the first: a hit within `halfWidth` of the
-plane through `origin` with normal `normal` takes `color`, its edge antialiased
-over the pixel's footprint. It changes no geometry, so the mesh bake never sees
-it and its edge stays as sharp as the pixel, where a stripe sculpted as a copy
-proud of its plate by less than the bake's cell (5 mm refined, 15 mm on smooth
-parts) frays into a jagged step and speckled material. A band is an infinite
-slab: it paints the slot's sides and back wherever they cross it, and it cannot
-end, bend or outline a shape, so a paint detail whose footprint is not a slab
-(the Moth's helmet trim, shin trims and mouth) has no palette mechanism and stays
-sculpted. A third band is refused: `3 bands exceed the 2 a palette slot paints.`
+Surface detail that is colour rather than form (a stripe, a trim, a mouth line,
+a panel) is a paint, never a sculpted copy proud of its plate: relief under the
+bake's cell (5 mm refined, 15 mm on smooth parts) frays into jagged steps and
+speckled material. `palette[].paints` holds up to eight paints, each drawn over
+the one before on every surface of the slot. A paint is one primitive of the
+shape vocabulary placed like a shape; the surface takes `color` inside it, or,
+with a `stroke`, within the stroke of its surface, the edge antialiased over the
+pixel's footprint. The views pass draws it at the hit alone, so it never changes
+the field or the bake.
 
-| Field | Range |
+```puck
+paints [
+  {
+    parent: "shin-left"          // rides that shape's frame, in its local frame
+    type: "Prism"
+    position [0, -0.29, 0]
+    scale [0.174, 0.174, 0.45]
+    profile { kind: "Ellipse" }
+    stroke: 0.023                // absent or zero fills the primitive
+    color: "#9D66C6"
+  }
+]
+```
+
+| Footprint | Paint |
 |---|---|
-| `origin` | finite point on the band's centre plane |
-| `normal` | finite, nonzero; normalized at pack |
-| `halfWidth` | > 0, in the frame's units |
-| `color` | `#RRGGBB` or a state binding |
+| A stripe across a part | `Plane`, stroked at the half-width; local +Y is its normal |
+| A ring, horseshoe or polygon outline on a curved surface | an extruded `Prism` profile (`Ellipse`, `Polygon`, `Convex`, rounded rectangle), stroked: the outline projected along local Z; `scale.z` is the half-depth and bounds which side of the part it reaches |
+| A filled panel | the same prism, unstroked |
+| A curved line (a mouth, a seam) | a `Sweep`, unstroked, its curve on the surface and its radius the line's half-width |
 
-Origin and normal are in the same frame as an inset's: world space for static
-geometry, the winning dynamic slot's local frame otherwise, and neither is
-converted by `CreationFrame`. On a body's part that frame is the slot its baked
-group rides: measured on the Moth, it sits at the group's first shape's
-authored position with the author frame's axes (+Z the front), so the
-shoulder pads' bands name `origin [0, -0.0125, 0]`, 12.5 mm below the pad
-prism's position, and an author-frame normal. A slot carries at most two bands
-(each back pod's two stripes share one), so
-mirrored stripes take mirrored slots. To find a frame, paint a test band and
+Fields: `type` (every primitive; a `Path` profile is refused), `color`
+(`#RRGGBB` or a state binding), `position`, `rotation`, `scale` (absent: origin,
+identity, one), `stroke` (finite ≥ 0), `parent`, and the shape fields
+`taper`, `profile`, `lift`, `rounding`, `chamfer`, `exponent` and `curve` (a
+`Sweep` requires a curve, and only a `Sweep` carries one). The primitive takes a
+shape's own admission.
+
+**Frames.** A paint with a `parent` is authored in that shape's local frame, the
+frame a shape-riding volume uses (curve points and text runs ride it the same
+way), and rides the shape's own dynamic slot, so it moves with the part whatever
+slot the hit's mesh rides; the parent may not carry a domain fold. Because a
+parented paint colours only the surface near it, two parts can share a slot
+(the Moth's two shins share `skin`). A paint without a parent is in the frame of
+the slot that owns the hit: the slot its baked group rides, which sits at the
+group's first shape's authored position with that shape's axes, or world space
+for static geometry. A static placement shares one palette across its
+placements and draws no parented paint. To find a frame, paint a test stripe and
 look before trusting the numbers.
 
 ## Render lanes

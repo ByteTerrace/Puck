@@ -229,12 +229,60 @@ public readonly record struct SdfMaterial(
     float Specular = 0f,
     float Roughness = SdfMaterial.DefaultRoughness,
     float Sheen = 0f,
-    // ... then Metal, Coat, Weathering, Wrap, Soften, Fill, Inset, Bleed, Receive, Band and SecondBand
+    // ... then Metal, Coat, Weathering, Wrap, Soften, Fill, Inset, Bleed, Receive and Paints
 );
 ```
 
 `AddMaterial` appends one and returns its index; shapes reference materials
-by that index. Most of the time that's the whole story. It gets more
+by that index.
+
+### Paints draw surface detail without the field
+
+A stripe, a trim, a mouth line or a panel outline is surface colour, not
+geometry, and a millimetre of relief sits under the mesh bake's cell, where it
+frays into steps and speckled material. A material's `Paints` draw such detail
+in the views pass instead, at the hit alone, so they never change the field or
+the bake and their edges stay as sharp as the pixel. An `SdfPaint` is one
+primitive of the shape vocabulary in a frame, a colour, and a stroke:
+
+```csharp
+var ring = new SdfPaint(
+    Shape: SdfPaintShape.Of(type: SdfSolidPrimitive.Prism, scale: new Vector3(0.17f, 0.17f, 0.45f),
+        profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Ellipse)),
+    Origin: new Vector3(0f, -0.29f, 0f),
+    Rotation: Quaternion.Identity,
+    Stroke: 0.023f,                 // zero fills the shape
+    Color: violet,
+    Slot: shinSlot);                // SdfPaint.WinningFrame: the frame of the slot that owns the hit
+```
+
+The surface takes the paint's colour where it lies inside the shape, or, with a
+positive stroke, within the stroke of the shape's surface; the edge is
+antialiased over the pixel's footprint. `SdfPaintShape.Of` packs the primitive
+through `SdfSolidGeometry.AppendScaledPrimitive`, the path every creation shape
+takes, and the views pass evaluates it through the same shape dispatch
+(`evaluateShape`) the field does, so a paint covers exactly the solid a shape
+with the same fields would. That gives three ways to place a curve on a curved
+surface:
+
+- **A stroked plane** is a stripe: every surface within the stroke of the plane.
+- **A stroked extruded profile** is that outline projected along the prism's
+  axis: an ellipse prism paints a ring, a polygon prism a polygon outline, a
+  filled one the panel inside it. The extrusion's depth bounds which side of a
+  part the projection reaches.
+- **A thin sweep, filled**, is a curved line wherever the surface passes
+  through its tube; place the curve on the surface and its radius is the line's
+  half-width.
+
+A paint rides its `Slot`'s frame, so a body part's paint moves with that part
+whatever slot the hit's mesh rides, and two parts can share a material: a paint
+only colours the surface near it. A material carries up to
+`SdfProgram.MaxPaintsPerMaterial` paints, drawn in order, each over the one
+before. The views pass skips a paint whose reach the hit lies beyond after one
+rotation. A path profile, a glyph, a sampled region and a screen slab are
+refused (`SdfPaint.Admits`).
+
+Most of the time that's the whole story for a material. It gets more
 interesting when a fold recolors *positionally*—`WallpaperFold` and
 `RepeatPolar` can take a `materialStride`, so each lattice cell or each
 sector of a repeated ring picks a different row of the palette (a

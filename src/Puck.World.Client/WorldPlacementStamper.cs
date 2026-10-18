@@ -33,7 +33,9 @@ public static class WorldPlacementStamper {
     /// <param name="colors">The colors the build bakes, which a state-bound palette color resolves through.</param>
     /// <param name="document">The creation document.</param>
     /// <param name="tint">The albedo tint (color + blend), or <see langword="null"/>.</param>
-    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint) {
+    /// <param name="pool">A pooled placement's root dynamic slot and placement scale, which parented paints ride; <see langword="null"/> for a
+    /// static placement.</param>
+    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, (int RootSlot, float Scale)? pool = null) {
         var ids = new int[PaletteLength(document: document)];
 
         FillPalette(
@@ -41,6 +43,7 @@ public static class WorldPlacementStamper {
             colors: colors,
             document: document,
             ids: ids,
+            pool: pool,
             tint: tint
         );
 
@@ -56,7 +59,7 @@ public static class WorldPlacementStamper {
             val2: 1
         );
     // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
-    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids) {
+    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null) {
         var resolveLayerColor = colors.LayerColor;
         var palette = (document.Palette ?? []);
         var count = Math.Min(
@@ -100,10 +103,46 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Band: ((entry?.Bands is { Count: > 0 } bands) ? bands[0].ToBand(resolve: resolveLayerColor) : null),
-                SecondBand: ((entry?.Bands is { Count: > 1 } more) ? more[1].ToBand(resolve: resolveLayerColor) : null)
+                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool)
             ));
         }
+    }
+    // A palette slot's paints. A pooled placement resolves a parented paint to its parent shape's own dynamic slot and
+    // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
+    // draws only the paints that ride the winning frame, as authored.
+    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool) {
+        if (entry?.Paints is not { Count: > 0 } paints) {
+            return null;
+        }
+
+        var shapes = (document.Shapes ?? []);
+        var resolved = new List<SdfPaint>(capacity: paints.Count);
+
+        foreach (var paint in paints) {
+            if (paint.Parent is not { } parent) {
+                resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: (pool?.Scale ?? 1f)));
+
+                continue;
+            }
+            if (pool is not { } frames) {
+                continue;
+            }
+
+            var shapeIndex = -1;
+
+            for (var index = 0; ((index < shapes.Count) && (index < WorldPlacementPolicy.MaxAnimatedStampShapes)); index++) {
+                if (string.Equals(a: shapes[index].Name?.Value, b: parent, comparisonType: StringComparison.Ordinal)) {
+                    shapeIndex = index;
+
+                    break;
+                }
+            }
+            if (shapeIndex >= 0) {
+                resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: ((frames.RootSlot + 1) + shapeIndex)));
+            }
+        }
+
+        return [.. resolved];
     }
 
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into

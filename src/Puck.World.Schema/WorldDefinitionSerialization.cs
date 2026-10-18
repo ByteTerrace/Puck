@@ -1219,6 +1219,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
             type: typeof(Puck.World.Authoring.CreationDocument)
         ).AsObject();
 
+        WorldSchema.ExpandOwnReferences(node: schema, root: schema);
         schema["$id"] = Puck.World.Authoring.CreationDocument.CurrentSchema;
 
         return schema;

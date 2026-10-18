@@ -366,27 +366,70 @@ public sealed class SdfMaterialLawTests {
             ));
         }
     }
-    /// <summary>A band packs its centre plane as a unit normal and the origin's offset along it, then its colour and
-    /// half-width (rows 20 and 21 for the first band, 22 and 23 for the second, which sdfMaterialLoad reads); a zero
-    /// normal, a non-positive half-width, a non-finite origin or a negative colour in either band is refused at both
-    /// doors.</summary>
+    /// <summary>Paints pack into the paint table between the instruction data and the materials, each material's
+    /// contiguous: material row 20 names its first paint's vector and its count (sdfMaterialLoad), and a paint's rows
+    /// carry its frame and shape type, rotation, residual scale, the shape's two data vectors as the builder packs them,
+    /// colour and stroke, slot and reach, then its side table, a sweep's offset naming that table (sdfApplyPaints).
+    /// An invalid paint, or more than the per-material maximum, is refused at both doors.</summary>
     [Fact]
-    public void BandsPackTheirCentrePlanesAndAreRefusedOutOfRangeAtBothDoors() {
-        var valid = new SdfBand(Origin: new Vector3(x: 0f, y: 2f, z: 0f), Normal: new Vector3(x: 0f, y: 3f, z: 0f), HalfWidth: 0.02f, Color: new Vector3(x: 0.5f, y: 0.25f, z: 0.125f));
-        var second = new SdfBand(Origin: new Vector3(x: 0f, y: 0f, z: -1f), Normal: new Vector3(x: 0f, y: 0f, z: 2f), HalfWidth: 0.05f, Color: new Vector3(x: 0.75f, y: 0.5f, z: 0.25f));
-        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Band: valid, SecondBand: second)]);
-        var row = ((((int)program.Words[3]) + 20) * 4);
+    public void PaintsPackIntoThePaintTableAndAreRefusedOutOfRangeAtBothDoors() {
+        var plane = new SdfPaint(Color: new Vector3(x: 0.5f, y: 0.25f, z: 0.125f), Origin: new Vector3(x: 0f, y: 2f, z: 0f), Rotation: new Quaternion(x: 0f, y: 0f, z: 0f, w: 2f), Shape: SdfPaintShape.Of(scale: Vector3.One, type: SdfSolidPrimitive.Plane), Stroke: 0.02f);
+        var sweep = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: Vector3.Zero, B: new Vector3(x: 0.5f, y: 0.25f, z: 0f), Bulge: 0f, C: Vector3.UnitX, RadiusEnd: 0.01f, RadiusStart: 0.01f, StrandOffset: 0f, Strands: 1, Twist: 0f), scale: new Vector3(value: 2f), type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 5);
+        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One), new SdfMaterial(Vector3.One, Paints: [plane, sweep])]);
+        float Lane(int word) => BitConverter.UInt32BitsToSingle(value: program.Words[word]);
+        var paintVector = (((int)program.Words[SdfProgram.ProgramDataOffsetLane]) + SdfProgram.InstructionDataVectors);
+        var secondMaterial = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + SdfProgram.MaterialVectorsPerEntry + 20) * 4);
 
-        Assert.Equal(expected: [0f, 1f, 0f, 2f, 0.5f, 0.25f, 0.125f, 0.02f, 0f, 0f, 1f, -1f, 0.75f, 0.5f, 0.25f, 0.05f], actual: Enumerable.Range(start: row, count: 16).Select(selector: index => BitConverter.UInt32BitsToSingle(value: program.Words[index])));
-        foreach (var band in new[] {
-            valid with { Normal = Vector3.Zero }, valid with { HalfWidth = 0f },
-            valid with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, valid with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
+        Assert.Equal(expected: 0u, actual: program.Words[(((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + 20) * 4) + 1)]);
+        Assert.Equal(expected: (uint)paintVector, actual: program.Words[secondMaterial]);
+        Assert.Equal(expected: 2u, actual: program.Words[(secondMaterial + 1)]);
+        Assert.Equal(expected: (paintVector + (2 * SdfProgram.PaintVectorsPerEntry)), actual: (int)program.Words[SdfProgram.ProgramMaterialOffsetLane]);
+
+        var first = (paintVector * 4);
+
+        Assert.Equal(expected: [0f, 2f, 0f], actual: [Lane(first), Lane(first + 1), Lane(first + 2)]);
+        Assert.Equal(expected: (uint)SdfShapeType.Plane, actual: program.Words[(first + 3)]);
+        Assert.Equal(expected: [0f, 0f, 0f, 1f], actual: Enumerable.Range(start: (first + 4), count: 4).Select(selector: Lane));
+        Assert.Equal(expected: [0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(start: (first + 20), count: 4).Select(selector: Lane));
+        Assert.Equal(expected: SdfProgram.PaintWinningFrame, actual: program.Words[(first + 24)]);
+        Assert.Equal(expected: float.PositiveInfinity, actual: Lane(first + 25));
+
+        var second = ((paintVector + SdfProgram.PaintVectorsPerEntry) * 4);
+
+        Assert.Equal(expected: (uint)SdfShapeType.Sweep, actual: program.Words[(second + 3)]);
+        Assert.Equal(expected: (uint)((paintVector + SdfProgram.PaintVectorsPerEntry) + 7), actual: program.Words[(second + 12)]);
+        Assert.Equal(expected: 5u, actual: program.Words[(second + 24)]);
+        Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(start: (second + 28), count: 12).Select(selector: Lane));
+        foreach (var paint in new[] {
+            plane with { Rotation = default }, plane with { Stroke = -1f },
+            plane with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, plane with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
+            plane with { Slot = -2 }, plane with { Shape = plane.Shape with { Type = SdfShapeType.Path } },
         }) {
-            foreach (var material in new[] { new SdfMaterial(Vector3.One, Band: band), new SdfMaterial(Vector3.One, Band: valid, SecondBand: band) }) {
-                Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
-                Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
-            }
+            var material = new SdfMaterial(Vector3.One, Paints: [plane, paint]);
+
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
         }
+        var crowded = new SdfMaterial(Vector3.One, Paints: Enumerable.Repeat(element: plane, count: (SdfProgram.MaxPaintsPerMaterial + 1)).ToArray());
+
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: crowded));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [crowded]));
+    }
+    /// <summary>A paint shape is the instruction the builder packs for a document primitive: a residual scale transform
+    /// folds into its scale, a convex polygon carries its vertices and their count, and a primitive the views pass
+    /// cannot evaluate (a path profile) is refused.</summary>
+    [Fact]
+    public void PaintShapesCaptureThePrimitiveTheBuilderPacks() {
+        var torus = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 1f), type: SdfSolidPrimitive.Torus);
+        var polygon = SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Convex, CornerRadius: 0f, Vertices: [new Vector2(x: -1f, y: -1f), new Vector2(x: 0f, y: 1f), new Vector2(x: 1f, y: -1f)]), scale: new Vector3(value: 0.5f), type: SdfSolidPrimitive.Prism);
+
+        Assert.Equal(expected: SdfShapeType.Torus, actual: torus.Type);
+        Assert.Equal(expected: new Vector3(x: 1f, y: 2f, z: 1f), actual: torus.Scale);
+        Assert.Empty(collection: torus.Table);
+        Assert.Equal(expected: SdfShapeType.ConvexPolygon, actual: polygon.Type);
+        Assert.Equal(expected: 3u, actual: BitConverter.SingleToUInt32Bits(value: polygon.Data0.X));
+        Assert.Equal(expected: 6, actual: polygon.Table.Count);
+        Assert.Throws<ArgumentException>(testCode: () => SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Path), scale: Vector3.One, type: SdfSolidPrimitive.Prism));
     }
     [Fact]
     public void MaterialLayersPackAuthoredSurfacesAndAllStops() {

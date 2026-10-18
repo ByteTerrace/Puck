@@ -7898,25 +7898,152 @@ export type WorldPrototype = {
        */
       receive?: number | null;
       /**
-       * Up to MaxPaletteBands painted bands, each drawn over the one before; null or empty paints none.
+       * Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.
        */
-      bands?: ({
+      paints?: ({
         /**
-         * A point on the band's centre plane.
+         * The primitive, read as a shape's type: every primitive but a path profile.
          */
-        origin: unknown;
+        type: "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism" | "Superellipsoid" | "Sweep";
         /**
-         * The centre plane's normal; any length but zero.
-         */
-        normal: unknown;
-        /**
-         * The band's half-width along the normal; positive.
-         */
-        halfWidth: number;
-        /**
-         * The band's color, #RRGGBB or a state binding.
+         * The paint's color, #RRGGBB or a state binding.
          */
         color: string;
+        /**
+         * The primitive's position (null = the frame's origin).
+         */
+        position?: unknown;
+        /**
+         * The primitive's rotation (null = identity).
+         */
+        rotation?: unknown;
+        /**
+         * The primitive's size, as a shape's scale (null = one).
+         */
+        scale?: unknown;
+        /**
+         * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
+         */
+        stroke?: number | null;
+        /**
+         * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
+         */
+        parent?: string | null;
+        /**
+         * Prism only: the top-to-bottom width ratio.
+         */
+        taper?: number | null;
+        /**
+         * Prism only: the cross-section; a path profile is refused.
+         */
+        profile?: {
+          /**
+           * The profile family.
+           */
+          kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
+          /**
+           * A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner radius, ChamferedRectangle's chamfer radius, or Convex's uniform corner rounding.
+           */
+          cornerRadius?: number;
+          /**
+           * Polygon side count, from 3 through 32.
+           */
+          sides?: number;
+          /**
+           * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
+           */
+          vertices?: unknown[] | null;
+          /**
+           * Required only for Path; its points are normalized profile coordinates.
+           */
+          path?: {
+            contours: ({
+              start: [number, number];
+              segments: ({
+                end: [number, number];
+                control?: unknown;
+                control2?: unknown;
+                arcCenter?: unknown;
+                clockwise?: boolean;
+              } | null)[];
+              closed?: boolean;
+            } | null)[];
+            tolerance?: number;
+            stroke?: {
+              radiusStart: number;
+              radiusEnd: number;
+              smooth?: boolean;
+              from?: number;
+              to?: number;
+            } | null;
+            shear?: {
+              linear: number;
+              quadratic?: number;
+              cubic?: number;
+              offset?: number;
+              from?: number;
+              to?: number;
+              target?: number;
+            } | null;
+          } | null;
+        } | null;
+        /**
+         * Prism only: extrude or revolve.
+         */
+        lift?: "Revolve" | "Extrude" | null;
+        /**
+         * The edge-rounding radius, as a shape's.
+         */
+        rounding?: number | null;
+        /**
+         * The cap chamfer radius, as a shape's.
+         */
+        chamfer?: number | null;
+        /**
+         * Superellipsoid only: the exponent.
+         */
+        exponent?: number | null;
+        /**
+         * Sweep only: the curve, in the frame's units.
+         */
+        curve?: {
+          /**
+           * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
+           */
+          a: unknown;
+          /**
+           * The curve's middle control point.
+           */
+          b: unknown;
+          /**
+           * The curve's last control point.
+           */
+          c: unknown;
+          /**
+           * The sweep radius at t = 0; finite and strictly positive.
+           */
+          radiusStart: number;
+          /**
+           * The sweep radius at t = 1; finite and strictly positive.
+           */
+          radiusEnd: number;
+          /**
+           * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
+           */
+          bulge?: number | null;
+          /**
+           * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
+           */
+          strands?: number | null;
+          /**
+           * The strand orbit rate, in turns along the curve (null = 0); finite.
+           */
+          twist?: number | null;
+          /**
+           * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
+           */
+          strandOffset?: number | null;
+        } | null;
       } | null)[] | null;
     } | null)[] | null;
     /**

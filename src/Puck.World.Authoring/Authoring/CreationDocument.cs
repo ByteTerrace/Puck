@@ -27,9 +27,9 @@ namespace Puck.World.Authoring;
 /// <param name="Bleed">The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state
 /// binding; null means white.</param>
 /// <param name="Receive">The finite nonnegative gain on received indirect light; null means one.</param>
-/// <param name="Bands">Up to <see cref="CreationDocument.MaxPaletteBands"/> painted bands, each drawn over the one
+/// <param name="Paints">Up to <see cref="CreationDocument.MaxPalettePaints"/> paints, each drawn over the one
 /// before; null or empty paints none.</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PaletteBandDocument>? Bands = null);
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PalettePaintDocument>? Paints = null);
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
 /// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
@@ -536,8 +536,8 @@ public sealed record CreationDocument(
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>
     /// clamp into <c>[0, PaletteSize)</c> at normalization.</summary>
     public const int PaletteSize = 32;
-    /// <summary>The most bands one palette slot paints (<see cref="PaletteEntryDocument.Bands"/>).</summary>
-    public const int MaxPaletteBands = 2;
+    /// <summary>The most paints one palette slot draws (<see cref="PaletteEntryDocument.Paints"/>).</summary>
+    public const int MaxPalettePaints = SdfProgram.MaxPaintsPerMaterial;
 
     /// <summary>Unknown sections preserved across a round-trip — the data-side plugin extensibility posture. Null
     /// when the document carries no unknown members. A settable (not <c>init</c>)

@@ -67,12 +67,17 @@ public sealed partial class SdfProgramBuilder {
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
             weathering: material.Weathering,
-            band: material.Band,
-            secondBand: material.SecondBand
+            paints: material.Paints
         )) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                "Invalid inset, weathering or band layer."
+                "Invalid inset, weathering or paint layer."
+            );
+        }
+        if (material.Paints is { Count: > SdfProgram.MaxPaintsPerMaterial } paints) {
+            throw new ArgumentOutOfRangeException(
+                nameof(material),
+                $"A material paints at most {SdfProgram.MaxPaintsPerMaterial} paints; got {paints.Count}."
             );
         }
 

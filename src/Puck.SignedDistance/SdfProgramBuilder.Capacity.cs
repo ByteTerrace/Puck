@@ -60,6 +60,7 @@ public sealed partial class SdfProgramBuilder {
             Instances: m_instances.Count,
             Instructions: instructions,
             Materials: m_materials.Count,
+            Paints: m_materials.Sum(selector: material => (material.Paints?.Count ?? 0)),
             PathEdges: pathEdges,
             RigidLeaves: checked((2 * shapes)),
             Segments: segments,

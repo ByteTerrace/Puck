@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Authoring;
 
 public static partial class CreationCanonicalizer {
-    private static void ValidatePaletteLayers(PaletteEntryDocument entry, List<DocumentValidationError> errors, int index) {
+    private static void ValidatePaletteLayers(PaletteEntryDocument entry, ShapeLookup lookup, IReadOnlyList<ShapeDocument> shapes, List<DocumentValidationError> errors, int index) {
         Vector3 Resolve(string color) {
             if (
                 !HexColor.TryParse(
@@ -21,23 +21,95 @@ public static partial class CreationCanonicalizer {
             }
             return Vector3.Zero;
         }
-        var bands = (entry.Bands ?? []);
+        // A paint's primitive takes a shape's own admission (SdfSolidGeometry.TryValidateScaledPrimitive), less a path
+        // profile, and its parent names a shape whose slot carries the shape's own frame: never a domain-bearing one,
+        // whose slot carries its parent's delta frame instead.
+        SdfPaint? ResolvePaint(PalettePaintDocument? paint, string path) {
+            if (paint is null) {
+                errors.Add(item: new(Message: "paint entry is null.", Path: path));
 
-        if (bands.Count > CreationDocument.MaxPaletteBands) {
+                return null;
+            }
+
+            var refused = false;
+
+            void Refuse(string message, string field) {
+                errors.Add(item: new(Message: message, Path: $"{path}.{field}"));
+                refused = true;
+            }
+            if (paint.Parent is { } parent) {
+                var shapeIndex = lookup.Find(name: parent);
+
+                if (shapeIndex < 0) {
+                    Refuse(message: $"parent '{parent}' names no shape in this creation.", field: "parent");
+                } else if (shapes[shapeIndex].Domain is { Count: > 0 }) {
+                    Refuse(message: $"parent '{parent}' carries a domain fold, whose slot does not carry its own frame.", field: "parent");
+                }
+            }
+            if (!Enum.IsDefined(value: paint.Type)) {
+                Refuse(message: $"type '{paint.Type}' is not a primitive.", field: "type");
+
+                return null;
+            }
+            if (paint.Profile is { Kind: SdfPrismProfileKind.Path }) {
+                Refuse(message: "a paint cannot cover a path profile.", field: "profile");
+            }
+            if ((paint.Stroke is { } stroke) && (!float.IsFinite(f: stroke) || (stroke < 0f))) {
+                Refuse(message: "stroke must be finite and non-negative.", field: "stroke");
+            }
+            if ((paint.Type == SdfSolidPrimitive.Sweep) != (paint.Curve is not null)) {
+                Refuse(message: "a Sweep paint requires a curve, and only a Sweep paint carries one.", field: "curve");
+            }
+            if (
+                (paint.Type != SdfSolidPrimitive.Sweep) &&
+                !SdfSolidGeometry.TryValidateScaledPrimitive(
+                    chamfer: (paint.Chamfer ?? 0f),
+                    exponent: (paint.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    lift: (paint.Lift ?? SdfLift.Extrude),
+                    profile: paint.Profile,
+                    refusal: out var refusal,
+                    rounding: (paint.Rounding ?? 0f),
+                    scale: (paint.Scale?.Value ?? Vector3.One),
+                    taper: (paint.Taper ?? 0.5f),
+                    type: paint.Type
+                )
+            ) {
+                Refuse(message: $"the primitive cannot be emitted: {refusal}.", field: "scale");
+            }
+            if (refused) {
+                return null;
+            }
+            try {
+                return paint.ToPaint(resolve: Resolve);
+            } catch (ArgumentException exception) {
+                errors.Add(item: new(Message: exception.Message, Path: path));
+
+                return null;
+            }
+        }
+        var paints = (entry.Paints ?? []);
+
+        if (paints.Count > CreationDocument.MaxPalettePaints) {
             errors.Add(item: new(
-                Message: $"{bands.Count} bands exceed the {CreationDocument.MaxPaletteBands} a palette slot paints.",
-                Path: $"palette[{index}].bands"
+                Message: $"{paints.Count} paints exceed the {CreationDocument.MaxPalettePaints} a palette slot draws.",
+                Path: $"palette[{index}].paints"
             ));
+        }
+        var resolved = new List<SdfPaint>(capacity: paints.Count);
+
+        for (var paintIndex = 0; (paintIndex < paints.Count); paintIndex++) {
+            if (ResolvePaint(paint: paints[paintIndex], path: $"palette[{index}].paints[{paintIndex}]") is { } paint) {
+                resolved.Add(item: paint);
+            }
         }
         try {
             if (!SdfMaterialLayers.IsValid(
                 inset: entry.Inset?.ToInset(resolve: Resolve),
                 weathering: entry.Weathering?.ToWeathering(resolve: Resolve),
-                band: ((bands.Count > 0) ? bands[0].ToBand(resolve: Resolve) : null),
-                secondBand: ((bands.Count > 1) ? bands[1].ToBand(resolve: Resolve) : null)
+                paints: resolved
             )) {
                 errors.Add(item: new(
-                    Message: "Invalid inset, weathering or band: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero band normal and a positive band half-width.",
+                    Message: "Invalid inset, weathering or paint: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive paint scale and a non-negative stroke.",
                     Path: $"palette[{index}]"
                 ));
             }

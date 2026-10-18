@@ -244,6 +244,9 @@ public static class SdfIsaHlsl {
             name: "SDF_MATERIAL_VECTORS_PER_ENTRY",
             value: SdfProgram.MaterialVectorsPerEntry
         );
+        declarations.Count(name: "SDF_PAINT_VECTORS_PER_ENTRY", value: SdfProgram.PaintVectorsPerEntry);
+        declarations.Count(name: "SDF_MAX_PAINTS_PER_MATERIAL", value: SdfProgram.MaxPaintsPerMaterial);
+        declarations.Bits(name: "SDF_PAINT_WINNING_FRAME", value: SdfProgram.PaintWinningFrame);
         declarations.Count(
             name: "SDF_GRID_HEADER_WORDS",
             value: SdfInstanceGrid.HeaderWords

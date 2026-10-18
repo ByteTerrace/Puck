@@ -212,7 +212,10 @@ The palette carries far more than a color: `specular`, `roughness`, `metal`,
 `coat`, `sheen`, `emissive`, plus `wrap` and `soften` for skin, `fill` for a
 warm interior fill, `weathering` for chips and scratches over a revealed
 substrate, and `inset` for a refracted layer beneath the surface — which is how
-an eye is authored, as color stops at radii rather than a dark sphere. Ranges,
+an eye is authored, as color stops at radii rather than a dark sphere, and
+`paints` for surface detail that is colour rather than form — stripes, trims,
+panel outlines, a mouth line — drawn crisp at the pixel and never sculpted as a
+millimetre of relief the bake frays. Ranges,
 defaults, what each does visually, and the lighting and environment fields that
 make them read at all are in `references/surface.md`.
 
@@ -293,7 +296,7 @@ stream and fencing rules that keep them honest, are in `references/loop.md`.
 |---|---|
 | `references/shapes.md` | Every primitive's scale convention, profiles and lifts, which facets each admits, every ceiling and refusal message |
 | `references/composition.md` | Blends with formulas, domain folds, groups, scopes, trims, panels, the budget arithmetic |
-| `references/surface.md` | Palette fields, weathering, inset, render lanes, lighting, environment, tonemap, volumes |
+| `references/surface.md` | Palette fields, weathering, inset, paints, render lanes, lighting, environment, tonemap, volumes |
 | `references/rig.md` | parent/joint/swings/slides, frames, chains, drivers, effectors, parts, cameras, text runs |
 | `references/loop.md` | The `.puck` compile/lint/decompile loop, console verbs, capture recipes, `puck creation` verbs, the sculpting library for C# authoring |
 | [`puck-dsl` skill](../puck-dsl/SKILL.md) | `.puck` grammar (`let`/`template`/`for`, the one-spelling rule), the CLI verbs' flags, and PUCKnnn diagnostics not specific to a shape/creation field |

@@ -119,7 +119,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 layerNormal = rotatePointByInverseQuaternion(normal, frameRotation);
                 layerRay = rotatePointByInverseQuaternion(p.rayDirection, frameRotation);
             }
-            applyBand(layerPoint, p.pixelFootprint * s.t, shadeMaterial);
+            sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, shadeMaterial);
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
 

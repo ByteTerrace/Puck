@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
@@ -49,30 +50,67 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
         )
     );
 }
-/// <summary>A band of paint across the surface, in the winning dynamic frame, or world space when no slot owns the hit:
-/// the points within <paramref name="HalfWidth"/> of the plane through <paramref name="Origin"/> with normal
-/// <paramref name="Normal"/> take <paramref name="Color"/>.</summary>
-/// <param name="Origin">A point on the band's centre plane.</param>
-/// <param name="Normal">The centre plane's normal; any length but zero.</param>
-/// <param name="HalfWidth">The band's half-width along the normal; positive.</param>
-/// <param name="Color">The band's color, #RRGGBB or a state binding.</param>
-public sealed record PaletteBandDocument(DocumentVector3 Origin, DocumentVector3 Normal, float HalfWidth, string Color) {
-    /// <summary>Resolves the generic engine layer.</summary>
+/// <summary>A paint over the palette slot's surface: a primitive of the shape vocabulary, placed like a shape, whose
+/// inside (or, with a <paramref name="Stroke"/>, the band within that distance of its surface) takes
+/// <paramref name="Color"/>. It never changes the field or the bake; the views pass draws it crisp at the pixel. A
+/// plane stroked at a half-width paints a stripe, an extruded ellipse prism stroked paints a ring projected along its
+/// axis, and a thin sweep paints a curved line where it crosses the surface.</summary>
+/// <param name="Type">The primitive, read as a shape's <c>type</c>: every primitive but a path profile.</param>
+/// <param name="Color">The paint's color, #RRGGBB or a state binding.</param>
+/// <param name="Position">The primitive's position (null = the frame's origin).</param>
+/// <param name="Rotation">The primitive's rotation (null = identity).</param>
+/// <param name="Scale">The primitive's size, as a shape's <c>scale</c> (null = one).</param>
+/// <param name="Stroke">The half-width of the band painted about the primitive's surface, in the frame's units; null
+/// or zero fills the primitive.</param>
+/// <param name="Parent">The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume
+/// is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static
+/// placement draws no parented paint.</param>
+/// <param name="Taper">Prism only: the top-to-bottom width ratio.</param>
+/// <param name="Profile">Prism only: the cross-section; a path profile is refused.</param>
+/// <param name="Lift">Prism only: extrude or revolve.</param>
+/// <param name="Rounding">The edge-rounding radius, as a shape's.</param>
+/// <param name="Chamfer">The cap chamfer radius, as a shape's.</param>
+/// <param name="Exponent">Superellipsoid only: the exponent.</param>
+/// <param name="Curve">Sweep only: the curve, in the frame's units.</param>
+public sealed record PalettePaintDocument(
+    SdfSolidPrimitive Type,
+    string Color,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentQuaternion? Rotation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Scale = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Stroke = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Taper = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfPrismProfile? Profile = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfLift? Lift = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Rounding = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Chamfer = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null
+) {
+    /// <summary>Resolves the engine paint at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
-    /// <returns>The band.</returns>
-    public SdfBand ToBand(Func<string, Vector3> resolve) => new(
-        Origin: new(
-            x: Origin.X,
-            y: Origin.Y,
-            z: Origin.Z
+    /// <param name="scale">The placement scale the paint's lengths multiply by; positive.</param>
+    /// <param name="slot">The dynamic transform slot of <see cref="Parent"/>, or <see cref="SdfPaint.WinningFrame"/>.</param>
+    /// <returns>The paint.</returns>
+    /// <exception cref="ArgumentException">The primitive emits something a paint cannot carry.</exception>
+    public SdfPaint ToPaint(Func<string, Vector3> resolve, float scale = 1f, int slot = SdfPaint.WinningFrame) => new(
+        Color: resolve(Color),
+        Origin: ((Position?.Value ?? Vector3.Zero) * scale),
+        Rotation: (Rotation?.Value ?? Quaternion.Identity),
+        Shape: SdfPaintShape.Of(
+            chamfer: ((Chamfer ?? 0f) * scale),
+            curve: Curve?.Parameters(),
+            exponent: (Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            lift: (Lift ?? SdfLift.Extrude),
+            profile: Profile,
+            rounding: ((Rounding ?? 0f) * scale),
+            scale: ((Scale?.Value ?? Vector3.One) * scale),
+            taper: (Taper ?? 0.5f),
+            type: Type
         ),
-        Normal: new(
-            x: Normal.X,
-            y: Normal.Y,
-            z: Normal.Z
-        ),
-        HalfWidth: HalfWidth,
-        Color: resolve(Color)
+        Slot: slot,
+        Stroke: ((Stroke ?? 0f) * scale)
     );
 }
 /// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces.</summary>

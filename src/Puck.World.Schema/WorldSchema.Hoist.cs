@@ -111,6 +111,7 @@ public static partial class WorldSchema {
         private readonly Dictionary<int, int> m_rawKeyCounts = [];
         private readonly Dictionary<int[], int> m_signatures = new(comparer: SignatureComparer.Instance);
         private readonly Dictionary<string, int> m_targetByPath = new(comparer: StringComparer.Ordinal);
+        private JsonObject? m_documentRoot;
 
         private readonly string?[] m_targetDefNames;
         private readonly JsonNode[] m_targetNodes;
@@ -224,6 +225,7 @@ public static partial class WorldSchema {
         // creation order, with each recursive marker still carrying its original document pointer until
         // FixupCyclicMarkers repoints it.
         public JsonObject Run(JsonObject merged) {
+            m_documentRoot = merged;
             var root = ((ExpandedNode)Expand(
                 probes: out _,
                 source: merged
@@ -366,6 +368,18 @@ public static partial class WorldSchema {
                     probes: out probes,
                     source: m_inlineRoots[inlineRoot]
                 );
+            }
+
+            // A node carrying its own "$id" (an embedded document schema, puck.creation.v1) resolves its pointers
+            // against that id, so it passes through whole: a leaf no def is hoisted out of.
+            if (
+                (source is JsonObject island) &&
+                !ReferenceEquals(objA: island, objB: m_documentRoot) &&
+                island.ContainsKey(propertyName: "$id")
+            ) {
+                probes = null;
+
+                return island;
             }
 
             if (

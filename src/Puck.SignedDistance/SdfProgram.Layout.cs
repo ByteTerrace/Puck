@@ -7,6 +7,7 @@ public sealed partial class SdfProgram {
     internal readonly record struct Layout(
         int Instructions,
         int Materials,
+        int Paints,
         int Segments,
         int Instances,
         int WorldSegments,
@@ -18,7 +19,8 @@ public sealed partial class SdfProgram {
         int PathEdges
     ) {
         public int DataOffset => (ProgramHeaderVectors + Instructions);
-        public int MaterialOffset => (DataOffset + (InstructionDataVectors * Instructions));
+        public int PaintOffset => (DataOffset + (InstructionDataVectors * Instructions));
+        public int MaterialOffset => (PaintOffset + (PaintVectorsPerEntry * Paints));
         public int BoundsOffset => (MaterialOffset + (MaterialVectorsPerEntry * Materials));
         public int SegmentOffset => (BoundsOffset + (BoundRecordVectors * Instructions));
         public int InstanceOffset => ((SegmentOffset + DirectoryHeaderVectors) + (BoundRecordVectors * Segments));

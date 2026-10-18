@@ -21,6 +21,9 @@ public sealed partial class SdfProgram {
             if (entry.Inset is { Paint: { Stops: { } stops } paint } inset) {
                 entry = entry with { Inset = inset with { Paint = paint with { Stops = Array.AsReadOnly(array: stops.ToArray()) } } };
             }
+            if (entry.Paints is { } paints) {
+                entry = entry with { Paints = Array.AsReadOnly(array: paints.ToArray()) };
+            }
             snapshot[index] = entry;
         }
         return snapshot;

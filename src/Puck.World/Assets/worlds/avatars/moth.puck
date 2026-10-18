@@ -1411,11 +1411,12 @@ prototypes {
               metal: 0
             }
           }
-          bands [
+          paints [
             {
-              origin [0, -0.0125, 0]
-              normal [0.3940162, 0.9191023, 0]
-              halfWidth: 0.02
+              type: "Plane"
+              position [0, -0.0125, 0]
+              rotation [0, 0, -0.201116, 0.979558]
+              stroke: 0.02
               color: "#EED3A6"
             }
           ]
@@ -1450,11 +1451,12 @@ prototypes {
               metal: 0
             }
           }
-          bands [
+          paints [
             {
-              origin [0, -0.0125, 0]
-              normal [-0.3940162, 0.9191023, 0]
-              halfWidth: 0.02
+              type: "Plane"
+              position [0, -0.0125, 0]
+              rotation [0, 0, 0.201116, 0.979558]
+              stroke: 0.02
               color: "#EED3A6"
             }
           ]
@@ -1489,62 +1491,19 @@ prototypes {
               metal: 0
             }
           }
-          bands [
+          paints [
             {
-              origin [0, 0.1175, 0]
-              normal [0.261909, 0.965092, 0]
-              halfWidth: 0.04
+              type: "Plane"
+              position [0, 0.1175, 0]
+              rotation [0, 0, -0.132112, 0.991232]
+              stroke: 0.04
               color: "#EED3A6"
             }
             {
-              origin [0, -0.1125, 0]
-              normal [0.261909, 0.965092, 0]
-              halfWidth: 0.05
-              color: "#EED3A6"
-            }
-          ]
-        }
-        {
-          color: "#9D66C6"
-          roughness: 0.3
-          specular: 0.12
-          emissive: 0
-          coat: 0.4
-          weathering {
-            edge: 0.4
-            lines: 0
-            settle: 0.02
-            reach: 0.02
-            seed: 32
-            scale: 6
-            floor: 1
-            under [
-              {
-                threshold: 0.28
-                surface {
-                  color: "#B396C3"
-                  roughness: 0.58
-                  metal: 0.1
-                }
-              }
-            ]
-            deposit {
-              color: "#827570"
-              roughness: 0.76
-              metal: 0
-            }
-          }
-          bands [
-            {
-              origin [0, 0.1175, 0]
-              normal [-0.261909, 0.965092, 0]
-              halfWidth: 0.04
-              color: "#EED3A6"
-            }
-            {
-              origin [0, -0.1125, 0]
-              normal [-0.261909, 0.965092, 0]
-              halfWidth: 0.05
+              type: "Plane"
+              position [0, -0.1125, 0]
+              rotation [0, 0, -0.132112, 0.991232]
+              stroke: 0.05
               color: "#EED3A6"
             }
           ]
@@ -1579,11 +1538,58 @@ prototypes {
               metal: 0
             }
           }
-          bands [
+          paints [
             {
-              origin [0, -0.0865, 0]
-              normal [0, 1, 0]
-              halfWidth: 0.0865
+              type: "Plane"
+              position [0, 0.1175, 0]
+              rotation [0, 0, 0.132112, 0.991232]
+              stroke: 0.04
+              color: "#EED3A6"
+            }
+            {
+              type: "Plane"
+              position [0, -0.1125, 0]
+              rotation [0, 0, 0.132112, 0.991232]
+              stroke: 0.05
+              color: "#EED3A6"
+            }
+          ]
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          paints [
+            {
+              type: "Plane"
+              position [0, -0.0865, 0]
+              stroke: 0.0865
               color: "#EED3A6"
             }
           ]

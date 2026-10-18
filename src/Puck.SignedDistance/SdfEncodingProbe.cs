@@ -191,8 +191,10 @@ public static class SdfEncodingProbe {
                         Under: [new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[47], y: v[48], z: v[49]), Metal: v[50], Roughness: v[51]), Threshold: v[52]), new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[53], y: v[54], z: v[55]), Metal: v[56], Roughness: v[57]), Threshold: v[58])]
                     ),
                     Wrap: v[59],
-                    Band: new SdfBand(Color: new Vector3(x: v[67], y: v[68], z: v[69]), HalfWidth: v[66], Normal: new Vector3(x: v[63], y: v[64], z: v[65]), Origin: new Vector3(x: v[60], y: v[61], z: v[62])),
-                    SecondBand: new SdfBand(Color: new Vector3(x: v[77], y: v[78], z: v[79]), HalfWidth: v[76], Normal: new Vector3(x: v[73], y: v[74], z: v[75]), Origin: new Vector3(x: v[70], y: v[71], z: v[72]))
+                    Paints: [
+                        new SdfPaint(Color: new Vector3(x: v[67], y: v[68], z: v[69]), Origin: new Vector3(x: v[60], y: v[61], z: v[62]), Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(scale: new Vector3(x: v[63], y: v[64], z: v[65]), type: SdfSolidPrimitive.Ellipsoid), Stroke: v[66]),
+                        new SdfPaint(Color: new Vector3(x: v[77], y: v[78], z: v[79]), Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: new Vector3(x: v[70], y: v[71], z: v[72]), B: new Vector3(x: v[73], y: v[74], z: v[75]), Bulge: 0f, C: new Vector3(x: 0.9f, y: 0.1f, z: 0.2f), RadiusEnd: v[76], RadiusStart: v[76], StrandOffset: 0f, Strands: 1, Twist: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 3),
+                    ]
                 )),
                 radius: 0.5f
             ),

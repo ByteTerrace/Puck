@@ -90,7 +90,19 @@ public sealed partial class SdfProgram {
     public const uint BoundModeStatic = 1;
     /// <summary>The material float4 stride, written by PackMaterials and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 24;
+    public const int MaterialVectorsPerEntry = 21;
+    /// <summary>The paint table's float4 stride, written by PackPaints and read by the views pass's paint layer
+    /// (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>): the frame origin and shape, the rotation, the residual scale, the shape's
+    /// two data vectors, the color and stroke, the slot and reach, then <see cref="PaintTableVectors"/> of side table.</summary>
+    public const int PaintVectorsPerEntry = (7 + PaintTableVectors);
+    /// <summary>The side-table vectors a paint carries inline: a convex polygon's eight vertices or a sweep's curve
+    /// (<c>SDF_PAINT_TABLE_VECTORS</c>).</summary>
+    public const int PaintTableVectors = 4;
+    /// <summary>The most paints one material carries (<c>SDF_MAX_PAINTS_PER_MATERIAL</c>).</summary>
+    public const int MaxPaintsPerMaterial = 8;
+    /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
+    /// (<c>SDF_PAINT_WINNING_FRAME</c>).</summary>
+    public const uint PaintWinningFrame = uint.MaxValue;
     /// <summary>Bit 0 of the instance directory header's <c>.z</c> word: no instruction carries
     /// <see cref="SdfInstruction.Detail"/>, so the kernels skip detail admission (<c>SDF_NO_DETAIL_SHAPES_FLAG</c>).</summary>
     public const uint NoDetailShapesFlag = 1u;

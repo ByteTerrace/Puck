@@ -100,6 +100,7 @@ public sealed partial class WorldStampPool {
                 builder: builder,
                 colors: colors,
                 document: (document ?? EmptyDocument),
+                pool: (rootSlot, (live?.Scale ?? 1f)),
                 tint: null
             )
         );

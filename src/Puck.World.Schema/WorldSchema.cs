@@ -1571,6 +1571,38 @@ public static partial class WorldSchema {
 
         return clone;
     }
+    // The exporter refers a repeated type's later occurrence to its first by a pointer from the exported root. A creation
+    // fragment embeds under the world schema, where the hoist resolves every pointer from the world's own root, so each
+    // such reference in the fragment takes a copy of its target, the reference's own sibling keywords replacing the
+    // target's in place; a reference to its own ancestor (a shape holding itself) is left as it is.
+    internal static void ExpandOwnReferences(JsonNode node, JsonObject root) {
+        if (
+            (node is JsonObject reference) &&
+            TryGetAbsoluteRefTarget(refObj: reference, target: out var pointer) &&
+            (ResolvePointer(pointer: pointer, root: root) is JsonObject target) &&
+            !$"{reference.GetPath()}.".StartsWith(value: $"{target.GetPath()}.", comparisonType: StringComparison.Ordinal) &&
+            !reference.GetPath().StartsWith(value: $"{target.GetPath()}[", comparisonType: StringComparison.Ordinal)
+        ) {
+            var occurrence = reference
+                .Where(predicate: static member => !string.Equals(a: member.Key, b: "$ref", comparisonType: StringComparison.Ordinal))
+                .ToDictionary(keySelector: static member => member.Key, elementSelector: static member => member.Value?.DeepClone(), comparer: StringComparer.Ordinal);
+            var members = target
+                .Select(selector: member => (member.Key, Value: (occurrence.Remove(key: member.Key, value: out var own) ? own : member.Value?.DeepClone())))
+                .ToArray()
+                .Concat(second: occurrence.Select(selector: static member => (member.Key, member.Value)))
+                .ToArray();
+
+            reference.Clear();
+            foreach (var (key, value) in members) {
+                reference[key] = value;
+            }
+        }
+        foreach (var child in node switch { JsonObject members => members.Select(selector: static member => member.Value).ToArray(), JsonArray items => items.ToArray(), _ => [] }) {
+            if (child is not null) {
+                ExpandOwnReferences(node: child, root: root);
+            }
+        }
+    }
     private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
         foreach (var (type, placeholder) in nested.Later) {
             var pointer = (JsonPointerOf(

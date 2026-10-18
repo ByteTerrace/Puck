@@ -7,8 +7,10 @@ namespace Puck.SignedDistance;
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
 //   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
-//   [materialOffset ..) = material layers, 24 uint4 per entry; see PackMaterials and sdfMaterialLoad.
-//   [materialOffset + 24*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
+//   [dataOffset + 2*instructionCount ..) = the paint table, PaintVectorsPerEntry uvec4 per paint, each material's
+//                         paints contiguous; see PackPaints and the views pass's sdfApplyPaints.
+//   [materialOffset ..) = material layers, MaterialVectorsPerEntry uint4 per entry; see PackMaterials and sdfMaterialLoad.
+//   [materialOffset + MaterialVectorsPerEntry*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
 //   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, tapeOffset) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
@@ -290,6 +292,11 @@ public sealed partial class SdfProgram {
 
         var instructionCount = m_instructions.Length;
         var materialCount = materialTable.Length;
+        var paintCount = 0;
+
+        foreach (var material in materialTable) {
+            paintCount += (material.Paints?.Count ?? 0);
+        }
         var worldSegmentCount = 0;
 
         foreach (var segment in segments) {
@@ -350,6 +357,7 @@ public sealed partial class SdfProgram {
             Instances: m_instances.Length,
             Instructions: instructionCount,
             Materials: materialCount,
+            Paints: paintCount,
             PathEdges: pathEdges,
             RigidLeaves: rigidPlan.Leaves.Count,
             Segments: segments.Count,
@@ -476,6 +484,7 @@ public sealed partial class SdfProgram {
         PackMaterials(
             materialCount: materialCount,
             materialOffsetVectors: materialOffsetVectors,
+            paintOffsetVectors: layout.PaintOffset,
             materialTable: materialTable
         );
 
@@ -556,6 +565,16 @@ public sealed partial class SdfProgram {
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
     /// list-capacity hint without needing its own copy of the material table.</summary>
     public int MaterialCount => ((int)m_words[ProgramMaterialCountLane]);
+    /// <summary>Gets the range of <see cref="Words"/> the paint and material tables span: values that shade a surface
+    /// and never change the field, the instruction stream or any bound.</summary>
+    public Range ShadingWords {
+        get {
+            var paintWord = ((((int)m_words[ProgramDataOffsetLane]) + (InstructionDataVectors * InstructionCount)) * WordsPerVector);
+            var materialEnd = ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * MaterialCount)) * WordsPerVector);
+
+            return new Range(start: paintWord, end: materialEnd);
+        }
+    }
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>

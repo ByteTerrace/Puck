@@ -1,4 +1,5 @@
 using Puck.World.Authoring;
+using Puck.SignedDistance;
 
 using Xunit;
 
@@ -21,7 +22,7 @@ public sealed class PaletteAdmissionLawTests {
     private static CreationDocument Document(PaletteEntryDocument entry) => CreationFixtures.Document(
         name: PrototypeId,
         palette: [entry],
-        shapes: []
+        shapes: [CreationFixtures.UnitSphereShape with { Name = "a" }, CreationFixtures.UnitSphereShape with { Id = 1, Name = "folded", Domain = [new ShapeDomainOp.Symmetry(Normal: System.Numerics.Vector3.UnitX)] }]
     );
 
     [Fact]
@@ -239,16 +240,25 @@ public sealed class PaletteAdmissionLawTests {
         );
     }
     [Fact]
-    public void BandsNeedANonzeroNormalAPositiveHalfWidthAColorAndAtMostTwoToASlot() {
-        var band = new PaletteBandDocument(Origin: new System.Numerics.Vector3(x: 0f, y: -0.0125f, z: 0f), Normal: new System.Numerics.Vector3(x: 0.4f, y: 0.9f, z: 0f), HalfWidth: 0.02f, Color: "#EED3A6");
-        var entry = new PaletteEntryDocument("#9D66C6", null, null, null, Bands: [band]);
+    public void PaintsTakeAShapesAdmissionAColorAParentShapeAndAtMostEightToASlot() {
+        var band = new PalettePaintDocument(Type: SdfSolidPrimitive.Plane, Color: "#EED3A6", Position: new System.Numerics.Vector3(x: 0f, y: -0.0125f, z: 0f), Stroke: 0.02f);
+        var ring = new PalettePaintDocument(Type: SdfSolidPrimitive.Prism, Color: "#9D66C6", Scale: new System.Numerics.Vector3(x: 0.2f, y: 0.18f, z: 0.4f), Profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Ellipse), Stroke: 0.02f, Parent: "a");
+        var line = new PalettePaintDocument(Type: SdfSolidPrimitive.Sweep, Color: "#754137", Curve: new ShapeCurveDocument(A: new System.Numerics.Vector3(x: 0f, y: 0f, z: 0f), B: new System.Numerics.Vector3(x: 0.02f, y: -0.01f, z: 0f), C: new System.Numerics.Vector3(x: 0.04f, y: 0f, z: 0f), RadiusStart: 0.003f, RadiusEnd: 0.003f));
+        var entry = new PaletteEntryDocument("#9D66C6", null, null, null, Paints: [band]);
 
         AssertAccepts(entry: entry);
-        AssertAccepts(entry: entry with { Bands = [band, band with { HalfWidth = 0.05f }] });
-        AssertRefusesNaming(entry: entry with { Bands = [band with { Normal = System.Numerics.Vector3.Zero }] }, needle: "Invalid inset, weathering or band");
-        AssertRefusesNaming(entry: entry with { Bands = [band, band with { HalfWidth = 0f }] }, needle: "Invalid inset, weathering or band");
-        AssertRefusesNaming(entry: entry with { Bands = [band with { Color = "cream" }] }, needle: "Layer colors");
-        AssertRefusesNaming(entry: entry with { Bands = [band, band, band] }, needle: "3 bands exceed the 2 a palette slot paints");
+        AssertAccepts(entry: entry with { Paints = [band, ring, line] });
+        AssertRefusesNaming(entry: entry with { Paints = [band with { Rotation = new System.Numerics.Quaternion(x: 0f, y: 0f, z: 0f, w: 0f) }] }, needle: "Invalid inset, weathering or paint");
+        AssertRefusesNaming(entry: entry with { Paints = [band, band with { Stroke = -1f }] }, needle: "stroke must be finite and non-negative");
+        AssertRefusesNaming(entry: entry with { Paints = [band with { Color = "cream" }] }, needle: "Layer colors");
+        AssertRefusesNaming(entry: entry with { Paints = [ring with { Parent = "nowhere" }] }, needle: "parent 'nowhere' names no shape");
+        AssertRefusesNaming(entry: entry with { Paints = [ring with { Parent = "folded" }] }, needle: "carries a domain fold");
+        AssertRefusesNaming(entry: entry with { Paints = [null!] }, needle: "paint entry is null");
+        AssertRefusesNaming(entry: entry with { Paints = [ring with { Profile = new SdfPrismProfile(Kind: SdfPrismProfileKind.Path) }] }, needle: "path profile");
+        AssertRefusesNaming(entry: entry with { Paints = [line with { Curve = null }] }, needle: "a Sweep paint requires a curve");
+        AssertRefusesNaming(entry: entry with { Paints = [ring with { Scale = new System.Numerics.Vector3(x: float.NaN, y: 1f, z: 1f) }] }, needle: "A scale must be finite");
+        AssertRefusesNaming(entry: entry with { Paints = [band with { Type = (SdfSolidPrimitive)99 }] }, needle: "is not a primitive");
+        AssertRefusesNaming(entry: entry with { Paints = [band, band, band, band, band, band, band, band, band] }, needle: "9 paints exceed the 8 a palette slot draws");
     }
     [Fact]
     public void WeatheringRequiresAuthoredRevealAndDepositSurfaces() {
@@ -262,7 +272,7 @@ public sealed class PaletteAdmissionLawTests {
 
         AssertRefusesNaming(
             entry: entry,
-            needle: "Invalid inset, weathering or band"
+            needle: "Invalid inset, weathering or paint"
         );
         AssertAccepts(entry: entry with {
             Weathering = new(
@@ -279,7 +289,7 @@ public sealed class PaletteAdmissionLawTests {
         });
         AssertRefusesNaming(
             entry: entry with { Weathering = new(Settle: 1f) },
-            needle: "Invalid inset, weathering or band"
+            needle: "Invalid inset, weathering or paint"
         );
     }
     [InlineData("wrap")]

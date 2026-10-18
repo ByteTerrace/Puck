@@ -1310,6 +1310,9 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
+        var shapes = (document.Shapes ?? []);
+        var lookup = new ShapeLookup(shapes: shapes);
+
         for (var i = 0; (i < palette.Count); i++) {
             var entry = palette[i];
 
@@ -1357,7 +1360,9 @@ public static partial class CreationCanonicalizer {
             ValidatePaletteLayers(
                 entry: entry,
                 errors: errors,
-                index: i
+                index: i,
+                lookup: lookup,
+                shapes: shapes
             );
         }
     }
