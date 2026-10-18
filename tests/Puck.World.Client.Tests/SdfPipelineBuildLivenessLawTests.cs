@@ -194,17 +194,19 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
-        // cache lists only the region copy, the mesh pass and its impostor card pass, released after the set, the held creations can return: no
-        // canceled build starts another.
+        // cache lists only the pass pipelines (the region copy, the mesh pass, its impostor card pass and the shadow
+        // cascades' pass), released after the set, the held creations can return: no canceled build starts another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 3)
+            step: () => (cache.Pipelines.SharedPipelines <= 4)
         );
         driver.Open();
         loss.Join();
+        // The loss returned every lease the residency held, the pass pipelines with the set.
+        Assert.Equal(expected: 0, actual: cache.Pipelines.SharedPipelines);
 
         Assert.Equal(
             actual: (driver.Entered, driver.Created),
