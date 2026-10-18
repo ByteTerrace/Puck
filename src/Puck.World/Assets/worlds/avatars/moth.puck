@@ -4048,8 +4048,9 @@ prototypes {
 
       shape Prism "shinArch-left" {
         id: 183
-        position [0.2, 0.1365, 0.2375]
-        scale [0.14, 0.125, 0.225]
+        position [0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.17, 0.12, 0.3]
         material: charcoal
         blend: "Subtraction"
         group: 18
@@ -4063,8 +4064,8 @@ prototypes {
 
       shape Prism "shinArchBack-left" {
         id: 964
-        position [0.2, 0.1365, -0.2125]
-        scale [0.14, 0.125, 0.225]
+        position [0.2, 0.1365, -0.25]
+        scale [0.14, 0.125, 0.19]
         material: jet
         blend: "Subtraction"
         group: 18
@@ -4105,8 +4106,8 @@ prototypes {
 
       shape Box "archBandEnds-left" {
         id: 951
-        position [0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
+        position [0.2, 0.407, 0.22]
+        scale [0.3, 0.302, 0.28]
         material: shinCream
         blend: "Intersection"
         group: 76
@@ -4115,8 +4116,9 @@ prototypes {
 
       shape Prism "archBandOuter-left" {
         id: 952
-        position [0.2, 0.1365, 0.2375]
-        scale [0.195, 0.2, 0.225]
+        position [0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.225, 0.175, 0.3]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.012
@@ -4129,10 +4131,31 @@ prototypes {
         }
       }
 
+      shape Superellipsoid "archBandHollow-left" {
+        id: 990
+        position [0.2, 0.4265, 0.0125]
+        scale [0.097, 0.42, 0.109]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.008
+        group: 76
+        parent: "shin-left"
+        exponent: 3
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
       shape Prism "archBandInner-left" {
         id: 953
-        position [0.2, 0.1365, 0.2375]
-        scale [0.14, 0.125, 0.226]
+        position [0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.17, 0.12, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.012
@@ -4166,8 +4189,8 @@ prototypes {
 
       shape Box "archBandBackEnds-left" {
         id: 967
-        position [0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
+        position [0.2, 0.407, -0.16]
+        scale [0.3, 0.302, 0.1]
         material: shinCream
         blend: "Intersection"
         group: 80
@@ -5442,8 +5465,9 @@ prototypes {
 
       shape Prism "shinArch-right" {
         id: 251
-        position [-0.2, 0.1365, 0.2375]
-        scale [0.14, 0.125, 0.225]
+        position [-0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.17, 0.12, 0.3]
         material: charcoal
         blend: "Subtraction"
         group: 32
@@ -5457,8 +5481,8 @@ prototypes {
 
       shape Prism "shinArchBack-right" {
         id: 972
-        position [-0.2, 0.1365, -0.2125]
-        scale [0.14, 0.125, 0.225]
+        position [-0.2, 0.1365, -0.25]
+        scale [0.14, 0.125, 0.19]
         material: jet
         blend: "Subtraction"
         group: 32
@@ -5499,8 +5523,8 @@ prototypes {
 
       shape Box "archBandEnds-right" {
         id: 958
-        position [-0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
+        position [-0.2, 0.407, 0.22]
+        scale [0.3, 0.302, 0.28]
         material: shinCream
         blend: "Intersection"
         group: 78
@@ -5509,8 +5533,9 @@ prototypes {
 
       shape Prism "archBandOuter-right" {
         id: 959
-        position [-0.2, 0.1365, 0.2375]
-        scale [0.195, 0.2, 0.225]
+        position [-0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.225, 0.175, 0.3]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.012
@@ -5523,10 +5548,31 @@ prototypes {
         }
       }
 
+      shape Superellipsoid "archBandHollow-right" {
+        id: 991
+        position [-0.2, 0.4265, 0.0125]
+        scale [0.097, 0.42, 0.109]
+        material: shinCream
+        blend: "SmoothSubtraction"
+        smooth: 0.008
+        group: 78
+        parent: "shin-right"
+        exponent: 3
+        flare {
+          amount: 0.7
+          bulge: 0.1
+          span: 0.56
+          top: 0.28
+          axis: 1
+          startScale: 1
+        }
+      }
+
       shape Prism "archBandInner-right" {
         id: 960
-        position [-0.2, 0.1365, 0.2375]
-        scale [0.14, 0.125, 0.226]
+        position [-0.2, 0.0458, 0.075]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.17, 0.12, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.012
@@ -5560,8 +5606,8 @@ prototypes {
 
       shape Box "archBandBackEnds-right" {
         id: 975
-        position [-0.2, 0.407, 0.0125]
-        scale [0.3, 0.302, 0.4]
+        position [-0.2, 0.407, -0.16]
+        scale [0.3, 0.302, 0.1]
         material: shinCream
         blend: "Intersection"
         group: 81
