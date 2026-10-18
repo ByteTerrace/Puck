@@ -20,10 +20,10 @@ public sealed class LawProofTreeLawTests : LawProofLaws {
         Assert.All(collection: name, action: static digit => Assert.True(condition: (char.IsAsciiDigit(c: digit) || ((digit >= 'a') && (digit <= 'f')))));
         Assert.NotEqual(expected: directory, actual: LawProofTree.DirectoryFor(root: root, source: Path.Combine(path1: Path.GetTempPath(), path2: "Other", path3: ".git")));
     }
-    [InlineData(false)]
-    [InlineData(true)]
-    [Theory]
-    public void AProofBuildUsesTheSharedShaderCacheAndWithheldShaderContentStillCompiles(bool withholdShader) {
+    // The withheld leg compiles the shader source it restores; the fixed leg publishes the fixed source from the cache
+    // the checkout's own build filled, so one proof shows both a compile in the clone and the shared cache.
+    [Fact]
+    public void AProofBuildUsesTheSharedShaderCacheAndWithheldShaderContentStillCompiles() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-shader-proof-");
         using var cache = new TemporaryDirectory(prefix: "puck-laws-shader-cache-");
@@ -39,7 +39,7 @@ public sealed class LawProofTreeLawTests : LawProofLaws {
             """);
         _ = checkout.Commit(message: "lib: shader source and build");
         checkout.Write(name: FixPath, text: "fixed");
-        if (withholdShader) { checkout.Write(name: Source, text: "fixed shader"); }
+        checkout.Write(name: Source, text: "fixed shader");
         var fix = checkout.Commit(message: "lib: fix");
         string[] properties = [$"PuckShaderCacheDirectory={cache.RootPath}", $"DxcCommand={shaders.CompilerPath}"];
 
@@ -63,17 +63,15 @@ public sealed class LawProofTreeLawTests : LawProofLaws {
                 var build = proof.Run(properties: properties, target: "Build");
 
                 proof.RequireSuccess(run: build);
-                Assert.Equal(expected: (withholdShader ? 1 : 0), actual: proof.Compiles());
+                Assert.Equal(expected: 1, actual: proof.Compiles());
                 if (builds == 2) {
                     Assert.Equal(expected: originalBytes, actual: File.ReadAllBytes(path: proof.PathOf(path: "Assets/Shaders/a.comp.spv")));
-                    if (withholdShader) {
-                        Assert.Contains(expectedSubstring: "1 published from the cache, 0 compiled", actualString: build.Stdout);
-                    }
+                    Assert.Contains(expectedSubstring: "1 published from the cache, 0 compiled", actualString: build.Stdout);
                 }
             },
         };
 
-        var result = Prove(checkout: checkout, fix: new LawFix(Paths: (withholdShader ? [FixPath, Source] : [FixPath]), Revision: fix), runner: runner, scratch: scratch);
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath, Source], Revision: fix), runner: runner, scratch: scratch);
 
         Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
         Assert.Equal(actual: builds, expected: 2);

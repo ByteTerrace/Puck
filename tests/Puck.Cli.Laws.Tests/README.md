@@ -2,7 +2,8 @@
 
 These laws hold `puck laws prove`: a proof withholds its fix in a persistent clone of its own, proves the law red and
 green, refuses a failed build, a skipped test and inconsistent legs, and leaves the caller's checkout as it found it.
-`LawBuildLawTests` runs real incremental builds of a small project, and `ReferenceAssemblyRecoveryLawTests` holds the
+`LawBuildLawTests` runs one proof through the real `dotnet build` runner over a small project; the other proof laws
+build through a fake runner. `ReferenceAssemblyRecoveryLawTests` holds the
 corrupt-reference recovery the project build and the proof runner share. A proof-tree law builds shaders in the clone
 through `ShaderBuildFixture` and the shipped shader targets, so the suite builds `Puck.Shaders.Generator` first.
 `LawProofTreeLawTests` also checks that leasing a proof clone prunes the least recently leased others and never one

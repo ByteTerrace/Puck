@@ -4,18 +4,18 @@ using Xunit;
 
 namespace Puck.Cli.Laws.Tests;
 
-/// <summary>Proof build counts distinguish compiler work from skipped targets, and an incremental build runs the
-/// changed source's binary. The real-build fixture has two tiny projects, no packages and no network sources.</summary>
+/// <summary>Proof build counts distinguish compiler work from skipped targets, and a proof's real builds compile the
+/// withheld source, then only the project its fix changes, and run the changed source's binary. The one real-build
+/// fixture has two tiny projects, no packages and no network sources. The persistent tree's reuse across proofs, its
+/// kept outputs and its untouched timestamps, is held over a fake runner by <see cref="LawProofTreeLawTests"/>.</summary>
 public sealed class LawBuildLawTests {
     private sealed class BinaryRunner : ILawRunner {
         public List<LawBuildCounts> Builds { get; } = [];
-        public List<string> Trees { get; } = [];
 
         public LawBuild Build(string tree, string project, string logDirectory, CancellationToken cancellationToken) {
             var result = new DotnetLawRunner().Build(cancellationToken: cancellationToken, logDirectory: logDirectory, project: project, tree: tree);
 
             Builds.Add(item: result.Counts);
-            Trees.Add(item: tree);
             return result;
         }
         public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
@@ -27,7 +27,7 @@ public sealed class LawBuildLawTests {
     }
 
     [Fact]
-    public void RepeatedProofsCompileTheWithheldSourceAndReuseUnchangedProjects() {
+    public void AProofCompilesTheWithheldSourceThenOnlyTheProjectItsFixChanges() {
         using var checkout = new GitScratchCheckout();
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-build-law-");
 
@@ -40,20 +40,21 @@ public sealed class LawBuildLawTests {
         checkout.Write(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 1; }\n");
         checkout.Write(name: "Application/Application.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
         checkout.Write(name: "Application/Program.cs", text: "System.Console.WriteLine(Value.Read());\n");
+        // An unrelated, unbuildable project proves that only the selected project's closure is built.
+        checkout.Write(name: "Unrelated/Unrelated.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
+        checkout.Write(name: "Unrelated/Failure.cs", text: "#error OUTSIDE_SELECTED_CLOSURE\n");
         _ = checkout.Commit(message: "initial");
         checkout.Write(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 2; }\n");
         _ = checkout.Commit(message: "lib: fix");
         var runner = new BinaryRunner();
+        var result = ConsoleCapture.RunSplit(run: () => LawProof.Prove(repositoryRoot: checkout.Root, law: "ValueLaw.Holds", project: "Application/Application.csproj", fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, lawTreesRoot: Path.Combine(path1: Path.GetDirectoryName(path: checkout.Root)!, path2: "law-trees"), cancellationToken: TestContext.Current.CancellationToken));
 
-        for (var proof = 0; (proof < 2); ++proof) {
-            var result = ConsoleCapture.RunSplit(run: () => LawProof.Prove(repositoryRoot: checkout.Root, law: "ValueLaw.Holds", project: "Application/Application.csproj", fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, lawTreesRoot: Path.Combine(path1: Path.GetDirectoryName(path: checkout.Root)!, path2: "law-trees"), cancellationToken: TestContext.Current.CancellationToken));
-
-            Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: (result.Error + result.Output));
-        }
-
-        Assert.Equal(expected: [2, 1, 1, 1], actual: runner.Builds.Select(selector: static build => build.Compiled));
-        Assert.Equal(expected: [0, 1, 1, 1], actual: runner.Builds.Select(selector: static build => build.UpToDate));
-        Assert.Single(collection: runner.Trees.Distinct());
+        // The red leg fails on the withheld value and the green leg passes on the fixed one, so each ran its own binary.
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: (result.Error + result.Output));
+        // The withheld build compiles both projects cold; restoring the fix compiles the library alone, and the
+        // application, whose reference assembly did not change, is up to date.
+        Assert.Equal(expected: [2, 1], actual: runner.Builds.Select(selector: static build => build.Compiled));
+        Assert.Equal(expected: [0, 1], actual: runner.Builds.Select(selector: static build => build.UpToDate));
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
         Assert.Equal(expected: string.Empty, actual: checkout.Git("status", "--porcelain"));
     }
@@ -73,47 +74,5 @@ public sealed class LawBuildLawTests {
         logger.Observe(args: new TargetSkippedEventArgs { ProjectFile = "Library.csproj", SkipReason = TargetSkipReason.OutputsUpToDate, TargetName = "CoreCompile" });
 
         Assert.Equal(expected: new LawBuildCounts(Compiled: 1, Targets: 1, UpToDate: 1), actual: logger.Counts);
-    }
-    [Fact]
-    public void AnIncrementalBuildSkipsUnchangedProjectsAndCompilesChangedSource() {
-        using var directory = new TemporaryDirectory(prefix: "puck-laws-build-law-");
-
-        File.Copy(sourceFileName: RepositoryPaths.Resolve(relativePath: "global.json"), destFileName: directory.PathOf(name: "global.json"));
-        _ = directory.WriteText(name: "Directory.Build.props", text: "<Project />\n");
-        _ = directory.WriteText(name: "Directory.Build.targets", text: "<Project />\n");
-        _ = directory.WriteText(name: "NuGet.Config", text: "<configuration><packageSources><clear /></packageSources></configuration>\n");
-        _ = directory.WriteText(name: "Library/Library.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
-        _ = directory.WriteText(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 1; }\n");
-        const string Project = "Application/Application.csproj";
-
-        _ = directory.WriteText(name: Project, text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /></ItemGroup></Project>\n");
-        _ = directory.WriteText(name: "Application/Program.cs", text: "System.Console.WriteLine(Value.Read());\n");
-        // An unrelated, unbuildable project proves that only the selected project's closure is built.
-        _ = directory.WriteText(name: "Unrelated/Unrelated.csproj", text: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>\n");
-        _ = directory.WriteText(name: "Unrelated/Failure.cs", text: "#error OUTSIDE_SELECTED_CLOSURE\n");
-        var runner = new DotnetLawRunner();
-        var cold = runner.Build(tree: directory.RootPath, project: Project, logDirectory: directory.PathOf(name: "cold"), cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(condition: cold.Succeeded, userMessage: string.Join(separator: '\n', values: cold.Errors));
-        Assert.Equal(expected: 2, actual: cold.Counts.Compiled);
-        Assert.Equal(expected: 0, actual: cold.Counts.UpToDate);
-        var warm = runner.Build(tree: directory.RootPath, project: Project, logDirectory: directory.PathOf(name: "warm"), cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(condition: warm.Succeeded, userMessage: string.Join(separator: '\n', values: warm.Errors));
-        Assert.Equal(expected: 0, actual: warm.Counts.Compiled);
-        Assert.Equal(expected: 2, actual: warm.Counts.UpToDate);
-        Assert.True(condition: ((warm.Counts.Targets > 0) && (warm.Counts.Targets < cold.Counts.Targets)));
-
-        _ = directory.WriteText(name: "Library/Value.cs", text: "public static class Value { public static int Read() => 2; }\n");
-        CliTreeFiles.Touch(tree: directory.RootPath, paths: ["Library/Value.cs"]);
-        var changed = runner.Build(tree: directory.RootPath, project: Project, logDirectory: directory.PathOf(name: "changed"), cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(condition: changed.Succeeded, userMessage: string.Join(separator: '\n', values: changed.Errors));
-        Assert.Equal(expected: 1, actual: changed.Counts.Compiled);
-        Assert.Equal(expected: 1, actual: changed.Counts.UpToDate);
-        var run = CliProcess.RunCaptured(fileName: "dotnet", arguments: [directory.PathOf(name: "Application/bin/Release/net11.0/Application.dll")], input: string.Empty, timeout: TimeSpan.FromMinutes(value: 1), workingDirectory: directory.RootPath, cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Equal(expected: 0, actual: run.ExitCode);
-        Assert.Equal(expected: "2", actual: run.Stdout.Trim());
     }
 }
