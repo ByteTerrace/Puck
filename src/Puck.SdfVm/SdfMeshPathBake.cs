@@ -492,7 +492,7 @@ public sealed class SdfMeshPathBake {
             }
             staticRun = (instance.IsDynamic ? null : group);
 
-            group.Geometry.AppendInstance(instance: index, program: frame.Program);
+            group.Geometry.AppendInstance(instance: index, program: frame.Program, transforms: frame.DynamicTransforms);
         }
 
         foreach (var group in m_groups) {
@@ -510,7 +510,7 @@ public sealed class SdfMeshPathBake {
 
         // The segments no instance owns, which every instance group's walk omits, bake as one group of their own, over a
         // cube the frame's far distance wide about the origin.
-        if (WorldInstructions(program: frame.Program) is { } world) {
+        if (WorldInstructions(frame: frame) is { } world) {
             m_groups.Add(item: world);
             world.High = new Vector3(value: reach);
             world.Low = new Vector3(value: -reach);
@@ -566,9 +566,11 @@ public sealed class SdfMeshPathBake {
             m_drawnMeshes = -1;
         }
     }
-    // The group of the shapes the program's segments outside every instance hold, from the first segment instruction that
-    // holds a drawn shape on, by their absolute materials; null when no segment holds one.
-    private static Group? WorldInstructions(SdfProgram program) {
+    // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
+    // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
+    // drawn shape.
+    private static Group? WorldInstructions(SdfFrame frame) {
+        var program = frame.Program;
         var instructions = program.Instructions;
         var owned = new bool[instructions.Count];
 
@@ -576,15 +578,21 @@ public sealed class SdfMeshPathBake {
             for (var index = instance.First; (index < instance.End); index++) { owned[index] = true; }
         }
 
-        Group? world = null;
+        var drawn = false;
 
-        for (var index = 0; (index < instructions.Count); index++) {
-            if (owned[index]) { continue; }
-            if ((instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail) { world ??= new Group(selector: WorldSelector, dynamic: false); }
-            world?.Geometry.AppendInstruction(index: index, program: program);
+        for (var index = 0; (!drawn && (index < instructions.Count)); index++) {
+            drawn = (!owned[index] && (instructions[index].Op == SdfOp.ShapeBlend) && !instructions[index].Detail);
         }
 
-        world?.Seal();
+        if (!drawn) { return null; }
+
+        var world = new Group(selector: WorldSelector, dynamic: false);
+
+        for (var index = 0; (index < instructions.Count); index++) {
+            if (!owned[index]) { world.Geometry.AppendInstruction(index: index, program: program, transforms: frame.DynamicTransforms); }
+        }
+
+        world.Seal();
 
         return world;
     }
