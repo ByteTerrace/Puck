@@ -6,8 +6,10 @@ green, refuses a failed build, a skipped test and inconsistent legs, and leaves 
 build through a fake runner. `ReferenceAssemblyRecoveryLawTests` holds the
 corrupt-reference recovery the project build and the proof runner share. A proof-tree law builds shaders in the clone
 through `ShaderBuildFixture` and the shipped shader targets, so the suite builds `Puck.Shaders.Generator` first.
-`LawProofTreeLawTests` also checks that leasing a proof clone prunes the least recently leased others and never one
-another proof holds.
+`LawProofTreeLeaseLawTests` also checks that leasing a proof clone prunes the least recently leased others and never
+one another proof holds. Every proof law costs seconds of git and process work, so the laws sit in several classes
+(`LawProofLawTests`, `LawProofEvidenceLawTests`, `LawProofCleanupLawTests`, `LawProofTreeLawTests`,
+`LawProofTreeLeaseLawTests`) that xUnit runs beside one another.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

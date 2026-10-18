@@ -7,7 +7,7 @@ namespace Puck.Cli.Laws.Tests;
 /// <summary>Proof build counts distinguish compiler work from skipped targets, and a proof's real builds compile the
 /// withheld source, then only the project its fix changes, and run the changed source's binary. The one real-build
 /// fixture has two tiny projects, no packages and no network sources. The persistent tree's reuse across proofs, its
-/// kept outputs and its untouched timestamps, is held over a fake runner by <see cref="LawProofTreeLawTests"/>.</summary>
+/// kept outputs and its untouched timestamps, is held over a fake runner by <see cref="LawProofTreeLeaseLawTests"/>.</summary>
 public sealed class LawBuildLawTests {
     private sealed class BinaryRunner : ILawRunner {
         public List<LawBuildCounts> Builds { get; } = [];

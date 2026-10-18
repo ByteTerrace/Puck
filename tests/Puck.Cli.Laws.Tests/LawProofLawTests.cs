@@ -81,7 +81,8 @@ public abstract class LawProofLaws {
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
     }
 }
-/// <summary>The proof's verdicts, its evidence and its cleanup, over the shared fixtures of <see cref="LawProofLaws"/>.</summary>
+/// <summary>The proof's red and green legs, the fixes it can withhold, and the runner's cancellation and failure, over
+/// the shared fixtures of <see cref="LawProofLaws"/>.</summary>
 public sealed partial class LawProofLawTests : LawProofLaws {
     [Fact]
     public void ALawThatCanFailIsProvenWithItsEvidence() {
@@ -274,6 +275,10 @@ public sealed partial class LawProofLawTests : LawProofLaws {
         Assert.Equal(expected: "runner failed", actual: exception.Message);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
+}
+/// <summary>What a proof's test runs may count as evidence, and the links a proof refuses, over the shared fixtures of
+/// <see cref="LawProofLaws"/>. Each law class runs beside the others.</summary>
+public sealed class LawProofEvidenceLawTests : LawProofLaws {
     [InlineData("NotExecuted")]
     [InlineData("Skipped")]
     [InlineData("Error")]
@@ -427,6 +432,10 @@ public sealed partial class LawProofLawTests : LawProofLaws {
             File.Delete(path: link);
         }
     }
+}
+/// <summary>A proof's cleanup: what it removes, what it never touches, and how its failures keep the verdict, over the
+/// shared fixtures of <see cref="LawProofLaws"/>.</summary>
+public sealed class LawProofCleanupLawTests : LawProofLaws {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]

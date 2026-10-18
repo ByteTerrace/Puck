@@ -3,8 +3,8 @@ using Xunit;
 
 namespace Puck.Cli.Laws.Tests;
 
-/// <summary>The proof's persistent tree: its lease, its incremental reuse and the pruning of other clones, over the shared fixtures of
-/// <see cref="LawProofLaws"/>.</summary>
+/// <summary>The proof's persistent tree: its name, and a shader build in it through the shared shader cache, over the
+/// shared fixtures of <see cref="LawProofLaws"/>.</summary>
 public sealed class LawProofTreeLawTests : LawProofLaws {
     // The clone's own build writes paths deep under the repository's directory, past Windows' 260-character limit when
     // the name is long; the name is a short key of the common git directory, the same for every spelling Windows folds.
@@ -79,6 +79,11 @@ public sealed class LawProofTreeLawTests : LawProofLaws {
         Assert.Equal(expected: originalBytes, actual: File.ReadAllBytes(path: shaders.PathOf(path: "Assets/Shaders/a.comp.spv")));
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
+}
+/// <summary>Leasing, reusing, refreshing and recloning the proof's persistent tree, over the shared fixtures of
+/// <see cref="LawProofLaws"/>. It runs beside <see cref="LawProofTreeLawTests"/>, whose shader build is the slowest
+/// law here.</summary>
+public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
     [Fact]
     public void LeasingAClonePrunesTheLeastRecentlyLeasedOthersButNeverAHeldOne() {
         using var checkout = Checkout(initial: "broken");
