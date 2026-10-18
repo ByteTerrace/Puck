@@ -25,11 +25,11 @@ public sealed class SdfMeshPathBakeLawTests {
     // The one bake both laws read, each its own group: a union's final lattice holds about a million samples, so the
     // bake, and not the laws, is the class's cost.
     private static readonly Lazy<(SdfMeshPathBake Bake, SdfFrame Frame)> Baked = new(valueFactory: static () => {
-        var (program, materials) = Program();
+        var (program, materials) = Program(shapes: Shapes);
         var bake = new SdfMeshPathBake { Residency = "copies" };
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: frame, materials: materials);
+        Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
 
         return (bake, frame);
     });
@@ -58,6 +58,84 @@ public sealed class SdfMeshPathBakeLawTests {
         var block = positions.Where(predicate: static point => (Field(shape: Shapes[1], point: point) > -0.001f) && (Field(shape: Shapes[1], point: point) < 0.001f) && (point.Y > 0.65f)).ToArray();
 
         Assert.True(condition: (block.Length > 60), userMessage: $"the block holds {block.Length} vertices");
+    }
+    // Two slabs of two materials side by side, one static copy turned 30 degrees about up, share a flat top: their
+    // boundary crosses the face along no crease and across the lattice's cells. The mesh cuts its triangles along it, so
+    // all but a thousandth of the top within 3 cm of the boundary takes the material of the slab it lies over, where
+    // splitting each quad into quarters steps the boundary across half a fine cell.
+    [Fact]
+    public void AMaterialBoundaryAcrossAFaceLiesWhereItsShapesMeet() {
+        Shape[] slabs = [
+            new(Center: new Vector3(x: -0.2f, y: 0.05f, z: 0f), Half: new Vector3(x: 0.2f, y: 0.05f, z: 0.3f), Rotation: Turn, Material: 0),
+            new(Center: Vector3.Transform(value: new Vector3(x: 0.4f, y: 0f, z: 0f), rotation: Turn) + new Vector3(x: -0.2f, y: 0.05f, z: 0f), Half: new Vector3(x: 0.2f, y: 0.05f, z: 0.3f), Rotation: Turn, Material: 1),
+        ];
+        var (program, materials) = Program(shapes: slabs);
+        var bake = new SdfMeshPathBake { Residency = "slabs" };
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
+
+        Drive(bake: bake, frame: frame, materials: materials, shapes: slabs);
+
+        var mesh = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh;
+        var positions = mesh.Positions.ToArray();
+        var indices = mesh.Indices.ToArray();
+        var triangleMaterials = mesh.TriangleMaterials.ToArray();
+        var wrong = 0f;
+        var area = 0f;
+
+        for (var triangle = 0; (triangle < triangleMaterials.Length); triangle++) {
+            var (a, b, c) = (positions[(int)indices[(3 * triangle)]], positions[(int)indices[((3 * triangle) + 1)]], positions[(int)indices[((3 * triangle) + 2)]]);
+            var centre = (((a + b) + c) / 3f);
+            // The signed distance across the boundary, the plane x = 0 of the slabs' frame turned about the first slab's
+            // inner face.
+            var across = Vector3.Transform(value: (centre - new Vector3(x: -0.2f, y: 0.05f, z: 0f)), rotation: Quaternion.Conjugate(value: Turn)).X - 0.2f;
+
+            if ((MathF.Abs(centre.Y - 0.1f) > 0.002f) || (MathF.Abs(across) > 0.03f)) {
+                continue;
+            }
+
+            var size = (0.5f * Vector3.Cross(vector1: (b - a), vector2: (c - a)).Length());
+
+            area += size;
+            wrong += ((triangleMaterials[triangle] != (uint)materials[((across < 0f) ? 0 : 1)]) ? size : 0f);
+        }
+
+        Assert.True(condition: (area > 0f));
+        Assert.True(condition: (wrong < (0.001f * area)), userMessage: $"{wrong / area:P3} of the top beside the boundary takes the other slab's material");
+    }
+    // Three slabs of three materials meeting at one point of a flat top keep all three about it, and a strip of a fourth
+    // shape thinner than a cell across one of them, which no mesh vertex lies on, keeps its material where it crosses.
+    [Fact]
+    public void ThreeMaterialsMeetAtAPointAndAStripThinnerThanACellStays() {
+        Shape[] slabs = [
+            new(Center: new Vector3(x: -0.2f, y: 0.05f, z: 0f), Half: new Vector3(x: 0.2f, y: 0.05f, z: 0.3f), Rotation: Turn, Material: 0),
+            new(Center: (Vector3.Transform(value: new Vector3(x: 0.4f, y: 0f, z: 0.15f), rotation: Turn) + new Vector3(x: -0.2f, y: 0.05f, z: 0f)), Half: new Vector3(x: 0.2f, y: 0.05f, z: 0.15f), Rotation: Turn, Material: 1),
+            new(Center: (Vector3.Transform(value: new Vector3(x: 0.4f, y: 0f, z: -0.15f), rotation: Turn) + new Vector3(x: -0.2f, y: 0.05f, z: 0f)), Half: new Vector3(x: 0.2f, y: 0.05f, z: 0.15f), Rotation: Turn, Material: 2),
+            new(Center: (Vector3.Transform(value: new Vector3(x: -0.1f, y: 0.0004f, z: 0f), rotation: Turn) + new Vector3(x: -0.2f, y: 0.05f, z: 0f)), Half: new Vector3(x: 0.002f, y: 0.05f, z: 0.3f), Rotation: Turn, Material: 2),
+        ];
+        var (program, materials) = Program(oneCopy: true, shapes: slabs);
+        var bake = new SdfMeshPathBake { Residency = "junction" };
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
+
+        Drive(bake: bake, frame: frame, materials: materials, shapes: slabs);
+
+        var mesh = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh;
+        var positions = mesh.Positions.ToArray();
+        var indices = mesh.Indices.ToArray();
+        var triangleMaterials = mesh.TriangleMaterials.ToArray();
+        var junction = new HashSet<uint>();
+        var strip = 0;
+
+        for (var triangle = 0; (triangle < triangleMaterials.Length); triangle++) {
+            var centre = (((positions[(int)indices[(3 * triangle)]] + positions[(int)indices[((3 * triangle) + 1)]]) + positions[(int)indices[((3 * triangle) + 2)]]) / 3f);
+            var local = Vector3.Transform(value: (centre - new Vector3(x: -0.2f, y: 0.05f, z: 0f)), rotation: Quaternion.Conjugate(value: Turn));
+
+            if (MathF.Abs(centre.Y - 0.1f) > 0.002f) { continue; }
+            if (Vector2.Distance(value1: new Vector2(x: local.X, y: local.Z), value2: new Vector2(x: 0.2f, y: 0f)) < 0.02f) { _ = junction.Add(item: triangleMaterials[triangle]); }
+            strip += (((MathF.Abs(local.X + 0.1f) < 0.002f) && (MathF.Abs(local.Z) < 0.25f) && (triangleMaterials[triangle] == (uint)materials[2])) ? 1 : 0);
+        }
+
+        Assert.Equal(expected: 3, actual: junction.Count);
+        Assert.True(condition: (strip > 10), userMessage: $"{strip} triangles of the strip's material lie on it");
     }
     [Fact]
     public void ASharpEdgeShadesAsTheFacesMeetingAtIt() {
@@ -98,7 +176,7 @@ public sealed class SdfMeshPathBakeLawTests {
     [Fact]
     public void ABakeOfGroupsItsStoreKeptLoadsThemAndRebakesOnlyAGroupWhoseEntryIsDamaged() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
-        var (program, materials) = Program();
+        var (program, materials) = Program(shapes: Shapes);
         // A reach just inside the plate's bound, which the union's box, and so its geometry, holds.
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 4.25f };
         var directory = scratch.PathOf(name: "meshes");
@@ -106,7 +184,7 @@ public sealed class SdfMeshPathBakeLawTests {
         SdfMeshPathBake Run(string name) {
             var bake = new SdfMeshPathBake { Identity = 5, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
 
-            Drive(bake: bake, frame: frame, materials: materials);
+            Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
 
             return bake;
         }
@@ -145,27 +223,28 @@ public sealed class SdfMeshPathBakeLawTests {
         return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f));
     }
     // The union of the first `count` shapes from `first`, and the material of the nearest.
-    private static float Union(Vector3 point, int count, int first = 0) => Nearest(count: count, first: first, point: point).Value;
-    private static (float Value, int Shape) Nearest(Vector3 point, int count, int first) {
+    private static float Union(Vector3 point, int count, int first = 0) => Nearest(count: count, first: first, point: point, shapes: Shapes).Value;
+    private static (float Value, int Shape) Nearest(Vector3 point, int count, int first, Shape[] shapes) {
         var best = (Value: float.PositiveInfinity, Shape: first);
 
         for (var shape = first; (shape < (first + count)); shape++) {
-            var value = Field(shape: Shapes[shape], point: point);
+            var value = Field(shape: shapes[shape], point: point);
 
             if (value < best.Value) { best = (value, shape); }
         }
 
         return best;
     }
-    // The program: one static instance per shape with its tight bound, the block baking with the plate before it.
-    private static (SdfProgram Program, int[] Materials) Program() {
+    // The program: one static instance per shape with its tight bound, the second baking with the first, or with
+    // `oneCopy` every shape after the first baking with the one before it.
+    private static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {
         var builder = new SdfProgramBuilder();
-        int[] materials = [builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX))];
+        int[] materials = [builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX)), builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitY))];
 
-        for (var index = 0; (index < Shapes.Length); index++) {
-            var shape = Shapes[index];
+        for (var index = 0; (index < shapes.Length); index++) {
+            var shape = shapes[index];
 
-            _ = builder.BeginInstance(bakesWithPrevious: (index == 1), boundCenter: shape.Center, boundRadius: (shape.Half.Length() + 0.05f))
+            _ = builder.BeginInstance(bakesWithPrevious: (oneCopy ? (index > 0) : (index == 1)), boundCenter: shape.Center, boundRadius: (shape.Half.Length() + 0.05f))
                 .ResetPoint()
                 .Translate(offset: shape.Center)
                 .Rotate(rotation: shape.Rotation)
@@ -176,14 +255,14 @@ public sealed class SdfMeshPathBakeLawTests {
         return (builder.Build(), materials);
     }
     // Answers the bake's lattices frame by frame until it has meshed every group.
-    private static void Drive(SdfMeshPathBake bake, SdfFrame frame, int[] materials) {
+    private static void Drive(SdfMeshPathBake bake, SdfFrame frame, int[] materials, Shape[] shapes) {
         var index = 0L;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = bake.Dress(frame: frame);
             if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
                 bake.Record(batch: batch);
-                bake.Complete(batch: batch, samples: Answer(batch: batch, materials: materials));
+                bake.Complete(batch: batch, samples: Answer(batch: batch, materials: materials, shapes: shapes));
             }
 
             return !bake.Pending;
@@ -191,7 +270,7 @@ public sealed class SdfMeshPathBakeLawTests {
     }
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points, over the instances its
     // selector names.
-    private static byte[] Answer(SdfMeshBakeBatch batch, int[] materials) {
+    private static byte[] Answer(SdfMeshBakeBatch batch, int[] materials, Shape[] shapes) {
         var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
         var sample = 0;
         ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
@@ -204,12 +283,12 @@ public sealed class SdfMeshPathBakeLawTests {
                 var position = (lattice.Points.IsEmpty
                     ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
                     : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
-                var (value, shape) = Nearest(count: lattice.Instances, first: first, point: position);
+                var (value, shape) = Nearest(count: lattice.Instances, first: first, point: position, shapes: shapes);
                 var gradient = Vector3.Zero;
 
                 if (lattice.Gradients) {
                     foreach (var tap in taps) {
-                        gradient += (tap * Union(count: lattice.Instances, first: first, point: (position + (tap * spacing))));
+                        gradient += (tap * Nearest(count: lattice.Instances, first: first, point: (position + (tap * spacing)), shapes: shapes).Value);
                     }
                     // The four taps sum to four times the spacing times the gradient.
                     gradient *= (0.25f / spacing);
@@ -218,7 +297,7 @@ public sealed class SdfMeshPathBakeLawTests {
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
-                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: materials[Shapes[shape].Material]);
+                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: materials[shapes[shape].Material]);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
