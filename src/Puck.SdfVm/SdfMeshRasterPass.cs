@@ -6,18 +6,24 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The SDF engine's mesh pass pipelines: the graphics pipeline that rasterizes a frame's mesh draws
-/// (<see cref="SdfFrame.MeshDraws"/>) into the mesh visibility target before primary traversal, and the impostor card
-/// pipeline that rasterizes the impostor draws beside it, one entry each a device in
-/// the composition's <see cref="GpuPassPipelineCache"/>. The two share the vertex stage, the layout and the render pass; the
-/// card's fragment stage discards the pixels its impostor does not cover and writes the depth of the surface it finds, so it
-/// runs after the depth test as well, where the mesh fragment stage forces the test first. The engine's holder leases it beside its pipeline set, as it
-/// leases the region copy, and the engine takes the built pipeline and its render pass at construction.
+/// (<see cref="SdfFrame.MeshDraws"/>) into the mesh visibility target before primary traversal, the impostor card
+/// pipeline that rasterizes the impostor draws beside it, and the shadow pipeline that rasterizes the mesh draws into a
+/// shadow cascade's depth alone, one entry each a device in the composition's <see cref="GpuPassPipelineCache"/>. The
+/// three share the layout; the mesh and card pipelines share the vertex stage and the render pass, and the shadow
+/// pipeline has a vertex stage of its own, the light's orthographic projection, which hands its fragment stage only the
+/// position. The card's fragment
+/// stage discards the pixels its impostor does not cover and writes the depth of the surface it finds, so it runs after
+/// the depth test as well, where the mesh and shadow fragment stages force the test first. The engine's holder leases them
+/// beside its pipeline set, as it leases the region copy, and the engine takes the built pipelines and their render passes
+/// at construction.
 /// <para>
-/// The pipeline draws with the mesh interface's layout (<see cref="SdfWorldInterfaces.Mesh"/>): one set per ring slot
-/// binding the viewport table and the mesh region, and the view and draw pushed per draw call. It reads no vertex
-/// buffer: its vertex stage pulls each draw's triangles from the mesh region. Its render pass (<see cref="RenderPass"/>) clears the target and a
-/// reversed-Z depth attachment to zero and tests <see cref="GpuDepthCompare.Greater"/>, so the nearest surface of every
-/// covered pixel stays; the target ends in its attachment layout, and the engine moves it on to be read.
+/// The pipelines draw with the mesh interface's layout (<see cref="SdfWorldInterfaces.Mesh"/>): one set per ring slot
+/// binding the viewport table and the mesh region, and the view and draw pushed per draw call. They read no vertex
+/// buffer: the vertex stage pulls each draw's triangles from the mesh region. The mesh render pass
+/// (<see cref="RenderPass"/>) clears the target and a reversed-Z depth attachment to zero and tests
+/// <see cref="GpuDepthCompare.Greater"/>, so the nearest surface of every covered pixel stays; the target ends in its
+/// attachment layout, and the engine moves it on to be read. The shadow render pass (<see cref="ShadowRenderPass"/>) has
+/// the depth attachment alone, cleared the same way and stored, which the surface pass samples.
 /// </para>
 /// </summary>
 public sealed class SdfMeshRasterPass {
@@ -26,6 +32,9 @@ public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the impostor card pipeline's fragment stage, <c>sdf-mesh-impostor.frag</c>; its vertex
     /// stage is the mesh pass's.</summary>
     public const string ImpostorShaderStem = "sdf-mesh-impostor";
+    /// <summary>The file stem of the shadow pipeline's two stages: <c>sdf-mesh-shadow.vert</c>, the light's orthographic
+    /// projection, and <c>sdf-mesh-shadow.frag</c>, which writes no colour and counts its fragments.</summary>
+    public const string ShadowShaderStem = "sdf-mesh-shadow";
     /// <summary>The bytes a pixel of the target and the depth attachment hold together.</summary>
     public const uint BytesPerPixel = (16u + 4u);
 
@@ -45,6 +54,18 @@ public sealed class SdfMeshRasterPass {
             stem: ImpostorShaderStem
         ),
         pipelines: pipelines,
+        shadowFragment: Load(
+            bytecodeExtension: bytecodeExtension,
+            directory: SdfKernelSet.DefaultDirectory,
+            stage: "frag",
+            stem: ShadowShaderStem
+        ),
+        shadowVertex: Load(
+            bytecodeExtension: bytecodeExtension,
+            directory: SdfKernelSet.DefaultDirectory,
+            stage: "vert",
+            stem: ShadowShaderStem
+        ),
         vertex: Load(
             bytecodeExtension: bytecodeExtension,
             directory: SdfKernelSet.DefaultDirectory,
@@ -57,8 +78,10 @@ public sealed class SdfMeshRasterPass {
     /// <param name="vertex">The vertex stage's bytecode.</param>
     /// <param name="fragment">The fragment stage's bytecode.</param>
     /// <param name="impostorFragment">The impostor card fragment stage's bytecode.</param>
+    /// <param name="shadowVertex">The shadow pipeline's vertex stage's bytecode.</param>
+    /// <param name="shadowFragment">The shadow pipeline's fragment stage's bytecode.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> impostorFragment) {
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> impostorFragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> shadowFragment) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
@@ -69,6 +92,10 @@ public sealed class SdfMeshRasterPass {
         ImpostorKey = ImpostorKeyOf(
             fragment: impostorFragment,
             vertex: vertex
+        );
+        ShadowKey = ShadowKeyOf(
+            fragment: shadowFragment,
+            vertex: shadowVertex
         );
     }
 
@@ -85,6 +112,8 @@ public sealed class SdfMeshRasterPass {
     );
     /// <summary>Gets the impostor card pipeline's description: the mesh pass's, named for the card stage.</summary>
     public static GpuGraphicsPipelineDescription ImpostorDescription { get; } = Description with { Name = ImpostorShaderStem };
+    /// <summary>Gets the shadow pipeline's description: the mesh pass's, named for the shadow stages.</summary>
+    public static GpuGraphicsPipelineDescription ShadowDescription { get; } = Description with { Name = ShadowShaderStem };
     /// <summary>Gets the render pass the pipeline draws in: the target (<see cref="SdfWorldPackage.MeshTargetFormat"/>)
     /// cleared and stored, left in its attachment layout, and the depth attachment
     /// (<see cref="SdfWorldPackage.MeshDepthAttachment"/>) cleared to its reversed-Z far plane and discarded.</summary>
@@ -97,11 +126,20 @@ public sealed class SdfMeshRasterPass {
         )],
         Depth: SdfWorldPackage.MeshDepthAttachment
     );
+    /// <summary>Gets the render pass a shadow cascade draws in: no color attachment, and the cascade's depth
+    /// (<see cref="SdfWorldPackage.MeshShadowDepthAttachment"/>) cleared to its reversed-Z far plane and stored for the
+    /// surface pass to sample.</summary>
+    public static GpuRenderPassDescription ShadowRenderPass { get; } = new(
+        Colors: [],
+        Depth: SdfWorldPackage.MeshShadowDepthAttachment
+    );
 
     /// <summary>Gets the pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey Key { get; }
     /// <summary>Gets the impostor card pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey ImpostorKey { get; }
+    /// <summary>Gets the shadow pipeline's key in <see cref="Pipelines"/>.</summary>
+    public GpuPassPipelineKey ShadowKey { get; }
     /// <summary>Gets the composition's pass pipelines.</summary>
     public GpuPassPipelineCache Pipelines { get; }
 
@@ -125,6 +163,17 @@ public sealed class SdfMeshRasterPass {
             description: ImpostorDescription,
             fragment: fragment,
             renderPass: RenderPass,
+            vertex: vertex
+        );
+    /// <summary>Returns the key of the shadow pipeline built from given stages.</summary>
+    /// <param name="vertex">The shadow vertex stage's bytecode.</param>
+    /// <param name="fragment">The shadow fragment stage's bytecode.</param>
+    /// <returns>The key.</returns>
+    public static GpuPassPipelineKey ShadowKeyOf(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment) =>
+        GpuPassPipelineKey.OfGraphics(
+            description: ShadowDescription,
+            fragment: fragment,
+            renderPass: ShadowRenderPass,
             vertex: vertex
         );
     /// <summary>Reads one deployed stage.</summary>
@@ -165,6 +214,18 @@ public sealed class SdfMeshRasterPass {
         return Pipelines.Acquire(
             device: device,
             key: ImpostorKey
+        );
+    }
+    /// <summary>Takes a lease on the shadow pipeline for a device, joining its build or starting it on the thread
+    /// pool.</summary>
+    /// <param name="device">The device.</param>
+    /// <returns>The lease; its <see cref="GpuPassPipeline"/> carries the pipeline and the shadow render pass.</returns>
+    public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireShadow(IGpuDeviceContext device) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        return Pipelines.Acquire(
+            device: device,
+            key: ShadowKey
         );
     }
 }

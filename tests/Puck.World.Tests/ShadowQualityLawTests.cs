@@ -83,6 +83,30 @@ public sealed class ShadowQualityLawTests {
                 sourceName: "s60-fix-presets.world.json", definition: out _, reason: out var reason), userMessage: reason);
         }
     }
+    // The shadow tier travels the lever whole: each tier is the live tier, chooses the cascades' resolution, and is the
+    // boot tier a save folds back. A tier outside the four is refused.
+    [Fact]
+    public void TheShadowTierRoundTripsThroughTheLeverAndChoosesTheCascadeResolution() {
+        var definition = Fixtures.BuildDocument() with { RenderRaw = new WorldRenderDefaults(Shadows: ShadowTier.High) };
+        var settings = new WorldRenderSettings(defaults: definition.Render);
+        var pacing = new PresentPacingControl(initialTargetHertz: null);
+        var audio = new AudioLever();
+        var bindingBar = new WorldBindingBarVisibility();
+        var sink = WorldSessionLevers.Compose(audio: audio, bindingBar: bindingBar, pacing: pacing, settings: settings);
+
+        Assert.Equal(expected: ShadowTier.High, actual: settings.Shadows);
+        foreach (var (tier, resolution) in new[] {
+            (ShadowTier.Low, Puck.SdfVm.SdfShadowResolution.Quarter), (ShadowTier.Medium, Puck.SdfVm.SdfShadowResolution.Half),
+            (ShadowTier.Off, Puck.SdfVm.SdfShadowResolution.Full), (ShadowTier.High, Puck.SdfVm.SdfShadowResolution.Full),
+        }) {
+            Assert.True(condition: sink.TryApply(lever: RoundTrip(lever: new WorldSessionLever(Section: WorldSection.Render, Name: WorldSessionLevers.Shadows, A: ((int)tier)))));
+            Assert.Equal(expected: tier, actual: settings.Shadows);
+            Assert.Equal(expected: resolution, actual: WorldFramePresenter.ShadowResolutionOf(tier: tier));
+            Assert.Equal(expected: tier, actual: WorldSessionLevers.Fold(definition: definition, settings: settings, pacing: pacing,
+                audio: audio, bindingBar: bindingBar, editor: new WorldEditorSeats()).Render.Shadows);
+        }
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => settings.Shadows = ((ShadowTier)4));
+    }
     [InlineData(QualityTier.Low, 0)]
     [InlineData(QualityTier.Medium, 1)]
     [InlineData(QualityTier.High, 2)]

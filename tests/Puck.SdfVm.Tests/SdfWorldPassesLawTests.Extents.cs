@@ -53,12 +53,13 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = view.Produce(context: in context);
             var row = view.Runtime.Latest!.Instances[0];
 
-            // The bake's two passes, the mesh, surface, views and sky at the active grid, the three shadow cascades at their
-            // own resolution, and the resolve and the composite at the output.
+            // The bake's two passes, the mesh, surface, views and sky at the active grid, the key light's two shadow
+            // cascades at their own resolution (the frame's one stable shadow slot draws no second), and the resolve and
+            // the composite at the output.
             const long Cascade = SdfWorldPackage.MeshShadowResolution;
 
-            Assert.Equal(expected: 11, actual: row.Passes);
-            Assert.Equal(expected: ((((6L * pixels) * pixels) + (3 * (Cascade * Cascade))) + (2 * (Extent * Extent))), actual: row.PassPixels);
+            Assert.Equal(expected: 10, actual: row.Passes);
+            Assert.Equal(expected: ((((6L * pixels) * pixels) + (2 * (Cascade * Cascade))) + (2 * (Extent * Extent))), actual: row.PassPixels);
             // The resolve's pass set, the third from the frame's last: the sky and the composite follow it.
             var set = gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
 
@@ -85,7 +86,7 @@ public sealed partial class SdfWorldPassesLawTests {
         // Changing the ceiling rebuilds allocation while preserving the published output. Switching off the separate
         // grid removes the resolve and its scratch; switching back selects the same declared resolve topology.
         foreach (var (ceiling, active, passes, renderPixels) in new[] {
-            (0.5f, 0.25f, 11, 8u), (1f, 0f, 10, 32u), (0.75f, 0.5f, 11, 16u),
+            (0.5f, 0.25f, 10, 8u), (1f, 0f, 9, 32u), (0.75f, 0.5f, 10, 16u),
         }) {
             current = current with { Views = [current.Views[0] with { RenderScale = ceiling, ResolvedRenderScale = active }], Time = (current.Time + 1f) };
             TestLiveness.Until(step: () => {
@@ -100,7 +101,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
             }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-            Assert.Equal(expected: (passes == 11), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
+            Assert.Equal(expected: (passes == 10), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
         current = current with { EnableCadenceGate = true };
         _ = view.Produce(context: in context);

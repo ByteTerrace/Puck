@@ -27,9 +27,7 @@ namespace Puck.World;
 public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     // The world.quality echo: the current individual settings the preset (or a later override) left in place.
     private string DescribeQuality() {
-        return $"[world.quality: shadows={(settings.Shadows
-            ? "on"
-            : "off")} ao={(settings.AmbientOcclusion
+        return $"[world.quality: shadows={ShadowTierName(tier: settings.Shadows)} ao={(settings.AmbientOcclusion
             ? "on"
             : "off")} temporal={(settings.Temporal
             ? "on"
@@ -100,7 +98,9 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
     }
     // The world.shadows echo.
     private static string ShadowEcho(WorldRenderSettings settings) =>
-        $"[world.shadows: {(settings.Shadows ? "on" : "off")}]";
+        $"[world.shadows: {ShadowTierName(tier: settings.Shadows)}]";
+    // A shadow tier's spelling, as the document and world.shadows spell it.
+    private static string ShadowTierName(ShadowTier tier) => tier.ToString().ToLowerInvariant();
 
     // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
     // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
@@ -230,14 +230,22 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadows",
-            description: "Turns the shadow cascades on or off ENGINE-WIDE, live (no rebuild): world.shadows [on|off] — no argument echoes the current state. Off, every light goes unshadowed and no cascade renders.",
+            description: "Selects the shadow tier ENGINE-WIDE, live: world.shadows [off|low|medium|high] — no argument echoes the current tier. High renders every shadow cascade at 2048 texels a side, medium at 1024 and low at 512, each at a quarter of the memory and fill of the tier above; a change of tier rebuilds each view's graph once. Off, every light goes unshadowed and no cascade renders or is held.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: ShadowEcho(settings: settings));
                 }
 
-                if (ParseOnOff(token: args[0]) is not { } on) {
-                    return CommandResult.Error(output: $"[world.shadows: unknown state '{args[0]}' — on|off]");
+                var tier = ((args.Count != 1) ? ((ShadowTier?)null) : args[0] switch {
+                    "off" => ShadowTier.Off,
+                    "low" => ShadowTier.Low,
+                    "medium" => ShadowTier.Medium,
+                    "high" => ShadowTier.High,
+                    _ => ((ShadowTier?)null),
+                });
+
+                if (tier is not { } selected) {
+                    return CommandResult.Error(output: $"[world.shadows: unknown tier '{args[0]}' — off|low|medium|high]");
                 }
 
                 // The echo formats INSIDE SubmitLever's completion — after the lever has applied (or been refused),
@@ -246,7 +254,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Shadows,
-                    a: (on ? 1.0 : 0.0),
+                    a: ((int)selected),
                     formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings))
                 );
             }
@@ -510,7 +518,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.Shadows,
-                    a: ((preset.Shadows != ShadowTier.Off) ? 1.0 : 0.0)
+                    a: ((int)preset.Shadows)
                 );
                 SubmitLever(
                     link: link,

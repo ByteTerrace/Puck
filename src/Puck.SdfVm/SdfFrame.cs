@@ -85,14 +85,19 @@ public readonly record struct SdfViewQuality {
     /// <summary>Gets whether the view skips shadows: the shadow cascades do not render and every light goes unshadowed.
     /// The pass block carries it as <c>disableSoftShadows</c>.</summary>
     public bool DisableSoftShadows { get; init; }
+    /// <summary>Gets the texels along each side of the view's shadow cascades while it renders shadows: its fragment
+    /// allocates cascades of that size, so a change rebuilds the view's graph. The default is
+    /// <see cref="SdfShadowResolution.Full"/>.</summary>
+    public SdfShadowResolution ShadowResolution { get; init; }
     /// <summary>Gets whether the view asks for temporal reconstruction: it runs the temporal fragment
     /// (<c>SdfWorldPackage.TemporalFragment</c>), jitters its samples and resolves them over its history into its
     /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
     /// barriers. The default asks for none.</summary>
     public bool Temporal { get; init; }
 
-    /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, and the view
-    /// reconstructs over time only when both ask. Neither can lift a restriction the other set.</summary>
+    /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, the cascades
+    /// take the coarser of the two resolutions, and the view reconstructs over time only when both ask. Neither can lift a
+    /// restriction the other set.</summary>
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
@@ -100,6 +105,7 @@ public readonly record struct SdfViewQuality {
         GeometryOnly = GeometryOnly,
         DisableAmbientOcclusion = (DisableAmbientOcclusion || other.DisableAmbientOcclusion),
         DisableSoftShadows = (DisableSoftShadows || other.DisableSoftShadows),
+        ShadowResolution = ((SdfShadowResolution)Math.Max(val1: ((int)ShadowResolution), val2: ((int)other.ShadowResolution))),
         Temporal = (Temporal && other.Temporal),
     };
 }

@@ -18,7 +18,7 @@ public sealed partial class WorldRenderSettings {
     private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
     private int m_revision;
-    private bool m_shadows;
+    private ShadowTier m_shadows;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
     private float m_upscaleSharpness;
@@ -32,7 +32,7 @@ public sealed partial class WorldRenderSettings {
     public WorldRenderSettings(WorldRenderDefaults defaults) {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
-        Shadows = (defaults.Shadows != ShadowTier.Off);
+        Shadows = defaults.Shadows;
         ShadowSlots = Client.WorldShadowSettings.From(render: defaults);
         AmbientOcclusion = defaults.AmbientOcclusion;
         RenderScale = defaults.RenderScale;
@@ -86,10 +86,20 @@ public sealed partial class WorldRenderSettings {
     public int Revision => unchecked((m_revision + SkyLayers.Revision));
     /// <summary>The live shadow-slot policy, set by the world's quality row and persisted by save.</summary>
     public Client.WorldShadowSettings ShadowSlots { get => m_shadowSlots; set { m_shadowSlots = value; m_revision++; } }
-    /// <summary>Whether the shadow cascades render: boots on unless the definition's shadow tier is
-    /// <see cref="ShadowTier.Off"/>, and the <c>world.shadows</c> verb moves it live through each view's
-    /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> lane, so no rebuild.</summary>
-    public bool Shadows { get => m_shadows; set { m_shadows = value; m_revision++; } }
+    /// <summary>The shadow tier: boots at the definition's <c>render.shadows</c>, and the <c>world.shadows</c> verb and a
+    /// quality preset move it live. <see cref="ShadowTier.Off"/> renders no cascade
+    /// (<see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/>); every other tier chooses the cascades' resolution
+    /// (<see cref="Puck.SdfVm.SdfViewQuality.ShadowResolution"/>, <see cref="Client.WorldFramePresenter.ShadowResolutionOf"/>),
+    /// and a change between tiers rebuilds each view's graph once at the new size.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value set is not a defined tier.</exception>
+    public ShadowTier Shadows {
+        get => m_shadows;
+        set {
+            if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
+            m_shadows = value;
+            m_revision++;
+        }
+    }
     /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
     /// and resolves them over its history into its output, at native or reduced render scale, through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed

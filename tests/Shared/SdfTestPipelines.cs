@@ -45,6 +45,8 @@ internal static class SdfTestPipelines {
                 fragment: new byte[] { 1 },
                 impostorFragment: new byte[] { 1 },
                 pipelines: pipelines,
+                shadowFragment: new byte[] { 1 },
+                shadowVertex: new byte[] { 1 },
                 vertex: new byte[] { 1 }
             ),
             regionCopy: new GpuRegionCopyPass(
@@ -67,6 +69,16 @@ internal static class SdfTestPipelines {
         GpuPassPipelineCache.Build(
             device: device,
             key: SdfMeshRasterPass.KeyOf(
+                fragment: new byte[] { 1 },
+                vertex: new byte[] { 1 }
+            ),
+            ledger: ledger
+        );
+    // Builds the shadow cascade pipeline from one-byte stages on the calling thread, as MeshRaster builds the mesh pass's.
+    public static GpuPassPipeline ShadowRaster(IGpuDeviceContext device, GpuWorkLedger ledger) =>
+        GpuPassPipelineCache.Build(
+            device: device,
+            key: SdfMeshRasterPass.ShadowKeyOf(
                 fragment: new byte[] { 1 },
                 vertex: new byte[] { 1 }
             ),

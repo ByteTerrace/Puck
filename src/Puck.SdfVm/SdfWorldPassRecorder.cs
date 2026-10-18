@@ -12,9 +12,9 @@ namespace Puck.SdfVm;
 // binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the lights and the
 // sky among them), and the world interface's pass group: the fragment storages its ports bind and, at every member its
 // ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes into its pass
-// block; and the screens, whose host images are rewritten every frame. The mesh part and the shadow cascades draw the
-// frame's mesh draws into their targets through the mesh pipeline, each with a set of its own per frame slot binding its
-// pass block. A recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
+// block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into
+// its target through the mesh pipeline and each shadow cascade into its depth alone through the shadow pipeline, each
+// with a set of its own per frame slot binding its pass block. A recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => ((m_part == SdfWorldPackage.Parts.Views) ? m_view.Residency.SkyDetails.Labels : []);
@@ -137,7 +137,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         // The mesh part draws through the mesh interface's layout, whose one pass group holds the pass block the world
         // interface lays out and the mesh region: a set per frame slot from a pool of its own, its block bound to the slot's
-        // pass block buffer, and a framebuffer over each instance of its target and depth.
+        // pass block buffer, and a framebuffer over each instance of its target and depth, or of a cascade's depth alone.
         var bindings = context.Services.Bindings;
         var sizes = default(GpuDescriptorPoolSizes);
 
@@ -182,11 +182,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_framebuffers = new IGpuFramebuffer[m_meshTargets.Count];
 
             for (var index = 0; (index < m_framebuffers.Length); index++) {
-                m_framebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
-                    colors: [m_meshTargets[index]],
-                    depth: groups.OutputImages[1][index],
-                    renderPass: tables.MeshRenderPass
-                );
+                m_framebuffers[index] = (IsShadowCascade
+                    ? context.Services.RenderPassFactory.CreateFramebuffer(
+                        colors: [],
+                        depth: m_meshTargets[index],
+                        renderPass: tables.ShadowRenderPass
+                    )
+                    : context.Services.RenderPassFactory.CreateFramebuffer(
+                        colors: [m_meshTargets[index]],
+                        depth: groups.OutputImages[1][index],
+                        renderPass: tables.MeshRenderPass
+                    ));
             }
         } catch {
             foreach (var framebuffer in m_framebuffers) {
@@ -327,7 +333,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
 
-        var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);
+        var cascades = SdfMeshShadowCascades.Fit(frame: frame, texels: BoundCascadeTexels(recording: in recording), view: view);
 
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
         if (IsShadowCascade) {
@@ -335,7 +341,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 SdfWorldPackage.Parts.ShadowNear => 0,
                 SdfWorldPackage.Parts.ShadowFar => 1,
                 _ => 2,
-            }]);
+            }], texels: cascades.Texels);
         }
         if (m_part is SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake) {
             if (!ClaimsBake(batch: out var batch)) {
@@ -362,6 +368,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (IsMesh) {
             RecordMesh(
                 camera: frame.Views[view].Camera,
+                cascadeTexels: cascades.Texels,
                 recording: in recording,
                 tables: tables
             );
@@ -413,6 +420,25 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no input read through '{member}'.");
     }
+    // The texels a side of the cascade depth the pass binds, a cascade's output or the surface pass's input, which its pass
+    // block and its fit follow, so a pass draws and reads the depth its graph allocated while a graph of another shadow
+    // resolution builds; null for a pass that binds none.
+    private int? BoundCascadeTexels(in RenderGraphPackageRecording recording) {
+        for (var port = 0; (port < m_outputs.Length); port++) {
+            if (IsCascadeDepth(version: m_outputs[port])) {
+                return ((int)recording.Outputs[port].Image.Width);
+            }
+        }
+        for (var port = 0; (port < m_inputs.Length); port++) {
+            if (IsCascadeDepth(version: m_inputs[port])) {
+                return ((int)recording.Inputs[port].Image.Width);
+            }
+        }
+
+        return null;
+    }
+    private static bool IsCascadeDepth(string version) =>
+        (version is SdfWorldPackage.Parts.ShadowNearDepth or SdfWorldPackage.Parts.ShadowFarDepth or SdfWorldPackage.Parts.ShadowSecondDepth);
     // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
     // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
     // passes install. The hold and the retain move with the view; the ports and screens rebind for the
@@ -520,8 +546,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
     // region: every draw the view records (SdfMeshLodSelector) through the mesh pipeline, then the impostor cards among
-    // them through the card pipeline. A frame with no draws never records (Skips).
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, CameraSnapshot camera) {
+    // them through the card pipeline; a cascade draws every mesh through the shadow pipeline into its depth, cascadeTexels
+    // a side. A frame with no draws never records (Skips).
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, CameraSnapshot camera, int cascadeTexels) {
         var draws = tables.MeshDraws;
         var count = tables.MeshDrawCount;
 
@@ -535,7 +562,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        var pipeline = tables.MeshPipeline;
+        var pipeline = (IsShadowCascade ? tables.ShadowPipeline : tables.MeshPipeline);
         var set = m_meshSets[slot];
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
@@ -590,11 +617,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             counters: WorkCountersOf(recording: in recording).Buffer,
             set: set
         );
-        // A cascade covers its whole target, whatever the view's render extent.
+        // A cascade covers its whole depth, whatever the view's render extent.
         recorder.BeginRenderPass(
             area: new GpuPixelRect(
-                Height: (IsShadowCascade ? SdfWorldPackage.MeshShadowResolution : recording.Height),
-                Width: (IsShadowCascade ? SdfWorldPackage.MeshShadowResolution : recording.Width),
+                Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
+                Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
                 X: 0,
                 Y: 0
             ),
@@ -732,11 +759,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 comparisonType: StringComparison.Ordinal
             )) {
                 meshVisibility = bound.Image.ImageViewHandle;
-            } else if (name == SdfWorldPackage.Parts.ShadowNearTarget) {
+            } else if (name == SdfWorldPackage.Parts.ShadowNearDepth) {
                 shadowNear = bound.Image.ImageViewHandle;
-            } else if (name == SdfWorldPackage.Parts.ShadowFarTarget) {
+            } else if (name == SdfWorldPackage.Parts.ShadowFarDepth) {
                 shadowFar = bound.Image.ImageViewHandle;
-            } else if (name == SdfWorldPackage.Parts.ShadowSecondTarget) {
+            } else if (name == SdfWorldPackage.Parts.ShadowSecondDepth) {
                 shadowSecond = bound.Image.ImageViewHandle;
             }
         }

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/79786cb9e3f1c7ff2c8ea3c7a1b0e082a24a890b1332c27cc4565a455c41f939). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/47f80111fc25fdbf5a9867887a40e5c5891c75bb396b27f753417938202ca549). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -189,9 +189,9 @@ struct SdfWorldPass {
     [[vk::offset(272)]] uint indirectSources;
     [[vk::offset(276)]] uint instanceMaskWordCount;
     [[vk::offset(280)]] float2 jitter;
-    [[vk::offset(288)]] uint lightCamera;
-    [[vk::offset(292)]] uint lightCount;
-    [[vk::offset(296)]] uint meshBakeCount;
+    [[vk::offset(288)]] uint lightCount;
+    [[vk::offset(292)]] uint meshBakeCount;
+    [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
     [[vk::offset(304)]] float4 meshBakeLattices[48];
     [[vk::offset(1072)]] uint meshDraws;
@@ -206,8 +206,8 @@ struct SdfWorldPass {
     [[vk::offset(1320)]] uint _pad1320;
     [[vk::offset(1324)]] uint _pad1324;
     [[vk::offset(1328)]] float4 meshShadowParameters;
-    [[vk::offset(1344)]] float nearDistance;
-    [[vk::offset(1348)]] uint _pad1348;
+    [[vk::offset(1344)]] uint meshShadowTexels;
+    [[vk::offset(1348)]] float nearDistance;
     [[vk::offset(1352)]] uint _pad1352;
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float4 previousView[6];

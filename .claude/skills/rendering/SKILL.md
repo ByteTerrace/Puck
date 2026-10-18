@@ -217,10 +217,15 @@ owns the explanation.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
   their own group. The pass block's lattice rows are a sync pair with
   `SdfFrameBlock.WriteMeshBake`.
-- **Cascades draw through the mesh pipeline**: `SdfFrameBlock.WriteShadowCamera`
-  writes the `lightCamera` flag so the mesh stages take their orthographic form, with the
-  view cameras' handedness; `passes/sdf-surface-stage.hlsli` mirrors that
-  projection.
+- **Cascades are depth only**: the shadow pipeline (`SdfMeshRasterPass.ShadowKey`,
+  `sdf-mesh-shadow.vert`/`.frag`) draws the mesh draws into each cascade's
+  sampled `D32Float` depth from the light camera `SdfFrameBlock.WriteShadowCamera`
+  writes, with the view cameras' handedness; `sdfMeshShadowDepth` in
+  `passes/sdf-surface-stage.hlsli` decodes that reversed, linear depth, so the two
+  projections are a sync pair. The shadow tier sizes the cascades
+  (`SdfShadowResolution`, `meshShadowTexels`) and a view holds the second slot's
+  cascade only while its world holds a second stable slot
+  (`SdfWorldPackage.WithShadows`).
 - **A dynamic group bakes in its slot's frame.** Its box, lattices and points are
   slot-local, and `sdf-mesh-bake` carries every sample through the slot's
   transform of the dispatching frame (a non-negative selector names the slot):

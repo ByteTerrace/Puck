@@ -233,6 +233,9 @@ public static partial class SdfWorldPackage {
         Load: GpuAttachmentLoad.Clear,
         Store: GpuAttachmentStore.Discard
     );
+    /// <summary>Gets a shadow cascade's depth attachment: cleared to <see cref="MeshClearDepth"/>, which reads as the
+    /// cascade's far plane where nothing was drawn, and stored, since the surface pass samples it.</summary>
+    public static GpuDepthAttachment MeshShadowDepthAttachment { get; } = MeshDepthAttachment with { Store = GpuAttachmentStore.Store };
 
     /// <summary>The name the fragment's output port version takes: the view's color, which the composite writes from the
     /// sky's runs and the lit image.</summary>
@@ -243,7 +246,6 @@ public static partial class SdfWorldPackage {
     /// and shadow slot table, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
     /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
-        Value(name: LightCamera, type: ShaderValueType.Uint),
         Value(name: IndirectSources, type: ShaderValueType.Uint),
         Value(name: IndirectSourceGains, type: ShaderValueType.Float4),
         Value(name: IndirectApply, type: ShaderValueType.Float4),
@@ -295,6 +297,7 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
+        Value(name: MeshShadowTexels, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshBakeBatch * MeshBakeLatticeRows), name: MeshBakeLattices, type: ShaderValueType.Float4),
         Value(name: MeshBakeCount, type: ShaderValueType.Uint),
         Value(name: MeshIrradianceVolume, type: ShaderValueType.Uint4),
@@ -385,14 +388,14 @@ public static partial class SdfWorldPackage {
         Passes: [
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]),
-            Raster(name: Parts.ShadowNear, target: Parts.ShadowNearTarget, depth: Parts.ShadowNearDepth),
-            Raster(name: Parts.ShadowFar, target: Parts.ShadowFarTarget, depth: Parts.ShadowFarDepth),
-            Raster(name: Parts.ShadowSecond, target: Parts.ShadowSecondTarget, depth: Parts.ShadowSecondDepth),
+            ShadowRaster(name: Parts.ShadowNear, depth: Parts.ShadowNearDepth),
+            ShadowRaster(name: Parts.ShadowFar, depth: Parts.ShadowFarDepth),
+            ShadowRaster(name: Parts.ShadowSecond, depth: Parts.ShadowSecondDepth),
             Raster(name: Parts.Mesh, target: Parts.MeshTarget, depth: Parts.MeshDepth),
             // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
             // back, stays live in the planned graph.
             Pass(
-                inputs: [Parts.MeshTarget, Parts.ShadowNearTarget, Parts.ShadowFarTarget, Parts.ShadowSecondTarget, Parts.BakeSamples],
+                inputs: [Parts.MeshTarget, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth, Parts.BakeSamples],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
             ),
@@ -416,9 +419,9 @@ public static partial class SdfWorldPackage {
                 sizeBytes: (((ulong)MeshBakeMaxSamples) * MeshBakeSampleWords * sizeof(uint)),
                 strideBytes: sizeof(uint)
             ),
-            .. ShadowResources(target: Parts.ShadowNearTarget, depth: Parts.ShadowNearDepth),
-            .. ShadowResources(target: Parts.ShadowFarTarget, depth: Parts.ShadowFarDepth),
-            .. ShadowResources(target: Parts.ShadowSecondTarget, depth: Parts.ShadowSecondDepth),
+            ShadowDepth(name: Parts.ShadowNearDepth, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             new ShaderPipelineResource(
                 Dimensions: ShaderPipelineDimensions.Relative(),
@@ -502,23 +505,25 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: target), new ResourceReference(Name: depth)]
     );
-    // A cascade's target and depth attachment, MeshShadowResolution texels a side.
-    private static ShaderPipelineResource[] ShadowResources(string target, string depth) => [
-        new ShaderPipelineResource(
-            Dimensions: ShaderPipelineDimensions.Absolute(height: MeshShadowResolution, width: MeshShadowResolution),
-            Format: MeshTargetFormat.ToString(),
-            Name: target,
-            Retained: true
-        ),
-        new ShaderPipelineResource(
-            ClearDepth: MeshClearDepth,
-            Dimensions: ShaderPipelineDimensions.Absolute(height: MeshShadowResolution, width: MeshShadowResolution),
-            Format: MeshDepthFormat.ToString(),
-            Kind: ShaderPipelineResourceKind.Depth,
-            Name: depth,
-            Retained: true
-        ),
-    ];
+    // A shadow cascade's raster pass, drawing the frame's mesh draws through the shadow pipeline into the cascade's depth
+    // alone.
+    private static RenderGraphFragmentPass ShadowRaster(string name, string depth) => new(
+        CountsKernelWork: true,
+        InputAccesses: [],
+        Inputs: [],
+        Name: name,
+        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite],
+        Outputs: [new ResourceReference(Name: depth)]
+    );
+    // A cascade's depth, texels a side, which its raster pass writes and the surface pass samples.
+    private static ShaderPipelineResource ShadowDepth(string name, int texels) => new(
+        ClearDepth: MeshClearDepth,
+        Dimensions: ShaderPipelineDimensions.Absolute(height: texels, width: texels),
+        Format: MeshDepthFormat.ToString(),
+        Kind: ShaderPipelineResourceKind.Depth,
+        Name: name,
+        Retained: true
+    );
 
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static class Parts {
@@ -534,17 +539,12 @@ public static partial class SdfWorldPackage {
         public const string ShadowFar = "shadow-far";
         /// <summary>The second shadow slot's cascade raster pass.</summary>
         public const string ShadowSecond = "shadow-second";
-        /// <summary>The near cascade's target: per texel the light-space depth of the nearest caster.</summary>
-        public const string ShadowNearTarget = "shadowNearTarget";
-        /// <summary>The near cascade's depth attachment.</summary>
+        /// <summary>The near cascade's depth: per texel the reversed-Z orthographic depth of the nearest caster, zero (the
+        /// far plane) where none was drawn.</summary>
         public const string ShadowNearDepth = "shadowNearDepth";
-        /// <summary>The far cascade's target.</summary>
-        public const string ShadowFarTarget = "shadowFarTarget";
-        /// <summary>The far cascade's depth attachment.</summary>
+        /// <summary>The far cascade's depth.</summary>
         public const string ShadowFarDepth = "shadowFarDepth";
-        /// <summary>The second slot's cascade target.</summary>
-        public const string ShadowSecondTarget = "shadowSecondTarget";
-        /// <summary>The second slot's cascade depth attachment.</summary>
+        /// <summary>The second slot's cascade depth.</summary>
         public const string ShadowSecondDepth = "shadowSecondDepth";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>
         public const string Mesh = "mesh";

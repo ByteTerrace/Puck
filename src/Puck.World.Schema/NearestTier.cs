@@ -1,7 +1,7 @@
 namespace Puck.World;
 
-/// <summary>The one reverse lookup from a continuous lever value to the document's tiered home for it, shared by
-/// <see cref="ShadowTiers.Tier"/> and <see cref="WorldRenderScaleTiers.Nearest"/>.</summary>
+/// <summary>The one reverse lookup from a continuous lever value to the document's tiered home for it
+/// (<see cref="WorldRenderScaleTiers.Nearest"/>).</summary>
 internal static class NearestTier {
     /// <summary>Returns the tier whose scale lies nearest <paramref name="value"/>, the tier declared first on a tie.
     /// A tier's own scale maps back to that tier exactly.</summary>

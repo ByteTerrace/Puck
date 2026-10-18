@@ -2065,8 +2065,11 @@ resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
-`world.shadows on|off` turns the views' cascade shadows on or off; the world's
-`render.shadows` tier boots it, any tier but `Off` meaning on.
+`world.shadows off|low|medium|high` selects the shadow tier: `off` renders and
+holds no cascade, and `low`, `medium` and `high` render every cascade at 512,
+1024 or 2048 texels a side, each a quarter of the memory and fill of the tier
+above; a change of tier rebuilds each view's graph once. The world's
+`render.shadows` tier boots it, and `world.save` folds it back.
 `world.indirect off|medium|high` selects the indirect-light tier the
 irradiance volume traces at. It boots at `render.indirect.tier`, Medium
 when absent; an explicit `off` disables it. The shared quality presets select

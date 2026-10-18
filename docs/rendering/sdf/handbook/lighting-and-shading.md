@@ -71,7 +71,9 @@ unshadowed. Neither radiance is crossfaded.
 A cascade covers only the slice of the view's frustum it was fitted to and the
 mesh draws inside its light camera's box, so an occluder outside it casts
 nothing into frame, and a body thinner than a cascade texel can miss its own
-shadow.
+shadow. The shadow tier sets the cascades' texels (2048 a side at `high`, 1024
+at `medium`, 512 at `low`): the filter's widths are counted in texels, so a
+lower tier casts softer, blunter shadows over the same reach.
 
 ## Indirect light controls
 
@@ -244,7 +246,7 @@ frame uploads zero and every default is preserved.
 
 | Verb | Effect | Why you'd use it |
 |---|---|---|
-| `world.shadows on\|off` | `off` leaves every light unshadowed and renders no cascade | Isolates the shadow cascades and filter |
+| `world.shadows off\|low\|medium\|high` | `off` leaves every light unshadowed and renders or holds no cascade; the other tiers render the cascades at 512, 1024 or 2048 texels a side, a change of tier rebuilding each view's graph once | Isolates the shadow cascades and filter, and trades their memory and fill against sharpness |
 | `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the occlusion's taps and its filter |
 
 `SdfFrame` also carries a lane for disabling screen lights

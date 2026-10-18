@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/e3ffe6718520543db206b7581bf1f47f23bb7618fd06cb33cf010a0eebca7173). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/ff59201a34f721c858309130b13528c73fd3013a3728acc95120c7cc7ec4e1a5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -189,9 +189,9 @@ struct SdfSkyPass {
     [[vk::offset(272)]] uint indirectSources;
     [[vk::offset(276)]] uint instanceMaskWordCount;
     [[vk::offset(280)]] float2 jitter;
-    [[vk::offset(288)]] uint lightCamera;
-    [[vk::offset(292)]] uint lightCount;
-    [[vk::offset(296)]] uint meshBakeCount;
+    [[vk::offset(288)]] uint lightCount;
+    [[vk::offset(292)]] uint meshBakeCount;
+    [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
     [[vk::offset(304)]] float4 meshBakeLattices[48];
     [[vk::offset(1072)]] uint meshDraws;
@@ -206,8 +206,8 @@ struct SdfSkyPass {
     [[vk::offset(1320)]] uint _pad1320;
     [[vk::offset(1324)]] uint _pad1324;
     [[vk::offset(1328)]] float4 meshShadowParameters;
-    [[vk::offset(1344)]] float nearDistance;
-    [[vk::offset(1348)]] uint _pad1348;
+    [[vk::offset(1344)]] uint meshShadowTexels;
+    [[vk::offset(1348)]] float nearDistance;
     [[vk::offset(1352)]] uint _pad1352;
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float4 previousView[6];

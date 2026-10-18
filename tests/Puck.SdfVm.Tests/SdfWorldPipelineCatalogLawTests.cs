@@ -21,8 +21,8 @@ public sealed class SdfWorldPipelineCatalogLawTests {
     // The bake mask, the bake, the surface, views, sky and composite kernels and the three environment kernels. The fake
     // brick baker is empty and resolve is acquired on demand.
     private const long KernelPipelines = 9L;
-    // The kernels, the region copy, the mesh pass and its impostor card pass.
-    private const int ResidencyPipelines = 12;
+    // The kernels, the region copy, the mesh pass, its impostor card pass and the shadow cascades' pass.
+    private const int ResidencyPipelines = 13;
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {

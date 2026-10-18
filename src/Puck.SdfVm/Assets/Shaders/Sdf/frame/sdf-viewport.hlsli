@@ -6,10 +6,6 @@
 #define SDF_VIEWPORT_HLSLI
 #include "../isa/sdf-isa.hlsli"
 
-// Whether the view is a mesh-path shadow cascade's orthographic light camera (SdfFrameBlock.WriteShadowCamera), which
-// only the mesh pass's stages draw from.
-bool sdfLightCamera() { return (passGroup.lightCamera != 0u); }
-
 // The view the pass renders, gathered from the pass block into the rows the shading and the mesh projection read it
 // through.
 struct ViewportData {
@@ -76,11 +72,11 @@ float worldNearDistance(ViewportData view) {
     return view.lens.x;
 }
 
-// Perspective surfaces keep SDF_MINIMUM_NEAR for their infinite reversed-Z projection. A shadow cascade's light camera has a
-// finite orthographic depth interval and starts at its positive authored near plane: raising that plane can clip a
-// caster the finite projection placed just beyond it.
+// The near distance a view's surfaces are rendered from: its own, raised to SDF_MINIMUM_NEAR for the mesh pass's infinite
+// reversed-Z projection. A shadow cascade's finite orthographic projection (sdf-mesh-shadow.vert.hlsl) starts at its own
+// near plane instead.
 float worldSurfaceNearDistance(ViewportData view) {
-    return sdfLightCamera() ? worldNearDistance(view) : max(worldNearDistance(view), SDF_MINIMUM_NEAR);
+    return max(worldNearDistance(view), SDF_MINIMUM_NEAR);
 }
 
 // The ray distance at which a camera ray along the unit `rayDirection` crosses the plane at forward distance

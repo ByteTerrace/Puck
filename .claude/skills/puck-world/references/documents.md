@@ -290,8 +290,9 @@ its whole authority surface.
   crossing test, derived overlap, reciprocal hysteresis, and corner topology;
   see [adjacency-and-federation.md](adjacency-and-federation.md) and
   [documents-composition.md](documents-composition.md).
-- `ShadowTier.cs` — the tier↔scale map `world.save` folds live shadow reach
-  through.
+- `ShadowTier.cs` — the shadow tier: off, or the cascades' resolution
+  (`world.shadows`, `render.shadows`, a preset's `shadows`), which
+  `WorldFramePresenter.ShadowResolutionOf` maps to `SdfShadowResolution`.
 - `BindingVocabularyHook.cs` — the static injection seam the composition
   root wires with a `[ModuleInitializer]` (`WorldDataHookInstaller` in
   `Puck.World`) so validators reach the input vocabulary without this

@@ -7,6 +7,7 @@ public static partial class SdfFrameBlock {
     private static readonly int MeshShadowCascadesOffset = Offset(member: SdfWorldPackage.MeshShadowCascades);
     private static readonly int MeshShadowCountOffset = Offset(member: SdfWorldPackage.MeshShadowCount);
     private static readonly int MeshShadowParametersOffset = Offset(member: SdfWorldPackage.MeshShadowParameters);
+    private static readonly int MeshShadowTexelsOffset = Offset(member: SdfWorldPackage.MeshShadowTexels);
     private static readonly int MeshBakeLatticesOffset = Offset(member: SdfWorldPackage.MeshBakeLattices);
     private static readonly int MeshBakeCountOffset = Offset(member: SdfWorldPackage.MeshBakeCount);
 
@@ -15,6 +16,7 @@ public static partial class SdfFrameBlock {
     /// <param name="cascades">The frame's cascades.</param>
     public static void WriteMeshShadows(Span<byte> block, in SdfMeshShadowCascades cascades) {
         WriteUInt32(block: block, offset: MeshShadowCountOffset, value: ((uint)cascades.Count));
+        WriteUInt32(block: block, offset: MeshShadowTexelsOffset, value: ((uint)cascades.Texels));
         WriteSingle(block: block, offset: MeshShadowParametersOffset, value: cascades.PenumbraSlope);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + sizeof(float)), value: SdfMeshShadowCascades.ConstantBias);
         WriteSingle(block: block, offset: (MeshShadowParametersOffset + (2 * sizeof(float))), value: SdfMeshShadowCascades.NormalOffsetTexels);
@@ -31,11 +33,12 @@ public static partial class SdfFrameBlock {
         }
     }
     /// <summary>Writes one cascade's orthographic light camera as the view a shadow cascade's raster pass draws from: the
-    /// view rows the mesh pass's stages read, the light-camera flag that puts them in their orthographic form, the cascade target's
-    /// extent, and no jitter.</summary>
+    /// view rows the shadow pipeline's vertex stage projects with (<c>sdf-mesh-shadow.vert.hlsl</c>), the cascade's depth
+    /// interval as the near and far distances, the cascade's extent, and no jitter.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="camera">The cascade's light camera.</param>
-    public static void WriteShadowCamera(Span<byte> block, in SdfMeshShadowCamera camera) {
+    /// <param name="texels">The texels along each side of the cascade's depth.</param>
+    public static void WriteShadowCamera(Span<byte> block, in SdfMeshShadowCamera camera, int texels) {
         WriteVector3(block: block, offset: ViewPosition, value: camera.Position);
         WriteVector3(block: block, offset: ViewRight, value: camera.Right);
         WriteVector3(block: block, offset: ViewUp, value: camera.Up);
@@ -46,9 +49,8 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: 0f);
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: camera.Far);
-        WriteUInt32(block: block, offset: ImageExtent, value: SdfWorldPackage.MeshShadowResolution);
-        WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: SdfWorldPackage.MeshShadowResolution);
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.LightCamera), value: 1u);
+        WriteUInt32(block: block, offset: ImageExtent, value: ((uint)texels));
+        WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: ((uint)texels));
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
     /// <summary>Writes the lattices one bake dispatch samples and the instances each selects, three rows a lattice

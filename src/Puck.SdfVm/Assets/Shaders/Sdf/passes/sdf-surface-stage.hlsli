@@ -26,8 +26,6 @@ static const float SdfMeshShadowMaxTexels = 14.0;
 static const float SdfMeshShadowSlopeBias = 2.5;
 static const float SdfMeshShadowNearTexels = 1.5;
 static const float SdfGoldenAngle = 2.39996323;
-// The texels along each side of a cascade target. KEEP IN SYNC with SdfWorldPackage.MeshShadowResolution.
-#define SDF_MESH_SHADOW_RESOLUTION 2048
 
 // The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
 // pixel takes its cell of a 4x4 ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen
@@ -120,12 +118,15 @@ SdfMeshCascade sdfMeshCascadeAt(uint cascade) {
     c.forward = r3.xyz; c.far = r3.w;
     return c;
 }
-// The light-space depth of the nearest caster at a cascade texel; past the far plane where the cascade drew nothing.
-float sdfMeshShadowDepth(uint cascade, int2 texel, float far) {
-    int2 clamped = clamp(texel, int2(0, 0), int2(SDF_MESH_SHADOW_RESOLUTION - 1, SDF_MESH_SHADOW_RESOLUTION - 1));
-    float4 value = ((cascade == 0u) ? meshShadowNear.Load(int3(clamped, 0))
-        : ((cascade == 1u) ? meshShadowFar.Load(int3(clamped, 0)) : meshShadowSecond.Load(int3(clamped, 0))));
-    return ((value.y >= 1.0) ? value.x : far);
+// The light-space depth of the nearest caster at a cascade texel. The cascade holds the shadow pipeline's reversed-Z
+// orthographic depth, linear from one at its near plane to zero at its far plane (sdf-mesh.vert.hlsl), so a texel the
+// cascade drew nothing into, left at its clear of zero, reads as the far plane.
+float sdfMeshShadowDepth(uint cascade, SdfMeshCascade c, int2 texel) {
+    int last = (int(passGroup.meshShadowTexels) - 1);
+    int2 clamped = clamp(texel, int2(0, 0), int2(last, last));
+    float depth = ((cascade == 0u) ? meshShadowNear.Load(int3(clamped, 0)).x
+        : ((cascade == 1u) ? meshShadowFar.Load(int3(clamped, 0)).x : meshShadowSecond.Load(int3(clamped, 0)).x));
+    return (c.far - (depth * (c.far - c.near)));
 }
 // How far a cascade's caster at the texel `offset` texels from the receiver's lies in front of the receiver, less the
 // clearance it needs: positive for an occluder. The receiver is extended over its plane to that texel's centre
@@ -140,7 +141,7 @@ float sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 offs
     float lateral = length(delta);
     float clearance = (texelWorld * max((near * lateral), ((lateral - SdfMeshShadowNearTexels) * cone)));
 
-    return (((receiver + dot(gradient, delta)) - clearance) - sdfMeshShadowDepth(cascade, int2(at), c.far));
+    return (((receiver + dot(gradient, delta)) - clearance) - sdfMeshShadowDepth(cascade, c, int2(at)));
 }
 // A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
 // search sizes the penumbra from the light's penumbra slope and the gap to the average blocker, and a percentage-closer
@@ -152,11 +153,12 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
     float rotation = (pattern.x * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
     float cone = (1.0 / slope);
+    float texels = float(passGroup.meshShadowTexels);
 
     [loop]
     for (uint cascade = first; (cascade < end); cascade++) {
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
-        float texelWorld = ((2.0 * c.halfHeight) / float(SDF_MESH_SHADOW_RESOLUTION));
+        float texelWorld = ((2.0 * c.halfHeight) / texels);
         float3 biased = (surfacePoint + (face * (parameters.z * texelWorld)));
         float3 relative = (biased - c.position);
         float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
@@ -169,7 +171,7 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
             continue;
         }
 
-        float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * float(SDF_MESH_SHADOW_RESOLUTION));
+        float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * texels);
         float receiver = (depth - parameters.y);
         // The receiver's plane in the cascade: its depth change per texel along the target's x and y, from the normal in
         // light space (x along right, y down the target's rows), so each tap compares against the receiver's own surface
