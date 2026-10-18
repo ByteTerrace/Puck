@@ -29,13 +29,18 @@ public sealed class FormatIntegrationTests {
         Assert.Contains(actualString: result, comparisonType: StringComparison.Ordinal, expectedSubstring: "message:");
         Assert.Contains(actualString: result, comparisonType: StringComparison.Ordinal, expectedSubstring: "public Exec Compiler");
     }
+    /// <summary>
+    /// A root is formatted as the selection of every file under it, so a file-based app found there goes through its
+    /// disposable project, rather than being parsed without its directives and reported as a syntax error and a file no
+    /// project owns. The rewrite keeps the app's directives, compiles before it replaces the source, and never runs the
+    /// app's body.
+    /// </summary>
     [Fact]
-    public void AStandaloneAppIsFormattedAndCompiledWithoutExecutingItsBody() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-format-file-app-");
+    public void AStandaloneAppUnderAFormattedRootIsFormattedThroughItsProjectWithoutExecutingItsBody() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-format-root-file-app-");
 
         CliScratchDirectories.PinSdk(directory: scratch.RootPath);
         var root = scratch.RootPath;
-
         var source = Path.Combine(
             path1: root,
             path2: "Probe.cs"
@@ -46,60 +51,9 @@ public sealed class FormatIntegrationTests {
             contents: (Directives + "throw new System.InvalidOperationException(\"The formatter must never execute me.\");\n"),
             path: source
         );
-        Assert.Equal(
-            expected: 0,
-            actual: FormatFileProject.Run(
-                file: source,
-                selected: FormatPasses.DefaultSelection(),
-                check: false
-            )
-        );
+
+        var (code, _, report) = ConsoleCapture.RunSplit(run: () => SuiteRoot.Invoke(args: ["format", root]));
         var result = File.ReadAllText(path: source);
-
-        Assert.StartsWith(
-            actualString: result,
-            comparisonType: StringComparison.Ordinal,
-            expectedStartString: Directives
-        );
-        Assert.Contains(
-            actualString: result,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "message:"
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: FormatFileProject.Run(
-                file: source,
-                selected: FormatPasses.DefaultSelection(),
-                check: true
-            )
-        );
-        Assert.Equal(
-            expected: result,
-            actual: File.ReadAllText(path: source)
-        );
-    }
-    /// <summary>
-    /// A root is formatted as the selection of every file under it, so a file-based app found there goes through its
-    /// disposable project exactly as an explicitly selected one does, rather than being parsed without its directives
-    /// and reported as a syntax error and a file no project owns.
-    /// </summary>
-    [Fact]
-    public void AStandaloneAppUnderAFormattedRootIsFormattedThroughItsProject() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-format-root-file-app-");
-
-        CliScratchDirectories.PinSdk(directory: scratch.RootPath);
-        var root = scratch.RootPath;
-
-        File.WriteAllText(
-            contents: "#!/usr/bin/env dotnet\n#:property PublishAot=false\nSystem.Console.WriteLine(value: \"formatted\");\n",
-            path: Path.Combine(
-                path1: root,
-                path2: "Probe.cs"
-            )
-        );
-
-        var (code, _, report) = ConsoleCapture.RunSplit(run: () => SuiteRoot.Invoke(args: ["format", root, "--check"]));
 
         Assert.Equal(
             actual: code,
@@ -109,6 +63,16 @@ public sealed class FormatIntegrationTests {
             actualString: report,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "syntax errors"
+        );
+        Assert.StartsWith(
+            actualString: result,
+            comparisonType: StringComparison.Ordinal,
+            expectedStartString: Directives
+        );
+        Assert.Contains(
+            actualString: result,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "message:"
         );
     }
     [Fact]

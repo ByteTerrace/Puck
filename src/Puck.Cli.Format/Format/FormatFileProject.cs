@@ -8,6 +8,9 @@ public static class FormatFileProject {
     // The disposable project is built here and nowhere else, so the semantic passes resolve against the
     // configuration this build just produced.
     private const string Configuration = "Release";
+    // The disposable project is no project of the architecture map, so the repository's architecture gate (two inline
+    // tasks compiled on every build) has nothing to hold it to.
+    private const string NoArchitectureGate = "-p:PuckArchitectureGateEnabled=false";
     // The item the injected target copies @(Compile) into once the reference set is resolved. The build adds its own
     // generated sources (assembly info and attributes) to @(Compile) just before compiling, so the copy is what a
     // design-time closure evaluation reports as the project's sources.
@@ -158,7 +161,7 @@ public static class FormatFileProject {
 
             // An explicit target makes MSBuild report items as the build left them rather than as evaluated, so this
             // one build is also the closure evaluation the semantic passes would otherwise run.
-            Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
+            Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", NoArchitectureGate, "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
             var closures = new CompileClosures();
 
             closures.Record(
@@ -199,7 +202,7 @@ public static class FormatFileProject {
                     a: original,
                     b: rewritten
                 )) {
-                    Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
+                    Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-c", Configuration, "--no-restore", NoArchitectureGate], workingDirectory: repository);
                     RewriteIo.WriteText(
                         file: file,
                         text: rewritten
