@@ -948,6 +948,17 @@ Facts a script needs:
   `camera=operator …`, headless included. `view.override camera auto` (or a
   named camera) restores the layout's own views. It is session presentation: it
   never enters the document or the journal.
+- **Inspecting part of a creation.** `view.isolate <prototype> <shape-name>...`
+  renders only the named shapes of a prototype and every shape parented beneath
+  them, wherever the world renders it, and hides the rest of that creation: no
+  mesh, no shadow, and the paints and volumes riding hidden shapes go too. A
+  name ending in `*` is a prefix. Hidden parents still pose and animate the
+  kept shapes, so `view.isolate moth thigh-left thigh-right` shows both legs
+  walking as they do on the whole Moth. It echoes `[view.isolate: <prototype>
+  kept=<n> hidden=<n> names=<names>]`, refuses an unknown prototype or a name
+  matching no shape by name, and `view.isolate off` restores the whole
+  creation; `view.isolate` alone echoes the live isolation. It is session
+  presentation, like the operator camera.
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at

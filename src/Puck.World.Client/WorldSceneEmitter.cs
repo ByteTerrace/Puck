@@ -235,7 +235,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 meshDraws: meshDraws,
                 colors: m_bakedColors,
                 palettes: m_palettes,
-                picks: m_picks
+                picks: m_picks,
+                isolation: m_animator.Isolation
             );
             m_meshDraws.Static = meshDraws;
         }
@@ -740,10 +741,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
     /// watch, then a counter that moves when a bound color the live build baked moves in the state mirror
     /// (<see cref="WorldBakedColors.TryTakeMove"/>), then a counter that moves when a
-    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the continuum's pinned
-    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>).
+    /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), the continuum's pinned
+    /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), and the operator's shape isolation
+    /// (<see cref="WorldShapeIsolation.Revision"/>).
     /// <para>
-    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
@@ -767,6 +769,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         destination[(WorldClient.RevisionComponentCount + 2)] = m_censusRevision;
         destination[(WorldClient.RevisionComponentCount + 3)] = m_continuum.PresentationRevision;
+        destination[(WorldClient.RevisionComponentCount + 4)] = m_animator.Isolation.Revision;
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
@@ -840,7 +843,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 4);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>

@@ -669,12 +669,22 @@ public static class CreationStampEmitter {
     /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
     /// whole-creation stamp of <see cref="RequiresScope"/>). The creation emitter shares this scope: a shape whose field
     /// op or warp would otherwise open its own scope then rides the caller's instead.</param>
-    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false) {
+    /// <param name="hidden">The shapes, by index, that emit nothing (a presentation's shape isolation), or
+    /// <see langword="null"/> to emit every shape.</param>
+    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false, IReadOnlyList<bool>? hidden = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        foreach (var shape in (document.Shapes ?? [])) {
+        var shapes = (document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            var shape = shapes[index];
+
+            if ((hidden is not null) && hidden[index]) {
+                continue;
+            }
+
             EmitShapeChain(
                 builder: builder,
                 contactMargin: contactMargin,

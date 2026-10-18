@@ -35,13 +35,15 @@ public static class WorldPlacementStamper {
     /// <param name="tint">The albedo tint (color + blend), or <see langword="null"/>.</param>
     /// <param name="pool">A pooled placement's root dynamic slot and placement scale, which parented paints ride; <see langword="null"/> for a
     /// static placement.</param>
-    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, (int RootSlot, float Scale)? pool = null) {
+    /// <param name="hidden">The shapes the isolation hides, whose parented paints are dropped, or <see langword="null"/>.</param>
+    internal static int[] RegisterPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null) {
         var ids = new int[PaletteLength(document: document)];
 
         FillPalette(
             builder: builder,
             colors: colors,
             document: document,
+            hidden: hidden,
             ids: ids,
             pool: pool,
             tint: tint
@@ -59,7 +61,7 @@ public static class WorldPlacementStamper {
             val2: 1
         );
     // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
-    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null) {
+    internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null) {
         var resolveLayerColor = colors.LayerColor;
         var palette = (document.Palette ?? []);
         var count = Math.Min(
@@ -103,14 +105,15 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool)
+                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool, hidden: hidden)
             ));
         }
     }
     // A palette slot's paints. A pooled placement resolves a parented paint to its parent shape's own dynamic slot and
     // scales it by the placement; a static placement shares one palette across its placements and has no slot, so it
-    // draws only the paints that ride the winning frame, as authored.
-    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool) {
+    // draws only the paints that ride the winning frame, as authored. A paint parented to a shape the isolation hides
+    // goes with it.
+    private static SdfPaint[]? Paints(WorldBakedColors colors, CreationDocument document, PaletteEntryDocument? entry, (int RootSlot, float Scale)? pool, bool[]? hidden) {
         if (entry?.Paints is not { Count: > 0 } paints) {
             return null;
         }
@@ -134,6 +137,9 @@ public static class WorldPlacementStamper {
             while (!string.Equals(a: shapes[shapeIndex].Name?.Value, b: parent, comparisonType: StringComparison.Ordinal)) {
                 shapeIndex++;
             }
+            if ((hidden is not null) && hidden[shapeIndex]) {
+                continue;
+            }
             resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: ((frames.RootSlot + 1) + shapeIndex)));
         }
 
@@ -143,7 +149,7 @@ public static class WorldPlacementStamper {
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
-    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes) {
+    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes, bool[]? hidden) {
         if (
             (volumes is null) ||
             (creation.Volumes is not { Count: > 0 } authored)
@@ -165,6 +171,10 @@ public static class WorldPlacementStamper {
             var frameRotation = rotation;
 
             if (volume.Parent is { } parent) {
+                if (WorldShapeIsolation.IsHidden(hidden: hidden, name: parent, shapes: shapes)) {
+                    continue;
+                }
+
                 foreach (var shape in shapes) {
                     if (string.Equals(
                         a: shape.Name?.Value,
@@ -259,10 +269,11 @@ public static class WorldPlacementStamper {
     // Emits the creation's shapes, EACH its own segment carrying the FULL placement prefix — the shader splits the
     // stream at each ResetPoint and a segment's transforms are local to it, so a shared prefix segment would be dead.
     // Uniform placement scale commutes with the per-shape rotations (shear-free).
-    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal, bool inScope) {
+    private static void EmitPlacedShapes(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, Vector3 placementOrigin, Quaternion placementRotation, Vector3? reflectionNormal, bool inScope, bool[]? hidden) {
         CreationStampEmitter.Emit(
             builder: builder,
             document: creation,
+            hidden: hidden,
             inScope: inScope,
             transform: new CreationStampTransform(
                 Origin: placementOrigin,
@@ -277,7 +288,12 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden) {
+        // An isolation that hides every shape leaves the placement nothing to draw.
+        if ((hidden is not null) && (Array.IndexOf(array: hidden, value: false) < 0)) {
+            return;
+        }
+
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
@@ -286,6 +302,7 @@ public static class WorldPlacementStamper {
         // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
         // options), all fixed for this whole EmitPlacement call, so every reader below shares this one result.
         var hasText = (
+            (hidden is null) &&
             (textCatalog is not null) &&
             (creation.TextRuns is { Count: > 0 })
         );
@@ -324,7 +341,7 @@ public static class WorldPlacementStamper {
         var perShape = (
             !scoped &&
             !hasText &&
-            (creation.TextRuns is not { Count: > 0 }) &&
+            ((hidden is not null) || (creation.TextRuns is not { Count: > 0 })) &&
             (creation.Shapes is { Count: > 0 })
         );
 
@@ -333,7 +350,8 @@ public static class WorldPlacementStamper {
             creation: creation,
             firstMesh: firstMesh,
             hasText: hasText,
-            mesh: mesh,
+            hidden: hidden,
+            mesh: ((hidden is null) ? mesh : null),
             meshDraws: meshDraws,
             meshMaterial: meshMaterial,
             meshScope: meshScope,
@@ -363,10 +381,11 @@ public static class WorldPlacementStamper {
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
-    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+    private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
+                hidden: hidden,
                 origin: instance.Origin,
                 rotation: rotation,
                 scale: placement.Scale,
@@ -392,8 +411,14 @@ public static class WorldPlacementStamper {
                     ReflectionNormal: instance.ReflectionNormal
                 );
 
+                var emitted = 0;
+
                 for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
                     var shape = creation.Shapes[shapeIndex];
+
+                    if ((hidden is not null) && hidden[shapeIndex]) {
+                        continue;
+                    }
                     // A fold's copies leave any shape-local sphere, so a domain-bearing shape keeps the
                     // whole-creation bound.
                     var (boundCenter, boundRadius) = ((shape.Domain is { Count: > 0 })
@@ -406,9 +431,10 @@ public static class WorldPlacementStamper {
                     );
 
                     // The copy's shapes keep their tight instances but bake as one mesh, their union, so two plates
-                    // that share a face draw it once rather than fighting over it.
+                    // that share a face draw it once rather than fighting over it. The copy's first emitted shape opens
+                    // the union, so a hidden first shape never joins this copy to the previous one.
                     _ = builder.BeginInstance(
-                        bakesWithPrevious: (shapeIndex > 0),
+                        bakesWithPrevious: (emitted++ > 0),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin)
                     );
@@ -440,6 +466,7 @@ public static class WorldPlacementStamper {
             EmitPlacedShapes(
                 builder: builder,
                 creation: creation,
+                hidden: hidden,
                 inScope: scoped,
                 paletteIds: paletteIds,
                 placement: placement,
@@ -623,7 +650,9 @@ public static class WorldPlacementStamper {
     /// <param name="meshScope">What distinguishes these placements' mesh draws from another emission's placements of the
     /// same ids (an adjacent world's projection), or <see langword="null"/> for the world's own; part of each draw's
     /// <see cref="SdfMeshDraw.Identity"/>.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null) {
+    /// <param name="isolation">The operator's shape isolation, whose hidden shapes, with the volumes parented to them,
+    /// the prototype's mesh and its text, emit nothing; <see langword="null"/> emits every shape.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -686,7 +715,8 @@ public static class WorldPlacementStamper {
                 )],
                 meshDraws: meshDraws,
                 meshScope: meshScope,
-                firstMesh: firstMesh
+                firstMesh: firstMesh,
+                hidden: isolation?.HiddenFor(document: creation.EngineDocument, prototype: creation.Id.Value)
             );
             if (picks is not null) {
                 var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null) { Prototype = creation.Id };

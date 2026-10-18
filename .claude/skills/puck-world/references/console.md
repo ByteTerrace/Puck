@@ -60,6 +60,13 @@ turns nothing while `seatLook` sensitivity is zero. It is a composition leaf
 (`WorldComposition.SetOperatorCamera`), so it works in a headless boot, answers
 with the absolute pose it set, and `world.view.state` reads it back.
 
+To see part of a creation alone (a leg, a wing) use `view.isolate <prototype>
+<shape-name>... | off` ([views.md](views.md#verbs)): it hides every other
+shape of that prototype from the boot world's program while hidden parents
+still pose the kept ones. It is Immediate and core-registered, writes only
+`WorldStampPool.Isolation`, and echoes the kept and hidden counts, headless
+included.
+
 Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
 stops at the two factories MISSES the wrapper's registration sites.
 

@@ -531,6 +531,31 @@ Free Cam do not alter the logical movement basis.
   pose, cutting temporal history on every change. `view.override camera auto`
   or a named camera clears it. Nothing reaches the document, journal or
   simulation.
+- `view.isolate <prototype> <shape-name>... | off` — the live SHAPE ISOLATION,
+  for inspecting part of a creation alone (`view.isolate moth thigh-left
+  thigh-right` shows both legs). It keeps the named shapes and every shape
+  parented beneath them, transitively; a name ending in `*` is a prefix
+  (`thigh-*`). Every other shape of that prototype emits nothing wherever the
+  boot world renders it (body stamps through `WorldStampPool`, and animated,
+  attached and static placements through `WorldPlacementStamper`), so it bakes
+  into no mesh and casts no shadow; paints and volumes parented to a hidden
+  shape, the prototype's mesh and its text go with it. Hidden shapes' slots
+  still pack, so a hidden parent still poses the kept shapes and swings,
+  effectors and gait still animate them. It echoes `[view.isolate: <prototype>
+  kept=<n> hidden=<n> names=<names>]`; `off` restores every shape, and no
+  arguments echo the live isolation or `[view.isolate: off]`. An unknown
+  prototype or a name matching no shape is refused by name and changes
+  nothing. One isolation at a time. Code: `WorldShapeIsolation` (the
+  selection, the descendant resolution and its revision, owned by the pool as
+  `WorldStampPool.Isolation`), `WorldViewCommandModule.Isolate.cs` (the verb).
+  `WorldSceneEmitter.WriteRevision` carries the isolation's revision, so a
+  change rebuilds the program; the changed bake groups hash new geometry, so
+  they bake or load their own meshes and never take the whole body's. Until a
+  changed group's mesh lands, the bake keeps drawing its previous mesh. The
+  session and adjacency emitters, the presentation query field and the limb
+  probes ignore it. Session presentation only: no document field, nothing the
+  simulation or a replay reads. Headless it records and echoes the isolation
+  with nothing to draw.
 - `player.camera [seat]` — toggles Free Cam (bindable, no tokens).
 - `world.row.set views.seatRig <json>` — replace seat framing (a whole camera
   program).

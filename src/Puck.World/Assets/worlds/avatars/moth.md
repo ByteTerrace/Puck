@@ -106,6 +106,9 @@ row, keep the row name `three-quarter` and give its rig a unique name; duplicate
 camera-program names are refused. Reload the world to restore the saved view.
 Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `knee`, `boots`,
 `boots-side` and `boots-rear` layouts remain available through `view.override`.
+`view.isolate moth thigh-left thigh-right` renders only the legs, both thighs and
+everything parented beneath them, still posed and animated by the hidden body;
+`view.isolate off` restores the whole Moth.
 
 The [Pipeline workflow](../../../README.md#shader-pipelines) describes shader edits and
 its pose controls. The native rig responds to the world body independently of
