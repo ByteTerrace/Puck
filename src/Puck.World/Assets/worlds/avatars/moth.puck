@@ -4077,13 +4077,6 @@ prototypes {
         }
       }
 
-      shape Box "archRecess-left" {
-        id: 965
-        position [0.2, 0.17, -0.105]
-        scale [0.125, 0.075, 0.008]
-        material: jet
-        parent: "shin-left"
-      }
 
       shape Superellipsoid "archBand-left" {
         id: 950
@@ -4281,8 +4274,8 @@ prototypes {
 
       shape Superellipsoid "ankle-left" {
         id: 192
-        position [0.2, 0.1915, 0.0075]
-        scale [0.085, 0.085, 0.0925]
+        position [0.2, 0.14, 0.03]
+        scale [0.14, 0.085, 0.15]
         material: charcoal
         parent: "shin-left"
         exponent: softness
@@ -4292,7 +4285,7 @@ prototypes {
       // violet bezel round a dark glass lens, after the model sheet's side views.
       shape Cylinder "ankleHub-left" {
         id: 1000
-        position [0.412, 0.175, -0.07]
+        position [0.392, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.082, 0.022, 0.082]
         material: gunmetal
@@ -4302,7 +4295,7 @@ prototypes {
 
       shape Cylinder "ankleBezel-left" {
         id: 1001
-        position [0.432, 0.175, -0.07]
+        position [0.41, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.064, 0.008, 0.064]
         material: violet
@@ -4312,7 +4305,7 @@ prototypes {
 
       shape Cylinder "ankleLens-left" {
         id: 1002
-        position [0.438, 0.175, -0.07]
+        position [0.414, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.044, 0.006, 0.044]
         material: jet
@@ -4390,6 +4383,18 @@ prototypes {
           kind: "ChamferedRectangle"
           cornerRadius: 0.38
         }
+      }
+
+      shape Box "bootUnderBand-left" {
+        id: 1020
+        position [0.2, -0.248, 0.3339]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.5, 0.5, 0.5]
+        material: skin
+        blend: "SmoothIntersection"
+        smooth: 0.01
+        group: 21
+        parent: "boot-left"
       }
 
       shape Prism "toe-left" {
@@ -5512,13 +5517,6 @@ prototypes {
         }
       }
 
-      shape Box "archRecess-right" {
-        id: 973
-        position [-0.2, 0.17, -0.105]
-        scale [0.125, 0.075, 0.008]
-        material: jet
-        parent: "shin-right"
-      }
 
       shape Superellipsoid "archBand-right" {
         id: 957
@@ -5716,8 +5714,8 @@ prototypes {
 
       shape Superellipsoid "ankle-right" {
         id: 260
-        position [-0.2, 0.1915, 0.0075]
-        scale [0.085, 0.085, 0.0925]
+        position [-0.2, 0.14, 0.03]
+        scale [0.14, 0.085, 0.15]
         material: charcoal
         parent: "shin-right"
         exponent: softness
@@ -5727,7 +5725,7 @@ prototypes {
       // violet bezel round a dark glass lens, after the model sheet's side views.
       shape Cylinder "ankleHub-right" {
         id: 1006
-        position [-0.412, 0.175, -0.07]
+        position [-0.392, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.082, 0.022, 0.082]
         material: gunmetal
@@ -5737,7 +5735,7 @@ prototypes {
 
       shape Cylinder "ankleBezel-right" {
         id: 1007
-        position [-0.432, 0.175, -0.07]
+        position [-0.41, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.064, 0.008, 0.064]
         material: violet
@@ -5747,7 +5745,7 @@ prototypes {
 
       shape Cylinder "ankleLens-right" {
         id: 1008
-        position [-0.438, 0.175, -0.07]
+        position [-0.414, 0.175, -0.07]
         rotation [0, 0, diagonal, diagonal]
         scale [0.044, 0.006, 0.044]
         material: jet
@@ -5825,6 +5823,18 @@ prototypes {
           kind: "ChamferedRectangle"
           cornerRadius: 0.38
         }
+      }
+
+      shape Box "bootUnderBand-right" {
+        id: 1021
+        position [-0.2, -0.248, 0.3339]
+        rotation [-0.342, 0, 0, 0.9397]
+        scale [0.5, 0.5, 0.5]
+        material: skin
+        blend: "SmoothIntersection"
+        smooth: 0.01
+        group: 35
+        parent: "boot-right"
       }
 
       shape Prism "toe-right" {
