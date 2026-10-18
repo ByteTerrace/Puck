@@ -93,7 +93,8 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// whose spacing follows the box's own proportions, sampled in slabs of whole planes, values alone; then the fine samples
 /// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
 /// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
-/// the thread pool (<see cref="SdfSampledLattice"/>). A dynamic group bakes in its slot's frame: its
+/// the thread pool (<see cref="SdfSampledLattice"/>) and split at their creases (<see cref="SdfContour.SplitAtCreases"/>).
+/// A dynamic group bakes in its slot's frame: its
 /// box, lattices and points are in that frame, and the kernel carries every sample through the slot's transform in the
 /// frame that dispatches it, so a body moving while it bakes is sampled where it is. Its vertices stay in that frame, and
 /// its draw follows the slot's live transform; a static group's are in world space.</para>
@@ -801,7 +802,7 @@ public sealed class SdfMeshPathBake {
         SdfContour? contour = null;
 
         try {
-            contour = lattice.Contour();
+            contour = lattice.Contour().SplitAtCreases();
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }

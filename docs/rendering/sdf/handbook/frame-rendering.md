@@ -663,9 +663,30 @@ contours whole. The gradients are then measured at the samples the contour reads
 one at: the corners of every crossed cell that contours whole, the coarse
 corners of every refined cell, whose unmeasured fine samples interpolate them,
 and the measured corners of every crossed fine cell. On the debug world about
-12,000 cells refine, and the bake makes about 800,000 triangles from about
-20.7 M field evaluations; a sheet that thins below the fine spacing still frays
-over its last few millimetres.
+8,000 cells refine, and the bake makes about 700,000 triangles from about
+21 M field evaluations.
+
+A cell's vertex is the point its crossings' tangent planes meet at. Where every
+plane passes through one point and two of them turn apart by more than thirty
+degrees, the point is a crease or corner (a feature): it is solved again with a
+bias only the planes' common null space feels, so it lies on the crease rather
+than drawn a few hundredths of a cell toward the crossings' mean, and it may sit
+up to a quarter cell past its cell (`SdfDualContouring.Place`). A merged piece
+of a refined cell that measured nothing is placed the same way from its fine
+crossings' planes (`MergedFeature`), so an edge keeps its line through the cells
+around a refined run (a seam between two materials). A feature vertex takes its
+normal from the crossings whose planes pass through it, as does a vertex whose
+crossings all face one way (one flat face); any other reads the gradients the
+lattice interpolates at it. The contour then splits each feature vertex whose
+quads face apart by more than 45 degrees into one vertex per side, each with the
+area-weighted facing of its side (`SdfContour.SplitAtCreases`), so a sharp edge
+shades as the two faces meeting at it rather than as a band of blended normals a
+cell wide, the band that serrated the test room's plates and frayed the Moth's
+plate rims into pale and dark fringes. Pieces of the surface apart from the rest,
+under two lattice cells across and a hundredth of the largest piece's quads, are
+dropped: the specks a shell leaves where it thins to a knife edge (the top of the
+Moth's shins). The inner band of the Moth's face opening still shows jagged
+slivers at the fine spacing ([open item](../../../plans/open-items.md#rendering)).
 
 The material is then sampled where a field hit would read it: the bake writes
 four points a quad, its quarters' centres lifted half a millimetre off the

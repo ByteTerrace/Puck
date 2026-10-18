@@ -47,23 +47,27 @@ public sealed class SdfSampledLatticeLawTests {
         return gradient;
     }
     private static SdfContour Bake(bool refine) => Bake(field: Field, refine: refine);
-    private static SdfContour Bake(Func<Vector3, float> field, bool refine) {
+    private static SdfContour Bake(Func<Vector3, float> field, bool refine) => Bake(field: field, material: null, refine: refine);
+    // The lattice's samples of `field` and, when given, `material`; refined `Factor` to a cell when asked.
+    private static SdfContour Bake(Func<Vector3, float> field, Func<Vector3, int>? material, bool refine) {
         var count = ((Samples * Samples) * Samples);
         var values = new float[count];
+        var materials = new int[count];
 
         for (var index = 0; (index < count); index++) {
             var at = new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples)));
 
             values[index] = field(arg: (Origin + (at * Cell)));
+            materials[index] = (material?.Invoke(arg: (Origin + (at * Cell))) ?? 0);
         }
 
-        var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
+        var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: materials, origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
 
         if (refine) {
             var fine = lattice.Refine(factor: Factor);
 
             Assert.NotEmpty(collection: fine);
-            lattice.AnswerRefinement(first: 0, materials: new int[fine.Length], values: [.. fine.Select(selector: field)]);
+            lattice.AnswerRefinement(first: 0, materials: [.. fine.Select(selector: point => (material?.Invoke(arg: point) ?? 0))], values: [.. fine.Select(selector: field)]);
         }
 
         var points = lattice.GradientPoints();
@@ -172,6 +176,119 @@ public sealed class SdfSampledLatticeLawTests {
         Assert.True(condition: (Pieces(contour: Bake(refine: false)) > 1));
         Assert.Equal(expected: 1, actual: Pieces(contour: Bake(refine: true)));
     }
+
+    // A turned slab with a block standing on it: a concave crease where the block meets the slab's top, running across
+    // the lattice's cells. Every vertex within a cell of the crease lies on it, where the mean-point bias once drew it
+    // off by a tenth of a cell from cell to cell, a sawtooth along the crease.
+    [Fact]
+    public void AConcaveCreaseKeepsItsVerticesOnIt() {
+        static float Slab(Vector3 point) => MathF.Abs(point.Y + 0.1f) - 0.03f;
+        static float Block(Vector3 point) => Box(point: (point + new Vector3(x: 0f, y: 0.0f, z: 0f)), turn: 0.3f);
+        static float Field(Vector3 point) => MathF.Max(MathF.Min(Slab(point: point), Block(point: point)), (point.Length() - 0.2f));
+
+        var contour = Bake(field: Field, refine: false);
+        var worst = 0f;
+
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            var point = Position(contour: contour, vertex: vertex);
+
+            // The crease: on the slab's top face (y = -0.07) and the block's side, away from the block's corners.
+            if ((MathF.Abs(point.Y + 0.07f) > Cell) || (MathF.Abs(Block(point: new Vector3(x: point.X, y: 0f, z: point.Z))) > Cell) || (point.Length() > 0.15f)) {
+                continue;
+            }
+
+            var local = Vector3.Abs(value: (Vector3.Transform(value: point, rotation: Quaternion.CreateFromAxisAngle(angle: 0.3f, axis: Vector3.UnitY)) - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f)));
+
+            if ((local.X > (0.05f - Cell)) && (local.Z > (0.05f - Cell))) {
+                continue;
+            }
+            worst = MathF.Max(worst, MathF.Abs(Field(point: point)));
+        }
+
+        Assert.True(condition: (worst <= (0.02f * Cell)), userMessage: $"a crease vertex lies {worst} from the field, {(worst / Cell)} cells");
+    }
+
+    // A turned box splits at its edges: each face's quads shade with the face's own normal up to the edge, where its
+    // vertex normals had blended the two faces across a band a cell wide. A sphere, which has no crease, keeps every vertex.
+    [Fact]
+    public void SplittingAtCreasesShadesEachFaceOfABoxAsItselfAndLeavesASphereWhole() {
+        var contour = Bake(field: point => Box(point: point, turn: 0.3f), refine: false);
+        var split = contour.SplitAtCreases();
+        var (blended, area) = Bent(contour: contour);
+        var (bent, _) = Bent(contour: split);
+
+        Assert.True(condition: (split.VertexCount > contour.VertexCount));
+        Assert.True(condition: ((bent < (0.03f * area)) && (bent < (0.5f * blended))), userMessage: $"{bent / area:P2} of the box shades more than 10 degrees off its faces, {blended / area:P2} before the split");
+
+        var sphere = Bake(field: static point => (point.Length() - 0.15f), refine: false);
+
+        Assert.Equal(expected: sphere.VertexCount, actual: sphere.SplitAtCreases().VertexCount);
+    }
+    // The area of the turned box's triangles, two cells or more from its corners, whose vertices' normals shade more than
+    // ten degrees off the face they lie on, and the area of them all.
+    private static (float Bent, float Area) Bent(SdfContour contour) {
+        var rotation = Quaternion.CreateFromAxisAngle(angle: 0.3f, axis: Vector3.UnitY);
+        var area = 0f;
+        var bent = 0f;
+
+        foreach (var (a, b, c) in Triangles(contour: contour)) {
+            var centre = (((Position(contour: contour, vertex: a) + Position(contour: contour, vertex: b)) + Position(contour: contour, vertex: c)) / 3f);
+            var local = (Vector3.Transform(value: centre, rotation: rotation) - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f));
+            var face = Vector3.Abs(value: local);
+
+            if ((face.X > (0.05f - (2f * Cell))) && (face.Y > (0.05f - (2f * Cell))) && (face.Z > (0.05f - (2f * Cell)))) {
+                continue;
+            }
+
+            var truth = ((face.X >= MathF.Max(face.Y, face.Z))
+                ? new Vector3(x: MathF.Sign(local.X), y: 0f, z: 0f)
+                : ((face.Y >= face.Z) ? new Vector3(x: 0f, y: MathF.Sign(local.Y), z: 0f) : new Vector3(x: 0f, y: 0f, z: MathF.Sign(local.Z))));
+            var normal = Vector3.Transform(value: Vector3.Normalize(value: ((NormalOf(contour: contour, vertex: a) + NormalOf(contour: contour, vertex: b)) + NormalOf(contour: contour, vertex: c))), rotation: rotation);
+            var size = (0.5f * Vector3.Cross(vector1: (Position(contour: contour, vertex: b) - Position(contour: contour, vertex: a)), vector2: (Position(contour: contour, vertex: c) - Position(contour: contour, vertex: a))).Length());
+
+            area += size;
+            bent += ((Vector3.Dot(vector1: normal, vector2: truth) < MathF.Cos(x: (10f * (MathF.PI / 180f)))) ? size : 0f);
+        }
+
+        return (bent, area);
+    }
+    // A turned box of two materials, split across the middle: the cells the seam crosses refine and the cells around them
+    // merge their fine vertices, and the box's edges stay sharp through both, where a merged vertex at its fine vertices'
+    // mean once cut a notch into every edge it crossed.
+    [Fact]
+    public void ASeamBetweenTwoMaterialsKeepsTheBoxSharpWhereItsCellsMerge() {
+        var contour = Bake(field: static point => Box(point: point, turn: 0.3f), material: static point => ((point.X < 0f) ? 1 : 2), refine: true);
+        var rotation = Quaternion.CreateFromAxisAngle(angle: 0.3f, axis: Vector3.UnitY);
+        var worst = 0f;
+
+        for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+            var point = Position(contour: contour, vertex: vertex);
+            var local = Vector3.Abs(value: (Vector3.Transform(value: point, rotation: rotation) - new Vector3(x: 0.004f, y: 0.007f, z: -0.003f)));
+
+            if (MathF.Min(local.X, MathF.Min(local.Y, local.Z)) > (0.05f - Cell)) {
+                continue;
+            }
+            worst = MathF.Max(worst, MathF.Abs(Box(point: point, turn: 0.3f)));
+        }
+
+        Assert.True(condition: (worst <= (0.05f * Cell)), userMessage: $"a vertex lies {worst} from the box, {(worst / Cell)} cells");
+    }
+
+    // A speck apart from the surface, as a sheet thinning to a knife edge leaves, is dropped; a surface that small on its
+    // own is the whole part and stays.
+    [Fact]
+    public void ASpeckApartFromTheSurfaceIsDroppedAndASmallSurfaceAloneStays() {
+        static float Speck(Vector3 point) => ((point - new Vector3(x: 0.17f, y: 0.17f, z: 0.17f)).Length() - (0.8f * Cell));
+
+        var withSpeck = Bake(field: static point => MathF.Min((point.Length() - 0.12f), Speck(point: point)), refine: false);
+        var alone = Bake(field: Speck, refine: false);
+
+        Assert.Equal(expected: 1, actual: Pieces(contour: withSpeck));
+        Assert.True(condition: (alone.QuadCount > 0));
+    }
+
+    private static Vector3 NormalOf(SdfContour contour, int vertex) =>
+        new(x: contour.Normals[(3 * vertex)], y: contour.Normals[((3 * vertex) + 1)], z: contour.Normals[((3 * vertex) + 2)]);
 
     // The connected pieces of a contour's triangles.
     private static int Pieces(SdfContour contour) {

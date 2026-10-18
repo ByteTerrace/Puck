@@ -16,6 +16,151 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     public int QuadCount => (Quads.Length / 4);
     /// <summary>Gets the vertices.</summary>
     public int VertexCount => (Positions.Length / 3);
+    /// <summary>Gets, per vertex, whether it lies on a crease or corner of the surface, a point where crossings that turn
+    /// apart by more than thirty degrees meet; empty when the contour records none. A vertex
+    /// <see cref="SplitAtCreases"/> appends records none.</summary>
+    public bool[] Features { get; init; } = [];
+
+    // The least turn, in degrees, between two quads' facings at a crease vertex that splits it (SplitAtCreases): more than a
+    // smooth face's quads turn at the lattice spacings the bake uses, less than a right-angled edge.
+    private const double CreaseDegrees = 45.0;
+
+    /// <summary>Returns the contour with its crease vertices split: a <see cref="Features"/> vertex two of whose quads face
+    /// apart by more than 45 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
+    /// area-weighted facing of the vertex's quads within 45 degrees of that quad's, so a sharp edge shades as the two faces
+    /// meeting at it rather than as a band of blended normals. A quad folded against its own vertices' normals neither
+    /// splits nor lends its facing.</summary>
+    /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
+    /// splits.</returns>
+    public SdfContour SplitAtCreases() {
+        var positions = Positions;
+        var normals = Normals;
+        int[] quads = [.. Quads];
+        var quadCount = (quads.Length / 4);
+        var vertexCount = (positions.Length / 3);
+        var cosine = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
+
+        if (quadCount == 0) {
+            return this;
+        }
+
+        Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+
+        // Each quad's area-weighted facing: its two triangles along its first diagonal.
+        var facings = new Vector3[quadCount];
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var a = At(values: positions, vertex: quads[(4 * quad)]);
+            var b = At(values: positions, vertex: quads[((4 * quad) + 1)]);
+            var c = At(values: positions, vertex: quads[((4 * quad) + 2)]);
+            var d = At(values: positions, vertex: quads[((4 * quad) + 3)]);
+
+            var facing = (Vector3.Cross(vector1: (b - a), vector2: (c - a)) + Vector3.Cross(vector1: (c - a), vector2: (d - a)));
+            var outward = (((At(values: normals, vertex: quads[(4 * quad)]) + At(values: normals, vertex: quads[((4 * quad) + 1)])) +
+                At(values: normals, vertex: quads[((4 * quad) + 2)])) + At(values: normals, vertex: quads[((4 * quad) + 3)]));
+
+            // A quad folded against its own vertices' normals has no facing to shade by: it keeps their normals and
+            // lends its facing to no split.
+            facings[quad] = ((Vector3.Dot(vector1: facing, vector2: outward) > 0f) ? facing : Vector3.Zero);
+        }
+
+        // The quads around each vertex, as compressed rows.
+        var starts = new int[(vertexCount + 1)];
+
+        for (var corner = 0; (corner < quads.Length); corner++) {
+            if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
+            starts[(quads[corner] + 1)]++;
+        }
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            starts[(vertex + 1)] += starts[vertex];
+        }
+
+        var around = new int[starts[vertexCount]];
+        var filled = new int[vertexCount];
+
+        for (var corner = 0; (corner < quads.Length); corner++) {
+            if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
+            var vertex = quads[corner];
+
+            around[(starts[vertex] + filled[vertex]++)] = (corner >> 2);
+        }
+
+        // A vertex lies on a crease where two of its quads face apart by more than the crease angle.
+        var creased = new bool[vertexCount];
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if ((vertex >= Features.Length) || !Features[vertex]) { continue; }
+            for (var first = starts[vertex]; (first < starts[(vertex + 1)]) && !creased[vertex]; first++) {
+                if (!(facings[around[first]].LengthSquared() > 0f)) { continue; }
+                var one = Vector3.Normalize(value: facings[around[first]]);
+
+                for (var second = (first + 1); (second < starts[(vertex + 1)]); second++) {
+                    if ((facings[around[second]].LengthSquared() > 0f) && (Vector3.Dot(vector1: one, vector2: Vector3.Normalize(value: facings[around[second]])) < cosine)) {
+                        creased[vertex] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        var addedPositions = new List<float>();
+        var addedNormals = new List<float>();
+        // A split vertex by the vertex it copies and the lowest quad of the facing group it shades.
+        var splits = new Dictionary<(int Vertex, int Group), int>();
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var facing = facings[quad];
+
+            if (!(facing.LengthSquared() > 0f)) { continue; }
+            facing = Vector3.Normalize(value: facing);
+
+            // A triangle lists its last vertex twice; both corners take one vertex.
+            var triangle = (quads[((4 * quad) + 3)] == quads[((4 * quad) + 2)]);
+
+            for (var corner = 0; (corner < 4); corner++) {
+                var at = ((4 * quad) + corner);
+
+                if ((corner == 3) && triangle) {
+                    quads[at] = quads[(at - 1)];
+                    continue;
+                }
+
+                var vertex = quads[at];
+
+                if (!creased[vertex]) { continue; }
+
+                var sum = Vector3.Zero;
+                var group = int.MaxValue;
+
+                for (var index = starts[vertex]; (index < starts[(vertex + 1)]); index++) {
+                    var other = around[index];
+                    var otherFacing = facings[other];
+
+                    if (!(otherFacing.LengthSquared() > 0f) || (Vector3.Dot(vector1: Vector3.Normalize(value: otherFacing), vector2: facing) < cosine)) { continue; }
+                    sum += otherFacing;
+                    group = Math.Min(val1: group, val2: other);
+                }
+
+                if (!splits.TryGetValue(key: (vertex, group), value: out var split)) {
+                    var normal = Vector3.Normalize(value: sum);
+
+                    split = (vertexCount + (addedPositions.Count / 3));
+                    splits.Add(key: (vertex, group), value: split);
+                    addedPositions.Add(item: positions[(3 * vertex)]);
+                    addedPositions.Add(item: positions[((3 * vertex) + 1)]);
+                    addedPositions.Add(item: positions[((3 * vertex) + 2)]);
+                    addedNormals.Add(item: normal.X);
+                    addedNormals.Add(item: normal.Y);
+                    addedNormals.Add(item: normal.Z);
+                }
+                quads[at] = split;
+            }
+        }
+
+        return ((addedPositions.Count == 0)
+            ? this
+            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], Quads = quads }));
+    }
 }
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
@@ -585,7 +730,9 @@ public sealed class SdfSampledLattice {
     }
 
     /// <summary>Extracts the lattice's surface: at the fine spacing in the cells <see cref="Refine"/> refined, and at
-    /// the lattice's own everywhere else.</summary>
+    /// the lattice's own everywhere else, with its feature vertices marked (<see cref="SdfContour.Features"/>). A piece
+    /// of the surface apart from the rest, under two lattice cells across and a hundredth of the largest piece's quads,
+    /// is dropped: the specks a sheet leaves where it thins below the fine spacing.</summary>
     /// <returns>The surface; empty when no lattice edge changes sign.</returns>
     public SdfContour Contour() {
         var surface = ((m_factor > 1)
@@ -620,14 +767,92 @@ public sealed class SdfSampledLattice {
             }
         }
 
+        (quads, materials) = WithoutSpecks(materials: materials, positions: positions, quads: quads);
+
         return new SdfContour(
             Normals: normals,
             Positions: positions,
             QuadMaterials: materials,
             Quads: quads
-        );
+        ) {
+            Features = surface.Features,
+        };
 
         static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    }
+
+    // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut
+    // where its inside meets its outside): pieces of the surface apart from the rest, each smaller than two lattice cells
+    // across and holding under a hundredth of the largest piece's quads. A whole surface that small, a part's own, stays.
+    private (int[] Quads, int[] Materials) WithoutSpecks(int[] quads, int[] materials, float[] positions) {
+        var quadCount = materials.Length;
+        var vertexCount = (positions.Length / 3);
+        var parent = new int[vertexCount];
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            parent[vertex] = vertex;
+        }
+
+        int Root(int vertex) {
+            while (parent[vertex] != vertex) {
+                vertex = parent[vertex] = parent[parent[vertex]];
+            }
+
+            return vertex;
+        }
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var first = Root(vertex: quads[(4 * quad)]);
+
+            for (var corner = 1; (corner < 4); corner++) {
+                var other = Root(vertex: quads[((4 * quad) + corner)]);
+
+                if (other != first) { parent[other] = first; }
+            }
+        }
+
+        // Each piece's quads and bounds.
+        var pieces = new Dictionary<int, (int Quads, Vector3 Low, Vector3 High)>();
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            var root = Root(vertex: quads[(4 * quad)]);
+            (int Quads, Vector3 Low, Vector3 High) piece = (pieces.TryGetValue(key: root, value: out var found) ? found : (0, new Vector3(value: float.PositiveInfinity), new Vector3(value: float.NegativeInfinity)));
+
+            for (var corner = 0; (corner < 4); corner++) {
+                var vertex = quads[((4 * quad) + corner)];
+                var point = new Vector3(x: positions[(3 * vertex)], y: positions[((3 * vertex) + 1)], z: positions[((3 * vertex) + 2)]);
+
+                piece = (piece.Quads, Vector3.Min(value1: piece.Low, value2: point), Vector3.Max(value1: piece.High, value2: point));
+            }
+            pieces[root] = ((piece.Quads + 1), piece.Low, piece.High);
+        }
+        if (pieces.Count < 2) {
+            return (quads, materials);
+        }
+
+        var largest = pieces.Values.Max(selector: static piece => piece.Quads);
+        var reach = (2f * m_cell.Length());
+        var specks = new HashSet<int>();
+
+        foreach (var (root, piece) in pieces) {
+            if (((100 * piece.Quads) < largest) && ((piece.High - piece.Low).Length() < reach)) { _ = specks.Add(item: root); }
+        }
+        if (specks.Count == 0) {
+            return (quads, materials);
+        }
+
+        var keptQuads = new List<int>(capacity: quads.Length);
+        var keptMaterials = new List<int>(capacity: quadCount);
+
+        for (var quad = 0; (quad < quadCount); quad++) {
+            if (specks.Contains(item: Root(vertex: quads[(4 * quad)]))) { continue; }
+            for (var corner = 0; (corner < 4); corner++) {
+                keptQuads.Add(item: quads[((4 * quad) + corner)]);
+            }
+            keptMaterials.Add(item: materials[quad]);
+        }
+
+        return ([.. keptQuads], [.. keptMaterials]);
     }
 
     private bool Owns(int material) => ((m_owns is null) || m_owns(arg: material));
@@ -753,6 +978,7 @@ public sealed class SdfSampledLattice {
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
+        public bool CoarseInside(int x, int y, int z) => (owner.m_values[owner.Index(x: x, y: y, z: z)] < 0f);
         public int Corner(int x, int y, int z) => (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
         public bool Inside(int corner) {
             var (x, y, z) = owner.FineCoordinates(key: corner);
@@ -770,6 +996,7 @@ public sealed class SdfSampledLattice {
             );
         }
         public double FeatureReach => 0.5;
+        public bool CrossingNormals => true;
         // A crossing's own measured gradient and value, or the gradient its edge's samples interpolate, on the surface.
         public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
             var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));

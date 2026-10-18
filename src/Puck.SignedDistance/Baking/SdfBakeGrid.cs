@@ -98,6 +98,7 @@ internal sealed class SdfBakeGrid : ISdfContourLattice {
     public (double X, double Y, double Z)? CellExtent => null;
     /// <summary>Returns the field's unit gradient at a world point by central differences a quarter cell wide.</summary>
     public double FeatureReach => 0.0;
+    public bool CrossingNormals => false;
     public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
         offset = 0.0;
 
