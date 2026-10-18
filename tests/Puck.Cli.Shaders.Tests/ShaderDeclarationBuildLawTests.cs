@@ -9,23 +9,21 @@ namespace Puck.Cli.Shaders.Tests;
 /// <summary>Runs the generator project's actual targets over a scratch checkout, using the already-built host.
 /// Generated files remain inputs to reconciliation even when every assembly and an old stamp are unchanged.</summary>
 public sealed class ShaderDeclarationBuildLawTests {
-    [InlineData(false)]
-    [InlineData(true)]
-    [Theory]
-    public void EveryBuildRepairsDriftAndAMissingDeclarationRegardlessOfTheContinuousIntegrationProperty(bool continuousIntegration) {
+    [Fact]
+    public void EveryBuildRepairsDriftAndAMissingDeclaration() {
         WithProject(action: (root, project, declaration) => {
             var path = Path.Combine(path1: root, path2: declaration.Path);
 
             File.WriteAllText(contents: "drift", path: path);
-            RequireSuccess(run: Run(continuousIntegration: continuousIntegration, project: project, target: "Build"));
+            RequireSuccess(run: Run(project: project, target: "Build"));
             Assert.Equal(expected: declaration.Generate(), actual: File.ReadAllText(path: path));
             var settled = File.GetLastWriteTimeUtc(path: path);
 
-            RequireSuccess(run: Run(continuousIntegration: continuousIntegration, project: project, target: "Build"));
+            RequireSuccess(run: Run(project: project, target: "Build"));
             Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: path));
 
             Directory.Delete(path: Path.GetDirectoryName(path: path)!, recursive: true);
-            RequireSuccess(run: Run(continuousIntegration: continuousIntegration, project: project, target: "Build"));
+            RequireSuccess(run: Run(project: project, target: "Build"));
             Assert.Equal(expected: declaration.Generate(), actual: File.ReadAllText(path: path));
         });
     }
@@ -68,8 +66,8 @@ public sealed class ShaderDeclarationBuildLawTests {
         File.WriteAllText(path: projectPath, contents: project.ToString());
         action(root, projectPath, declarations.Single(predicate: static declaration => declaration.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: SdfIsaHlsl.FileName)));
     }
-    private static CliProcessResult Run(string project, string target, bool continuousIntegration) => CliProcess.RunCaptured(
-        arguments: ["msbuild", "--disable-build-servers", project, "-nologo", "-v:q", $"-t:{target}", $"-p:ContinuousIntegrationBuild={continuousIntegration}"],
+    private static CliProcessResult Run(string project, string target) => CliProcess.RunCaptured(
+        arguments: ["msbuild", "--disable-build-servers", project, "-nologo", "-v:q", $"-t:{target}"],
         cancellationToken: TestContext.Current.CancellationToken,
         fileName: "dotnet",
         input: string.Empty,

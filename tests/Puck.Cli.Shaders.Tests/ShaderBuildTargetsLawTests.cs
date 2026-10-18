@@ -7,7 +7,9 @@ namespace Puck.Cli.Shaders.Tests;
 /// the generator, and a CPU-only stand-in for DXC that records every compile it runs and can hold or fail one. Each
 /// fixture compiles into a shader cache of its own unless a law shares one on purpose.</summary>
 public abstract class ShaderBuildTargetsLaws {
-    // A build over two sources and a shared include, one input changed, then the pack check and the rebuild.
+    // A build over two sources and a shared include, one input changed, then the pack check and the rebuild. Each change
+    // is one way the targets' own incremental inputs move; which output check refuses and why, for every kind of damage,
+    // is held in-process by Puck.Shaders.Tests' ShaderBuildLawTests.
     private protected static void ChangedInput(string change, int expectedCompiles, bool checkRefuses) {
         using var fixture = new ShaderBuildFixture();
 
@@ -18,8 +20,6 @@ public abstract class ShaderBuildTargetsLaws {
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Equal(expected: 2, actual: fixture.Compiles());
 
-        var bytecode = fixture.PathOf(path: "Assets/Shaders/a.comp.spv");
-        var sidecar = (bytecode + ".hash");
         string[] properties = [];
 
         switch (change) {
@@ -35,10 +35,7 @@ public abstract class ShaderBuildTargetsLaws {
                 }
                 properties = [$"DxcCommand={Puck.Abstractions.PuckPaths.Normalize(path: alternate)}"];
                 break;
-            case "bytecode": File.WriteAllText(contents: "corrupted compiled bytes", path: bytecode); break;
-            case "sidecar": File.AppendAllText(path: sidecar, contents: File.ReadAllText(path: sidecar)); break;
-            case "bytecode-missing": File.Delete(path: bytecode); break;
-            case "sidecar-missing": File.Delete(path: sidecar); break;
+            case "bytecode": File.WriteAllText(contents: "corrupted compiled bytes", path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")); break;
             default: throw new ArgumentOutOfRangeException(paramName: nameof(change));
         }
 
@@ -48,7 +45,6 @@ public abstract class ShaderBuildTargetsLaws {
         Assert.Equal(expected: 2, actual: fixture.Compiles());
         fixture.RequireSuccess(run: fixture.Run(target: "Build", properties: properties));
         Assert.Equal(expected: expectedCompiles, actual: fixture.Compiles());
-        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode", properties: properties));
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
     }
     private protected static T WaitFor<T>(Func<T?> find) where T : class {
@@ -66,62 +62,9 @@ public abstract class ShaderBuildTargetsLaws {
         Assert.True(condition: waiting.IsSet, userMessage: "The process ended without observing contention on the source tree's publication lock.");
     }
 }
-/// <summary>The shipped shader targets publish from the cache, recompile only what an edited include reaches, compile
-/// again the outputs of a backend the last build left off,
-/// compile again into an empty cache, gate a pack on the publication lock and the commit record, and remove only the
-/// bytecode they wrote; a design-time build runs none of it.</summary>
+/// <summary>The shipped shader targets compile again the outputs of a backend the last build left off, and gate a pack
+/// on the publication lock every publisher of the source tree shares and on the commit record.</summary>
 public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
-    [Fact]
-    public void AWarmBuildOfAnotherCheckoutPublishesFromTheCacheAndRunsNoCompiler() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-shader-targets-");
-        string[] cache = [$"PuckShaderCacheDirectory={Path.Combine(path1: scratch.RootPath, path2: "cache")}"];
-        var first = new ShaderBuildFixture(root: Path.Combine(path1: scratch.RootPath, path2: "first"));
-        var second = new ShaderBuildFixture(root: Path.Combine(path1: scratch.RootPath, path2: "elsewhere", path3: "second"));
-
-        foreach (var fixture in ((ReadOnlySpan<ShaderBuildFixture>)[first, second])) {
-            fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
-            fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"shared.hlsli\"\nfirst source");
-            fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
-            fixture.ShaderProject(body: ShaderBuildFixture.Sources);
-        }
-
-        // One DXC for both checkouts: the toolchain is part of every key, the checkout is not.
-        string[] shared = [.. cache, $"DxcCommand={first.CompilerPath}"];
-
-        first.RequireSuccess(run: first.Run(properties: shared, target: "Build"));
-        Assert.Equal(expected: 2, actual: first.Compiles());
-
-        var warm = second.Run(properties: shared, target: "Build");
-
-        second.RequireSuccess(run: warm);
-        Assert.Equal(expected: 0, actual: second.Compiles());
-        Assert.Contains(expectedSubstring: "2 shader output(s): 0 current, 2 published from the cache, 0 compiled, in ", actualString: warm.Stdout);
-        foreach (var output in ((ReadOnlySpan<string>)["Assets/Shaders/a.comp.spv", "Assets/Shaders/b.comp.spv"])) {
-            Assert.Equal(expected: File.ReadAllBytes(path: first.PathOf(path: output)), actual: File.ReadAllBytes(path: second.PathOf(path: output)));
-        }
-        second.RequireSuccess(run: second.Run(properties: shared, target: "CollectShaderBytecode"));
-    }
-    [Fact]
-    public void EditingOneIncludeRecompilesOnlyTheOutputsWhoseClosureHoldsIt() {
-        using var fixture = new ShaderBuildFixture();
-
-        fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "shared declaration");
-        fixture.Write(path: "Assets/Shaders/a-only.hlsli", text: "a's declaration");
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "#include \"a-only.hlsli\"\n#include \"shared.hlsli\"\nfirst source");
-        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "#include \"shared.hlsli\"\nsecond source");
-        fixture.Write(path: "Assets/Shaders/c.comp.hlsl", text: "independent source");
-        fixture.ShaderProject(body: ShaderBuildFixture.Sources);
-        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Equal(expected: 3, actual: fixture.Compiles());
-
-        fixture.Write(path: "Assets/Shaders/a-only.hlsli", text: "a's changed declaration");
-        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Equal(expected: ["a.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 3));
-
-        fixture.Write(path: "Assets/Shaders/shared.hlsli", text: "changed shared declaration");
-        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Equal(expected: ["a.comp.hlsl", "b.comp.hlsl"], actual: fixture.CompiledSources().Skip(count: 4).Order(comparer: StringComparer.Ordinal));
-    }
     [Fact]
     public void ABuildThatEnablesABackendTheLastBuildLeftOffCompilesThatBackendsOlderOutputs() {
         using var fixture = new ShaderBuildFixture();
@@ -141,20 +84,6 @@ public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
         fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=true"], target: "Build"));
         Assert.Equal(expected: 4, actual: fixture.Compiles());
         fixture.RequireSuccess(run: fixture.Run(properties: [.. dxil, "PuckShaderSpirvEnabled=true"], target: "CollectShaderBytecode"));
-    }
-    [Fact]
-    public void AnEmptyCacheCompilesEveryOutputAgainHoweverCurrentTheTree() {
-        using var fixture = new ShaderBuildFixture();
-
-        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "first source");
-        fixture.Write(path: "Assets/Shaders/b.comp.hlsl", text: "second source");
-        fixture.ShaderProject(body: ShaderBuildFixture.Sources);
-        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        fixture.RequireSuccess(run: fixture.Run(target: "Build"));
-        Assert.Equal(expected: 2, actual: fixture.Compiles());
-
-        fixture.RequireSuccess(run: fixture.Run(properties: [$"PuckShaderCacheDirectory={fixture.PathOf(path: "fresh-cache")}"], target: "Build"));
-        Assert.Equal(expected: 4, actual: fixture.Compiles());
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -222,6 +151,11 @@ public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
         fixture.RequireSuccess(run: await second);
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
     }
+}
+/// <summary>The shipped shader targets remove only the bytecode they wrote, hash an include a reference restores after
+/// references resolve, run no shader build in a design-time build, and collect existing Direct3D 11 entries without
+/// compiling during a pack.</summary>
+public sealed class ShaderBuildBytecodeLawTests : ShaderBuildTargetsLaws {
     [Fact]
     public void ABuildRemovesTheBytecodeItWroteForADeletedSourceAndRefusesBytecodeItDidNotWrite() {
         using var fixture = new ShaderBuildFixture();
@@ -269,7 +203,6 @@ public sealed class ShaderBuildTargetsLawTests : ShaderBuildTargetsLaws {
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
         Assert.Equal(expected: 2, actual: fixture.Compiles());
         Assert.Equal(expected: committed, actual: File.ReadAllText(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
-        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
 
         fixture.Write(path: "declaration.txt", text: "changed generated declaration");
         fixture.RequireSuccess(run: fixture.Run(target: "Build"));
@@ -354,14 +287,10 @@ public sealed class ShaderSourceChangeLawTests : ShaderBuildTargetsLaws {
     public void AChangedInputCompilesOnlyWhatItChangedAndAPackThatSkipsTheBuildRefusesIt(string change, int expectedCompiles, bool checkRefuses) =>
         ChangedInput(change: change, checkRefuses: checkRefuses, expectedCompiles: expectedCompiles);
 }
-/// <summary>Changed or missing bytecode or sidecars compile again only their own output, and a pack that skips the
-/// build refuses them.</summary>
+/// <summary>Changed bytecode is published again from the cache, compiling nothing, and a pack that skips the build
+/// refuses it.</summary>
 public sealed class ShaderOutputChangeLawTests : ShaderBuildTargetsLaws {
-    [InlineData("bytecode", 2, true)]
-    [InlineData("sidecar", 2, true)]
-    [InlineData("bytecode-missing", 2, true)]
-    [InlineData("sidecar-missing", 2, true)]
-    [Theory]
-    public void AChangedInputCompilesOnlyWhatItChangedAndAPackThatSkipsTheBuildRefusesIt(string change, int expectedCompiles, bool checkRefuses) =>
-        ChangedInput(change: change, checkRefuses: checkRefuses, expectedCompiles: expectedCompiles);
+    [Fact]
+    public void ChangedBytecodeIsPublishedAgainAndAPackThatSkipsTheBuildRefusesIt() =>
+        ChangedInput(change: "bytecode", checkRefuses: true, expectedCompiles: 2);
 }

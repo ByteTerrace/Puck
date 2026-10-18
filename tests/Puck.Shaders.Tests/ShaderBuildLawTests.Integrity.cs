@@ -4,6 +4,52 @@ using Puck.Testing;
 namespace Puck.Shaders.Tests;
 
 public sealed partial class ShaderBuildLawTests {
+    // What a pack that skips the build checks: a changed source or include, changed or missing bytecode, and a missing or
+    // malformed sidecar each fail the check by name and reason, compiling nothing; the next build makes only that output
+    // current again, compiling a changed closure and publishing the rest from the cache, and the check then passes.
+    [InlineData("source", "is stale relative to its source", 1)]
+    [InlineData("include", "is stale relative to its source", 1)]
+    [InlineData("bytecode", "does not match its own '.hash' sidecar", 0)]
+    [InlineData("bytecode-missing", "is missing", 0)]
+    [InlineData("sidecar", "has no '.hash' sidecar", 0)]
+    [InlineData("sidecar-missing", "has no '.hash' sidecar", 0)]
+    [Theory]
+    public async Task ACheckRefusesAnOutputABuildWouldChangeAndTheNextBuildRepairsOnlyThatOutput(string damage, string reason, int compiles) {
+        using var scratch = new TemporaryDirectory(prefix: "puck-shader-check-");
+        var cache = Path.Combine(path1: scratch.RootPath, path2: "cache");
+        var checkout = Checkout(root: Path.Combine(path1: scratch.RootPath, path2: "one"));
+        var runner = new Runner();
+
+        Assert.True(condition: await Build(cache: cache, checkout: checkout, runner: runner));
+        runner.Clear();
+
+        var output = checkout.Outputs[0];
+        var sidecar = (output.OutputPath + ShaderBuild.SidecarExtension);
+
+        switch (damage) {
+            case "source": File.AppendAllText(contents: "// edited\n", path: output.SourcePath); break;
+            case "include": File.WriteAllText(contents: "#define A_ONLY 2\n", path: Path.Combine(path1: checkout.Root, path2: "Assets/Shaders/a-only.hlsli")); break;
+            case "bytecode": File.WriteAllText(contents: "corrupted compiled bytes", path: output.OutputPath); break;
+            case "bytecode-missing": File.Delete(path: output.OutputPath); break;
+            case "sidecar": File.AppendAllText(contents: File.ReadAllText(path: sidecar), path: sidecar); break;
+            case "sidecar-missing": File.Delete(path: sidecar); break;
+            default: throw new ArgumentOutOfRangeException(paramName: nameof(damage));
+        }
+
+        var log = new StringWriter();
+
+        Assert.False(condition: BuildOf(cache: cache, checkout: checkout, log: log, runner: runner).Check(outputs: checkout.Outputs));
+        Assert.Contains(expectedSubstring: $"'Assets/Shaders/a.comp.spv' {reason}", actualString: log.ToString());
+        Assert.DoesNotContain(expectedSubstring: "b.comp.spv", actualString: log.ToString());
+        Assert.Equal(expected: 0, actual: runner.Runs);
+
+        var build = BuildOf(cache: cache, checkout: checkout, runner: runner);
+
+        Assert.True(condition: await build.CompileAsync(cancellationToken: TestContext.Current.CancellationToken, cores: new FixedShaderCoreBroker(cores: 4), outputs: checkout.Outputs));
+        Assert.Equal(expected: compiles, actual: runner.Runs);
+        Assert.Equal(expected: [output.OutputPath], actual: build.Compiled.Concat(second: build.Restored).Select(selector: static repaired => repaired.OutputPath));
+        Assert.True(condition: BuildOf(cache: cache, checkout: checkout, runner: runner).Check(outputs: checkout.Outputs));
+    }
     [InlineData("truncate")]
     [InlineData("payload")]
     [InlineData("key")]
