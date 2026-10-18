@@ -71,8 +71,7 @@ beside the package that owns it. The open parts are:
   Steam Deck run are open.
 - **P16:** the display transform, the HDR swapchain selection, paper white and
   the HDR desktop capture have landed; the HDR-display checks have not run.
-- **P17:** the bake and impostor implementation and sampling evidence hold;
-  the extended handover and paused-state World observations remain open.
+- **P17:** withdrawn ([P17](#p17--assets-derived-from-sdfs)).
 - **P18:** the cadence, lighting, atmosphere, live panorama, infinity-layer
   routing and artist controls are implemented. Remaining image, admission and
   counted-default checks are named under their steps. P18-11's part-two binder
@@ -1456,94 +1455,17 @@ the simulation destination feeds a seat's pointer ray on a world surface
 (P13b-2). The GPU bakes
 settled carves into 128-cubed bricks (`SdfWorldTables.BrickBake.cs`).
 
-P17's CPU half and the device half of its sampling check have landed, and so
-has drawing a bake's geometry, textures and impostor; the impostor's device
-runs are open. `SdfBaker`
-(`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
-into an indexed mesh, five surface textures and an octahedral impostor
-([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
-Every texture is a tile-aware mip chain that ends at one texel per tile, filtered
-in its declared space, and stored block-compressed by the CPU codecs in
-`Puck.Assets.Textures`: albedo as BC7 in sRGB, normals as BC5 octahedral pairs,
-occlusion and impostor depth as BC4, and surface and impostor emission as BC6H,
-while material identity stays uncompressed with majority mips. The encoders write the same
-bytes on every machine and each has an exact decoder as its test oracle.
-Dual contouring won the extraction: it strays from the field about half as far
-as surface nets did, for about a tenth more evaluations over a whole bake, and
-surface nets is deleted. It places a vertex per surface patch of a cell, so a
-plate about a cell thick meshes as a closed two-manifold and no prototype's mesh
-shares an edge among more than two quads, at 0.26% more vertices than one vertex
-per cell ([the measured comparison](#p17--assets-derived-from-sdfs)). A bake is keyed by the creation pin, `CreationBakeDerivation.Fingerprint`
-and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
-chunk fills it, so a released world bakes nothing on the device, and a
-presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
-pool, keeps it under the state root, and reports it ready through the
-`sdf.bakes` counters ([creation bakes](../architecture/worlds.md#creation-bakes)).
-`SdfBakerLawTests` and `CreationBakeLawTests` hold the laws. A compiled world's
-`BAKE` chunk names only the keys it needs; the build writes the standard tier's
-bakes once, in one bake pack (`bakes.puckbake`) at the root of the shipped
-worlds, so a creation several worlds share is baked and shipped once. A bake is
-the same bytes on every machine: the baker reads the field in fixed point,
-writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
-against exact thresholds.
-
-The bake key's code fingerprint is computed by the running build, from the
-compiled content of the assemblies that bake (`AssemblyReach.ContentFingerprint`). The open
-derivation-key slices are owned by
-[runtime and delivery](runtime-and-delivery.md#derivation-keys).
-
-Both backends put a bake's textures on the GPU as they are stored.
-`GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
-upload (`IGpuSurfaceUpload.Upload`) takes every level of a chain, returns a
-view over all of them, and refuses by name a device that cannot sample the
-format: a Vulkan device created without `textureCompressionBC`, or a Direct3D 12
-device whose format support lacks two-dimensional sampling. The samplers select
-levels by point with no level-of-detail clamp on both backends.
-`BakeSamplingDeviceLawTests` uploads the BC7, BC5 and BC6H textures of
-`tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with every level
-and samples each probe texel at its level on Vulkan, Direct3D 12 hardware and
-WARP, holding each to the CPU decoder under the fixture's tolerance;
-`BakeSamplingFixtureLawTests` holds the fixture's GPU-free half. BC7 albedo is
-uploaded without sRGB decode: the drawing path chooses its sRGB view.
-
 The pixel-format fold is done: `GpuPixelFormat` is the one vocabulary a GPU
-image, a presented or captured `Surface`, a swapchain and a baked texture's
-levels are all stored in, and `GpuPixelFormats` states each format's texel or
-block size once, which the block codecs, the upload chain check and the shader
-pipeline budget all read. `ImagePixelFormat` stays apart: it is the code an
+image, a presented or captured `Surface` and a swapchain are stored in, and
+`GpuPixelFormats` states each format's texel or block size once, which the
+upload chain check and the shader pipeline budget read. It names the block
+formats BC4, BC5, BC6H and BC7, sampled only, and the one image upload
+(`IGpuSurfaceUpload.Upload`) takes every level of a chain and refuses by name a
+device that cannot sample the format: a Vulkan device created without
+`textureCompressionBC`, or a Direct3D 12 device whose format support lacks
+two-dimensional sampling. `ImagePixelFormat` stays apart: it is the code an
 uploaded source's region header carries for its conversion kernel, including
 the palette-indexed and NV12 host layouts no GPU image is created in.
-
-No view draws a prototype bake: every view renders the residency's own baked
-meshes, and the bake-drawing path and its `world.bakes` lever are deleted. The
-engine keeps drawing a textured mesh or an impostor card when a frame's draw
-carries one, sampling the mesh atlases with the albedo decoded from sRGB in the
-shader (held by `SdfMeshAtlasLawTests` and `MeshTextureDeviceLawTests`), and no
-emitter produces such a draw. The parity world ships its bakes: `puck parity` compiles its tree with the
-World artifact's own CLI and boots the compiled world, whose `BAKE` chunk holds
-every bake from the pack, and refuses a leg that resolved a bake on the device.
-
-The impostor draws as a card. A baked placement emits two draws bounded by one
-sphere, its mesh and a card (`SdfMeshCard.Mesh`, `SdfMeshDraw.Impostor`), and a
-view records exactly one of them (`SdfMeshLodSelector`, `SdfMeshLod`): the card once
-the sphere's projected diameter falls under the impostor's view edge in render
-pixels (sixteen at the standard tier), the mesh again once it passes that edge by a
-quarter. The choice is the CPU's, made per view from that view's camera and counted
-as `sdf.mesh.lod.near` and `sdf.mesh.lod.far`. The card is a quad on the plane
-touching the sphere's near side; its fragment stage, a second pipeline beside the
-mesh pass's, marches the camera's ray through the three impostor views nearest the
-direction toward the camera against their depth, discards what no majority of them
-covers, and writes the surface's ray parameter and depth, so a card pixel sorts
-against meshes and the field as the surface does. The hit passes shade it from the
-same views: albedo, normal and emission weighted by view and coverage, with the
-each texel's own material (the impostor stores a material plane). The CPU oracle `SdfImpostorOracle` states the trace hold it to the field's sphere and box within a stated share of
-the bounding radius, `SdfMeshLodLawTests` hold the selection and its handover, and
-`ParityBakeSelectionLawTests` hold the parity world's captures to meshes, so its
-references change with no impostor. The `sdf-bake-impostor` canary is the device
-check; it, `puck parity`, the bake canaries, `kernel-counters`, `puck counters`
-(the mesh pass gains a descriptor write, and a pipeline bind and a draw when a card
-is recorded) and `device-loss` have not run since the impostor landed. Choosing
-per placement between a bake and the field by measured cost is P6's.
 
 The SDF frame's values and its environment are members of the generated pass
 block (P14-7): `SdfWorldPackage.Values` declares them, `puck shaders generate`
@@ -2072,8 +1994,7 @@ and the canaries hold every scene the check names.
    validator refuses an empty mesh, a partial triangle, an index past the
    vertices, a non-finite vertex, a degenerate triangle (a repeated index or
    zero area) and a material outside the palette, each by name.
-   `WorldPlacementStamper.EmitPlacement`,
-   the static placement path P17's bakes also reach, adds one `SdfMeshDraw` per
+   `WorldPlacementStamper.EmitPlacement`, the static placement path, adds one `SdfMeshDraw` per
    placement instance (the engine-frame triangles under the instance's scale,
    mirror, yaw and position), and `WorldFramePresenter` hands them to
    `SdfFrame.MeshDraws`. The SDF engine uploads them into its mesh region
@@ -2247,8 +2168,8 @@ the package.
 animation, and measured cost, never "all environments are SDFs". Five
 experiments are in scope:
 
-- a per-placement choice between the field, a bake, and a mesh, decided by
-  counted cost;
+- a per-placement choice between the field and a mesh, decided by counted
+  cost;
 - shadows and ambient occlusion on meshes, which P4 shades neutral;
 - capsule or ellipsoid proxies on a character's bones for approximate shadows
   and ambient occlusion that never silently become the contact surface;
@@ -2768,8 +2689,7 @@ Phase 3, the groups, follows phase 2:
       backend's pipeline factory adds a static or combined sampler for one;
       a compute description carries no sampler filter.
       `GpuDescriptorPoolSizes` counts no combined image sampler, and
-      `IGpuBindings` writes none. The bake-sampling device law reads its
-      probe table and image through a pass group and a pushed index.
+      `IGpuBindings` writes none.
       Canaries: the 19 `GpuDescriptorPoolSizes` and `GpuRegion` map to.
 15. Done: pipelines are on groups. `WriteFrame` writes the frame group, set 0,
     into a per-node frame `GpuRegion` of uniform usage, a ring of whole
@@ -4175,7 +4095,7 @@ views read; no live instance renders `sdf.bricks`, and the GPU brick bake (`Requ
 color is `composite`'s output; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
-decals, the lights and the sky, the glyph atlas, the brick pool, the mesh atlases), group 2 the instance (empty and
+decals, the lights and the sky, the glyph atlas, the brick pool), group 2 the instance (empty and
 reserved), and group 3 the pass (its block, holding the frame's values, then
 masks, tiles, arguments, bounds, visibility, shadow, color, and the screen
 sources, an image array read through a sampler array). Each frame source's half
@@ -4307,13 +4227,13 @@ item 2 landed.
    - The mesh pass is a conditional package pass
      (`IRenderGraphPackageRecorder.Skips`): on a frame that draws no mesh it
      records nothing, and neither do the barriers of its target and depth.
-   - The world's tables, the brick pool, the glyph atlas, the samplers and the
-     mesh atlases are the `sdf.world` interface's World group
+   - The world's tables, the brick pool, the glyph atlas and the samplers are
+     the `sdf.world` interface's World group
      (`SdfWorldPackage.Tables`), bound at group 1 through one set per upload
      ring slot that the tables own and write once (`SdfWorldTables.WorldSet`).
      Every compute part of every view binds it, and it is
      rewritten only when what it binds moves (a region's growth, the glyph
-     atlas, the mesh atlases), after the device is idle. A pass set holds only
+     atlas), after the device is idle. A pass set holds only
      the view's own storages, output, screens and mesh target.
    - An instance whose resolved residency changes follows it in place,
      recording the other residency's tables through the passes it has, when
@@ -4409,8 +4329,7 @@ item 2 landed.
 
     a. Landed, one record and one body per stage. A mesh hit's triangle rides
        the record's L row (its identity names the draw), so only primary reads
-       the mesh target, and surface and views read a mesh hit from the record,
-       views a textured mesh's atlas albedo, material and emission among it.
+       the mesh target, and surface and views read a mesh hit from the record.
        Each stage is its own function over one
        pixel context (`SdfPixel`, `march/sdf-pixel.hlsli`): `sdfPrimaryStage`,
        `sdfSurfaceStage`, `sdfAmbientStage`, `sdfShadowStage` and
@@ -4622,10 +4541,8 @@ that cost, and layered views return only if the counts call for them.
 **Not adopted.** The interval-pruning study also weighed these, and none is
 planned:
 
-- An interval-culled octree in the baker: it saves 20.9% of a bake's sign
-  evaluations, 0.5% of the whole bake's.
 - A compiled or SIMD CPU evaluator: the CPU evaluator answers fixed-point
-  queries and bakes, a different domain from the GPU march the study prices.
+  queries, a different domain from the GPU march the study prices.
 - An interpreter rebuilt on the studied design: step 14 takes its pruning as a
   pass in front of the existing interpreter, whose instruction set, kernel
   variants and device law already stand.
@@ -5398,155 +5315,15 @@ the parity contract. The HDR-display checks keep P16 open; their list is under
 
 ### P17 — Assets derived from SDFs
 
-**Starts from:** brick baking (`SdfWorldTables.BrickBake.cs`, with
-`SdfBrickPoolLayout` holding at most 8 bricks of 128 cubed samples) for settled
-carves; the CPU baker, its key, its cache, the `BAKE` chunk of
-[compiled worlds](runtime-and-delivery.md#compiled-worlds), and background baking
-on the CPU thread pool, and the mesh pass that draws a bake and its impostor,
-described under the implementation status.
-
-**Owns:** the baker, the texture pipeline, the content-addressed bake cache,
-its chunk in compiled worlds, and background baking on the CPU thread pool.
-
-**Delivers:** one baker that turns an SDF prototype into presentation assets:
-
-- A mesh with UVs, extracted with manifold dual contouring, which beat surface nets on
-  silhouette error and cost and beat one vertex per cell on topology.
-- Baked textures for albedo, normals, ambient occlusion, and material identity.
-- Impostors for distant content.
-
-The texture pipeline that stores these generates mips and compresses with BC7
-for color, BC5 for normals, and BC6H for HDR data, and each texture declares
-whether it is sRGB or linear. The Steam Deck supports all three formats. One
-pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
-GPU's images and the presented surfaces, with no conversion between them.
-
-Each bake is keyed by the prototype's content hash, the bake derivation's code
-fingerprint, and the quality tier, and one cache is filled in two ways. A build ships each bake once
-in a bake pack, and a compiled world's chunk names the keys it needs from it, so
-a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
-that has not been compiled, the CPU baker runs in the background on the thread
-pool (`WorldBakeSchedule`), never on the frame thread or the GPU. It bakes only
-the prototypes that changed and stores the results locally. Baking is data processing in the shipped
-baker, so it needs no toolchain on the device.
-
-Bakes are presentation only: contact and queries keep reading the SDF field.
-The parity world ships its bakes, so captures never depend on a local bake.
-Which representation a placement uses follows P6's rule that representations
-are chosen by measured cost.
-
-**Qualification state.** The existing CPU and device sampling evidence remains
-applicable to unchanged bake sampling. The `sdf-bake-impostor` fixture adds the
-two visits to the handover band and settled draw-count observations, which no
-longer have a producer to observe. The creation-bake outcome pins are checked after
-the final bake derivation fingerprint is current; a successful shader build alone
-does not establish those bytes.
-
-**Manifold extraction.** The extractor places one vertex per surface patch of a
-cell, not one per cell: a cell's patches are the connected pieces of the
-marching-cubes surface inside it, found from the eight corner signs alone, so a
-cell two sheets cross holds a vertex for each. An ambiguous face, whose diagonal
-corners agree, is cut to separate its inside corners, a rule that reads nothing
-but the face's four signs, so the two cells sharing a face agree and the mesh has
-no crack. Over the 93 prototypes baked at the standard tier from the counters,
-parity, nexus, standard and courtyard worlds, counting edges shared by more than
-two quads by vertex index:
-
-| Extractor | Prototypes with such edges | Such edges | Vertices | Mesh evaluations | Whole-bake evaluations | Worst error | Mean error |
-|---|---|---|---|---|---|---|---|
-| One vertex per cell | 8 | 106 | 52,649 | 2,100,421 | 21,591,844 | 0.600 cells | 0.229 cells |
-| One vertex per patch | 0 | 0 | 52,787 | 2,101,141 | 21,596,216 | 0.600 cells | 0.229 cells |
-
-A prototype's error is the baker's own measure (`SdfBaker.MeasureError`), the
-largest field magnitude at a vertex, an edge midpoint or a triangle centroid, in
-lattice cells; the table gives the worst prototype, the courtyard tree under
-both, and the mean over prototypes. Patches cost 138 more vertices (0.26%) and
-0.02% more evaluations over whole bakes, and the triangles are the same 105,004.
-Eighty-five meshes are byte-identical under the two extractors, including each of the parity
-world's five, so no parity reference moves; the eight that differ are the eight
-prototypes the old extractor pinched (the kart ramp 33 such edges, the bank wall
-30, the granary store 18 and anchor 17, the wren 4, the spider 2, the courtyard
-floor and grass 1 each), and their error moves by at most 0.01 cells. A plate
-tilted off the lattice axes meshes as a closed two-manifold at every thickness
-from 0.4 to 3 cells, where one vertex per cell leaves 36 to 84 shared edges from
-0.85 to 1.1 cells (84 at one cell) and none at 0.4, 0.7, 1.2 or 1.3 to 3. Counting
-edges by vertex position instead reports 19 prototypes before and 14 after,
-because 11 prototypes carry no shared edge by index: each holds 1 to 8 positions
-where two distinct vertices coincide (the hex tiles, the arena pools, the groove
-seam, the jump wall, the isle shard, the dragonfly and the courtyard tree), which
-the census does not explain and no indexed consumer reads as topology. Whether any
-consumer needs those vertices apart stays open. The numbers come from a CPU
-census whose code is not kept; the laws in `SdfBakerLawTests` hold the plate and
-the closed meshes.
-
-**Impostors for distant content** are octahedral and view-dependent, and a
-placement hands over to them by its size on screen:
-
-- *Atlas.* The impostor is a grid of orthographic views of the bake's bounding
-  sphere, along the directions an octahedral map decodes with +Y its pole, each
-  view one tile of five textures: albedo with coverage (BC7, sRGB), normal (BC5),
-  depth across the sphere (BC4), material identity (R8, never blended) and
-  emission (BC6H), mipped per tile. They pack
-  into impostor atlases beside the mesh atlases, never in one with them, since
-  their tiles and chains differ.
-- *Sampling.* A card, a quad on the plane touching the sphere's near side, covers
-  the sphere's silhouette. Its pixels find the surface by marching the camera's ray
-  through the three views nearest the direction toward the camera, against each
-  view's depth, and take the weighted mean of the hits a majority of the views
-  agree on; a pixel the views do not cover is discarded. The surface is shaded from
-  the same three views, and the card writes the surface's depth, not its own.
-- *Switch.* The impostor's view edge, in texels, is the switch, in render pixels of
-  the sphere's projected diameter: below it one impostor texel covers at most one
-  pixel, so the impostor shows all the view could. It is 16 at the standard tier.
-  A placement drawn as its impostor hands back to its mesh once its diameter passes
-  the switch by a quarter, so a camera hovering at the switch does not alternate.
-- *Handover.* The field is kept camera-hidden whatever the representation, as for
-  the mesh, and keeps shadowing and occluding. A bake that is not ready draws the
-  field, and when it is ready the placement's two draws replace the field's; a
-  view then records one of them. The choice is made per view on the CPU from that
-  view's camera, so two views at two distances choose apart, and the shaders hold
-  no copy of it.
-- *Limits.* The nearest-texel depth bends a silhouette by at most a texel; the
-  oracle laws state the bound. A card reads a texel's material from the view
-  holding the most weight at the hit, unfiltered, so a boundary between two
-  materials is as sharp as a view texel. Coverage and material have one rule from
-  one provenance: a pixel is a card's only if some view's nearest depth texel at the
-  hit's level is covered, and its material is the highest-weighted such view's, so a
-  filtered alpha a neighbouring texel lifted never names an uncovered view's material.
-- *History.* The temporal resolve (P15-5) keeps a pixel's color history only where
-  the history surface names the same visibility identity (the kind and the draw
-  ordinal) at about the same ray distance. A placement's mesh and card are two draws
-  with two ordinals, so a switch between them is an identity change like any other
-  and restarts the pixel's history; no separate reset or reprojection is owed, and
-  `SdfVisibilityLawTests` hold the switch to that rule.
-
-**Check:** baking one prototype twice produces the same key and, on one
-device, the same bytes; editing one prototype rebakes only that prototype; a
-compiled world with a filled cache bakes nothing on load, counted; a missing
-bake renders through SDF and then switches; baked silhouettes stay under a
-stated error against the SDF; a baked plate about one cell thick meshes as a
-closed two-manifold; state hashes are equal with bakes on and off; a
-view records a placement's impostor and not its mesh once the placement is under
-the switch, hands back with hysteresis, and counts the draws it records; the
-impostor's views reproduce the field's sphere and box within a stated share of
-the bounding radius; the parity world's captures project every baked placement
-above the switch, so no parity reference depends on an impostor.
-
-**Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
-packaging, and compiled worlds in the runtime and delivery programme.
-
-#### Research input: manifold meshes and octree sign resolution
-
-A CPU study of the baker counted two things against the mesher that placed one
-vertex per cell. At the standard tier, 19 of the 93 prototypes baked from the
-counters, parity, nexus, standard and courtyard worlds carry edges shared by more
-than two triangles by vertex position (a nexus kart ramp 33, a kart bank wall 30,
-a granary anchor 27, each hex tile 8, the courtyard floor 1), while every mesh is
-closed; the manifold extraction above separates the causes. A plate one cell thick
-meshed with 84 such edges. An octree sign resolution saved 20.9% of sign
-evaluations but 0.5% of a whole bake's evaluations. The octree count covers one
-tier and matches vertices by position to 1e-5. The figures survive only in the
-study's commit messages.
+P17 is withdrawn. No view draws a prototype's bake: every view renders the
+meshes the residency bakes from its own program
+([the bake](../rendering/sdf/handbook/frame-rendering.md#the-bake)), so the
+prototype baker, its texture codecs, its bake pack and its cache are deleted.
+The manifold dual contouring P17 chose, one vertex per surface patch of a cell
+so a plate about a cell thick meshes as a closed two-manifold, is the mesh
+bake's contouring (`SdfDualContouring`). Shipping the mesh bake's static meshes
+with a build, so that a boot need not bake them, is a new path
+([open items](open-items.md#rendering)).
 
 ### P18 — Sky and atmosphere
 
@@ -7436,8 +7213,7 @@ the SDF pass interfaces in the one pass-block spelling (P14-5), the
 cutover with the cadence as the scheduler's (P14-6, P14-9), the generated frame
 block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
-bound through the group-1 set P17's texture draw added for the bake atlases, one
-per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
+bound through one group-1 set per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
 and the final sweep (P14-13). Per-tile instruction pruning (P14-14) and
 winner-only gradients (P14-15) have landed, with per-pass shape and gradient
 counts and the dense counters workloads. The RTX 2060 measurements meet the
@@ -7447,11 +7223,7 @@ P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
 with P14-10's float working targets and its HDR desktop capture after it; the
 HDR-display checks keep P16 open and are listed under
 [deferred to the end](#deferred-to-the-end).
-P17's CPU half, the bakes and their texture codecs, has landed, and so have
-their block-compressed upload and sampling check on both backends and the one
-pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
-of its field, textured, and its impostor draws in the mesh's place once the
-placement is small on screen; choosing between a bake and the field follows P6.
+P17 is withdrawn.
 
 **Bound state.** P9 has landed, and so have all nine steps of P10, which stays
 open on its floor-tier parity leg (listed under
@@ -7466,8 +7238,7 @@ and a bound member and an overridden member compose by the rule
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
 landed, and P14's fifteen steps have landed with their pruning and gradient
 GPU acceptance conditions met. The remaining P15 step is P15-8 (P15-1 to
-P15-7 have landed or been decided). A bake's
-textures and impostor (P17) come before P6's choice between a bake and the field.
+P15-7 have landed or been decided).
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to

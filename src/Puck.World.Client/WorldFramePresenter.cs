@@ -88,7 +88,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private bool m_displayExtentSupplied;
     private FrameContext? m_graphContext;
 
-    private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
@@ -1779,12 +1778,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <see langword="null"/> (every candidate condition then holds).</param>
     /// <param name="graphs">The host of the document's <c>views.graphs</c> rows on the render graph, or
     /// <see langword="null"/> for a presentation with no render graph, whose instance slots then show nothing.</param>
-    /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
-    /// or <see langword="null"/> for a presentation that bakes nothing.</param>
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
@@ -1848,7 +1845,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
         m_graphs = graphs;
-        m_bakes = bakes;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.

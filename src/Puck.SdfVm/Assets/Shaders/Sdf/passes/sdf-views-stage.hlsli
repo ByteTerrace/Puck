@@ -103,7 +103,6 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     precise float3 rayTravel = p.rayDirection * s.t;
     precise float3 surfacePoint = p.rayOrigin + rayTravel;
     int material = s.material;
-    SdfLightMesh mesh = (SdfLightMesh)0;
 
     if ((ambientFilter || shadowFilter) && s.hit) {
         float ambient;
@@ -114,11 +113,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         s.shadows = (shadowFilter ? shadows : s.shadows);
     }
 
-    if (s.hit && useFinalShading && (s.material < SDF_SCREEN_MATERIAL)) {
-        mesh = sdfLightMeshAt(p, s, surfacePoint, material);
-    }
-
-    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, mesh, material, coverage, reactivity);
+    float3 color = sdfLightStage(p, s, surfacePoint, useFinalShading, curvatureShading, material, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
     if ((p.viewMode != 0) && (p.viewMode != DebugViewModeSkyCost)) {

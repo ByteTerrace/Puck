@@ -1,8 +1,7 @@
 # Puck.Assets
 
 Puck.Assets provides content-addressed asset storage, in-process caching, and
-minimal codecs: PNG/APNG, BC4/BC5/BC6H/BC7 block compression with tile-aware
-mip chains, QR code generation, automatic sequence programs, and the chunk
+minimal codecs: PNG/APNG, QR code generation, automatic sequence programs, and the chunk
 container Puck's binary products share. Its RGBA frame comparison measures
 visible changes in editor captures and canaries through one noise threshold.
 

@@ -792,7 +792,7 @@ public sealed class SdfSampledLattice {
         for (var quad = 0; (quad < materials.Length); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SdfSurfaceTextures.SplitsAlongFirstDiagonal(
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(
                 n0: Vertex(values: normals, vertex: quads[at]),
                 n1: Vertex(values: normals, vertex: quads[(at + 1)]),
                 n2: Vertex(values: normals, vertex: quads[(at + 2)]),
@@ -818,6 +818,44 @@ public sealed class SdfSampledLattice {
         };
 
         static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    }
+
+    // Whether quad (v0, v1, v2, v3), with corner normals n0 to n3, splits along its first diagonal, v0 to v2, rather than
+    // its second: the diagonal whose two triangles both face the way the corner normals point, else the shorter one.
+    // Every quad of a contour splits by this one rule.
+    private static bool SplitsAlongFirstDiagonal(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 n0, Vector3 n1, Vector3 n2, Vector3 n3) {
+        var outward = (
+            X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
+            Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
+            Z: (((((double)n0.Z) + n1.Z) + n2.Z) + n3.Z)
+        );
+        var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
+        var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
+
+        return ((alongFirst == alongSecond)
+            ? (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3))
+            : alongFirst);
+    }
+    // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
+    private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
+        var ux = (((double)b.X) - a.X);
+        var uy = (((double)b.Y) - a.Y);
+        var uz = (((double)b.Z) - a.Z);
+        var vx = (((double)c.X) - a.X);
+        var vy = (((double)c.Y) - a.Y);
+        var vz = (((double)c.Z) - a.Z);
+        var nx = ((uy * vz) - (uz * vy));
+        var ny = ((uz * vx) - (ux * vz));
+        var nz = ((ux * vy) - (uy * vx));
+
+        return ((((nx * outward.X) + (ny * outward.Y)) + (nz * outward.Z)) >= 0.0);
+    }
+    private static double DistanceSquared(Vector3 a, Vector3 b) {
+        var dx = (((double)b.X) - a.X);
+        var dy = (((double)b.Y) - a.Y);
+        var dz = (((double)b.Z) - a.Z);
+
+        return (((dx * dx) + (dy * dy)) + (dz * dz));
     }
 
     // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut

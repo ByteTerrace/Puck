@@ -231,7 +231,6 @@ internal sealed class DocumentIdChunk : ICompiledWorldChunk {
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "DOCI");
     public IReadOnlyList<ChunkCode> DependsOn { get; } = [AssetChunk.Instance.Code];
 
-    public bool DerivesOnBoot => true;
     public uint Version => 1;
 
     public AssetContentHash? ReadInput(CompiledWorldContext context, string name) => null;

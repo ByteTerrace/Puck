@@ -194,9 +194,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <param name="meshRaster">The device's mesh pass pipeline (<see cref="SdfMeshRasterPass"/>), built on
     /// <paramref name="device"/> with the render pass it draws in, which a view's mesh pass records with. The caller keeps
     /// ownership and disposes it after the tables.</param>
-    /// <param name="impostorRaster">The device's impostor card pipeline, built on <paramref name="device"/> with the mesh pass's
-    /// layout and render pass, which a view's mesh pass draws impostor cards with after its meshes. The caller keeps
-    /// ownership and disposes it after the tables.</param>
     /// <param name="shadowRaster">The device's shadow cascade pipeline, built on <paramref name="device"/> with the mesh
     /// pass's layout and the depth-only render pass a view's cascades draw in. The caller keeps ownership and disposes it
     /// after the tables.</param>
@@ -207,12 +204,11 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     /// <exception cref="ObjectDisposedException"><paramref name="pipelines"/> has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline impostorRaster, GpuPassPipeline shadowRaster, SdfWorldTablesOptions options) {
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
         ArgumentNullException.ThrowIfNull(meshRaster);
-        ArgumentNullException.ThrowIfNull(impostorRaster);
         ArgumentNullException.ThrowIfNull(shadowRaster);
         ObjectDisposedException.ThrowIf(
             condition: pipelines.IsDisposed,
@@ -270,7 +266,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_pipelines = pipelines;
         m_meshPipeline = (meshRaster.Graphics ?? throw new ArgumentException(message: "The mesh pass pipeline is not a graphics pipeline.", paramName: nameof(meshRaster)));
         m_meshRenderPass = (meshRaster.RenderPass ?? throw new ArgumentException(message: "The mesh pass pipeline names no render pass.", paramName: nameof(meshRaster)));
-        m_impostorPipeline = (impostorRaster.Graphics ?? throw new ArgumentException(message: "The impostor pass pipeline is not a graphics pipeline.", paramName: nameof(impostorRaster)));
         m_shadowPipeline = (shadowRaster.Graphics ?? throw new ArgumentException(message: "The shadow pass pipeline is not a graphics pipeline.", paramName: nameof(shadowRaster)));
         m_shadowRenderPass = (shadowRaster.RenderPass ?? throw new ArgumentException(message: "The shadow pass pipeline names no render pass.", paramName: nameof(shadowRaster)));
         m_regionCopyPipeline = regionCopy;
@@ -590,6 +585,5 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();
-        DisposeMeshAtlases();
     }
 }

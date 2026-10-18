@@ -780,8 +780,7 @@ base, so passing both is refused.
   selects none.
 - **The catalog**: a change to a shipped world under
   `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
-  a project the composer, the SDF baker, the shader packager or the texture
-  codecs are built from, chooses `puck compile --tree … --output … --check` over the
+  a project the composer or the shader packager is built from, chooses `puck compile --tree … --output … --check` over the
   game's Release catalog.
 - **Worlds**: a changed `.puck` source that declares `test` blocks is run with
   [`puck test`](#puck-testtest-worlds).
@@ -1918,13 +1917,10 @@ backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture
 the same simulation ticks, each pair observes one moment by construction.
-The parity world ships its bakes as a released world does: the run compiles
-the source's directory into its artifacts with the World artifact's own CLI (a
-compiled world holds only for the engine build that derived it), copying every
-other file of the tree beside it, and each leg boots that copy, whose `BAKE`
-chunk holds every bake from its bake pack. Each leg ends by reading
-`world.counters sdf.bakes` and fails when it resolved a bake on the device
-(`sdf.bakes.scheduled` above zero), so no leg depends on a local bake.
+The run compiles the source's directory into its artifacts with the World
+artifact's own CLI (a compiled world holds only for the engine build that
+derived it), copying every other file of the tree beside it, and each leg boots
+that copy.
 The offscreen host steps one tick per produced frame, so every captured tick is
 a frame of its own and its frame reprojects from the frame of the tick before
 ([host pacing](hosting.md#host-pacing)). It never steps past an armed
@@ -2173,7 +2169,7 @@ end
 A scenario's document hashes are the world's fingerprint, the compiled world's
 definition hash and catalog fingerprint, in that order and always present, then
 each asset row's canonical hash (`patch:`, `tune:`, `music:`, `table:`) and each
-creation's canonical hash and bake key (`creation:`, `bake:`). A stream missing
+creation's canonical hash (`creation:`). A stream missing
 one of the first three, or naming a document of another family, is refused. A
 tick's vector holds each authoritative state component on its own (population
 pose, arena, host-owned rows, declarations, topologies, latches, rule groups,
@@ -2963,7 +2959,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -2981,7 +2977,7 @@ source gets its normal adjacent `.world.json` or
 successful outputs in place. `--output` and `--watch` require exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
 world document is written to the same relative place under the `--output`
-directory, and any other `*.world.json`, `*.puckb` or `*.puckbake` under that
+directory, and any other `*.world.json` or `*.puckb` under that
 directory is removed once all sources compiled, so it holds exactly this run's worlds. No run writes one
 document file twice: a source whose output lands on a file an earlier source of
 the run wrote, exactly or in another letter case, is refused by name (exit 1),
@@ -2998,7 +2994,7 @@ is not its file name, so the build never derives them from the sources' names.
 `--check` compiles the tree into a scratch directory and compares it with
 `--output` instead of writing there. It exits 1 naming each file a fresh run
 writes that the output lacks or holds with other bytes, and each document,
-compiled world, bake pack or stored package the output holds that the run does
+compiled world or stored package the output holds that the run does
 not write. Run over the game's Release catalog, it proves the tree compile is
 deterministic across processes; [`puck affected`](#puck-affectedthe-checks-a-change-needs)
 chooses it when a shipped world or the code the compile's output depends on
@@ -3033,29 +3029,9 @@ composition of its name that declares other worlds. Any other two files
 carrying one name, ignoring case — a `.world.json` beside a source of another
 stem that declares its name, or two sources emitting one name — are refused by
 name before anything is written (`DocumentName.Collision`), as the composer
-refuses the same pair. The sweep removes every `*.puckb` and `*.puckbake` the run did
+refuses the same pair. The sweep removes every `*.puckb` the run did
 not write along with every such `*.world.json`, so the build ships exactly the
-documents, compiled worlds and bake pack the run wrote.
-
-A compiled world names the [creation bakes](../architecture/worlds.md#creation-bakes)
-it needs, and the bakes themselves ship once in a bake pack, `bakes.puckbake`. A
-`--tree` run writes one pack at the root of the output directory, holding
-exactly the bakes its compiled worlds name, after every source compiled; any
-other run writes one beside each compiled world and keeps the bakes an earlier
-compile into that directory left there. Either prints one `Wrote bake pack
-'<path>'` line with the pack's outcomes and bytes and the creations its bake
-cache baked or refused and the field evaluations it spent, each distinct
-creation baked once. A run whose compiled worlds name no bake writes no pack.
-`--bake-cache <directory>` gives a `--tree` run a content-addressed bake cache
-(`WorldBakeStore`): the run reads each outcome whose key the cache holds and
-keeps there every outcome it bakes, so a run over unchanged prototypes bakes
-nothing and one after an edit bakes the edited prototypes alone. The pack's
-bytes are the same with or without the cache. The game's build passes the
-per-user `bakes` cache, which `puck parity` and the World share, so every
-checkout reuses every other's bakes; a bake's key carries the bake code's
-fingerprint, so checkouts whose bake code differs never share a key. `--check`
-refuses the option, since it compares with a fresh run
-(`TreeBakeCacheLawTests`).
+documents and compiled worlds the run wrote.
 
 A `--tree` run also packages every pipeline its compiled worlds name by source:
 each `views.graphs` row's `source` (a row naming an engine `package` has none),

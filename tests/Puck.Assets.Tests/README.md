@@ -5,8 +5,6 @@ This suite checks the asset codecs and content helpers in `Puck.Assets`.
 alpha exclusion, symmetry, and packed-buffer refusal.
 `PngCodecLawTests`, `QrCodecLawTests`, and `AutomaticSequenceCodecTests` cover
 round trips, bounded and malformed input, and deterministic encoded output;
-`TextureCodecLawTests` and `TextureMipChainLawTests` cover the block codecs
-against their decoders, their pinned bytes, and tile-aware mip chains;
 `ChunkContainerLawTests` covers the shared chunk container and the canonical
 binary primitives it writes with;
 `VectorJsonConverterLawTests` covers the vector JSON contract; and

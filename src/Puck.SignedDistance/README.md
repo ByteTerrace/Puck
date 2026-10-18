@@ -2,8 +2,8 @@
 
 Puck.SignedDistance provides the signed-distance-function instruction ISA,
 packed program representation, authoring builder, deterministic CPU evaluator,
-and the baker that samples a program through that evaluator into a mesh,
-textures, and an impostor.
+and the dual contouring that turns a sampled lattice into the frame's baked
+meshes (`Baking`: `SdfSampledLattice`, `SdfDualContouring`).
 The evaluators expose structural line-of-sight work envelopes derived from their
 compiled programs and fixed march budgets. These counts carry no cycle price.
 

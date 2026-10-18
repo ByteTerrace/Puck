@@ -313,7 +313,7 @@ refused verdict. This is console output, not a durable persistence receipt.
 Local rebuild and undo commands (`world.reload`, `world.load`, `world.reset`,
 `world.undo`) wait for their tick-boundary echo and answer with it. A command
 that holds its session answers when the hold ends: `world.wait <ticks>` with
-its release tick, and `world.wait ready|bakes|captures` with the release
+its release tick, and `world.wait ready|captures` with the release
 report, a refusal unless the condition came true. A wait the call's deadline
 cannot cover is refused before it arms (`world.wait <ticks>` at the world's
 rate), and a hold still standing shortly before the deadline ends with a

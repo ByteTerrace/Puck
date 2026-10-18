@@ -142,7 +142,6 @@ subdirectory there. Every cache among them is bounded:
 | `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipeline-cache` keeps 8 files per backend, and its `pipelines` shader cache is bounded as `shaders` is |
 | `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds | 4096 objects, 256 MiB |
 | `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root | 1024 files, 256 MiB |
-| `bakes` | The creation bakes the game's build, `puck compile --tree`, `puck parity` and presentations make, shared by every checkout | 8192 objects, 512 MiB |
 | `world-builds` | The shared Release builds of `Puck.World` the CLI gates run | 4 builds |
 | `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` | 2 clones |
 | `compilations` | The `.puck` compile cache the game and the CLI share | 1024 files, 256 MiB |
@@ -715,8 +714,8 @@ unverified when no device run exists.
   the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,
   recreate it as the user, and copy its contents back.
 - A workspace-only sandbox cannot write the per-user `Puck` caches just because
-  it can build the checkout. Shader and world-asset builds accept the
-  `PuckShaderCacheDirectory` and `PuckWorldBakeCache` MSBuild overrides.
+  it can build the checkout. Shader builds accept the
+  `PuckShaderCacheDirectory` MSBuild override.
   `puck parity` and `puck counters` also need a writable `world-builds` store:
   `WorldArtifactStore` retries an access-denied lock open as contention until
   its deadline, so a quiet wait before any World process starts can be a cache

@@ -1138,17 +1138,8 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfKernelSet.LoadWork);
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfMeshLodSelector.ProcessWork);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
-    }
-    /// <summary>Registers the presentation's bake schedule over the registered <see cref="WorldCacheRoots"/>' bake
-    /// cache, the cache a boot's compiled world fills, and its <c>sdf.bakes</c> work source.</summary>
-    /// <param name="services">The service collection a presentation shape composes.</param>
-    private static void AddWorldBakes(IServiceCollection services) {
-        services.TryAddSingleton(implementationFactory: static sp => new WorldBakeSchedule(store: WorldBakeStore.Open(directory: sp.GetRequiredService<WorldCacheRoots>().Bakes)));
-        services.TryAddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => new WorldBakeReadiness(schedule: sp.GetRequiredService<WorldBakeSchedule>()));
-        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldBakeSchedule>());
     }
 
     /// <summary>
@@ -1171,7 +1162,6 @@ public static class WorldBootComposition {
         ArgumentNullException.ThrowIfNull(argument: services);
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
-        AddWorldBakes(services: services);
         services.AddGpuCreationFaults();
         services.AddGpuCaptureCommand();
         // The render levers need only the render settings, the session-lever submit and the render probe registered
@@ -1266,7 +1256,6 @@ public static class WorldBootComposition {
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
-            bakes: sp.GetRequiredService<WorldBakeSchedule>(),
             editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
             domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ) {
@@ -1339,7 +1328,6 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new ExternalClockRegistry(electionPolicy: sp.GetRequiredService<WorldHostSettings>().Genlock));
         AddWorldPipelineCache(services: services);
         AddWorldShaderWork(services: services);
-        AddWorldBakes(services: services);
         services.AddGpuCreationFaults();
         services.AddGpuCaptureCommand();
 
@@ -1626,7 +1614,6 @@ public static class WorldBootComposition {
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
-            bakes: sp.GetRequiredService<WorldBakeSchedule>(),
             editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
             domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));

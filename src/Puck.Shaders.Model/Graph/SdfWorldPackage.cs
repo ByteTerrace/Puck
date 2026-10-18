@@ -174,36 +174,6 @@ public static partial class SdfWorldPackage {
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
-    /// <summary>The mesh albedo atlas, sRGB-encoded BC7 the views pass decodes after sampling.</summary>
-    public const string MeshAlbedo = "sdfMeshAlbedo";
-    /// <summary>The mesh normal atlas: octahedral object-space normal pairs, BC5.</summary>
-    public const string MeshNormals = "sdfMeshNormals";
-    /// <summary>The mesh occlusion atlas, BC4.</summary>
-    public const string MeshOcclusion = "sdfMeshOcclusion";
-    /// <summary>The mesh material atlas: each texel's palette entry, R8, read without filtering.</summary>
-    public const string MeshMaterials = "sdfMeshMaterials";
-    /// <summary>The mesh emission atlas: linear emitted light, BC6H.</summary>
-    public const string MeshEmission = "sdfMeshEmission";
-    /// <summary>The impostor albedo atlas, sRGB-encoded BC7 with coverage in alpha.</summary>
-    public const string ImpostorAlbedo = "sdfImpostorAlbedo";
-    /// <summary>The impostor normal atlas: octahedral object-space normal pairs, BC5.</summary>
-    public const string ImpostorNormals = "sdfImpostorNormals";
-    /// <summary>The impostor depth atlas, BC4: 0 at a view's near side of the bounding sphere, 1 at its far side and where
-    /// the view's ray missed.</summary>
-    public const string ImpostorDepth = "sdfImpostorDepth";
-    /// <summary>The impostor material atlas: each texel's program material id, R8, read without filtering.</summary>
-    public const string ImpostorMaterials = "sdfImpostorMaterials";
-    /// <summary>The impostor emission atlas: linear emitted light, BC6H.</summary>
-    public const string ImpostorEmission = "sdfImpostorEmission";
-
-    /// <summary>Gets the impostor atlases, World-group members of every compute pass (and, for the depth atlas, the mesh
-    /// pass's pass group), in the order the impostor atlases hold the usages they pack (albedo, normal, depth, material, emission):
-    /// images that change only when the set of impostors a frame draws does.</summary>
-    public static IReadOnlyList<string> ImpostorAtlases { get; } = [ImpostorAlbedo, ImpostorNormals, ImpostorDepth, ImpostorMaterials, ImpostorEmission];
-    /// <summary>Gets the mesh atlases, World-group members of every compute pass, in the order the mesh atlases hold
-    /// the usages they pack (albedo, normal, occlusion, material, emission): images that change only when the set of
-    /// textured meshes a frame draws does.</summary>
-    public static IReadOnlyList<string> MeshAtlases { get; } = [MeshAlbedo, MeshNormals, MeshOcclusion, MeshMaterials, MeshEmission];
 
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
@@ -306,9 +276,8 @@ public static partial class SdfWorldPackage {
         ShaderWorkCounters.DetailRowMember,
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
-    /// brick pool, the glyph atlas, the samplers and the mesh and impostor atlases (<see cref="MeshAtlases"/>,
-    /// <see cref="ImpostorAtlases"/>), which the residency
-    /// binds as one set per upload ring slot, written once and again only when what it binds moves.</summary>
+    /// brick pool, the glyph atlas and the samplers, which the residency binds as one set per upload ring slot, written
+    /// once and again only when what it binds moves.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
@@ -329,16 +298,6 @@ public static partial class SdfWorldPackage {
             length: SamplerCount,
             name: Samplers
         ),
-        WorldImage(name: MeshAlbedo),
-        WorldImage(name: MeshNormals),
-        WorldImage(name: MeshOcclusion),
-        WorldImage(name: MeshMaterials),
-        WorldImage(name: MeshEmission),
-        WorldImage(name: ImpostorAlbedo),
-        WorldImage(name: ImpostorNormals),
-        WorldImage(name: ImpostorDepth),
-        WorldImage(name: ImpostorMaterials),
-        WorldImage(name: ImpostorEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
     /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh and cascade targets and the

@@ -142,7 +142,7 @@ in the frame.
   rewrites only the slots of the cells it brings in, and views reject a slot
   holding another cell's probe.
 - **The trace.** `SdfMeshIrradianceScene` gathers every static mesh draw (not
-  dynamic, not an impostor card) into a bounding volume hierarchy on the thread
+  dynamic) into a bounding volume hierarchy on the thread
   pool, once the mesh bake has settled. Probes trace on the pool, nearest the
   camera first, every probe's first sweep before any second. A probe stores two
   ambient cubes, one value per axis direction: the share of cosine-weighted sky

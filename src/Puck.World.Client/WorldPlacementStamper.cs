@@ -193,7 +193,7 @@ public static class WorldPlacementStamper {
     // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws. Its
     // identity is its scope, its placement and its order among the placement's draws, which a rebuild that keeps the
     // placement keeps, so an edited placement's draw reads its edit as motion.
-    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws, string? scope, string placement, int firstMesh, SdfMeshLod? lod = null, SdfMeshImpostor? impostor = null) {
+    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws, string? scope, string placement, int firstMesh) {
         if ((mesh is null) || (meshDraws is null)) {
             return;
         }
@@ -210,10 +210,7 @@ public static class WorldPlacementStamper {
             reflectionNormal: reflectionNormal,
             rotation: rotation,
             scale: scale
-        ) with {
-            Impostor = impostor,
-            Lod = lod,
-        });
+        ));
     }
 
     private readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);

@@ -85,7 +85,7 @@ public sealed class SdfMeshLibrary {
             renumbered[triangle] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : source[triangle]);
         }
 
-        return new SdfMesh(indices: mesh.Indices, normals: mesh.Normals, positions: mesh.Positions, textures: mesh.Textures, triangleMaterials: renumbered, uvs: mesh.Uvs);
+        return new SdfMesh(indices: mesh.Indices, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: renumbered);
     }
 
     private sealed record Variant(int[] Materials, SdfMesh Mesh);

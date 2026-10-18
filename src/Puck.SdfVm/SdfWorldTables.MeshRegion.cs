@@ -10,23 +10,19 @@ namespace Puck.SdfVm;
 // placed: a body that moves rewrites its record's matrix, and a mesh that lands writes its own words, never the meshes
 // already placed. Newly placed meshes land within a frame's share of words (MeshLandingWords), in the list's order, and a
 // draw whose mesh is still owed waits out of the staged records until it lands, so a body crossing into a world with all
-// its meshes at once lands over a few frames. A plan that relocates every mesh or the mesh atlases changing (a textured
-// mesh's texture coordinates are written moved into them, SdfWorldTables.MeshAtlas.cs) writes every word at once. The
+// its meshes at once lands over a few frames. A plan that relocates every mesh writes every word at once. The
 // region is created with the tables, one draw record long so every set that binds it binds a buffer, and grows to twice
 // the need without waiting for the device, the next upload carrying the words it held on the GPU; a frame without draws
 // keeps it. A view's mesh pass reads the draws' triangles from it, and primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
-    // Whether the arena has written its meshes into the region, and the atlases it wrote them for.
+    // Whether the arena has written its meshes into the region.
     private bool m_meshSectionWritten;
-    private SdfMeshAtlas? m_meshSectionAtlas;
 
-    // The draw list last planned and its revision, the atlases its meshes were planned into, and whether its draws are all
-    // staged: a list whose meshes' words are still owed stages again each frame as they land.
+    // The draw list last planned and its revision, and whether its draws are all staged: a list whose meshes' words are
+    // still owed stages again each frame as they land.
     private IReadOnlyList<SdfMeshDraw>? m_meshSource;
     private long m_meshSourceRevision;
-    private SdfMeshAtlas? m_meshAtlas;
-    private SdfMeshAtlas? m_meshImpostors;
     private bool m_meshStaged;
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
@@ -75,23 +71,20 @@ public sealed partial class SdfWorldTables {
             ) ||
             (revision != m_meshSourceRevision)
         ) {
-            m_meshAtlas = StageMeshAtlas(draws: draws);
-            m_meshImpostors = StageImpostorAtlas(draws: draws);
             m_meshArena.Plan(draws: draws);
 
             if (m_meshArena.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
-                // Every mesh is written again at once when the arena moved them, none was written yet, or the atlases their
-                // texture coordinates are moved into changed, since no mesh's words stand where its draw reads them;
-                // otherwise only the meshes this list placed are owed, and land over the next frames.
-                if (m_meshArena.Relocated || !m_meshSectionWritten || !ReferenceEquals(objA: m_meshSectionAtlas, objB: m_meshAtlas)) {
+                // Every mesh is written again at once when the arena moved them or none was written yet, since no mesh's
+                // words stand where its draw reads them; otherwise only the meshes this list placed are owed, and land over
+                // the next frames.
+                if (m_meshArena.Relocated || !m_meshSectionWritten) {
                     m_meshesOwed.Clear();
-                    foreach (var (mesh, placement) in m_meshArena.Placements) { WriteMeshWords(atlas: m_meshAtlas, mesh: mesh, placement: placement); }
+                    foreach (var (mesh, placement) in m_meshArena.Placements) { WriteMeshWords(mesh: mesh, placement: placement); }
                 } else {
                     m_meshesOwed.UnionWith(other: m_meshArena.Placed);
                 }
                 m_meshSectionWritten = true;
-                m_meshSectionAtlas = m_meshAtlas;
             }
 
             m_meshSource = draws;
@@ -126,10 +119,8 @@ public sealed partial class SdfWorldTables {
         var records = m_meshDrawWords.AsSpan(length: drawWords, start: 0);
 
         SdfMeshRegion.WriteDraws(
-            atlas: m_meshAtlas,
             destination: records,
             draws: staged,
-            impostors: m_meshImpostors,
             meshes: m_meshArena.Placements
         );
         StageMeshMotion(
@@ -154,13 +145,13 @@ public sealed partial class SdfWorldTables {
         foreach (var draw in draws) {
             if (written >= MeshLandingWords) { return; }
             if (m_meshesOwed.Remove(item: draw.Mesh)) {
-                WriteMeshWords(atlas: m_meshAtlas, mesh: draw.Mesh, placement: m_meshArena.Placements[draw.Mesh]);
+                WriteMeshWords(mesh: draw.Mesh, placement: m_meshArena.Placements[draw.Mesh]);
                 written += SdfMeshRegion.WordsOf(mesh: draw.Mesh);
             }
         }
     }
     // Writes one placed mesh's words into the region.
-    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement, SdfMeshAtlas? atlas) {
+    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
 
         if (words > m_meshWords.Length) {
@@ -170,7 +161,6 @@ public sealed partial class SdfWorldTables {
         var destination = m_meshWords.AsSpan(length: words, start: 0);
 
         SdfMeshRegion.WriteMesh(
-            atlas: atlas,
             destination: destination,
             mesh: mesh,
             placement: new SdfMeshRegionMesh(

@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Numerics;
-using Puck.Assets.Textures;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
@@ -119,7 +118,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         var request = slot.Request;
         var identity = BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[4..]);
         var normal = (((identity != 0) && (request.Sample is not null))
-            ? OctahedralNormal.DecodeSnorm16(packed: BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[NormalOffset..]))
+            ? DecodeNormal(packed: BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[NormalOffset..]))
             : (0.0, 0.0, 0.0));
 
         return request with {
@@ -128,6 +127,27 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             Material = BinaryPrimitives.ReadInt32LittleEndian(source: bytes[8..]),
             Normal = new Vector3(x: ((float)normal.Item1), y: ((float)normal.Item2), z: ((float)normal.Item3)),
         };
+    }
+
+    // The visibility record's normal: two signed-normalized 16-bit octahedral coordinates, X in bits 0..15 and Y in bits
+    // 16..31, a sync pair with the visibility record's packing in frame/sdf-visibility.hlsli. The reserved pair (-32768, -32768) means no
+    // normal and decodes as zero; any other unfolds the lower half across the diagonals and normalizes.
+    private static (double X, double Y, double Z) DecodeNormal(uint packed) {
+        if (packed == 0x80008000U) {
+            return (0.0, 0.0, 0.0);
+        }
+
+        var x = (((short)packed) / 32767.0);
+        var y = (((short)(packed >> 16)) / 32767.0);
+        var z = ((1.0 - Math.Abs(value: x)) - Math.Abs(value: y));
+
+        if (z < 0.0) {
+            (x, y) = (((1.0 - Math.Abs(value: y)) * ((x >= 0.0) ? 1.0 : -1.0)), ((1.0 - Math.Abs(value: x)) * ((y >= 0.0) ? 1.0 : -1.0)));
+        }
+
+        var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+
+        return ((x / length), (y / length), (z / length));
     }
 
     private sealed class Slot {

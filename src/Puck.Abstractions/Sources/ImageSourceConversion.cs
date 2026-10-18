@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Numerics;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Abstractions.Sources;
@@ -206,33 +205,6 @@ public static class ImageSourceConversion {
                 y: (1.0 / 2.4)
             )) - 0.055)
         );
-    }
-    /// <summary>Returns the 8-bit sRGB code of a linear value (IEC 61966-2-1): the code whose interval under
-    /// <see cref="SrgbToLinear"/> holds it, so a value lying between two codes' decoded midpoints encodes to the code
-    /// between them, and every code's own decoded value encodes back to it. A negative value or NaN encodes to 0 and a
-    /// value past the last midpoint to 255.
-    /// <para>The encode compares <paramref name="value"/> with the 255 decoded midpoints and nothing else, and each
-    /// midpoint is the smallest <see cref="double"/> at or above the exact real one, found in integer arithmetic, so the
-    /// code is the same on every machine; an encode through <see cref="Math.Pow(double, double)"/> is not, because the
-    /// last bit of a power is the platform library's.</para></summary>
-    /// <param name="value">The linear value.</param>
-    /// <returns>The code.</returns>
-    public static byte LinearToSrgb8(double value) {
-        var midpoints = SrgbMidpoints.Values;
-        var low = 0;
-        var high = midpoints.Length;
-
-        while (low < high) {
-            var middle = ((low + high) >>> 1);
-
-            if (midpoints[middle] <= value) {
-                low = (middle + 1);
-            } else {
-                high = middle;
-            }
-        }
-
-        return ((byte)low);
     }
     /// <summary>Returns the 8-bit code a normalized value stores as: clamped to 0–1 and rounded to the nearest code.</summary>
     /// <param name="value">The normalized value.</param>
@@ -515,84 +487,5 @@ public static class ImageSourceConversion {
         return ((format == ImagePixelFormat.R10G10B10A2Unorm)
             ? (((word & 0x3FFU) / 1023.0), (((word >> 10) & 0x3FFU) / 1023.0), (((word >> 20) & 0x3FFU) / 1023.0), ((word >> 30) / 3.0))
             : (((word & 0xFFU) / 255.0), (((word >> 8) & 0xFFU) / 255.0), (((word >> 16) & 0xFFU) / 255.0), ((word >> 24) / 255.0)));
-    }
-
-    /// <summary>Returns the linear value of an 8-bit sRGB code (IEC 61966-2-1): the smallest <see cref="double"/> at or
-    /// above the exact decoded value, found in integer arithmetic, so it is the same on every machine. It is the decode
-    /// <see cref="LinearToSrgb8"/> inverts: every code's value encodes back to that code. A filter that averages sRGB
-    /// texels in linear light reads them through this rather than <see cref="SrgbToLinear"/>, whose last bit is the
-    /// platform library's.</summary>
-    /// <param name="code">The code.</param>
-    /// <returns>The linear value, 0 to 1.</returns>
-    public static double Srgb8ToLinear(byte code) =>
-        SrgbMidpoints.Codes[code];
-
-    // The exact sRGB tables, each entry the smallest double at or above an exact decoded value. An encoded value is
-    // k / 510 for an integer k: Midpoints[c - 1] decodes k = 2c - 1 (the midpoint below code c, for c from 1 to 255), and
-    // Codes[c] decodes k = 2c (code c itself). An estimate is stepped one double at a time until the exact comparison
-    // holds for it and fails for the double below it, so the tables rest on no floating-point result, only on the
-    // ordering of doubles.
-    private static class SrgbMidpoints {
-        public static readonly double[] Values = Compute(count: 255, first: 1, offset: -1);
-        public static readonly double[] Codes = Compute(count: 256, first: 0, offset: 0);
-
-        // Entry i decodes k = 2 (first + i) + offset.
-        private static double[] Compute(int first, int count, int offset) {
-            var values = new double[count];
-
-            for (var index = 0; (index < count); index++) {
-                var k = ((2 * (first + index)) + offset);
-
-                if (k == 0) {
-                    continue;
-                }
-
-                var decoded = SrgbToLinear(value: (k / 510.0));
-
-                while (!AtLeast(k: k, value: decoded)) {
-                    decoded = Math.BitIncrement(x: decoded);
-                }
-
-                while (AtLeast(k: k, value: Math.BitDecrement(x: decoded))) {
-                    decoded = Math.BitDecrement(x: decoded);
-                }
-
-                values[index] = decoded;
-            }
-
-            return values;
-        }
-        // Whether a value is at least the exact decoded value of the encoded value k / 510. Encoded values at or under
-        // 0.04045 (k up to 20) decode linearly, to 5 k / 32946; the rest decode to r^(12/5) with
-        // r = (20 k + 561) / 10761. A positive value is m 2^e exactly, so it is compared over integers: m 2^e 32946
-        // against 5 k, or m^5 2^(5e) 10761^12 against (20 k + 561)^12.
-        private static bool AtLeast(int k, double value) {
-            if (!(value > 0.0)) {
-                return false;
-            }
-
-            var bits = BitConverter.DoubleToInt64Bits(value: value);
-            var exponent = ((int)((bits >> 52) & 0x7FF));
-            var mantissa = new BigInteger(value: bits & 0xF_FFFF_FFFF_FFFFL);
-
-            if (exponent == 0) {
-                exponent = -1074;
-            } else {
-                mantissa += (BigInteger.One << 52);
-                exponent -= 1075;
-            }
-
-            return ((k <= 20)
-                ? (Compare(left: (mantissa * 32946), leftShift: exponent, right: new BigInteger(value: (k * 5))) >= 0)
-                : (Compare(
-                    left: (BigInteger.Pow(exponent: 5, value: mantissa) * BigInteger.Pow(exponent: 12, value: 10761)),
-                    leftShift: (5 * exponent),
-                    right: BigInteger.Pow(exponent: 12, value: ((20 * k) + 561))
-                ) >= 0));
-        }
-        // Compares left 2^leftShift with right.
-        private static int Compare(BigInteger left, int leftShift, BigInteger right) => ((leftShift >= 0)
-            ? (left << leftShift).CompareTo(other: right)
-            : left.CompareTo(other: (right << -leftShift)));
     }
 }

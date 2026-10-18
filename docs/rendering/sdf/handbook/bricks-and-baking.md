@@ -4,10 +4,9 @@ Puck caches a distance field only for settled, dense carve clusters where
 bounds cannot reduce the work. A brick stores a small 3D sample of the carve
 distance; the `√3` scale keeps trilinear interpolation safe to march. The
 settle → bake → swap → invalidate lifecycle keeps that cache current while the
-analytic program remains the source of truth. A prototype bake, the mesh,
-textures and impostor a creation's field is sampled into, is a second kind of
-baking, and the frame's own mesh bake ([the bake](frame-rendering.md#the-bake))
-a third.
+analytic program remains the source of truth. Puck has two kinds of baking:
+these bricks, and the frame's mesh bake, which samples each residency's program
+into the meshes every view draws ([the bake](frame-rendering.md#the-bake)).
 
 ## The problem: a cluster no bound can save
 
@@ -183,180 +182,6 @@ reprint from.** That discipline is what lets a discretized cache live inside a
 purely-analytic engine without quietly becoming the thing the engine promised not
 to be.
 
-## Prototype bakes
-
-`SdfBaker` (`src/Puck.SignedDistance/Baking`) turns a program into presentation
-assets by reading the field through `SdfFieldEvaluator`, the same interpreter
-contact and queries read ([Queries and determinism](queries-and-determinism.md)),
-so there is no second evaluator to keep in step. A bake is a mesh, five surface
-textures, and an impostor. Like a brick, it is a cache of a field the program
-already computes: it is presentation only, and nothing it produces is read back
-into simulation state. Unlike a brick, it is durable data keyed by its creation's
-content, so a build ships it in its bake pack and a device keeps it.
-
-**The mesh** is extracted by manifold dual contouring over a cube of cells around the
-program's reach, one empty cell of padding on each side. A block of four cells a
-side whose center's scaled field value proves no surface lies within the block
-takes that center's sign at every corner, so empty space costs one evaluation
-per block; a corner is evaluated only when a sign-changing edge needs its value.
-A crossed cell holds one vertex for each patch of the surface inside it: its
-patches are the connected pieces of the marching-cubes surface, found from the
-eight corner signs alone by joining the sign-changing cube edges along each face's
-marching-squares segments, so a cell two sheets cross, as a plate about a cell
-thick crosses its cells, holds a vertex for each and no edge of the mesh is shared
-by more than two quads. A face whose diagonal corners agree is cut to separate its
-inside corners whichever cell reads it, so the two cells that share a face agree
-and the mesh has no crack. A patch's vertex is the least-squares point of the
-tangent planes at its edges' crossings, drawn weakly toward their mean and clamped
-into the cell, and its normal is the field's gradient there. Each quad is split along the
-diagonal whose triangles face the way the corner normals point, else the shorter
-one. The mesh stays within half a cell of the field: the largest field magnitude
-at any vertex, edge midpoint or triangle centroid is at most half the cell size.
-A feature thinner than a cell can fold a quad inward; every feature the standard
-tier is expected to show spans more than two cells.
-
-**The surface textures** give each quad one 4-texel-square tile of an atlas, its
-corners on the centers of the tile's corner texels, so bilinear filtering inside a
-quad never reads another quad's texels and a 4x4 block-compressed block never
-spans two quads. A texel samples the field at the quad's bilinear point, steps
-onto the surface along the gradient, and records:
-
-| Texture | Stored as | Values |
-|---|---|---|
-| Albedo | BC7, sRGB | The winning material's albedo; alpha is opaque |
-| Normal | BC5, linear | The unit gradient in the prototype's frame, as an octahedral pair |
-| Occlusion | BC4, linear | One minus the weighted occlusion of four probes along the normal, one to four cells out |
-| Material | R8, linear, uncompressed | The winning material id, an identity that is never blended or compressed lossily |
-| Emission | BC6H, linear | The winning material's linear albedo times its emissive strength, in half precision, which may exceed one |
-
-A texel shared by two quads, on a corner or a shared edge, is sampled once.
-`SdfBakedTexture.PlanFor` is the one statement of each usage's format, color
-space and mip filter.
-
-The octahedral pair (`OctahedralNormal` in `Puck.Assets.Textures`) stores any
-direction in two channels: the direction projects onto the octahedron
-`|x| + |y| + |z| = 1`, the lower half folds across the diagonals, and the decode
-reconstructs `z` and normalizes. It holds object-space normals, which point every
-way, where a tangent-space `z = sqrt(1 - x² - y²)` could not; one pair of 8-bit
-codes stays within about a degree of the direction it stores.
-
-**Mips are tile-aware.** Every texture is a mip chain whose levels halve with a
-2x2 box inside one tile, so no level mixes two tiles, and the chain ends at the
-level where each tile is one texel (`TextureMipChain`): three levels for a
-surface tile of four texels, and five for a standard impostor view of sixteen.
-Below that a texel would span several tiles, so no such level exists. A renderer
-sampling level `l` keeps each lookup inside its tile's `TileTexels >> l` texels,
-because a bilinear tap at a tile's edge otherwise reads the neighbor; that
-clamped per-tile filtering is chosen over gutters, which would break the 4x4
-block alignment. Each usage filters its own way:
-
-- albedo decodes its sRGB codes to linear light through the exact
-  `ImageSourceConversion.Srgb8ToLinear`, averages them weighted by alpha, and
-  encodes again through `LinearToSrgb8`;
-- normals decode, sum, and encode again, which renormalizes them;
-- occlusion and depth average their codes, and emission averages its halves in
-  double and rounds to the nearest half;
-- material identity keeps the id most of its four texels hold, the smallest id
-  winning a tie. A box footprint has no nearest texel, since all four are
-  equidistant from its center, and a blended id would name a material nothing
-  authored. An impostor's chain weights the vote by the albedo's coverage: a texel
-  the view's ray missed holds 0 and casts no vote, so a coarse texel over two
-  misses and two hits names the hits' material, and 0 only where all four miss.
-
-**Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
-are the same on every machine, and an exact decoder that is its test oracle.
-BC7 writes whichever of its modes decodes nearest: mode 6, mode 5 when a block's
-alpha runs independently of its color, or a partitioned mode, which splits the
-block into two or three subsets with their own endpoints, when the block holds
-colors no one line does. It stores a one-color block exactly. BC5 is two BC4
-blocks, and BC4 keeps the better of its two palettes. BC6H writes whichever of
-its one-region modes 11 to 14 or two-region modes 1 to 10 decodes nearest, the
-two-region modes splitting the block by one of the first 32 of BC7's two-subset
-partitions, and stores a one-value block exactly. On the codec laws' natural
-test image (gradients, noise and a hard-edged disc), BC4 decodes within 2 codes
-of the source (root-mean-square 0.63), BC5 within 8 (0.88), and BC7 within 10
-(2.2); BC6H stays within 8% of each value in smooth blocks and 23% in a corner
-block that ramps from about 0.001 to 1.24, a thousandfold range whose half bits
-bend away from any line two endpoints interpolate. From the
-second level down a block holds four
-or sixteen tiles; the filter never mixes them, but they share the block's
-endpoints, so compression error there is shared within those bounds.
-
-**The impostor** is octahedral: a grid of orthographic views, each marched one
-ray per texel through the evaluator's own march, covering every direction with +Y
-as the octahedron's pole, so a camera below a flying body is covered as well as
-one above a prop. It stores albedo with coverage in alpha (BC7), the normal as an
-octahedral pair (BC5; a miss holds the direction toward the view's camera), the
-hit's depth across the bounding sphere (BC4; a miss is the far side), and the
-light the hit's material emits, in the surface textures' linear half-precision
-form (BC6H; a miss emits none), so a placement drawn as its impostor keeps its
-glow. Each view is a tile of its chains, and the normal, depth and emission mips
-are weighted by the albedo's coverage, so empty texels never bend a silhouette's
-normals, pull its depth or dim its glow. A single billboard is right from one direction only, which no orbiting or
-overhead camera satisfies.
-| Tier | Cells a side | Impostor |
-|---|---|---|
-| `Preview` | 12 | 4 x 4 views of 8 x 8 texels |
-| `Standard` | 32 | 8 x 8 views of 16 x 16 texels |
-
-`SdfBakeWork` counts every evaluation a bake made, split by mesh, textures and
-impostor, and the rays, vertices and triangles; a bake is judged by those counts,
-never by wall-clock time.
-
-A bake is the same bytes on every machine, which it must be: a pack built on one
-machine stands in for a bake made on another. Everything a bake reads from the
-field is fixed point. Every float it writes comes from scalar addition,
-subtraction, multiplication, division and square root, each correctly rounded,
-in a written order. No transcendental function is used, and no `Vector3`
-operation whose multiply-add the JIT may fuse. Albedo is sRGB-encoded by
-`ImageSourceConversion.LinearToSrgb8`, which compares the linear value with the
-exact decoded midpoints between codes rather than calling `Math.Pow`. The
-lattice's size comes from the creation's reach, taken without its flares:
-contact emits no flare, and a flare's extrema go through `MathF.Acos` and
-`MathF.Sin`. The mip filters and block encoders are integer arithmetic or scalar
-double arithmetic in a written order, and `TextureCodecLawTests` pins each
-encoder's bytes for a fixed image.
-
-A creation reaches the baker through `CreationBaker`, which emits it at its own
-origin and unit scale with `CreationStampEmitter.EmitFixed`, the emission contact
-reads. A bake therefore shows only what the fixed-point interpreter answers for:
-detail shapes, sweeps, text runs, noise relief, volumes, and the warp facets
-contact omits are absent, and a creation the interpreter refuses has no bake. A
-palette slot whose color is bound to a state cell bakes the fallback gray, though
-its material texels still name the slot. How bakes are keyed, shipped in a
-build's bake pack, and baked on a device is in
-[creation bakes](../../../architecture/worlds.md#creation-bakes).
-
-Both backends upload a bake's textures as they are stored. `GpuPixelFormat`
-names BC4, BC5, BC6H (unsigned) and BC7, and the one image upload,
-`IGpuSurfaceUpload.Upload`, takes a whole mip chain: every level, largest first,
-tightly packed and back to back, rows of 4x4 blocks for a compressed format
-(`GpuPixelFormats.ChainByteLength`). The view it returns covers every level, and
-the samplers `IGpuBindings.CreateSampler` makes select levels by point and clamp
-no level away, so an explicit level reaches the level asked for on both
-backends. A device that cannot sample a compressed format refuses the upload by
-name: a Vulkan device created without `textureCompressionBC`, and a Direct3D 12
-device whose format support lacks two-dimensional sampling. BC7 albedo is
-sampled as stored codes, without sRGB decode. `BakeSamplingDeviceLawTests`
-samples each probe texel of the bake sampling fixture on Vulkan, Direct3D 12
-hardware and WARP and holds it to the CPU decoder.
-
-No view draws a prototype bake: every view renders the residency's own baked
-meshes ([the bake](frame-rendering.md#the-bake)). Prototype bakes are compiled
-into a build's bake pack and held, and a presentation resolves the ones its cache
-lacks in the background (`WorldBakeSchedule`), as
-[creation bakes](../../../architecture/worlds.md#creation-bakes) describes.
-
-The engine still draws a textured mesh or an impostor card when a frame's mesh
-draws carry one: the SDF tables pack textured meshes into five mesh atlases
-(`SdfMeshAtlas`) and impostors into their own (`SdfMeshImpostor`), the mesh
-pass draws a card through its impostor pipeline, and the light stage samples
-the atlases (`frame/sdf-mesh-textures.hlsli`,
-`frame/sdf-mesh-impostor-surface.hlsli`). No emitter produces such a draw
-today. `MeshTextureDeviceLawTests` holds the texture reads to the CPU decoders
-on Vulkan, Direct3D 12 hardware and WARP, and `SdfMeshAtlasLawTests` holds the
-packing.
-
 ---
 
 ## Related resources
@@ -376,9 +201,9 @@ packing.
   targets: the carve ladders that measured both were removed and
   are recorded nowhere else. The motivation for the brick survives in this
   chapter; the numbers that sized it do not.
-- The prototype baker and its key and cache: `SdfBaker` in
-  [`src/Puck.SignedDistance/Baking`](../../../../src/Puck.SignedDistance/Baking/),
-  `CreationBaker` in [`src/Puck.World.Authoring`](../../../../src/Puck.World.Authoring/),
-  and [creation bakes](../../../architecture/worlds.md#creation-bakes).
+- The frame's mesh bake: [the bake](frame-rendering.md#the-bake),
+  `SdfMeshPathBake` in [`src/Puck.SdfVm`](../../../../src/Puck.SdfVm/), and
+  its lattice and contouring, `SdfSampledLattice` and `SdfDualContouring`, in
+  [`src/Puck.SignedDistance/Baking`](../../../../src/Puck.SignedDistance/Baking/).
 - The baked-volume family rejection and its single reconsider-trigger:
   [Rejected and conditional SDF techniques](../reference/negative-results-and-rejections.md).
