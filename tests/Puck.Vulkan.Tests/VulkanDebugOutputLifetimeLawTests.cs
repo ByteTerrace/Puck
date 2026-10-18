@@ -73,7 +73,7 @@ public sealed unsafe class VulkanDebugOutputLifetimeLawTests {
         instance.Dispose();
     }
     private static VulkanInstance Create(RecordingApi api, StringWriter writer) => new VulkanInstanceFactory(instanceApi: api).Create(
-        applicationName: "writer-law", debugOutput: writer, displayKind: NativeDisplayKind.Win32, enableValidation: true
+        applicationName: "writer-law", debugOutput: writer, displayKind: NativeDisplayKind.Win32, validation: GpuValidation.Basic
     );
     private static void Collect() {
         GC.Collect();

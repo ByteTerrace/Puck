@@ -1,4 +1,5 @@
 using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Networking;
 using Puck.World.Machines;
 using Puck.World.Server;
@@ -38,9 +39,6 @@ public sealed record WorldBootInputs(
     /// as a first console line <c>world.control start</c> would; <see langword="false"/> leaves it closed until a
     /// console line starts it.</summary>
     public bool Control { get; init; }
-    /// <summary>Gets whether the backend enables its validation layers when it creates the device
-    /// (<c>--debug-layers</c>).</summary>
-    public bool DebugLayers { get; init; }
     /// <summary>Gets the service-extension configuration (<c>--extensions-config-file</c>), or
     /// <see langword="null"/> for none.</summary>
     public WorldExtensionConfiguration? ExtensionsConfiguration { get; init; }
@@ -59,4 +57,7 @@ public sealed record WorldBootInputs(
     public string? StorageUserId { get; init; }
     /// <summary>Gets whether the headless tick host runs without pacing (<c>--unpaced</c>).</summary>
     public bool Unpaced { get; init; }
+    /// <summary>Gets how much of its backend's validation the device is created with (<c>--debug-layers
+    /// [basic|full]</c>); <see cref="GpuValidation.Off"/> when the flag is absent.</summary>
+    public GpuValidation Validation { get; init; }
 }

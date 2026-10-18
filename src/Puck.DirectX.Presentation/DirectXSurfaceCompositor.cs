@@ -293,7 +293,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         WaitForFrameSlot();
 
         // The full-drain WaitIdle this replaced also flushed the D3D12 debug-layer message queue every frame
-        // (opt-in via GpuDeviceOptions.DebugLayers); the per-slot wait above has nothing to do with that queue, so the drain
+        // (opt-in via GpuDeviceOptions.Validation); the per-slot wait above has nothing to do with that queue, so the drain
         // is called directly to keep the same per-frame cadence.
         deviceContext.DrainDebugMessages();
 

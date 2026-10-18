@@ -208,10 +208,15 @@ the recording document, and one capability-disclosure line per mounted addon. Th
 flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
-because changing APIs rebuilds the whole render host. `--debug-layers` creates
-the device with its backend's validation layer (on Vulkan with synchronization
-validation), printing `[vulkan-debug]` or
-`[d3d12-debug]` lines; `puck canary --debug-layers` and `puck qualify` pass it.
+because changing APIs rebuilds the whole render host. `--debug-layers [basic|full]`
+creates the device with its backend's validation, printing `[vulkan-debug]` or
+`[d3d12-debug]` lines and naming the device's objects. A bare flag is `basic`, the
+API layer (on Vulkan with synchronization validation), which `puck canary
+--debug-layers` and `puck qualify` pass; `full` adds the GPU's own checks
+(Direct3D 12 GPU-based validation, Vulkan GPU-assisted validation and best
+practices), at the cost of minutes of pipeline instrumentation and much slower
+frames ([Direct3D 12](../../docs/rendering/directx.md#validation),
+[Vulkan](../../docs/rendering/vulkan.md#validation)).
 
 `--help` (or `-h`) and `--version` exit before host setup: they do not load a
 world, open a window, or initialize storage. Use `--version` alone; the parser

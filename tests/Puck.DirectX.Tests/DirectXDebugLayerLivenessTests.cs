@@ -16,7 +16,7 @@ public sealed class ConsoleErrorCollection {
 /// <summary>
 /// Proves the Direct3D 12 debug drain is live, so a World run with <c>--debug-layers</c> that prints no
 /// <c>[d3d12-debug]</c> line is evidence rather than silence. A device context created with the debug layer on, as the
-/// presenter registration creates one under <c>GpuDeviceOptions.DebugLayers</c>, receives one deliberate violation: a committed texture that is neither a render target
+/// presenter registration creates one under <c>GpuDeviceOptions.Validation</c>, receives one deliberate violation: a committed texture that is neither a render target
 /// nor a depth stencil, created with an optimized clear value. The runtime refuses the creation, so no resource exists,
 /// and the debug layer stores a message that <see cref="DirectXDeviceContext.DrainDebugMessages"/> prints.
 /// <para>The live-object report at teardown is held the same way: an object still alive when the context releases the

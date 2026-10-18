@@ -8,8 +8,8 @@ namespace Puck.Cli;
 /// loader's general and performance notices are not. A device asked for the layer says whether it is live: a Vulkan
 /// instance writes <c>[vulkan] validation layer live</c>, or that it has no debug messenger, and a Direct3D 12 device
 /// writes <c>[d3d12] debug layer live</c>, or that it has no info queue. A run that never says its layer is live
-/// validated nothing. The one message the layer raises by design, a pipeline-library miss, never reaches standard
-/// error: the Direct3D 12 debug drain leaves it out where it reads the queue, so no reader here keeps an allowlist of
+/// validated nothing. The messages the layer raises by design, a pipeline-library miss and the full level's startup notice, never reach standard
+/// error: the Direct3D 12 debug drain leaves them out where it reads the queue, so no reader here keeps an allowlist of
 /// its own.
 /// </summary>
 public static class DebugLayerOutput {

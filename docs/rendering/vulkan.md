@@ -588,16 +588,35 @@ throwing. The first query is retained for that device; an unavailable extension
 or failed query is reported without hiding the original loss. Vendor binary
 crash dumps are not enabled.
 
-`--debug-layers` creates the instance with `VK_LAYER_KHRONOS_validation`, and
-the same flag turns on the layer's synchronization validation: the create-info
-chains a `VkValidationFeaturesEXT` enabling
-`VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT`, declared by the
-layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
+`--debug-layers [basic|full]` (`GpuValidation`) creates the instance with
+`VK_LAYER_KHRONOS_validation`, and every level turns on the layer's
+synchronization validation: the create-info chains a `VkValidationFeaturesEXT`
+enabling `VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT`, declared
+by the layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
 (`VulkanNativeInstanceApi.LinkCreateChain`). A missing barrier, or one whose
 stages or accesses do not cover a read-after-write, write-after-read or
 write-after-write, then prints a `[vulkan-debug] validation` line naming the
-`SYNC-HAZARD-*` it found. An instance created with validation prints
-`[vulkan] validation layer live` once its debug messenger exists, or
+`SYNC-HAZARD-*` it found. A bare flag is `basic`, the level every verb that
+boots a World under its layer passes.
+
+`full` adds `VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT` and
+`VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT` to the same features, and
+chains a `VkLayerSettingsCreateInfoEXT` (the layer's `VK_EXT_layer_settings`)
+setting `validate_best_practices_nvidia`. GPU-assisted validation instruments
+every shader for out-of-bounds access and shared-memory races and forces the
+device features it needs (buffer device address, 64-bit integers, the memory
+model); the layer prints those adjustments, and that core and GPU-assisted
+validation together run slowly, as `validation WARNING` lines at device
+creation. Best-practices advice prints as `[vulkan-debug] best-practices`
+lines: the callback tells it from a finding by its `BestPractices` message
+identifier (`VulkanNativeInstanceApi.IsBestPractice`), so advice is triaged
+rather than failing a run, while a GPU-assisted finding prints as a
+`validation ERROR` like any other. It is a hunting level that no verb or gate
+uses.
+
+An instance created with validation prints
+`[vulkan] validation layer live: … (basic: synchronization)` or `… (full: …)`
+once its debug messenger exists, or
 `[vulkan] validation layer requested but not live` when it has none, so a run
 with no message can be told from one the layer never watched. Both messengers
 (the one chained into `vkCreateInstance` and the standalone one) carry the
@@ -618,7 +637,8 @@ pool. A name holds no handle, counter or clock, so an object has the same name
 on every run.
 
 `VulkanGpuObjectNaming` applies names through `vkSetDebugUtilsObjectNameEXT`,
-and only when the device was created with validation (`--debug-layers`) and
+and only when the renderer names objects (`VulkanRendererOptions.NameObjects`,
+which any `--debug-layers` level turns on) and the instance has
 `VK_EXT_debug_utils`. Otherwise naming returns before it formats anything, so a
 normal run builds no strings. The validation layer prints the name in
 brackets after the handle, so a leak report reads

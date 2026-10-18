@@ -140,7 +140,7 @@ public sealed class VulkanRenderer(
             m_instance = instanceFactory.Create(
                 applicationName: options.ApplicationName,
                 displayKind: binding.DisplayKind,
-                enableValidation: options.EnableValidation
+                validation: options.Validation
             );
             m_surface = surfaceFactory.Create(
                 binding: binding,

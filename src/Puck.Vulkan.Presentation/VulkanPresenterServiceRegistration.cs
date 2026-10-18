@@ -66,12 +66,12 @@ public static class VulkanPresenterServiceRegistration {
         var queueSubmitter = serviceProvider.GetRequiredService<VulkanQueueSubmitter>();
         var renderPassApi = serviceProvider.GetRequiredService<IVulkanRenderPassApi>();
         var shaderModuleFactory = serviceProvider.GetRequiredService<IVulkanShaderModuleFactory>();
-        var validation = serviceProvider.GetRequiredService<VulkanRendererOptions>().EnableValidation;
+        var nameObjects = serviceProvider.GetRequiredService<VulkanRendererOptions>().NameObjects;
 
         return deviceContext => {
             var naming = new VulkanGpuObjectNaming(
                 deviceContext: deviceContext,
-                isEnabled: validation
+                isEnabled: nameObjects
             );
 
             return GpuCreationFaults.Wrap(faults: creationFaults, services: new GpuDeviceServices {
@@ -246,7 +246,8 @@ public static class VulkanPresenterServiceRegistration {
         // before calling this to override both.
         services.TryAddSingleton(implementationFactory: static sp => new VulkanRendererOptions {
             ApplicationName = AppDomain.CurrentDomain.FriendlyName,
-            EnableValidation = (sp.GetService<GpuDeviceOptions>()?.DebugLayers ?? false),
+            NameObjects = (sp.GetService<GpuDeviceOptions>()?.NameObjects ?? false),
+            Validation = (sp.GetService<GpuDeviceOptions>()?.Validation ?? GpuValidation.Off),
         });
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).

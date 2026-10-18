@@ -189,11 +189,17 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// and, at teardown, every object the device still holds. <see langword="null"/> writes to the process's standard
     /// error at the time of writing, where a run's validation checks read them.</summary>
     public TextWriter? DebugOutput { get; init; }
-    /// <summary>Gets whether the device is created with the Direct3D 12 debug layer, whose messages
-    /// <see cref="DrainDebugMessages"/> surfaces and whose live-object report <see cref="Dispose"/> surfaces. Off by
-    /// default: on some configurations the layer makes device creation fail, and it cannot be turned off once enabled
-    /// in a process. The presenter registration sets it from <c>GpuDeviceOptions.DebugLayers</c>.</summary>
-    public bool EnableDebugLayer { get; init; }
+    /// <summary>Gets how much validation the device is created with. <see cref="GpuValidation.Basic"/> enables the
+    /// Direct3D 12 debug layer, whose messages <see cref="DrainDebugMessages"/> surfaces and whose live-object report
+    /// <see cref="Dispose"/> surfaces; <see cref="GpuValidation.Full"/> adds GPU-based validation, with state tracking,
+    /// and synchronized command-queue validation. Off by default: on some configurations the layer makes device creation
+    /// fail, and it cannot be turned off once enabled in a process. The presenter registration sets it from
+    /// <c>GpuDeviceOptions.Validation</c>.</summary>
+    public GpuValidation Validation { get; init; }
+    /// <summary>Gets whether the device's objects are named (<see cref="DirectXGpuObjectNaming"/>), so the debug layer's
+    /// messages, a removal report's allocations and a GPU capture show each object's name. The presenter registration
+    /// sets it from <c>GpuDeviceOptions.NameObjects</c>.</summary>
+    public bool NameObjects { get; init; }
     /// <inheritdoc />
     public DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets whether the created device reports through the debug layer's info queue, so its messages and its
@@ -236,23 +242,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        // Enable the Direct3D 12 debug layer BEFORE device creation so it validates this device and feeds the
-        // [d3d12-debug] drain. OPT-IN (EnableDebugLayer): on some configurations
-        // (observed on a Windows 11 build 26200 / RTX 4070 with a mismatched Graphics Tools layer) EnableDebugLayer
-        // poisons the process so the very next D3D12CreateDevice fails with DXGI_ERROR_DEVICE_RESET (0x887A0007) —
-        // and the layer cannot be turned off once enabled in a process, so there is no in-process recovery.
-        // Defaulting off keeps device creation working everywhere.
-        if (EnableDebugLayer) {
-            void* debugInterface;
-            var debugIid = ID3D12Debug.IID_Guid;
-
-            if (PInvoke.D3D12GetDebugInterface(
-                ppvDebug: &debugInterface,
-                riid: in debugIid
-            ).Succeeded) {
-                ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
-                _ = ((IUnknown*)debugInterface)->Release();
-            }
+        // The debug layer is a process-wide setting read at device creation, so it precedes it. It is opt-in: on some configurations (a Windows 11 build 26200 / RTX 4070 with a mismatched Graphics Tools layer)
+        // enabling it poisons the process so the next D3D12CreateDevice fails with DXGI_ERROR_DEVICE_RESET
+        // (0x887A0007), and it cannot be turned off once enabled in a process.
+        if (Validation != GpuValidation.Off) {
+            EnableDebugLayer(full: (Validation == GpuValidation.Full));
         }
 
         // The device bring-up. No Direct3D 12 runtime, no adapter at the feature level, a device creation the driver
@@ -308,9 +302,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         // A requested layer states whether it is live, so a validation run that prints no [d3d12-debug] line can tell a
         // clean run from one the layer never watched. The prefix is not [d3d12-debug], which a run's checks fail on.
-        if (EnableDebugLayer) {
+        if (Validation != GpuValidation.Off) {
             (DebugOutput ?? Console.Error).WriteLine(value: ((0 != m_infoQueue)
-                ? "[d3d12] debug layer live: the device reports through its info queue"
+                ? ((Validation == GpuValidation.Full)
+                    ? "[d3d12] debug layer live: the device reports through its info queue (full: GPU-based validation with state tracking, synchronized queue validation)"
+                    : "[d3d12] debug layer live: the device reports through its info queue (basic)")
                 : "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"));
         }
 
@@ -359,6 +355,34 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 )
             );
         }
+    }
+    // Enables the debug layer and, at the full level, GPU-based validation (state tracking stays on, its default) and
+    // synchronized command-queue validation. A runtime without the layer leaves it off, and the live line says so.
+    private static void EnableDebugLayer(bool full) {
+        void* debugInterface;
+        var debugIid = ID3D12Debug.IID_Guid;
+
+        if (PInvoke.D3D12GetDebugInterface(
+            ppvDebug: &debugInterface,
+            riid: in debugIid
+        ).Failed) {
+            return;
+        }
+
+        ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
+
+        var debug1Iid = ID3D12Debug1.IID_Guid;
+
+        if (full && ((IUnknown*)debugInterface)->QueryInterface(
+            ppvObject: out var debug1,
+            riid: in debug1Iid
+        ).Succeeded) {
+            ((ID3D12Debug1*)debug1)->SetEnableGPUBasedValidation(Enable: true);
+            ((ID3D12Debug1*)debug1)->SetEnableSynchronizedCommandQueueValidation(Enable: true);
+            _ = ((IUnknown*)debug1)->Release();
+        }
+
+        _ = ((IUnknown*)debugInterface)->Release();
     }
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
     // descriptor heaps and the device, without a GPU drain, leaving the context with no device.
@@ -457,7 +481,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     public void Persist() => PipelineLibrary?.Persist();
     /// <summary>Writes any Direct3D 12 debug-layer messages accumulated since the last drain to <see cref="DebugOutput"/>, then
     /// clears them. A no-op when the debug layer / info queue is unavailable (the default; opt in with
-    /// <see cref="EnableDebugLayer"/>). Also called at the end of <see cref="WaitIdle"/>; callers that no longer drain the
+    /// <see cref="Validation"/>). Also called at the end of <see cref="WaitIdle"/>; callers that no longer drain the
     /// whole device every frame (e.g. a per-ring-slot presenter) call this directly to keep the same per-frame
     /// debug-message cadence.</summary>
     public void DrainDebugMessages() =>
@@ -501,9 +525,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 );
 
                 // A pipeline library lookup that misses is the cache working as designed, counted as
-                // gpu.pipeline-cache.misses; the layer warns on every one, so it is the one message not reported.
+                // gpu.pipeline-cache.misses; the layer warns on every one, so it is not reported. Nor is the notice that
+                // the full level's GPU-based validation is on, which the live line already states.
                 if (
                     (message->ID == D3D12_MESSAGE_ID.D3D12_MESSAGE_ID_LOADPIPELINE_NAMENOTFOUND) ||
+                    (message->ID == D3D12_MESSAGE_ID.D3D12_MESSAGE_ID_CREATEDEVICE_DEBUG_LAYER_STARTUP_OPTIONS) ||
                     (live && (message->ID == D3D12_MESSAGE_ID.D3D12_MESSAGE_ID_LIVE_DEVICE))
                 ) {
                     continue;
@@ -573,8 +599,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
     /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
-    /// debug layer is NOT re-enabled here (it cannot be toggled per-process and can poison creation on some configs);
-    /// <see cref="EnsureCreated"/> applies the same opt-in gate it always does. A device that cannot be created yet is
+    /// debug layer is applied again by the same creation path, and is process-wide, so it cannot change between devices.
+    /// A device that cannot be created yet is
     /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
     /// waits and calls again.
     /// <para>The one retry rule every Direct3D 12 host follows: a rebuild that fails in Direct3D 12 itself, whether the

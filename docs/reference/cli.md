@@ -1266,13 +1266,13 @@ the projects' `bin` directories (see [where the World artifact is
 built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
 leg on the named entry assembly instead, such as a published package's, and
 builds nothing. `--debug-layers` boots the World of every leg that names a
-backend, windowed or offscreen, with `--debug-layers`, its backend's validation
+backend, windowed or offscreen, with `--debug-layers`, its backend's basic validation
 layer, and then fails any such leg
 whose stderr holds a validation message, naming the first: a
 `[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
 live-object report included. The Vulkan loader's `general` notices do not
-count, and the Direct3D 12 drain never prints the one message the layer raises
-by design, a pipeline-library miss. A leg must also say its backend's layer is
+count, and the Direct3D 12 drain never prints the messages the layer raises
+by design, a pipeline-library miss and the full level's startup notice. A leg must also say its backend's layer is
 live: a Vulkan World prints `[vulkan] validation layer live` and a Direct3D 12
 World `[d3d12] debug layer live`. A leg that never prints its backend's live
 line, or prints `[vulkan] validation layer requested but not live` or

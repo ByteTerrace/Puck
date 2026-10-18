@@ -969,7 +969,8 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationInstance: hostSettings);
         // Read by either backend's registration when it creates the device; a headless boot creates none.
         services.AddSingleton(implementationInstance: new GpuDeviceOptions {
-            DebugLayers = inputs.DebugLayers,
+            NameObjects = (inputs.Validation != GpuValidation.Off),
+            Validation = inputs.Validation,
         });
         // Registered before the launcher terminal block (reached through AddWorldBootShape) so the launcher's
         // TryAddSingleton<LauncherOptions> defers to this one in every boot shape: --exit-after-seconds applies to the

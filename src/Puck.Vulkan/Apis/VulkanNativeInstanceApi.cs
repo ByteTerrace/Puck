@@ -79,6 +79,14 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return m_enumerateInstanceExtensionProperties;
         }
     }
+    /// <summary>Returns whether a validation-layer message is best-practices advice, whose message identifier the layer
+    /// starts with <c>BestPractices</c> (NVIDIA's included, as <c>BestPractices-NVIDIA-…</c>).</summary>
+    /// <param name="messageIdName">A pointer to the message's null-terminated UTF-8 identifier, or zero for none.</param>
+    /// <returns><see langword="true"/> for a best-practices message.</returns>
+    public static bool IsBestPractice(nint messageIdName) => (
+        (0 != messageIdName) &&
+        MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((byte*)messageIdName)).StartsWith(value: "BestPractices"u8)
+    );
     // The VK_EXT_debug_utils callback: it writes each validation message to the instance's writer (userData, through
     // VulkanDebugOutput), or to the process's standard error when it has none, mirroring the Direct3D 12 info-queue
     // drain, and returns VK_FALSE so the triggering Vulkan call still proceeds.
@@ -98,13 +106,16 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             ));
 
             // The type leads the line so a reader can tell a validation finding from the loader's own general
-            // notices, such as a duplicate third-party layer on the machine, which are not about this program.
-            var type = (((messageTypes & 0x2u) != 0u)
-                ? "validation"
-                : (((messageTypes & 0x4u) != 0u)
-                    ? "performance"
-                    : "general"
-            ));
+            // notices, such as a duplicate third-party layer on the machine, which are not about this program, and from
+            // the full level's best-practices advice, which the layer raises under its validation type.
+            var type = (IsBestPractice(messageIdName: callbackData->MessageIdName)
+                ? "best-practices"
+                : (((messageTypes & 0x2u) != 0u)
+                    ? "validation"
+                    : (((messageTypes & 0x4u) != 0u)
+                        ? "performance"
+                        : "general"
+            )));
 
             VulkanDebugOutput.Writer(userData: ((nint)userData)).WriteLine(value: $"[vulkan-debug] {type} {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
         }
@@ -135,31 +146,51 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     }
 
     /// <summary>Fills a create chain and links it for <c>vkCreateInstance</c>'s <c>pNext</c> when validation is on: the
-    /// validation features, enabling synchronization validation, then a messenger create-info, so the layer's messages
-    /// raised during <c>vkCreateInstance</c> and <c>vkDestroyInstance</c>, which the standalone messenger cannot see,
-    /// also reach the console. With validation off it links nothing.</summary>
+    /// validation features, enabling synchronization validation and, at <see cref="GpuValidation.Full"/>, GPU-assisted
+    /// validation and the best-practices checks; at that level the layer settings turning on NVIDIA's best practices;
+    /// then a messenger create-info, so the layer's messages raised during <c>vkCreateInstance</c> and
+    /// <c>vkDestroyInstance</c>, which the standalone messenger cannot see, also reach the console. With validation off
+    /// it links nothing.</summary>
     /// <param name="chain">The chain to fill, at an address that stays valid until the create call returns.</param>
-    /// <param name="enableValidation">Whether the validation layer is enabled.</param>
+    /// <param name="validation">The validation level.</param>
     /// <param name="debugUserData">The <c>pUserData</c> the chained messenger hands its callback: a handle to the writer
     /// its messages go to (<see cref="VulkanDebugOutput"/>), or zero for the process's standard error.</param>
-    /// <returns>The chain's head, the validation features; zero when <paramref name="enableValidation"/> is
-    /// <see langword="false"/>.</returns>
+    /// <returns>The chain's head, the validation features; zero when <paramref name="validation"/> is
+    /// <see cref="GpuValidation.Off"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
-    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, bool enableValidation, nint debugUserData) {
+    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, GpuValidation validation, nint debugUserData) {
         if (null == chain) {
             throw new ArgumentNullException(paramName: nameof(chain));
         }
 
-        if (!enableValidation) {
+        if (validation == GpuValidation.Off) {
             return 0;
         }
 
+        var full = (validation == GpuValidation.Full);
+
         chain->EnabledFeature = VulkanInstanceCreateChain.SynchronizationValidation;
+        chain->SecondEnabledFeature = VulkanInstanceCreateChain.GpuAssistedValidation;
+        chain->ThirdEnabledFeature = VulkanInstanceCreateChain.BestPractices;
+        chain->True = 1;
         chain->Messenger = BuildMessengerCreateInfo(userData: debugUserData);
-        chain->ValidationFeatures = new VkValidationFeaturesExt {
-            EnabledValidationFeatureCount = 1,
-            EnabledValidationFeatures = ((nint)(&chain->EnabledFeature)),
+        chain->NvidiaBestPractices = new VkLayerSettingExt {
+            LayerName = ((nint)Unsafe.AsPointer(value: ref MemoryMarshal.GetReference(span: "VK_LAYER_KHRONOS_validation"u8))),
+            SettingName = ((nint)Unsafe.AsPointer(value: ref MemoryMarshal.GetReference(span: "validate_best_practices_nvidia"u8))),
+            Type = VulkanInstanceCreateChain.LayerSettingBool32,
+            ValueCount = 1,
+            Values = ((nint)(&chain->True)),
+        };
+        chain->LayerSettings = new VkLayerSettingsCreateInfoExt {
             Next = ((nint)(&chain->Messenger)),
+            SettingCount = 1,
+            Settings = ((nint)(&chain->NvidiaBestPractices)),
+            StructureType = VulkanInstanceCreateChain.LayerSettingsStructureType,
+        };
+        chain->ValidationFeatures = new VkValidationFeaturesExt {
+            EnabledValidationFeatureCount = (full ? 3U : 1U),
+            EnabledValidationFeatures = ((nint)(&chain->EnabledFeature)),
+            Next = (full ? ((nint)(&chain->LayerSettings)) : ((nint)(&chain->Messenger))),
             StructureType = VulkanInstanceCreateChain.ValidationFeaturesStructureType,
         };
 
@@ -225,7 +256,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             Next = LinkCreateChain(
                 chain: &chain,
                 debugUserData: request.DebugUserData,
-                enableValidation: request.EnableValidation
+                validation: request.Validation
             ),
             StructureType = VkStructureTypeInstanceCreateInfo,
         };

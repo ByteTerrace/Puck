@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Windowing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -8,21 +10,21 @@ using Xunit;
 
 namespace Puck.Vulkan.Tests;
 
-/// <summary>Pins, without a loader, that a Vulkan instance requested with the validation layer turns synchronization
-/// validation on: the chain <c>vkCreateInstance</c>'s create-info carries leads with a <c>VkValidationFeaturesEXT</c>
-/// enabling <c>VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT</c> and ends with the messenger, the
-/// factory enables the layer's <c>VK_EXT_validation_features</c> that declares it, and an instance requested without
-/// the layer carries neither.</summary>
+/// <summary>Pins, without a loader, what each validation level asks the layer for: the chain <c>vkCreateInstance</c>'s
+/// create-info carries leads with a <c>VkValidationFeaturesEXT</c> enabling synchronization validation, and at the full
+/// level GPU-assisted validation and best practices with a <c>VkLayerSettingsEXT</c> turning on NVIDIA's best
+/// practices, and ends with the messenger; the factory enables the layer's extensions that declare them; an instance
+/// requested without the layer carries none of it.</summary>
 public sealed unsafe class VulkanInstanceCreateChainLawTests {
     private const uint MessengerStructureType = 1000128004;
 
     [Fact]
-    public void AValidatedInstanceChainsSynchronizationValidationBeforeTheMessenger() {
+    public void ABasicInstanceChainsSynchronizationValidationBeforeTheMessenger() {
         VulkanInstanceCreateChain chain = default;
         var head = VulkanNativeInstanceApi.LinkCreateChain(
             chain: &chain,
             debugUserData: 0x5EED,
-            enableValidation: true
+            validation: GpuValidation.Basic
         );
         var features = ((VkValidationFeaturesExt*)head);
 
@@ -42,9 +44,124 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
             actual: features->DisabledValidationFeatureCount,
             expected: 0U
         );
+        AssertMessenger(messenger: ((VkDebugUtilsMessengerCreateInfoExt*)features->Next));
+    }
+    [Fact]
+    public void AFullInstanceAddsGpuAssistedValidationBestPracticesAndNvidiasSetting() {
+        VulkanInstanceCreateChain chain = default;
+        var features = ((VkValidationFeaturesExt*)VulkanNativeInstanceApi.LinkCreateChain(
+            chain: &chain,
+            debugUserData: 0x5EED,
+            validation: GpuValidation.Full
+        ));
+        var enabled = new ReadOnlySpan<uint>(
+            length: ((int)features->EnabledValidationFeatureCount),
+            pointer: ((void*)features->EnabledValidationFeatures)
+        );
 
-        var messenger = ((VkDebugUtilsMessengerCreateInfoExt*)features->Next);
+        Assert.Equal(
+            actual: enabled.ToArray(),
+            expected: [VulkanInstanceCreateChain.SynchronizationValidation, VulkanInstanceCreateChain.GpuAssistedValidation, VulkanInstanceCreateChain.BestPractices]
+        );
 
+        var settings = ((VkLayerSettingsCreateInfoExt*)features->Next);
+
+        Assert.Equal(
+            actual: settings->StructureType,
+            expected: VulkanInstanceCreateChain.LayerSettingsStructureType
+        );
+        Assert.Equal(
+            actual: settings->SettingCount,
+            expected: 1U
+        );
+
+        var setting = ((VkLayerSettingExt*)settings->Settings);
+
+        Assert.Equal(
+            actual: Marshal.PtrToStringUTF8(ptr: setting->LayerName),
+            expected: VulkanInstanceCreateChain.ValidationLayer
+        );
+        Assert.Equal(
+            actual: Marshal.PtrToStringUTF8(ptr: setting->SettingName),
+            expected: VulkanInstanceCreateChain.NvidiaBestPracticesSetting
+        );
+        Assert.Equal(
+            actual: (setting->Type, setting->ValueCount, *((uint*)setting->Values)),
+            expected: (VulkanInstanceCreateChain.LayerSettingBool32, 1U, 1U)
+        );
+        AssertMessenger(messenger: ((VkDebugUtilsMessengerCreateInfoExt*)settings->Next));
+    }
+    [Fact]
+    public void AnInstanceWithoutValidationChainsNothing() {
+        VulkanInstanceCreateChain chain = default;
+
+        Assert.Equal(
+            actual: VulkanNativeInstanceApi.LinkCreateChain(
+                chain: &chain,
+                debugUserData: 0,
+                validation: GpuValidation.Off
+            ),
+            expected: 0
+        );
+    }
+    [Fact]
+    public void AnUnreachableChainIsRefused() =>
+        Assert.Throws<ArgumentNullException>(testCode: () => VulkanNativeInstanceApi.LinkCreateChain(
+            chain: null,
+            debugUserData: 0,
+            validation: GpuValidation.Basic
+        ));
+    [InlineData(GpuValidation.Off)]
+    [InlineData(GpuValidation.Basic)]
+    [InlineData(GpuValidation.Full)]
+    [Theory]
+    public void TheFactoryEnablesTheLayersExtensionsExactlyWithTheirLevel(GpuValidation validation) {
+        var api = new RequestRecordingApi();
+
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => new VulkanInstanceFactory(instanceApi: api).Create(
+            applicationName: "law",
+            displayKind: NativeDisplayKind.Win32,
+            validation: validation
+        ));
+
+        var request = api.Request!.Value;
+
+        Assert.Equal(
+            actual: request.Validation,
+            expected: validation
+        );
+        Assert.Equal(
+            actual: request.ExtensionNames.Contains(value: VulkanInstanceCreateChain.ValidationFeaturesExtension),
+            expected: (validation != GpuValidation.Off)
+        );
+        Assert.Equal(
+            actual: request.ExtensionNames.Contains(value: VulkanInstanceCreateChain.LayerSettingsExtension),
+            expected: (validation == GpuValidation.Full)
+        );
+        Assert.Equal(
+            actual: request.LayerNames.Contains(value: VulkanInstanceCreateChain.ValidationLayer),
+            expected: (validation != GpuValidation.Off)
+        );
+    }
+    [InlineData("BestPractices-NVIDIA-ClearColor-NotCompressed", true)]
+    [InlineData("BestPractices-vkCreateDevice-deprecated-extension", true)]
+    [InlineData("SYNC-HAZARD-WRITE-AFTER-READ", false)]
+    [InlineData(null, false)]
+    [Theory]
+    public void BestPracticesAdviceIsToldFromValidationByItsIdentifier(string? messageIdName, bool advice) {
+        var name = ((messageIdName is null) ? 0 : Marshal.StringToCoTaskMemUTF8(s: messageIdName));
+
+        try {
+            Assert.Equal(
+                actual: VulkanNativeInstanceApi.IsBestPractice(messageIdName: name),
+                expected: advice
+            );
+        } finally {
+            Marshal.FreeCoTaskMem(ptr: name);
+        }
+    }
+
+    private static void AssertMessenger(VkDebugUtilsMessengerCreateInfoExt* messenger) {
         Assert.Equal(
             actual: messenger->StructureType,
             expected: MessengerStructureType
@@ -63,49 +180,10 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
             expected: 0
         );
     }
-    [Fact]
-    public void AnInstanceWithoutValidationChainsNothing() {
-        VulkanInstanceCreateChain chain = default;
 
-        Assert.Equal(
-            actual: VulkanNativeInstanceApi.LinkCreateChain(
-                chain: &chain,
-                debugUserData: 0,
-                enableValidation: false
-            ),
-            expected: 0
-        );
-    }
-    [InlineData(true)]
-    [InlineData(false)]
-    [Theory]
-    public void TheFactoryEnablesTheLayersValidationFeaturesExactlyWithTheLayer(bool enableValidation) {
-        var api = new RequestRecordingApi();
-
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => new VulkanInstanceFactory(instanceApi: api).Create(
-            applicationName: "law",
-            displayKind: NativeDisplayKind.Win32,
-            enableValidation: enableValidation
-        ));
-
-        var request = api.Request!.Value;
-
-        Assert.Equal(
-            actual: request.EnableValidation,
-            expected: enableValidation
-        );
-        Assert.Equal(
-            actual: request.ExtensionNames.Contains(value: VulkanInstanceCreateChain.ValidationFeaturesExtension),
-            expected: enableValidation
-        );
-        Assert.Equal(
-            actual: request.LayerNames.Contains(value: VulkanInstanceCreateChain.ValidationLayer),
-            expected: enableValidation
-        );
-    }
-
-    // Advertises the validation features only from the validation layer, as the layer's manifest does, records the
-    // request it is handed and refuses the creation, so the factory's request is observed without a loader.
+    // Advertises the validation features and layer settings only from the validation layer, as the layer's manifest
+    // does, records the request it is handed and refuses the creation, so the factory's request is observed without a
+    // loader.
     private sealed class RequestRecordingApi : IVulkanInstanceApi {
         public VulkanInstanceCreateRequest? Request { get; private set; }
 
@@ -119,7 +197,7 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
         public void DestroyDebugMessenger(VulkanInstanceCommands instance, nint messengerHandle) { }
         public void DestroyInstance(VulkanInstanceCommands instance) { }
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
-            ((extensionName == VulkanInstanceCreateChain.ValidationFeaturesExtension) &&
+            ((extensionName is VulkanInstanceCreateChain.ValidationFeaturesExtension or VulkanInstanceCreateChain.LayerSettingsExtension) &&
             (layerName == VulkanInstanceCreateChain.ValidationLayer));
     }
 }

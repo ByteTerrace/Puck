@@ -73,7 +73,7 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
             .AddPuckAllocator()
             .AddVulkanNativeApis()
             .AddVulkanFactories()
-            .AddSingleton(implementationInstance: new VulkanRendererOptions { ApplicationName = applicationName, EnableValidation = validation })
+            .AddSingleton(implementationInstance: new VulkanRendererOptions { ApplicationName = applicationName, NameObjects = validation, Validation = (validation ? GpuValidation.Basic : GpuValidation.Off) })
             .AddSingleton(implementationInstance: new VulkanQueueSubmitter())
             .BuildServiceProvider();
 
@@ -92,7 +92,7 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
                     applicationName: applicationName,
                     debugOutput: debugOutput.Writer,
                     displayKind: NativeDisplayKind.Win32,
-                    enableValidation: validation
+                    validation: (validation ? GpuValidation.Basic : GpuValidation.Off)
                 );
             } catch (GpuDeviceUnavailableException exception) {
                 Assert.Skip(reason: (validation

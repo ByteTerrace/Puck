@@ -49,7 +49,7 @@ public sealed class VulkanValidationLivenessTests {
                 )).Create(
                     applicationName: nameof(VulkanValidationLivenessTests),
                     displayKind: NativeDisplayKind.Win32,
-                    enableValidation: true
+                    validation: GpuValidation.Basic
                 );
             } catch (GpuDeviceUnavailableException exception) {
                 Assert.Skip(reason: $"No Vulkan loader, driver or validation layer: {exception.Message}");
@@ -114,7 +114,7 @@ public sealed class VulkanValidationLivenessTests {
                 )).Create(
                     applicationName: nameof(VulkanValidationLivenessTests),
                     displayKind: NativeDisplayKind.Win32,
-                    enableValidation: true
+                    validation: GpuValidation.Basic
                 );
             } catch (GpuDeviceUnavailableException exception) {
                 Assert.Skip(reason: $"No Vulkan loader, driver or validation layer: {exception.Message}");

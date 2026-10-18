@@ -120,7 +120,7 @@ public sealed unsafe class SharedFenceLawTests {
             )).Create(
                 applicationName: nameof(SharedFenceLawTests),
                 displayKind: Puck.Abstractions.Windowing.NativeDisplayKind.Win32,
-                enableValidation: false
+                validation: GpuValidation.Off
             );
         } catch (GpuDeviceUnavailableException exception) {
             Assert.Skip(reason: $"no Vulkan loader or driver: {exception.Message}");

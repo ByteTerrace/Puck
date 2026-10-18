@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
@@ -78,11 +79,17 @@ var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
     DefaultValueFactory = static _ => null,
     Description = "Arms the world document's schedule section and names where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it.",
 };
-// A developer and qualification diagnostic, never world-authored: the validation layer of whichever backend the run
-// hosts on. `puck canary --debug-layers` and `puck qualify` (its profile's debugLayers) pass it to the Worlds they start.
-var debugLayersOption = new Option<bool>(name: "--debug-layers") {
-    DefaultValueFactory = static _ => false,
-    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
+// A developer and qualification diagnostic, never world-authored: the validation of whichever backend the run hosts
+// on. A bare flag is the basic level, which `puck canary --debug-layers` and `puck qualify` (its profile's debugLayers)
+// pass to the Worlds they start; `full` adds the GPU's own checks.
+var debugLayersOption = new Option<GpuValidation>(name: "--debug-layers") {
+    Arity = ArgumentArity.ZeroOrOne,
+    CustomParser = static result => WorldDiagnosticFlags.ParseValidation(
+        error: result.AddError,
+        token: ((result.Tokens.Count == 0) ? null : result.Tokens[0].Value)
+    ),
+    DefaultValueFactory = static _ => GpuValidation.Off,
+    Description = "Create the GPU device with its backend's validation. A bare flag (or 'basic') is the API layer: [vulkan-debug] lines with synchronization validation on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. 'full' adds GPU-based validation with state tracking and synchronized queue validation on Direct3D 12, GPU-assisted validation and best-practices checks (NVIDIA's included) on Vulkan, and makes pipeline creation and every frame much slower. Every level names the device's objects. On some Direct3D 12 configurations the layer makes device creation fail.",
 };
 var unpacedOption = new Option<bool>(name: "--unpaced") {
     DefaultValueFactory = static _ => false,
@@ -434,7 +441,11 @@ services.AddWorldBoot(inputs: new WorldBootInputs(
     CaptureDirectory = parseResult.GetValue(option: captureDirOption),
     ConnectionSubject = connectionSubject,
     Control = parseResult.GetValue(option: controlOption),
-    DebugLayers = parseResult.GetValue(option: debugLayersOption),
+    // The parser hands a bare flag its default rather than its custom parser, so a present flag with no value is read
+    // here as the basic level.
+    Validation = ((parseResult.GetResult(option: debugLayersOption) is { Implicit: false, Tokens.Count: 0 })
+        ? GpuValidation.Basic
+        : parseResult.GetValue(option: debugLayersOption)),
     ExtensionsConfiguration = extensionsConfiguration,
     FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
     ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),

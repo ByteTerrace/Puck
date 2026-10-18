@@ -441,6 +441,28 @@ value ahead of its reads, so neither device blocks.
 | `DirectXException` / `HResultExtensions` | The failing-`HRESULT`-to-exception seam every native call funnels through. |
 | `DirectXGpu*` (root and `Interop`) | The `Puck.Abstractions` GPU-contract implementations: compute pipelines, descriptor allocation, storage and geometry buffers, images, render passes and framebuffers, shared-surface export, queue submission. The image factories translate the neutral device context and pixel format once, through `DirectXGpuImageRequest.From`. |
 
+## Validation
+
+`DirectXDeviceContext.Validation` (`GpuValidation`, set from the World's
+`--debug-layers [basic|full]`) chooses the debug layer before the device is
+created; the layer is process-wide and cannot be turned off once on.
+
+- `basic`, a bare `--debug-layers`: the debug layer. The context drains its
+  info queue into `[d3d12-debug]` lines every frame and reports every object
+  the device still holds at teardown. Every verb that boots a World under its
+  layer uses this level.
+- `full`: `basic`, plus `ID3D12Debug1` GPU-based validation, with its resource
+  state tracking left on, and synchronized command-queue validation. The layer
+  patches every pipeline with validation code, so the debug world's bake takes
+  about two minutes on the RTX 2060 instead of six seconds, and every frame is
+  slower. It is a hunting level that no verb or gate uses.
+
+A device asked for either level writes `[d3d12] debug layer live: … (basic)` or
+`… (full: …)` once its info queue exists, or that the layer did not load. The
+drain leaves out two messages the layer raises by design: a pipeline-library
+miss, which `gpu.pipeline-cache.misses` counts, and the full level's
+startup-options notice, which the live line already states.
+
 ## Debug names
 
 Every object the backend creates carries a debug name taken from its creator,
@@ -453,7 +475,8 @@ pool. A name holds no handle, counter or clock, so an object has the same name
 on every run.
 
 `DirectXGpuObjectNaming` applies names through `ID3D12Object::SetName`, and
-only when the debug layer is on (`--debug-layers`). It names resources,
+only when the context names objects (`DirectXDeviceContext.NameObjects`, which
+any `--debug-layers` level turns on). It names resources,
 pipeline states, command allocators and command lists; views, descriptor pools
 and sets, and render passes are not Direct3D 12 objects, so they carry no
 name. Otherwise naming returns before it formats anything, so a normal run

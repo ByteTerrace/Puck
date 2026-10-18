@@ -53,7 +53,8 @@ public static class DirectXPresenterServiceRegistration {
             pipelineCacheStore: sp.GetService<GpuPipelineCacheStore>(),
             pipelineCacheWork: sp.GetRequiredKeyedService<GpuPipelineCacheWork>(serviceKey: PipelineCacheBackend)
         ) {
-            EnableDebugLayer = (sp.GetService<GpuDeviceOptions>()?.DebugLayers ?? false),
+            NameObjects = (sp.GetService<GpuDeviceOptions>()?.NameObjects ?? false),
+            Validation = (sp.GetService<GpuDeviceOptions>()?.Validation ?? GpuValidation.Off),
             Memory = sp.GetRequiredKeyedService<GpuDeviceMemoryWork>(serviceKey: PipelineCacheBackend),
         });
         services.TryAddSingleton<IDirectXDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());

@@ -35,8 +35,9 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     private readonly IVulkanInstanceApi m_instanceApi;
 
     // With validation on, the layer's own VK_EXT_validation_features declares the VkValidationFeaturesEXT the create
-    // chain carries (VulkanNativeInstanceApi.LinkCreateChain), which enables synchronization validation.
-    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind, bool enableValidation) {
+    // chain carries (VulkanNativeInstanceApi.LinkCreateChain), which enables synchronization validation; at the full
+    // level its VK_EXT_layer_settings declares the layer settings that turn on NVIDIA's best practices.
+    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind, GpuValidation validation) {
         string[] surfaceExtensions = displayKind switch {
             NativeDisplayKind.Vi => [.. CommonExtensions, "VK_NN_vi_surface",],
             NativeDisplayKind.Wayland => [.. CommonExtensions, "VK_KHR_wayland_surface",],
@@ -51,11 +52,17 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 extensionName: extension,
                 layerName: null
             )),
-            .. ((enableValidation && m_instanceApi.HasInstanceExtension(
+            .. (((validation != GpuValidation.Off) && m_instanceApi.HasInstanceExtension(
                 extensionName: VulkanInstanceCreateChain.ValidationFeaturesExtension,
                 layerName: VulkanInstanceCreateChain.ValidationLayer
             ))
                 ? [VulkanInstanceCreateChain.ValidationFeaturesExtension,]
+                : Array.Empty<string>()),
+            .. (((validation == GpuValidation.Full) && m_instanceApi.HasInstanceExtension(
+                extensionName: VulkanInstanceCreateChain.LayerSettingsExtension,
+                layerName: VulkanInstanceCreateChain.ValidationLayer
+            ))
+                ? [VulkanInstanceCreateChain.LayerSettingsExtension,]
                 : Array.Empty<string>()),
         ];
     }
@@ -64,13 +71,13 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     public VulkanInstance Create(
         string applicationName,
         NativeDisplayKind displayKind,
-        bool enableValidation,
+        GpuValidation validation,
         TextWriter? debugOutput = null
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: applicationName);
 
         // The writer both messengers report to, held for the instance's life; none with validation off.
-        var output = ((enableValidation && (debugOutput is not null))
+        var output = (((validation != GpuValidation.Off) && (debugOutput is not null))
             ? new VulkanDebugOutput(writer: debugOutput)
             : null);
         VulkanInstanceCreateRequest request;
@@ -83,12 +90,12 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 ApplicationName: applicationName,
                 DebugUserData: (output?.UserData ?? 0),
                 DisplayKind: displayKind,
-                EnableValidation: enableValidation,
+                Validation: validation,
                 ExtensionNames: BuildExtensionNames(
                     displayKind: displayKind,
-                    enableValidation: enableValidation
+                    validation: validation
                 ),
-                LayerNames: (enableValidation
+                LayerNames: ((validation != GpuValidation.Off)
                 ? ValidationLayers
                 : [])
             );
@@ -127,7 +134,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         try {
             // With validation on, register the debug-utils messenger so validation messages reach the console — parity
             // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
-            debugMessengerHandle = (enableValidation
+            debugMessengerHandle = ((validation != GpuValidation.Off)
                 ? m_instanceApi.CreateDebugMessenger(
                     instance: instance,
                     userData: (output?.UserData ?? 0)
@@ -138,9 +145,11 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             // A requested layer states whether it is live, so a validation run that prints no [vulkan-debug] line can
             // tell a clean run from one the layer never watched. The prefix is not [vulkan-debug], which a run's checks
             // fail on.
-            if (enableValidation) {
+            if (validation != GpuValidation.Off) {
                 VulkanDebugOutput.Writer(userData: (output?.UserData ?? 0)).WriteLine(value: ((0 != debugMessengerHandle)
-                    ? VulkanInstance.ValidationLiveLine
+                    ? ((validation == GpuValidation.Full)
+                        ? $"{VulkanInstance.ValidationLiveLine} (full: synchronization, GPU-assisted, best practices with NVIDIA's{(request.ExtensionNames.Contains(value: VulkanInstanceCreateChain.LayerSettingsExtension) ? string.Empty : " unavailable: the layer has no VK_EXT_layer_settings")})"
+                        : $"{VulkanInstance.ValidationLiveLine} (basic: synchronization)")
                     : VulkanInstance.ValidationNotLiveLine));
             }
 

@@ -179,7 +179,8 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             ),
             options: new VulkanRendererOptions {
                 ApplicationName = nameof(VulkanDeviceChainCleanupLawTests),
-                EnableValidation = true,
+                NameObjects = true,
+                Validation = GpuValidation.Basic,
             },
             physicalDeviceApi: driver,
             physicalDeviceSelector: new VulkanPhysicalDeviceSelector(physicalDeviceApi: driver),

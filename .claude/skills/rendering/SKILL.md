@@ -320,6 +320,13 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   --world <file>` compares Vulkan and Direct3D 12 on one world.
 - Under `--debug-layers`, any `[vulkan-debug] validation`, `SYNC-HAZARD-*` or
   `[d3d12-debug]` line is a bug to fix in the engine, never a message to filter.
+  `--debug-layers full` adds Direct3D 12 GPU-based validation and Vulkan
+  GPU-assisted validation (out-of-bounds access, groupshared races) and best
+  practices; the boot's bake takes minutes under it, so wait on
+  `[sdf.mesh-bake] done` before judging a frame. Its `[vulkan-debug]
+  best-practices` lines are advice to triage, not failures, and the layer's own
+  `validation WARNING` notices at device creation (adjusted features, core plus
+  GPU-assisted being slow) are not about the engine.
 
 ## References
 

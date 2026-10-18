@@ -52,7 +52,8 @@ internal static class DirectXTestDevices {
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         ) {
             DebugOutput = output,
-            EnableDebugLayer = true,
+            NameObjects = true,
+            Validation = GpuValidation.Basic,
         };
 
         try {

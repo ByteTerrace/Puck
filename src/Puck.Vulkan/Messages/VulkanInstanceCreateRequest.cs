@@ -7,7 +7,7 @@ namespace Puck.Vulkan.Messages;
 /// </summary>
 /// <param name="ApplicationName">The name reported to the implementation for the application.</param>
 /// <param name="DisplayKind">The native display kind, which determines the platform surface extension to enable.</param>
-/// <param name="EnableValidation">Whether the Vulkan validation layers are enabled.</param>
+/// <param name="Validation">The validation level; above <see cref="GpuValidation.Off"/> the validation layer is enabled.</param>
 /// <param name="ExtensionNames">The names of the instance extensions to enable.</param>
 /// <param name="LayerNames">The names of the instance layers to enable.</param>
 /// <param name="DebugUserData">The <c>pUserData</c> the messenger chained into creation hands its callback: a handle to
@@ -15,7 +15,7 @@ namespace Puck.Vulkan.Messages;
 public readonly record struct VulkanInstanceCreateRequest(
     string ApplicationName,
     NativeDisplayKind DisplayKind,
-    bool EnableValidation,
+    GpuValidation Validation,
     IReadOnlyList<string> ExtensionNames,
     IReadOnlyList<string> LayerNames,
     nint DebugUserData
