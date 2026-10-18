@@ -576,9 +576,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // not touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks
                     // clamp, so a recorded run produces identical sim ticks regardless of recovery hitches.
                     try {
-                        // The operator's gpu.faults lose: the armed frame loses the device here, on a healthy GPU, and
+                        // The operator's gpu.faults lose or remove: the armed frame loses or removes the device here, and
                         // recovers through the same policy a real loss does.
-                        m_faults?.ThrowIfLossDue();
+                        DeviceLossRecovery.CountFrame(faults: m_faults, rootHostContext: m_rootHostContext);
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
                         // previous frame's GPU work, so the render root can safely reuse its per-frame resources.

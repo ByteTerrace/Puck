@@ -38,6 +38,7 @@ public sealed class GpuCreationFaults {
     // Frames counted since the last disarm, and the one-based frame the armed loss fires on, or zero.
     private long m_framesSeen;
     private long m_lossArmed;
+    private bool m_lossRemoves;
     private long m_revision;
 
     /// <summary>Gets every kind, in declaration order.</summary>
@@ -180,11 +181,16 @@ public sealed class GpuCreationFaults {
     }
     /// <summary>Arms a device loss on the <paramref name="nth"/> frame a GPU host produces from now, replacing any loss
     /// already armed: the host's frame throws <see cref="DeviceLostException"/> (<see cref="ThrowIfLossDue"/>) and
-    /// recovers through its device-loss policy exactly as from a real loss, on a device that is still healthy.</summary>
+    /// recovers through its device-loss policy exactly as from a real loss, on a device that is still healthy.
+    /// <para>With <paramref name="remove"/>, the frame removes the device for real instead, through the backend's
+    /// <see cref="IGpuDeviceRemoval"/>, and throws nothing itself: the frame's own GPU calls then fail as a removed
+    /// device's do, and the backend writes its removal record (Direct3D 12's DRED) as it recovers. A backend that cannot
+    /// remove its device loses it as the synthetic loss does, and the loss's message says so.</para></summary>
     /// <param name="nth">The one-based number, counted from now, of the frame that loses the device: 1 loses the
     /// next.</param>
+    /// <param name="remove">Whether the frame removes the device for real.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="nth"/> is less than 1.</exception>
-    public void ArmLoss(int nth = 1) {
+    public void ArmLoss(int nth = 1, bool remove = false) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
             value: nth
@@ -192,6 +198,7 @@ public sealed class GpuCreationFaults {
 
         lock (m_gate) {
             m_lossArmed = (m_framesSeen + nth);
+            m_lossRemoves = remove;
             m_revision++;
         }
     }
@@ -203,15 +210,34 @@ public sealed class GpuCreationFaults {
             Array.Clear(array: m_seen);
             m_framesSeen = 0L;
             m_lossArmed = 0L;
+            m_lossRemoves = false;
             m_revision++;
         }
     }
     /// <summary>Counts one frame a GPU host is about to produce, and throws when it is the frame the armed loss fires
     /// on, clearing the loss as it fires. A host calls this once per frame, inside the frame body its device-loss
     /// policy guards.</summary>
-    /// <exception cref="DeviceLostException">This is the frame the armed loss fires on.</exception>
-    public void ThrowIfLossDue() {
+    /// <exception cref="DeviceLostException">This is the frame the armed loss fires on, and the loss is synthetic.</exception>
+    public void ThrowIfLossDue() =>
+        ThrowIfLossDue<object?>(
+            removal: static _ => null,
+            state: null
+        );
+    /// <summary>Counts one frame a GPU host is about to produce, and acts when it is the frame the armed loss fires on,
+    /// clearing the loss as it fires: an armed removal removes the device through <paramref name="removal"/>'s answer,
+    /// and a synthetic loss, or a removal the backend cannot make, throws. A host calls this once per frame, inside the
+    /// frame body its device-loss policy guards.</summary>
+    /// <typeparam name="TState">The type of the state <paramref name="removal"/> reads.</typeparam>
+    /// <param name="state">The state <paramref name="removal"/> reads, such as the host's context.</param>
+    /// <param name="removal">Resolves the backend's removal, or <see langword="null"/> when it has none; called only on
+    /// the frame an armed removal fires.</param>
+    /// <exception cref="DeviceLostException">This is the frame the armed loss fires on, and the loss is synthetic or the
+    /// device could not be removed.</exception>
+    public void ThrowIfLossDue<TState>(TState state, Func<TState, IGpuDeviceRemoval?> removal) {
+        ArgumentNullException.ThrowIfNull(removal);
+
         long fired;
+        bool removes;
 
         lock (m_gate) {
             var seen = ++m_framesSeen;
@@ -221,25 +247,38 @@ public sealed class GpuCreationFaults {
             }
 
             m_lossArmed = 0L;
+            removes = m_lossRemoves;
+            m_lossRemoves = false;
             m_revision++;
             fired = seen;
         }
 
-        throw new DeviceLostException(message: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{LossRefusalCode}: gpu.faults lost the device on frame {fired}, counted since the faults were last disarmed."
-        ));
+        if (removes && (removal(state)?.RemoveDevice() ?? false)) {
+            return;
+        }
+
+        throw new DeviceLostException(message: (removes
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{LossRefusalCode}: gpu.faults could not remove the device on frame {fired}, counted since the faults were last disarmed, because its backend has no removal; it lost the device instead."
+            )
+            : string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{LossRefusalCode}: gpu.faults lost the device on frame {fired}, counted since the faults were last disarmed."
+            )));
     }
     /// <summary>Reads how many frames remain before the armed loss fires.</summary>
     /// <param name="remaining">The one-based number, counted from now, of the frame that loses the device: 1 is the
     /// next; zero when none is armed.</param>
+    /// <param name="removes">Whether the armed loss removes the device for real (<see cref="ArmLoss"/>).</param>
     /// <returns><see langword="true"/> when a loss is armed.</returns>
-    public bool TryGetArmedLoss(out long remaining) {
+    public bool TryGetArmedLoss(out long remaining, out bool removes) {
         lock (m_gate) {
             remaining = ((m_lossArmed == 0L)
                 ? 0L
                 : (m_lossArmed - m_framesSeen)
             );
+            removes = ((m_lossArmed != 0L) && m_lossRemoves);
 
             return (m_lossArmed != 0L);
         }

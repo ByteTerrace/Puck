@@ -132,6 +132,16 @@ D3D12_RLDO_FLAGS
 // The full validation level: GPU-based validation and synchronized command-queue validation (ID3D12Debug1).
 ID3D12Debug1
 
+// Direct3D 12: device removed extended data (DRED), set before device creation and read once a device is removed:
+// the auto-breadcrumb trail with its PIX-event contexts, and the page fault's address with the allocations near it.
+// ID3D12Device5::RemoveDevice removes a healthy device on purpose, for gpu.faults remove.
+ID3D12DeviceRemovedExtendedDataSettings1
+ID3D12DeviceRemovedExtendedData1
+D3D12_DRED_ENABLEMENT
+D3D12_AUTO_BREADCRUMB_OP
+D3D12_DRED_ALLOCATION_TYPE
+ID3D12Device5
+
 // Win32 event-based GPU fence waiting.
 CreateEventW
 WaitForSingleObject

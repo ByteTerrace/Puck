@@ -24,7 +24,7 @@ namespace Puck.DirectX.Interop;
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuPipelineCache, IDisposable {
+public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuDeviceRemoval, IGpuPipelineCache, IDisposable {
     private readonly long m_adapterLuid;
     private readonly IDirectXDeviceApi m_deviceApi;
     private readonly Func<long>? m_adapterLuidProvider;
@@ -37,6 +37,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private DirectXDevice? m_device;
     private nint m_dispatchSignature;
     private bool m_disposed;
+    private bool m_removalReported;
     private nint m_idleFence;
     private nint m_infoQueue;
     private HANDLE m_idleFenceEvent;
@@ -200,6 +201,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// messages, a removal report's allocations and a GPU capture show each object's name. The presenter registration
     /// sets it from <c>GpuDeviceOptions.NameObjects</c>.</summary>
     public bool NameObjects { get; init; }
+    /// <summary>Gets whether the device records device removed extended data (DRED): the auto-breadcrumb trail of every
+    /// command list, with the PIX-event label each operation ran under, and the page fault that removed a device, with
+    /// the allocations at its address. On by default; a removed device's record is written as <c>[d3d12-dred]</c> lines
+    /// (<see cref="DirectXRemovalReport"/>) before the device is recreated or released.</summary>
+    public bool RecordRemoval { get; init; } = true;
     /// <inheritdoc />
     public DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets whether the created device reports through the debug layer's info queue, so its messages and its
@@ -242,11 +248,16 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        // The debug layer is a process-wide setting read at device creation, so it precedes it. It is opt-in: on some configurations (a Windows 11 build 26200 / RTX 4070 with a mismatched Graphics Tools layer)
+        // The debug layer and DRED are process-wide settings read at device creation, so they precede it. The layer is
+        // opt-in: on some configurations (a Windows 11 build 26200 / RTX 4070 with a mismatched Graphics Tools layer)
         // enabling it poisons the process so the next D3D12CreateDevice fails with DXGI_ERROR_DEVICE_RESET
         // (0x887A0007), and it cannot be turned off once enabled in a process.
         if (Validation != GpuValidation.Off) {
             EnableDebugLayer(full: (Validation == GpuValidation.Full));
+        }
+
+        if (RecordRemoval) {
+            EnableRemovalRecord();
         }
 
         // The device bring-up. No Direct3D 12 runtime, no adapter at the feature level, a device creation the driver
@@ -384,6 +395,81 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         _ = ((IUnknown*)debugInterface)->Release();
     }
+    // Turns on DRED's auto-breadcrumbs, their PIX-event contexts and page-fault reporting for every device created from
+    // here on. A runtime without DRED settings records nothing, and a removal then reports only its reason.
+    private static void EnableRemovalRecord() {
+        void* settings;
+        var settingsIid = ID3D12DeviceRemovedExtendedDataSettings1.IID_Guid;
+
+        if (PInvoke.D3D12GetDebugInterface(
+            ppvDebug: &settings,
+            riid: in settingsIid
+        ).Failed) {
+            return;
+        }
+
+        var dred = ((ID3D12DeviceRemovedExtendedDataSettings1*)settings);
+
+        dred->SetAutoBreadcrumbsEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
+        dred->SetBreadcrumbContextEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
+        dred->SetPageFaultEnablement(Enablement: D3D12_DRED_ENABLEMENT.D3D12_DRED_ENABLEMENT_FORCED_ON);
+        _ = ((IUnknown*)settings)->Release();
+    }
+    // Writes the current device's removal record once, when the device reports a removal reason: the breadcrumb trail
+    // and page fault DRED kept, or why there is none. A healthy device writes nothing.
+    private void ReportRemoval() {
+        if ((m_device is null) || m_removalReported) {
+            return;
+        }
+
+        var reason = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)).DeviceRemovedReason();
+
+        if (!reason.Failed) {
+            return;
+        }
+
+        m_removalReported = true;
+
+        var output = (DebugOutput ?? Console.Error);
+
+        foreach (var line in DirectXRemovalReport.Read(
+            device: ((ID3D12Device*)m_device.Handle),
+            reason: reason.Value
+        )) {
+            output.WriteLine(value: line);
+        }
+    }
+    /// <summary>Removes the current device on purpose (<c>ID3D12Device5::RemoveDevice</c>), as a hang or a fault would,
+    /// without a timeout detection and recovery: every later call on it reports <c>DXGI_ERROR_DEVICE_REMOVED</c>, which
+    /// the host's device-loss recovery handles as a real removal, writing the device's removal record before it
+    /// recreates the device. <c>gpu.faults remove</c> calls it. A device never created is not created by it.</summary>
+    /// <returns><see langword="true"/> when a device was removed; <see langword="false"/> when there is none, or its
+    /// runtime has no <c>ID3D12Device5</c>.</returns>
+    /// <exception cref="ObjectDisposedException">The context is disposed.</exception>
+    public bool RemoveDevice() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if ((m_device is null) || !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 17763)) {
+            return false;
+        }
+
+        var device5Iid = ID3D12Device5.IID_Guid;
+
+        if (((IUnknown*)m_device.Handle)->QueryInterface(
+            ppvObject: out var device5,
+            riid: in device5Iid
+        ).Failed) {
+            return false;
+        }
+
+        ((ID3D12Device5*)device5)->RemoveDevice();
+        _ = ((IUnknown*)device5)->Release();
+
+        return true;
+    }
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
     // descriptor heaps and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
@@ -421,6 +507,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         var device = m_device;
 
         m_device = null;
+        m_removalReported = false;
 
         if (device is null) {
             return;
@@ -598,9 +685,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <summary>Recreates the device, command queue, idle fence and descriptor heaps IN PLACE after a device removal — preserving this
     /// instance's identity so the published <c>IGpuDeviceContext</c> capability (and every node that resolved it) stays
     /// valid; they rebuild their own device-derived resources. The old objects are released WITHOUT a GPU drain (the
-    /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe). The
-    /// debug layer is applied again by the same creation path, and is process-wide, so it cannot change between devices.
-    /// A device that cannot be created yet is
+    /// device is removed, so a Signal/wait would never complete; a COM Release on a removed device's objects is safe), after
+    /// a removed device's DRED record is written as <c>[d3d12-dred]</c> lines (<see cref="RecordRemoval"/>). The debug
+    /// layer and DRED settings are applied again by the same creation path, and are process-wide, so they cannot change
+    /// between devices. A device that cannot be created yet is
     /// still the loss being recovered from: a real removal leaves no capable adapter for seconds, so the host's recovery
     /// waits and calls again.
     /// <para>The one retry rule every Direct3D 12 host follows: a rebuild that fails in Direct3D 12 itself, whether the
@@ -619,6 +707,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             instance: this
         );
 
+        ReportRemoval();
         ReleaseDeviceObjects();
 
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
@@ -664,6 +753,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             DrainDebugMessages();
         }
 
+        ReportRemoval();
         m_disposed = true;
 
         if (0 != m_idleFence) {

@@ -364,6 +364,29 @@ releasing its objects inside `IRenderRoot.OnDeviceLost` never throws. Every fram
 path waits through `SignalAndWait`, which throws, so a loss mid-frame reaches
 recovery.
 
+### Device removal record
+
+Every device records device removed extended data (DRED,
+`DirectXDeviceContext.RecordRemoval`, on by default): before it is created the
+context forces on DRED's auto-breadcrumbs, their breadcrumb contexts (the PIX
+event label each pass records) and page-fault reporting. Always on costs nothing
+measurable on the debug world: on the RTX 2060 the steady frame's GPU passes sum
+to 6.72 and 6.79 ms with it and 6.75 and 6.78 ms without, and the CPU's frame
+production stays near 2 ms either way.
+
+When a removed device is recreated (`Recreate`) or released (`Dispose`), the
+context writes its record once, as `[d3d12-dred]` lines
+(`DirectXRemovalReport`): the removal reason and how many command lists the
+trail holds; for each list the GPU did not finish, the PIX event labels open at
+its first unfinished operation (`the GPU stopped in world > mesh`) and the
+operations around it, marked `done` or `open`; the finished lists by name; and
+the page fault's GPU address with the allocations live at it and recently freed
+there, named when the device names objects. DRED keeps only lists still in flight
+at the removal, so a removal of an idle device, such as `gpu.faults remove`,
+reports its reason with an empty trail and no page fault. The fence check that
+first sees a removal carries the device's removal reason into the
+`DeviceLostException`, so the host's `[device-lost]` line names it too.
+
 ---
 
 ## Pipeline library

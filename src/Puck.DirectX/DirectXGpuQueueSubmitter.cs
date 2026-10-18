@@ -151,7 +151,12 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
             var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
 
             if (completed == ulong.MaxValue) {
-                throw new DeviceLostException(message: "ID3D12Fence::GetCompletedValue reported a removed device.");
+                var reason = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).DeviceRemovedReason();
+
+                throw new DeviceLostException(
+                    message: $"ID3D12Fence::GetCompletedValue reported a removed device (reason 0x{reason.Value:X8}).",
+                    reasonCode: reason.Value
+                );
             }
 
             return (completed >= m_pendingValue);

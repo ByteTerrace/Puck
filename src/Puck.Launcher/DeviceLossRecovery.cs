@@ -95,6 +95,23 @@ public sealed class DeviceLossRecovery {
     /// frame.</summary>
     public int Streak => m_streak;
 
+    /// <summary>Counts one frame a GPU host is about to produce against the operator's armed loss
+    /// (<c>gpu.faults lose|remove</c>, <see cref="GpuCreationFaults.ThrowIfLossDue{TState}"/>): on its frame a loss
+    /// throws, and a removal removes the device the host context publishes, when it is an
+    /// <see cref="IGpuDeviceRemoval"/>, so the frame's own GPU calls fail as a real removal's do. A host calls it once per
+    /// frame, inside the frame body this policy guards.</summary>
+    /// <param name="faults">The host's creation faults, or <see langword="null"/> when it has none.</param>
+    /// <param name="rootHostContext">The root host context whose published device context a removal removes.</param>
+    /// <exception cref="DeviceLostException">This is the frame the armed loss fires on, and the loss is synthetic or the
+    /// device could not be removed.</exception>
+    public static void CountFrame(GpuCreationFaults? faults, IHostContext rootHostContext) =>
+        faults?.ThrowIfLossDue(
+            removal: static host => (host.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)
+                ? (deviceContext as IGpuDeviceRemoval)
+                : null),
+            state: rootHostContext
+        );
+
     /// <summary>Records a frame produced on the device, which ends the current streak of losses.</summary>
     public void NoteFrameProduced() {
         if (0 == m_streak) {

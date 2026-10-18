@@ -704,10 +704,10 @@ to the last reset, like `submitted`); `pipeline.inspect` prints them, one
 which only lowers the device's budget, and prints `budget= device= cap= owned=
 steady= peak=`; a candidate whose peak does not fit fails `installed` or
 `resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running.
-`gpu.faults arm <kind> [<n>] | lose [<n>] | disarm | list` (Immediate, `CommandAudience.Operator`,
+`gpu.faults arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list` (Immediate, `CommandAudience.Operator`,
 registered in both GPU presentation shapes by `AddGpuCreationFaults`) arms the
 host's `GpuCreationFaults`; an armed creation fails `installed` with
-`GPU_CREATION_FAULT`, `lose` loses the device on its nth counted frame through the host's device-loss
+`GPU_CREATION_FAULT`, `lose` loses the device on its nth counted frame through the host's device-loss (`remove` removes it for real where the backend can, Direct3D 12)
 policy, and every form prints `armed=… <kind>=<seen> … frames=<seen>` for a
 canary's `response` extraction. A paused
 reset's initialization frame never consumes a pending `pipeline.step`; the step

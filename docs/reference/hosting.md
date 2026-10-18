@@ -402,7 +402,12 @@ host produces from then on, on a healthy GPU: each host counts its frames
 against the faults inside the frame body the policy guards, and the armed frame
 throws the device loss there, so the recovery runs exactly as for a real one.
 The `device-loss` and `device-loss-windowed` canaries run it on both backends
-with a capture armed at the loss.
+with a capture armed at the loss. `gpu.faults remove [<n>]` removes the device
+for real on its frame instead (`DeviceLossRecovery.CountFrame` reaches the
+published device context's `IGpuDeviceRemoval`, which Direct3D 12 implements),
+so the loss surfaces from the frame's own GPU calls and the backend writes its
+removal record before the rebuild; on Vulkan it loses the device as `lose`
+does.
 
 `FrameCaptureController` owns an optional capture session, including its
 engine-time cadence, frame indexing, budget, and capture-only fault isolation.

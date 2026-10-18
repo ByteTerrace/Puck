@@ -293,7 +293,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                     string? reason;
 
                     try {
-                        m_faults?.ThrowIfLossDue();
+                        DeviceLossRecovery.CountFrame(faults: m_faults, rootHostContext: m_rootHostContext);
                         // The tick counts as composed once the root has been handed its context, the step it advanced
                         // included, so a loss raised before the hand-off leaves the retry carrying the step and one the
                         // root raises after it leaves the retry advancing nothing.

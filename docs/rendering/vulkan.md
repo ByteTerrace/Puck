@@ -586,7 +586,11 @@ appear in the `DeviceLostException` message and on standard error. Presentation
 recovery and upload teardown also log the report when they handle a loss without
 throwing. The first query is retained for that device; an unavailable extension
 or failed query is reported without hiding the original loss. Vendor binary
-crash dumps are not enabled.
+crash dumps are not enabled. Vulkan has no call that removes a healthy device,
+so `gpu.faults remove` loses a Vulkan device as `gpu.faults lose` does, and the
+loss says so; nothing records per-pass checkpoints for a loss to report
+(`VK_NV_device_diagnostic_checkpoints`, the peer of Direct3D 12's
+breadcrumbs, is an [open item](../plans/open-items.md#rendering)).
 
 `--debug-layers [basic|full]` (`GpuValidation`) creates the instance with
 `VK_LAYER_KHRONOS_validation`, and every level turns on the layer's

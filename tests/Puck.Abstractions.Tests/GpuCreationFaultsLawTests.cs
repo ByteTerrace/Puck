@@ -370,7 +370,8 @@ public sealed class GpuCreationFaultsLawTests {
         faults.ThrowIfLossDue();
         faults.ThrowIfLossDue();
         faults.ArmLoss(nth: nth);
-        Assert.True(condition: faults.TryGetArmedLoss(remaining: out var remaining));
+        Assert.True(condition: faults.TryGetArmedLoss(remaining: out var remaining, removes: out var removes));
+        Assert.False(condition: removes);
         Assert.Equal(
             actual: remaining,
             expected: nth
@@ -386,7 +387,7 @@ public sealed class GpuCreationFaultsLawTests {
             actual: loss.Message,
             expected: $"{GpuCreationFaults.LossRefusalCode}: gpu.faults lost the device on frame {(2 + nth)}, counted since the faults were last disarmed."
         );
-        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _));
+        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _, removes: out _));
         faults.ThrowIfLossDue();
         Assert.Equal(
             actual: faults.FramesSeen,
@@ -399,6 +400,33 @@ public sealed class GpuCreationFaultsLawTests {
             actual: faults.FramesSeen,
             expected: 0L
         );
+    }
+    /// <summary>An armed removal fires once, on its frame, through the removal the host resolves: a removed device
+    /// throws nothing, since the frame's own calls now fail, and a removal that cannot be made is a synthetic loss naming
+    /// why. A missing resolver is refused.</summary>
+    [Fact]
+    public void AnArmedRemovalRemovesOnceThroughTheHostsRemovalOrLosesTheDevice() {
+        var faults = new GpuCreationFaults();
+        var removed = 0;
+
+        faults.ArmLoss(nth: 2, remove: true);
+        faults.ThrowIfLossDue(removal: static _ => throw new InvalidOperationException(message: "resolved before the frame"), state: 0);
+        faults.ThrowIfLossDue(removal: static count => new CountingRemoval(count: count), state: (Action)(() => removed++));
+        Assert.Equal(actual: removed, expected: 1);
+        faults.ThrowIfLossDue(removal: static _ => throw new InvalidOperationException(message: "resolved with nothing armed"), state: 0);
+        faults.ArmLoss(remove: true);
+        Assert.Contains(
+            expectedSubstring: "could not remove the device on frame 4",
+            actualString: Assert.Throws<DeviceLostException>(testCode: faults.ThrowIfLossDue).Message
+        );
+        _ = Assert.Throws<ArgumentNullException>(testCode: () => faults.ThrowIfLossDue<int>(removal: null!, state: 0));
+    }
+    private sealed class CountingRemoval(Action count) : IGpuDeviceRemoval {
+        public bool RemoveDevice() {
+            count();
+
+            return true;
+        }
     }
     /// <summary>The revision changes on every arm, loss arm and disarm, and when a creation fault or a loss fires and
     /// clears, and on nothing else: a creation or frame that fires nothing leaves it where it was.</summary>

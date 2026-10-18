@@ -736,8 +736,16 @@ created and the installed graph keeps running. A fault fires once.
 one, on a healthy GPU; the host recovers through its
 [device-loss policy](../../docs/reference/hosting.md), and a capture armed at
 the loss is refused as `[capture] refused <path>: <reason>`.
+`gpu.faults remove [<n>]` removes the device for real on that frame where the
+backend can (Direct3D 12's `ID3D12Device5::RemoveDevice`), so the frame's own
+calls fail as a removed device's do and the host recovers after the backend
+writes its `[d3d12-dred]` removal record
+([Direct3D 12](../../docs/rendering/directx.md#device-removal-record)); a
+Vulkan device cannot be removed, so there it loses the device as `lose` does
+and the loss says why.
 `gpu.faults disarm` clears every fault, the armed loss and every count, and
-`gpu.faults list` prints `armed=<kind>:<n>,…,lose:<n>` (or `armed=none`), one
+`gpu.faults list` prints `armed=<kind>:<n>,…,lose:<n>` (`remove:<n>` for an
+armed removal, or `armed=none`), one
 `<kind>=<count>` field per kind, the creations since the last disarm, and
 `frames=<count>`, the frames counted since then. Only the operator's console
 runs it; a seat, binding, schedule step or world document cannot.

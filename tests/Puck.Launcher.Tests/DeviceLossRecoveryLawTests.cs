@@ -280,12 +280,41 @@ public sealed class DeviceLossRecoveryLawTests {
             actual: log,
             expected: ["release", "rebuild"]
         );
-        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _));
+        Assert.False(condition: faults.TryGetArmedLoss(remaining: out _, removes: out _));
         Assert.True(condition: (faults.FramesSeen > 2L));
         Assert.Equal(
             actual: Assert.IsType<DeviceLostException>(@object: (await request.Completion).Error).Message,
             expected: CaptureRequestSlot.DeviceLostReason
         );
+    }
+
+    /// <summary>The operator's <c>gpu.faults remove</c>: a host's frame count removes the device its context publishes
+    /// for real, throwing nothing itself, when that device can be removed, and loses it as a synthetic loss naming why
+    /// when it cannot (a device that is no <see cref="IGpuDeviceRemoval"/>, or no device at all).</summary>
+    [Fact]
+    public void AnArmedRemovalRemovesTheDeviceTheHostPublishesOrLosesItWhenItCannot() {
+        var log = new List<string>();
+        var faults = new GpuCreationFaults();
+        var removable = new DeviceHostContext(device: new RemovableDevice(log: log));
+
+        faults.ArmLoss(nth: 1, remove: true);
+        Assert.True(condition: faults.TryGetArmedLoss(remaining: out _, removes: out var removes));
+        Assert.True(condition: removes);
+        DeviceLossRecovery.CountFrame(faults: faults, rootHostContext: removable);
+        Assert.Equal(actual: log, expected: ["remove"]);
+
+        DeviceLossRecovery.CountFrame(faults: null, rootHostContext: removable);
+        faults.ArmLoss(nth: 1, remove: true);
+
+        var loss = Assert.Throws<DeviceLostException>(testCode: () => DeviceLossRecovery.CountFrame(
+            faults: faults,
+            rootHostContext: new DeviceHostContext(device: new DrainLoggingDevice(log: log))
+        ));
+
+        Assert.Contains(expectedSubstring: "could not remove the device", actualString: loss.Message);
+        faults.ArmLoss(nth: 1, remove: true);
+        _ = Assert.Throws<DeviceLostException>(testCode: () => DeviceLossRecovery.CountFrame(faults: faults, rootHostContext: new NoDeviceHostContext()));
+        Assert.Equal(actual: log, expected: ["remove"]);
     }
 
     // A policy over recording fakes: a published device whose drain is logged, a render root holding a capture slot,
@@ -427,6 +456,34 @@ public sealed class DeviceLossRecoveryLawTests {
             log.Add(item: "drain");
 
             throw new DeviceLostException(message: "the device is removed");
+        }
+    }
+    // A device that removes itself on request, logging it.
+    private sealed class RemovableDevice(List<string> log) : IGpuDeviceContext, IGpuDeviceRemoval {
+        public long AdapterLuid => 0L;
+        public GpuDeviceCapabilities? Capabilities => null;
+        public GpuDeviceIdentity? Identity => null;
+        public GpuMemoryProfile MemoryProfile => default;
+        public GpuDeviceServices Services => throw new NotSupportedException();
+
+        public bool RemoveDevice() {
+            log.Add(item: "remove");
+
+            return true;
+        }
+        public void WaitIdle() { }
+    }
+    // A host context that publishes no device.
+    private sealed class NoDeviceHostContext : IHostContext {
+        public bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class {
+            capability = null!;
+
+            return false;
+        }
+        public bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class {
+            capability = null!;
+
+            return false;
         }
     }
 }
