@@ -384,6 +384,8 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(expected: (uint)paintVector, actual: program.Words[secondMaterial]);
         Assert.Equal(expected: 2u, actual: program.Words[(secondMaterial + 1)]);
         Assert.Equal(expected: (paintVector + (2 * SdfProgram.PaintVectorsPerEntry)), actual: (int)program.Words[SdfProgram.ProgramMaterialOffsetLane]);
+        // The shading words, which a lighting-only upload rewrites, span the paints and the materials.
+        Assert.Equal(expected: new Range(start: (paintVector * 4), end: ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + (2 * SdfProgram.MaterialVectorsPerEntry)) * 4)), actual: program.ShadingWords);
 
         var first = (paintVector * 4);
 

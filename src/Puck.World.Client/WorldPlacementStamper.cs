@@ -128,18 +128,13 @@ public static class WorldPlacementStamper {
                 continue;
             }
 
-            var shapeIndex = -1;
+            // The canonicalizer refuses a parent that names no shape, so the parent is found.
+            var shapeIndex = 0;
 
-            for (var index = 0; ((index < shapes.Count) && (index < WorldPlacementPolicy.MaxAnimatedStampShapes)); index++) {
-                if (string.Equals(a: shapes[index].Name?.Value, b: parent, comparisonType: StringComparison.Ordinal)) {
-                    shapeIndex = index;
-
-                    break;
-                }
+            while (!string.Equals(a: shapes[shapeIndex].Name?.Value, b: parent, comparisonType: StringComparison.Ordinal)) {
+                shapeIndex++;
             }
-            if (shapeIndex >= 0) {
-                resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: ((frames.RootSlot + 1) + shapeIndex)));
-            }
+            resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: ((frames.RootSlot + 1) + shapeIndex)));
         }
 
         return [.. resolved];
