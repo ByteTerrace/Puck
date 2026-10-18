@@ -11,3 +11,6 @@ src/Puck.World/WorldScreenBinder.Device.
 src/Puck.Launcher/GpuCapture/GpuCaptureTools.Load.
 src/Puck.Launcher/GpuCapture/PixGpuCaptureTool.
 src/Puck.Launcher/GpuCapture/RenderDocCaptureTool.
+# A removed Direct3D 12 device's DRED record, read only from a device that was removed; DirectXRemovalReportLawTests
+# covers its formatting.
+src/Puck.DirectX/DirectXRemovalReport.Device.

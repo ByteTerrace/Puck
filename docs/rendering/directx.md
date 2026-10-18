@@ -383,7 +383,11 @@ operations around it, marked `done` or `open`; the finished lists by name; and
 the page fault's GPU address with the allocations live at it and recently freed
 there, named when the device names objects. DRED keeps only lists still in flight
 at the removal, so a removal of an idle device, such as `gpu.faults remove`,
-reports its reason with an empty trail and no page fault. The fence check that
+reports its reason with an empty trail and no page fault. Direct3D 12 hands every
+context on one adapter in a process the same device, so a removal, deliberate or
+not, removes it under all of them: a test that removed the WARP device failed the
+suite's parallel WARP laws, so the record is shown by `gpu.faults remove` in a
+World run, where one context holds the device. The fence check that
 first sees a removal carries the device's removal reason into the
 `DeviceLostException`, so the host's `[device-lost]` line names it too.
 
