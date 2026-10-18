@@ -1590,6 +1590,15 @@ public static partial class WorldModelShape {
                 M("scale", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.FrameTransformDocument), "Scale", Read | Write, static value => ((global::Puck.World.Authoring.FrameTransformDocument)value).Scale),
             ],
             []),
+        T(typeof(global::Puck.World.Authoring.PaletteBandDocument), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("origin", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.PaletteBandDocument), "Origin", Read | Write, static value => ((global::Puck.World.Authoring.PaletteBandDocument)value).Origin),
+                M("normal", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.PaletteBandDocument), "Normal", Read | Write, static value => ((global::Puck.World.Authoring.PaletteBandDocument)value).Normal),
+                M("halfWidth", typeof(global::System.Single), typeof(global::Puck.World.Authoring.PaletteBandDocument), "HalfWidth", Read | Write, static value => ((global::Puck.World.Authoring.PaletteBandDocument)value).HalfWidth),
+                M("color", typeof(global::System.String), typeof(global::Puck.World.Authoring.PaletteBandDocument), "Color", Read | Write, static value => ((global::Puck.World.Authoring.PaletteBandDocument)value).Color),
+            ],
+            []),
         T(typeof(global::Puck.World.Authoring.PaletteEntryDocument), true, JsonTypeInfoKind.Object, null,
             [],
             [
@@ -1607,6 +1616,7 @@ public static partial class WorldModelShape {
                 M("inset", typeof(global::Puck.World.Authoring.PaletteInsetDocument), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Inset", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Inset),
                 M("bleed", typeof(global::System.String), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Bleed", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Bleed),
                 M("receive", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Receive", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Receive),
+                M("band", typeof(global::Puck.World.Authoring.PaletteBandDocument), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Band", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Band),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.PaletteInsetDocument), true, JsonTypeInfoKind.Object, null,

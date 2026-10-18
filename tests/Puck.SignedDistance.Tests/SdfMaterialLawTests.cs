@@ -366,6 +366,26 @@ public sealed class SdfMaterialLawTests {
             ));
         }
     }
+    /// <summary>A band packs its centre plane as a unit normal and the origin's offset along it, then its colour and
+    /// half-width (rows 20 and 21, which sdfMaterialLoad reads); a zero normal, a non-positive half-width, a non-finite
+    /// origin or a negative colour is refused at both doors.</summary>
+    [Fact]
+    public void ABandPacksItsCentrePlaneAndIsRefusedOutOfRangeAtBothDoors() {
+        var valid = new SdfBand(Origin: new Vector3(x: 0f, y: 2f, z: 0f), Normal: new Vector3(x: 0f, y: 3f, z: 0f), HalfWidth: 0.02f, Color: new Vector3(x: 0.5f, y: 0.25f, z: 0.125f));
+        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One, Band: valid)]);
+        var row = ((((int)program.Words[3]) + 20) * 4);
+
+        Assert.Equal(expected: [0f, 1f, 0f, 2f, 0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(start: row, count: 8).Select(selector: index => BitConverter.UInt32BitsToSingle(value: program.Words[index])));
+        foreach (var band in new[] {
+            valid with { Normal = Vector3.Zero }, valid with { HalfWidth = 0f },
+            valid with { Origin = new Vector3(x: float.NaN, y: 0f, z: 0f) }, valid with { Color = new Vector3(x: -1f, y: 0f, z: 0f) },
+        }) {
+            var material = new SdfMaterial(Vector3.One, Band: band);
+
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: material));
+            Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [material]));
+        }
+    }
     [Fact]
     public void MaterialLayersPackAuthoredSurfacesAndAllStops() {
         var stages = new SdfRevealStage[] { new(
@@ -579,7 +599,7 @@ public sealed class SdfMaterialLawTests {
         var offset = (((int)program.Words[3]) * 4);
 
         // The inset's unused tail shares two lanes with the material's unit-default indirect bleed channels.
-        for (var i = (4 * 4); (i < (20 * 4)); i++) {
+        for (var i = (4 * 4); (i < (SdfProgram.MaterialVectorsPerEntry * 4)); i++) {
             Assert.Equal(
                 ((i is 30 or 31) ? BitConverter.SingleToUInt32Bits(value: 1f) : 0u),
                 program.Words[(offset + i)]

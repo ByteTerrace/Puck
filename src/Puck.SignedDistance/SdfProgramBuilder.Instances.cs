@@ -66,11 +66,12 @@ public sealed partial class SdfProgramBuilder {
         RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
-            weathering: material.Weathering
+            weathering: material.Weathering,
+            band: material.Band
         )) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),
-                "Invalid inset or weathering layer."
+                "Invalid inset, weathering or band layer."
             );
         }
 

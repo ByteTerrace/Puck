@@ -315,7 +315,8 @@ public sealed partial class SdfProgram {
                 !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
-                weathering: material.Weathering
+                weathering: material.Weathering,
+                band: material.Band
             )
             ) {
                 throw new ArgumentOutOfRangeException(

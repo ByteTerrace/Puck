@@ -15,6 +15,16 @@ public sealed record SdfRadialPaint(IReadOnlyList<SdfRadialStop> Stops, float So
 /// <summary>A refractive paint plane at local z = -Depth. Origin/Rotation are relative to the winning dynamic
 /// transform, or world space for static geometry. Ior = 1 samples the same plane without bending the ray.</summary>
 public sealed record SdfInset(Vector3 Origin, Quaternion Rotation, float Depth, float Ior, SdfRadialPaint Paint);
+/// <summary>A band of paint across a surface: where a hit lies within <paramref name="HalfWidth"/> of the plane through
+/// <paramref name="Origin"/> with normal <paramref name="Normal"/>, its albedo becomes <paramref name="Color"/>, with an
+/// edge antialiased over the pixel's footprint. Origin and normal are in the winning dynamic transform's frame, or world
+/// space for static geometry, as an inset's are; the band paints without changing the field, so it costs the bake
+/// nothing and its edge is as sharp as the pixel.</summary>
+/// <param name="Origin">A point on the band's centre plane.</param>
+/// <param name="Normal">The centre plane's normal, in any length but zero.</param>
+/// <param name="HalfWidth">The band's half-width along the normal, in the frame's units; positive.</param>
+/// <param name="Color">The band's linear-RGB albedo.</param>
+public readonly record struct SdfBand(Vector3 Origin, Vector3 Normal, float HalfWidth, Vector3 Color);
 /// <summary>Generic coverage controls. Edge follows curvature, Lines a triplanar pattern, and Settle upward
 /// facing surfaces. Reach sets curvature sensitivity. Lane selects one of four anonymous instance channels;
 /// Floor supplies minimum coverage. Under contains at most two ascending reveal thresholds. Deposit is required
@@ -33,7 +43,20 @@ public static class SdfMaterialLayers {
     private static bool Unit(float v) => (NonNegative(v: v) && (v <= 1f));
 
     /// <summary>Returns whether all layer inputs are finite and their bounded collections and ranges are valid.</summary>
-    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering) {
+    /// <param name="inset">The refractive paint layer, or <see langword="null"/> for none.</param>
+    /// <param name="weathering">The coverage layer, or <see langword="null"/> for none.</param>
+    /// <param name="band">The painted band, or <see langword="null"/> for none.</param>
+    /// <returns><see langword="true"/> when every present layer is admissible.</returns>
+    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering, SdfBand? band) {
+        if (band is { } stripe) {
+            if (
+                !VectorFunctions.IsFinite(vector: stripe.Origin) ||
+                !VectorFunctions.IsFinite(vector: stripe.Normal) ||
+                (stripe.Normal.LengthSquared() < 1e-12f) ||
+                !Positive(v: stripe.HalfWidth) ||
+                !Color(v: stripe.Color)
+            ) { return false; }
+        }
         if (inset is { } layer) {
             if (
                 !VectorFunctions.IsFinite(vector: layer.Origin) ||

@@ -1,4 +1,4 @@
-# Palette, weathering, inset, lanes, and the render section
+# Palette, weathering, inset, band, lanes, and the render section
 
 ## The palette
 
@@ -20,6 +20,7 @@
 | `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
 | `weathering` | see below | absent | |
 | `inset` | see below | absent | |
+| `band` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
 name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
@@ -70,8 +71,9 @@ Two cross-rules the validator enforces together:
   something to reveal.
 - `settle > 0` **requires** `deposit`.
 
-Both fail with one message: `Invalid inset or weathering: check frames, ordered
-stops, surfaces, ranges, and lane [0, 3].`
+Both fail with one message: `Invalid inset, weathering or band: check frames,
+ordered stops, surfaces, ranges, lane [0, 3], a nonzero band normal and a
+positive band half-width.`
 
 The live amount is `max(saturate(lane), floor)`, and the edge mask comes from the
 level-set mean curvature measured at the hit, positive side only, scaled by
@@ -116,6 +118,32 @@ Each palette slot has one inset frame. A geometry symmetry fold does not
 reflect that material origin. Mirrored eyes generally need separate slots
 with separate frames; shared slots work only when their respective dynamic
 frames make the same local inset correct.
+
+## Band
+
+`palette[].band` paints a stripe across every surface of the slot: a hit within
+`halfWidth` of the plane through `origin` with normal `normal` takes `color`,
+its edge antialiased over the pixel's footprint. It changes no geometry, so the
+mesh bake never sees it and its edge stays as sharp as the pixel, where a stripe
+sculpted as a copy proud of its plate by less than the bake's cell (5 mm
+refined, 15 mm on smooth parts) frays into a jagged step and speckled material.
+
+| Field | Range |
+|---|---|
+| `origin` | finite point on the band's centre plane |
+| `normal` | finite, nonzero; normalized at pack |
+| `halfWidth` | > 0, in the frame's units |
+| `color` | `#RRGGBB` or a state binding |
+
+Origin and normal are in the same frame as an inset's: world space for static
+geometry, the winning dynamic slot's local frame otherwise, and neither is
+converted by `CreationFrame`. On a body's part that frame is the slot its baked
+group rides: measured on the Moth, it sits at the group's first shape's
+authored position with the author frame's axes (+Z the front), so the
+shoulder pads' bands name `origin [0, -0.0125, 0]`, 12.5 mm below the pad
+prism's position, and an author-frame normal. Each slot carries one band, so
+mirrored stripes take mirrored slots. To find a frame, paint a test band and
+look before trusting the numbers.
 
 ## Render lanes
 

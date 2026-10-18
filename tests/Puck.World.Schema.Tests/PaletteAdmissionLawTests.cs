@@ -239,6 +239,16 @@ public sealed class PaletteAdmissionLawTests {
         );
     }
     [Fact]
+    public void ABandNeedsANonzeroNormalAPositiveHalfWidthAndAColor() {
+        var band = new PaletteBandDocument(Origin: new System.Numerics.Vector3(x: 0f, y: -0.0125f, z: 0f), Normal: new System.Numerics.Vector3(x: 0.4f, y: 0.9f, z: 0f), HalfWidth: 0.02f, Color: "#EED3A6");
+        var entry = new PaletteEntryDocument("#9D66C6", null, null, null, Band: band);
+
+        AssertAccepts(entry: entry);
+        AssertRefusesNaming(entry: entry with { Band = band with { Normal = System.Numerics.Vector3.Zero } }, needle: "Invalid inset, weathering or band");
+        AssertRefusesNaming(entry: entry with { Band = band with { HalfWidth = 0f } }, needle: "Invalid inset, weathering or band");
+        AssertRefusesNaming(entry: entry with { Band = band with { Color = "cream" } }, needle: "Layer colors");
+    }
+    [Fact]
     public void WeatheringRequiresAuthoredRevealAndDepositSurfaces() {
         var entry = new PaletteEntryDocument(
             "#CCCCCC",
@@ -250,7 +260,7 @@ public sealed class PaletteAdmissionLawTests {
 
         AssertRefusesNaming(
             entry: entry,
-            needle: "Invalid inset or weathering"
+            needle: "Invalid inset, weathering or band"
         );
         AssertAccepts(entry: entry with {
             Weathering = new(
@@ -267,7 +277,7 @@ public sealed class PaletteAdmissionLawTests {
         });
         AssertRefusesNaming(
             entry: entry with { Weathering = new(Settle: 1f) },
-            needle: "Invalid inset or weathering"
+            needle: "Invalid inset, weathering or band"
         );
     }
     [InlineData("wrap")]

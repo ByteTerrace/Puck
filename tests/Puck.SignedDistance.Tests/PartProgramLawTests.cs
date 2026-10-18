@@ -102,7 +102,7 @@ public sealed class PartProgramLawTests {
         Data1: Vector4.Zero
     );
     private static int PartTable(ReadOnlySpan<uint> words) {
-        var segment = (((int)((words[3] + (20u * words[1])) + (2u * words[0]))) * 4);
+        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
         var instances = ((segment + 4) + (8 * ((int)words[segment])));
 
         return (((int)words[(instances + 1)]) * 4);
@@ -656,7 +656,7 @@ public sealed class PartProgramLawTests {
             : 0x40000000u),
             words[(shape + 1)]
         );
-        var segment = (((int)((words[3] + (20u * words[1])) + (2u * words[0]))) * 4);
+        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
         var instances = ((segment + 4) + (8 * ((int)words[segment])));
 
         Assert.Equal(

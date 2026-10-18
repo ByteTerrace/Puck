@@ -20,7 +20,7 @@ public sealed class SdfDetailShapeLawTests {
     );
     private static uint ShadingFlags(SdfProgram program) {
         var words = program.Words;
-        var segment = (((int)((words[3] + (20u * words[1])) + (2u * words[0]))) * 4);
+        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
         var instances = ((segment + 4) + (8 * ((int)words[segment])));
 
         return words[(instances + 2)];

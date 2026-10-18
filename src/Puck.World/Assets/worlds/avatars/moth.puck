@@ -20,6 +20,8 @@ let brass = 8 // #B88335
 let umber = 9 // #89481D
 let jet = 10 // #120D13
 let pearl = 11 // #FFF8EF
+let violetBandLeft = 12 // violet under the left shoulder pad's #EED3A6 band
+let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
@@ -1376,6 +1378,80 @@ prototypes {
           emissive: 0.8
           coat: 0
         }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          band {
+            origin [0, -0.0125, 0]
+            normal [0.3940162, 0.9191023, 0]
+            halfWidth: 0.02
+            color: "#EED3A6"
+          }
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          band {
+            origin [0, -0.0125, 0]
+            normal [-0.3940162, 0.9191023, 0]
+            halfWidth: 0.02
+            color: "#EED3A6"
+          }
+        }
       ]
       shape Superellipsoid "pelvis" {
         id: 1
@@ -2454,7 +2530,7 @@ prototypes {
         id: 150
         position [0.31, 1.5015, 0.0075]
         scale [0.24, 0.225, 0.155]
-        material: violet
+        material: violetBandLeft
         group: 14
         parent: "upperArm-left"
         profile {
@@ -2474,7 +2550,7 @@ prototypes {
         id: 151
         position [0.3, 1.5015, 0.0075]
         scale [0.25, 0.4, 0.155]
-        material: violet
+        material: violetBandLeft
         blend: "Intersection"
         group: 14
         parent: "upperArm-left"
@@ -2490,48 +2566,6 @@ prototypes {
         group: 14
         parent: "upperArm-left"
         exponent: softness
-      }
-
-      shape Prism "shoulderStripe-left" {
-        id: 153
-        position [0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.1565]
-        material: skin
-        group: 15
-        parent: "upperArm-left"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.25, 0.2222222]
-            [0.1666667, 0.4444444]
-            [0.6041667, 0.2222222]
-            [1, -1]
-            [0.25, -0.5333333]
-          ]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Superellipsoid "stripeCurve-left" {
-        id: 154
-        position [0.3, 1.5015, 0.0075]
-        scale [0.251, 0.4, 0.1565]
-        material: skin
-        blend: "Intersection"
-        group: 15
-        parent: "upperArm-left"
-        exponent: 2.6
-      }
-
-      shape Box "stripeMask-left" {
-        id: 155
-        position [0.31, 1.489, 0.0075]
-        rotation [0, 0, -0.2011189, 0.9795668]
-        scale [0.4, 0.02, 0.3]
-        material: skin
-        blend: "Intersection"
-        group: 15
-        parent: "upperArm-left"
       }
 
       shape Superellipsoid "shoulderSaddle-left" {
@@ -3408,7 +3442,7 @@ prototypes {
         id: 218
         position [-0.31, 1.5015, 0.0075]
         scale [0.24, 0.225, 0.155]
-        material: violet
+        material: violetBandRight
         group: 28
         parent: "upperArm-right"
         profile {
@@ -3428,7 +3462,7 @@ prototypes {
         id: 219
         position [-0.3, 1.5015, 0.0075]
         scale [0.25, 0.4, 0.155]
-        material: violet
+        material: violetBandRight
         blend: "Intersection"
         group: 28
         parent: "upperArm-right"
@@ -3444,48 +3478,6 @@ prototypes {
         group: 28
         parent: "upperArm-right"
         exponent: softness
-      }
-
-      shape Prism "shoulderStripe-right" {
-        id: 221
-        position [-0.31, 1.5015, 0.0075]
-        scale [0.24, 0.225, 0.1565]
-        material: skin
-        group: 29
-        parent: "upperArm-right"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-0.25, -0.5333333]
-            [-1, -1]
-            [-0.6041667, 0.2222222]
-            [-0.1666667, 0.4444444]
-            [0.25, 0.2222222]
-          ]
-          cornerRadius: 0.12
-        }
-      }
-
-      shape Superellipsoid "stripeCurve-right" {
-        id: 222
-        position [-0.3, 1.5015, 0.0075]
-        scale [0.251, 0.4, 0.1565]
-        material: skin
-        blend: "Intersection"
-        group: 29
-        parent: "upperArm-right"
-        exponent: 2.6
-      }
-
-      shape Box "stripeMask-right" {
-        id: 223
-        position [-0.31, 1.489, 0.0075]
-        rotation [0, 0, 0.2011189, 0.9795668]
-        scale [0.4, 0.02, 0.3]
-        material: skin
-        blend: "Intersection"
-        group: 29
-        parent: "upperArm-right"
       }
 
       shape Superellipsoid "shoulderSaddle-right" {

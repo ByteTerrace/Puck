@@ -49,6 +49,32 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
         )
     );
 }
+/// <summary>A band of paint across the surface, in the winning dynamic frame, or world space when no slot owns the hit:
+/// the points within <paramref name="HalfWidth"/> of the plane through <paramref name="Origin"/> with normal
+/// <paramref name="Normal"/> take <paramref name="Color"/>.</summary>
+/// <param name="Origin">A point on the band's centre plane.</param>
+/// <param name="Normal">The centre plane's normal; any length but zero.</param>
+/// <param name="HalfWidth">The band's half-width along the normal; positive.</param>
+/// <param name="Color">The band's color, #RRGGBB or a state binding.</param>
+public sealed record PaletteBandDocument(DocumentVector3 Origin, DocumentVector3 Normal, float HalfWidth, string Color) {
+    /// <summary>Resolves the generic engine layer.</summary>
+    /// <param name="resolve">The color resolver.</param>
+    /// <returns>The band.</returns>
+    public SdfBand ToBand(Func<string, Vector3> resolve) => new(
+        Origin: new(
+            x: Origin.X,
+            y: Origin.Y,
+            z: Origin.Z
+        ),
+        Normal: new(
+            x: Normal.X,
+            y: Normal.Y,
+            z: Normal.Z
+        ),
+        HalfWidth: HalfWidth,
+        Color: resolve(Color)
+    );
+}
 /// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces.</summary>
 public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,

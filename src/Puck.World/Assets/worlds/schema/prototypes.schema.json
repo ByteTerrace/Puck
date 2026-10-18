@@ -322,6 +322,39 @@
                   ],
                   "default": null,
                   "description": "The finite nonnegative gain on received indirect light; null means one."
+                },
+                "band": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "origin": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "A point on the band\u0027s centre plane."
+                    },
+                    "normal": {
+                      "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                      "description": "The centre plane\u0027s normal; any length but zero."
+                    },
+                    "halfWidth": {
+                      "type": "number",
+                      "description": "The band\u0027s half-width along the normal; positive."
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "The band\u0027s color, #RRGGBB or a state binding."
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "normal",
+                    "halfWidth",
+                    "color"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "Optional painted band."
                 }
               },
               "required": [

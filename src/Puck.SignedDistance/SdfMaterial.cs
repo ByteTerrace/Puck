@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-/// <summary>One entry of the scene's material palette. Packed as twenty uint4 words (see <see cref="SdfProgram"/>).</summary>
+/// <summary>One entry of the scene's material palette. Packed as twenty-two uint4 words (see <see cref="SdfProgram"/>).</summary>
 /// <param name="Albedo">The linear-RGB base color; every component must be finite and non-negative when admitted to
 /// a builder or program. Also the metallic reflectance tint — see <see cref="Metal"/>.</param>
 /// <param name="Emissive">The self-illumination strength: <c>albedo * emissive</c> adds to the shaded color, so an
@@ -46,7 +46,8 @@ namespace Puck.SignedDistance;
 /// <param name="Bleed">The finite, nonnegative tint multiplying diffuse reflectance and emission sent into the
 /// irradiance volume. Null means white; this does not change the directly viewed surface color.</param>
 /// <param name="Receive">The finite, nonnegative gain applied to indirect irradiance received by the surface.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f) {
+/// <param name="Band">Optional painted band.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, SdfBand? Band = null) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>shade/sdf-material.hlsli</c>

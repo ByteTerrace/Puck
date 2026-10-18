@@ -90,7 +90,7 @@ public sealed partial class SdfProgram {
     public const uint BoundModeStatic = 1;
     /// <summary>The material float4 stride, written by PackMaterials and read by the kernels' <c>sdfMaterialLoad</c>
     /// (<c>SDF_MATERIAL_VECTORS_PER_ENTRY</c>).</summary>
-    public const int MaterialVectorsPerEntry = 20;
+    public const int MaterialVectorsPerEntry = 22;
     /// <summary>Bit 0 of the instance directory header's <c>.z</c> word: no instruction carries
     /// <see cref="SdfInstruction.Detail"/>, so the kernels skip detail admission (<c>SDF_NO_DETAIL_SHAPES_FLAG</c>).</summary>
     public const uint NoDetailShapesFlag = 1u;

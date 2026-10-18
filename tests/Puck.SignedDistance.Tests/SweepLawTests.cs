@@ -329,7 +329,7 @@ public sealed class SweepLawTests {
         return best;
     }
     private static Vector4 SweepBound(ReadOnlySpan<uint> words) {
-        var index = checked((((int)((words[3] + (20u * words[1])) + 2u)) * 4));
+        var index = checked((((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + 2u)) * 4));
 
         Assert.Equal(
             1u,
@@ -696,7 +696,7 @@ public sealed class SweepLawTests {
                     Bulge: 0f
                 )]
         ).Words;
-        var shapeBound = checked((((int)((words[3] + (20u * words[1])) + (2u * ((uint)shapeIndex)))) * 4));
+        var shapeBound = checked((((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * ((uint)shapeIndex)))) * 4));
 
         Assert.Equal(
             (bounded
@@ -715,7 +715,7 @@ public sealed class SweepLawTests {
             : 0u),
             words[(shapeBound + 5)]
         );
-        var segmentHeader = checked((((int)((words[3] + (20u * words[1])) + (2u * words[0]))) * 4));
+        var segmentHeader = checked((((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4));
         var plan = checked((((int)words[(segmentHeader + 2)]) * 4));
         var leaf = checked((((int)words[plan]) * 4));
 
@@ -749,7 +749,7 @@ public sealed class SweepLawTests {
             0f,
             0f
         ).Words;
-        var boundIndex = checked((((int)((words[3] + (20u * words[1])) + 2u)) * 4));
+        var boundIndex = checked((((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + 2u)) * 4));
 
         Assert.Equal(
             (bounded

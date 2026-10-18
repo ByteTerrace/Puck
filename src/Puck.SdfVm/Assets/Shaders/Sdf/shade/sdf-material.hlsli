@@ -29,6 +29,8 @@ struct SdfMaterialData {
     float4 underResponse[2]; // roughness, metal, stage count, reserved
     float4 deposit;
     float4 depositResponse;
+    float4 bandPlane; // unit normal, centre-plane offset
+    float4 bandColorHalfWidth; // color, half-width (zero: no band)
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -83,6 +85,8 @@ SdfMaterialData sdfMaterialLoad(int material) {
     }
     data.deposit = asfloat(sdfWords[materialBase + 18u]);
     data.depositResponse = asfloat(sdfWords[materialBase + 19u]);
+    data.bandPlane = asfloat(sdfWords[materialBase + 20u]);
+    data.bandColorHalfWidth = asfloat(sdfWords[materialBase + 21u]);
 
     return data;
 }

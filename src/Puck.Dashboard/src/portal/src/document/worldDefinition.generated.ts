@@ -7897,6 +7897,27 @@ export type WorldPrototype = {
        * The finite nonnegative gain on received indirect light; null means one.
        */
       receive?: number | null;
+      /**
+       * Optional painted band.
+       */
+      band?: {
+        /**
+         * A point on the band's centre plane.
+         */
+        origin: unknown;
+        /**
+         * The centre plane's normal; any length but zero.
+         */
+        normal: unknown;
+        /**
+         * The band's half-width along the normal; positive.
+         */
+        halfWidth: number;
+        /**
+         * The band's color, #RRGGBB or a state binding.
+         */
+        color: string;
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).

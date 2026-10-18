@@ -24,10 +24,11 @@ public static partial class CreationCanonicalizer {
         try {
             if (!SdfMaterialLayers.IsValid(
                 inset: entry.Inset?.ToInset(resolve: Resolve),
-                weathering: entry.Weathering?.ToWeathering(resolve: Resolve)
+                weathering: entry.Weathering?.ToWeathering(resolve: Resolve),
+                band: entry.Band?.ToBand(resolve: Resolve)
             )) {
                 errors.Add(item: new(
-                    Message: "Invalid inset or weathering: check frames, ordered stops, surfaces, ranges, and lane [0, 3].",
+                    Message: "Invalid inset, weathering or band: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero band normal and a positive band half-width.",
                     Path: $"palette[{index}]"
                 ));
             }
