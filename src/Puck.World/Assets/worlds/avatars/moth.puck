@@ -3507,11 +3507,11 @@ prototypes {
       shape Superellipsoid "boot-left" {
         id: 195
         position [0.2, 0.1315, 0.085]
-        scale [0.135, 0.13, 0.225]
+        scale [0.162, 0.135, 0.255]
         material: skin
         group: 21
         parent: "shin-left"
-        exponent: 2.4
+        exponent: 2.2
         swings [
           {
             driver: "gait"
@@ -3542,7 +3542,7 @@ prototypes {
 
       shape Box "bootPlan-left" {
         id: 196
-        position [0.2, -0.229, -0.079]
+        position [0.2, -0.2075, -0.0663]
         rotation [0.2637, 0, 0, 0.9646]
         scale [0.5, 0.5, 0.5]
         material: skin
@@ -3555,7 +3555,7 @@ prototypes {
       shape Superellipsoid "toe-left" {
         id: 199
         position [0.2, 0.06, 0.085]
-        scale [0.138, 0.064, 0.255]
+        scale [0.17, 0.066, 0.285]
         material: violet
         group: 23
         parent: "boot-left"
@@ -4639,11 +4639,11 @@ prototypes {
       shape Superellipsoid "boot-right" {
         id: 263
         position [-0.2, 0.1315, 0.085]
-        scale [0.135, 0.13, 0.225]
+        scale [0.162, 0.135, 0.255]
         material: skin
         group: 35
         parent: "shin-right"
-        exponent: 2.4
+        exponent: 2.2
         swings [
           {
             driver: "gait"
@@ -4674,7 +4674,7 @@ prototypes {
 
       shape Box "bootPlan-right" {
         id: 264
-        position [-0.2, -0.229, -0.079]
+        position [-0.2, -0.2075, -0.0663]
         rotation [0.2637, 0, 0, 0.9646]
         scale [0.5, 0.5, 0.5]
         material: skin
@@ -4687,7 +4687,7 @@ prototypes {
       shape Superellipsoid "toe-right" {
         id: 267
         position [-0.2, 0.06, 0.085]
-        scale [0.138, 0.064, 0.255]
+        scale [0.17, 0.066, 0.285]
         material: violet
         group: 37
         parent: "boot-right"
