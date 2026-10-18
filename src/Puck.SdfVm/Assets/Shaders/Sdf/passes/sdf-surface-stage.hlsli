@@ -161,12 +161,16 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         float3 relative = (biased - c.position);
         float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
 
-        if (any(abs(plane) > 0.97)) {
+        // A cascade holds the casters between its near and far planes only; a receiver past its far plane (the floor far
+        // below a high camera's near slice) would read every empty texel's far depth as a blocker in front of it.
+        float depth = dot(relative, c.forward);
+
+        if (any(abs(plane) > 0.97) || (depth <= c.near) || (depth >= c.far)) {
             continue;
         }
 
         float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * float(SDF_MESH_SHADOW_RESOLUTION));
-        float receiver = (dot(relative, c.forward) - parameters.y);
+        float receiver = (depth - parameters.y);
         // The receiver's plane in the cascade: its depth change per texel along the target's x and y, from the normal in
         // light space (x along right, y down the target's rows), so each tap compares against the receiver's own surface
         // at that tap's texel centre rather than the depth at the pixel. A receiver near edge-on to the light keeps its
