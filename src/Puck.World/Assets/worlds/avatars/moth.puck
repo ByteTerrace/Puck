@@ -504,6 +504,232 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
+  // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
+  {
+    name: "shoulders-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -50.4])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -50.4]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [45.6, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [46.3029, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 2.4885, -45.6])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -45.6]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-back-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -46.3029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-back-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -46.3029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50.4, 2.4885, -48])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 2.4885, -48]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "shoulders-front-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.6971, 2.4885, -49.6971])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 1.42, -48])
+        worldAxes: false
+      }
+      name: "shoulders-front-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -49.6971]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   // Eight hero cameras round the lower legs at the hero spawn, at 45-degree steps from the front, tiled by the legs-hero
   // layout. Each looks down about 20 degrees, so its frame tops out just under the horizon and shows only plain ground.
   {
@@ -6751,6 +6977,71 @@ views {
       }
       {
         camera: "legs-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  // The shoulders from eight sides at once.
+  layout "shoulders-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "shoulders-front"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "shoulders-front-left"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "shoulders-left"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "shoulders-back-left"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "shoulders-back"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "shoulders-back-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "shoulders-right"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "shoulders-front-right"
         height: 0.5
         width: 0.25
         x: 0.75
