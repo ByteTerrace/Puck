@@ -967,6 +967,19 @@ dynamics [
     r: 0.2
     zeta: 0.8
   }
+  // The moth rig's followers: the turn her hips trail and settle from, and the lean her planar acceleration builds.
+  {
+    f: 2.2
+    name: "body-turn"
+    r: 0
+    zeta: 0.55
+  }
+  {
+    f: 1.8
+    name: "body-lean"
+    r: 0
+    zeta: 0.75
+  }
 ]
 
 gravity {
@@ -1828,6 +1841,9 @@ prototypes {
         scale [0.195, 0.1425, 0.1475]
         material: charcoal
         exponent: softness
+        // The whole body rides the pelvis: it turns its hips into a diagonal (0.7 rad at 45 degrees off the facing,
+        // none in a pure strafe or backpedal), trails a turn by 0.12 s of turn rate, and leans about the ground into
+        // its planar acceleration, sideways into a curving run and forward into a start.
         swings [
           {
             driver: "stride"
@@ -1836,6 +1852,34 @@ prototypes {
             pivot [0, 1.0765, 0]
             wave: "sine"
             phase: 0
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: 0.7
+            pivot [0, 1.0765, 0]
+            wave: "sine"
+          }
+          {
+            driver: "trail"
+            axis [0, 1, 0]
+            amplitude: -0.12
+            pivot [0, 1.0765, 0]
+            wave: "linear"
+          }
+          {
+            driver: "lean"
+            axis [0, 0, 1]
+            amplitude: -0.016
+            pivot [0, 0, 0]
+            wave: "linear"
+          }
+          {
+            driver: "surge"
+            axis [1, 0, 0]
+            amplitude: 0.006
+            pivot [0, 0, 0]
+            wave: "linear"
           }
         ]
       }
@@ -1847,7 +1891,22 @@ prototypes {
         material: charcoal
         parent: "pelvis"
         exponent: softness
+        // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
         swings [
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.4
+            pivot [0, 1.0765, 0]
+            wave: "sine"
+          }
+          {
+            driver: "trail"
+            axis [0, 1, 0]
+            amplitude: 0.08
+            pivot [0, 1.0765, 0]
+            wave: "linear"
+          }
           {
             driver: "bank"
             axis [0, 0, 1]
@@ -2070,7 +2129,22 @@ prototypes {
         group: 4
         parent: "torso"
         exponent: softness
+        // The head keeps to the facing whatever the hips do, and looks ahead into a turn.
         swings [
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.3
+            pivot [0, 1.5715, 0]
+            wave: "sine"
+          }
+          {
+            driver: "trail"
+            axis [0, 1, 0]
+            amplitude: 0.07
+            pivot [0, 1.5715, 0]
+            wave: "linear"
+          }
           {
             driver: "cruise"
             axis [1, 0, 0]
@@ -3021,7 +3095,25 @@ prototypes {
           radiusStart: 0.095
           radiusEnd: 0.095
         }
+        // The stride swings in the plane of travel: the hip's own turn into the travel direction is undone, the plane
+        // is turned to the full travel direction, the leg strides, and both turns are put back. A forward diagonal
+        // strides straight ahead of the turned hips, a pure strafe abducts into a sidestep, and a backpedal strides
+        // backward.
         swings [
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: 0.7
+            pivot [0.145, 1.0265, 0]
+            wave: "sine"
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.5
+            pivot [0.145, 1.0265, 0]
+            wave: "linear"
+          }
           {
             driver: "stride"
             axis [1, 0, 0]
@@ -3029,6 +3121,20 @@ prototypes {
             pivot [0.145, 1.0265, 0]
             wave: "sine"
             phase: 0
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: 0.5
+            pivot [0.145, 1.0265, 0]
+            wave: "linear"
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.7
+            pivot [0.145, 1.0265, 0]
+            wave: "sine"
           }
           {
             driver: "flight"
@@ -4091,7 +4197,22 @@ prototypes {
           radiusStart: 0.095
           radiusEnd: 0.095
         }
+        // The stride swings in the plane of travel, as thigh-left's does.
         swings [
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: 0.7
+            pivot [-0.145, 1.0265, 0]
+            wave: "sine"
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.5
+            pivot [-0.145, 1.0265, 0]
+            wave: "linear"
+          }
           {
             driver: "stride"
             axis [1, 0, 0]
@@ -4099,6 +4220,20 @@ prototypes {
             pivot [-0.145, 1.0265, 0]
             wave: "sine"
             phase: 3.1415927
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: 0.5
+            pivot [-0.145, 1.0265, 0]
+            wave: "linear"
+          }
+          {
+            driver: "heading"
+            axis [0, 1, 0]
+            amplitude: -0.7
+            pivot [-0.145, 1.0265, 0]
+            wave: "sine"
           }
           {
             driver: "flight"
@@ -4937,6 +5072,48 @@ prototypes {
             "moving"
           ]
         }
+        // Twice the travel direction off the facing: a sine of it peaks on the diagonals and vanishes on a pure
+        // strafe or backpedal, and half of it, linear, is the direction itself.
+        {
+          name: "heading"
+          cadence: 2
+          signal: "travelDirection"
+          blendInSeconds: 0.12
+          blendOutSeconds: 0.3
+          "when" [
+            "Grounded"
+            "moving"
+          ]
+        }
+        // The turn rate through an underdamped response: a part swinging against it trails a turn, catches up a
+        // beat after the turn stops and overshoots a little as it settles.
+        {
+          name: "trail"
+          cadence: 1
+          signal: "turnRate"
+          dynamics: "body-turn"
+          "when" [
+            "always"
+          ]
+        }
+        {
+          name: "lean"
+          cadence: 1
+          signal: "lateralAcceleration"
+          dynamics: "body-lean"
+          "when" [
+            "Grounded"
+          ]
+        }
+        {
+          name: "surge"
+          cadence: 1
+          signal: "forwardAcceleration"
+          dynamics: "body-lean"
+          "when" [
+            "Grounded"
+          ]
+        }
       ]
       volumes [
         {
@@ -5031,6 +5208,13 @@ prototypes {
             driver: "stride"
             swingWeight: 0
             window [0, 3.1415925]
+            // At rest the boot holds its spot and steps once its stance point drifts 9 cm: turning in place, or
+            // settling into the stance after a stop.
+            replant {
+              distance: 0.09
+              seconds: 0.2
+              height: 0.07
+            }
           }
         }
         {
@@ -5053,6 +5237,11 @@ prototypes {
             driver: "stride"
             swingWeight: 0
             window [3.1415925, 6.28]
+            replant {
+              distance: 0.09
+              seconds: 0.2
+              height: 0.07
+            }
           }
         }
       ]

@@ -71,7 +71,10 @@ public static class WorldGaitDrivers {
     /// <param name="address">This call's entity address; uninhabited placements use index -1 with no body facts.</param>
     /// <param name="reads">The registration's reads of the state mirror a state-cell signal and a state gate token
     /// read through, bound to the wearing body; <see langword="null"/> when none can read.</param>
-    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null) {
+    /// <param name="kinematics">The registration's eased motion and driver followers, which the direction and
+    /// acceleration signals and a driver's <see cref="CreationDriverDocument.Dynamics"/> read; <see langword="null"/>
+    /// reads those signals as zero and tracks every signal exactly.</param>
+    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null) {
         if (
             !seeded ||
             (lastAddress != address)
@@ -83,6 +86,7 @@ public static class WorldGaitDrivers {
             easedSpeed = 0f;
             phases.Clear();
             weights.Clear();
+            kinematics?.Reset();
 
             return;
         }
@@ -102,6 +106,16 @@ public static class WorldGaitDrivers {
             : 0f) - easedSpeed) * blend));
 
         var moving = (easedSpeed > MovingSpeed);
+        var travelLength = travel.Length();
+
+        kinematics?.Observe(
+            blend: blend,
+            deltaSeconds: deltaSeconds,
+            travel: ((travelLength > MaxTravelPerFrame)
+                ? (travel * (MaxTravelPerFrame / travelLength))
+                : travel),
+            yaw: Yaw(rotation: orientation)
+        );
 
         if (drivers is not { Count: > 0 } rows) {
             return;
@@ -162,7 +176,7 @@ public static class WorldGaitDrivers {
             if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
                 // A state cell presented at the frame: a cycle-trait clock, a drawn value, an advancing counter —
                 // the phase is the sim's own number, read through the state mirror like every other binding.
-                phases[index] = (((reads is not null) && reads.TryNumber(
+                var stateTarget = (((reads is not null) && reads.TryNumber(
                     reference: driver.Signal!,
                     truth: false,
                     value: out var stateValue
@@ -171,14 +185,34 @@ public static class WorldGaitDrivers {
                     : 0f
                 );
 
+                phases[index] = (kinematics?.Follow(
+                    deltaSeconds: deltaSeconds,
+                    index: index,
+                    period: 0f,
+                    target: stateTarget
+                ) ?? stateTarget);
+
                 continue;
             }
             if (!CreationDriverDocument.Integrates(signal: driver.Signal)) {
-                phases[index] = (driver.Cadence.Value * (driver.Signal switch {
+                var target = (driver.Cadence.Value * (driver.Signal switch {
                     CreationDriverDocument.SignalSpeed => (total * perSecond),
                     CreationDriverDocument.SignalVerticalSpeed => (travel.Y * perSecond),
+                    CreationDriverDocument.SignalTravelDirection => (kinematics?.TravelDirection ?? 0f),
+                    CreationDriverDocument.SignalLateralAcceleration => (kinematics?.LateralAcceleration ?? 0f),
+                    CreationDriverDocument.SignalForwardAcceleration => (kinematics?.ForwardAcceleration ?? 0f),
                     _ => (yawDelta * perSecond),
                 }));
+
+                phases[index] = (kinematics?.Follow(
+                    deltaSeconds: deltaSeconds,
+                    index: index,
+                    period: WorldGaitKinematics.Period(
+                        cadence: driver.Cadence.Value,
+                        signal: driver.Signal
+                    ),
+                    target: target
+                ) ?? target);
 
                 continue;
             }

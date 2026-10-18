@@ -98,16 +98,19 @@ public sealed partial class WorldStampPool {
             if (gateHolds) {
                 resolved = ApplyPlant(
                     contactWeight: out contactWeight,
+                    deltaSeconds: deltaSeconds,
                     document: document,
                     effector: effector,
                     index: index,
                     live: live,
                     resolved: resolved,
+                    rootRotation: rootRotation,
                     target: ref targetWorld
                 );
             } else {
                 // A contact released in flight cannot be reused on a later landing at another world point.
                 live.EffectorPlanted[index] = false;
+                live.EffectorStepping[index] = false;
             }
 
             var holds = (resolved && gateHolds);
@@ -242,10 +245,11 @@ public sealed partial class WorldStampPool {
     }
     // Holds the effector's target where it was when the plant window opened, and reports whether a usable target
     // exists: a latched contact survives a probe that misses this frame, which is the whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, ref Vector3 target, out float contactWeight) {
+    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, ref Vector3 target, out float contactWeight) {
         contactWeight = 1f;
         if (effector.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
+            live.EffectorStepping[index] = false;
 
             return resolved;
         }
@@ -258,8 +262,33 @@ public sealed partial class WorldStampPool {
             weights: live.DriverWeight
         )) {
             live.EffectorPlanted[index] = false;
+            live.EffectorStepping[index] = false;
 
             return resolved;
+        }
+        if (plant.Replant is { } replant) {
+            if (driverWeight <= WorldGaitDrivers.RestWeight) {
+                return ApplyRestingPlant(
+                    deltaSeconds: deltaSeconds,
+                    document: document,
+                    driver: plant.Driver,
+                    index: index,
+                    live: live,
+                    replant: replant,
+                    resolved: resolved,
+                    target: ref target,
+                    up: StepUp(
+                        effector: effector,
+                        rootRotation: rootRotation
+                    )
+                );
+            }
+            if (live.EffectorStepping[index]) {
+                // The gait took the limb back mid-step: the cycle latches afresh rather than snapping the tip back to
+                // the point the step left.
+                live.EffectorStepping[index] = false;
+                live.EffectorPlanted[index] = false;
+            }
         }
 
         var window = plant.Window.Value;
@@ -295,6 +324,136 @@ public sealed partial class WorldStampPool {
         live.EffectorPlantTarget[index] = target;
 
         return true;
+    }
+    // A resting plant (CreationReplantDocument): the tip holds its latched world point until the point its target
+    // resolves to drifts past the replant distance, then steps there along a raised arc, one effector per plant
+    // driver at a time. A latch survives a probe that misses this frame; a step heading for a point the probe has
+    // since lost keeps the last point it found.
+    private static bool ApplyRestingPlant(Registration live, CreationDocument document, string driver, int index, CreationReplantDocument replant, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target) {
+        if (!live.EffectorPlanted[index]) {
+            live.EffectorStepping[index] = false;
+
+            if (!resolved) {
+                return false;
+            }
+
+            live.EffectorPlanted[index] = true;
+            live.EffectorPlantTarget[index] = target;
+
+            return true;
+        }
+
+        var fresh = target;
+        var latch = live.EffectorPlantTarget[index];
+
+        if (live.EffectorStepping[index]) {
+            live.EffectorStepTo[index] = (resolved ? fresh : live.EffectorStepTo[index]);
+
+            var progress = MathF.Min(
+                x: 1f,
+                y: (live.EffectorStepProgress[index] + ((deltaSeconds > 0f) ? (deltaSeconds / replant.Seconds) : 0f))
+            );
+
+            live.EffectorStepProgress[index] = progress;
+
+            if (progress >= 1f) {
+                live.EffectorStepping[index] = false;
+                live.EffectorPlantTarget[index] = live.EffectorStepTo[index];
+                target = live.EffectorStepTo[index];
+
+                return true;
+            }
+
+            target = StepPoint(
+                from: live.EffectorStepFrom[index],
+                height: replant.Height,
+                progress: progress,
+                to: live.EffectorStepTo[index],
+                up: up
+            );
+
+            return true;
+        }
+
+        target = latch;
+
+        if (
+            resolved &&
+            (Vector3.Distance(value1: latch, value2: fresh) > replant.Distance) &&
+            !SiblingStepping(
+                document: document,
+                driver: driver,
+                index: index,
+                live: live
+            )
+        ) {
+            live.EffectorStepping[index] = true;
+            live.EffectorStepFrom[index] = latch;
+            live.EffectorStepTo[index] = fresh;
+            live.EffectorStepProgress[index] = 0f;
+        }
+
+        return true;
+    }
+    // Whether another effector whose plant names the same driver is mid-step: a pair of feet steps one at a time.
+    private static bool SiblingStepping(Registration live, CreationDocument document, string driver, int index) {
+        var effectors = (document.Effectors ?? []);
+        var count = Math.Min(
+            val1: effectors.Count,
+            val2: CreationDocument.MaxEffectors
+        );
+
+        for (var other = 0; (other < count); other++) {
+            if (
+                (other != index) &&
+                live.EffectorStepping[other] &&
+                string.Equals(
+                a: effectors[other].Plant?.Driver,
+                b: driver,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// <summary>Returns a resting step's world point: an eased travel from <paramref name="from"/> to
+    /// <paramref name="to"/>, lifted along <paramref name="up"/> by a half-sine arc peaking at
+    /// <paramref name="height"/> mid-step.</summary>
+    /// <param name="from">The latched point the step leaves, world units.</param>
+    /// <param name="to">The point the step lands on, world units.</param>
+    /// <param name="up">The unit direction the arc rises along.</param>
+    /// <param name="height">The arc's peak lift, world units.</param>
+    /// <param name="progress">The step's progress in [0, 1].</param>
+    /// <returns>The step's point.</returns>
+    private static Vector3 StepPoint(Vector3 from, Vector3 to, Vector3 up, float height, float progress) {
+        var t = Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: progress
+        );
+        var eased = ((t * t) * (3f - (2f * t)));
+
+        return (Vector3.Lerp(
+            amount: eased,
+            value1: from,
+            value2: to
+        ) + (up * (height * MathF.Sin(x: (MathF.PI * t)))));
+    }
+    // The direction a resting step's arc rises along: against a surface target's probe direction, carried by the
+    // root; world up for a target that names no direction.
+    private static Vector3 StepUp(CreationEffectorDocument effector, Quaternion rootRotation) {
+        var direction = (effector.Target.Direction?.Value ?? Vector3.Zero);
+
+        return ((direction.LengthSquared() > 0f)
+            ? -Vector3.Normalize(value: Vector3.Transform(
+                rotation: rootRotation,
+                value: direction
+            ))
+            : Vector3.UnitY
+        );
     }
     // A rigid delta applied to a creation-space point.
     private static Vector3 Compose(Vector3 point, Quaternion rotation, Vector3 translation) => (Vector3.Transform(
@@ -482,7 +641,8 @@ public sealed partial class WorldStampPool {
                 Target: (live.EffectorHasTarget[index]
                 ? live.EffectorTarget[index]
                 : null),
-                Bones: live.EffectorBoneCount[index]
+                Bones: live.EffectorBoneCount[index],
+                Stepping: live.EffectorStepping[index]
             ));
         }
 
@@ -509,7 +669,18 @@ public readonly record struct WorldRigDriver(string Name, float Phase, float Wei
 /// resolved (a probe that found no surface, an inactive body target, a cell holding no point).</param>
 /// <param name="Bones">The bones its chain resolved to — fewer than
 /// <see cref="CreationEffectorDocument.MinChainBones"/> means the effector is inert.</param>
-public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones);
+/// <param name="Stepping">Whether its resting plant is mid-step toward a new point
+/// (<see cref="CreationReplantDocument"/>).</param>
+public readonly record struct WorldRigEffector(string Name, float Weight, bool Planted, Vector3? Target, int Bones, bool Stepping) {
+    /// <summary>Gets the contact word <c>body.rig</c> prints: <c>stepping</c> mid-step, else <c>yes</c> while the latch
+    /// holds and <c>no</c> while it does not.</summary>
+    public string Contact => (Stepping
+        ? "stepping"
+        : (Planted
+            ? "yes"
+            : "no"
+    ));
+}
 /// <summary>A body-rooted creation look's live animation state — what <c>body.rig</c> echoes.</summary>
 /// <param name="Creation">The stamped creation's row id.</param>
 /// <param name="Speed">The body's eased rendered speed, metres per second — the value the <c>moving</c>/<c>still</c>
