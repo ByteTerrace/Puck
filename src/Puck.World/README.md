@@ -907,7 +907,10 @@ Facts a script needs:
 - **Aiming the view.** `view.override camera` has an operator camera that
   frames the world whatever a seat's look sensitivity is, which is a player
   input setting and not an operator lever (the engine default is zero, so
-  `player.look` turns nothing until a world authors `playerDefaults.seatLook`).
+  `player.look` and a look stick turn nothing until a world authors
+  `seatDefaults.seatCameraFeel`, which the debug world's Moth basis does, at a
+  stick rate of 2.6 radians a second; `world.row.set playerDefaults.seatLook`
+  edits it live).
   `pose <x> <y> <z> <yaw> <pitch> [<fov>]` sets an absolute eye and heading,
   `look <x> <y> <z> <tx> <ty> <tz> [<fov>]` an eye facing a point, and
   `orbit <tx> <ty> <tz> <distance> <yaw> <pitch> [<fov>]` an eye behind a point.

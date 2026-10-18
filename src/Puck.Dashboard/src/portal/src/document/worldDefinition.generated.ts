@@ -7898,9 +7898,9 @@ export type WorldPrototype = {
        */
       receive?: number | null;
       /**
-       * Optional painted band.
+       * Up to MaxPaletteBands painted bands, each drawn over the one before; null or empty paints none.
        */
-      band?: {
+      bands?: ({
         /**
          * A point on the band's centre plane.
          */
@@ -7917,7 +7917,7 @@ export type WorldPrototype = {
          * The band's color, #RRGGBB or a state binding.
          */
         color: string;
-      } | null;
+      } | null)[] | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).

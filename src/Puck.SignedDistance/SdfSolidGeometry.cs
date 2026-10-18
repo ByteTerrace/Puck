@@ -592,11 +592,12 @@ public static class SdfSolidGeometry {
                 detail: detail
             );
         }
-        // The plain Box arm preserves the transformed box's axial zero-set extents under one conventional world-space
-        // corner radius, so the field stays a true rounded-box distance; the chamfered arm keeps the same zero set and
-        // the same fillet (riding the family's rounding lane on top of the chamfer), so the two share one collider and
-        // a chamfer going to zero lands on the plain Box.
-        var boxExtents = (((BoxHalfExtents + new Vector3(value: BoxRound)) * effectiveScale) - new Vector3(value: boxRound));
+        // The plain Box arm's faces sit at the scaled half-extents, as the transformed unit box's do, under one
+        // world-space corner radius inset from them (sdfBox erodes by it and offsets back out), so the field stays a true
+        // rounded-box distance at any aspect; the chamfered arm keeps the same zero set and the same fillet (riding the
+        // family's rounding lane on top of the chamfer), so the two share one collider and a chamfer going to zero lands
+        // on the plain Box.
+        var boxExtents = (BoxHalfExtents * effectiveScale);
 
         if (
             (type == SdfSolidPrimitive.Box) &&
@@ -819,8 +820,7 @@ public static class SdfSolidGeometry {
     /// <summary>A primitive's local support half-extent along a unit local axis — how far its emitted zero set reaches
     /// from its center in that direction, the panel trait's erode/translate input (see <c>ShapePanelDocument</c>).
     /// Reads the same zero set <see cref="AppendScaledPrimitive"/> emits: a Box's face sits at its half-extents lane
-    /// in both its spellings (the corner fillet is an inset), <c>(1 + BoxRound)·scaleᵢ − BoxRound·min(scale)</c> per
-    /// axis and exactly <c>scale</c> when uniform. Exact along a principal axis for every primitive; off-axis, a Sphere or Ellipsoid
+    /// in both its spellings (the corner fillet is an inset), <c>scaleᵢ</c> per axis. Exact along a principal axis for every primitive; off-axis, a Sphere or Ellipsoid
     /// reads its true support (<c>|radii ⊙ axis|</c>), and every other primitive reads the support of its canonical
     /// unit-scale half-extent box (<see cref="GetLocalBounds"/>'s dimension table, <c>Σ|axisᵢ|·extentᵢ</c>). Support
     /// (the farthest reach) rather than the ray-exit distance is what keeps a raised panel's bound widening sound:
@@ -884,17 +884,9 @@ public static class SdfSolidGeometry {
 
         // KEEP IN SYNC with AppendScaledPrimitive's Box arms: the fillet is an inset in both spellings (sdfBox
         // erodes its half-extents by the corner radius before offsetting back out; ChamferedRectangle insets by its
-        // rounding), so the zero set is the half-extents lane itself — (1 + BoxRound)·scale − BoxRound·min(scale)
-        // per axis, exactly `scale` when uniform.
+        // rounding), so the zero set is the half-extents lane itself, the scale per axis.
         if (type == SdfSolidPrimitive.Box) {
-            var minimumScale = MathF.Min(
-                x: effectiveScale.X,
-                y: MathF.Min(
-                    x: effectiveScale.Y,
-                    y: effectiveScale.Z
-                )
-            );
-            var face = (((BoxHalfExtents + new Vector3(value: BoxRound)) * effectiveScale) - new Vector3(value: (BoxRound * minimumScale)));
+            var face = (BoxHalfExtents * effectiveScale);
 
             return MathF.Abs(x: Vector3.Dot(
                 vector1: Vector3.Abs(value: direction),

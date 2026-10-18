@@ -17,12 +17,17 @@ namespace Puck.World.Client;
 /// the portal trigger and the arrival isometry. This class is the render consumer — it converts a finished frame to
 /// single precision once and applies the render-only policy (proud epsilon, interior fraction) on top.</remarks>
 public static class WorldPrototypeFacets {
-    // RENDER POLICY over the shared frame, not geometry: the slab sits proud of the face surface by
+    // RENDER POLICY over the shared frame, not geometry: a display's slab sits proud of the face surface by
     // FaceProudEpsilon so its zero-set never coincides with the host shape's (coincident zero-sets speckle), and it
     // covers FaceInteriorFraction of the frame so the drawn image reads as an inset screen rather than reaching the
-    // frame's edge. The portal trigger reads the SAME frame and applies neither.
+    // frame's edge. An opening's glass (a window projection's, IsOpening) lies inside the face's own shape instead: a
+    // slab about its mid-plane, FaceOpeningInset short of each of its faces, so the shape buries the glass everywhere
+    // but where an aperture is cut through it, and the glass fills that aperture to its walls with no zero-set
+    // coinciding with the shape's, as thick as the shape allows so the mesh bake keeps it however coarse its cells. The
+    // portal trigger reads the SAME frame and applies none of it.
     private const float FaceInteriorFraction = 0.8f;
     private const float FaceMinimumHalfDepth = 0.01f;
+    private const float FaceOpeningInset = 0.01f;
     private const float FaceProudEpsilon = 0.05f;
     private const uint FaceRenderHeight = 192;
     private const uint FaceRenderWidth = 256;
@@ -49,6 +54,22 @@ public static class WorldPrototypeFacets {
     private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter) {
         var normal = frame.Normal.ToVector3();
         var halfDepth = ((float)((double)frame.HalfDepth));
+
+        if (IsOpening(source: source)) {
+            return new WorldScreen(
+                Index: index,
+                Origin: (frame.Origin.ToVector3() + (normal * OpeningHalfDepth(frame: frame))),
+                Right: frame.Right.ToVector3(),
+                Up: frame.Up.ToVector3(),
+                HalfWidth: OpeningHalf(half: frame.HalfWidth),
+                HalfHeight: OpeningHalf(half: frame.HalfHeight),
+                HalfDepth: OpeningHalfDepth(frame: frame),
+                Round: 0f,
+                Source: source,
+                Route: WorldScreenRoute.Passive,
+                Filter: filter
+            );
+        }
 
         return new WorldScreen(
             Index: index,
@@ -83,12 +104,32 @@ public static class WorldPrototypeFacets {
             derivedFaceScreens: definition.Authoring.DerivedFaceScreens
         ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
     }
+    // One of an opening's glass half-extents: the face's own, FaceOpeningInset short, never under FaceMinimumHalfDepth.
+    private static float OpeningHalf(Puck.Maths.FixedQ4816 half) => MathF.Max(
+        x: (((float)((double)half)) - FaceOpeningInset),
+        y: FaceMinimumHalfDepth
+    );
+    private static float OpeningHalfDepth(WorldFaceFrame frame) => OpeningHalf(half: frame.HalfDepth);
+    /// <summary>Returns whether a face's source shows through it as an opening rather than on it as a display: a
+    /// session seen through a window projection, whose glass lies inside its face's shape and so fills whatever aperture
+    /// is cut through that shape (<see cref="GlassSpan"/>).</summary>
+    /// <param name="source">The face's source.</param>
+    /// <returns><see langword="true"/> for a window-projection session.</returns>
+    public static bool IsOpening(WorldScreenSource source) => (source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window });
     /// <summary>Returns where the glass a face's screen draws lies along the face's normal, measured from its frame's
-    /// origin: its back and its front, the front proud of the face. A window looking through the face as its counterpart,
-    /// from either side, starts its rays past it (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
+    /// origin: its back and its front, a display's front proud of the face and an opening's about its mid-plane. A
+    /// window looking through the face as its counterpart, from either side, starts its rays past it
+    /// (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
     /// <param name="frame">The face's frame.</param>
+    /// <param name="source">The face's source, which decides whether its glass is an opening (<see cref="IsOpening"/>).</param>
     /// <returns>The glass's back and front, in world units along the frame's normal.</returns>
-    public static (float Back, float Front) GlassSpan(WorldFaceFrame frame) {
+    public static (float Back, float Front) GlassSpan(WorldFaceFrame frame, WorldScreenSource source) {
+        if (IsOpening(source: source)) {
+            var half = OpeningHalfDepth(frame: frame);
+
+            return (-half, half);
+        }
+
         var halfDepth = ((float)((double)frame.HalfDepth));
         var front = (halfDepth + FaceProudEpsilon);
 

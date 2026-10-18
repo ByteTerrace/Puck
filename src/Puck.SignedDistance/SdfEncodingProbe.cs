@@ -191,7 +191,8 @@ public static class SdfEncodingProbe {
                         Under: [new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[47], y: v[48], z: v[49]), Metal: v[50], Roughness: v[51]), Threshold: v[52]), new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[53], y: v[54], z: v[55]), Metal: v[56], Roughness: v[57]), Threshold: v[58])]
                     ),
                     Wrap: v[59],
-                    Band: new SdfBand(Color: new Vector3(x: v[67], y: v[68], z: v[69]), HalfWidth: v[66], Normal: new Vector3(x: v[63], y: v[64], z: v[65]), Origin: new Vector3(x: v[60], y: v[61], z: v[62]))
+                    Band: new SdfBand(Color: new Vector3(x: v[67], y: v[68], z: v[69]), HalfWidth: v[66], Normal: new Vector3(x: v[63], y: v[64], z: v[65]), Origin: new Vector3(x: v[60], y: v[61], z: v[62])),
+                    SecondBand: new SdfBand(Color: new Vector3(x: v[77], y: v[78], z: v[79]), HalfWidth: v[76], Normal: new Vector3(x: v[73], y: v[74], z: v[75]), Origin: new Vector3(x: v[70], y: v[71], z: v[72]))
                 )),
                 radius: 0.5f
             ),
@@ -203,6 +204,7 @@ public static class SdfEncodingProbe {
                 0.5f, 2f, 0.52f, 0.53f, 0.54f, 55f, 0.56f, 0.57f, 0.58f, 0.59f,
                 0.6f, 0.61f, 0.3f, 0.63f, 0.64f, 0.65f, 0.66f, 0.67f, 0.7f, 0.69f,
                 0.71f, 0.72f, 0.73f, 0.3f, 0.4f, 0.5f, 0.02f, 0.77f, 0.78f, 0.79f,
+                0.81f, 0.82f, 0.83f, 0.5f, 0.6f, 0.7f, 0.03f, 0.87f, 0.88f, 0.89f,
             ],
             name: "material"
         );

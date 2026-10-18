@@ -1192,7 +1192,7 @@ public sealed class ShapePanelLawTests {
     }
 
     // A recessed panel's plate is Box(0.4, 0.3, 0.2); its face defaults to +Z (the Box's front), whose half-extent
-    // is 1.04 * 0.2 - 0.04 * 0.2 = 0.2 (the rounded-box fillet is an inset), so a depth of 0.1 and an inset of 0.05
+    // is its scale, 0.2 (the rounded-box fillet is an inset), so a depth of 0.1 and an inset of 0.05
     // sit inside every clamp. The uniform plate takes AppendScaledPrimitive's Scale-op branch, the non-uniform one
     // its native extents — the two branch shapes every path law must cover.
     private static readonly ShapePanelDocument RecessedPanel = new(

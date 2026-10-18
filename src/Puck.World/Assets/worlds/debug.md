@@ -49,8 +49,9 @@ the garden's scene (`via endpoint:6~global6~garden`), so `world.counters` shows
 the two residencies `world` and `routed$6~global6~garden`. Each window renders
 at the power-of-two share of the screen its glass covers, as clear glass
 sampled linearly (the frames author `filter: linear`), without shadows. The
-axis lines, the reference cubes and the test room stand behind the spawn on +Z
-and -X, out of the frames' way.
+axis lines meet two metres to the spawn's +X side and run along +X and +Z, and
+the reference cubes and the test room stand behind the spawn on +Z and -X, all
+out of the frames' way.
 
 ## Where a crossing lands
 

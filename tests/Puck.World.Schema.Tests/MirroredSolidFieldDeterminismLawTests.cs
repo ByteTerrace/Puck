@@ -92,9 +92,9 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         Assert.Equal(
             expected: new Vector4(
                 w: expectedRound,
-                x: ((1.04f * 24f) - expectedRound),
-                y: ((1.04f * fixedThinAxis) - expectedRound),
-                z: ((1.04f * 24f) - expectedRound)
+                x: 24f,
+                y: fixedThinAxis,
+                z: 24f
             ),
             actual: box.Data0
         );

@@ -1,4 +1,4 @@
-// The debug world: a flat 256 m ground under a clear day, with axis markers and reference cubes at the origin and
+// The debug world: a flat 256 m ground under a clear day, with axis markers beside the spawn, reference cubes and
 // the Moth avatar to walk it, an open-fronted coloured room beside them for judging indirect light, and a picture
 // frame ahead of the spawn whose glass is a portal onto the garden (garden.puck). It is the plain starting point the
 // island is built up from, in engine: boot it with `--world src/Puck.World/Assets/worlds/debug.puck`, edit this
@@ -109,19 +109,21 @@ placements {
     ]
   }
 
+  // The axis markers meet at (2, 0, 0), two metres to the spawn's +X side, so the up pole stands beside the avatar in
+  // every spawn and chase view rather than through it, and clear of the chase camera's sight of the portal frame.
   placement "axis-x" {
     prototype: "axis-x"
-    position [8, 0.02, 0]
+    position [10, 0.02, 0]
   }
 
   placement "axis-z" {
     prototype: "axis-z"
-    position [0, 0.02, 8]
+    position [2, 0.02, 8]
   }
 
   placement "axis-up" {
     prototype: "axis-up"
-    position [0, 2, 0]
+    position [2, 2, 0]
   }
 
   placement "cube-1m" {
@@ -260,9 +262,10 @@ prototypes {
     }
   }
 
-  // A Cornell-style room for judging indirect light: red and green side walls, a white back wall, ceiling and raised
-  // floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open sky
-  // elsewhere in this world hides them.
+  // A Cornell-style room for judging indirect light: red and green side walls, a white back wall between them, ceiling
+  // and raised floor, two white blocks, and one open side. Bounced light and colour bleed show inside it, where the open
+  // sky elsewhere in this world hides them. The plates abut without overlapping: each bakes as its own mesh, and two
+  // meshes sharing a face fight over it.
   prototype "gi-corner" {
     document {
       name: "gi-corner"
@@ -302,7 +305,7 @@ prototypes {
       shape Box "back-wall" {
         material: roomWhite
         position [0, 1.6, -2.05]
-        scale [2.1, 1.5, 0.05]
+        scale [2, 1.5, 0.05]
       }
       shape Box "ceiling" {
         material: roomWhite

@@ -363,7 +363,7 @@ public sealed class HighSpeedGroundContactLawTests {
         }
     }
 
-    // CreationGeometry's unit box half-extent is 1 (was 0.34); this ratio (old unit + round) / (new unit + round)
-    // keeps the compiled floor's world-space reach the same as before the unit-size table changed.
-    private const float BoxUnitRatio = (0.38f / 1.04f);
+    // A Box's half-extents are its scale; this ratio keeps the compiled floor's world-space reach at 0.38 of the
+    // authored extents, the reach the contact laws were tuned on.
+    private const float BoxUnitRatio = 0.38f;
 }

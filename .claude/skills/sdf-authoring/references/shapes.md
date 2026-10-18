@@ -13,7 +13,7 @@ a magnitude of at least 0.0001.
 | Type | `scale` reads as | Unit size |
 |---|---|---|
 | `Sphere` | uniform: radius. Non-uniform: baked as per-axis ellipsoid radii | r = 1 |
-| `Box` | half-extents | (1,1,1) plus a 0.04 fillet |
+| `Box` | half-extents | (1,1,1): `scale` is the half-extent on each axis exactly, its corners filleted inside that box by 0.04 of the smallest axis |
 | `Torus` | uniform multiplier only; non-uniform rides a generic scale | major 1, minor 0.4 — band width is 0.4 × major |
 | `Cylinder` | x/z radius (x must equal z to bake), y half-height | r = 1, half-height 1 |
 | `Capsule` | x/z radius (x must equal z), y the cylindrical section length | total height is 2r + length |

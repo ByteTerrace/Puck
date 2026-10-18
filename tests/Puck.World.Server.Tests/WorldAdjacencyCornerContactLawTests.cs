@@ -418,7 +418,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         );
     }
 
-    private const float BoxLocalHalfExtent = 1.04f;
+    private const float BoxLocalHalfExtent = 1f;
     private const float FloorHalfExtent = 12f;
     private const float GroundTolerance = 0.01f;
 

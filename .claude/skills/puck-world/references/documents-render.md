@@ -211,7 +211,7 @@ radiance unchanged; a light outside the slots shades unshadowed. The per-slot
 march counters and counted 16-byte handoff uploads follow the
 [P18-7 binding contract](../../../../docs/plans/rendering.md#p18--sky-and-atmosphere).
 
-`CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
+`CreationDocument.PaletteSize = 32` bounds `puck.creation.v1`'s `palette`
 array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a
 `state.<row>[.<key>]` binding), `emissive` (null = 0), `specular` (null =
 the `SdfMaterial` default 0; the GGX dielectric reflectance at normal

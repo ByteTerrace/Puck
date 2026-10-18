@@ -7,8 +7,8 @@ namespace Puck.SignedDistance;
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
 //   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
-//   [materialOffset ..) = material layers, 22 uint4 per entry; see PackMaterials and sdfMaterialLoad.
-//   [materialOffset + 22*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
+//   [materialOffset ..) = material layers, 24 uint4 per entry; see PackMaterials and sdfMaterialLoad.
+//   [materialOffset + 24*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
 //   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, tapeOffset) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,

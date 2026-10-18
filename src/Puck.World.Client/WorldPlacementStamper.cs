@@ -100,7 +100,8 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Band: entry?.Band?.ToBand(resolve: resolveLayerColor)
+                Band: ((entry?.Bands is { Count: > 0 } bands) ? bands[0].ToBand(resolve: resolveLayerColor) : null),
+                SecondBand: ((entry?.Bands is { Count: > 1 } more) ? more[1].ToBand(resolve: resolveLayerColor) : null)
             ));
         }
     }

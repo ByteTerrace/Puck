@@ -22,6 +22,9 @@ let jet = 10 // #120D13
 let pearl = 11 // #FFF8EF
 let violetBandLeft = 12 // violet under the left shoulder pad's #EED3A6 band
 let violetBandRight = 13 // violet under the right shoulder pad's #EED3A6 band
+let violetPodLeft = 14 // violet under the left back pod's two #EED3A6 bands
+let violetPodRight = 15 // violet under the right back pod's two #EED3A6 bands
+let violetChest = 16 // violet under the breastplate's #EED3A6 lower band
 
 // Values repeated across the body, named so changing one changes the moth rather than 120 shapes.
 let softness = 2.1 // the superellipsoid exponent every rounded body part shares
@@ -1408,12 +1411,14 @@ prototypes {
               metal: 0
             }
           }
-          band {
-            origin [0, -0.0125, 0]
-            normal [0.3940162, 0.9191023, 0]
-            halfWidth: 0.02
-            color: "#EED3A6"
-          }
+          bands [
+            {
+              origin [0, -0.0125, 0]
+              normal [0.3940162, 0.9191023, 0]
+              halfWidth: 0.02
+              color: "#EED3A6"
+            }
+          ]
         }
         {
           color: "#9D66C6"
@@ -1445,12 +1450,143 @@ prototypes {
               metal: 0
             }
           }
-          band {
-            origin [0, -0.0125, 0]
-            normal [-0.3940162, 0.9191023, 0]
-            halfWidth: 0.02
-            color: "#EED3A6"
+          bands [
+            {
+              origin [0, -0.0125, 0]
+              normal [-0.3940162, 0.9191023, 0]
+              halfWidth: 0.02
+              color: "#EED3A6"
+            }
+          ]
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
           }
+          bands [
+            {
+              origin [0, 0.1175, 0]
+              normal [0.261909, 0.965092, 0]
+              halfWidth: 0.04
+              color: "#EED3A6"
+            }
+            {
+              origin [0, -0.1125, 0]
+              normal [0.261909, 0.965092, 0]
+              halfWidth: 0.05
+              color: "#EED3A6"
+            }
+          ]
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          bands [
+            {
+              origin [0, 0.1175, 0]
+              normal [-0.261909, 0.965092, 0]
+              halfWidth: 0.04
+              color: "#EED3A6"
+            }
+            {
+              origin [0, -0.1125, 0]
+              normal [-0.261909, 0.965092, 0]
+              halfWidth: 0.05
+              color: "#EED3A6"
+            }
+          ]
+        }
+        {
+          color: "#9D66C6"
+          roughness: 0.3
+          specular: 0.12
+          emissive: 0
+          coat: 0.4
+          weathering {
+            edge: 0.4
+            lines: 0
+            settle: 0.02
+            reach: 0.02
+            seed: 32
+            scale: 6
+            floor: 1
+            under [
+              {
+                threshold: 0.28
+                surface {
+                  color: "#B396C3"
+                  roughness: 0.58
+                  metal: 0.1
+                }
+              }
+            ]
+            deposit {
+              color: "#827570"
+              roughness: 0.76
+              metal: 0
+            }
+          }
+          bands [
+            {
+              origin [0, -0.0865, 0]
+              normal [0, 1, 0]
+              halfWidth: 0.0865
+              color: "#EED3A6"
+            }
+          ]
         }
       ]
       shape Superellipsoid "pelvis" {
@@ -1511,7 +1647,7 @@ prototypes {
         id: 3
         position [0, 1.3965, 0.0125]
         scale [0.24, 0.1725, 0.16]
-        material: violet
+        material: violetChest
         group: 1
         parent: "torso"
         exponent: softness
@@ -1537,37 +1673,6 @@ prototypes {
         blend: "Subtraction"
         group: 1
         parent: "torso"
-      }
-
-      shape Superellipsoid "breastIvory" {
-        id: 6
-        position [0, 1.3965, 0.0125]
-        scale [0.2415, 0.174, 0.1615]
-        material: skin
-        group: 2
-        parent: "torso"
-        exponent: softness
-      }
-
-      shape Prism "breastPaint" {
-        id: 7
-        position [0, 1.3315, 0.14]
-        scale [0.1925, 0.075, 0.1]
-        material: skin
-        blend: "Intersection"
-        group: 2
-        parent: "torso"
-        profile {
-          kind: "Convex"
-          vertices [
-            [-1, 0.8666667]
-            [1, 0.8666667]
-            [0.9480519, -0.2666667]
-            [0, -1]
-            [-0.9480519, -0.2666667]
-          ]
-          cornerRadius: 0.12
-        }
       }
 
       shape Prism "abdomen0" {
@@ -3252,7 +3357,7 @@ prototypes {
         id: 206
         position [0.14, 1.3115, -0.23]
         scale [0.125, 0.2875, 0.0875]
-        material: violet
+        material: violetPodLeft
         group: 24
         parent: "torso"
         exponent: softness
@@ -3300,58 +3405,6 @@ prototypes {
         profile {
           kind: "Ellipse"
         }
-      }
-
-      shape Superellipsoid "podBand-left-0" {
-        id: 208
-        position [0.14, 1.3115, -0.23]
-        scale [0.126, 0.289, 0.0885]
-        material: skin
-        group: 25
-        parent: "pod-left"
-        exponent: softness
-        shear {
-          target: 0
-          driver: 1
-          linear: 0.14
-        }
-      }
-
-      shape Box "podBandMask-left-0" {
-        id: 209
-        position [0.14, 1.429, -0.23]
-        rotation [0, 0, -0.1321126, 0.9912347]
-        scale [0.24, 0.04, 0.2]
-        material: skin
-        blend: "Intersection"
-        group: 25
-        parent: "pod-left"
-      }
-
-      shape Superellipsoid "podBand-left-1" {
-        id: 210
-        position [0.14, 1.3115, -0.23]
-        scale [0.126, 0.289, 0.0885]
-        material: skin
-        group: 26
-        parent: "pod-left"
-        exponent: softness
-        shear {
-          target: 0
-          driver: 1
-          linear: 0.14
-        }
-      }
-
-      shape Box "podBandMask-left-1" {
-        id: 211
-        position [0.14, 1.199, -0.23]
-        rotation [0, 0, -0.1321126, 0.9912347]
-        scale [0.24, 0.05, 0.2]
-        material: skin
-        blend: "Intersection"
-        group: 26
-        parent: "pod-left"
       }
 
       shape Cylinder "podHinge-left" {
@@ -4164,7 +4217,7 @@ prototypes {
         id: 274
         position [-0.14, 1.3115, -0.23]
         scale [0.125, 0.2875, 0.0875]
-        material: violet
+        material: violetPodRight
         group: 38
         parent: "torso"
         exponent: softness
@@ -4212,58 +4265,6 @@ prototypes {
         profile {
           kind: "Ellipse"
         }
-      }
-
-      shape Superellipsoid "podBand-right-0" {
-        id: 276
-        position [-0.14, 1.3115, -0.23]
-        scale [0.126, 0.289, 0.0885]
-        material: skin
-        group: 39
-        parent: "pod-right"
-        exponent: softness
-        shear {
-          target: 0
-          driver: 1
-          linear: -0.14
-        }
-      }
-
-      shape Box "podBandMask-right-0" {
-        id: 277
-        position [-0.14, 1.429, -0.23]
-        rotation [0, 0, 0.1321126, 0.9912347]
-        scale [0.24, 0.04, 0.2]
-        material: skin
-        blend: "Intersection"
-        group: 39
-        parent: "pod-right"
-      }
-
-      shape Superellipsoid "podBand-right-1" {
-        id: 278
-        position [-0.14, 1.3115, -0.23]
-        scale [0.126, 0.289, 0.0885]
-        material: skin
-        group: 40
-        parent: "pod-right"
-        exponent: softness
-        shear {
-          target: 0
-          driver: 1
-          linear: -0.14
-        }
-      }
-
-      shape Box "podBandMask-right-1" {
-        id: 279
-        position [-0.14, 1.199, -0.23]
-        rotation [0, 0, 0.1321126, 0.9912347]
-        scale [0.24, 0.05, 0.2]
-        material: skin
-        blend: "Intersection"
-        group: 40
-        parent: "pod-right"
       }
 
       shape Cylinder "podHinge-right" {
@@ -4622,6 +4623,18 @@ rule "blink-open" {
   blink[$each] = 0
   generate(row: blinkRest)
   blinkAt[$each] = $tick + blinkRest
+}
+
+// The seat camera's feel: pointer orbit at a milliradian a pixel, and the look stick (or a typed player.look) at 2.6
+// radians a second at full deflection. Without it every look input turns the camera by zero.
+seatDefaults {
+  seatCameraFeel {
+    invertPitch: false
+    invertYaw: false
+    pitchSensitivity: 0.001
+    stickLookRate: 2.6
+    yawSensitivity: 0.001
+  }
 }
 
 simulation {

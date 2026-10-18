@@ -21,11 +21,20 @@ public static partial class CreationCanonicalizer {
             }
             return Vector3.Zero;
         }
+        var bands = (entry.Bands ?? []);
+
+        if (bands.Count > CreationDocument.MaxPaletteBands) {
+            errors.Add(item: new(
+                Message: $"{bands.Count} bands exceed the {CreationDocument.MaxPaletteBands} a palette slot paints.",
+                Path: $"palette[{index}].bands"
+            ));
+        }
         try {
             if (!SdfMaterialLayers.IsValid(
                 inset: entry.Inset?.ToInset(resolve: Resolve),
                 weathering: entry.Weathering?.ToWeathering(resolve: Resolve),
-                band: entry.Band?.ToBand(resolve: Resolve)
+                band: ((bands.Count > 0) ? bands[0].ToBand(resolve: Resolve) : null),
+                secondBand: ((bands.Count > 1) ? bands[1].ToBand(resolve: Resolve) : null)
             )) {
                 errors.Add(item: new(
                     Message: "Invalid inset, weathering or band: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero band normal and a positive band half-width.",

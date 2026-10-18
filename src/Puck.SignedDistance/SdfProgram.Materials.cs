@@ -3,10 +3,10 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
-    // Twenty-two float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
+    // Twenty-four float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit;
-    // 20..21 band (unit normal and centre-plane offset; color and half-width, zero when absent).
+    // 20..21 band and 22..23 second band (unit normal and centre-plane offset; color and half-width, zero when absent).
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w.
     private void PackMaterials(int materialOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         for (var index = 0; (index < materialCount); index++) {
@@ -55,24 +55,30 @@ public sealed partial class SdfProgram {
                 )
             );
             Row(row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
-            if (m.Band is { } band) {
-                var normal = Vector3.Normalize(value: band.Normal);
+            void Band(int row, SdfBand? band) {
+                if (band is not { } stripe) {
+                    return;
+                }
+
+                var normal = Vector3.Normalize(value: stripe.Normal);
 
                 Row(
-                    row: 20,
+                    row: row,
                     value: new(
                         value: normal,
-                        w: Vector3.Dot(vector1: normal, vector2: band.Origin)
+                        w: Vector3.Dot(vector1: normal, vector2: stripe.Origin)
                     )
                 );
                 Row(
-                    row: 21,
+                    row: (row + 1),
                     value: new(
-                        value: band.Color,
-                        w: band.HalfWidth
+                        value: stripe.Color,
+                        w: stripe.HalfWidth
                     )
                 );
             }
+            Band(row: 20, band: m.Band);
+            Band(row: 22, band: m.SecondBand);
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;
 

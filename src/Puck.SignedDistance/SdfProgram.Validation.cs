@@ -316,7 +316,8 @@ public sealed partial class SdfProgram {
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,
-                band: material.Band
+                band: material.Band,
+                secondBand: material.SecondBand
             )
             ) {
                 throw new ArgumentOutOfRangeException(
