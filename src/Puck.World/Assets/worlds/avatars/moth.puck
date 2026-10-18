@@ -386,7 +386,23 @@ bindingOverlays [
                 ]
               }
               {
+                channel: "flight"
+                scale: 1
+                sources [
+                  "keyboard.f"
+                  "gamepad.buttonNorth"
+                ]
+              }
+              {
                 channel: "rise"
+                scale: 1
+                sources [
+                  "keyboard.space"
+                  "gamepad.buttonSouth"
+                ]
+              }
+              {
+                channel: "jump"
                 scale: 1
                 sources [
                   "keyboard.space"
@@ -1395,6 +1411,11 @@ channels [
     shape: Binary
   }
   {
+    composition: true
+    name: "flight"
+    shape: Binary
+  }
+  {
     composition: false
     name: "rise"
     role: MoveUp
@@ -1606,44 +1627,73 @@ kits {
       motion {
         facingSnap: false
         groundStick: 2
+        // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
+        // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
+        // falls with no hover and no thrust, and jumps instead.
         holds [
           {
+            name: "groundFlight"
             bond: Surface
+            hold: Gravity
             cone [0, 60]
-            driveAlignment: 0
+            reach: 1.2
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
             envelope {
               sinkSpeed: 40
             }
-            forward: Heading
-            gravity {
-              fall: 46
-              rise: 28
-            }
-            hold: Gravity
-            lift: 0
-            name: "ground"
-            onDrive: false
-            pull: 0
-            reach: 1.2
             thrust: 1
-            upLean: 0
+            spend {
+              state: "flightFuel"
+              ratePerSecond: 0.001
+            }
           }
           {
-            bond: Free
-            driveAlignment: 0
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 1.2
             forward: Heading
             gravity {
               fall: 46
               rise: 28
             }
+            envelope {
+              sinkSpeed: 40
+            }
+          }
+          {
+            name: "flight"
+            bond: Free
             hold: Lift
+            forward: Heading
             lift: 1
-            name: "air"
-            onDrive: false
-            pull: 0
-            reach: 0
+            gravity {
+              fall: 46
+              rise: 28
+            }
             thrust: 1
-            upLean: 0
+            spend {
+              state: "flightFuel"
+              ratePerSecond: 0.001
+            }
+          }
+          {
+            name: "fall"
+            bond: Free
+            hold: Gravity
+            forward: Heading
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            envelope {
+              sinkSpeed: 40
+            }
           }
         ]
         moveFrame: World
@@ -1668,6 +1718,100 @@ kits {
           rate: 2.5
         }
       }
+      // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
+      // makes of the holds' 28:46 arc, a second press in the air jumps again, and letting go while still rising cuts the
+      // arc short. North or F switches flight mode.
+      actions {
+        jump {
+          onPress {
+            gate: all(predicates: [
+              compareState(state: flightFuel, comparison: Equal, value: 0)
+              compareState(state: jumps, comparison: Greater, value: 0)
+            ]
+            )
+            latchSeconds: 0
+            effects [
+              setVerticalVelocity(velocity: 5.1)
+              addState(state: jumps, value: -1)
+            ]
+          }
+          onRelease {
+            gate: all(predicates: [
+              compareState(state: flightFuel, comparison: Equal, value: 0)
+              now(fact: Rising)
+            ]
+            )
+            latchSeconds: 0
+            effects [
+              scaleVerticalVelocity(factor: 0.45)
+            ]
+          }
+        }
+        // A press is counted, then flipped on the next tick whether she stands or flies: on to 1000, or off to 0.
+        flight {
+          onPress {
+            latchSeconds: 0
+            effects [
+              setState(state: flightPress, value: 1)
+            ]
+          }
+          onFact [
+            {
+              fact: "Grounded"
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Equal, value: 0)
+              ]
+              )
+              effects [
+                setState(state: flightFuel, value: 1000)
+                setState(state: flightPress, value: 0)
+              ]
+            }
+            {
+              fact: "Airborne"
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Equal, value: 0)
+              ]
+              )
+              effects [
+                setState(state: flightFuel, value: 1000)
+                setState(state: flightPress, value: 0)
+              ]
+            }
+            {
+              fact: "Grounded"
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Greater, value: 0)
+              ]
+              )
+              effects [
+                setState(state: flightFuel, value: 0)
+                setState(state: flightPress, value: 0)
+              ]
+            }
+            {
+              fact: "Airborne"
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Greater, value: 0)
+              ]
+              )
+              effects [
+                setState(state: flightFuel, value: 0)
+                setState(state: flightPress, value: 0)
+              ]
+            }
+          ]
+        }
+      }
+
       name: "walker"
     }
   ]
@@ -1690,9 +1834,12 @@ looks {
         gaitAmplitude: 0
         replayFrames: false
         secondsPerFrame: 0
+        // Lane 1 is the jets: dark out of flight mode, a pilot flame at a fifth when flight mode is on, full burn as she
+        // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights.
         lanes [
           0
-          airPose[$body]
+          flightMode[$body] * (0.2 + 0.8 * airPose[$body])
+          flightMode[$body]
         ]
         poses {
           blink: "state.blink.$body"
@@ -6852,8 +6999,15 @@ render {
   }
 }
 
+// The flight pose and wings deploy only in flight mode; an ordinary jump keeps her upright.
+rule "flight-mode" {
+  when channel(1, flight) > 0
+  mode: Edge
+  flightMode[0] = 1 - flightMode[0]
+}
+
 rule "airborne-on" {
-  when fact(each, Airborne) == 1
+  when fact(each, Airborne) == 1 and flightMode[$each] > 0
   mode: Edge
   forEach: airPose
   airPose[$each] = 1
@@ -6861,7 +7015,7 @@ rule "airborne-on" {
 }
 
 rule "airborne-off" {
-  when fact(each, Airborne) == 0
+  when fact(each, Airborne) == 0 or flightMode[$each] == 0
   mode: Edge
   forEach: airPose
   airPose[$each] = 0
@@ -6916,6 +7070,27 @@ spawnPoints [
 ]
 
 state {
+  // Flight mode is fuel the flight holds spend: 1000 while switched on (it drains a thousandth a second), 0 off, so the
+  // hover and thrust rows are offered only in flight mode. Jumps counts the jumps left before landing.
+  body [
+    {
+      name: "flightFuel"
+      kind: "Counter"
+      initial: 0
+    }
+    {
+      name: "flightPress"
+      kind: "Counter"
+      initial: 0
+    }
+    {
+      name: "jumps"
+      kind: "Counter"
+      initial: 2
+      resetFact: "Grounded"
+    }
+  ]
+
   world {
     row {
       cells [
@@ -6942,6 +7117,11 @@ state {
       ]
       kind: "Fixed"
       name: "airWings"
+    }
+    // Flight mode as the look and the flight-pose rules see it: the walker's flightFuel is per-body action state, which
+    // world rules and render lanes cannot read, so this row flips on the same flight press.
+    table flightMode {
+      "0" = 0
     }
     table blink {
       "0" = 0
