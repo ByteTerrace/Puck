@@ -677,76 +677,87 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// angular velocity in the provider-neutral gamepad frame (+X right, +Y up, +Z back); the seat preference applies
     /// independent per-axis dead zones/inversion and two authored 3D projections to produce semantic look-right/up
     /// rates. Stick and gyro combine before one allocation-free view nudge/lock. An explicit held recenter remains
-    /// higher priority and wins that frame.</summary>
+    /// higher priority and wins that frame. Each seat's view records the tick's whole step, which a frame between
+    /// ticks interpolates across (<see cref="WorldSeatViewState.PresentedLook"/>).</summary>
+    /// <param name="deltaSeconds">The fixed tick's length, in seconds.</param>
     public void AdvanceSeatViews(float deltaSeconds) {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is not { } seat) {
                 continue;
             }
 
-            var route = m_seatRouter.Route(slot: slot);
-            var definition = route.Endpoint.Definition;
-
-            var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
-            var look = seat.Look;
-            var motionLook = (seat.MotionControlsActive
-                ? preference.Gyro.Project(angularVelocity: seat.MotionAngularVelocity)
-                : Vector2.Zero
+            seat.View.BeginTick();
+            AdvanceSeatView(
+                deltaSeconds: deltaSeconds,
+                seat: seat,
+                slot: slot
             );
-            var lookRate = (new Vector2(
-                x: (((float)((double)look.Value.X)) * preference.StickLookRate),
-                y: (((float)((double)look.Value.Y)) * preference.StickLookRate)
-            ) + motionLook);
-            var looking = (
-                look.IsActive ||
-                seat.MotionControlsActive ||
-                seat.FreeLooking ||
-                seat.Orbiting ||
-                seat.PointerSteering
-            );
-
-            seat.View.Nudge(
-                input: lookRate,
-                yawScale: deltaSeconds,
-                pitchScale: deltaSeconds,
-                preference: preference,
-                views: definition.Views
-            );
-
-            // A held recenter drives the camera round behind the body EVERY tick — the body turning under it drags
-            // the camera along — and wins over both this tick's look nudge and the follow below.
-            if (seat.Recentering) {
-                if (route.Endpoint.TryEntityHeading(
-                    index: route.EntityIndex,
-                    heading: out var recenterHeading
-                )) {
-                    seat.View.RecenterLook(
-                        targetYaw: recenterHeading,
-                        views: definition.Views
-                    );
-                }
-
-                continue;
-            }
-
-            if (
-                looking ||
-                (definition.Views.SeatControl.Follow is not { } follow) ||
-                (!follow.WhileIdle && !seat.MovementHeld) ||
-                !route.Endpoint.TryEntityHeading(
-                index: route.EntityIndex,
-                heading: out var heading
-            )
-            ) {
-                continue;
-            }
-
-            seat.View.Follow(
-                targetYaw: heading,
-                rate: follow.Rate,
-                deltaSeconds: deltaSeconds
-            );
+            seat.View.CompleteTick();
         }
+    }
+    private void AdvanceSeatView(SeatController seat, int slot, float deltaSeconds) {
+        var route = m_seatRouter.Route(slot: slot);
+        var definition = route.Endpoint.Definition;
+
+        var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+        var look = seat.Look;
+        var motionLook = (seat.MotionControlsActive
+            ? preference.Gyro.Project(angularVelocity: seat.MotionAngularVelocity)
+            : Vector2.Zero
+        );
+        var lookRate = (new Vector2(
+            x: (((float)((double)look.Value.X)) * preference.StickLookRate),
+            y: (((float)((double)look.Value.Y)) * preference.StickLookRate)
+        ) + motionLook);
+        var looking = (
+            look.IsActive ||
+            seat.MotionControlsActive ||
+            seat.FreeLooking ||
+            seat.Orbiting ||
+            seat.PointerSteering
+        );
+
+        seat.View.Nudge(
+            input: lookRate,
+            yawScale: deltaSeconds,
+            pitchScale: deltaSeconds,
+            preference: preference,
+            views: definition.Views
+        );
+
+        // A held recenter drives the camera round behind the body EVERY tick — the body turning under it drags
+        // the camera along — and wins over both this tick's look nudge and the follow below.
+        if (seat.Recentering) {
+            if (route.Endpoint.TryEntityHeading(
+                index: route.EntityIndex,
+                heading: out var recenterHeading
+            )) {
+                seat.View.RecenterLook(
+                    targetYaw: recenterHeading,
+                    views: definition.Views
+                );
+            }
+
+            return;
+        }
+
+        if (
+            looking ||
+            (definition.Views.SeatControl.Follow is not { } follow) ||
+            (!follow.WhileIdle && !seat.MovementHeld) ||
+            !route.Endpoint.TryEntityHeading(
+            index: route.EntityIndex,
+            heading: out var heading
+        )
+        ) {
+            return;
+        }
+
+        seat.View.Follow(
+            targetYaw: heading,
+            rate: follow.Rate,
+            deltaSeconds: deltaSeconds
+        );
     }
     /// <summary>Attaches the accepted-lever applier. Composition-root wiring, done after construction because the
     /// presentation services it writes are themselves built around the client.</summary>

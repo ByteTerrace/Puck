@@ -1,7 +1,16 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.Physics.Motion;
+
+/// <summary>The compiled parameters of <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>: the fractions of the
+/// move speed a body travels at across and against its heading. The commanded target decomposes against the body's
+/// heading; its lateral part scales by <see cref="Strafe"/> and a part opposing the heading by
+/// <see cref="Backward"/>, so a full stick traces an ellipse of speeds rather than a circle.</summary>
+/// <param name="Strafe">The fraction of the move speed travel across the heading reaches, in <c>[0, 1]</c>.</param>
+/// <param name="Backward">The fraction of the move speed travel against the heading reaches, in <c>[0, 1]</c>.</param>
+public readonly record struct FixedPlanarTarget(FixedQ4816 Strafe, FixedQ4816 Backward);
 
 /// <summary>Declares the register and operation profile a compiled program uses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<BodyProgramKind>))]
@@ -54,12 +63,13 @@ public sealed class CompiledBodyMotionProgram {
 
     private readonly HashSet<BodyMotionOp> m_operations;
 
-    private CompiledBodyMotionProgram(string name, BodyProgramKind kind, BodyProgramAdmission admissionMask, BodyMotionOp[][] phases, HashSet<BodyMotionOp> operations) {
+    private CompiledBodyMotionProgram(string name, BodyProgramKind kind, BodyProgramAdmission admissionMask, BodyMotionOp[][] phases, HashSet<BodyMotionOp> operations, FixedPlanarTarget? planarTarget) {
         Name = name;
         Kind = kind;
         AdmissionMask = admissionMask;
         Phases = phases;
         m_operations = operations;
+        PlanarTarget = planarTarget;
     }
 
     /// <summary>Gets the register admission mask for <see cref="Kind"/>.</summary>
@@ -79,6 +89,9 @@ public sealed class CompiledBodyMotionProgram {
     public bool OwnsVerticalContactState => (Contains(operation: BodyMotionOp.ApplyHold) && !Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity));
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
+    /// <summary>Gets the parameters <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/> runs with, or
+    /// <see langword="null"/> for a target at the full move speed in every direction.</summary>
+    public FixedPlanarTarget? PlanarTarget { get; }
 
     private static BodyProgramAdmission AdmissionFor(BodyProgramKind kind) => kind switch {
         BodyProgramKind.Motion => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
@@ -137,9 +150,13 @@ public sealed class CompiledBodyMotionProgram {
     /// <param name="version">The declared instruction-set version; must equal <see cref="SupportedVersion"/>.</param>
     /// <param name="kind">The declared program profile.</param>
     /// <param name="operations">The selected domain operations; their phases are intrinsic and cannot be reordered.</param>
+    /// <param name="planarTarget">The parameters <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/> runs with, or
+    /// <see langword="null"/> for the full move speed in every direction. Refused unless the program selects that op
+    /// and <see cref="BodyMotionOp.ResolveYawAttitudeAndPlanarFrame"/>, whose heading the target decomposes
+    /// against.</param>
     /// <returns>The compiled program.</returns>
     /// <exception cref="BodyMotionProgramException">The declared shape is refused.</exception>
-    public static CompiledBodyMotionProgram Compile(string? name, string? version, BodyProgramKind? kind, IReadOnlyList<BodyMotionOp>? operations) {
+    public static CompiledBodyMotionProgram Compile(string? name, string? version, BodyProgramKind? kind, IReadOnlyList<BodyMotionOp>? operations, FixedPlanarTarget? planarTarget = null) {
         if (string.IsNullOrWhiteSpace(value: name)) {
             throw Refuse(
                 detail: "name is required",
@@ -212,6 +229,16 @@ public sealed class CompiledBodyMotionProgram {
 
             _ = Phase(op: op);
         }
+        if (
+            (planarTarget is not null) &&
+            (!seen.Contains(item: BodyMotionOp.ComputePlanarTargetVelocity) || !seen.Contains(item: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame))
+        ) {
+            throw Refuse(
+                detail: $"planarTarget parameterizes '{BodyMotionOp.ComputePlanarTargetVelocity}' against the heading '{BodyMotionOp.ResolveYawAttitudeAndPlanarFrame}' resolves, and the program does not select both",
+                name: name,
+                refusal: BodyMotionProgramRefusal.ParameterUnknown
+            );
+        }
         var phaseLists = new List<BodyMotionOp>[8];
 
         for (var phase = 0; (phase < phaseLists.Length); phase++) {
@@ -234,7 +261,8 @@ public sealed class CompiledBodyMotionProgram {
             kind: programKind,
             name: name,
             operations: seen,
-            phases: phases
+            phases: phases,
+            planarTarget: planarTarget
         );
     }
     /// <summary>Reports whether this program selects an operation.</summary>

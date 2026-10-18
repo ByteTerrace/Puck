@@ -50,16 +50,28 @@ public sealed record ActionStateSlot(
 /// <param name="Kind">The declared program profile that gates operations and registers.</param>
 /// <param name="Operations">The selected domain operations; their phases are intrinsic and cannot be reordered.</param>
 /// <param name="Target">The single source supplying the program's target, when it uses target-aware operations.</param>
+/// <param name="PlanarTarget">The parameters of <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>, or
+/// <see langword="null"/> for a target at the full move speed in every direction.</param>
 public sealed record BodyMotionProgram(
     string Name,
     string Version,
     BodyProgramKind? Kind,
     IReadOnlyList<BodyMotionOp> Operations,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyTargetSource? Target = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyTargetSource? Target = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyPlanarTarget? PlanarTarget = null
 ) {
     /// <summary>The supported body-motion instruction-set version.</summary>
     public const string CurrentVersion = CompiledBodyMotionProgram.SupportedVersion;
 }
+/// <summary>How fast <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/> lets a body travel across and against its
+/// heading, as fractions of its move speed. The commanded target decomposes against the heading the program's
+/// <see cref="BodyMotionOp.ResolveYawAttitudeAndPlanarFrame"/> resolves: the lateral part scales by
+/// <paramref name="Strafe"/> and a part opposing the heading by <paramref name="Backward"/>, whatever frame the seat
+/// composed the stick in. A camera-framed strafe seat, whose heading follows the camera, therefore strafes and
+/// backpedals slower than it runs forward.</summary>
+/// <param name="Strafe">The fraction of the move speed travel across the heading reaches, in <c>[0, 1]</c>.</param>
+/// <param name="Backward">The fraction of the move speed travel against the heading reaches, in <c>[0, 1]</c>.</param>
+public sealed record BodyPlanarTarget(float Strafe = 1f, float Backward = 1f);
 /// <summary>The document intake for <see cref="CompiledBodyMotionProgram"/> — the one place an authored
 /// <see cref="BodyMotionProgram"/> row becomes the engine's compiled instruction form.</summary>
 public static class BodyMotionProgramFactory {
@@ -75,7 +87,13 @@ public static class BodyMotionProgramFactory {
             name: program.Name,
             version: program.Version,
             kind: program.Kind,
-            operations: program.Operations
+            operations: program.Operations,
+            planarTarget: ((program.PlanarTarget is { } planarTarget)
+                ? new FixedPlanarTarget(
+                    Backward: FixedQ4816.FromDouble(value: planarTarget.Backward),
+                    Strafe: FixedQ4816.FromDouble(value: planarTarget.Strafe)
+                )
+                : null)
         );
     }
 }

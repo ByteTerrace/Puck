@@ -275,6 +275,19 @@ refuses at boot. A `BodyMotionOp` reading a further facet owes
 `RequiredMotionTuningFacets` and `SuppliedMotionTuningFacets` an entry —
 never a hunt.
 
+**New behaviour is a program operation or an operation's parameter, never a
+kit switch** (the owner's ruling). The program carries its operations'
+parameters beside the op list: `target` for `SenseNearestInCone`, and
+`planarTarget { strafe, backward }` for `ComputePlanarTargetVelocity` — the
+commanded target decomposed against the heading, its lateral part scaled to
+`strafe` and a part opposing the heading to `backward` of the move speed
+(`[0, 1]`, default 1). The walker's ramps are the existing `ShapeVelocity`
+op over the kit's `shaping` row (`along { engage, release }`, u/s²), and
+partial stick deflection already commands a proportional speed. `FacingSnap`
+and `MoveFrame` predate the ruling: a change that needs them to behave
+differently moves the behaviour into an op rather than adding a sibling
+switch. `body.motion [body]` echoes the program and its `planarTarget`.
+
 A seated player's live profile overrides the kit's `Speed.Value`
 (feel stays real-time under `identity.motion`);
 `WorldSpeed.Envelope` is the world's own counter-pin — an
