@@ -756,8 +756,8 @@ arrives from another world (a body crossing between the debug world and the
 garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
-`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, bounded at a
-gibibyte, least recently used first out), keyed by the group's geometry and
+`meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to a gibibyte by
+the caches' one retention, `CacheRetention`), keyed by the group's geometry and
 the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s build
 and the hash of the bake's own sources in `Puck.SdfVm` (their list is
 `PuckMeshBakeSource` in its project). A program's group the store holds loads

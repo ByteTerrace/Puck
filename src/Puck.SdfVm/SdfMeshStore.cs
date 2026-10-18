@@ -19,9 +19,9 @@ namespace Puck.SdfVm;
 /// ends with a checksum of its bytes; one that is truncated, damaged, another key's or not a mesh
 /// (<see cref="SdfMesh"/> refuses it) is refused by name and deleted, and its group bakes. Writes replace an entry
 /// atomically, so concurrent Worlds may share a directory.</para>
-/// <para>The store holds at most <see cref="CapacityBytes"/> bytes: past that, a write deletes the least recently used
-/// entries, by the time each was last written or read, until the store holds three quarters of it. Its members are
-/// thread-safe.</para>
+/// <para>The store holds at most <see cref="CapacityBytes"/> bytes, under Puck's one cache retention: a read stamps an
+/// entry and a write enforces the bound, least recently used out (<see cref="Puck.Abstractions.CacheRetention"/>). Its
+/// members are thread-safe.</para>
 /// </summary>
 public sealed class SdfMeshStore {
     /// <summary>The bytes a store holds at most unless its owner names another bound: a gibibyte, about fifteen boots of
@@ -35,13 +35,8 @@ public sealed class SdfMeshStore {
     // The magic, the key, and five counts: vertices, normals, indices, triangle materials and the group's materials.
     private const int HeaderBytes = (sizeof(ulong) + 16 + (5 * sizeof(int)));
     private const int ChecksumBytes = 16;
-    // A writer's temporary file, which an interrupted write leaves behind and a trim older than this removes.
-    private const string TemporaryExtension = ".tmp";
-    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromMinutes(minutes: 10);
-
-    private readonly Lock m_gate = new();
-    // The bytes the entries hold, measured on the first write and kept by every write after; -1 until then.
-    private long m_bytes = -1;
+    // The most entries a store keeps, past any world's groups many times over: its bytes bound it first.
+    private const int MaxEntries = 65_536;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshStore"/> class. Nothing is created until an entry is
     /// written.</summary>
@@ -131,14 +126,12 @@ public sealed class SdfMeshStore {
             return false;
         }
 
-        // A read keeps the entry among the most recently used; another World may have replaced or removed it meanwhile,
-        // and the mesh is read either way.
-        _ = Quietly(action: () => File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow, path: path));
+        Puck.Abstractions.CacheRetention.Stamp(path: path);
 
         return true;
     }
-    /// <summary>Writes a geometry's mesh under a bake's identity, replacing any entry it had, then trims the store to
-    /// <see cref="CapacityBytes"/>. A write the file system refuses leaves the store as it was: the store is a cache.</summary>
+    /// <summary>Writes a geometry's mesh under a bake's identity, replacing any entry it had, then holds the store to
+    /// <see cref="CapacityBytes"/>, keeping this entry. A write the file system refuses leaves the store as it was: the store is a cache.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
     /// <param name="mesh">The mesh.</param>
@@ -153,19 +146,13 @@ public sealed class SdfMeshStore {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(key: key);
         var bytes = Encode(key: key, materials: materials, mesh: mesh);
-        var temporary = $"{path}.{Guid.NewGuid():N}{TemporaryExtension}";
-
-        if (!Quietly(action: () => {
-            _ = System.IO.Directory.CreateDirectory(path: Directory);
-            File.WriteAllBytes(bytes: bytes, path: temporary);
-            File.Move(destFileName: path, overwrite: true, sourceFileName: temporary);
-        })) {
-            Delete(path: temporary);
-
-            return false;
-        }
-
-        Trim(written: bytes.Length);
+        if (!Quietly(action: () => Puck.Assets.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
+        _ = Puck.Abstractions.CacheRetention.EnforceOnWrite(
+            bound: new Puck.Abstractions.CacheBound(MaxBytes: CapacityBytes, MaxEntries: MaxEntries),
+            directory: Directory,
+            inUse: path,
+            isEntry: static file => file.Name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal)
+        );
 
         return true;
     }
@@ -283,37 +270,6 @@ public sealed class SdfMeshStore {
         var expected = ((((((long)HeaderBytes + (4L * groupMaterials)) + (12L * vertices)) + (12L * normals)) + (4L * indices)) + (4L * triangleMaterials));
 
         return (((vertices < 0) || (normals < 0) || (indices < 0) || (triangleMaterials < 0) || (groupMaterials < 0) || (expected != body.Length)) ? "holds counts its length does not" : null);
-    }
-    // Counts a written entry into the store's bytes and, past its capacity, deletes the least recently used entries until
-    // it holds three quarters of it, with any temporary file an interrupted write left.
-    private void Trim(long written) {
-        lock (m_gate) {
-            if (m_bytes >= 0) {
-                m_bytes += written;
-                if (m_bytes <= CapacityBytes) { return; }
-            }
-
-            var entries = new List<FileInfo>();
-            var total = 0L;
-
-            foreach (var file in new DirectoryInfo(path: Directory).EnumerateFiles()) {
-                if (file.Name.EndsWith(value: TemporaryExtension, comparisonType: StringComparison.Ordinal)) {
-                    if ((DateTime.UtcNow - file.LastWriteTimeUtc) > AbandonedAfter) { Delete(path: file.FullName); }
-                    continue;
-                }
-                if (!file.Name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal)) { continue; }
-                entries.Add(item: file);
-                total += file.Length;
-            }
-            if (total > CapacityBytes) {
-                foreach (var entry in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc)) {
-                    if (total <= ((CapacityBytes / 4) * 3)) { break; }
-                    Delete(path: entry.FullName);
-                    total -= entry.Length;
-                }
-            }
-            m_bytes = total;
-        }
     }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));

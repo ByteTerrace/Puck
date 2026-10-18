@@ -83,43 +83,28 @@ public sealed class SdfMeshStoreLawTests {
         Assert.True(condition: Directory.Exists(path: path));
     }
     [Fact]
-    public void AStorePastItsCapacityKeepsItsMostRecentlyUsedEntries() {
+    public void AWritePastTheCapacityRemovesTheLeastRecentlyUsedEntries() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var directory = scratch.PathOf(name: "meshes");
         var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
-        // Room for three entries.
-        var store = new SdfMeshStore(capacityBytes: ((3 * entry.Length) + 1), directory: directory);
         var old = DateTime.UtcNow.AddHours(value: -1);
 
-        // A foreign file is no entry and stays; a temporary file an interrupted write left an hour ago goes, a fresh one
-        // stays.
+        // Two entries an earlier run left, the older first, and a file that is no entry.
         _ = Directory.CreateDirectory(path: directory);
+        File.WriteAllBytes(bytes: entry, path: Path.Combine(path1: directory, path2: "older.mesh"));
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: Path.Combine(path1: directory, path2: "older.mesh"));
+        File.WriteAllBytes(bytes: entry, path: Path.Combine(path1: directory, path2: "newer.mesh"));
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 1), path: Path.Combine(path1: directory, path2: "newer.mesh"));
         File.WriteAllText(contents: "notes", path: Path.Combine(path1: directory, path2: "notes.txt"));
-        File.WriteAllText(contents: "partial", path: Path.Combine(path1: directory, path2: "abandoned.mesh.0.tmp"));
-        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: Path.Combine(path1: directory, path2: "abandoned.mesh.0.tmp"));
-        File.WriteAllText(contents: "partial", path: Path.Combine(path1: directory, path2: "writing.mesh.1.tmp"));
 
-        for (var hash = 0; (hash < 3); hash++) {
-            Assert.True(condition: store.Write(geometry: (Geometry with { Hash = (UInt128)hash }), identity: Identity, materials: [], mesh: Mesh()));
-            File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: hash), path: Entry(store: store, geometry: (Geometry with { Hash = (UInt128)hash })));
-        }
+        // Room for two entries: the write keeps itself and the more recent of the two.
+        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length), directory: directory);
 
-        // Reading the oldest makes it the most recent, so the fourth write evicts the second and third, leaving three
-        // quarters of the capacity.
-        Assert.True(condition: store.TryRead(geometry: (Geometry with { Hash = 0 }), identity: Identity, materials: out _, mesh: out _, refusal: out _));
-        Assert.True(condition: store.Write(geometry: (Geometry with { Hash = 3 }), identity: Identity, materials: [], mesh: Mesh()));
-
-        Assert.True(condition: store.Contains(geometry: (Geometry with { Hash = 0 }), identity: Identity));
-        Assert.False(condition: store.Contains(geometry: (Geometry with { Hash = 1 }), identity: Identity));
-        Assert.False(condition: store.Contains(geometry: (Geometry with { Hash = 2 }), identity: Identity));
-        Assert.True(condition: store.Contains(geometry: (Geometry with { Hash = 3 }), identity: Identity));
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
+        Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: directory, path2: "older.mesh")));
+        Assert.True(condition: File.Exists(path: Path.Combine(path1: directory, path2: "newer.mesh")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: directory, path2: "notes.txt")));
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: directory, path2: "abandoned.mesh.0.tmp")));
-        Assert.True(condition: File.Exists(path: Path.Combine(path1: directory, path2: "writing.mesh.1.tmp")));
-
-        // Under the capacity, a write counts its bytes without looking at the directory.
-        Assert.True(condition: store.Write(geometry: (Geometry with { Hash = 4 }), identity: Identity, materials: [], mesh: Mesh()));
-        Assert.True(condition: store.Contains(geometry: (Geometry with { Hash = 0 }), identity: Identity));
     }
     [Fact]
     public void ABakesIdentityMovesWithItsKernelsAndNothingElse() {
