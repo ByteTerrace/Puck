@@ -2828,7 +2828,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.6
+            amplitude: 0.42
             pivot [0.295, 1.4515, 0]
             wave: "sine"
             phase: 3.1415927
@@ -2937,7 +2937,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.9
+            amplitude: -0.7
             pivot [0.39, 1.1765, 0.005]
             wave: "constant"
             phase: 0
@@ -2945,7 +2945,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.25
+            amplitude: 0.18
             pivot [0.39, 1.1765, 0.005]
             wave: "sine"
             phase: 3.6416
@@ -3992,7 +3992,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.6
+            amplitude: 0.42
             pivot [-0.295, 1.4515, 0]
             wave: "sine"
             phase: 6.2831853
@@ -4101,7 +4101,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: -0.9
+            amplitude: -0.7
             pivot [-0.39, 1.1765, 0.005]
             wave: "constant"
             phase: 0
@@ -4109,7 +4109,7 @@ prototypes {
           {
             driver: "stride"
             axis [1, 0, 0]
-            amplitude: 0.25
+            amplitude: 0.18
             pivot [-0.39, 1.1765, 0.005]
             wave: "sine"
             phase: 0.5
@@ -5278,14 +5278,18 @@ prototypes {
           parent: "nozzle-left"
           position [0, -0.27, 0]
           rotation [0, 0, 0, 1]
-          halfExtent [0.08, 0.24, 0.08]
-          axis: 0.48
-          width: 0.0405
+          halfExtent [0.2, 0.25, 0.2]
+          axis: 0.5
+          width: 0.027
+          spread: 4
+          fade: 1.5
+          noiseScale: 0.08
+          noiseDepth: 0.4
           speed: 1.5
           seed: 31
-          steps: 64
-          intensity: 85
-          extinction: 1
+          steps: 40
+          intensity: 60
+          extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
           intensityLane: 1
@@ -5313,14 +5317,18 @@ prototypes {
           parent: "nozzle-right"
           position [0, -0.27, 0]
           rotation [0, 0, 0, 1]
-          halfExtent [0.08, 0.24, 0.08]
-          axis: 0.48
-          width: 0.0405
+          halfExtent [0.2, 0.25, 0.2]
+          axis: 0.5
+          width: 0.027
+          spread: 4
+          fade: 1.5
+          noiseScale: 0.08
+          noiseDepth: 0.4
           speed: 1.5
           seed: 39
-          steps: 64
-          intensity: 85
-          extinction: 1
+          steps: 40
+          intensity: 60
+          extinction: 1.2
           pulseAmplitude: 0.04
           pulseFrequency: 14
           intensityLane: 1
