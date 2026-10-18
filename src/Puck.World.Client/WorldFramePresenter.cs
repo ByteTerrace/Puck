@@ -408,7 +408,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // either direction must be measured the same way: composing both sides into one shared builder, then measuring
     // that ONE composed program. Measuring either side alone would let a mutation on ONE side spend program-word/
     // instance capacity the OTHER side already holds, since
-    // the packed tables a program carries (the instance grid, segment directory, world-segment list, rigid plan) are
+    // the packed tables a program carries (the segment directory, world-segment list, rigid plan, part programs) are
     // computed over the WHOLE composed program and are not additive across emitters — a later commit on the
     // unchecked side could exceed an engine structural limit at the next rebuild, even with growable buffers.
     //
@@ -478,7 +478,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
 
             m_adjacencies.EmitCurrent(builder: builder);
-            m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false)));
+            m_client.PublishStaticField(field: new SdfFieldEvaluator(program: builder.Build()));
         } catch (ArgumentException) {
             // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored
             // eye; query-compatible worlds still receive the presentation-only clearance correction.

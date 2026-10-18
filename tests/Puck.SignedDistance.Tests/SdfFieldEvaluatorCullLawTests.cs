@@ -287,8 +287,8 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             }
         }
 
-        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
-        var unwrapped = new SdfFieldEvaluator(program: unwrappedBuilder.Build(buildInstanceGrid: false));
+        var culled = new SdfFieldEvaluator(program: culledBuilder.Build());
+        var unwrapped = new SdfFieldEvaluator(program: unwrappedBuilder.Build());
 
         foreach (var x in ((double[])[-80.0, -20.0, 0.0, 20.0, 57.0, 80.0,])) {
             var position = Position(

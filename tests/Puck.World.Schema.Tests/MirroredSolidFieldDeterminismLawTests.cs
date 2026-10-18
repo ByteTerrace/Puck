@@ -68,7 +68,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             materialFor: _ => material
         );
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         var scales = program.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Scale)).ToArray();
         var box = Assert.Single(
             collection: program.Instructions,
@@ -115,7 +115,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             material: material
         );
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         var cylinder = Assert.Single(
             collection: program.Instructions,
             predicate: candidate =>
@@ -198,8 +198,8 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             materialFor: _ => fixedMaterial
         );
 
-        var floatProgram = floatBuilder.Build(buildInstanceGrid: false);
-        var fixedProgram = fixedBuilder.Build(buildInstanceGrid: false);
+        var floatProgram = floatBuilder.Build();
+        var fixedProgram = fixedBuilder.Build();
         var floatShapeTranslation = floatProgram.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Translate)).ElementAt(index: 1).Data0;
         var fixedShapeTranslation = fixedProgram.Instructions.Where(predicate: candidate => (candidate.Op == SdfOp.Translate)).ElementAt(index: 1).Data0;
         var floatShapeRotation = RotationOf(
@@ -254,7 +254,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             radius: 1f,
             material: material
         )
-            .Build(buildInstanceGrid: false);
+            .Build();
         var instruction = Assert.Single(
             collection: program.Instructions,
             predicate: candidate => (candidate.Op == SdfOp.Rotate)
@@ -318,7 +318,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             materialFor: _ => material
         );
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         // The stamp's prefix, then its reflection as the fixed alignment carrying X onto +Y, a mirror of X and the
         // alignment back, then the shape's own authored pose, unreflected, and the
         // primitive's own unit scale.
@@ -389,7 +389,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             radius: 1f,
             material: material
         )
-            .Build(buildInstanceGrid: false);
+            .Build();
 
         var exception = Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: program));
 

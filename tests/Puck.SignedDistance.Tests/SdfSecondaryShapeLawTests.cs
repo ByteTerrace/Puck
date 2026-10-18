@@ -6,9 +6,8 @@ using Xunit;
 
 namespace Puck.SignedDistance.Tests;
 
-/// <summary>Laws over <see cref="SdfInstruction.Secondary"/>: the packed-word flag bit, its opposite exclusion set
-/// from <see cref="SdfInstruction.Detail"/> (a non-secondary shape is ordinary CONTACT geometry — only the GPU
-/// soft-shadow/AO field walks in passes/sdf-light-stage.hlsli and surface/sdf-surface.hlsli drop it, unverified by machine here), and the builder's
+/// <summary>Laws over <see cref="SdfInstruction.Secondary"/>: its validation, that a non-secondary shape is ordinary
+/// contact geometry (unlike <see cref="SdfInstruction.Detail"/>), and the builder's
 /// <see cref="SdfProgramBuilder.MarkSecondary"/> chain contract.</summary>
 public sealed class SdfSecondaryShapeLawTests {
     private static readonly SdfMaterial[] OneMaterial = [new SdfMaterial(Albedo: Vector3.One)];
@@ -64,31 +63,6 @@ public sealed class SdfSecondaryShapeLawTests {
 
         _ = Build(instructions: [plainTranslate, Shape(secondary: true)]);
     }
-    /// <summary>Detail and Secondary=false are independent bits: a shape carrying both packs both flags and neither
-    /// masks the other off the shape-type lane.</summary>
-    [Fact]
-    public void DetailAndNonSecondaryComposeAsIndependentBits() {
-        var both = Build(instructions: [
-            (Shape(
-                secondary: false,
-                shape: ((uint)SdfShapeType.Box)
-            ) with { Detail = true })
-        ]);
-        var packedShape = both.Words[5];
-
-        Assert.Equal(
-            actual: packedShape & 0x80000000u,
-            expected: 0x80000000u
-        );
-        Assert.Equal(
-            actual: packedShape & 0x40000000u,
-            expected: 0x40000000u
-        );
-        Assert.Equal(
-            actual: packedShape & SdfProgram.ShapeTypeMask,
-            expected: ((uint)SdfShapeType.Box)
-        );
-    }
     /// <summary>Opposite of <see cref="SdfDetailShapeLawTests"/>'s Detail-only-program law: a non-secondary shape is
     /// ordinary contact geometry to <see cref="SdfFieldEvaluator"/>, which has no notion of shadow/AO march mode —
     /// TryDistance/Overlap answer exactly as they would for the same shape with Secondary true.</summary>
@@ -142,8 +116,8 @@ public sealed class SdfSecondaryShapeLawTests {
             )
         );
     }
-    /// <summary><see cref="SdfProgramBuilder.MarkSecondary"/> chained immediately after the shape it marks packs the
-    /// flag onto that exact instruction and leaves every earlier instruction untouched.</summary>
+    /// <summary><see cref="SdfProgramBuilder.MarkSecondary"/> chained immediately after the shape it marks sets the
+    /// flag on that exact instruction and leaves every earlier instruction untouched.</summary>
     [Fact]
     public void MarkSecondaryPatchesOnlyTheMostRecentShapeInstruction() {
         var builder = new SdfProgramBuilder();
@@ -162,19 +136,9 @@ public sealed class SdfSecondaryShapeLawTests {
         ).MarkSecondary(secondary: false);
 
         var program = builder.Build();
-        // Header word 0 is (instructionCount, ...); each instruction header is one uvec4, lane 1 = the shape.
-        var instructionCount = program.Words[0];
-        var firstShapeLane = program.Words[5];
-        var secondShapeLane = program.Words[((((int)(1 + (instructionCount - 1))) * 4) + 1)];
 
-        Assert.Equal(
-            actual: firstShapeLane & 0x40000000u,
-            expected: 0u
-        );
-        Assert.Equal(
-            actual: secondShapeLane & 0x40000000u,
-            expected: 0x40000000u
-        );
+        Assert.True(condition: program.Instructions[0].Secondary);
+        Assert.False(condition: program.Instructions[^1].Secondary);
     }
     /// <summary><see cref="SdfProgramBuilder.MarkSecondary"/> must chain directly onto the shape method that emitted
     /// the instruction it marks — a field op appended first moves "most recent" past the ShapeBlend and the call is
@@ -193,40 +157,5 @@ public sealed class SdfSecondaryShapeLawTests {
 
         // Control: an empty builder (no instruction at all) is refused the same way.
         Assert.Throws<InvalidOperationException>(testCode: () => new SdfProgramBuilder().MarkSecondary(secondary: false));
-    }
-    /// <summary>The flag packs into the Shape lane's next-highest bit (below Detail's), and the shape id stays
-    /// readable underneath both — three independent lanes in one word.</summary>
-    [Fact]
-    public void PackingOrsTheNoSecondaryFlagOntoTheShapeLaneNextBit() {
-        var excluded = Build(instructions: [Shape(
-                secondary: false,
-                shape: ((uint)SdfShapeType.Box)
-            )]);
-        // Header word 0 is (instructionCount, ...); instruction headers start one uvec4 in, lane 1 = the shape.
-        var packedShape = excluded.Words[5];
-
-        Assert.Equal(
-            actual: packedShape & 0x40000000u,
-            expected: 0x40000000u
-        );
-        Assert.Equal(
-            actual: packedShape & 0x80000000u,
-            expected: 0u
-        );
-        Assert.Equal(
-            actual: packedShape & SdfProgram.ShapeTypeMask,
-            expected: ((uint)SdfShapeType.Box)
-        );
-
-        // Control: the same shape with Secondary true (the default) packs the bare id, no high bits.
-        var plain = Build(instructions: [Shape(
-                secondary: true,
-                shape: ((uint)SdfShapeType.Box)
-            )]);
-
-        Assert.Equal(
-            actual: plain.Words[5],
-            expected: ((uint)SdfShapeType.Box)
-        );
     }
 }

@@ -647,8 +647,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material identifier.</param>
     /// <param name="blend">The blend against the accumulated field.</param>
     /// <param name="smooth">The radius used by smooth and chamfer blends.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is not finite and non-negative, or
     /// <paramref name="material"/> is negative, <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or
@@ -729,8 +729,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> or <paramref name="halfSeparation"/> is
     /// not finite, the derived tip half-height (see remarks) is not finite, <paramref name="material"/> is negative,
     /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not

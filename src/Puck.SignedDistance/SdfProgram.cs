@@ -12,52 +12,36 @@ namespace Puck.SignedDistance;
 //   [materialOffset ..) = material layers, MaterialVectorsPerEntry uint4 per entry; see PackMaterials and sdfMaterialLoad.
 //   [materialOffset + MaterialVectorsPerEntry*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
-//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, tapeOffset) header uvec4, then 2
+//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
 //                         first, end) — the chain-level skip map()'s outer loop walks. The header's .y lane (float
 //                         bits) is the per-PROGRAM Lipschitz STEP SCALE (1/L, AnalyzeLipschitz): mapCore multiplies
 //                         its FINAL returned distance by it so sphere tracing cannot overstep a non-1-Lipschitz warp
-//                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program, so its
-//                         scenes stay byte-identical. Both tables' offsets derive from word[0]'s existing lanes, so
-//                         the header is unchanged. See PackBounds.
-//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, tapeTokens)
-//                         header uvec4, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float
-//                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
-//                         the SEGMENT directory above (not raw instructions): every segment in that range is
-//                         guaranteed (by construction — AnalyzeBounds splits/merges never cross an instance
-//                         boundary) to be owned by exactly that instance, so mapCore (field/sdf-map.hlsli) evaluates the
-//                         whole range when the instance's per-tile mask bit is set and never touches it otherwise,
-//                         and the BEAM prepass reads only i0/i1 for its per-tile cull. shadingFlags bit 0 proves
-//                         the entire stream has no Detail shape; zero requires shade re-evaluation. See PackInstances.
-//   [.. + 1 + 2*instanceCount ..) = the WORLD-SEGMENT list (world render path only): one (worldSegmentCount,
-//                         chainTableOffset, 0, 0) header uvec4, then one uvec4 per WORLD segment (only .x used — kept uvec4-granular for
-//                         simplicity), value = the segment-directory index of a segment owned by NO instance,
-//                         ascending. mapCore merges this always-evaluated list with the visible instances' segment
-//                         ranges by ascending segment index (the flat stream's blend order), so a map() call costs
-//                         O(world segments + visible instances' segments), never O(all segments). See
-//                         PackWorldSegments.
-//   [.. + 1 + worldSegmentCount ..) = the INSTANCE GRID block (world render path only): the deterministic world-space
-//                         uniform grid the tile-cull beam prepass walks so its cost tracks instances NEAR a tile's cone,
-//                         not the total instance count. A self-contained uint block (header + CSR cellStart[] + cell
-//                         entries + always-tested list), padded to a uvec4 boundary — see SdfInstanceGrid for the full
-//                         layout. The instance-mask pass and secondary-query gathers consume this grid; mapCore
-//                         consumes their candidate masks and the ordered world/instance segment directories.
-//   [.. after the grid ..) = the RIGID-LEAF execution plan: one directory uvec4 per segment, followed by three uvec4s
-//                         per compiled leaf slot (pose, quaternion, tight sphere). Rigid Reset/Translate/Rotate/TransformDynamic/Shape chains are collapsed
+//                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program. Both
+//                         tables' offsets derive from word[0]'s lanes. See PackBounds.
+//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, 0, 0) header uvec4,
+//                         then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float bits), i1 = (mode,
+//                         dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index the SEGMENT directory
+//                         above (not raw instructions): every segment in that range is guaranteed (by construction —
+//                         AnalyzeBounds splits/merges never cross an instance boundary) to be owned by exactly that
+//                         instance, so mapCore (field/sdf-map.hlsli) evaluates the whole range when the instance's mask
+//                         bit is set and never touches it otherwise. See PackInstances.
+//   [.. + 1 + 2*instanceCount ..) = the WORLD-SEGMENT list: one (worldSegmentCount, 0, 0, 0) header uvec4, then one
+//                         uvec4 per WORLD segment (only .x used — kept uvec4-granular for simplicity), value = the
+//                         segment-directory index of a segment owned by NO instance, ascending. mapCore merges this
+//                         always-evaluated list with the visible instances' segment ranges by ascending segment index
+//                         (the flat stream's blend order), so a map() call costs O(world segments + visible instances'
+//                         segments), never O(all segments). See PackWorldSegments.
+//   [.. + 1 + worldSegmentCount ..) = the RIGID-LEAF execution plan, at the segment header's rigidPlanOffset: one
+//                         directory uvec4 per segment, followed by three uvec4s per compiled leaf slot (pose, quaternion,
+//                         tight sphere). Rigid Reset/Translate/Rotate/TransformDynamic/Shape chains are collapsed
 //                         host-side into a direct transform + shape record; mapCore executes these without its generic
 //                         per-op loop/switch. A static chain may carry one contiguous run of point folds (SymmetryPlane,
 //                         Repeat, RepeatLimited): its leaf is flagged folded and the NEXT slot holds the pose before the
 //                         folds (position + first fold instruction, quaternion, fold count). A zero leaf count retains the
 //                         full interpreter for that segment.
-//   [.. after rigid leaves ..) = one tape certificate uvec4 per instruction: three float bounds and a flag byte,
-//                         with the compact ShapeBlend/PopField token index in the upper 24 bits of the last word.
-//   [.. after the certificates ..) = the CHAIN table, at the world-segment header's chainTableOffset: one (chainCount,
-//                         identityOffset, 0, 0) header uvec4, each directory segment's (first chain, chain count), two
-//                         segments a uvec4, then one 32-bit chain identity a word. See SdfProgram.Chains.
-// Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
-// they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
-// SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldTables and
-// frame/sdf-environment.hlsli's ScreenSurfaceData).
+//   [.. after rigid leaves ..) = the convex-polygon, sweep-curve and path side tables, then the part programs (each
+//                         located by an absolute offset its instruction or the instance header carries).
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -78,11 +62,11 @@ public sealed partial class SdfProgram {
     /// <summary><c>SDF_SQRT_HALF</c> (field/sdf-program.hlsli): the scale on every chamfer arm's bevel plane, and so the divisor in
     /// that arm's Lipschitz recurrence. KEEP IN SYNC with the shader constant.</summary>
     private const float SqrtHalf = 0.70710678f;
-    /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with march/sdf-cone.hlsli's <c>collectInstanceMaskWord</c>
-    /// negative-radius skip). An <see cref="SdfInstanceRange.Active"/> = <see langword="false"/> instance packs this
-    /// instead of a real (always non-negative) radius, so the beam prepass rejects it with one <c>bound.w &lt; 0</c>
-    /// branch — no sphere-vs-cone math, mask bit left 0 — while the slot still occupies its reserved capacity. Chosen
-    /// well below any legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
+    /// <summary>The PARKED-instance sentinel radius (KEEP IN SYNC with the negative-radius skip in field/sdf-layout.hlsli's
+    /// <c>sdfNextVisibleInstanceRange</c>). An <see cref="SdfInstanceRange.Active"/> = <see langword="false"/> instance
+    /// packs this instead of a real (always non-negative) radius, so the walk skips its segments with one
+    /// <c>bound.w &lt; 0</c> branch while the slot still occupies its reserved capacity. Chosen well below any
+    /// legitimate rounding of a real radius toward 0 so the branch never misfires on a genuine bound.</summary>
     private const float ParkedBoundRadius = -1f;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
     /// origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli's ScreenSurfaceData).</summary>
@@ -92,29 +76,26 @@ public sealed partial class SdfProgram {
     private const int SweepCurveVectorsPerEntry = 3;
 
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
-    /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
-    /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
-    /// is always evaluated.
+    /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so every bound test admits it and the
+    /// instance is always evaluated.
     /// <para>Deliberately a large, finite value rather than <see cref="float.PositiveInfinity"/>: DXC compiles the
     /// kernels with fast-math (<c>ninf</c>), so an infinity in that arithmetic would be undefined. 1e30 leaves ~8
-    /// decades of headroom below <see cref="float.MaxValue"/> after the cull test's multiply, and no world extent comes
-    /// within 20 decades of it. Needs no shader change: the existing cull arithmetic already always admits it, and it is
-    /// non-negative so neither the parked-slot skip in <c>collectInstanceMaskWord</c> nor the one in
-    /// <c>sdfNextVisibleInstanceRange</c> misfires.</para></summary>
+    /// decades of headroom below <see cref="float.MaxValue"/>, and no world extent comes within 20 decades of it. It is
+    /// non-negative so the parked-slot skip in <c>sdfNextVisibleInstanceRange</c> never misfires.</para></summary>
     public const float UnmaskableBoundRadius = 1.0e30f;
 
     private const int WordsPerVector = 4;
 
-    private readonly bool m_buildInstanceGrid;
     // Every SdfShapeType.ConvexPolygon instruction's own vertex list, keyed by that instruction's index — the host
     // side of the side table PackConvexPolygonProfiles appends to the packed word stream (see
     // SdfShapeType.ConvexPolygon), and what SdfFieldEvaluator reads directly to mirror the field without decoding
     // the packed offset. Empty for a program with no convex-polygon profile.
     private readonly (int InstructionIndex, Vector2[] Vertices)[] m_convexPolygonProfiles;
-    private readonly SdfInstanceGridInput[] m_instanceBinning;
     // Each instance's certified distance gain and smooth-union sag (InstanceDistanceGain), analyzed once after the
     // Lipschitz pass patches the scope rescales; ClassifyInstances widens the packed radius by the sag it needs.
     private readonly DistanceBound[] m_instanceDistanceBounds;
+    // Each instance's packed bound radius (ClassifyInstances): what PackInstances writes and InspectInstance reports.
+    private readonly float[] m_instanceRadii;
     // Every SdfShapeType.Sweep instruction's own control points/radius endpoints, keyed by that instruction's index —
     // the host side of the side table PackSweepCurves appends to the packed word stream (see SdfShapeType.Sweep), and
     // what SdfFieldEvaluator reads directly to mirror the field without decoding the packed offset. Empty for a
@@ -133,18 +114,6 @@ public sealed partial class SdfProgram {
     /// <param name="materials">The material table referenced by the instructions.</param>
     /// <param name="instances">Optional contiguous instruction ranges with world-space bounds for instance culling.</param>
     /// <param name="screenSurfaces">Optional screen-surface frames referenced by screen materials.</param>
-    /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (see
-    /// <see cref="SdfInstanceGrid"/>). Default (and production) is <see langword="true"/>: the beam prepass walks the
-    /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a disabled grid so
-    /// the beam falls back to the flat per-instance loop over the same instances, letting a caller compare the
-    /// grid-cull and flat-loop results against each other by hand.</param>
-    /// <param name="gridWorkspace">Optional pooled scratch to build the packed grid block into instead of the
-    /// allocating <see cref="SdfInstanceGrid.Build"/> path — a repeat-construction caller (a live composition rebuild)
-    /// supplies its own <see cref="SdfInstanceGrid.Workspace"/> to avoid re-paying that allocation every rebuild. The
-    /// workspace's own <see cref="SdfInstanceGrid.Workspace.MaxInstances"/> must equal
-    /// <see cref="SdfProgramBuilder.MaxInstances"/> — the same ceiling the allocating path derives the grid resolution
-    /// against — or the two paths could coarsen the grid differently for the same instances. <see langword="null"/>
-    /// (the default) keeps the allocating path, so every existing one-shot caller is unaffected.</param>
     /// <param name="convexPolygonProfiles">Every <see cref="SdfShapeType.ConvexPolygon"/> instruction's own vertex
     /// list, keyed by that instruction's index in <paramref name="instructions"/> — exactly one entry per such
     /// instruction, no two claiming the same index. <see langword="null"/> (the default) is empty, valid only when
@@ -158,16 +127,14 @@ public sealed partial class SdfProgram {
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
-    /// index; an instance range does not lie within the instruction stream; two instance ranges claim one instruction; or
-    /// <paramref name="gridWorkspace"/> was sized for a different instance ceiling than <see cref="SdfProgramBuilder.MaxInstances"/>.</exception>
+    /// index; an instance range does not lie within the instruction stream; or two instance ranges claim one
+    /// instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A screen surface's index is outside
     /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, its origin is not finite, its right/up axes are
     /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
     /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
     /// the deterministic field's representation.</exception>
-    /// <exception cref="InvalidOperationException">Two distinct chains of the program share one 32-bit
-    /// <see cref="SdfChain.Identity"/>.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
@@ -180,7 +147,6 @@ public sealed partial class SdfProgram {
         m_instances = [.. (instances ?? [])];
         m_instructions = [.. instructions];
         m_screenSurfaces = [.. (screenSurfaces ?? [])];
-        m_buildInstanceGrid = buildInstanceGrid;
         m_sweepCurves = [.. (sweepCurves ?? [])];
         m_paths = (paths ?? []).Select(selector: path => new SdfCompiledPath(path.InstructionIndex, path.Edges.ToArray())).ToArray();
         var convexPolygonProfilesSource = (convexPolygonProfiles ?? []);
@@ -202,7 +168,6 @@ public sealed partial class SdfProgram {
         m_screenSurfacesView = Array.AsReadOnly(array: m_screenSurfaces);
 
         ValidateIsa();
-        BakeLogSphereFrames();
 
         if (m_instances.Length > SdfProgramBuilder.MaxInstances) {
             throw new ArgumentException(
@@ -288,8 +253,6 @@ public sealed partial class SdfProgram {
         var rigidPlan = CompileRigidPlan(segments: segments);
         var partPrograms = CompilePartPrograms();
 
-        m_chainTable = BuildChainTable(segments: segments);
-
         var instructionCount = m_instructions.Length;
         var materialCount = materialTable.Length;
         var paintCount = 0;
@@ -305,39 +268,9 @@ public sealed partial class SdfProgram {
             }
         }
 
-        // Classify each instance ONCE (packed radius + whether the frozen grid can bin it) and build the uniform-grid
-        // block from the SAME classification PackInstances writes, so the beam's grid cull can never disagree with the
-        // bound it tests. The grid block is a self-contained uint array appended after the world-segment list; its
-        // length is known here (it depends on the instance layout), so it sizes the word stream up front. A probe
-        // program flows through this same path, so the frozen capacity envelope grows to cover the grid automatically.
+        // Classify each instance ONCE: its packed radius, which PackInstances writes and InspectInstance reports.
         m_instanceDistanceBounds = AnalyzeInstanceDistanceBounds();
-        m_instanceBinning = ClassifyInstances();
-        RequiresFrameInstanceGridRebuild = (buildInstanceGrid && HasFrameBinnableDynamicInstance());
-
-        if (
-            (gridWorkspace is not null) &&
-            (gridWorkspace.MaxInstances != SdfProgramBuilder.MaxInstances)
-        ) {
-            throw new ArgumentException(
-                message: $"gridWorkspace must be sized for SdfProgramBuilder.MaxInstances ({SdfProgramBuilder.MaxInstances}) instances; got a workspace sized for {gridWorkspace.MaxInstances}.",
-                paramName: nameof(gridWorkspace)
-            );
-        }
-
-        // The pooled path (gridWorkspace supplied) and the allocating SdfInstanceGrid.Build path run the IDENTICAL
-        // computation over owned vs. pooled scratch (see SdfInstanceGrid.Workspace.Build's remarks) — same instances,
-        // same maxInstances (enforced by the guard above) — so the packed bytes below are the same either way.
-        var gridBlock = ((gridWorkspace is not null)
-            ? gridWorkspace.Build(
-                enabled: buildInstanceGrid,
-                instances: m_instanceBinning
-            )
-            : SdfInstanceGrid.Build(
-                enabled: buildInstanceGrid,
-                instances: m_instanceBinning,
-                maxInstances: SdfProgramBuilder.MaxInstances
-            )
-        );
+        m_instanceRadii = ClassifyInstances();
 
         var convexPolygonVectors = 0;
         var pathEdges = 0;
@@ -351,9 +284,7 @@ public sealed partial class SdfProgram {
         }
 
         var layout = new Layout(
-            ChainTableVectors: m_chainTable.Vectors,
             ConvexPolygonVectors: convexPolygonVectors,
-            GridWords: gridBlock.Length,
             Instances: m_instances.Length,
             Instructions: instructionCount,
             Materials: materialCount,
@@ -370,10 +301,7 @@ public sealed partial class SdfProgram {
         var segmentOffsetVectors = layout.SegmentOffset;
         var instanceOffsetVectors = layout.InstanceOffset;
         var worldSegmentOffsetVectors = layout.WorldSegmentOffset;
-        var gridOffsetVectors = layout.GridOffset;
         var rigidPlanOffsetVectors = layout.RigidPlanOffset;
-        var tapeOffsetVectors = layout.TapeOffset;
-        var chainTableOffsetVectors = layout.ChainTableOffset;
         var convexPolygonOffsetVectors = layout.ConvexPolygonOffset;
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
         var convexPolygonCursor = 0;
@@ -455,9 +383,7 @@ public sealed partial class SdfProgram {
             var headerBase = ((ProgramHeaderVectors + index) * WordsPerVector);
 
             m_words[(headerBase + InstructionOpLane)] = ((uint)instruction.Op);
-            m_words[(headerBase + InstructionShapeLane)] = ((instruction.Op == SdfOp.ShapeBlend)
-                ? instruction.Shape | (instruction.Detail ? ShapeDetailFlag : 0u) | (instruction.Secondary ? 0u : ShapeNoSecondaryFlag)
-                : instruction.Shape);
+            m_words[(headerBase + InstructionShapeLane)] = instruction.Shape;
             m_words[(headerBase + InstructionBlendLane)] = instruction.Blend;
             m_words[(headerBase + InstructionMaterialLane)] = instruction.Material;
 
@@ -498,7 +424,6 @@ public sealed partial class SdfProgram {
             rigidSegments: rigidPlan.Segments
         );
         PackInstances(
-            binning: m_instanceBinning,
             instanceOffsetVectors: instanceOffsetVectors,
             segments: segments
         );
@@ -507,21 +432,10 @@ public sealed partial class SdfProgram {
             worldSegmentCount: worldSegmentCount,
             worldSegmentOffsetVectors: worldSegmentOffsetVectors
         );
-
-        // The uniform-grid block sits after the world-segment list (mapCore never reads past that list, so its offset
-        // chain and every rendered pixel of a scope-/instance-driven walk are unchanged — only the beam prepass reads
-        // the grid). See SdfInstanceGrid for the block layout.
-        gridBlock.CopyTo(destination: m_words.AsSpan(
-            start: (gridOffsetVectors * WordsPerVector),
-            length: gridBlock.Length
-        ));
         PackRigidPlan(
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
-        m_words[((segmentOffsetVectors * WordsPerVector) + SegmentTapeLane)] = ((uint)tapeOffsetVectors);
-        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
-        PackChainTable(offset: chainTableOffsetVectors, worldSegmentOffset: worldSegmentOffsetVectors);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: layout.PathOffset);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);
@@ -586,10 +500,6 @@ public sealed partial class SdfProgram {
     /// <summary>Gets each non-unit clamp baked into a field scope, in instruction order. A shared scope applies
     /// its clamp to all its shapes. Empty means no scope clamps, not necessarily a unit global step scale.</summary>
     public IReadOnlyList<SdfFieldScopeClamp> FieldScopeClamps { get; }
-    /// <summary>Gets a value indicating whether this program's ring-local cull grid depends on a per-frame dynamic
-    /// transform. Static, unmaskable, parked, and grid-disabled programs have an invariant side table that the engine
-    /// uploads once with the program; an active maskable dynamic instance requires the existing per-frame rebuild.</summary>
-    public bool RequiresFrameInstanceGridRebuild { get; }
     /// <summary>Gets the packed screen-surface side table (see the type-level remarks): always
     /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> 3-uvec4 (48-byte) entries, each at its declared screen
     /// index's slot; an undeclared slot is all-zero and never addressed by a program-consistent material id.</summary>
@@ -798,22 +708,15 @@ public sealed partial class SdfProgram {
             y: 1.0f
         );
     }
-    // Packs the instance directory: a count header, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius
-    // (the same float-safety padding as WriteBound), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd). The
-    // segment range is resolved here (not during AnalyzeBounds) by scanning the FINAL, POST-MERGE segment list for
-    // the contiguous run whose InstanceIndex equals this instance's index — sound because splits/merges never let a
-    // segment straddle an instance boundary, so that run is always contiguous and never empty.
-    // Classifies each declared instance for BOTH the bound directory and the uniform grid: its packed bound radius (the
-    // float-safety-padded live radius + any soft-blend halo + any scoped-field reach, the UnmaskableBoundRadius sentinel,
-    // or the ParkedBoundRadius sentinel) and whether the FROZEN grid can bin it (active + static + maskable → a fixed,
-    // finite world-space bound). Computed ONCE so PackInstances and SdfInstanceGrid pack from the SAME radius — a
-    // divergence would desync the beam's grid cull from the bound it tests. Also runs the parked-unmaskable validation:
+    // Classifies each declared instance's packed bound radius: the float-safety-padded live radius + any soft-blend
+    // halo + any scoped-field reach, the UnmaskableBoundRadius sentinel, or the ParkedBoundRadius sentinel. Computed
+    // ONCE so PackInstances and InspectInstance read the SAME radius. Also runs the parked-unmaskable validation:
     // an unbounded Plane or an op that reads the running accumulator (an intersection-family blend or an
     // Onion/Dilate/Displace/NoiseDisplace field op) cannot be parked, because a parked slot asserts "contributes nothing", which
     // such an instruction violates outside every finite bound. See MaxSmoothBlendRadius / MaxScopedFieldReach /
     // HasUnmaskableInfluence for the margin/gate derivations.
-    private SdfInstanceGridInput[] ClassifyInstances() {
-        var result = new SdfInstanceGridInput[m_instances.Length];
+    private float[] ClassifyInstances() {
+        var result = new float[m_instances.Length];
 
         for (var index = 0; (index < m_instances.Length); index++) {
             var instance = m_instances[index];
@@ -829,36 +732,18 @@ public sealed partial class SdfProgram {
                 );
             }
 
-            float radius;
-            bool binnable;
-
-            if (!instance.Active) {
-                // A PARKED instance packs the negative sentinel so the beam skips its sphere-vs-cone test with one branch;
-                // it is neither binned nor placed in the always-list (a parked pool costs zero).
-                radius = ParkedBoundRadius;
-                binnable = false;
-            } else if (unmaskable) {
-                // An op that reads the accumulator has unbounded influence; no finite bound culls it, so it packs the
-                // large sentinel (every tile's cull test passes) and rides the grid's ALWAYS-tested list.
-                radius = UnmaskableBoundRadius;
-                binnable = false;
-            } else {
-                // A live, maskable instance: its geometry radius plus its soft-blend coupling halo plus any scoped-field
-                // outward reach, float-safety padded. A STATIC one has a fixed world-space bound the grid bins; a DYNAMIC
-                // one resolves its center per frame, so the frozen grid cannot bin it and it rides the always-list.
-                radius = ((((instance.Radius + SmoothHalo(index: index)) + MaxScopedFieldReach(
-                    first: instance.First,
-                    end: instance.End
-                )) * BoundRadiusScale) + BoundRadiusPadding);
-                binnable = !instance.IsDynamic;
-            }
-
-            result[index] = new SdfInstanceGridInput(
-                Center: instance.Center,
-                Radius: radius,
-                Binnable: binnable,
-                FrameBinnable: (instance.Active && !unmaskable)
-            );
+            // A PARKED instance packs the negative sentinel so the walk skips its segments with one branch; an op that
+            // reads the accumulator has unbounded influence, so no finite bound culls it and it packs the large
+            // sentinel. A live, maskable instance packs its geometry radius plus its soft-blend coupling halo plus any
+            // scoped-field outward reach, float-safety padded.
+            result[index] = ((!instance.Active)
+                ? ParkedBoundRadius
+                : (unmaskable
+                    ? UnmaskableBoundRadius
+                    : ((((instance.Radius + SmoothHalo(index: index)) + MaxScopedFieldReach(
+                        first: instance.First,
+                        end: instance.End
+                    )) * BoundRadiusScale) + BoundRadiusPadding)));
         }
 
         return result;
@@ -1013,19 +898,6 @@ public sealed partial class SdfProgram {
         }
         return domainProduct;
     }
-    private bool HasFrameBinnableDynamicInstance() {
-        for (var index = 0; (index < m_instances.Length); index++) {
-            if (
-                m_instances[index].IsDynamic &&
-                m_instanceBinning[index].FrameBinnable
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>Returns whether an instance's instruction slice has an influence no finite sphere can mask. Three
     /// families qualify.
     /// <para>The plane. Its zero set and negative half-space are unbounded, irrespective of its blend or field scope.
@@ -1211,55 +1083,6 @@ public sealed partial class SdfProgram {
             end: instance.End
         ));
 
-    /// <summary>Returns whether an instance is shadow-transparent: omitting it from a soft-shadow march can only make
-    /// the field more solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow
-    /// occluder set. True iff the instance contains at least one shape and every shape compose is a subtraction-family
-    /// blend (<see cref="SdfBlendOp.Subtraction"/> / <see cref="SdfBlendOp.SmoothSubtraction"/> /
-    /// <see cref="SdfBlendOp.ChamferSubtraction"/>) — subtraction only removes material — and the instance carries no
-    /// accumulator-growing field op (<see cref="SdfOp.Onion"/> / <see cref="SdfOp.Dilate"/> / <see cref="SdfOp.Displace"/> / <see cref="SdfOp.NoiseDisplace"/>)
-    /// nor a field scope (<see cref="SdfOp.PushField"/> / <see cref="SdfOp.PopField"/>), either of which could add
-    /// solidity and make the omission a light-leak. Anything else classifies as a normal occluder (today's behavior), so
-    /// the flag is conservative by default — it is set only for instances provably safe to skip.</summary>
-    /// <param name="first">The instance's first instruction index (inclusive).</param>
-    /// <param name="end">The instance's instruction end index (exclusive).</param>
-    /// <returns><see langword="true"/> when every shape in the slice is a subtraction-family carve and no growth op appears.</returns>
-    private bool IsShadowTransparentInstance(int first, int end) {
-        var sawShape = false;
-
-        for (var index = first; (index < end); index++) {
-            var instruction = m_instructions[index];
-
-            // A growth op (a bare field op or a field scope) can move the surface OUTWARD, so skipping this instance in
-            // shadow could remove real occlusion — refuse the flag.
-            if (
-                (instruction.Op == SdfOp.Onion) ||
-                (instruction.Op == SdfOp.Dilate) ||
-                (instruction.Op == SdfOp.Displace) ||
-                (instruction.Op is SdfOp.NoiseDisplace or SdfOp.CellDisplace) ||
-                (instruction.Op == SdfOp.PushField) ||
-                (instruction.Op == SdfOp.PopField)
-            ) {
-                return false;
-            }
-
-            // The Blend lane carries an SdfBlendOp only on a ShapeBlend instruction (fold ops reuse the lane).
-            if (instruction.Op != SdfOp.ShapeBlend) {
-                continue;
-            }
-
-            sawShape = true;
-
-            if (
-                (instruction.Blend != ((uint)SdfBlendOp.Subtraction)) &&
-                (instruction.Blend != ((uint)SdfBlendOp.SmoothSubtraction)) &&
-                (instruction.Blend != ((uint)SdfBlendOp.ChamferSubtraction))
-            ) {
-                return false; // an additive/intersecting/xor shape — skipping the instance could remove a real occluder.
-            }
-        }
-
-        return sawShape;
-    }
     // Grows a 2D-primitive family shape's exact 2D bounding radius into a 3D containment-sphere radius per its lift
     // (Data1.Y = mode, matching SdfLift / the shader's `data1.y > 0.5`; Data0.W = the lift amount). EXTRUDE sweeps the
     // 2D disc ±half-height along Z ⇒ √(r² + h²); REVOLVE offsets the disc by o then lathes it ⇒ the whole solid lies
@@ -1456,8 +1279,7 @@ public sealed partial class SdfProgram {
         // The header's .y carries the final field's Lipschitz correction; .z locates the rigid plan directory.
         // KEEP IN SYNC with sdfLoadProgramLayout in field/sdf-layout.hlsli.
         m_words[(segmentHeaderBase + SegmentStepScaleLane)] = BitConverter.SingleToUInt32Bits(value: stepScale);
-        // Absolute uint4 offset of the plan directory. The table is appended after the instance grid so the grid's
-        // long-settled offset chain stays byte-for-byte unchanged.
+        // Absolute uint4 offset of the plan directory, which follows the world-segment list.
         m_words[(segmentHeaderBase + SegmentRigidPlanLane)] = ((uint)rigidPlanOffsetVectors);
 
         for (var index = 0; (index < segments.Count); index++) {
@@ -1473,12 +1295,13 @@ public sealed partial class SdfProgram {
             );
         }
     }
-    // Packs the header and two vectors per instance: bound sphere, then mode/slot/segment range.
-    // Detail admission covers the entire stream, including uninstanced and parked shapes.
-    private void PackInstances(SdfInstanceGridInput[] binning, int instanceOffsetVectors, List<BoundRecord> segments) {
+    // Packs the instance directory: a count header, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius
+    // (ClassifyInstances), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd). The segment range is resolved here (not
+    // during AnalyzeBounds) by scanning the FINAL, POST-MERGE segment list for the contiguous run whose InstanceIndex
+    // equals this instance's index — sound because splits/merges never let a segment straddle an instance boundary, so
+    // that run is always contiguous and never empty.
+    private void PackInstances(int instanceOffsetVectors, List<BoundRecord> segments) {
         m_words[((instanceOffsetVectors * WordsPerVector) + InstanceCountLane)] = ((uint)m_instances.Length);
-        m_words[((instanceOffsetVectors * WordsPerVector) + InstanceFlagsLane)] = (m_instructions.Any(predicate: static instruction => instruction.Detail)
-            ? 0u : NoDetailShapesFlag);
 
         // Resolve every instance's contiguous [segmentFirst, segmentEnd) directory range in ONE pass over the segment
         // list in O(instances + segments). Splits/merges never let a
@@ -1514,12 +1337,10 @@ public sealed partial class SdfProgram {
             var instance = m_instances[instanceIndex];
             var entryBase = (((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * instanceIndex)) * WordsPerVector);
 
-            // The packed radius (float-safety-padded live radius + soft-blend halo + scoped-field reach, or the
-            // unmaskable/parked sentinel) is the one ClassifyInstances derived — the same value the grid binned from.
             WriteVector4(
                 words: m_words,
                 baseIndex: entryBase,
-                w: binning[instanceIndex].Radius,
+                w: m_instanceRadii[instanceIndex],
                 x: instance.Center.X,
                 y: instance.Center.Y,
                 z: instance.Center.Z
@@ -1534,15 +1355,10 @@ public sealed partial class SdfProgram {
                 val1: segmentFirst[instanceIndex],
                 val2: 0
             ));
-
-            // The segmentEnd lane (i1.w) additionally carries the instance's flags in its four high bits (InstanceFlagsOf);
-            // mapCore masks them off before using the lane as a range.
-            var segmentEndPacked = ((uint)Math.Max(
+            m_words[((entryBase + WordsPerVector) + 3)] = ((uint)Math.Max(
                 val1: segmentEnd[instanceIndex],
                 val2: 0
-            )) & SegmentEndMask;
-
-            m_words[((entryBase + WordsPerVector) + 3)] = segmentEndPacked | InstanceFlagsOf(instance: instance);
+            ));
         }
     }
     // Packs the world-segment list: a count header (worldSegmentCount — the ctor already counted the unowned
@@ -1862,68 +1678,6 @@ public sealed partial class SdfProgram {
         words[(baseIndex + 3)] = BitConverter.SingleToUInt32Bits(value: w);
     }
 
-    // Rebuilds the cull grid against THIS frame's dynamic instance positions. The public instruction program remains
-    // immutable; SdfWorldTables uploads this compact side table into a ring-local buffer after the matching dynamic
-    // transforms, so a moving instance no longer has to ride the O(dynamic-count) always-tested list. Static centers
-    // pass through unchanged; a dynamic bound follows the same position + boundOffset rule as sdfInstanceBoundAt
-    // (orientation is conservatively folded into the authored radius by BeginInstanceDynamic's contract).
-    public ReadOnlySpan<uint> BuildFrameInstanceGrid(
-        IReadOnlyList<DynamicTransform> transforms,
-        Span<SdfInstanceGridInput> inputScratch,
-        SdfInstanceGrid.Workspace workspace
-    ) {
-        ArgumentNullException.ThrowIfNull(transforms);
-        ArgumentNullException.ThrowIfNull(workspace);
-
-        if (inputScratch.Length < m_instanceBinning.Length) {
-            throw new ArgumentException(
-                message: $"The frame-grid input scratch has {inputScratch.Length} entries; the program needs {m_instanceBinning.Length}.",
-                paramName: nameof(inputScratch)
-            );
-        }
-
-        if (!m_buildInstanceGrid) {
-            return workspace.Build(
-                instances: ReadOnlySpan<SdfInstanceGridInput>.Empty,
-                enabled: false
-            );
-        }
-
-        for (var index = 0; (index < m_instanceBinning.Length); index++) {
-            var input = m_instanceBinning[index];
-            var instance = m_instances[index];
-            var center = input.Center;
-
-            if (
-                instance.IsDynamic &&
-                input.FrameBinnable
-            ) {
-                center += transforms[instance.Slot].Position;
-            }
-
-            inputScratch[index] = input with { Center = center, Binnable = input.FrameBinnable };
-        }
-
-        return workspace.Build(
-            instances: inputScratch[..m_instanceBinning.Length],
-            enabled: m_buildInstanceGrid
-        );
-    }
-    /// <summary>Builds the program-upload copy for a grid proven independent of frame transforms.</summary>
-    public ReadOnlySpan<uint> BuildInvariantFrameInstanceGrid(
-        Span<SdfInstanceGridInput> inputScratch,
-        SdfInstanceGrid.Workspace workspace
-    ) {
-        if (RequiresFrameInstanceGridRebuild) {
-            throw new InvalidOperationException(message: "A frame-variant instance grid cannot be built without dynamic transforms.");
-        }
-
-        return BuildFrameInstanceGrid(
-            transforms: Array.Empty<DynamicTransform>(),
-            inputScratch: inputScratch,
-            workspace: workspace
-        );
-    }
     /// <summary>Returns the physical uint stride of one tile's mask entry: primary instance bits plus one summary bit per
     /// primary word. The summary lets mapCore jump across sparse 32-instance blocks in O(non-empty blocks) time.</summary>
     public static int InstanceMaskStorageWordCountFor(int instanceCount) {

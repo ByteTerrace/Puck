@@ -22,14 +22,6 @@ SdfHit sdfIsaErrorHit() {
 
 #include "sdf-quaternion.hlsli"
 
-// The MATERIAL BLEND CHANNEL. A smooth blend blends the two operands' DISTANCE smoothly, but result.material is an
-// integer that can only carry ONE winner, so at every SMOOTH compose mapCore records the OTHER (losing) operand's material
-// and the SYMMETRIC seam weight min(h, 1-h) in [0, 0.5] (0 at/beyond the band, 0.5 at the seam centre) in this
-// per-thread channel. A HARD compose that flips the winner resets the weight to 0; a HARD compose the incumbent keeps
-// leaves an earlier smooth seam's weight intact. Both ids are POST-parityMaterialDelta.
-static float sdfMaterialBlendWeight = 0.0;
-static int sdfMaterialBlendOther = 0;
-
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would
 // silently mis-color/mis-rotate every negative-index cell. Keep every wallpaper mod on this helper.

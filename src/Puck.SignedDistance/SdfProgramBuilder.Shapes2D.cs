@@ -21,8 +21,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="capChamfer">A 45-degree bevel radius on the extrusion's two cap rims (<see cref="SdfLift.Extrude"/>
     /// only — a revolve has no cap seam and ignores it), clamped like <paramref name="rounding"/>; zero (the default)
     /// takes the plain extrude join exactly, so an unchamfered ellipse is unchanged.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="semiX"/>, <paramref name="semiY"/> or
     /// <paramref name="liftAmount"/> is not finite, the derived lifted bound radius (see remarks) is not finite,
     /// <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
@@ -153,8 +153,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="smooth">The blend smoothing radius.</param>
     /// <param name="rounding">The edge-rounding radius filleting the lift's rims (extrude) or the profile's corners
     /// (revolve), clamped by <see cref="ClampRounding"/>; zero emits the sharp shape.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> or <paramref name="liftAmount"/> is not
     /// finite, the derived lifted bound radius (see remarks) is not finite, <paramref name="material"/> is negative,
     /// <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
@@ -254,8 +254,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="capChamfer">A 45-degree bevel radius on the extrusion's two cap rims (<see cref="SdfLift.Extrude"/>
     /// only — a revolve has no cap seam and ignores it), clamped like <paramref name="rounding"/>; zero (the default)
     /// takes the plain extrude join exactly, so an unchamfered rounded rectangle is unchanged.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
     /// remarks) is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined
     /// <see cref="SdfLift"/>, or <paramref name="smooth"/>/<paramref name="rounding"/>/<paramref name="capChamfer"/>
@@ -387,8 +387,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/>, <paramref name="sharpness"/> or
     /// <paramref name="liftAmount"/> is not finite, the derived lifted bound radius (see remarks) is not finite,
     /// <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
@@ -471,8 +471,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="capChamfer">A 45-degree bevel radius on the extrusion's two cap rims (<see cref="SdfLift.Extrude"/>
     /// only — a revolve has no cap seam and ignores it), clamped like <paramref name="rounding"/>; zero (the default)
     /// takes the plain extrude join exactly, so an unchamfered trapezoid is unchanged.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
     /// remarks) is not finite, the profile's slant vector — authored or inset by <paramref name="rounding"/> — is
     /// shorter than <see cref="MinTrapezoidProfileSlant"/>, <paramref name="material"/> is negative,
@@ -668,8 +668,8 @@ public sealed partial class SdfProgramBuilder {
     /// <c>(halfWidth + halfHeight − chamfer)/√2</c> from the origin along its unit normal and binds first once the
     /// chamfer is large relative to the rectangle's aspect. Clamped by <see cref="ClampRounding"/> against that
     /// inradius (and, for an extrude, the lift half-height); zero emits the sharp-chamfered shape.</param>
-    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
-    /// every march/step-bound consumer and included only at an already-found hit.</param>
+    /// <param name="detail">Whether the shape is a detail shape (<see cref="SdfInstruction.Detail"/>): baked like any
+    /// other shape and excluded from contact.</param>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
     /// remarks) is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined
     /// <see cref="SdfLift"/>, or <paramref name="smooth"/>/<paramref name="chamfer"/>/<paramref name="rounding"/> is
@@ -798,7 +798,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="capChamfer">A 45-degree bevel radius on the extrusion's two cap rims (<see cref="SdfLift.Extrude"/>
     /// only), clamped like <paramref name="cornerRadius"/>; zero (the default) takes the plain extrude join
     /// exactly.</param>
-    /// <param name="detail">Whether the emitted shape instruction is shading-only (<see cref="SdfInstruction.Detail"/>).</param>
+    /// <param name="detail">Whether the emitted shape instruction is a detail shape (<see cref="SdfInstruction.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="vertices"/> is not a valid convex hull (see
     /// <see cref="SdfPrismProfile.IsValidConvexHull"/>), <paramref name="liftAmount"/> is not finite, the derived
     /// lifted bound radius is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a

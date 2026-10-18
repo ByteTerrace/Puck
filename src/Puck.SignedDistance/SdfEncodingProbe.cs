@@ -18,7 +18,7 @@ public sealed record SdfEncodingProbeCall(string Name, IReadOnlyList<float> Inpu
 /// shape type, blend and lift, one per member of each enum an instruction lane carries (<see cref="SdfNoiseFlavor"/>,
 /// <see cref="SdfCellMode"/>, <see cref="SdfAxis"/>, <see cref="SdfPlane"/>, <see cref="SdfWallpaperGroup"/>), and calls
 /// that pack every side table and flag the kernels read: a material with every field and layer, compiled part programs,
-/// sweep, path and convex-polygon tables, instances and the instance grid, and the chain table.
+/// sweep, path and convex-polygon tables, and instances.
 /// <para><see cref="Describe()"/> states, for each call's packed program, every word that holds an integer (a count, an
 /// offset, an enum, a flag, a packed bitfield), for each input which words move when that input alone is raised (the
 /// bits an integer word's change spans, and every float word that moves), and for each float word that moves, the input
@@ -47,8 +47,6 @@ public static class SdfEncodingProbe {
                 Name: name
             ));
 
-        Call(name: "tape certificate", inputs: [0.2f, 0.3f, 0.4f, 0.5f], emit: static (b, m, v) => b.ResetPoint()
-            .Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])).Sphere(radius: v[3], material: m));
         // Point operations, each ahead of a unit sphere.
         Call(name: "translate", inputs: [0.31f, 0.37f, 0.41f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "rotate", inputs: [0.4f, 0.5f, 0.6f, 0.7f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Rotate(rotation: new Quaternion(w: v[3], x: v[0], y: v[1], z: v[2])), material: m));
@@ -122,8 +120,6 @@ public static class SdfEncodingProbe {
         foreach (var blend in Enum.GetValues<SdfBlendOp>().Where(predicate: static blend => (blend is not (SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction)))) {
             Call(name: $"blend {blend}", inputs: [0.33f, 0.22f], emit: (b, m, v) => b.ResetPoint().Sphere(blend: blend, material: m, radius: v[0], smooth: v[1]));
         }
-        Call(name: "detail", inputs: [0.34f], emit: static (b, m, v) => b.ResetPoint().Sphere(detail: true, material: m, radius: v[0]));
-        Call(name: "no-secondary", inputs: [0.35f], emit: static (b, m, v) => b.ResetPoint().Sphere(material: m, radius: v[0]).MarkSecondary(secondary: false));
 
         // Every shape type.
         Call(name: "box", inputs: [0.41f, 0.43f, 0.47f, 0.05f], emit: static (b, m, v) => b.ResetPoint().Box(halfExtents: new Vector3(x: v[0], y: v[1], z: v[2]), material: m, round: v[3]));
@@ -151,7 +147,7 @@ public static class SdfEncodingProbe {
             Call(name: $"convex-polygon {lift}", inputs: [0.05f, 0.18f, 0.75f], emit: (b, m, v) => b.ResetPoint().ConvexPolygon(cornerRadius: v[0], lift: lift, liftAmount: v[1], material: m, vertices: [new Vector2(x: -0.5f, y: -0.25f), new Vector2(x: 0f, y: v[2]), new Vector2(x: 0.5f, y: -0.25f)]));
         }
 
-        // Side tables and flags: a material with every field and layer, static and dynamic instances over the grid, and
+        // Side tables and flags: a material with every field and layer, static and dynamic instances, and
         // compiled part programs traced independently.
         Call(
             emit: static (b, _, v) => b.ResetPoint().Sphere(
@@ -243,15 +239,6 @@ public static class SdfEncodingProbe {
             inputs: [2.5f, 0.6f, 1f, 0.35f, 0.45f, 0.55f],
             name: "part-programs"
         );
-        // The chain table: segments merged and apart, a chain two segments share, a chain with code-selecting lanes, a
-        // scope's push cut at a reset and its pop closing an empty chain, and a field op cut at the program's end.
-        Call(name: "chain table", inputs: [0.31f, 0.37f, 0.41f, 0.5f, 0.43f, 0.06f], emit: static (b, m, v) => b
-            .ResetPoint().Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])).Sphere(v[3], m)
-            .Translate(offset: new Vector3(x: v[2], y: v[0], z: v[1])).Sphere(v[3], m)
-            .ResetPoint().Translate(offset: new Vector3(x: v[1], y: v[2], z: v[0])).Sphere(v[3], m)
-            .ResetPoint().PushField()
-            .ResetPoint().RotatePlane(driver: SdfAxis.Y, origin: 0f, plane: SdfPlane.XZ, rate: v[4]).Sphere(v[3], m).PopField()
-            .ResetPoint().Sphere(v[3], m).Onion(thickness: v[5]));
 
         return calls;
     }

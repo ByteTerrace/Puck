@@ -3,10 +3,10 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 /// <summary>One per-object instance's declaration: the instruction slice it owns (<see cref="First"/>..<see cref="End"/>,
-/// exclusive) plus its world-space bounding sphere — the world renderer's tile-cull beam prepass tests the sphere per
-/// tile and writes a per-tile instance mask (<see cref="SdfProgram.InstanceMaskWordCount"/> uints, ceiling
-/// <see cref="SdfProgramBuilder.MaxInstances"/> bits) so <c>map()</c> in the world path evaluates an instance's slice
-/// only for tiles the sphere may cover. Declared via
+/// exclusive) plus its world-space bounding sphere — the mesh bake masks instances per lattice
+/// (<see cref="SdfProgram.InstanceMaskWordCount"/> uints, ceiling <see cref="SdfProgramBuilder.MaxInstances"/> bits) so
+/// <c>mapCore</c> evaluates an instance's slice only where its group bakes, and the walk skips an instance whose sphere
+/// cannot win. Declared via
 /// <see cref="SdfProgramBuilder.BeginInstance"/>/<see cref="SdfProgramBuilder.BeginInstanceDynamic"/>/
 /// <see cref="SdfProgramBuilder.EndInstance"/>; packed into the program word stream by <see cref="SdfProgram"/>.</summary>
 /// <param name="First">The instance's first instruction index (inclusive).</param>
@@ -18,16 +18,10 @@ namespace Puck.SignedDistance;
 /// <param name="Radius">The finite, non-negative bound radius (post-dynamic local geometry folded in for a dynamic
 /// instance).</param>
 /// <param name="Slot">The dynamic-transform slot index; meaningless when <see cref="IsDynamic"/> is <see langword="false"/>.</param>
-/// <param name="Active">Whether the instance participates in the tile-cull scan. A PARKED instance (<see langword="false"/>)
+/// <param name="Active">Whether the instance contributes to the field. A PARKED instance (<see langword="false"/>)
 /// still occupies its reserved instance/dynamic-transform slot (so a pool's live-emission always fits the once-sized
-/// buffers), but the beam prepass skips it with a single cheap branch (the packed bound carries a negative-radius
-/// sentinel — see <see cref="SdfProgram"/>) instead of running the full sphere-vs-cone test, so a parked slot costs
-/// almost nothing per tile. Its mask bit is always 0, so Stage 1 never marches it — bit-identical to a bound that no
-/// ray can reach, at a fraction of the cull cost.</param>
-/// <param name="CameraHidden">Whether the camera never sees the instance: the tile cull leaves it out of every camera
-/// mask, so primary never marches it, while shadows and ambient occlusion, which gather their own occluders, still
-/// read it. A placement whose baked mesh draws in its place keeps its field this way, so its shadows and occlusion
-/// stay (<see cref="SdfProgram.CameraHiddenInstanceFlag"/>).</param>
+/// buffers), but the walk skips it with a single cheap branch (the packed bound carries a negative-radius sentinel —
+/// see <see cref="SdfProgram"/>) and the bake gives it no group.</param>
 /// <param name="BakesWithPrevious">Whether a static instance bakes into one mesh with the static instance just before
 /// it: the baked-mesh path's group of one rigid copy is the run of instances it heads, so shapes that share a face
 /// bake as their union rather than as meshes fighting over the face. Meaningless for a dynamic instance, whose group is
@@ -40,6 +34,5 @@ public readonly record struct SdfInstanceRange(
     float Radius,
     int Slot,
     bool Active = true,
-    bool CameraHidden = false,
     bool BakesWithPrevious = false
 );

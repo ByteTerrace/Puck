@@ -4,9 +4,8 @@ namespace Puck.SignedDistance;
 
 /// <summary>One live instance's packed ownership and the exact culling facts derived when its program was built.</summary>
 /// <param name="OwnedWords">Words exclusively owned by this instance: instruction headers/data/bounds, instance and
-/// segment rows, rigid leaves, chain-table entries and identities, shape side tables and per-instance part bindings.
-/// Shared palettes, grid and part assets, the chain table's header and the padding that rounds its entries and identities
-/// to whole vectors are excluded and remain in the program's shared remainder.</param>
+/// segment rows, rigid leaves, shape side tables and per-instance part bindings. Shared palettes and part assets are
+/// excluded and remain in the program's shared remainder.</param>
 /// <param name="Shapes">ShapeBlend instructions in the instance.</param>
 /// <param name="ScopeClamps">Non-unit field-scope clamps in the instance.</param>
 /// <param name="BoundRadius">The packed culling radius, including padding or a parked/unmaskable sentinel.</param>
@@ -29,6 +28,21 @@ public readonly record struct SdfSkipSphere(uint Mode, int Slot, Vector3 Center,
 public sealed partial class SdfProgram {
     /// <summary>Gets the number of entries in the packed segment directory, after adjacent skippable segments merged.</summary>
     public int SkipSegmentCount => ((int)m_words[(SegmentDirectoryWord() + SegmentCountLane)]);
+    /// <summary>Gets the number of directory segments that carry a rigid-leaf plan (<see cref="SegmentRigidPlanFlag"/>).</summary>
+    public int RigidSegmentCount {
+        get {
+            var segments = SegmentDirectoryWord();
+            var count = 0;
+
+            for (var segment = 0; (segment < SkipSegmentCount); segment++) {
+                if ((m_words[((segments + ((DirectoryHeaderVectors + (BoundRecordVectors * segment)) * WordsPerVector)) + WordsPerVector)] & SegmentRigidPlanFlag) != 0u) {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
 
     /// <summary>Reads the packed skip sphere of one instruction. Only a <see cref="SdfOp.ShapeBlend"/> can carry one.</summary>
     /// <param name="instruction">The zero-based instruction index.</param>
@@ -63,9 +77,9 @@ public sealed partial class SdfProgram {
         var instances = (segments + ((DirectoryHeaderVectors + (BoundRecordVectors * ((int)m_words[(segments + SegmentCountLane)]))) * WordsPerVector));
         var entry = (instances + (((DirectoryHeaderVectors + (BoundRecordVectors * index)) + 1) * WordsPerVector));
         var firstSegment = ((int)m_words[(entry + 2)]);
-        var endSegment = ((int)(m_words[(entry + 3)] & SegmentEndMask));
+        var endSegment = ((int)m_words[(entry + 3)]);
         var rigid = (((int)m_words[(segments + SegmentRigidPlanLane)]) * WordsPerVector);
-        var vectors = (((((2 + InstructionDataVectors) + BoundRecordVectors) * instructionCount) + BoundRecordVectors)
+        var vectors = (((((1 + InstructionDataVectors) + BoundRecordVectors) * instructionCount) + BoundRecordVectors)
             + ((BoundRecordVectors + 1) * (endSegment - firstSegment)));
 
         for (var segment = firstSegment; (segment < endSegment); segment++) {
@@ -101,10 +115,10 @@ public sealed partial class SdfProgram {
                 clamps++;
             }
         }
-        return new SdfInstanceCost(OwnedWords: checked(((vectors * WordsPerVector) + ChainTableWordsOf(endSegment: endSegment, firstSegment: firstSegment))), Shapes: shapes, ScopeClamps: clamps,
-            BoundRadius: m_instanceBinning[index].Radius,
+        return new SdfInstanceCost(OwnedWords: checked((vectors * WordsPerVector)), Shapes: shapes, ScopeClamps: clamps,
+            BoundRadius: m_instanceRadii[index],
             Halo: (SmoothHalo(index: index) + MaxScopedFieldReach(first: instance.First, end: instance.End)),
-            Unmaskable: (m_instanceBinning[index].Radius == UnmaskableBoundRadius),
+            Unmaskable: (m_instanceRadii[index] == UnmaskableBoundRadius),
             FieldRescale: rescale);
 
         bool Owns(int instruction) => ((instruction >= instance.First) && (instruction < instance.End));

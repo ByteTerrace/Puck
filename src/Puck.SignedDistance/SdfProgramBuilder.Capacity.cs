@@ -10,9 +10,8 @@ public readonly record struct SdfProgramCapacity(int Words, int Instances);
 public sealed partial class SdfProgramBuilder {
     /// <summary>Measures the capacity the program this builder holds would need, without building it. The segment count
     /// and every table the emission states (materials, instances, polygon profiles, sweep curves, paths, reserved path
-    /// words) are exact; the counts only analysis decides are bounded above: world segments by the segments, rigid leaves
-    /// by two per shape (a leaf and its fold extension), chains by the instructions (each closes on at least one), and
-    /// the instance grid by its block at <see cref="MaxInstances"/>. The words are therefore never below the built
+    /// words) are exact; the counts only analysis decides are bounded above: world segments by the segments, and rigid
+    /// leaves by two per shape (a leaf and its fold extension). The words are therefore never below the built
     /// program's <see cref="SdfProgram.PartCompilationWordCapacity"/>, through the one layout
     /// (<c>SdfProgram.Layout</c>) the program packs by. A capacity probe measures with it, so it allocates no packed
     /// stream and runs none of the build's analysis.</summary>
@@ -54,9 +53,7 @@ public sealed partial class SdfProgramBuilder {
         }
 
         var layout = new SdfProgram.Layout(
-            ChainTableVectors: SdfProgram.ChainTableVectorsOf(chains: instructions, segments: segments),
             ConvexPolygonVectors: convexPolygonVectors,
-            GridWords: SdfInstanceGrid.WordCapacity(maxInstances: MaxInstances),
             Instances: m_instances.Count,
             Instructions: instructions,
             Materials: m_materials.Count,

@@ -43,7 +43,7 @@ public sealed class WorldStampPoolCompactionLawTests {
             maxPlacementScale: 1f,
             slotBase: SlotBase
         );
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static void Reconcile(WorldStampPool pool, WorldPrototype creation, params int[] bodies) => pool.Reconcile(
         placements: [],

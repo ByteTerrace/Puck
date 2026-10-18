@@ -109,21 +109,18 @@ public sealed partial class SdfProgramBuilder {
     public int InstanceCount => m_instances.Count;
 
     /// <summary>Opens a static per-object instance: every instruction until the matching <see cref="EndInstance"/>
-    /// belongs to it, and the world renderer's tile-cull beam prepass tests <paramref name="boundCenter"/>/
-    /// <paramref name="boundRadius"/> (a world-space bounding sphere) per tile, evaluating the instance's instruction
-    /// slice only for tiles the sphere may cover. Instructions declared outside any instance are the world set:
-    /// always evaluated, unmasked (floors/walls/unbounded shapes).</summary>
+    /// belongs to it, bounded by <paramref name="boundCenter"/>/<paramref name="boundRadius"/> (a world-space bounding
+    /// sphere, <see cref="SdfInstanceRange"/>). Instructions declared outside any instance are the world set: always
+    /// evaluated, unmasked (floors/walls/unbounded shapes).</summary>
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
-    /// <param name="cameraHidden">Whether the camera never sees the instance, while shadows and ambient occlusion still
-    /// read it (<see cref="SdfInstanceRange.CameraHidden"/>).</param>
     /// <param name="bakesWithPrevious">Whether the instance bakes into one mesh with the instance declared just before
     /// it, when that one is static too (<see cref="SdfInstanceRange.BakesWithPrevious"/>): the shapes of one rigid
     /// copy, each with its own tight bound, baked as their union.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool cameraHidden = false, bool bakesWithPrevious = false) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -131,7 +128,6 @@ public sealed partial class SdfProgramBuilder {
             radiusParamName: nameof(boundRadius)
         );
         BeginInstanceCore(
-            cameraHidden: cameraHidden,
             isDynamic: false,
             center: boundCenter,
             radius: boundRadius,
@@ -149,11 +145,10 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="slot">The dynamic-transform slot index (0-based) this instance's bound tracks.</param>
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
-    /// <param name="active">Whether the instance participates in the tile-cull scan. Pass <see langword="false"/> to park a
+    /// <param name="active">Whether the instance contributes to the field. Pass <see langword="false"/> to park a
     /// reserved-pool slot that carries no live content this rebuild (the classic "hidden below the floor" placeholder):
-    /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
-    /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
-    /// almost nothing. Its mask bit is always 0 — Stage 1 never marches it.</param>
+    /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the walk skips it
+    /// with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs almost nothing.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the dynamic-transform slot
     /// range, <paramref name="boundOffset"/> is not finite, or <paramref name="boundRadius"/> is not finite and
     /// non-negative.</exception>
@@ -249,7 +244,6 @@ public sealed partial class SdfProgramBuilder {
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
             Active: m_openInstanceActive,
-            CameraHidden: m_openInstanceCameraHidden,
             BakesWithPrevious: m_openInstanceBakesWithPrevious
         ));
 

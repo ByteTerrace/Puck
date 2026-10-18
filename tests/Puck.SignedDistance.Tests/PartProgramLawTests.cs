@@ -81,7 +81,6 @@ public sealed class PartProgramLawTests {
         var rejects = (((20f - program.InspectInstance(index: 1).BoundRadius) * SdfProgram.DecodePartDistanceGain(entryCountLane: words[(entry + 2)])) >= 15f);
 
         Assert.False(condition: rejects, userMessage: "The bound of an optional intersection cannot reject the remaining subject.");
-        Assert.Equal(expected: 0u, actual: words[(entry + 2)] & SdfProgram.PartBoundedSecondaryFlag);
     }
 
     private static SdfProgram Build(List<SdfInstruction> instructions, SdfInstanceRange[] instances) => new(
@@ -436,10 +435,9 @@ public sealed class PartProgramLawTests {
             2u,
             words[(secondBindings + 1)]
         );
-        // Dynamic, bounded in the shadow and ambient walks, two bindings, and the unit distance gain of two exact spheres in
-        // a hard-union scope.
+        // Dynamic, two bindings, and the unit distance gain of two exact spheres in a hard-union scope.
         Assert.Equal(
-            0x80000002u | SdfProgram.PartBoundedSecondaryFlag | (SdfProgram.PartDistanceGainMask << SdfProgram.PartDistanceGainShift),
+            0x80000002u | (SdfProgram.PartDistanceGainMask << SdfProgram.PartDistanceGainShift),
             words[(table + 6)]
         );
         Assert.Equal(expected: 1f, actual: SdfProgram.DecodePartDistanceGain(entryCountLane: words[(table + 6)]));
@@ -643,27 +641,6 @@ public sealed class PartProgramLawTests {
         Assert.Equal(
             2u,
             words[(table + 1)]
-        );
-        var leaf = (((int)words[(table + 8)]) * 4);
-        var shape = (((int)(words[leaf] + 1u)) * 4);
-
-        Assert.Equal(
-            ((uint)SdfShapeType.Sphere) | (detail
-            ? 0x80000000u
-            : 0u)
-            | (secondary
-            ? 0u
-            : 0x40000000u),
-            words[(shape + 1)]
-        );
-        var segment = (((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + (2u * words[0]))) * 4);
-        var instances = ((segment + 4) + (8 * ((int)words[segment])));
-
-        Assert.Equal(
-            (detail
-            ? 0u
-            : 1u),
-            words[(instances + 2)]
         );
     }
     // The compiled part evaluator discards the scope's final point, which nothing after the instance may read: a world

@@ -122,7 +122,7 @@ interface through the same kernel-set transaction as the other SDF kernels.
 Scalar bake samples can execute a complete compiled part instead of revisiting
 its scope and individual VM segments. `SdfProgram` shares its leaf program by
 geometry identity and supplies separate pose/material bindings per placement.
-The direct walk retains internal cuts, blend order, material seams and the
+The direct walk retains internal cuts, blend order, the material winner and the
 scope's distance correction; unsupported parts use the generic interpreter.
 The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 

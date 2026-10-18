@@ -30,7 +30,7 @@ public sealed class WorldTextAuthoringLawTests {
 
         pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
             slotBase: 0, textCatalog: fonts);
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         var instance = Assert.Single(collection: program.Instances);
 
         Assert.True(condition: instance.IsDynamic);
@@ -319,7 +319,7 @@ public sealed class WorldTextAuthoringLawTests {
             materialFor: _ => material
         );
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
 
         Assert.Equal(
             expected: creation.TextRuns![0].Text.Length,

@@ -144,52 +144,20 @@
 #define SDF_SEGMENT_COUNT(v)             ((v).x)
 #define SDF_SEGMENT_STEP_SCALE(v)        ((v).y)
 #define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
-#define SDF_SEGMENT_TAPE_OFFSET(v)       ((v).w)
-#define SDF_TAPE_INSTRUCTION_THRESHOLD   30u
 #define SDF_PART_LEAF_COUNT_MASK         0x0000FFFFu
 #define SDF_PART_DISTANCE_GAIN_SHIFT     16u
 #define SDF_PART_DISTANCE_GAIN_MASK      0x00003FFFu
 #define SDF_PART_DISTANCE_GAIN_UNIT      6.103888E-05
-#define SDF_PART_BOUNDED_SECONDARY       0x40000000u
-#define SDF_TAPE_CERTIFIED               0x00000001u
-#define SDF_TAPE_OMISSIBLE               0x00000002u
-#define SDF_TAPE_DYNAMIC_FRAME           0x00000004u
-#define SDF_TAPE_CENTERED_NORM_ENVELOPE  0x00000008u
-#define SDF_TAPE_TOKEN_SHIFT             8u
-#define SDF_TAPE_COORDINATE_LIMIT        65536.0
-#define SDF_TAPE_INTERMEDIATE_LIMIT      1E+12
-#define SDF_TAPE_BLEND_ROUNDOFF_MARGIN   3.8146973E-06
 #define SDF_INSTANCE_COUNT(v)            ((v).x)
 #define SDF_INSTANCE_PART_PROGRAMS(v)    ((v).y)
-#define SDF_INSTANCE_FLAGS(v)            ((v).z)
-#define SDF_INSTANCE_TAPE_TOKENS(v)      ((v).w)
 #define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
-#define SDF_CHAIN_TABLE_OFFSET(v)        ((v).y)
 
-// The chain table (SdfProgram.Chains): its header's lane accessors, each segment's first chain and chain count, and each chain's identity, read from the vector the index's division by the per-vector count selects.
-#define SDF_CHAIN_COUNT(v)                  ((v).x)
-#define SDF_CHAIN_IDENTITIES_OFFSET(v)      ((v).y)
-#define SDF_CHAIN_SEGMENTS_PER_VECTOR       2u
-#define SDF_CHAIN_IDENTITIES_PER_VECTOR     4u
-#define SDF_CHAIN_SEGMENT_FIRST(v, segment) ((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * 2u) + 0u])
-#define SDF_CHAIN_SEGMENT_COUNT(v, segment) ((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * 2u) + 1u])
-#define SDF_CHAIN_IDENTITY(v, chain)        ((v)[(chain) % SDF_CHAIN_IDENTITIES_PER_VECTOR])
-
-// Shape-lane flags and the type mask on a ShapeBlend instruction's header.
-#define SDF_SHAPE_DETAIL_FLAG       0x80000000u
-#define SDF_SHAPE_NO_SECONDARY_FLAG 0x40000000u
-#define SDF_SHAPE_TYPE_MASK         0x3FFFFFFFu
-
-// Bound modes, and the flags and masks packed beside them in bound, segment and instance records.
-#define SDF_BOUND_NONE                      0u
-#define SDF_BOUND_STATIC                    1u
-#define SDF_BOUND_DYNAMIC                   2u
-#define SDF_SEGMENT_RIGID_PLAN              0x80000000u
-#define SDF_SEGMENT_BOUND_MASK              0x000000FFu
-#define SDF_INSTANCE_SHADOW_TRANSPARENT_BIT 0x80000000u
-#define SDF_INSTANCE_CAMERA_HIDDEN_BIT      0x40000000u
-#define SDF_INSTANCE_SEGMENT_END_MASK       0x3FFFFFFFu
-#define SDF_NO_DETAIL_SHAPES_FLAG           0x00000001u
+// Bound modes, and the flags and masks packed beside them in bound and segment records.
+#define SDF_BOUND_NONE         0u
+#define SDF_BOUND_STATIC       1u
+#define SDF_BOUND_DYNAMIC      2u
+#define SDF_SEGMENT_RIGID_PLAN 0x80000000u
+#define SDF_SEGMENT_BOUND_MASK 0x000000FFu
 
 // The rigid-leaf plan.
 #define SDF_RIGID_LEAF_IDENTITY_ROTATION 0x80000000u
@@ -206,8 +174,6 @@
 #define SDF_PAINT_VECTORS_PER_ENTRY     12u
 #define SDF_MAX_PAINTS_PER_MATERIAL     8u
 #define SDF_PAINT_WINNING_FRAME         0xFFFFFFFFu
-#define SDF_GRID_HEADER_WORDS           16u
-#define SDF_GRID_MAX_DIM                64u
 #define SDF_MAX_FIELD_SCOPE_DEPTH       2u
 #define SDF_FLARE_MIN_SCALE             0.05
 #define SDF_LANE_ERODE_RAGGED_AMOUNT    0.35

@@ -11,9 +11,7 @@ public sealed partial class SdfProgram {
         int Segments,
         int Instances,
         int WorldSegments,
-        int GridWords,
         int RigidLeaves,
-        int ChainTableVectors,
         int ConvexPolygonVectors,
         int SweepCurves,
         int PathEdges
@@ -25,11 +23,8 @@ public sealed partial class SdfProgram {
         public int SegmentOffset => (BoundsOffset + (BoundRecordVectors * Instructions));
         public int InstanceOffset => ((SegmentOffset + DirectoryHeaderVectors) + (BoundRecordVectors * Segments));
         public int WorldSegmentOffset => ((InstanceOffset + DirectoryHeaderVectors) + (BoundRecordVectors * Instances));
-        public int GridOffset => ((WorldSegmentOffset + DirectoryHeaderVectors) + WorldSegments);
-        public int RigidPlanOffset => (GridOffset + (GridWords / WordsPerVector));
-        public int TapeOffset => ((RigidPlanOffset + Segments) + (3 * RigidLeaves));
-        public int ChainTableOffset => (TapeOffset + Instructions);
-        public int ConvexPolygonOffset => (ChainTableOffset + ChainTableVectors);
+        public int RigidPlanOffset => ((WorldSegmentOffset + DirectoryHeaderVectors) + WorldSegments);
+        public int ConvexPolygonOffset => ((RigidPlanOffset + Segments) + (3 * RigidLeaves));
         public int SweepOffset => (ConvexPolygonOffset + ConvexPolygonVectors);
         public int PathOffset => (SweepOffset + (SweepCurveVectorsPerEntry * SweepCurves));
         public int PartProgramOffset => checked((PathOffset + (2 * PathEdges)));
@@ -41,8 +36,4 @@ public sealed partial class SdfProgram {
             ? 0
             : ((1 + Instances) + Instructions))) * WordsPerVector) + reservedPathWords));
     }
-
-    // The most vectors a chain table over these segments and chains spans: the header, the segment entries and the
-    // identity list (ChainTable.Vectors).
-    internal static int ChainTableVectorsOf(int segments, int chains) => checked(((DirectoryHeaderVectors + ChainTable.EntryVectors(segments: segments)) + ((chains + (ChainIdentitiesPerVector - 1)) / ChainIdentitiesPerVector)));
 }

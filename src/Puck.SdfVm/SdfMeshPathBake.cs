@@ -448,7 +448,7 @@ public sealed class SdfMeshPathBake {
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
 
-            if (!instance.Active || instance.CameraHidden) { continue; }
+            if (!instance.Active) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(instance.Radius, reach) : reach);
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its

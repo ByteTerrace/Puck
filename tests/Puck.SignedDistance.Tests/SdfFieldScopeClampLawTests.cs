@@ -15,7 +15,7 @@ public sealed class SdfFieldScopeClampLawTests {
             .PushField().ResetPoint().Sphere(1f, material)
             .ResetPoint().CellDisplace(amplitude: 1f, frequency: 1f, mode: SdfCellMode.F1, randomness: .2f, seed: 0u).PopField()
             .ResetPoint().CellDisplace(amplitude: 1f, frequency: 1f, mode: SdfCellMode.F1, randomness: .2f, seed: 0u).PopField().EndInstance();
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
 
         Assert.Collection(program.FieldScopeClamps,
             inner => { Assert.Equal(1, inner.ShapeCount); Assert.Equal(.5f, inner.StepScale); },
@@ -40,7 +40,7 @@ public sealed class SdfFieldScopeClampLawTests {
             randomness: .2f,
             seed: 0
         ).PopField();
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
 
         Assert.Equal(
             1f,
@@ -94,7 +94,7 @@ public sealed class SdfFieldScopeClampLawTests {
             randomness: .2f,
             seed: 0
         ).PopField();
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
 
         Assert.Equal(
             1f,
@@ -143,7 +143,7 @@ public sealed class SdfFieldScopeClampLawTests {
             smooth: .2f
         ).PopField();
         builder.EndInstance();
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
 
         Assert.Equal(
             1f,

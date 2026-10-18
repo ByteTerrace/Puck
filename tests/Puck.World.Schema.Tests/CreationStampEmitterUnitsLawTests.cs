@@ -57,7 +57,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
         );
         _ = builder.EndInstance();
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     // The whole-creation, one-shared-scope static form (WorldPlacementStamper.EmitPlacement's "scoped" branch — a
     // creation whose blend composes internally).
@@ -95,7 +95,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
         }
         _ = builder.EndInstance();
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, float? rounding = null, float? chamfer = null, float? dilate = null, float? onion = null, float? smooth = null, SdfBlendOp? blend = null, ShapePanelDocument? panel = null, int id = 0) => new(
         Id: id,

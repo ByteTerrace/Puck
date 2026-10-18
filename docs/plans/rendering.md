@@ -2766,7 +2766,7 @@ Phase 3, the groups, follows phase 2:
     package's include to the generator by name.
 19. Done: the SDF tables upload through `GpuRegion`
     (`SdfWorldTables.Regions.cs`). Their program words, dynamic
-    transforms, frame instance grid, screen surfaces, screen mappings, screen
+    transforms, screen surfaces, screen mappings, screen
     lights, volumes, glyph decals, mesh draws, lights, and the sky's block
     and layers are each a region under the policy
     `GpuResidency.Select` chooses for its size with a reader in
@@ -4143,8 +4143,8 @@ item 2 landed.
    or `Indirect` from a buffer version and offset, which the pass reaches in the
    indirect-argument state), a buffer's `strideBytes`, and a buffer's `count`
    in place of `sizeBytes`. A count is a sum of terms, each `elements` per unit
-   of a product of bases: `Extent`, `Instances`, `ProgramWords`, `Viewports`,
-   `Tiles`, `DynamicTransforms`, `InstanceMaskWords` and `InstanceGridWords`.
+   of a product of bases: `Extent`, `RenderExtent`, `Instances`, `ProgramWords`,
+   `Viewports`, `DynamicTransforms`, `InstanceMaskWords` and `BrickPoolVoxels`.
    A term names each basis once, and no two terms name the same bases. A term
    whose bases the host resolves to zero units adds nothing, and a buffer whose
    terms all resolve to zero bytes is refused by name. A read of another kind
@@ -4208,8 +4208,8 @@ item 2 landed.
    mesh pass's interface lays out the world pass block member for member, so it
    binds the block its node writes. A block value and a config field may be an array of
    four-component vectors (`length`), which the interface echo reads element by
-   element. The frame's tables (dynamic transforms, volumes, mesh draws, the
-   instance grid) stay regions.
+   element. The frame's tables (dynamic transforms, volumes, mesh draws) stay
+   regions.
 8. The SDF pipelines build through the graph's pipeline cache
    (`GpuPassPipelineCache`), and a view's recording cost comes back to the
    engine's. Landed:

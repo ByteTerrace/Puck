@@ -729,7 +729,7 @@ public sealed class SweepLawTests {
             words[(leaf + 3)] & 0x7FFFFFFFu
         );
         Assert.Equal(
-            ((uint)SdfShapeType.Sweep) | 0xC0000000u,
+            ((uint)SdfShapeType.Sweep),
             words[(((shapeIndex + 1) * 4) + 1)]
         );
     }

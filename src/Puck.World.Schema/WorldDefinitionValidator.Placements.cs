@@ -1644,7 +1644,7 @@ public static partial class WorldDefinitionValidator {
                         var variantColliders = 0L;
 
                         foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
-                            // A detail shape is shading-only — it never reaches either contact compiler, so it
+                            // A detail shape never reaches either contact compiler, so it
                             // contributes no collider and none of this shape's own admission rules apply to it.
                             if (solidShape.Detail == true) {
                                 continue;
@@ -1949,8 +1949,8 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The document-global dynamic-instance ceiling (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances,
-        // the measured CPU/grid bound — see its remarks): the sum above, not any single row, is what pays the
-        // per-frame instance-grid rebuild cost, so it is gated once here rather than per row.
+        // the measured CPU bound — see its remarks): the sum above, not any single row, is what the ceiling prices, so it
+        // is gated once here rather than per row.
         if (dynamicInstanceCount > WorldDynamicGeometryCeilings.MaxContributedDynamicInstances) {
             errors.Add(item: $"{dynamicInstanceCount} contributed dynamic instances (animated placements + inhabited placement bodies) exceed the {WorldDynamicGeometryCeilings.MaxContributedDynamicInstances}-instance document-global dynamic-geometry ceiling.");
         }

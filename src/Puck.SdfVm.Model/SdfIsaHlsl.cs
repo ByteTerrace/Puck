@@ -128,55 +128,14 @@ public static class SdfIsaHlsl {
         declarations.Lane(lane: SdfProgram.SegmentCountLane, name: "SDF_SEGMENT_COUNT");
         declarations.Lane(lane: SdfProgram.SegmentStepScaleLane, name: "SDF_SEGMENT_STEP_SCALE");
         declarations.Lane(lane: SdfProgram.SegmentRigidPlanLane, name: "SDF_SEGMENT_RIGID_PLAN_OFFSET");
-        declarations.Lane(lane: SdfProgram.SegmentTapeLane, name: "SDF_SEGMENT_TAPE_OFFSET");
-        declarations.Count(name: "SDF_TAPE_INSTRUCTION_THRESHOLD", value: SdfProgram.TapeInstructionThreshold);
         declarations.Bits(name: "SDF_PART_LEAF_COUNT_MASK", value: SdfProgram.PartLeafCountMask);
         declarations.Count(name: "SDF_PART_DISTANCE_GAIN_SHIFT", value: SdfProgram.PartDistanceGainShift);
         declarations.Bits(name: "SDF_PART_DISTANCE_GAIN_MASK", value: SdfProgram.PartDistanceGainMask);
         declarations.Real(name: "SDF_PART_DISTANCE_GAIN_UNIT", value: SdfProgram.PartDistanceGainUnit);
-        declarations.Bits(name: "SDF_PART_BOUNDED_SECONDARY", value: SdfProgram.PartBoundedSecondaryFlag);
-        declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);
-        declarations.Bits(name: "SDF_TAPE_OMISSIBLE", value: SdfTapeCertificate.OmissibleSegment);
-        declarations.Bits(name: "SDF_TAPE_DYNAMIC_FRAME", value: SdfTapeCertificate.DynamicFrame);
-        declarations.Bits(name: "SDF_TAPE_CENTERED_NORM_ENVELOPE", value: SdfTapeCertificate.CenteredNormEnvelope);
-        declarations.Count(name: "SDF_TAPE_TOKEN_SHIFT", value: SdfProgram.TapeTokenShift);
-        declarations.Real(name: "SDF_TAPE_COORDINATE_LIMIT", value: SdfTapeCertificate.CoordinateLimit);
-        declarations.Real(name: "SDF_TAPE_INTERMEDIATE_LIMIT", value: SdfTapeCertificate.IntermediateLimit);
-        declarations.Real(name: "SDF_TAPE_BLEND_ROUNDOFF_MARGIN", value: SdfTapeCertificate.BlendRoundoffMargin);
         declarations.Lane(lane: SdfProgram.InstanceCountLane, name: "SDF_INSTANCE_COUNT");
         declarations.Lane(lane: SdfProgram.InstancePartProgramsLane, name: "SDF_INSTANCE_PART_PROGRAMS");
-        declarations.Lane(lane: SdfProgram.InstanceFlagsLane, name: "SDF_INSTANCE_FLAGS");
-        declarations.Lane(lane: SdfProgram.InstanceTapeTokenCountLane, name: "SDF_INSTANCE_TAPE_TOKENS");
         declarations.Lane(lane: SdfProgram.WorldSegmentCountLane, name: "SDF_WORLD_SEGMENT_COUNT");
-        declarations.Lane(lane: SdfProgram.ChainTableLane, name: "SDF_CHAIN_TABLE_OFFSET");
-        declarations.Section(title: "The chain table (SdfProgram.Chains): its header's lane accessors, each segment's first chain and chain count, and each chain's identity, read from the vector the index's division by the per-vector count selects.");
-        declarations.Lane(lane: SdfProgram.ChainCountLane, name: "SDF_CHAIN_COUNT");
-        declarations.Lane(lane: SdfProgram.ChainIdentitiesLane, name: "SDF_CHAIN_IDENTITIES_OFFSET");
-        declarations.Count(name: "SDF_CHAIN_SEGMENTS_PER_VECTOR", value: SdfProgram.ChainSegmentsPerVector);
-        declarations.Count(name: "SDF_CHAIN_IDENTITIES_PER_VECTOR", value: SdfProgram.ChainIdentitiesPerVector);
-        declarations.Expression(
-            name: "SDF_CHAIN_SEGMENT_FIRST(v, segment)",
-            value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * {SdfProgram.ChainSegmentWords}u) + {SdfProgram.ChainSegmentFirstWord}u])")
-        );
-        declarations.Expression(
-            name: "SDF_CHAIN_SEGMENT_COUNT(v, segment)",
-            value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"((v)[(((segment) % SDF_CHAIN_SEGMENTS_PER_VECTOR) * {SdfProgram.ChainSegmentWords}u) + {SdfProgram.ChainSegmentCountWord}u])")
-        );
-        declarations.Expression(name: "SDF_CHAIN_IDENTITY(v, chain)", value: "((v)[(chain) % SDF_CHAIN_IDENTITIES_PER_VECTOR])");
-        declarations.Section(title: "Shape-lane flags and the type mask on a ShapeBlend instruction's header.");
-        declarations.Bits(
-            name: "SDF_SHAPE_DETAIL_FLAG",
-            value: SdfProgram.ShapeDetailFlag
-        );
-        declarations.Bits(
-            name: "SDF_SHAPE_NO_SECONDARY_FLAG",
-            value: SdfProgram.ShapeNoSecondaryFlag
-        );
-        declarations.Bits(
-            name: "SDF_SHAPE_TYPE_MASK",
-            value: SdfProgram.ShapeTypeMask
-        );
-        declarations.Section(title: "Bound modes, and the flags and masks packed beside them in bound, segment and instance records.");
+        declarations.Section(title: "Bound modes, and the flags and masks packed beside them in bound and segment records.");
         declarations.Count(
             name: "SDF_BOUND_NONE",
             value: SdfProgram.BoundModeNone
@@ -196,22 +155,6 @@ public static class SdfIsaHlsl {
         declarations.Bits(
             name: "SDF_SEGMENT_BOUND_MASK",
             value: SdfProgram.SegmentBoundModeMask
-        );
-        declarations.Bits(
-            name: "SDF_INSTANCE_SHADOW_TRANSPARENT_BIT",
-            value: SdfProgram.ShadowTransparentInstanceFlag
-        );
-        declarations.Bits(
-            name: "SDF_INSTANCE_CAMERA_HIDDEN_BIT",
-            value: SdfProgram.CameraHiddenInstanceFlag
-        );
-        declarations.Bits(
-            name: "SDF_INSTANCE_SEGMENT_END_MASK",
-            value: SdfProgram.SegmentEndMask
-        );
-        declarations.Bits(
-            name: "SDF_NO_DETAIL_SHAPES_FLAG",
-            value: SdfProgram.NoDetailShapesFlag
         );
         declarations.Section(title: "The rigid-leaf plan.");
         declarations.Bits(
@@ -247,14 +190,6 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PAINT_VECTORS_PER_ENTRY", value: SdfProgram.PaintVectorsPerEntry);
         declarations.Count(name: "SDF_MAX_PAINTS_PER_MATERIAL", value: SdfProgram.MaxPaintsPerMaterial);
         declarations.Bits(name: "SDF_PAINT_WINNING_FRAME", value: SdfProgram.PaintWinningFrame);
-        declarations.Count(
-            name: "SDF_GRID_HEADER_WORDS",
-            value: SdfInstanceGrid.HeaderWords
-        );
-        declarations.Count(
-            name: "SDF_GRID_MAX_DIM",
-            value: SdfInstanceGrid.MaxDimension
-        );
         declarations.Count(
             name: "SDF_MAX_FIELD_SCOPE_DEPTH",
             value: SdfProgramBuilder.MaxFieldScopeDepth

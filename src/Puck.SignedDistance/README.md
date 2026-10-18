@@ -14,17 +14,9 @@ octahedral direction mapping the sky environment map uses (`SdfOctahedral`).
 reads, including immutable nested lists.
 
 `SdfProgram.InspectInstance` reads exclusive packed ownership and culling facts for a
-live instance. Its count includes instructions and their data/bounds, owned segment,
-rigid-leaf and chain-table rows, shape side tables and part bindings. Shared tables stay in the
+live instance. Its count includes instructions and their data/bounds, owned segment and
+rigid-leaf rows, shape side tables and part bindings. Shared tables stay in the
 program-level remainder; inspection never re-emits a prototype.
-
-`SdfProgram.ChainsOf` and `Specialization` read the program's chain table: each
-directory segment's chains (`SdfChain`), keyed by op and the header lanes that
-select code (`SdfOpRoles.CodeLanesOf`), and the set of distinct chains, shape
-types, blends and compose forms (`SdfSpecializationSet`), which no edit to data
-changes. Two distinct chains of one program that share a 32-bit identity are refused
-by name. SDF program specialization, which would have compiled a world's field
-code from that set, is [withdrawn](https://github.com/ByteTerrace/Puck/blob/main/docs/decisions/rendering.md#the-frame-does-not-interpret-sdf-programs).
 `BuildDynamicTransformBounds` collects the existing packed bounds by dynamic
 slot for presentation-cache invalidation. It reuses finite instance certificates
 for unskippable chains and reports an infinite bound for an unsupported dynamic

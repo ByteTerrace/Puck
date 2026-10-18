@@ -1839,11 +1839,11 @@ more pieces of vocabulary:
   term is `elements` per unit of the product of the bases in `per`, counts the
   host resolves: output `Extent` pixels, `RenderExtent` pixels (the allocation
   ceiling for a package with separate grids), program `Instances`, `ProgramWords`,
-  `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
-  `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
-  its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
-  SDF engine's cull buffer, for one, is
-  `[{ "per": ["Viewports", "Tiles"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
+  `Viewports`, `DynamicTransforms`, the `InstanceMaskWords` of one instance mask
+  the host derives from its instances, and the `BrickPoolVoxels` of the world's
+  SDF brick pool. A buffer of four floats a viewport plus twelve a viewport and
+  instance is
+  `[{ "per": ["Viewports"], "elements": 4 }, { "per": ["Viewports", "Instances"], "elements": 12 }]`
   floats. A term names at least one basis and each basis once, and no two terms
   name the same bases, so a count has one spelling and a size that scales with
   nothing stays `sizeBytes`. `ShaderPipelineResource.ResolveSizeBytes` computes

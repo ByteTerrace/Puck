@@ -203,8 +203,8 @@ content into the world many times without re-uploading it. An instance is a rang
 of the program with a transform and a cull bound. Three lifecycles matter:
 
 - **Static** instances are placed once and don't move—a forest of rocks, a
-  field of carves. They bin into the spatial grid ([SDF frame rendering](frame-rendering.md))
-  by center and cost nothing to re-cull frame to frame.
+  field of carves. Their bound is fixed in world space, and each bakes into the
+  mesh its group draws ([SDF frame rendering](frame-rendering.md)).
 - **Dynamic** instances read their transform from a per-frame buffer slot
   (`TransformDynamic`): a walking player, a moving screen. The static scene
   program never changes; only a small transform buffer updates each frame.

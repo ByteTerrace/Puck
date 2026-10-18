@@ -720,7 +720,7 @@ public static class CreationStampEmitter {
         );
 
         foreach (var shape in (document.Shapes ?? [])) {
-            // A detail shape is SHADING-ONLY — it never reaches this contact compiler at all, so it neither carves
+            // A detail shape never reaches this contact compiler at all, so it neither carves
             // nor pads the collider it would otherwise emit.
             if (shape.Detail == true) {
                 continue;
@@ -1397,7 +1397,7 @@ public static class CreationStampEmitter {
         var reflectionNormal = transform.ReflectionNormal?.Normalize();
 
         foreach (var shape in (document.Shapes ?? [])) {
-            // A detail shape is SHADING-ONLY — it never reaches this contact compiler at all, so it neither carves
+            // A detail shape never reaches this contact compiler at all, so it neither carves
             // nor pads the collider it would otherwise emit.
             if (shape.Detail == true) {
                 continue;

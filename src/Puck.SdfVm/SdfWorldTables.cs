@@ -8,9 +8,9 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The device-resident half of one SDF frame source (<see cref="SdfWorldResidency"/>): every table the
-/// <c>sdf.world</c> kernels read that the frame source writes — the program words, dynamic transforms, frame instance
-/// grid, screen surfaces, screen mappings, screen lights, bounded volumes, glyph decals and mesh draws, each a
-/// <see cref="GpuRegion"/> — with the glyph atlas, the carve-bake brick pool, the samplers and the pipelines a view's
+/// <c>sdf.world</c> kernels read that the frame source writes — the program words, dynamic transforms, screen surfaces,
+/// screen mappings, screen lights, bounded volumes, glyph decals and mesh draws, each a <see cref="GpuRegion"/> — with
+/// the glyph atlas, the carve-bake brick pool, the samplers and the pipelines a view's
 /// passes record with. A view's scratch and output are its render-graph instance's (<see cref="SdfWorldPasses"/>); the
 /// tables are shared by every view of the frame source. Fully backend-neutral through its device's
 /// <see cref="IGpuDeviceContext.Services"/>.
@@ -20,7 +20,7 @@ namespace Puck.SdfVm;
 /// host-baked brick and the carve bake's slices, fenced, into the next of <see cref="FrameRingSize"/> upload slots, whose
 /// buffers every pass of the frame binds. Before an upload rewrites a slot it waits the previous upload's fence, which
 /// signals once every submission queued before it has finished, the views that read the slot two uploads earlier among
-/// them. A rewrite of what every slot shares — a grown program or instance grid, a grown mesh region, the glyph atlas, a
+/// them. A rewrite of what every slot shares — a grown program, a grown mesh region, the glyph atlas, a
 /// reloaded kernel — waits the device idle first, since other nodes' submissions read it.
 /// </para>
 /// </summary>

@@ -16,7 +16,7 @@ It intentionally omits implementation chronology and review provenance.
 | Screen-space obscurance AO with a 4×4 interleaved pattern and a plane-aware window filter | Shipped: estimated in the surface pass, filtered in views, ambient-only | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Irradiance volume traced on the CPU against the baked meshes | Shipped | [The mesh path's irradiance volume](../handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume); [P6-GI plan](../../../plans/rendering.md#p6-gi-global-illumination) |
 | Cascaded percentage-closer soft shadows | Shipped: two cascades for the key light, one for the second stable slot | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| Material blending at smooth seams | Tracked by the interpreter, not drawn: the bake point-samples each quad's winning material | [Materials and primitives](materials-and-primitives.md) |
+| Material blending at smooth seams | Not done: the bake point-samples each quad's winning material | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
 | Host bounds on the screen material sentinel band | Required on both ends, with the shader bounding the decoded index | [Materials and primitives](materials-and-primitives.md) |
 | Degenerate profile bounds sized to the fixed-point representation | Required wherever an exact core divides by its own dimensions; refused at the builder, the packed program constructor, and the document validator | [Materials and primitives](materials-and-primitives.md) |

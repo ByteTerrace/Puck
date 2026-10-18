@@ -86,7 +86,7 @@ internal static partial class CreationFixtures {
             )
         );
 
-        return builder.Build(buildInstanceGrid: false);
+        return builder.Build();
     }
     /// <summary>Every primitive except <paramref name="excluded"/>, as theory rows.</summary>
     /// <param name="excluded">The primitive the law admits.</param>

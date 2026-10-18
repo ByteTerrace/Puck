@@ -252,7 +252,7 @@ public sealed class VolumeLawTests {
             volumes: volumes
         );
 
-        var program = builder.Build(buildInstanceGrid: false);
+        var program = builder.Build();
         var volume = Assert.Single(collection: volumes);
         // The same resolved placement frame the stamper bakes every shape against, composed over the nozzle's
         // engine-frame pose (CreationFrame.ToEngine) — a parented volume's offset is shape-local.

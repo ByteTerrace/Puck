@@ -107,9 +107,8 @@ if it does, ship it as a `SdfProgramBuilder` method emitting existing
 instructions. A real new instruction touches every partner in one change:
 
 1. **C# model.** The enum, `SdfProgramBuilder` (its `RequireDefined` maximum),
-   `SdfProgram` validation and packing, the Lipschitz analysis, its rows in
-   `SdfOpRoles` (`Of`, `CodeLanesOf`), and the part-program key for a new
-   parameter.
+   `SdfProgram` validation and packing, the Lipschitz analysis, its row in
+   `SdfOpRoles.Of`, and the part-program key for a new parameter.
 2. **Cull margins.** `MaxSmoothBlendRadius` (blend halo), `MaxScopedFieldReach`
    or `HasUnmaskableInfluence`.
 3. **Generated declarations.** `isa/sdf-isa.hlsli` is generated from the C#
@@ -278,7 +277,7 @@ reading is evidence beside the counts of the same run, never the verdict alone.
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
-world.budget           # program words, instances, scopes, segments, chains
+world.budget           # program words, instances, scopes, segments
 ```
 
 Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,

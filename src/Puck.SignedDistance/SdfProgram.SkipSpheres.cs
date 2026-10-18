@@ -3,6 +3,10 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
+    // The instruction count from which AnalyzeBounds stops merging adjacent skippable segments: a program of at least
+    // this many instructions keeps one segment-directory entry per segment range.
+    private const int SegmentMergeInstructionLimit = 30;
+
     // HOST-BAKED bounding-sphere skip data (programs build once, shapes evaluate millions of times per frame): for
     // every plain-Union shape reachable through a RIGID transform chain, a conservative world-space bounding sphere
     // lets map() skip work outright when the sphere's lower-bound distance cannot beat the running union minimum —
@@ -70,9 +74,9 @@ public sealed partial class SdfProgram {
         // a second list instead of shifting `segments`' own suffix down by one on every merge — O(segments) total
         // instead of O(segments x merges). `accumulator` plays the role the old loop's `next` played: the up-to-date
         // (possibly already-merged) entry immediately to the right of the index under test.
-        // Dense programs retain their reset chains as tape deletion units; their slab proof replaces the benefit
-        // of merging nearby bounds. Small programs retain the compact directory and never build a tile tape.
-        if ((segments.Count > 1) && (m_instructions.Length < TapeInstructionThreshold)) {
+        // Only a program shorter than SegmentMergeInstructionLimit merges; a longer one keeps one directory entry per
+        // segment range.
+        if ((segments.Count > 1) && (m_instructions.Length < SegmentMergeInstructionLimit)) {
             var compacted = new List<BoundRecord>(capacity: segments.Count);
             var accumulator = segments[^1];
 

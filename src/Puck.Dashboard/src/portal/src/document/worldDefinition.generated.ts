@@ -8357,7 +8357,7 @@ export type WorldPrototype = {
         inset?: number;
       } | null)[] | null;
       /**
-       * Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at an already-found hit, where its own material and its perturbation of the surface normal paint its footprint — a seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance instead of dotting out. Refused by name alongside Panel or Trims on the same shape.
+       * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
        */
       detail?: boolean | null;
       /**
@@ -8394,7 +8394,7 @@ export type WorldPrototype = {
        */
       exponent?: number | null;
       /**
-       * Whether this shape casts soft shadows and contributes ambient occlusion (null = true). False excludes it from ONLY the soft-shadow and ambient-occlusion field walks — it still carves the silhouette, the contact field, and the collider like any ordinary shape, unlike Detail (which excludes from every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet, a groove) — see Secondary.
+       * An authored participation flag (null = true) carried as Secondary, which the GPU encoding does not carry: the baked frame samples the shape like any other, and it carves the contact field and the collider like any ordinary shape, unlike Detail.
        */
       secondary?: boolean | null;
       /**

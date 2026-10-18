@@ -26,7 +26,7 @@ public sealed class SdfNestedFieldScopeLawTests {
             .PopField()
             .ResetPoint().Translate(offset: new Vector3(x: 4f, y: 0f, z: 0f)).Sphere(.25f, 4, blend: SdfBlendOp.Subtraction)
             .PopField();
-        var evaluator = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
         var point = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
 
         Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out var actualMaterial, position: point));
@@ -43,7 +43,7 @@ public sealed class SdfNestedFieldScopeLawTests {
 
         builder.PushField().PushField().Sphere(1f, material);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => builder.PushField());
-        var program = builder.PopField().PopField().Build(buildInstanceGrid: false);
+        var program = builder.PopField().PopField().Build();
 
         Assert.Equal(2, program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField)));
         Assert.True(condition: program.InstancesComposable);
