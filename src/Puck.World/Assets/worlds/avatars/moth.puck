@@ -504,6 +504,231 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight hero cameras round the lower legs at 45-degree steps from the front, tiled by the legs-hero layout.
+  {
+    name: "legs-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [-0, 0.7, -2])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [-0, 0.7, -2]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-front-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [-1.4142, 0.7, -1.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-front-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [-1.4142, 0.7, -1.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [-2, 0.7, -0])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [-2, 0.7, -0]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [-1.4142, 0.7, 1.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-back-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [-1.4142, 0.7, 1.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [-0, 0.7, 2])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-back"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [-0, 0.7, 2]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-back-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [1.4142, 0.7, 1.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-back-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [1.4142, 0.7, 1.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [1.97, 0.7, -0.35])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [1.97, 0.7, -0.35]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "legs-front-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [1.4142, 0.7, -1.4142])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [0, 0.34, 0])
+        worldAxes: false
+      }
+      name: "legs-front-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [1.4142, 0.7, -1.4142]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.34, 0]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   {
     name: "front"
     renderHeight: 900
@@ -6463,6 +6688,71 @@ views {
   cameraLayout("knee")
   cameraLayout("boots-side")
   cameraLayout("boots-rear")
+
+  // The legs from eight sides at once, for judging the greaves and boots against the model sheet.
+  layout "legs-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "legs-front"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "legs-front-left"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "legs-left"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "legs-back-left"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "legs-back"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "legs-back-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "legs-right"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "legs-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
 
   layout "pipeline" {
     seatCount: 0
