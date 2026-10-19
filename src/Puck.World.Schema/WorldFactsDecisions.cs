@@ -254,12 +254,8 @@ public static partial class WorldFactsCompiler {
         if (rule.Mode != ActionTriggerMode.Level) {
             throw Refuse(detail: "requires Level rule mode");
         }
-        if (string.Equals(
-            a: rule.ForEach?.Spelling,
-            b: RuleFacts.ForEachZones,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw Refuse(detail: "iterates bodies, never a zone table — forEach names a keyed row");
+        if (rule.ForEach?.Spelling is RuleFacts.ForEachZones or RuleFacts.ForEachBodies) {
+            throw Refuse(detail: $"iterates a keyed row's body keys, never '{rule.ForEach.Spelling}' — forEach names a keyed row");
         }
         if (
             !Enum.IsDefined(value: decision.Mode) ||

@@ -44,6 +44,9 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
     /// <summary>Gets the document every name resolves against.</summary>
     public WorldDefinition Definition { get; }
+    /// <inheritdoc/>
+    /// <remarks>The document's entity-table capacity.</remarks>
+    public override long BodyCapacity => Definition.Population.Capacity;
 
     private static TableSource[] TableSources(WorldDefinition definition) {
         var rows = (definition.Tables ?? []);

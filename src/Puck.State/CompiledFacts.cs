@@ -20,6 +20,10 @@ public interface IRuleCostContext {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <returns>The capacity.</returns>
     long RowCapacity(int rowOrdinal);
+
+    /// <summary>Gets how many bodies a <see cref="RuleFacts.ForEachBodies"/> sweep can visit: the document's body
+    /// capacity, or zero for a section no host with bodies runs.</summary>
+    long BodyCapacity { get; }
 }
 /// <summary>The root of the compiled-fact hierarchy the rule compiler emits — an operand, a key, or an effect.
 /// <see cref="RequiredFacet"/> is a reading of the fact's own declaration: the typed bases answer it from their type

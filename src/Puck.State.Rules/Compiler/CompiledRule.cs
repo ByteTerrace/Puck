@@ -69,7 +69,7 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 /// <param name="Effects">The compiled effects, in authored order.</param>
 /// <param name="Needs">What the rule needs from the host that runs it.</param>
 /// <param name="ForEachOrdinal">The catalog ordinal of the keyed row the rule iterates, or <c>-1</c> for one
-/// evaluation per tick or for an iteration over the rule's own zone table.</param>
+/// evaluation per tick or for an iteration over the rule's own zone table or the live bodies.</param>
 /// <param name="ForEachZones">Whether the rule iterates its own <paramref name="Zones"/> table.</param>
 /// <param name="Locals">The compiled per-evaluation locals, in declared order.</param>
 /// <param name="Zones">The compiled <see cref="Rule.Zones"/> table, or <see langword="null"/>.</param>
@@ -77,7 +77,9 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 /// names.</param>
 /// <param name="PoolForEach">The pool a whole-rule sweep snapshots, or <see langword="null"/>.</param>
 /// <param name="PoolBindingSlot">The evaluator register carrying each whole-rule pool handle.</param>
-public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1) {
+/// <param name="ForEachBodies">Whether the rule iterates every live body the host's <see cref="ILiveBodies"/>
+/// lists (<see cref="RuleFacts.ForEachBodies"/>).</param>
+public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1, bool ForEachBodies = false) {
     /// <summary>Appends every state cell one evaluation reads: the gate, the locals, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
     /// <param name="into">The read set being collected.</param>

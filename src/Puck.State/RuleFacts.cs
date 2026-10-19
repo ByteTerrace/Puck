@@ -26,6 +26,11 @@ public static class RuleFacts {
     /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
     /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
     public const string ForEachZones = "$zones";
+    /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates every live body rather than a row: each body
+    /// the host holds active at the top of the sweep, in ascending body-index order, bound to <c>$each</c> and to the
+    /// <c>each</c> participant reference. The host answers the list through <see cref="ILiveBodies"/>, which a rule
+    /// iterating it needs, and the sweep is priced at the document's body capacity.</summary>
+    public const string ForEachBodies = "$bodies";
     /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
     /// history row (0 is the latest), or the ring's empty value past what it holds. The age is everything after the
     /// second colon: a whole number in 0..capacity-1, bounded when the rule compiles, or an int expression evaluated

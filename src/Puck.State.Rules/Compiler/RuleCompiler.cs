@@ -62,11 +62,13 @@ public static partial class RuleCompiler {
                 subject: "rule"
             );
             var forEachZones = IteratesZones(forEach: rule.ForEach);
+            var forEachBodies = IteratesBodies(forEach: rule.ForEach);
             var forEachOrdinal = -1;
 
             if (
                 (rule.ForEach is { } forEachName) &&
-                !forEachZones
+                !forEachZones &&
+                !forEachBodies
             ) {
                 forEachOrdinal = ResolveRowOrdinal(
                     context: context,
@@ -112,6 +114,7 @@ public static partial class RuleCompiler {
                 Locals: compiledLocals,
                 Describe: rule.Name.Value,
                 Effects: effects,
+                ForEachBodies: forEachBodies,
                 ForEachOrdinal: forEachOrdinal,
                 ForEachZones: forEachZones,
                 Gate: gate,
@@ -169,6 +172,11 @@ public static partial class RuleCompiler {
                         ruleName: rule.Name
                     );
                 }
+            } else if (IteratesBodies(forEach: forEach)) {
+                BeginBodySweep(
+                    context: context,
+                    ruleName: rule.Name
+                );
             } else {
                 _ = ResolveRequiredRow(
                     channel: "forEach",
@@ -276,6 +284,30 @@ public static partial class RuleCompiler {
     // A rule iterates its own zone table when its `forEach` is the reserved word alone (RuleFacts.ForEachZones): the
     // zones channel called with no argument.
     private static bool IteratesZones(StateChannelRef? forEach) => (forEach?.Call is { Channel: "zones", Count: 0 });
+    // A rule iterates every live body when its `forEach` is RuleFacts.ForEachBodies: the bodies channel called with no
+    // argument.
+    private static bool IteratesBodies(StateChannelRef? forEach) => (forEach?.Call is { Channel: "bodies", Count: 0 });
+    // A body sweep binds each live body's index spelled as a key, so every index the document's capacity admits is
+    // interned here as a compiler symbol: the sweep then resolves keys and never mints one on the tick path.
+    private static void BeginBodySweep(RuleCompileContext context, CellName ruleName) {
+        var capacity = context.BodyCapacity;
+
+        if (capacity <= 0L) {
+            throw new RuleException(
+                detail: $"iterates 'forEach' over '{RuleFacts.ForEachBodies}' but the document declares no bodies",
+                refusal: RuleRefusal.BodiesUnserved,
+                ruleName: ruleName
+            );
+        }
+        for (var index = 0L; (index < capacity); index++) {
+            _ = InternKey(
+                context: context,
+                name: IndexKeyCache.Get(index: index)
+            );
+        }
+
+        context.Needs.Add(facet: FacetRef.Of<ILiveBodies>());
+    }
     private static bool IsFractionalConstantExpression(ExpressionProgram? expression) {
         if (expression is null) {
             return false;

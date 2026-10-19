@@ -73,7 +73,7 @@ public static partial class WorldConstructs {
                     Kind: WorldMemberKind.Reference,
                     Name: "forEach",
                     Position: WorldMemberPosition.Property,
-                    Summary: "The row whose live keys the rule iterates, one firing per key."
+                    Summary: "What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, or `$bodies` for every live body in ascending index order."
                 ),
                 new(
                     DocumentKeys: ["effects"],

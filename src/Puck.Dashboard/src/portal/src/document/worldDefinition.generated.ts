@@ -10534,7 +10534,7 @@ export type WorldRule = {
    */
   mode?: ActionTriggerMode;
   /**
-   * A keyed state row to iterate, $zones to iterate the rule's own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell's key — the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key's interned CellKey ordinal, so a key keeps its latch wherever it sits in the row.
+   * A keyed state row to iterate, $zones to iterate the rule's own Zones table (its non-empty indices, each bound to $each), $bodies to iterate every live body in ascending index order (ForEachBodies), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell's key — the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key's interned CellKey ordinal, so a key keeps its latch wherever it sits in the row.
    */
   forEach?: StateChannelRefNonNullable;
   /**
