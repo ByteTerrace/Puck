@@ -42,7 +42,8 @@ static const float BAND_TILT = 0.3;
 static const float BAND_ARCH = 1.6;          // the bands arch, highest near the inner edge
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
-static const float PLATE_ROUND = 0.005;      // how soft each plate's edge is where it meets a groove
+static const float PLATE_CHAMFER = 0.005;    // the crisp chamfer on each plate's edge where it meets a groove
+static const float SHINGLE = 0.012;          // how far each plate's lower edge stands proud of the plate below
 static const float COLUMN_X = 0.0;
 // The bottom cut, in the pod's frame: a plane from the inner edge part-way down to the pointed outer tip, facing in,
 // down and back; the casing is open under it and its rim is trimmed in gunmetal.
@@ -123,8 +124,8 @@ float casingOuter(float3 s) {
     d = smax(d, dot(s.xy, normalize(float2(0.77, 0.63))) - TOP_OUTER_D, 0.08);
     d = smax(d, dot(s.xy, normalize(float2(-0.707, 0.707))) - TOP_INNER_D, 0.02);
     d = smax(d, s.z - FACE_Z, 0.02);
-    d = smax(d, dot(s.xz, normalize(float2(0.8, 0.6))) - BEVEL_D, 0.025);
-    d = smax(d, dot(s.xz, normalize(float2(-0.75, 0.66))) - INNER_BEVEL_D, 0.02);
+    d = smax(d, dot(s.xz, normalize(float2(0.8, 0.6))) - BEVEL_D, 0.005);
+    d = smax(d, dot(s.xz, normalize(float2(-0.75, 0.66))) - INNER_BEVEL_D, 0.005);
     return d;
 }
 
@@ -134,20 +135,25 @@ float2 pod(float3 q) {
     float3 s = q - POD_C;
     s.xy = mul(s.xy, rot(ROLL));
     s.y /= POD_HEIGHT;
-    float outer = casingOuter(s);
+    // The plates shingle: each thickens toward its lower edge by up to SHINGLE, so it stands proud over the plate below.
+    float b = s.y + BAND_TILT * s.x + BAND_ARCH * s.x * s.x;
+    const float edges[4] = { 0.27, 0.16, 0.01, -0.14 };
+    float above = 0.62, below = -0.62;
+    for (int j = 0; j < 4; j++) { if (b < edges[j]) above = edges[j]; else { below = max(below, edges[j]); } }
+    if (b >= edges[0]) { above = 0.62; below = edges[0]; }
+    float lift = SHINGLE * saturate((above - b) / max(above - below, 0.01));
+    float outer = casingOuter(s) - lift;
     float inner = casingOuter(s * (SHELL_R / (SHELL_R - SHELL_T)) ) * ((SHELL_R.x - SHELL_T) / SHELL_R.x);
     float back = -(s.z + WRAP);
     float edge = INNER_X - q.x;
     float cut = dot(s - CUT_P, normalize(CUT_N));
     float casing = smax(smax(smax(max(outer, -inner), back, 0.004), edge, 0.005), cut, 0.003);
     // Grooves between plates and between the columns, stopping short of the trimmed rim.
-    float b = s.y + BAND_TILT * s.x + BAND_ARCH * s.x * s.x;
-    const float edges[4] = { 0.27, 0.16, 0.01, -0.14 };
     float seamD = 1e9;
     for (int i = 0; i < 4; i++) seamD = min(seamD, abs(b - edges[i]));
     seamD = min(seamD, abs(s.x - COLUMN_X));
     float groove = max(max(seamD - SEAM, -GROOVE - outer), cut + TRIM_W);
-    float plates = smax(casing, -groove, PLATE_ROUND);
+    float plates = cmax(casing, -groove, PLATE_CHAMFER);
     // The vent: a gunmetal frame recessed into the cap, a black slot deeper in it.
     float2 vp = s.xy - VENT_C;
     float frame = max(sdBox2(vp, VENT_FRAME, 0.007), -0.006 - outer);
