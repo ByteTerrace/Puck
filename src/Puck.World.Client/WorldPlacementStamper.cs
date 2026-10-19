@@ -474,7 +474,10 @@ public static class WorldPlacementStamper {
                     _ = builder.BeginInstance(
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
-                        boundRadius: (boundRadius + PlacementBoundMargin)
+                        boundRadius: (boundRadius + PlacementBoundMargin),
+                        // Cellular relief creases along every cell wall, so it declares a thirty-second of its cell as
+                        // the detail its whole surface bakes at.
+                        detail: ((shape.Cells is { } cells) ? ((placement.Scale / cells.Frequency) / 32f) : 0f)
                     );
                     CreationStampEmitter.EmitShapeStamp(
                         builder: builder,
