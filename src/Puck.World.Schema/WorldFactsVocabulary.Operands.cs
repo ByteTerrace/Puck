@@ -25,6 +25,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.LineOfSightPrefix}<a>:<b>",
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
             $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
+            $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
@@ -631,6 +632,61 @@ public static partial class WorldFactsVocabulary {
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
                     valueKind: CellKind.Int,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.BodyStatePrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var width = WorldFactsCompileContext.BodyRefTokenWidth(
+                    start: 0,
+                    tokens: tokens
+                );
+
+                if (
+                    (tokens.Length != (width + 1)) ||
+                    !WorldBodyStateReads.TryResolveSlot(
+                    definition: world.Definition,
+                    kind: out var slotKind,
+                    name: tokens[width],
+                    slot: out var slot
+                )
+                ) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>' ({WorldFactsCompileContext.BodyRefVocabulary}, then a slot state.body or state.identity declares)",
+                        refusal: WorldRuleRefusal.BodyStateMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(
+                    channel: name,
+                    ruleName: ruleName,
+                    start: 0,
+                    tokens: tokens
+                );
+                var operand = new BodyStateOperand(
+                    body: body,
+                    kind: slotKind,
+                    slot: slot
+                );
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: -1,
+                    valueKind: CellKind.Fixed,
                     world: world
                 );
             } else if (name.StartsWith(

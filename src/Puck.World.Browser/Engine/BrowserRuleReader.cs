@@ -164,6 +164,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             value: 0L
         )
     );
+    RuleFact IWorldFacts.Read(BodyStateOperand operand) => Record(
+        operand: nameof(BodyStateOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Fixed,
+            value: 0L
+        )
+    );
     RuleFact IWorldFacts.Read(LinkStalenessOperand operand) => Record(
         operand: nameof(LinkStalenessOperand),
         fact: RuleFact.Finite(

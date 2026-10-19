@@ -228,6 +228,8 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     /// <inheritdoc/>
     public RuleFact Read(BodyFactOperand operand) => Unserved();
     /// <inheritdoc/>
+    public RuleFact Read(BodyStateOperand operand) => Unserved();
+    /// <inheritdoc/>
     public RuleFact Read(LinkStalenessOperand operand) => Unserved();
     /// <inheritdoc/>
     public RuleFact Read(ChannelOperand operand) => Unserved();

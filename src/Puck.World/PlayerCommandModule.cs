@@ -123,7 +123,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.channels",
-            description: "Echoes the channel decision read-back for a body — per DECLARED channel, the fold's value and owning-seat base, the held overlay admitted later and its composed result, every fold contributor tagged by principal (trusted/untrusted), the pool ceiling in force, and whether the pool actually clamped this write: body.channels [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). The fold only ever exists over a human-occupied local seat; any other target reports that plainly rather than fabricating a base/pool.",
+            description: "Echoes the channel decision read-back for a body — per DECLARED channel, the fold's value and owning-seat base, the held overlay admitted later and its composed result, every fold contributor tagged by principal (trusted/untrusted), the pool ceiling in force, and whether the pool actually clamped this write: body.channels [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A held source reaches a role channel (one declaring a role, such as MoveUp) through the fold, so it shows in folded and h with held 0, and a composition channel through the held overlay, so it shows in held with folded 0; composed is the value the body reads either way. The fold only ever exists over a human-occupied local seat; any other target reports that plainly rather than fabricating a base/pool.",
             handler: ChannelsHandler
         );
         yield return CommandDefinition.WithWireArgs(

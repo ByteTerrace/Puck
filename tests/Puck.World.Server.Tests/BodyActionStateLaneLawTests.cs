@@ -386,7 +386,6 @@ public sealed class BodyActionStateLaneLawTests {
             )
         );
     }
-
     // A rebuild starts a fresh simulation: participant slots return to their authored initials, a newly declared slot
     // is born rather than reading zero, and an identity slot stays with the identity that owns it.
     [Fact]
@@ -485,6 +484,68 @@ public sealed class BodyActionStateLaneLawTests {
                 ordinal: 1,
                 server: fixture.Server
             )
+        );
+    }
+    // A rule's bodyState read answers what the lane holds after the body's step, a timer in seconds; a body that is
+    // not there reads zero; the snapshot entry carries the same presented values for a render lane; and a slot the
+    // world does not declare is refused by name.
+    [Fact]
+    public void ARuleReadsABodysSlotsAndTheSnapshotCarriesThem_ControlAnAbsentBodyReadsZeroAndAnUndeclaredSlotIsRefused() {
+        using var fixture = Fixtures.FreshServer(definition: ReadingDocument(slot: AmmoSlot));
+        var sink = new RecordingSink();
+        using var lease = fixture.Server.AttachSink(sink: sink);
+
+        _ = fixture.JoinSeat();
+        WriteLane(
+            lane: StateLane.Participant,
+            name: AmmoSlot,
+            ordinal: 0,
+            raw: CarriedAmmo.Value,
+            server: fixture.Server
+        );
+        fixture.Step();
+
+        var cooldown = WorldBodyStateReads.Presented(
+            kind: ActionStateKind.Timer,
+            raw: LaneValue(
+                lane: StateLane.Identity,
+                name: CooldownSlot,
+                ordinal: 0,
+                server: fixture.Server
+            )
+        );
+
+        Assert.Equal(
+            expected: CarriedAmmo.Value,
+            actual: fixture.SlotValue(row: "ammoRead")
+        );
+        Assert.InRange(
+            actual: cooldown,
+            high: FixedQ4816.FromInteger(value: 2).Value,
+            low: 1L
+        );
+        Assert.Equal(
+            expected: cooldown,
+            actual: fixture.SlotValue(row: "cooldownRead")
+        );
+        Assert.Null(@object: fixture.Server.Body(index: 3));
+        Assert.Equal(
+            expected: 0L,
+            actual: fixture.SlotValue(row: "absentRead")
+        );
+        Assert.Equal(
+            expected: [CarriedAmmo.Value, cooldown],
+            actual: sink.LastState(index: 0)
+        );
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: ReadingDocument(slot: "missing"),
+            reason: out var reason
+        ));
+        Assert.Contains(
+            expectedSubstring: nameof(WorldRuleRefusal.BodyStateMalformed),
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal
         );
     }
 
@@ -610,6 +671,33 @@ public sealed class BodyActionStateLaneLawTests {
                 World: baseDocument.State
             ),
         });
+    }
+    // Document's slots, each copied into a world row every tick by a rule reading it through bodyState.
+    private static WorldDefinition ReadingDocument(string slot) {
+        var document = Document();
+        static WorldRule Copy(string row, string channel) => new(
+            Name: CellName.Parse(candidate: $"{row}-copy"),
+            Effects: [new ActionEffect.SetState(
+                State: row,
+                FromState: channel
+            )]
+        );
+
+        return document with {
+            StateRaw = document.StateRaw! with {
+                World = [
+                    .. document.State,
+                    StateFixtures.FixedSlot(name: "ammoRead", rawBits: 0L),
+                    StateFixtures.FixedSlot(name: "cooldownRead", rawBits: 0L),
+                    StateFixtures.FixedSlot(name: "absentRead", rawBits: 0L),
+                ],
+            },
+            Rules = [
+                Copy(row: "ammoRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{slot}"),
+                Copy(row: "cooldownRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{CooldownSlot}"),
+                Copy(row: "absentRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:3:{AmmoSlot}"),
+            ],
+        };
     }
     private static long LaneValue(WorldServer server, StateLane lane, string name, int ordinal) {
         Assert.True(condition: server.Arena.TryReadSlot(

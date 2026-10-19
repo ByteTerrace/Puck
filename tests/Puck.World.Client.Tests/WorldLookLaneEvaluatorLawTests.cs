@@ -117,6 +117,129 @@ public sealed class WorldLookLaneEvaluatorLawTests {
                 reads: ClientFixtures.StateReads(definition: Fixtures.BuildDocument())
             )
         );
+    // A bodyState lane reads the slot as the wearing body's (or a named body's) latest snapshot entry carried it, a
+    // delivery that moves it refreshes the read, a register file of the wrong width is ignored, and a lane naming a
+    // slot the world does not declare is refused.
+    [Fact]
+    public void ABodyStateLaneReadsTheDeliveredSlot_ControlAnUndeclaredSlotIsRefused() {
+        const long One = 65536L;
+        var baseDocument = Fixtures.BuildDocument();
+        var definition = baseDocument with {
+            StateRaw = new WorldStateSection(
+                Body: [new ActionStateSlot(Name: "fuel", Kind: Puck.Physics.Motion.ActionStateKind.Counter)],
+                Identity: [new ActionStateSlot(Name: "cooldown", Kind: Puck.Physics.Motion.ActionStateKind.Timer)],
+                World: baseDocument.State
+            ),
+        };
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+        var reads = new WorldStateLease();
+        var lane = ExpressionProgram.Parse(text: "bodyState($body, fuel) + bodyState(body, 0, cooldown)");
+        var moved = new int[WorldDocumentStateView.MaxMovedBodyState];
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+        reads.Bind(
+            bodyIndex: 1,
+            mirror: mirror
+        );
+        Assert.Equal(
+            actual: WorldLookLaneEvaluator.Evaluate(
+                expression: lane,
+                reads: reads
+            ),
+            expected: 0f
+        );
+
+        view.ApplyBodyState(
+            body: 1,
+            values: [(3L * One), 0L]
+        );
+        view.ApplyBodyState(
+            body: 0,
+            values: [0L, (One / 2L)]
+        );
+
+        var count = view.TakeMovedBodyState(moved: moved);
+
+        Assert.Equal(
+            actual: count,
+            expected: 2
+        );
+        mirror.RefreshRows(ordinals: moved.AsSpan(
+            length: count,
+            start: 0
+        ));
+        mirror.Apply(fraction: 1f);
+        Assert.Equal(
+            actual: WorldLookLaneEvaluator.Evaluate(
+                expression: lane,
+                reads: reads
+            ),
+            expected: 3.5f
+        );
+
+        view.ApplyBodyState(
+            body: 1,
+            values: [One]
+        );
+        Assert.Equal(
+            actual: view.TakeMovedBodyState(moved: moved),
+            expected: 0
+        );
+
+        // A key naming no body reads no value, and a slot the world does not declare resolves no row.
+        Assert.True(condition: view.TryResolveRow(
+            ordinal: out var fuelRow,
+            rowName: $"{WorldBodyStateReads.RowPrefix}fuel"
+        ));
+        Assert.True(condition: view.TryRead(
+            engineTick: 0UL,
+            key: "nobody",
+            ordinal: fuelRow,
+            sample: out var unkeyed,
+            target: false,
+            tick: 0UL
+        ));
+        Assert.Equal(
+            actual: unkeyed.Value,
+            expected: default
+        );
+        Assert.False(condition: view.TryResolveRow(
+            ordinal: out _,
+            rowName: $"{WorldBodyStateReads.RowPrefix}missing"
+        ));
+
+        WorldDefinition Wearing(string text) => definition with {
+            LooksRaw = new(Rows: [new(
+                "probe",
+                new WorldLookSource.Catalog(Index: 0),
+                1f,
+                WorldLookMotion.Default with { Lanes = [ExpressionProgram.Parse(text: text)] }
+            )]),
+        };
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Wearing(text: "bodyState($body, fuel)"),
+                reason: out var controlReason
+            ),
+            userMessage: controlReason
+        );
+        foreach (var malformed in new[] { "bodyState($body, missing)", "bodyState(fuel)" }) {
+            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Wearing(text: malformed),
+                reason: out var reason
+            ));
+            Assert.Contains(
+                expectedSubstring: "bodyState($body, <slot>)",
+                actualString: reason,
+                comparisonType: StringComparison.Ordinal
+            );
+        }
+    }
     [Fact]
     public void LanesRoundTripThroughTheWorldSourceGeneratedContext() {
         var document = Fixtures.BuildDocument() with {

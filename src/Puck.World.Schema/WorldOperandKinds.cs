@@ -108,6 +108,22 @@ public sealed class BodyFactOperand : WorldOperandFact {
     public CompiledBodyRef Body { get; }
     public BodyFacts Fact { get; }
 }
+/// <summary>One of a body's action-state slots (<see cref="WorldRuleFacts.BodyStatePrefix"/>), answered as
+/// <see cref="WorldBodyStateReads.Presented"/> defines; a reference resolving to no live body reads <c>0</c>.</summary>
+public sealed class BodyStateOperand : WorldOperandFact {
+    public BodyStateOperand(CompiledBodyRef body, int slot, ActionStateKind kind) : base(CellKind.Fixed) {
+        Body = body;
+        Kind = kind;
+        Slot = slot;
+    }
+
+    public CompiledBodyRef Body { get; }
+    /// <summary>Gets whether the slot is a counter or a timer.</summary>
+    public ActionStateKind Kind { get; }
+    /// <summary>Gets the slot's index in the world's register file (<c>state.body</c>, then
+    /// <c>state.identity</c>).</summary>
+    public int Slot { get; }
+}
 /// <summary>One fact on the identity a body drives under, read from the body's lane cell in the world's reserved
 /// <see cref="WorldIdentityFactLane"/> row (<see cref="WorldRuleFacts.IdentityPrefix"/>); a body driving under no
 /// identity, or a fact the identity never wrote, reads 0.</summary>

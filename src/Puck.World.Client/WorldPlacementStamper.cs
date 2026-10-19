@@ -105,7 +105,8 @@ public static class WorldPlacementStamper {
                 Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor),
                 Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
                 Receive: (entry?.Receive ?? 1f),
-                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool, hidden: hidden)
+                Paints: Paints(colors: colors, document: document, entry: entry, pool: pool, hidden: hidden),
+                EmissiveLane: entry?.EmissiveLane
             ));
         }
     }
