@@ -63,11 +63,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly IGpuBuffer?[] m_boundCounters;
     private readonly nint[][] m_screens;
 
-    // The mesh part's pool, its set per frame slot, and a framebuffer over each instance of its target and depth.
+    // The mesh part's pool, its set per frame slot and tables ring slot (MeshSetOf), and a framebuffer over each instance
+    // of its target and depth.
     private readonly nint m_meshPool;
 
     private readonly nint[] m_meshSets = [];
-    // The buffers each mesh set binds now, per slot: its mesh region, its dynamic transforms and its work counters.
+    // The buffers each mesh set binds now: its mesh region, its dynamic transforms and its work counters.
     private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
@@ -133,12 +134,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         // The mesh part draws through the mesh interface's layout, whose one pass group holds the pass block the world
-        // interface lays out and the mesh region: a set per frame slot from a pool of its own, its block bound to the slot's
-        // pass block buffer, and a framebuffer over each instance of its target and depth, or of a cascade's depth alone.
+        // interface lays out and the mesh region: a set per frame slot and tables ring slot from a pool of its own, its block
+        // bound to the frame slot's pass block buffer, and a framebuffer over each instance of its target and depth, or of a
+        // cascade's depth alone.
         var bindings = context.Services.Bindings;
         var sizes = default(GpuDescriptorPoolSizes);
+        var sets = (slots * SdfWorldTables.FrameRingSize);
 
-        for (var slot = 0; (slot < slots); slot++) {
+        for (var set = 0; (set < sets); set++) {
             sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
         }
 
@@ -151,16 +154,18 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         try {
-            m_meshSets = new nint[slots];
-            m_meshSetBuffers = new IGpuBuffer?[slots][];
+            m_meshSets = new nint[sets];
+            m_meshSetBuffers = new IGpuBuffer?[sets][];
 
-            for (var slot = 0; (slot < slots); slot++) {
-                m_meshSetBuffers[slot] = new IGpuBuffer?[3];
-                m_meshSets[slot] = bindings.AllocateSet(
+            for (var set = 0; (set < sets); set++) {
+                var slot = (set / SdfWorldTables.FrameRingSize);
+
+                m_meshSetBuffers[set] = new IGpuBuffer?[3];
+                m_meshSets[set] = bindings.AllocateSet(
                     descriptorSetLayoutHandle: tables.MeshPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
                     name: new GpuObjectName(
                         detail: "mesh group",
-                        index: slot,
+                        index: set,
                         owner: context.Instance,
                         part: context.Pass
                     ),
@@ -171,7 +176,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     binding: 0,
                     bufferHandle: groups.PassBlocks[slot].BufferHandle,
                     bufferSize: groups.PassBlocks[slot].SizeBytes,
-                    descriptorSetHandle: m_meshSets[slot]
+                    descriptorSetHandle: m_meshSets[set]
                 );
             }
 
@@ -545,6 +550,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
     // region, through the mesh pipeline; a cascade draws every mesh through the shadow pipeline into its depth,
     // cascadeTexels a side. A frame with no draws records the render pass alone, which clears the target.
+    // The mesh set a frame slot draws through while the tables upload into their current ring slot. The tables' ring and
+    // the frame slots' turn at different lengths, so a set per pair keeps each set's buffers those of one ring slot, and
+    // a set never rewrites what it binds once written.
+    private static int MeshSetOf(int slot, SdfWorldTables tables) =>
+        ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
     private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels) {
         var draws = tables.MeshDraws;
         var count = ((draws is null) ? 0u : tables.MeshDrawCount);
@@ -552,7 +562,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
         var pipeline = (IsShadowCascade ? tables.ShadowPipeline : tables.MeshPipeline);
-        var set = m_meshSets[slot];
+        var meshSet = MeshSetOf(slot: slot, tables: tables);
+        var set = m_meshSets[meshSet];
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
 
@@ -568,12 +579,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         if (count > 0) {
             tables.WriteMeshTables(
-                bound: m_meshSetBuffers[slot],
+                bound: m_meshSetBuffers[meshSet],
                 set: set,
                 slot: tables.CurrentSlot
             );
             tables.WriteMeshWorkCounters(
-                bound: ref m_meshSetBuffers[slot][2],
+                bound: ref m_meshSetBuffers[meshSet][2],
                 counters: WorkCountersOf(recording: in recording).Buffer,
                 set: set
             );
