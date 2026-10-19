@@ -218,10 +218,12 @@ public sealed class SdfMeshPathBake {
     private bool m_reported;
     private long m_loaded;
 
-    /// <summary>Gets whether a group still owes a lattice the frame can dispatch, or a contour still runs.</summary>
+    /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
+    /// (<see cref="Probe"/>) still samples.</summary>
     public bool Pending {
         get {
             lock (m_gate) {
+                if (m_slice is not null) { return true; }
                 foreach (var group in m_groups) {
                     if (!group.Done) { return true; }
                 }
@@ -229,6 +231,26 @@ public sealed class SdfMeshPathBake {
             }
         }
     }
+
+    /// <summary>Queues a field slice, whose lattices the frame's bake dispatch takes before any group's, one reference
+    /// frame's share at a time; its completion action runs on the thread that answers its last lattice, and a new program
+    /// restarts it. One slice samples at a time.</summary>
+    /// <param name="slice">The slice to sample.</param>
+    /// <returns><see langword="false"/> when another slice still samples, which leaves the queue unchanged.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="slice"/> is <see langword="null"/>.</exception>
+    public bool Probe(SdfFieldSlice slice) {
+        ArgumentNullException.ThrowIfNull(argument: slice);
+
+        lock (m_gate) {
+            if (m_slice is not null) { return false; }
+            m_slice = slice;
+            return true;
+        }
+    }
+
+    // The field slice still sampling, and the ticket each of its lattices answers through.
+    private SdfFieldSlice? m_slice;
+    private sealed record SliceTicket(SdfFieldSlice Slice, int Lattice, int Generation);
 
     /// <summary>Returns a frame that draws the bake's meshes beside its own mesh draws, restarting the bake when the frame
     /// carries a new program. A dynamic group draws at its slot's transform in the frame.</summary>
@@ -327,6 +349,20 @@ public sealed class SdfMeshPathBake {
                 var samples = 0;
                 var entries = 0;
                 var taps = 0;
+                // A slice's lattices come first, within the same share, so a long bake never holds a diagnostic back.
+                while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
+                    if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: WorldSelector) is not { } next) { break; }
+                    if ((lattices.Count > 0) && (((taps + next.Taps) > m_frameBudget) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
+                        slice.Return(ticket: lattice);
+                        break;
+                    }
+                    samples += next.Samples;
+                    entries += next.Samples;
+                    taps += next.Taps;
+                    lattices.Add(item: next);
+                    tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
+                    m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
+                }
                 for (var index = 0; (index < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch); index++) {
                     var group = m_groups[index];
 
@@ -391,6 +427,9 @@ public sealed class SdfMeshPathBake {
     private void Return(SdfMeshBakeBatch batch) {
         for (var index = 0; (index < batch.Tickets.Length); index++) {
             if (batch.Tickets[index] is Group group) { group.InFlight = false; }
+            if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
+                ticket.Slice.Return(ticket: ticket.Lattice);
+            }
             m_discarded += (batch.Recorded ? batch.Lattices[index].Samples : 0);
         }
     }
@@ -435,6 +474,20 @@ public sealed class SdfMeshPathBake {
     // Answers one lattice: a refining lattice narrows its group's box, and a final one starts the group's contour on the
     // thread pool.
     private void Complete(object? ticket, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
+        if (ticket is SliceTicket sliced) {
+            bool done;
+
+            lock (m_gate) {
+                // A slice a new program restarted, or one already finished, takes no answer from an earlier dispatch.
+                if (!ReferenceEquals(objA: sliced.Slice, objB: m_slice) || (sliced.Slice.Generation != sliced.Generation)) { return; }
+                done = sliced.Slice.Answer(samples: samples, ticket: sliced.Lattice);
+            }
+            if (done) {
+                sliced.Slice.Complete();
+                lock (m_gate) { m_slice = null; }
+            }
+            return;
+        }
         if (ticket is not Group group) { return; }
 
         var count = request.Samples;
@@ -516,6 +569,8 @@ public sealed class SdfMeshPathBake {
 
         m_program = frame.Program;
         m_groups.Clear();
+        // A slice samples one program: a new one takes every lattice again.
+        m_slice?.Reset();
 
         var bySlot = new Dictionary<int, Group>();
         var instances = frame.Program.Instances;

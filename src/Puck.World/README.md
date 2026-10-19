@@ -979,6 +979,36 @@ Facts a script needs:
   matching no shape by name, and `view.isolate off` restores the whole
   creation; `view.isolate` alone echoes the live isolation. It is session
   presentation, like the operator camera.
+- **Each shape's law.** `creation.shape <prototype> [<shape-name>...]` reads
+  every shape of a creation (or the named ones) off its own lowering: what the
+  renderer emits for it alone (`lowered=Scale(0.2,0.5,0.4)·Capsule`), whether
+  that field is `exact`, a `bound` with its certified gain (the field is at least
+  `gain` times the distance, so `|grad d|` lies in `[gain, 1]`: a non-uniform
+  `Scale` the primitive has no native spelling for, or the superellipsoid gauge
+  an ellipsoid lowers to) or `uncertified` (a warp, field op, path or sweep),
+  the `step` a warp or blend clamps the march to, whether the fixed-point
+  evaluator interprets it (`cpu=`), and what deterministic contact makes of it
+  on a solid placement (`contact=admitted`, with the instructions it drops, or
+  `omitted`/`refused` and why). A summary line counts each verdict. It reads the
+  document only, so it answers headless; `puck creation shape` is its offline
+  twin.
+- **Slicing the field.** `world.slice <x|y|z> <offset> <u> <v> <half> <path.png>`
+  or `world.slice <placement> <x|y|z> <path.png> [offset <m>]`, then optional
+  `bands <m>` and `res <n>`, cuts the World's field on an axis-aligned plane and
+  writes the distance diagnostic to a PNG: on the left the distance (warm
+  outside, cool inside, a thin line every band, a white surface line), on the
+  right `|grad d|` (white within 2% of one, blue below, red above, the surface
+  black). Bands that bunch or spread, and blue or red on the right, show a field
+  that is not the distance. `(u, v)` is `(Z, Y)` on an x cut, `(X, Z)` on a y cut
+  and `(X, Y)` on a z cut; the placement form centres on the placement's
+  authored position over 1.25 times its creation's reach. The mesh bake's
+  sampler, the one field walk, reads the residency's program at every sample
+  with its gradient, a frame's bake share at a time and before any pending
+  group; outside an instance's influence sphere it answers the sphere's bound.
+  The verb echoes the armed slice; the file and the gradient statistics land on
+  stderr as `[world.slice] … |grad d| min= mean= max= off= near-surface … ->
+  <path>`, and `world.wait bakes <seconds>` holds a script until then. It needs
+  a renderer (windowed or offscreen).
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at

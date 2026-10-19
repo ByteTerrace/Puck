@@ -300,6 +300,13 @@ dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --
 
 A hand-authored JSON document starts at `creation stats` directly.
 
+Whether one shape's distance is exact, a bound, or uncertified, whether
+the fixed-point evaluator takes it and what contact makes of it: `creation
+shape --world <file> --prototype <id> [--shape <name>]`, or `creation.shape
+<prototype> [<shape-name>]` live. `world.slice <placement> <x|y|z> <path.png>`
+writes the field's distance bands and `|grad d|` through the running World
+([loop](references/loop.md)).
+
 Then run the game and look — a claim about how something reads is not verified
 until you have looked at a capture. The offscreen and windowed recipes, with the
 stream and fencing rules that keep them honest, are in `references/loop.md`.
