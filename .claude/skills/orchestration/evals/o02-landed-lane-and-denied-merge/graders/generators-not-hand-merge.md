@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-generator
+puck (schema|locks)|generator
