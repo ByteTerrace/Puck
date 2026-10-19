@@ -160,31 +160,9 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
     word = sdfPackTransport(transport);
 }
 
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint2 extent = passGroup.extent;
-    if (any(id.xy >= extent)) return;
-    uint2 render = passGroup.imageExtent;
-    float2 jitter = passGroup.jitter;
-    bool temporal = ((passGroup.temporal != 0u) && (passGroup.debugMode == 0u));
-    // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
-    bool unjittered = (!temporal || all(jitter == 0.0));
-    float3 airOrigin = passGroup.viewPosition;
-    float3 airDirection = sdfResolveAirDirection(id.xy, extent);
-    float4 spatial;
-    float4 spatialTransport;
-    uint2 spatialWord;
-
-    sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
-        (unjittered && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
-    if (!temporal) {
-        output[id.xy] = spatial;
-        sdfWorkTexels = 1u;
-        transportRW[((id.y * extent.x) + id.x)] = spatialWord;
-        puckCountWork(sdfWorkSteps, sdfWorkTexels);
-        return;
-    }
-
+// The temporal path: this frame's 3x3 samples joined by the history the pixel's motion reaches, which it writes back.
+// `accepted` says the history survived, and `total` is the weight the mean `accumulated` (and its transport) gathered.
+void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out float total, out float4 accumulated, out float4 accumulatedTransport) {
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
     int2 nearest = int2(floor(center - jitter));
@@ -242,7 +220,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     reactive = saturate(reactive);
-    bool accepted = false;
+    accepted = false;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
 
@@ -317,20 +295,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    float total = (historyWeight + weightSum);
-    float4 accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
-    float4 accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
-    float4 resolved = (accepted ? lerp(spatial, accumulated, saturate(total)) : spatial);
-
+    total = (historyWeight + weightSum);
+    accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
+    accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
     uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
-
-    output[id.xy] = resolved;
-    sdfWorkTexels = 1u;
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
 
-    transportRW[((id.y * extent.x) + id.x)] = (accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, saturate(total))) : spatialWord);
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = hitIdentity;
     historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
@@ -338,5 +310,46 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     historySurfaceRW[word + 2u] = historyTransportWords.x;
     historySurfaceRW[word + 3u] = historyTransportWords.y;
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID) {
+    uint2 extent = passGroup.extent;
+    if (any(id.xy >= extent)) return;
+    uint2 render = passGroup.imageExtent;
+    float2 jitter = passGroup.jitter;
+    bool temporal = ((passGroup.temporal != 0u) && (passGroup.debugMode == 0u));
+    // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
+    bool unjittered = (!temporal || all(jitter == 0.0));
+    float3 airOrigin = passGroup.viewPosition;
+    float3 airDirection = sdfResolveAirDirection(id.xy, extent);
+    bool accepted = false;
+    float total = 0.0;
+    float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
+    float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
+
+    if (temporal) {
+        sdfResolveTemporal(id, extent, render, jitter, airOrigin, airDirection, accepted, total, accumulated, accumulatedTransport);
+    }
+
+    // The spatial path shows where the history is rejected or holds less than one sample's weight; a pixel whose gathered
+    // weight covers it shows the mean alone and reconstructs nothing.
+    float4 resolved = accumulated;
+    uint2 transportWord = sdfPackTransport(accumulatedTransport);
+
+    if (!accepted || (total < 1.0)) {
+        float4 spatial;
+        float4 spatialTransport;
+        uint2 spatialWord;
+
+        sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
+            (unjittered && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+        resolved = (accepted ? lerp(spatial, accumulated, total) : spatial);
+        transportWord = (accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, total)) : spatialWord);
+    }
+
+    output[id.xy] = resolved;
+    sdfWorkTexels = 1u;
+    transportRW[((id.y * extent.x) + id.x)] = transportWord;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }
