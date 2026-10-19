@@ -62,6 +62,16 @@ public sealed class WorldAnnotationInput(WorldAnnotations annotations, WorldSeat
             RadiusY: ((extent.Y * 0.5f) / height)
         );
     }
+    // A client-pixel position in normalized frame space, or null before the client extent is known.
+    private Vector2? Normalize(Vector2 position) {
+        var width = ((float)viewports.ClientWidth);
+        var height = ((float)viewports.ClientHeight);
+
+        return (((width <= 0f) || (height <= 0f))
+            ? null
+            : new Vector2(x: (position.X / width), y: (position.Y / height))
+        );
+    }
     private bool Button(in WindowInputEvent inputEvent) {
         var bit = BitOf(buttonIndex: inputEvent.ButtonIndex);
 
@@ -107,6 +117,7 @@ public sealed class WorldAnnotationInput(WorldAnnotations annotations, WorldSeat
             case WindowInputKind.PointerPosition:
                 m_position = inputEvent.Vector;
                 m_hasPosition = true;
+                annotations.SetPointer(pointer: Normalize(position: m_position));
 
                 if (m_dragging) {
                     annotations.SetDrag(drag: Fit(end: m_position, start: m_dragStart));
@@ -115,6 +126,7 @@ public sealed class WorldAnnotationInput(WorldAnnotations annotations, WorldSeat
                 return false;
             case WindowInputKind.PointerLeft:
                 m_hasPosition = false;
+                annotations.SetPointer(pointer: null);
 
                 return false;
             case WindowInputKind.FocusLost:

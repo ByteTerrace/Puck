@@ -19,6 +19,7 @@ public sealed class WorldAnnotations : IAnnotationSource {
     private bool m_active;
     private int m_count;
     private OverlayAnnotationCircle? m_drag;
+    private System.Numerics.Vector2? m_pointer;
 
     /// <summary>Gets whether annotate mode is on.</summary>
     public bool Active {
@@ -91,6 +92,14 @@ public sealed class WorldAnnotations : IAnnotationSource {
             m_drag = drag;
         }
     }
+    /// <summary>Sets where the pointer is, which annotate mode draws as a reticle.</summary>
+    /// <param name="pointer">The pointer in normalized frame space (origin top-left, Y down), or <see langword="null"/>
+    /// when it is not over the window.</param>
+    public void SetPointer(System.Numerics.Vector2? pointer) {
+        lock (m_gate) {
+            m_pointer = pointer;
+        }
+    }
     /// <summary>Keeps one outline after the others.</summary>
     /// <param name="circle">The outline, in normalized frame space.</param>
     /// <param name="index">The kept outline's one-based index, or 0 when none was kept.</param>
@@ -117,7 +126,8 @@ public sealed class WorldAnnotations : IAnnotationSource {
             frame = new OverlayAnnotationFrame(
                 Active: m_active,
                 Circles: m_snapshot.AsMemory(start: 0, length: m_count),
-                Drag: m_drag
+                Drag: m_drag,
+                Pointer: m_pointer
             );
 
             return (m_active || (m_count > 0) || m_drag.HasValue);

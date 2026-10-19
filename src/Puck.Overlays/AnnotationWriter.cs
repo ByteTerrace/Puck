@@ -17,10 +17,14 @@ public readonly record struct OverlayAnnotationCircle(
 /// <param name="Circles">The kept outlines, oldest first; each is labelled with its one-based index.</param>
 /// <param name="Drag">The outline the drag in progress would keep, or <see langword="null"/> when none is.</param>
 /// <param name="Active">Whether annotate mode is on.</param>
+/// <param name="Pointer">The pointer in normalized frame space (origin top-left, Y down) while it is over the window,
+/// or <see langword="null"/> when it is not; drawn as a reticle while annotate mode is on, since the world hides the
+/// system cursor.</param>
 public readonly record struct OverlayAnnotationFrame(
     ReadOnlyMemory<OverlayAnnotationCircle> Circles,
     OverlayAnnotationCircle? Drag,
-    bool Active
+    bool Active,
+    System.Numerics.Vector2? Pointer = null
 );
 /// <summary>The read seam <see cref="AnnotationWriter"/> consumes; the host's annotation state is the writer.</summary>
 public interface IAnnotationSource {
@@ -46,8 +50,8 @@ public sealed class AnnotationWriter(IAnnotationSource source, OverlayThemeStore
     /// <summary>The banner's character clamp.</summary>
     public const int BannerChars = 56;
     /// <summary>The element records the channel may write: two strokes and a label per kept outline, two strokes for
-    /// the drag in progress, and the banner's plate and text.</summary>
-    public const int MaxElements = ((MaxCircles * 3) + 2 + 2);
+    /// the drag in progress, the banner's plate and text, and the pointer reticle's ring and dot, two strokes each.</summary>
+    public const int MaxElements = ((MaxCircles * 3) + 2 + 2 + 4);
     /// <summary>The glyph-code words the channel may write: every label and the banner.</summary>
     public const int MaxTextWords = ((MaxCircles * LabelChars) + BannerChars);
 
@@ -61,12 +65,23 @@ public sealed class AnnotationWriter(IAnnotationSource source, OverlayThemeStore
 
     private readonly char[] m_label = new char[LabelChars];
 
-    private static void WriteOutline(OverlayFrameBuilder builder, in OverlayAnnotationCircle circle, float alpha) {
-        var centerX = (circle.CenterX * builder.Width);
-        var centerY = (circle.CenterY * builder.Height);
-        var radiusX = MathF.Max(x: (circle.RadiusX * builder.Width), y: 1f);
-        var radiusY = MathF.Max(x: (circle.RadiusY * builder.Height), y: 1f);
+    // The pointer reticle: a ring and a centre dot, in pixels.
+    private const float ReticleRadiusPx = 9f;
+    private const float ReticleDotPx = 1.5f;
+    // The smallest type size, in pixels, the labels and banner draw at.
+    private const float MinTypePx = 12f;
 
+    private static void WriteOutline(OverlayFrameBuilder builder, in OverlayAnnotationCircle circle, float alpha) {
+        WriteRing(
+            alpha: alpha,
+            builder: builder,
+            centerX: (circle.CenterX * builder.Width),
+            centerY: (circle.CenterY * builder.Height),
+            radiusX: MathF.Max(x: (circle.RadiusX * builder.Width), y: 1f),
+            radiusY: MathF.Max(x: (circle.RadiusY * builder.Height), y: 1f)
+        );
+    }
+    private static void WriteRing(OverlayFrameBuilder builder, float centerX, float centerY, float radiusX, float radiusY, float alpha) {
         builder.WriteEllipse(
             alpha: (HaloAlpha * alpha),
             centerX: centerX,
@@ -98,7 +113,8 @@ public sealed class AnnotationWriter(IAnnotationSource source, OverlayThemeStore
 
         var circles = frame.Circles.Span;
         var count = Math.Min(val1: circles.Length, val2: MaxCircles);
-        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Current.Type.MicroSize);
+        // A world without an authored theme has a zero type size; the tool keeps its labels legible regardless.
+        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: MathF.Max(x: theme.Current.Type.MicroSize, y: MinTypePx));
 
         if (count < circles.Length) {
             builder.NoteRefused(
@@ -139,6 +155,14 @@ public sealed class AnnotationWriter(IAnnotationSource source, OverlayThemeStore
 
         if (frame.Drag is { } drag) {
             WriteOutline(alpha: 0.6f, builder: builder, circle: in drag);
+        }
+
+        if (frame.Active && (frame.Pointer is { } pointer)) {
+            var pointerX = (pointer.X * builder.Width);
+            var pointerY = (pointer.Y * builder.Height);
+
+            WriteRing(alpha: 1f, builder: builder, centerX: pointerX, centerY: pointerY, radiusX: ReticleRadiusPx, radiusY: ReticleRadiusPx);
+            WriteRing(alpha: 1f, builder: builder, centerX: pointerX, centerY: pointerY, radiusX: ReticleDotPx, radiusY: ReticleDotPx);
         }
 
         if (frame.Active) {

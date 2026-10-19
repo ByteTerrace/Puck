@@ -4,7 +4,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldViewCommandModule {
-    private const string IsolateForm = "<prototype> <shape-name>... | off";
+    private const string IsolateForm = "[toggle] <prototype> <shape-name>... | off";
 
     // Sets, clears or echoes the stamp pool's shape isolation. Names resolve against the live document so a refusal
     // names what is missing; the emitters resolve them again at each rebuild against the document they then emit.
@@ -25,21 +25,41 @@ internal sealed partial class WorldViewCommandModule {
                 ? "[view.isolate: off]"
                 : $"[view.isolate: off — {was.Prototype} renders whole]"));
         }
-        if (args.Count < 2) {
+        // toggle: the same selection already live turns isolation off; anything else sets it, so one bound key flips
+        // between the named shapes alone and the whole creation.
+        var toggle = string.Equals(a: args[0].ToString(), b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase);
+        var first = (toggle ? 1 : 0);
+
+        if ((args.Count - first) < 2) {
             return CommandResult.Usage(form: IsolateForm, verb: "view.isolate");
         }
 
-        var prototype = args[0].ToString();
+        var prototype = args[first].ToString();
+
+        if (toggle && (isolation.Current is { } live) && string.Equals(a: live.Prototype, b: prototype, comparisonType: StringComparison.Ordinal) &&
+            (live.Names.Count == (args.Count - first - 1))) {
+            var same = true;
+
+            for (var index = 0; (same && (index < live.Names.Count)); index++) {
+                same = string.Equals(a: live.Names[index], b: args[(index + first + 1)].ToString(), comparisonType: StringComparison.Ordinal);
+            }
+
+            if (same) {
+                isolation.Set(selection: null);
+
+                return new CommandResult(Output: $"[view.isolate: off — {prototype} renders whole]");
+            }
+        }
         var creations = client.Definition.Creations;
 
         if (WorldDefinitionRows.FindCreation(creations: creations, id: prototype) is not { } creation) {
             return CommandResult.Error(output: $"[view.isolate: no prototype named '{prototype}' — prototypes: {NamesOf(names: creations.Select(selector: static candidate => candidate.Id.Value))}]");
         }
 
-        var names = new string[(args.Count - 1)];
+        var names = new string[(args.Count - first - 1)];
 
         for (var index = 0; (index < names.Length); index++) {
-            names[index] = args[(index + 1)].ToString();
+            names[index] = args[(index + first + 1)].ToString();
         }
 
         var matched = new bool[names.Length];

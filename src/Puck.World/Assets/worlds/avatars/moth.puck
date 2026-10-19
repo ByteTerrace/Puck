@@ -482,6 +482,15 @@ bindingOverlays [
                 ]
                 text: "toggle"
               }
+              {
+                command: "view.isolate"
+                id: "jetpackAlone"
+                label: "Jetpack alone"
+                sources [
+                  "keyboard.f4"
+                ]
+                text: "toggle moth pod* nozzle*"
+              }
             ]
             id: "base"
           }
