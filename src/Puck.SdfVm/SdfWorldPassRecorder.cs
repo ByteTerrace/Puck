@@ -69,6 +69,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly nint[] m_meshSets = [];
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
+    // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
+    private readonly bool[] m_targetsWritten = [];
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
 
     private bool m_disposed;
@@ -171,6 +173,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             m_meshTargets = groups.OutputImages[0];
             m_framebuffers = new IGpuFramebuffer[m_meshTargets.Count];
+            m_targetsWritten = new bool[m_meshTargets.Count];
 
             for (var index = 0; (index < m_framebuffers.Length); index++) {
                 m_framebuffers[index] = (IsShadowCascade
@@ -199,6 +202,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, or one of the shadow
     // cascades, which draw from the cascade's light camera.
     private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh || IsShadowCascade);
+    private bool TargetsWritten => Array.TrueForAll(array: m_targetsWritten, match: static written => written);
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
 
     public void Dispose() {
@@ -228,10 +232,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mask and
     // bake passes run only while the residency's bake dispatches a lattice this frame, in whichever of its views the
     // render graph records first (the mask then selects the lattice's instances, as the bake's walk reads them), so a
-    // residency whose first view is out of view still bakes, and a shadow cascade a frame with no cascade of its own. The
-    // mesh part and a cascade with one record on a frame that draws no mesh, as before the first bake lands: their render
-    // pass clears the target the surface pass samples, which would otherwise hold no contents at all. No other part walks
-    // the field, and none skips.
+    // residency whose first view is out of view still bakes, the mesh part a frame that draws no mesh, and a shadow cascade
+    // a frame with no draw or no cascade of its own. A frame that draws no mesh still records while an instance of the
+    // part's target has never been written, as before the first bake lands: its render pass clears the target the surface
+    // pass samples, which would otherwise hold no contents at all. No other part walks the field, and none skips.
     public bool Skips(in FrameContext context) {
         switch (m_part) {
             case SdfWorldPackage.Parts.Mask:
@@ -242,15 +246,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 _ = m_view.Residency.Submit(context: in context);
                 return !ClaimsBake(batch: out _);
             }
+            case SdfWorldPackage.Parts.Mesh: {
+                Follow();
+                m_owner.Begin(residency: m_view.Residency);
+                return ((m_view.Residency.Submit(context: in context).MeshDrawCount == 0) && TargetsWritten);
+            }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond: {
                 Follow();
                 m_owner.Begin(residency: m_view.Residency);
-                _ = m_view.Residency.Submit(context: in context);
+                var tables = m_view.Residency.Submit(context: in context);
                 var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                return ((cascades.Count == 0) ||
+                return ((cascades.Count == 0) || ((tables.MeshDrawCount == 0) && TargetsWritten) ||
                     ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
             }
             default:
@@ -549,6 +558,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 objB: target
             )) {
                 framebuffer = m_framebuffers[index];
+                m_targetsWritten[index] = true;
             }
         }
 
