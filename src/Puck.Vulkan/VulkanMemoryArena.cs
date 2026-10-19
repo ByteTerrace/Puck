@@ -20,6 +20,7 @@ public sealed unsafe class VulkanMemoryArena {
     private const uint StructureTypeMemoryAllocateInfo = 5;
 
     private readonly VulkanDeviceCommands m_device;
+
     private readonly Lock m_gate = new();
     private readonly Dictionary<(uint Type, GpuMemoryRole Role, bool Image), List<Block>> m_pools = [];
     private readonly Dictionary<nint, (Block Block, ulong Offset, ulong Size)> m_slices = [];

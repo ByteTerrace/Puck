@@ -7,7 +7,9 @@ namespace Puck.Vulkan.Interop;
 /// One logical device's <c>VkPipelineCache</c>, seeded from the device's <see cref="GpuPipelineCacheFile"/>, passed to
 /// every compute and graphics pipeline creation on the device, and written back by <see cref="Persist"/> and on
 /// disposal. Created without the externally-synchronized flag, so the driver synchronizes it internally and pipelines
-/// may be created on several threads at once. The file owns where the cache lives and when it is written; this type
+/// may be created on several threads at once; reading the cache's data still waits for every creation in flight
+/// (<see cref="Enter"/>): a cold boot that read it while other threads created pipelines through it faulted inside
+/// <c>vkGetPipelineCacheData</c> on NVIDIA's driver under the validation layer. The file owns where the cache lives and when it is written; this type
 /// owns only the native cache and the header check.
 /// <para>
 /// A file is loaded only when its header names this device: header version one, the device's vendor and device IDs
@@ -26,7 +28,10 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
 
     private readonly VulkanDeviceCommands m_device;
     private readonly GpuPipelineCacheFile m_file;
+
     private readonly Lock m_gate = new();
+    // Creations through the cache share it; reading its data holds it alone.
+    private readonly ReaderWriterLockSlim m_use = new(recursionPolicy: LockRecursionPolicy.NoRecursion);
 
     private bool m_disposed;
 
@@ -98,8 +103,16 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
 
         return null;
     }
-    // The cache's current data, or empty when the driver could not return it (reported).
+    // The cache's current data, or empty when the driver could not return it (reported), read while no creation runs.
     private static ReadOnlyMemory<byte> Serialize(VulkanPipelineCache cache) {
+        cache.m_use.EnterWriteLock();
+        try {
+            return SerializeAlone(cache: cache);
+        } finally {
+            cache.m_use.ExitWriteLock();
+        }
+    }
+    private static ReadOnlyMemory<byte> SerializeAlone(VulkanPipelineCache cache) {
         var device = cache.m_device;
         nuint size = 0;
         var result = device.GetPipelineCacheData(
@@ -183,6 +196,15 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
             handle: handle
         );
     }
+    /// <summary>Holds a cache for one pipeline creation through it, which other creations share and a read of its data
+    /// waits for.</summary>
+    /// <param name="cache">The cache, or <see langword="null"/> for an uncached creation.</param>
+    /// <returns>The hold, released by disposing it.</returns>
+    public static Use Enter(VulkanPipelineCache? cache) {
+        cache?.m_use.EnterReadLock();
+
+        return new Use(cache: cache);
+    }
     /// <summary>Counts one pipeline created through this cache.</summary>
     /// <param name="feedback">The driver's report on the creation; a report without the valid bit counts as a miss.</param>
     public void Count(in VkPipelineCreationFeedback feedback) =>
@@ -201,6 +223,7 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
                 handle: Handle
             );
         }
+        m_use.Dispose();
     }
     /// <summary>Writes the cache to its file when a creation missed it since the last write. Safe on any thread; a
     /// failed read of the cache data or a failed write is reported and leaves the previous file whole.</summary>
@@ -221,5 +244,12 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
             serialize: static cache => Serialize(cache: cache),
             state: this
         );
+    }
+
+    /// <summary>One creation's hold on a cache (<see cref="Enter"/>).</summary>
+    /// <param name="cache">The held cache, or <see langword="null"/>.</param>
+    public readonly struct Use(VulkanPipelineCache? cache) : IDisposable {
+        /// <summary>Releases the hold.</summary>
+        public void Dispose() => cache?.m_use.ExitReadLock();
     }
 }

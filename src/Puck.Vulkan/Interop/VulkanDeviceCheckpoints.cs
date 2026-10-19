@@ -14,16 +14,18 @@ public sealed unsafe class VulkanDeviceCheckpoints {
     /// <summary>The optional device extension.</summary>
     public const string ExtensionName = "VK_NV_device_diagnostic_checkpoints";
 
-    private const uint StructureTypeCheckpointData = 1000206000;
-    private const uint StageTopOfPipe = 0x1;
     private const uint StageBottomOfPipe = 0x2000;
+    private const uint StageTopOfPipe = 0x1;
+    private const uint StructureTypeCheckpointData = 1000206000;
 
     private readonly delegate* unmanaged[Cdecl]<nint, nint, void> m_mark;
     private readonly delegate* unmanaged[Cdecl]<nint, uint*, VkCheckpointDataNv*, void> m_read;
+
     private readonly Lock m_lock = new();
     // Every label marked, by its marker less one; a label keeps its first marker.
     private readonly List<string> m_labels = [];
     private readonly Dictionary<string, nint> m_markers = new(comparer: StringComparer.Ordinal);
+
     private nint m_queue;
 
     /// <summary>Resolves the extension's entry points only when device creation enabled it.</summary>

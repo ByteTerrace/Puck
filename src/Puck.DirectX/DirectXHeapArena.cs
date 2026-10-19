@@ -30,11 +30,13 @@ public sealed unsafe class DirectXHeapArena {
     // Every placed resource of every arena, by the token it carries, so a release that names only the resource finds its
     // range.
     private static readonly ConcurrentDictionary<long, (DirectXHeapArena Arena, Heap Heap, ulong Offset, ulong Size)> Placed = [];
+
     private static long Tokens;
 
     private readonly IDirectXCommandCalls m_calls;
     private readonly nint m_device;
     private readonly GpuDeviceMemoryWork? m_memory;
+
     private readonly Lock m_gate = new();
     private readonly Dictionary<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role), List<Heap>> m_pools = [];
 

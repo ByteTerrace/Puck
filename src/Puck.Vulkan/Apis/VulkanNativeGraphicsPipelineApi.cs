@@ -184,14 +184,16 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 Subpass = 0,
             };
 
-            result = request.Device.CreateGraphicsPipelines(
-                request.Device.Handle,
-                (request.PipelineCache?.Handle ?? 0),
-                1,
-                ((nint)(&pipelineCreateInfo)),
-                0,
-                out pipelineHandle
-            );
+            using (VulkanPipelineCache.Enter(cache: request.PipelineCache)) {
+                result = request.Device.CreateGraphicsPipelines(
+                    request.Device.Handle,
+                    (request.PipelineCache?.Handle ?? 0),
+                    1,
+                    ((nint)(&pipelineCreateInfo)),
+                    0,
+                    out pipelineHandle
+                );
+            }
 
             if (result.IsSuccess()) {
                 request.PipelineCache?.Count(feedback: in feedback);

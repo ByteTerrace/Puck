@@ -91,14 +91,18 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
                 Stage = ShaderStageComputeBit,
             },
         };
-        var result = request.Device.CreateComputePipelines(
-            request.Device.Handle,
-            (request.PipelineCache?.Handle ?? 0),
-            1,
-            ((nint)(&createInfo)),
-            0,
-            out pipelineHandle
-        );
+        VkResult result;
+
+        using (VulkanPipelineCache.Enter(cache: request.PipelineCache)) {
+            result = request.Device.CreateComputePipelines(
+                request.Device.Handle,
+                (request.PipelineCache?.Handle ?? 0),
+                1,
+                ((nint)(&createInfo)),
+                0,
+                out pipelineHandle
+            );
+        }
 
         if (result.IsSuccess()) {
             request.PipelineCache?.Count(feedback: in feedback);
