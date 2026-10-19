@@ -6,7 +6,8 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Creates the backend's committed buffers. Every buffer the backend creates goes through <see cref="CreateCommitted"/>,
+/// Creates the backend's buffers, placed in a device's heaps or committed. Every buffer the backend creates goes through
+/// <see cref="Create"/>,
 /// so every one is a row-major, single-sample, format-less buffer on a heap with no heap flags, and differs only in its
 /// size, heap type, initial state and resource flags.
 /// </summary>
@@ -25,10 +26,12 @@ public static unsafe class DirectXBuffers {
     /// owner counts its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <param name="calls">The answerer of the creation call, or <see langword="null"/> for the device's own
     /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
+    /// <param name="arena">The device's heaps to place it in (<see cref="DirectXHeapArena"/>), which count it, or
+    /// <see langword="null"/> to commit it.</param>
     /// <returns>The buffer, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null) {
+    public static ID3D12Resource* Create(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = heapType,
         };
@@ -43,6 +46,17 @@ public static unsafe class DirectXBuffers {
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
             Width = sizeBytes,
         };
+        var role = heapType switch {
+            D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT => GpuMemoryRole.DeviceLocal,
+            D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_GPU_UPLOAD => GpuMemoryRole.HostVisibleDeviceLocal,
+            _ => GpuMemoryRole.HostVisible,
+        };
+
+        // A device's arena places the buffer in a heap it shares, which it counts; otherwise the buffer is committed.
+        if (arena is not null) {
+            return arena.Create(clearValue: null, description: in description, heapType: heapType, initialState: initialState, role: role);
+        }
+
         var buffer = DirectXCommandCalls.CreateCommittedResource(
             calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
             clearValue: null,
@@ -56,11 +70,7 @@ public static unsafe class DirectXBuffers {
             device: device,
             memory: memory,
             resource: buffer,
-            role: heapType switch {
-                D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT => GpuMemoryRole.DeviceLocal,
-                D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_GPU_UPLOAD => GpuMemoryRole.HostVisibleDeviceLocal,
-                _ => GpuMemoryRole.HostVisible,
-            }
+            role: role
         );
 
         return buffer;

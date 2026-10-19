@@ -90,7 +90,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         );
         var initialState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var resource = DirectXTextures.CreateCommitted(
+        var resource = DirectXTextures.Create(
             clearValue: null,
             device: device,
             flags: flags,

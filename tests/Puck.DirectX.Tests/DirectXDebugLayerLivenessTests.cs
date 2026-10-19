@@ -102,7 +102,7 @@ public sealed unsafe class DirectXDebugLayerLivenessTests {
         };
 
         try {
-            var texture = DirectXTextures.CreateCommitted(
+            var texture = DirectXTextures.Create(
                 clearValue: clearValue,
                 device: device,
                 flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,

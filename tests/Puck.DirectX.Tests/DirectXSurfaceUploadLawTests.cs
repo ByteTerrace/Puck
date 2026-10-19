@@ -397,6 +397,13 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
         }
         public HRESULT CreateQueryHeap(D3D12_QUERY_HEAP_DESC* description, ID3D12QueryHeap** heap) => m_real.CreateQueryHeap(description: description, heap: heap);
         public HRESULT Map(ID3D12Resource* resource, void** data) => m_real.Map(data: data, resource: resource);
+        public D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(D3D12_RESOURCE_DESC* description) => m_real.AllocationInfo(description: description);
+        public HRESULT CreateHeap(D3D12_HEAP_DESC* description, ID3D12Heap** heap) => m_real.CreateHeap(description: description, heap: heap);
+        public HRESULT CreatePlacedResource(ID3D12Heap* heap, ulong offset, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) => m_real.CreatePlacedResource(clearValue: clearValue, description: description, heap: heap, initialState: initialState, offset: offset, resource: resource);
+        public void ReleaseHeap(ID3D12Heap* heap) => m_real.ReleaseHeap(heap: heap);
+        public void ReleaseResource(ID3D12Resource* resource) => m_real.ReleaseResource(resource: resource);
+        public HRESULT Tag(ID3D12Resource* resource, Guid key, long value) => m_real.Tag(key: key, resource: resource, value: value);
+        public bool TryReadTag(ID3D12Resource* resource, Guid key, out long value) => m_real.TryReadTag(key: key, resource: resource, value: out value);
         public HRESULT ResetAllocator(ID3D12CommandAllocator* allocator) {
             if (FailNextAllocatorReset) {
                 FailNextAllocatorReset = false;

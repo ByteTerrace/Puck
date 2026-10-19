@@ -76,6 +76,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
         }
 
         PipelineCache?.Dispose();
+        Commands.Arena.FreeAll();
         m_logicalDeviceApi.DestroyDevice(device: Commands);
         m_disposed = true;
         Commands.Memory?.EndDevice(device: Commands.Handle);
