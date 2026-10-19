@@ -8,9 +8,9 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>
 /// The <see cref="SdfShapeType.Sweep"/> contract: the closed-form closest point on a known quadratic Bezier, the
 /// radius profile at its three named parameters, the admission refusals <see cref="SdfProgramBuilder.Sweep"/>
-/// enforces, and — the load-bearing proof — that the shape's own conservative margin
-/// (<see cref="SdfProgramBuilder.SweepConservativeMargin"/>) keeps the field from overestimating true distance to a
-/// fine-sampled reference tube, for both a single strand and a multi-strand braid, over a randomized grid.
+/// enforces, and — the load-bearing proof — that the field is the distance to its swept spheres, held to a
+/// fine-sampled reference over a randomized grid for a tapered, bulging strand that bends past its centreline's medial
+/// axis and for a multi-strand braid.
 /// </summary>
 public sealed class SweepLawTests {
     private static Vector3 BezierDerivative(Vector3 a, Vector3 b, Vector3 c, float t) =>
@@ -182,72 +182,75 @@ public sealed class SweepLawTests {
                 : t2
         ));
     }
-    // The render field selects closest-t on the centerline, then the nearest strand there, minus its margin.
+    // The render field (sdfSweep): a tube of one radius about the centreline reads its closed-form nearest parameter;
+    // any other sweep takes, per strand, the least gap to the swept spheres over the nearest of 33 samples of t and 12
+    // golden-section rounds within a sample either side of it.
     private static float FieldDistance(Vector3 p, Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, int strands, float twist, float strandOffset) {
-        var t = ClosestT(
-            a: a,
-            b: b,
-            c: c,
-            p: p
-        );
-        var basePoint = BezierPoint(
-            a: a,
-            b: b,
-            c: c,
-            t: t
-        );
-        var radius = RadiusAt(
-            bulge: bulge,
-            radiusEnd: radiusEnd,
-            radiusStart: radiusStart,
-            t: t
-        );
-        var tangent = BezierDerivative(
-            a: a,
-            b: b,
-            c: c,
-            t: t
-        );
-        var tangentDirection = ((tangent.LengthSquared() > 1e-16f)
-            ? Vector3.Normalize(value: tangent)
-            : Vector3.UnitY
-        );
-        var referenceAxis = ((MathF.Abs(x: tangentDirection.Y) < 0.999f)
-            ? Vector3.UnitY
-            : Vector3.UnitX
-        );
-        var u = Vector3.Normalize(value: Vector3.Cross(
-            vector1: tangentDirection,
-            vector2: referenceAxis
-        ));
-        var v = Vector3.Cross(
-            vector1: tangentDirection,
-            vector2: u
-        );
+        if ((radiusStart == radiusEnd) && (bulge == 0f) && (strandOffset == 0f)) {
+            return (Vector3.Distance(value1: p, value2: BezierPoint(a: a, b: b, c: c, t: ClosestT(a: a, b: b, c: c, p: p))) - radiusStart);
+        }
+
+        const int Samples = 32;
+        const float Spacing = (1f / Samples);
         var best = 1e9f; // sdfSweep's finite strand seed is part of the field, including at extreme distances.
 
         for (var strand = 0; (strand < strands); strand++) {
-            var phase = (((t * twist) * MathF.Tau) + ((strand * MathF.Tau) / strands));
-            var offsetPoint = (basePoint + (((u * MathF.Cos(x: phase)) + (v * MathF.Sin(x: phase))) * strandOffset));
+            var phase = ((strand * MathF.Tau) / strands);
 
-            best = MathF.Min(
-                x: best,
-                y: (Vector3.Distance(
-                    value1: p,
-                    value2: offsetPoint
-                ) - radius)
-            );
+            float Gap(float t) => (Vector3.Distance(value1: p, value2: StrandPoint(a: a, b: b, c: c, phase: phase, strandOffset: strandOffset, t: t, twist: twist)) - RadiusAt(bulge: bulge, radiusEnd: radiusEnd, radiusStart: radiusStart, t: t));
+
+            var nearest = 0f;
+            var nearestGap = 1e9f;
+
+            for (var sample = 0; (sample <= Samples); sample++) {
+                var gap = Gap(t: (sample * Spacing));
+
+                if (gap < nearestGap) {
+                    nearestGap = gap;
+                    nearest = (sample * Spacing);
+                }
+            }
+
+            var low = MathF.Max((nearest - Spacing), 0f);
+            var high = MathF.Min((nearest + Spacing), 1f);
+            var left = float.Lerp(amount: 0.381966f, value1: low, value2: high);
+            var right = float.Lerp(amount: 0.618034f, value1: low, value2: high);
+            var leftGap = Gap(t: left);
+            var rightGap = Gap(t: right);
+
+            for (var round = 0; (round < 12); round++) {
+                nearestGap = MathF.Min(nearestGap, MathF.Min(leftGap, rightGap));
+                if (leftGap < rightGap) {
+                    (high, right, rightGap) = (right, left, leftGap);
+                    left = float.Lerp(amount: 0.381966f, value1: low, value2: high);
+                    leftGap = Gap(t: left);
+                } else {
+                    (low, left, leftGap) = (left, right, rightGap);
+                    right = float.Lerp(amount: 0.618034f, value1: low, value2: high);
+                    rightGap = Gap(t: right);
+                }
+            }
+            best = MathF.Min(best, MathF.Min(nearestGap, MathF.Min(leftGap, rightGap)));
         }
 
-        var margin = SdfProgramBuilder.SweepConservativeMargin(
-            bulge: bulge,
-            radiusEnd: radiusEnd,
-            radiusStart: radiusStart,
-            strandOffset: strandOffset,
-            twist: twist
-        );
+        return best;
+    }
+    // A strand's centre at t: the centreline point orbited by the offset across the tangent (sdfSweepStrandPoint).
+    private static Vector3 StrandPoint(Vector3 a, Vector3 b, Vector3 c, float t, float twist, float strandOffset, float phase) {
+        var basePoint = BezierPoint(a: a, b: b, c: c, t: t);
 
-        return (best - margin);
+        if (strandOffset == 0f) {
+            return basePoint;
+        }
+
+        var tangent = BezierDerivative(a: a, b: b, c: c, t: t);
+        var tangentDirection = ((tangent.LengthSquared() > 1e-16f) ? Vector3.Normalize(value: tangent) : Vector3.UnitY);
+        var referenceAxis = ((MathF.Abs(x: tangentDirection.Y) < 0.999f) ? Vector3.UnitY : Vector3.UnitX);
+        var u = Vector3.Normalize(value: Vector3.Cross(vector1: tangentDirection, vector2: referenceAxis));
+        var v = Vector3.Cross(vector1: tangentDirection, vector2: u);
+        var angle = (((t * twist) * MathF.Tau) + phase);
+
+        return (basePoint + (((u * MathF.Cos(x: angle)) + (v * MathF.Sin(x: angle))) * strandOffset));
     }
     private static Puck.Maths.FixedPosition FixedPositionOf(Vector3 value) => Puck.Maths.FixedPosition.FromLocal(local: new Puck.Maths.FixedVector3(
         X: Puck.Maths.FixedQ4816.FromDouble(value: value.X),
@@ -271,7 +274,8 @@ public sealed class SweepLawTests {
         )));
     }
     // A fine-sampled brute-force reference: the true minimum of "distance to the strand curve minus the radius
-    // profile" over a dense t grid and every strand — the ground truth the conservative margin must never exceed.
+    // profile" over a dense t grid and every strand. The field never reads above it; its search can read a little below,
+    // where the bulge's steep rise off an end falls between the grid's samples.
     private static float ReferenceDistance(Vector3 p, Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, int strands, float twist, float strandOffset, int samples = 1200) {
         var best = float.PositiveInfinity;
 
@@ -390,7 +394,7 @@ public sealed class SweepLawTests {
         );
     }
     [Fact]
-    public void AZeroStrandOffsetSingleStrandIsTheExactTubeMinusMargin() {
+    public void ATubeOfOneRadiusIsTheExactTube() {
         var a = Vector3.Zero;
         var b = new Vector3(
             x: 1f,
@@ -733,52 +737,6 @@ public sealed class SweepLawTests {
             words[(((shapeIndex + 1) * 4) + 1)]
         );
     }
-    [InlineData(16f, true)]
-    [InlineData(17f, false)]
-    [InlineData(64f, false)]
-    [Theory]
-    public void SweepCapOnlyAdmitsMarginsWithRoundingSlack(float bulge, bool bounded) {
-        var words = BuildSweep(
-            Vector3.Zero,
-            Vector3.Zero,
-            Vector3.Zero,
-            4f,
-            4f,
-            bulge,
-            1,
-            0f,
-            0f
-        ).Words;
-        var boundIndex = checked((((int)((words[3] + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[1])) + 2u)) * 4));
-
-        Assert.Equal(
-            (bounded
-            ? 1u
-            : 0u),
-            words[(boundIndex + 4)]
-        );
-        var candidate = FieldDistance(
-            new Vector3(
-                x: 2e9f,
-                y: 0f,
-                z: 0f
-            ),
-            Vector3.Zero,
-            Vector3.Zero,
-            Vector3.Zero,
-            4f,
-            4f,
-            bulge,
-            1,
-            0f,
-            0f
-        );
-
-        Assert.Equal(
-            actual: candidate,
-            expected: (1e9f - bulge)
-        );
-    }
     [Fact]
     public void TaperExceedingTheAdmittedRatioRefusesByName() {
         var builder = new SdfProgramBuilder();
@@ -802,29 +760,32 @@ public sealed class SweepLawTests {
         );
     }
     [Fact]
-    public void TheConservativeMarginStaysBelowTrueDistanceOnAGridForOneStrand() {
+    public void TheFieldIsTheSweptSpheresDistanceOnAGridForATaperedBulgingStrand() {
+        // The gallery's tapered sweep: its arch bends tighter than its radius at the apex, past the centreline's medial
+        // axis.
         var a = new Vector3(
-            x: 0.12f,
-            y: 4.148f,
-            z: 0.325f
+            x: -0.4f,
+            y: 0f,
+            z: 0f
         );
         var b = new Vector3(
-            x: -0.16f,
-            y: 4.17f,
-            z: 0.57f
+            x: 0f,
+            y: 1f,
+            z: 0.2f
         );
         var c = new Vector3(
-            x: -0.387f,
-            y: 3.844f,
-            z: 0.38f
+            x: 0.4f,
+            y: 0f,
+            z: 0f
         );
-        const float RadiusStart = 0.05f;
-        const float RadiusEnd = 0.05f;
-        const float Bulge = 0.05f;
+        const float RadiusStart = 0.14f;
+        const float RadiusEnd = 0.04f;
+        const float Bulge = 0.06f;
         const int Strands = 1;
         const float Twist = 0f;
         const float StrandOffset = 0f;
         var random = new Random(Seed: 1);
+        var evaluator = new SdfFieldEvaluator(program: BuildSweep(a: a, b: b, bulge: Bulge, c: c, radiusEnd: RadiusEnd, radiusStart: RadiusStart, strandOffset: StrandOffset, strands: Strands, twist: Twist));
 
         for (var trial = 0; (trial < 400); trial++) {
             var t = ((float)random.NextDouble());
@@ -877,13 +838,16 @@ public sealed class SweepLawTests {
             );
 
             Assert.True(
-                condition: (fieldDistance <= (trueDistance + 1e-4f)),
-                userMessage: $"trial {trial}: field {fieldDistance} exceeded true distance {trueDistance} at p={p}"
+                condition: ((fieldDistance <= (trueDistance + 1e-4f)) && (fieldDistance >= (trueDistance - 1e-3f))),
+                userMessage: $"trial {trial}: field {fieldDistance} differs from the swept spheres' distance {trueDistance} at p={p}"
             );
+            // The fixed-point evaluator answers the same field to its search's resolution.
+            Assert.True(condition: evaluator.TryDistance(distance: out var fixedDistance, material: out _, position: FixedPositionOf(value: p)));
+            Assert.True(condition: (MathF.Abs(x: (((float)fixedDistance) - fieldDistance)) < 0.0005f), userMessage: $"trial {trial}: fixed {(float)fixedDistance} against float {fieldDistance} at p={p}");
         }
     }
     [Fact]
-    public void TheConservativeMarginStaysBelowTrueDistanceOnAGridForThreeStrands() {
+    public void TheFieldIsTheSweptSpheresDistanceOnAGridForThreeStrands() {
         var a = new Vector3(
             x: -0.42f,
             y: 3.48f,
@@ -959,8 +923,8 @@ public sealed class SweepLawTests {
             );
 
             Assert.True(
-                condition: (fieldDistance <= (trueDistance + 1e-4f)),
-                userMessage: $"trial {trial}: field {fieldDistance} exceeded true distance {trueDistance} at p={p}"
+                condition: ((fieldDistance <= (trueDistance + 1e-4f)) && (fieldDistance >= (trueDistance - 1e-3f))),
+                userMessage: $"trial {trial}: field {fieldDistance} differs from the swept spheres' distance {trueDistance} at p={p}"
             );
         }
     }
@@ -1021,7 +985,7 @@ public sealed class SweepLawTests {
             strandOffset: 0.03f
         );
 
-        Assert.True(condition: (MathF.Abs(x: (((float)distance) - expectedFloat)) < 0.02f));
+        Assert.True(condition: (MathF.Abs(x: (((float)distance) - expectedFloat)) < 0.0005f), userMessage: $"fixed {(float)distance} against float {expectedFloat}");
     }
     [Fact]
     public void TheFixedPointEvaluatorRefusesMoreThanOneStrandByName() {

@@ -640,14 +640,40 @@ float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge)
 
     return (taper + (bulge * pow(s, 0.65)));
 }
-// The conservative margin subtracted from the raw closest-point candidate — the closed-form closest point is taken
-// on the CENTERLINE alone (ignoring how the radius/orbit vary elsewhere along the curve), so the raw candidate can
-// OVERESTIMATE true distance near strong radius/orbit variation; this margin, calibrated over a randomized grid
-// against a fine-sampled reference tube (SweepLawTests), restores a conservative (never-overestimating, within the
-// calibrated envelope) field. KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin and the fixed-point mirror.
-float sdfSweepConservativeMargin(float bulge, float strandOffset, float twist, float radiusStart, float radiusEnd) {
-    return (((1.0 * abs(bulge)) + ((0.7 * strandOffset) * (1.0 + abs(twist)))) + (0.9 * abs((radiusEnd - radiusStart))));
+// The general path's samples along t (a power of two, so every sample's parameter is exact) and its golden-section
+// rounds about the nearest sample. KEEP IN SYNC with SdfFieldEvaluator's SweepSamples and SweepRounds.
+static const uint SDF_SWEEP_SAMPLES = 32u;
+static const uint SDF_SWEEP_ROUNDS = 12u;
+// A strand's centre at t: the centreline point, orbited by strandOffset across the tangent at the phase the twist
+// reaches there from the strand's own phase.
+float3 sdfSweepStrandPoint(float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase) {
+    float3 base = sdfBezierPoint(a, b, c, t);
+
+    if (strandOffset == 0.0) { return base; }
+
+    float3 tangent = sdfBezierDerivative(a, b, c, t);
+    float tangentLength = length(tangent);
+    float3 tangentDir = ((tangentLength > 1e-8) ? (tangent / tangentLength) : float3(0.0, 1.0, 0.0));
+    float3 refAxis = ((abs(tangentDir.y) < 0.999) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
+    float3 u = normalize(cross(tangentDir, refAxis));
+    float3 v = cross(tangentDir, u);
+    float sinP, cosP;
+
+    sincos(((t * twist * SDF_TAU) + phase), sinP, cosP);
+
+    return (base + (strandOffset * ((u * cosP) + (v * sinP))));
 }
+// The gap from p to the sphere a strand sweeps at t. Each gap is 1-Lipschitz in p, so their least over t is the swept
+// solid's field: exact outside it, a bound inside.
+float sdfSweepGap(float3 p, float3 a, float3 b, float3 c, float t, float twist, float strandOffset, float phase, float radiusStart, float radiusEnd, float bulge) {
+    return (length(p - sdfSweepStrandPoint(a, b, c, t, twist, strandOffset, phase)) - sdfSweepRadiusAt(t, radiusStart, radiusEnd, bulge));
+}
+// The sweep is the union of the spheres of radius r(t) about each strand's centre. A tube of one radius about the
+// centreline takes the closed-form nearest parameter (sdfSweepClosestT), exact for it. Any other sweep takes the least
+// gap over t: the nearest of SDF_SWEEP_SAMPLES + 1 samples, then golden-section rounds within a sample either side of it,
+// keeping the least gap any probe measured. The centreline's own nearest parameter is not the nearest sphere's once the
+// radius or the strand varies along t: the radius read there overestimates the distance and jumps where that parameter
+// crosses the centreline's medial axis.
 float sdfSweep(float3 p, float4 data0, float4 data1) {
     uint tableOffset = asuint(data0.x);
     float strandsFloat = data0.y;
@@ -658,32 +684,61 @@ float sdfSweep(float3 p, float4 data0, float4 data1) {
 
     sdfSweepCurve(tableOffset, a, b, c, radiusStart, radiusEnd, bulge);
 
-    float t = sdfSweepClosestT(p, a, b, c);
-    float3 base = sdfBezierPoint(a, b, c, t);
-    float radius = sdfSweepRadiusAt(t, radiusStart, radiusEnd, bulge);
-    float3 tangent = sdfBezierDerivative(a, b, c, t);
-    float tangentLength = length(tangent);
-    float3 tangentDir = ((tangentLength > 1e-8) ? (tangent / tangentLength) : float3(0.0, 1.0, 0.0));
-    float3 refAxis = ((abs(tangentDir.y) < 0.999) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
-    float3 u = normalize(cross(tangentDir, refAxis));
-    float3 v = cross(tangentDir, u);
     if (!isfinite(strandsFloat) || strandsFloat < 1.0 || strandsFloat > (float)SDF_MAX_SWEEP_STRANDS) { return SDF_FAR_DISTANCE; }
+    if ((radiusStart == radiusEnd) && (bulge == 0.0) && (strandOffset == 0.0)) {
+        return (length(p - sdfBezierPoint(a, b, c, sdfSweepClosestT(p, a, b, c))) - radiusStart);
+    }
+
     uint strandCount = (uint)(strandsFloat + 0.5);
     float best = SDF_FAR_DISTANCE;
+    float spacing = (1.0 / float(SDF_SWEEP_SAMPLES));
 
     for (uint strand = 0u; strand < SDF_MAX_SWEEP_STRANDS; strand++) {
         if (strand >= strandCount) { break; }
-        float phase = ((t * twist * SDF_TAU) + ((float(strand) * SDF_TAU) / float(strandCount)));
-        float sinP, cosP;
 
-        sincos(phase, sinP, cosP);
+        float phase = ((float(strand) * SDF_TAU) / float(strandCount));
+        float nearest = 0.0;
+        float nearestGap = SDF_FAR_DISTANCE;
 
-        float3 offsetPoint = (base + (strandOffset * ((u * cosP) + (v * sinP))));
+        [loop]
+        for (uint probe = 0u; (probe <= SDF_SWEEP_SAMPLES); probe++) {
+            float t = (float(probe) * spacing);
+            float gap = sdfSweepGap(p, a, b, c, t, twist, strandOffset, phase, radiusStart, radiusEnd, bulge);
 
-        best = min(best, (length(p - offsetPoint) - radius));
+            if (gap < nearestGap) {
+                nearestGap = gap;
+                nearest = t;
+            }
+        }
+
+        float low = max((nearest - spacing), 0.0);
+        float high = min((nearest + spacing), 1.0);
+        float left = lerp(low, high, 0.381966);
+        float right = lerp(low, high, 0.618034);
+        float leftGap = sdfSweepGap(p, a, b, c, left, twist, strandOffset, phase, radiusStart, radiusEnd, bulge);
+        float rightGap = sdfSweepGap(p, a, b, c, right, twist, strandOffset, phase, radiusStart, radiusEnd, bulge);
+
+        [loop]
+        for (uint refinement = 0u; (refinement < SDF_SWEEP_ROUNDS); refinement++) {
+            nearestGap = min(nearestGap, min(leftGap, rightGap));
+            if (leftGap < rightGap) {
+                high = right;
+                right = left;
+                rightGap = leftGap;
+                left = lerp(low, high, 0.381966);
+                leftGap = sdfSweepGap(p, a, b, c, left, twist, strandOffset, phase, radiusStart, radiusEnd, bulge);
+            } else {
+                low = left;
+                left = right;
+                leftGap = rightGap;
+                right = lerp(low, high, 0.618034);
+                rightGap = sdfSweepGap(p, a, b, c, right, twist, strandOffset, phase, radiusStart, radiusEnd, bulge);
+            }
+        }
+        best = min(best, min(nearestGap, min(leftGap, rightGap)));
     }
 
-    return (best - sdfSweepConservativeMargin(bulge, strandOffset, twist, radiusStart, radiusEnd));
+    return best;
 }
 // === end SDF_SHAPE_SWEEP =============================================================================================
 

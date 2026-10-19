@@ -7,46 +7,19 @@ public sealed partial class SdfProgramBuilder {
     public const int MaxSweepStrands = 4;
     /// <summary>The fewest helical strands one <see cref="Sweep"/> may declare.</summary>
     public const int MinSweepStrands = 1;
-    /// <summary>The largest admitted <c>|bulge|</c>, as a multiple of <c>max(radiusStart, radiusEnd)</c> — past this
-    /// ratio the closed-form closest-point approximation's conservative margin (calibrated over a randomized grid;
-    /// see <see cref="SweepConservativeMargin"/> and <c>SweepLawTests</c>) is no longer proven sound, so
-    /// <see cref="Sweep"/> refuses the declaration by name rather than emit a field that can overestimate true
-    /// distance.</summary>
+    /// <summary>The largest admitted <c>|bulge|</c>, as a multiple of <c>max(radiusStart, radiusEnd)</c>: the envelope
+    /// over which <c>SweepLawTests</c> holds the sweep's field (the least gap to its swept spheres) to a fine-sampled
+    /// reference tube, so <see cref="Sweep"/> refuses a declaration past it by name.</summary>
     public const float MaxSweepBulgeRatio = 16f;
     /// <summary>The largest admitted <c>|radiusEnd - radiusStart|</c>, as a multiple of
-    /// <c>min(radiusStart, radiusEnd)</c> — see <see cref="MaxSweepBulgeRatio"/>'s remarks; the same calibration
-    /// covers taper.</summary>
+    /// <c>min(radiusStart, radiusEnd)</c>: the taper envelope <see cref="MaxSweepBulgeRatio"/> describes.</summary>
     public const float MaxSweepTaperRatio = 4f;
     /// <summary>The largest admitted <see cref="Sweep"/> <c>strandOffset</c>, as a multiple of
-    /// <c>max(radiusStart, radiusEnd)</c> — see <see cref="MaxSweepBulgeRatio"/>'s remarks; a strand orbiting far
-    /// outside the tube's own radius is the combination the calibration grid found unsound even with a generous
-    /// margin, so it is decoupled from and capped tighter than the bulge ratio.</summary>
+    /// <c>max(radiusStart, radiusEnd)</c>: the strand envelope <see cref="MaxSweepBulgeRatio"/> describes.</summary>
     public const float MaxSweepStrandOffsetRatio = 2f;
-
-    // The three conservative-margin coefficients SweepConservativeMargin folds against the curve's own authored
-    // bulge/strand-offset/taper — calibrated over a randomized grid against a fine-sampled reference tube within the
-    // MaxSweepBulgeRatio/MaxSweepTaperRatio/MaxSweepStrandOffsetRatio envelope above (see SweepLawTests). KEEP IN
-    // SYNC with sdfSweepConservativeMargin (field/sdf-shapes.hlsli) and the fixed-point mirror
-    // (Puck.SignedDistance.Queries.SdfFieldEvaluator).
-    internal const float SweepBulgeMarginFactor = 1.0f;
-    internal const float SweepStrandMarginFactor = 0.7f;
-    internal const float SweepTaperMarginFactor = 0.9f;
 
     private readonly List<SdfSweepCurve> m_sweepCurves = [];
 
-    /// <summary>Returns the conservative margin <see cref="Sweep"/> subtracts from its raw closest-point-minus-radius
-    /// candidate — see <see cref="MaxSweepBulgeRatio"/>'s remarks for what this margin covers and how it was
-    /// calibrated. KEEP IN SYNC with sdfSweepConservativeMargin (field/sdf-shapes.hlsli) and the fixed-point mirror.</summary>
-    /// <param name="bulge">The mid-span radius bulge amplitude.</param>
-    /// <param name="strandOffset">The strand orbit radius.</param>
-    /// <param name="twist">The strand orbit rate, in turns.</param>
-    /// <param name="radiusStart">The sweep radius at <c>t = 0</c>.</param>
-    /// <param name="radiusEnd">The sweep radius at <c>t = 1</c>.</param>
-    /// <returns>The non-negative margin.</returns>
-    public static float SweepConservativeMargin(float bulge, float strandOffset, float twist, float radiusStart, float radiusEnd) =>
-        (((SweepBulgeMarginFactor * MathF.Abs(x: bulge)) +
-        ((SweepStrandMarginFactor * strandOffset) * (1f + MathF.Abs(x: twist)))) +
-        (SweepTaperMarginFactor * MathF.Abs(x: (radiusEnd - radiusStart))));
     /// <summary>Adds a quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as
     /// helical strands orbiting the curve — see <see cref="SdfShapeType.Sweep"/>. The control points and radius
     /// endpoints live in a side table this program's own word stream carries; the instruction's Data0.x carries only
@@ -71,8 +44,7 @@ public sealed partial class SdfProgramBuilder {
     /// positive; <paramref name="bulge"/>/<paramref name="twist"/> is not finite; <paramref name="strandOffset"/> is
     /// not finite and non-negative; <paramref name="strands"/> is outside [<see cref="MinSweepStrands"/>,
     /// <see cref="MaxSweepStrands"/>]; or <paramref name="bulge"/>/<paramref name="strandOffset"/>/the radius taper
-    /// exceeds the ratio this shape's conservative margin is calibrated against (see
-    /// <see cref="MaxSweepBulgeRatio"/>).</exception>
+    /// exceeds its admitted envelope (see <see cref="MaxSweepBulgeRatio"/>).</exception>
     public SdfProgramBuilder Sweep(Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, int strands, float twist, float strandOffset, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         RequireFinite(
             value: a,
@@ -137,21 +109,21 @@ public sealed partial class SdfProgramBuilder {
         if (MathF.Abs(x: bulge) > (MaxSweepBulgeRatio * maxRadius)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(bulge),
-                message: $"A sweep bulge magnitude ({MathF.Abs(x: bulge)}) exceeds {MaxSweepBulgeRatio} times the largest authored radius ({maxRadius}) — past this ratio the conservative margin SdfProgramBuilder.SweepConservativeMargin is calibrated against is no longer proven sound. Shrink the bulge or widen the radius."
+                message: $"A sweep bulge magnitude ({MathF.Abs(x: bulge)}) exceeds {MaxSweepBulgeRatio} times the largest authored radius ({maxRadius}), past the envelope its field is verified over. Shrink the bulge or widen the radius."
             );
         }
 
         if (MathF.Abs(x: (radiusEnd - radiusStart)) > (MaxSweepTaperRatio * minRadius)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(radiusEnd),
-                message: $"A sweep's radius taper (|{radiusEnd} - {radiusStart}|) exceeds {MaxSweepTaperRatio} times the smaller authored radius ({minRadius}) — past this ratio the conservative margin is no longer proven sound. Shrink the taper or raise the smaller radius."
+                message: $"A sweep's radius taper (|{radiusEnd} - {radiusStart}|) exceeds {MaxSweepTaperRatio} times the smaller authored radius ({minRadius}), past the envelope its field is verified over. Shrink the taper or raise the smaller radius."
             );
         }
 
         if (strandOffset > (MaxSweepStrandOffsetRatio * maxRadius)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(strandOffset),
-                message: $"A sweep strand offset ({strandOffset}) exceeds {MaxSweepStrandOffsetRatio} times the largest authored radius ({maxRadius}) — past this ratio the conservative margin is no longer proven sound. Shrink the offset or widen the radius."
+                message: $"A sweep strand offset ({strandOffset}) exceeds {MaxSweepStrandOffsetRatio} times the largest authored radius ({maxRadius}), past the envelope its field is verified over. Shrink the offset or widen the radius."
             );
         }
 

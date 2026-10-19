@@ -4,8 +4,8 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
     // A Bezier point is in its control polygon's convex hull. Enclose that hull, then add the largest positive
-    // profile radius, strand orbit and the margin SUBTRACTED by sdfSweep. Geometric containment alone is too small
-    // to lower-bound that field. This argument does not depend on the approximate closest-t solver's choice.
+    // profile radius and the strand orbit: every sphere sdfSweep takes its least gap to lies inside, whichever
+    // parameters its search probes.
     private static bool TryGetSweepBound(SdfInstruction instruction, int instructionIndex, SdfSweepCurve[] sweepCurves, out Vector3 center, out float radius) {
         center = Vector3.Zero;
         radius = 0f;
@@ -15,22 +15,6 @@ public sealed partial class SdfProgram {
             instructionIndex: instructionIndex,
             sweepCurves: sweepCurves
         )) {
-            return false;
-        }
-
-        var margin = SdfProgramBuilder.SweepConservativeMargin(
-            bulge: curve.Bulge,
-            strandOffset: instruction.Data0.W,
-            twist: instruction.Data0.Z,
-            radiusStart: curve.RadiusStart,
-            radiusEnd: curve.RadiusEnd
-        );
-
-        // sdfSweep seeds its strand minimum with SDF_FAR_DISTANCE = 1e9 (float ULP 64). At margin <= 16,
-        // subtracting the margin from that cap still rounds to 1e9, with slack for shader arithmetic. Larger margins
-        // retain full evaluation. The scalar AND dual bound tests also require runningMin <= SDF_FAR_DISTANCE:
-        // this sphere bounds the uncapped candidate, while the capped candidate cannot win under that condition.
-        if (!(margin <= 16f)) {
             return false;
         }
 
@@ -76,13 +60,13 @@ public sealed partial class SdfProgram {
             )
         ));
 
-        radius = (((((hullRadius + MathF.Max(
+        radius = ((((hullRadius + MathF.Max(
             x: curve.RadiusStart,
             y: curve.RadiusEnd
         )) + MathF.Max(
             x: curve.Bulge,
             y: 0f
-        )) + instruction.Data0.W) + margin) + coordinateSlack);
+        )) + instruction.Data0.W) + coordinateSlack);
 
         return float.IsFinite(f: radius);
     }

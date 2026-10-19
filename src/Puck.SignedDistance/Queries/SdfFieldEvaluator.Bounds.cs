@@ -857,7 +857,7 @@ public sealed partial class SdfFieldEvaluator {
                 capChamfer: instruction.Data0Z
             ) - Point(value: instruction.Data1W)),
             SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W), exponent: instruction.Data0W),
-            SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), twist: instruction.Data0Z, strandOffset: instruction.Data0W),
+            SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), strandOffset: instruction.Data0W),
             SdfShapeType.ConvexPolygon => (LiftedBounds(
                 p: p,
                 instruction: instruction,
@@ -945,11 +945,11 @@ public sealed partial class SdfFieldEvaluator {
     // SdfSweep over a box, whatever parameter the point search picks: the centreline over the whole parameter range is
     // the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset the
     // interval its rotated frame reaches. The lower bound is the box's least distance to that hull, less the largest
-    // radius and the margin. The upper bound is the lesser of the far side of that hull and, because the search starts
-    // at the curve's start and only ever moves to a point it measures nearer, the distance to that start. The search's
+    // radius. The upper bound is the lesser of the far side of that hull and, because either search measures the curve's
+    // start and only ever keeps a point it measures nearer, the distance to that start. The search's
     // own squared distances are enclosed too, so a box where they would leave the carrier answers unbounded and the
     // frame excludes it.
-    private static FixedInterval SweepBounds(IntervalVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset) {
+    private static FixedInterval SweepBounds(IntervalVector3 p, SweepCurveFixed curve, FixedQ4816 strandOffset) {
         var t = SweepParameter;
         var centre = BezierBounds(a: curve.A, b: curve.B, c: curve.C, t: t);
         var reach = new IntervalVector3(X: (p.X - centre.X), Y: (p.Y - centre.Y), Z: (p.Z - centre.Z));
@@ -966,10 +966,7 @@ public sealed partial class SdfFieldEvaluator {
         var spread = (((SweepFrameComponent * UnitRange) + (SweepFrameComponent * UnitRange)) * Point(value: strandOffset));
         var offsetCentre = new IntervalVector3(X: (centre.X + spread), Y: (centre.Y + spread), Z: (centre.Z + spread));
         var distance = new IntervalVector3(X: (p.X - offsetCentre.X), Y: (p.Y - offsetCentre.Y), Z: (p.Z - offsetCentre.Z)).Length;
-        var margin = (((Point(value: SweepBulgeMarginFactor) * FixedInterval.Abs(value: Point(value: curve.Bulge))) +
-            ((Point(value: SweepStrandMarginFactor) * Point(value: strandOffset)) * (Point(value: FixedQ4816.One) + FixedInterval.Abs(value: Point(value: twist))))) +
-            (Point(value: SweepTaperMarginFactor) * FixedInterval.Abs(value: (Point(value: curve.RadiusEnd) - Point(value: curve.RadiusStart)))));
-        var hull = ((distance - radius) - margin);
+        var hull = (distance - radius);
 
         if (hull.IsUnbounded) {
             return FixedInterval.Entire;
@@ -979,7 +976,7 @@ public sealed partial class SdfFieldEvaluator {
         // squared distance rounds strictly lower. Each rounding is half a raw, so the pick's exact squared distance is at
         // most the start's plus one raw; its root, the strand's reach and half a raw of the final root bound the answer.
         var startSquared = ((FixedInterval.Square(value: (p.X - Point(value: curve.A.X))) + FixedInterval.Square(value: (p.Y - Point(value: curve.A.Y)))) + FixedInterval.Square(value: (p.Z - Point(value: curve.A.Z))));
-        var fromStart = ((((FixedInterval.Sqrt(value: (startSquared + Point(value: FixedQ4816.Epsilon))) + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius) - margin);
+        var fromStart = (((FixedInterval.Sqrt(value: (startSquared + Point(value: FixedQ4816.Epsilon))) + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius);
 
         return (fromStart.IsUnbounded
             ? hull

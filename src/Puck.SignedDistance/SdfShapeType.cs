@@ -87,20 +87,17 @@ public enum SdfShapeType : uint {
     // radiusStart), (B.xyz, radiusEnd), (C.xyz, bulge) — fixed size, unlike ConvexPolygon's variable vertex count, so
     // no count needs packing alongside the offset.
     //
-    // Distance: "exact-enough", not exact — the closest point on the quadratic Bezier CENTERLINE (ignoring radius and
-    // strand offset) has the standard iq closed form (a depressed-cubic solve); the radius and, for strands > 1, the
-    // orbit offset are evaluated AT that one parameter t*, never re-solved for the radius-adjusted or helical
-    // objective. That approximation can overestimate true distance near strong radius/orbit variation (the same
-    // failure mode a single-sample "closest point on a fat, tapered tube" approximation always has — proven
-    // numerically over a randomized grid, see SweepLawTests and SdfProgramBuilder.Sweep's admission bounds), so the
-    // shape returns the raw candidate minus a CONSERVATIVE MARGIN derived from the curve's own authored parameters —
-    // KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin / sdfSweepConservativeMargin (field/sdf-shapes.hlsli) / the
-    // fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator. The margin is a NUMERICALLY CALIBRATED
-    // constant (like Vesica's pre-fix history), not a closed-form Lipschitz proof; SdfProgramBuilder.Sweep refuses (by name) a declaration
-    // whose bulge/taper/strand-offset ratios exceed the envelope that margin was calibrated against.
+    // Distance: the solid is the union of the spheres of radius r(t) about each strand's centre, and the field is the
+    // least gap from the point to those spheres over t, each gap 1-Lipschitz: exact outside, a bound inside. A tube of
+    // one radius about the centreline reads the closed-form nearest parameter (the standard depressed-cubic solve);
+    // any other sweep searches t (samples, then golden-section rounds about the nearest), since the centreline's own
+    // nearest parameter is not the nearest sphere's once the radius or the strand varies. KEEP IN SYNC with sdfSweep
+    // (field/sdf-shapes.hlsli) and the fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator;
+    // SdfProgramBuilder.Sweep refuses (by name) a declaration whose bulge/taper/strand-offset ratios leave the envelope
+    // SweepLawTests verifies the field over.
     //
     // Fixed-point mirror (Puck.SignedDistance.Queries.SdfFieldEvaluator): supported ONLY for strands == 1 — a single
-    // closed-form closest point on a Bezier is fine in fixed point (FixedQ4816.Pow/Sin/Cos are available), but the
+    // strand's search is fine in fixed point (FixedQ4816.Pow/Sin/Cos are available), but the
     // multi-strand orbit and its per-strand min are RENDER-ONLY and refused for deterministic field contact by name,
     // exactly like Glyph/SampledRegion are refused for reasons of their own.
     Sweep = 19,
