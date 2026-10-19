@@ -132,7 +132,7 @@ of its passes. The upload and the view's passes, in order:
 |---|---|---|
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-mesh-bake-mask.comp` | Writes each of the frame's bake lattices' instance selection; only while a bake is pending (`Skips`). |
-| `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours; only while a bake is pending. |
+| `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours, or draws as a field slice (`SdfFieldSlice`); only while a bake or a slice is pending. |
 | `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | Draw every mesh draw from the cascade's light camera into its sampled depth alone, 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. |
@@ -257,8 +257,14 @@ full binding map is in
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao`
-selects a diagnostic image (`ao` is the filtered ambient occlusion views shades with) (`DebugViewModes.Names` is the list, a sync pair with
+`world.debug-view off|depth|normals|raydir|material-id|visibility|motion|sky-cost|ao|shadow`
+selects a diagnostic image (`ao` and `shadow` are the filtered ambient occlusion and key-light visibility views shades with) (`DebugViewModes.Names` is the list, a sync pair with
 `frame/sdf-debug-modes.hlsli` and `debug/sdf-debug-views.hlsli`); `depth`
 isolates the raster. To see what a shadow cascade sees, place a camera at the
 shaded point looking along the sun direction under `material-id`.
+
+The debug views see the mesh, not the field: no pixel kernel walks the program.
+The field's own diagnostic is `world.slice` (`SdfFieldSlice`), which samples a
+plane through the bake kernel with its tetrahedral gradient and writes a PNG of
+the distance bands beside `|grad d|`; `creation.shape` reads each shape's
+exactness off its lowering without a GPU.
