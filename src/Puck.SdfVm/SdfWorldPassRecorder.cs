@@ -228,9 +228,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mask and
     // bake passes run only while the residency's bake dispatches a lattice this frame, in whichever of its views the
     // render graph records first (the mask then selects the lattice's instances, as the bake's walk reads them), so a
-    // residency whose first view is out of view still bakes, the mesh part a frame that draws no mesh, whose surface pass
-    // reads nothing of the target since its pass block's mesh draws are zero, and a shadow cascade a frame with no draw or
-    // no cascade of its own. No other part walks the field, and none skips.
+    // residency whose first view is out of view still bakes, and a shadow cascade a frame with no cascade of its own. The
+    // mesh part and a cascade with one record on a frame that draws no mesh, as before the first bake lands: their render
+    // pass clears the target the surface pass samples, which would otherwise hold no contents at all. No other part walks
+    // the field, and none skips.
     public bool Skips(in FrameContext context) {
         switch (m_part) {
             case SdfWorldPackage.Parts.Mask:
@@ -241,20 +242,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 _ = m_view.Residency.Submit(context: in context);
                 return !ClaimsBake(batch: out _);
             }
-            case SdfWorldPackage.Parts.Mesh: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                return (m_view.Residency.Submit(context: in context).MeshDrawCount == 0);
-            }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond: {
                 Follow();
                 m_owner.Begin(residency: m_view.Residency);
-                var tables = m_view.Residency.Submit(context: in context);
+                _ = m_view.Residency.Submit(context: in context);
                 var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                return ((tables.MeshDrawCount == 0) || (cascades.Count == 0) ||
+                return ((cascades.Count == 0) ||
                     ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
             }
             default:
@@ -535,18 +531,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
     // region, through the mesh pipeline; a cascade draws every mesh through the shadow pipeline into its depth,
-    // cascadeTexels a side. A frame with no draws never records (Skips).
+    // cascadeTexels a side. A frame with no draws records the render pass alone, which clears the target.
     private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels) {
         var draws = tables.MeshDraws;
-        var count = tables.MeshDrawCount;
-
-        if (
-            (count == 0) ||
-            (draws is null)
-        ) {
-            return;
-        }
-
+        var count = ((draws is null) ? 0u : tables.MeshDrawCount);
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
@@ -564,14 +552,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
-        tables.WriteMeshTables(
-            set: set,
-            slot: tables.CurrentSlot
-        );
-        tables.WriteMeshWorkCounters(
-            counters: WorkCountersOf(recording: in recording).Buffer,
-            set: set
-        );
+        if (count > 0) {
+            tables.WriteMeshTables(
+                set: set,
+                slot: tables.CurrentSlot
+            );
+            tables.WriteMeshWorkCounters(
+                counters: WorkCountersOf(recording: in recording).Buffer,
+                set: set
+            );
+        }
         // A cascade covers its whole depth, whatever the view's render extent.
         recorder.BeginRenderPass(
             area: new GpuPixelRect(
@@ -583,14 +573,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             commandBufferHandle: commandBuffer,
             framebuffer: framebuffer
         );
-        RecordMeshDraws(
-            commandBuffer: commandBuffer,
-            count: count,
-            draws: draws,
-            pipeline: pipeline,
-            recorder: recorder,
-            set: set
-        );
+        if (count > 0) {
+            RecordMeshDraws(
+                commandBuffer: commandBuffer,
+                count: count,
+                draws: draws!,
+                pipeline: pipeline,
+                recorder: recorder,
+                set: set
+            );
+        }
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
     }
     // Binds a pipeline and the pass set, then draws every draw.
