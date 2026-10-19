@@ -40,6 +40,31 @@ public sealed class AnisotropicPrimitiveLawTests {
         Assert.Empty(collection: failures);
     }
 
+    // A cylinder scaled differently in X and Z: an elliptic section extruded along its height.
+    [InlineData(0.6f, 0.9f, 0.25f)]
+    [InlineData(0.15f, 0.4f, 1.1f)]
+    [InlineData(1.3f, 0.2f, 0.02f)]
+    [Theory]
+    public void ACylinderScaledDifferentlyInXAndZAnswersItsTrueDistance(float x, float y, float z) {
+        var scale = new Vector3(x: x, y: y, z: z);
+        var evaluator = Evaluator(scale: scale, type: SdfSolidPrimitive.Cylinder);
+        var failures = new List<string>();
+
+        foreach (var point in Points(reach: (1.4f * MathF.Max(MathF.Max(x, y), z)))) {
+            var section = EllipseDistanceLawTests.Reference(px: point.X, py: point.Z, semiX: x, semiY: z);
+            var height = (Math.Abs(value: point.Y) - y);
+            var expected = (Math.Min(val1: Math.Max(val1: section, val2: height), val2: 0.0) +
+                new Vector2(x: (float)Math.Max(val1: section, val2: 0.0), y: (float)Math.Max(val1: height, val2: 0.0)).Length());
+            var actual = Distance(evaluator: evaluator, point: point);
+
+            if (!(Math.Abs(value: (actual - expected)) <= Tolerance)) {
+                failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
+            }
+        }
+
+        Assert.Empty(collection: failures);
+    }
+
     private static SdfFieldEvaluator Evaluator(SdfSolidPrimitive type, Vector3 scale) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

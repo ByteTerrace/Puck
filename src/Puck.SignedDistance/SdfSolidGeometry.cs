@@ -41,6 +41,8 @@ public static class SdfSolidGeometry {
         y: 0.5f,
         z: 0f
     );
+    // The turn that carries an extruded profile's depth axis (Z) onto a primitive's height (Y), its profile plane onto XZ.
+    private static readonly Quaternion EllipticCylinderTurn = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 2f));
     private static readonly Vector3 EllipsoidRadii = new(
         x: 1f,
         y: 1f,
@@ -696,6 +698,20 @@ public static class SdfSolidGeometry {
             material: material,
             radius: (CylinderRadius * effectiveScale.X),
             rounding: rounding,
+            smooth: smooth
+        ),
+            // A cylinder scaled differently in X and Z is the extrusion of the ellipse its section stretches into, along its
+            // height: the ellipse's extrusion axis turned onto Y, its exact distance with its rims rounded or bevelled.
+            SdfSolidPrimitive.Cylinder => chain.Rotate(rotation: EllipticCylinderTurn).Ellipse(
+            blend: blend,
+            capChamfer: chamfer,
+            detail: detail,
+            lift: SdfLift.Extrude,
+            liftAmount: (CylinderHalfHeight * effectiveScale.Y),
+            material: material,
+            rounding: rounding,
+            semiX: (CylinderRadius * effectiveScale.X),
+            semiY: (CylinderRadius * effectiveScale.Z),
             smooth: smooth
         ),
             SdfSolidPrimitive.Cone when (effectiveScale.X == effectiveScale.Z) => chain.Trapezoid(
