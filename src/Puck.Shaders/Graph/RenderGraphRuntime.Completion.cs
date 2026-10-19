@@ -12,6 +12,15 @@ public sealed partial class RenderGraphRuntime {
     private string?[] m_stale = [];
     // Whether that reason is a refusal, which only a change to what the instance was built from lifts.
     private bool[] m_staleRefused = [];
+    // The watchdog: how many render attempts in a row each instance has not shown its frame, and the reason it last
+    // narrated. A refusal narrates at once and a wait once it outlasts StallFrames attempts, each reason once, on standard
+    // error, so a host that never renders names why whatever its script waits on.
+    private int[] m_staleFrames = [];
+    private string?[] m_staleNarrated = [];
+
+    /// <summary>The render attempts in a row an instance may wait without showing its frame before the runtime narrates
+    /// why: about thirty seconds at the simulation's default rate, far past a cold boot's pipeline builds.</summary>
+    public const int StallFrames = 900;
     // Repeated producer answers reuse their named diagnostic, even after a rendered frame clears the standing.
     private string?[] m_productionReasons = [];
     private string?[] m_productionMessages = [];
@@ -31,6 +40,8 @@ public sealed partial class RenderGraphRuntime {
     private void ResetStale(int count) {
         m_stale = new string?[count];
         m_staleRefused = new bool[count];
+        m_staleFrames = new int[count];
+        m_staleNarrated = new string?[count];
         m_productionReasons = new string?[count];
         m_productionMessages = new string?[count];
         m_historySucceeded = new bool[count];
@@ -68,10 +79,16 @@ public sealed partial class RenderGraphRuntime {
     private void MarkCurrent(int index) {
         m_stale[index] = null;
         m_staleRefused[index] = false;
+        m_staleFrames[index] = 0;
+        m_staleNarrated[index] = null;
     }
     private void MarkStale(int index, string reason, bool refused = false) {
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
+        if ((refused || (++m_staleFrames[index] > StallFrames)) && !string.Equals(a: reason, b: m_staleNarrated[index], comparisonType: StringComparison.Ordinal)) {
+            m_staleNarrated[index] = reason;
+            Console.Error.WriteLine(value: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}");
+        }
     }
     // A paused node presents its exact previous image on purpose. Its readers consume that standing publication, not
     // an absent render at the latest scheduled frame.

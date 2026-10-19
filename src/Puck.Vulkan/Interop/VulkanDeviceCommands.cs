@@ -643,16 +643,23 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="handle">The native handle to destroy, or zero.</param>
     /// <param name="memoryHandle">The native <c>VkDeviceMemory</c> handle bound to it, or zero.</param>
     public void Destroy(delegate* unmanaged[Cdecl]<nint, nint, nint, void> destroy, nint handle, nint memoryHandle) {
+        // A block of the arena is the arena's alone to free: the resource's range goes back to it, and no destroy, late or
+        // repeated, frees the block itself. The range goes back BEFORE the handle is destroyed: once destroyed, a creation
+        // on another thread may be handed the same handle value, and must find no range still standing under it. A range
+        // freed under a resource that is never used again is valid.
+        if (m_arena?.Owns(memory: memoryHandle) == true) {
+            // The same field value this table resolved, so an address comparison identifies vkDestroyImage.
+            if (0 != handle) { _ = m_arena.Release(image: (((nint)destroy) == ((nint)DestroyImage)), resource: handle); }
+            Destroy(
+                destroy: destroy,
+                handle: handle
+            );
+            return;
+        }
         Destroy(
             destroy: destroy,
             handle: handle
         );
-        // A block of the arena is the arena's alone to free: the resource's range goes back to it, and no destroy, late or
-        // repeated, frees the block itself. Any other memory is the resource's own.
-        if (m_arena?.Owns(memory: memoryHandle) == true) {
-            if (0 != handle) { _ = m_arena.Release(resource: handle); }
-            return;
-        }
         Destroy(
             destroy: FreeMemory,
             handle: memoryHandle

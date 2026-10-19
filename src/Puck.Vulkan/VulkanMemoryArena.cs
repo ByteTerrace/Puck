@@ -26,7 +26,9 @@ public sealed unsafe class VulkanMemoryArena {
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<(uint Type, GpuMemoryRole Role, bool Image), List<Block>> m_pools = [];
-    private readonly Dictionary<nint, (Block Block, ulong Offset, ulong Size)> m_slices = [];
+    // Each bound resource's range, by its handle and whether it is an image: a buffer and an image may share a handle
+    // value, as a layer that wraps handles (RenderDoc) hands them out.
+    private readonly Dictionary<(nint Resource, bool Image), (Block Block, ulong Offset, ulong Size)> m_slices = [];
     // The memory of every block the arena holds, and once retired of every block it freed as it retired: no other
     // allocation reuses a retired arena's handles, since its device is being destroyed.
     private readonly HashSet<nint> m_blocks = [];
@@ -91,17 +93,18 @@ public sealed unsafe class VulkanMemoryArena {
                 chosen.Ranges.Free(offset: offset, size: requirements.Size);
                 throw;
             }
-            m_slices.Add(key: resource, value: (chosen, offset, requirements.Size));
+            m_slices.Add(key: (resource, image), value: (chosen, offset, requirements.Size));
 
             return chosen.Memory;
         }
     }
     /// <summary>Returns the memory a resource the arena bound held, once the resource is destroyed.</summary>
     /// <param name="resource">The buffer or image.</param>
+    /// <param name="image">Whether it is an image.</param>
     /// <returns>Whether the arena bound it; one it did not still owns its memory.</returns>
-    public bool Release(nint resource) {
+    public bool Release(nint resource, bool image) {
         lock (m_gate) {
-            if (!m_slices.Remove(key: resource, value: out var slice)) {
+            if (!m_slices.Remove(key: (resource, image), value: out var slice)) {
                 return false;
             }
 
@@ -127,7 +130,7 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound the resource to mapped memory.</returns>
     public bool TryMapped(nint resource, out nint pointer) {
         lock (m_gate) {
-            if (!m_retired && m_slices.TryGetValue(key: resource, value: out var slice) && (slice.Block.Mapped != 0)) {
+            if (!m_retired && m_slices.TryGetValue(key: (resource, false), value: out var slice) && (slice.Block.Mapped != 0)) {
                 pointer = (slice.Block.Mapped + ((nint)slice.Offset));
                 return true;
             }

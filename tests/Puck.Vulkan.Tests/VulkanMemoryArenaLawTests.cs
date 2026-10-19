@@ -27,6 +27,8 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
 
     [ThreadStatic] private static List<string>? Calls;
     [ThreadStatic] private static nint NextMemory;
+    // When set, a buffer's destroy records whether this arena still held its range as the driver destroyed it.
+    [ThreadStatic] private static VulkanMemoryArena? Watched;
 
     [Fact]
     public void ResourcesShareBlocksAndGiveBackTheirRanges() {
@@ -61,11 +63,28 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
 
         // A pool keeps one empty block and frees a second; a resource the arena never bound is not its to release.
         Calls.Clear();
-        Assert.False(condition: arena.Release(resource: 99));
-        Assert.True(condition: arena.Release(resource: 2));
-        Assert.True(condition: arena.Release(resource: 1));
-        Assert.True(condition: arena.Release(resource: 4));
+        Assert.False(condition: arena.Release(image: false, resource: 99));
+        Assert.True(condition: arena.Release(image: false, resource: 2));
+        Assert.True(condition: arena.Release(image: false, resource: 1));
+        Assert.True(condition: arena.Release(image: false, resource: 4));
         Assert.Equal(expected: ["free 1002"], actual: Calls);
+
+        // A buffer and an image may share a handle value, as a layer that wraps handles hands them out: each binds and
+        // releases as its own resource.
+        Calls.Clear();
+        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 3, role: GpuMemoryRole.DeviceLocal);
+        Assert.True(condition: arena.Release(image: false, resource: 3));
+        Assert.False(condition: arena.Release(image: false, resource: 3));
+        Assert.Equal(expected: ["bind buffer 3 1000 0"], actual: Calls);
+
+        // A destroy gives the range back before the driver destroys the handle, so a creation handed the same handle
+        // value the moment it is destroyed finds no range still standing under it.
+        Calls.Clear();
+        Watched = arena;
+        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 9, role: GpuMemoryRole.DeviceLocal);
+        device.Destroy(destroy: device.DestroyBuffer, handle: 9, memoryHandle: 1000);
+        Watched = null;
+        Assert.Equal(expected: ["bind buffer 9 1000 0", "destroy buffer 9 standing=False"], actual: Calls);
 
         // A failed bind gives its range back to the block, which the next resource takes.
         Calls.Clear();
@@ -89,7 +108,7 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         arena.FreeAll();
         Assert.Equal(expected: 0, actual: arena.Blocks);
         Assert.Equal(expected: ["free 1000", "free 1001", "unmap 1003", "free 1003"], actual: Calls);
-        Assert.False(condition: arena.Release(resource: 3));
+        Assert.False(condition: arena.Release(image: true, resource: 3));
     }
 
     [Fact]
@@ -191,7 +210,8 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void UnmapMemory(nint device, nint memory) => Calls!.Add(item: $"unmap {memory}");
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void DestroyBuffer(nint device, nint buffer, nint allocator) => Calls!.Add(item: $"destroy buffer {buffer}");
+    private static void DestroyBuffer(nint device, nint buffer, nint allocator) =>
+        Calls!.Add(item: ((Watched is { } arena) ? $"destroy buffer {buffer} standing={arena.Release(image: false, resource: buffer)}" : $"destroy buffer {buffer}"));
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void DestroyImage(nint device, nint image, nint allocator) => Calls!.Add(item: $"destroy image {image}");
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
