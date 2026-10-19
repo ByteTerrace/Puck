@@ -151,6 +151,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Each seat's reads of its routed authority's state mirror that are not rig operands: the perceived body's live
     // scale the chase framing follows.
     private readonly WorldStateLease[] m_seatReads = NewSeatReads();
+    // Every kit's compiled collider, indexed by kit row, for the definition it was compiled from: the volume a chase
+    // eye keeps out of when it frames a body of that kit.
+    private FixedWorldCollider?[] m_subjectColliders = [];
+    private WorldDefinition? m_subjectCollidersFor;
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot).
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
@@ -628,6 +632,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // scale: the look target's height above the root, then the eye's offset from that rescaled target (the orbit
         // radius the boom eases toward). Chase-rig-only, like the seatUp alignment below: a camera-mode application
         // frames its own subject's pose directly and is not an orbit around this body at all.
+        var perceivedBody = m_anchor.PerceivedBody(slot: slot);
+        var liveScale = 1f;
+
         if (ReferenceEquals(
             objA: rig,
             objB: chase
@@ -635,11 +642,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             var reads = m_seatReads[slot];
 
             reads.Bind(
-                bodyIndex: m_anchor.PerceivedBody(slot: slot),
+                bodyIndex: perceivedBody,
                 mirror: state
             );
 
-            var liveScale = WorldGaitDrivers.LiveBodyScale(
+            liveScale = WorldGaitDrivers.LiveBodyScale(
                 reads: reads,
                 scaleRow: definition.Population.ScaleRow
             );
@@ -666,15 +673,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // the seat's OWN frame, so its forward stays square to that up and the frame the player pushes against is the
         // frame the player is looking through. A seat standing on world up aligns by identity, so every flat world's
         // camera is untouched to the bit.
+        var seatUp = Vector3.Transform(
+            rotation: bodyOrientation,
+            value: Vector3.UnitY
+        );
+
         if (ReferenceEquals(
             objA: rig,
             objB: chase
         )) {
-            var seatUp = Vector3.Transform(
-                rotation: bodyOrientation,
-                value: Vector3.UnitY
-            );
-
             if (seatUp.LengthSquared() > 0f) {
                 var alignment = view.CarriedUpAlignment(up: seatUp);
 
@@ -708,10 +715,18 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 objB: chase
             )
         ) {
+            // The eye keeps out of the framed body as well as the static field, which holds no body.
             eye = WorldCameraClearance.Resolve(
                 desiredEye: eye,
                 field: m_client.StaticField,
-                target: target
+                subject: new WorldChaseBody(
+                    collider: SubjectCollider(body: perceivedBody),
+                    orientation: bodyOrientation,
+                    position: bodyPosition,
+                    scale: liveScale
+                ),
+                target: target,
+                up: seatUp
             );
         }
 
@@ -723,6 +738,35 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             target: target,
             viewportHeight: placed.Y,
             viewportWidth: placed.X
+        );
+    }
+    // The compiled collider of a local body's kit, or null for a body whose kit authors none.
+    private FixedWorldCollider? SubjectCollider(int body) {
+        var definition = m_client.Definition;
+
+        if (!ReferenceEquals(
+            objA: definition,
+            objB: m_subjectCollidersFor
+        )) {
+            var kits = definition.Kits;
+            var colliders = new FixedWorldCollider?[kits.Count];
+
+            for (var index = 0; (index < colliders.Length); index++) {
+                colliders[index] = FixedWorldCollider.Compile(
+                    collider: kits[index].Collider,
+                    creations: definition.Creations
+                );
+            }
+
+            m_subjectColliders = colliders;
+            m_subjectCollidersFor = definition;
+        }
+
+        var kit = m_client.Kit(index: body);
+
+        return ((kit < m_subjectColliders.Length)
+            ? m_subjectColliders[kit]
+            : null
         );
     }
     // The extent, in display pixels, of a placed rect: what a camera projects for and what a pane's frame values carry,
