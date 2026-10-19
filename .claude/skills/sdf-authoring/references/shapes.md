@@ -154,6 +154,14 @@ already fully gone a fraction of the way into its authored `from`/`to` window â€
 roughly a quarter of it for a thin plate. Back-solve the window from a measured
 capture rather than assuming `to` is where the shape disappears.
 
+A strong `flare` bulge placed far toward one end can break the field enough to
+punch holes through the baked mesh. On the moth's pods, `amount: 0.3` with
+`bulge: 0.8` opened an oval hole through two stacked plates, and the same flare
+at `bulge: 0.6` baked whole. The validator accepts it, so look at a capture
+after raising either value. For a part that widens steadily toward one end, a
+linear `flare` (`amount: 0`, `startScale` below 1) with a matching `shear` to
+keep one edge straight is safe.
+
 Creation contact emission omits `flare`, `shear`, `bumps`, and `erode`.
 This is an authoring-path omission, not a statement that their low-level VM
 operations all lack fixed-point interpreters. `cells` also leaves contact at
