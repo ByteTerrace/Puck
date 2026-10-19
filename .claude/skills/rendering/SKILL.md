@@ -230,11 +230,13 @@ owns the explanation.
   (`SdfShadowResolution`, `meshShadowTexels`) and a view holds the second slot's
   cascade only while its world holds a second stable slot
   (`SdfWorldPackage.WithShadows`).
-- **A dynamic group bakes in its slot's frame.** Its box, lattices and points are
-  slot-local, and `sdf-mesh-bake` carries every sample through the slot's
-  transform of the dispatching frame (a non-negative selector names the slot):
-  a box fixed in world space at the bake's start misses a body that moves
-  while it bakes. The contour is the mesh, already in that frame.
+- **A bake never reads the frame's transforms.** A dynamic group's box,
+  lattices and points are slot-local, and `sdf-mesh-bake` reads every transform
+  through the poses the group's geometry hashed (`SdfMeshGeometryBuilder.Poses`,
+  staged after the batch's points, named by each lattice's fourth row,
+  `SDF_MESH_BAKE_POSES`), so a mesh is a function of its geometry: a body moving
+  while it bakes bakes whole, and two boots of one device bake alike. The
+  contour is the mesh, already in that frame.
 - **Materials are point-sampled, not taken from the lattice.** Each final quad's
   quarters and vertices are sampled through `sdfMeshBakePoints` (a staged World
   table the residency writes before the upload); a quad whose quarters disagree

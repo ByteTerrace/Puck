@@ -18,12 +18,37 @@ uint4 sdfProgramWord(uint index) {
     return sdfWords[index];
 }
 #ifdef SDF_DYNAMIC_TRANSFORMS
+#include "sdf-quaternion.hlsli"
+#ifdef SDF_MESH_BAKE_POSES
+// The mesh bake samples a group through the poses its geometry hashed (SdfMeshPathBake), staged in the point table from
+// sdfBakePoseBase: the turn from world axes into the group's frame, then three rows a slot from sdfBakePoseFirst for
+// sdfBakePoseCount slots, rather than through this frame's transforms, so a mesh never depends on the frame its lattice
+// dispatched in. The bake kernel sets them per lattice.
+static uint sdfBakePoseBase = 0u;
+static uint sdfBakePoseFirst = 0u;
+static uint sdfBakePoseCount = 0u;
+#endif
 float4 sdfDynamicTransformRow(uint index) {
+#ifdef SDF_MESH_BAKE_POSES
+    if (((index / 3u) - sdfBakePoseFirst) < sdfBakePoseCount) {
+        return sdfMeshBakePoints[sdfBakePoseBase + 1u + (index - (3u * sdfBakePoseFirst))];
+    }
+#endif
     uint count;
     uint stride;
     sdfDynamicTransforms.GetDimensions(count, stride);
     if (index >= count) { return 0.0; }
     return sdfDynamicTransforms[index];
+}
+// A dynamic bound's center: its offset, along world axes as the program was emitted, from the position of the slot it
+// rides. The bake reads it in the group's frame, so it turns the offset into that frame as it reads the slot's pose.
+float3 sdfDynamicBoundCenter(float3 offset, uint slot) {
+#ifdef SDF_MESH_BAKE_POSES
+    if ((slot - sdfBakePoseFirst) < sdfBakePoseCount) {
+        return (rotatePointByQuaternion(offset, sdfMeshBakePoints[sdfBakePoseBase]) + sdfDynamicTransformRow(3u * slot).xyz);
+    }
+#endif
+    return (offset + sdfDynamicTransformRow(3u * slot).xyz);
 }
 #endif
 // Program word stream (sdfWords, each element one uint4 = 16 bytes), read-only: the program is never written. Layout:

@@ -252,6 +252,62 @@ public sealed class SdfMeshPathBakeLawTests {
 
         return best;
     }
+    // A blend group's shapes ride two slots inside one dynamic instance, its own and a second. However the frame places
+    // the pair, the group bakes through its own slot at the identity and the second where it stands relative to it, as
+    // its geometry hashed both, and never through the frame's transforms: two frames that move the pair together stage
+    // the same slot poses, so its mesh is the same on every boot and whatever the body does while it bakes.
+    [Fact]
+    public void ADynamicGroupBakesThroughThePosesItsGeometryHashedWhereverTheFramePlacesIt() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder.BeginInstanceDynamic(slot: 1, boundOffset: Vector3.Zero, boundRadius: 1f)
+            .ResetPoint()
+            .TransformDynamic(slot: 1)
+            .Box(halfExtents: new Vector3(value: 0.2f), material: material, round: 0f)
+            .ResetPoint()
+            .TransformDynamic(slot: 2)
+            .Box(halfExtents: new Vector3(value: 0.1f), material: material, round: 0f)
+            .EndInstance()
+            .Build();
+        var offset = new Vector3(x: 0.3f, y: 0.05f, z: 0f);
+        var hinge = Quaternion.CreateFromAxisAngle(angle: 0.4f, axis: Vector3.UnitX);
+
+        (SdfMeshBakeBatch Batch, SdfMeshPathBake Bake) Take(Vector3 position, Quaternion orientation) {
+            var bake = new SdfMeshPathBake { Residency = "pair" };
+            var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
+                DynamicTransforms = [default, new DynamicTransform(Orientation: orientation, Position: position), new DynamicTransform(Orientation: (orientation * hinge), Position: (position + Vector3.Transform(value: offset, rotation: orientation)))],
+                FarDistance = 100f,
+            };
+
+            _ = bake.Dress(frame: frame);
+            Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0L));
+
+            return (batch, bake);
+        }
+
+        var turn = Quaternion.CreateFromAxisAngle(angle: 2.1f, axis: Vector3.Normalize(value: new Vector3(x: 1f, y: 2f, z: 3f)));
+        var (near, _) = Take(orientation: Quaternion.Identity, position: Vector3.Zero);
+        var (far, _) = Take(orientation: turn, position: new Vector3(x: 41.7f, y: -3.2f, z: 9.9f));
+        var (first, rows) = Assert.Single(collection: near.Poses);
+        var farRows = Assert.Single(collection: far.Poses).Rows;
+
+        // The slots' rows agree; only the first row, the turn a dynamic bound's world-axis offset takes into the group's
+        // frame, follows where the frame turned the pair.
+        Assert.Equal(expected: 1, actual: first);
+        Assert.Equal(expected: rows.Span[1..].ToArray(), actual: farRows.Span[1..].ToArray());
+        Assert.Equal(expected: new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), actual: rows.Span[0]);
+        Assert.Equal(expected: Quaternion.Inverse(value: turn).W, actual: farRows.Span[0].W, tolerance: 0.0001f);
+        Assert.Equal(expected: [Vector4.Zero, new Vector4(x: 0f, y: 0f, z: 0f, w: 1f), Vector4.Zero], actual: rows.Span[1..4].ToArray());
+        Assert.Equal(expected: 0.3f, actual: rows.Span[4].X, tolerance: 0.001f);
+        Assert.Equal(expected: hinge.X, actual: rows.Span[5].X, tolerance: 0.001f);
+
+        // The poses follow the batch's points in the point table, where the lattice's fourth row names them.
+        var table = new Vector4[near.TableEntries];
+
+        Assert.True(condition: near.WritePoints(table: table));
+        Assert.Equal(expected: rows.ToArray(), actual: table.AsSpan(start: near.PoseBase(lattice: 0)).ToArray());
+        Assert.Equal(expected: (near.Samples + rows.Length), actual: near.PoseBase(lattice: 1));
+    }
     // The program: one static instance per shape with its tight bound, the second baking with the first, or with
     // `oneCopy` every shape after the first baking with the one before it.
     private static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {

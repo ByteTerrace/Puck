@@ -191,7 +191,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
             if (segmentBoundMode == SDF_BOUND_DYNAMIC) {
-                boundCenter += sdfDynamicTransformRow(3u * segmentMeta.y).xyz;
+                boundCenter = sdfDynamicBoundCenter(boundCenter, segmentMeta.y);
                 boundReady = true;
             }
 #endif
@@ -772,7 +772,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                         if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
-                            shapeBoundCenter += sdfDynamicTransformRow(3u * shapeBoundMeta.y).xyz;
+                            shapeBoundCenter = sdfDynamicBoundCenter(shapeBoundCenter, shapeBoundMeta.y);
                             shapeBoundReady = true;
                         }
 #endif

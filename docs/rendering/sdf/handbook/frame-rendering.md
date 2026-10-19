@@ -784,9 +784,13 @@ dispatches and 20,000 triangles to the bake. A boundary between two groups is
 the meshes' crossing and no cut reaches it.
 
 A dynamic group bakes in its slot's frame: its box, lattices and points are in
-that frame, and `sdf-mesh-bake` carries each sample through the slot's transform
-in the frame that dispatches it, so a body that moves while it bakes is sampled
-where it is rather than where it stood when the bake began. Its mesh stays in
+that frame, and `sdf-mesh-bake` reads every transform through the poses the
+group's geometry hashed (`SdfMeshGeometryBuilder.Poses`: each slot it reads,
+relative to its own and rounded like the geometry's key, after the turn that
+takes a dynamic bound's world-axis offset into its frame), which the batch
+stages after its points and each lattice's fourth row names. No sample reads the frame
+the lattice dispatches in, so a body that moves while it bakes bakes whole, and
+one geometry bakes one mesh on every boot of a device. Its mesh stays in
 that frame and draws at the slot's live transform, and its draw names that slot
 (`SdfMeshDraw.FrameSlot`, the draw record's word 31), which the surface pass
 writes into the visibility record so views places material layers in the body's
