@@ -35,7 +35,8 @@ float4 puckReconstructionTap(Texture2D<float4> image, int2 pixel, uint2 sourceDi
 // zero: the 4x4 neighbourhood around its bilinear origin, the fractions toward the next texel, the Catmull-Rom weights
 // along each axis and the saturated sharpness. A caller that reconstructs several quantities with one set of weights
 // (the SDF resolve's color and transport) reads each quantity's taps where puckReconstructionReads says, at
-// puckReconstructionTapOffset from the origin, and combines each with puckReconstructionCombine.
+// puckReconstructionTapOffset from the origin, adds each to its own PuckReconstructionSum as it reads it and finishes
+// each with puckReconstructionFinish.
 struct PuckReconstructionFootprint {
     int2 origin;
     float2 f;
@@ -66,46 +67,70 @@ bool puckReconstructionReads(PuckReconstructionFootprint footprint, uint tap) {
 
     return ((footprint.sharpness > 0.0) || (all(cell >= 1u) && all(cell <= 2u)));
 }
-// Combines a footprint's taps: bilinear over the central four at sharpness 0, blending to clamped Catmull-Rom over all
-// sixteen at sharpness 1. A tap the footprint does not read is ignored.
-float4 puckReconstructionCombine(PuckReconstructionFootprint footprint, float4 taps[16]) {
-    float4 c00 = taps[5];
-    float4 c10 = taps[6];
-    float4 c01 = taps[9];
-    float4 c11 = taps[10];
-    float2 f = footprint.f;
-    float4 bilinear = lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
+// A reconstruction in progress: the taps read so far, weighted for the bilinear and the Catmull-Rom result, and the
+// central four's bounds, which clamp the cubic. Adding taps one at a time holds four values a quantity where the
+// sixteen taps would hold sixteen; with a loop unrolled over the taps every weight below folds to a constant choice.
+struct PuckReconstructionSum {
+    float4 bilinear;
+    float4 cubic;
+    float4 low;
+    float4 high;
+};
+PuckReconstructionSum puckReconstructionSumStart() {
+    PuckReconstructionSum sum;
 
+    sum.bilinear = float4(0.0, 0.0, 0.0, 0.0);
+    sum.cubic = float4(0.0, 0.0, 0.0, 0.0);
+    sum.low = float4(3.402823e+38, 3.402823e+38, 3.402823e+38, 3.402823e+38);
+    sum.high = -sum.low;
+
+    return sum;
+}
+// Adds a footprint tap's value: above sharpness 0 its Catmull-Rom weight is its column's times its row's, and each of
+// the central four also takes its bilinear weight and bounds the clamp. A tap the footprint does not read adds a zero
+// value.
+void puckReconstructionAdd(PuckReconstructionFootprint footprint, uint tap, float4 value, inout PuckReconstructionSum sum) {
+    uint2 cell = uint2((tap & 3u), (tap >> 2u));
+
+    if (footprint.sharpness > 0.0) {
+        sum.cubic += ((footprint.wx[cell.x] * footprint.wy[cell.y]) * value);
+    }
+    if (all(cell >= 1u) && all(cell <= 2u)) {
+        float2 weight = float2(
+            ((cell.x == 1u) ? (1.0 - footprint.f.x) : footprint.f.x),
+            ((cell.y == 1u) ? (1.0 - footprint.f.y) : footprint.f.y)
+        );
+
+        sum.bilinear += ((weight.x * weight.y) * value);
+        sum.low = min(sum.low, value);
+        sum.high = max(sum.high, value);
+    }
+}
+// Finishes a reconstruction: bilinear over the central four at sharpness 0, blending to clamped Catmull-Rom over all
+// sixteen at sharpness 1.
+float4 puckReconstructionFinish(PuckReconstructionFootprint footprint, PuckReconstructionSum sum) {
     if (footprint.sharpness == 0.0) {
-        return bilinear;
+        return sum.bilinear;
     }
 
-    float4 wx = footprint.wx;
-    float4 wy = footprint.wy;
-    float4 row0 = (wx.x * taps[0]) + (wx.y * taps[1]) + (wx.z * taps[2]) + (wx.w * taps[3]);
-    float4 row1 = (wx.x * taps[4]) + (wx.y * c00) + (wx.z * c10) + (wx.w * taps[7]);
-    float4 row2 = (wx.x * taps[8]) + (wx.y * c01) + (wx.z * c11) + (wx.w * taps[11]);
-    float4 row3 = (wx.x * taps[12]) + (wx.y * taps[13]) + (wx.z * taps[14]) + (wx.w * taps[15]);
-    float4 cubic = ((((wy.x * row0) + (wy.y * row1)) + (wy.z * row2)) + (wy.w * row3));
-    float4 neighborhoodMin = min(min(c00, c10), min(c01, c11));
-    float4 neighborhoodMax = max(max(c00, c10), max(c01, c11));
-
-    return lerp(bilinear, clamp(cubic, neighborhoodMin, neighborhoodMax), footprint.sharpness);
+    return lerp(sum.bilinear, clamp(sum.cubic, sum.low, sum.high), footprint.sharpness);
 }
 // Reconstructs at a continuous source position in texel units, the first texel's center at zero: bilinear over the four
 // nearest texels at sharpness 0, blending to clamped Catmull-Rom over the sixteen nearest at sharpness 1.
 float4 puckReconstructAtWithin(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness, uint4 current) {
     PuckReconstructionFootprint footprint = puckReconstructionFootprintAt(sourcePos, sourceDims, sharpness);
-    float4 taps[16];
+    PuckReconstructionSum sum = puckReconstructionSumStart();
 
     [unroll] for (uint tap = 0u; tap < 16u; tap++) {
-        taps[tap] = float4(0.0, 0.0, 0.0, 0.0);
+        float4 value = float4(0.0, 0.0, 0.0, 0.0);
+
         if (puckReconstructionReads(footprint, tap)) {
-            taps[tap] = puckReconstructionTapWithin(image, (footprint.origin + puckReconstructionTapOffset(tap)), sourceDims, sourceOrigin, current);
+            value = puckReconstructionTapWithin(image, (footprint.origin + puckReconstructionTapOffset(tap)), sourceDims, sourceOrigin, current);
         }
+        puckReconstructionAdd(footprint, tap, value, sum);
     }
 
-    return puckReconstructionCombine(footprint, taps);
+    return puckReconstructionFinish(footprint, sum);
 }
 float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
     return puckReconstructAtWithin(image, sourcePos, sourceDims, sourceOrigin, sharpness, PuckReconstructionAllCurrent);

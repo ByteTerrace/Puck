@@ -139,21 +139,24 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
     }
 
     PuckReconstructionFootprint footprint = puckReconstructionFootprintAt(position, render, passGroup.upscaleSharpness);
-    float4 colors[16];
-    float4 transports[16];
+    PuckReconstructionSum colors = puckReconstructionSumStart();
+    PuckReconstructionSum transports = puckReconstructionSumStart();
 
     [unroll] for (uint tap = 0u; tap < 16u; tap++) {
-        colors[tap] = float4(0.0, 0.0, 0.0, 0.0);
-        transports[tap] = float4(0.0, 0.0, 0.0, 0.0);
+        float4 tapColor = float4(0.0, 0.0, 0.0, 0.0);
+        float4 tapTransport = float4(0.0, 0.0, 0.0, 0.0);
+
         if (puckReconstructionReads(footprint, tap)) {
             int2 at = (footprint.origin + puckReconstructionTapOffset(tap));
 
-            colors[tap] = puckReconstructionTapWithin(currentColor, at, render, uint2(0, 0), current);
-            transports[tap] = sdfResolveTransportAt(at, render, colors[tap].a, origin, direction);
+            tapColor = puckReconstructionTapWithin(currentColor, at, render, uint2(0, 0), current);
+            tapTransport = sdfResolveTransportAt(at, render, tapColor.a, origin, direction);
         }
+        puckReconstructionAdd(footprint, tap, tapColor, colors);
+        puckReconstructionAdd(footprint, tap, tapTransport, transports);
     }
-    color = puckReconstructionCombine(footprint, colors);
-    transport = puckReconstructionCombine(footprint, transports);
+    color = puckReconstructionFinish(footprint, colors);
+    transport = puckReconstructionFinish(footprint, transports);
     word = sdfPackTransport(transport);
 }
 

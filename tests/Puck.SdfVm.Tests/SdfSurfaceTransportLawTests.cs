@@ -261,10 +261,12 @@ public sealed partial class SdfSurfaceTransportLawTests {
 
         // Views leaves each hit's color through the atmosphere's transmittance along its own ray.
         Assert.Contains(actualString: views, expectedSubstring: "sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t)");
-        // The spatial path reads each transport tap beside its color tap and combines both over one footprint.
-        Assert.Matches(actualString: resolve, expectedRegexPattern: @"colors\[tap\] = puckReconstructionTapWithin\(currentColor, at,[^;]*;\s*transports\[tap\] = sdfResolveTransportAt\(at, render, colors\[tap\]\.a, origin, direction\);");
-        Assert.Contains(actualString: resolve, expectedSubstring: "color = puckReconstructionCombine(footprint, colors);");
-        Assert.Contains(actualString: resolve, expectedSubstring: "transport = puckReconstructionCombine(footprint, transports);");
+        // The spatial path reads each transport tap beside its color tap and sums both over one footprint.
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"tapColor = puckReconstructionTapWithin\(currentColor, at,[^;]*;\s*tapTransport = sdfResolveTransportAt\(at, render, tapColor\.a, origin, direction\);");
+        Assert.Contains(actualString: resolve, expectedSubstring: "puckReconstructionAdd(footprint, tap, tapColor, colors);");
+        Assert.Contains(actualString: resolve, expectedSubstring: "puckReconstructionAdd(footprint, tap, tapTransport, transports);");
+        Assert.Contains(actualString: resolve, expectedSubstring: "color = puckReconstructionFinish(footprint, colors);");
+        Assert.Contains(actualString: resolve, expectedSubstring: "transport = puckReconstructionFinish(footprint, transports);");
         // The temporal path accumulates it with the Gaussian weights, and its history with the history color's.
         Assert.Contains(actualString: resolve, expectedSubstring: "transportSum += (weight * transport);");
         Assert.Contains(actualString: resolve, expectedSubstring: "rowTransport += (wx[x] * sdfUnpackTransport(");

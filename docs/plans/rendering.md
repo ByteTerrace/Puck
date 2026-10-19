@@ -6195,7 +6195,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      sample's own ray distance and premultiplied by its coverage: the fog's
      in-scatter weight, coverage times one minus transmittance, and coverage
      over distance. The resolve reads each transport tap beside its color tap
-     over one footprint (`reconstruction.hlsli`'s footprint and combine), and
+     over one footprint (`reconstruction.hlsli`'s footprint and running sum), and
      accumulates it with the Gaussian and history weights color has, so a
      pixel's fog is its samples' coverage-weighted fog exactly. Media clip at
      the harmonic mean of the samples' distances, exact for a footprint of one
