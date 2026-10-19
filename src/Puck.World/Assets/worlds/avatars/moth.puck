@@ -4525,7 +4525,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-left" {
         id: 990
         position [0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.097, 0.33, 0.109]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -4549,7 +4549,7 @@ prototypes {
         scale [0.162, 0.112, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
-        smooth: 0.012
+        smooth: 0.006
         group: 76
         parent: "shin-left"
         profile {
@@ -4610,7 +4610,7 @@ prototypes {
         scale [0.132, 0.117, 0.226]
         material: shinCream
         blend: "SmoothSubtraction"
-        smooth: 0.01
+        smooth: 0.006
         group: 80
         parent: "shin-left"
         profile {
@@ -5457,7 +5457,7 @@ prototypes {
         id: 1135
         position [0.232, 0.8746, -0.3066]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
-        scale [0.1562, 0.0971, 0.0234]
+        scale [0.1321, 0.0822, 0.0234]
         material: charcoal
         group: 96
         parent: "pod-left"
@@ -5484,7 +5484,7 @@ prototypes {
         id: 1137
         position [0.2172, 0.8571, -0.3114]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
-        scale [0.1421, 0.0831, 0.0125]
+        scale [0.1181, 0.0682, 0.0125]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -5501,7 +5501,7 @@ prototypes {
         id: 1138
         position [0.2236, 0.8647, -0.3093]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
-        scale [0.0703, 0.0437, 0.0055]
+        scale [0.0595, 0.037, 0.0055]
         material: cyan
         parent: "nozzle-left"
         exponent: softness
@@ -5511,10 +5511,54 @@ prototypes {
         id: 1139
         position [0.2212, 0.8617, -0.3101]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
-        scale [0.0281, 0.0175, 0.0047]
+        scale [0.0238, 0.0148, 0.0047]
         material: glow
         parent: "nozzle-left"
         exponent: softness
+      }
+
+      shape Prism "nozzleLip-left" {
+        id: 1140
+        position [0.229, 0.8711, -0.3075]
+        rotation [-0.5959, 0.2037, -0.28, 0.7246]
+        scale [0.154, 0.104, 0.0156]
+        material: gunmetal
+        group: 97
+        parent: "pod-left"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        taper: 1
+        rounding: 0.006
+      }
+
+      shape Prism "nozzleLipHole-left" {
+        id: 1141
+        position [0.229, 0.8711, -0.3075]
+        rotation [-0.5959, 0.2037, -0.28, 0.7246]
+        scale [0.1353, 0.0853, 0.0312]
+        material: gunmetal
+        blend: "SmoothSubtraction"
+        smooth: 0.003
+        group: 97
+        parent: "pod-left"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        taper: 1
+      }
+
+      shape Box "nozzleLipClip-left" {
+        id: 1142
+        position [1.04, 1.13, -0.4239]
+        rotation [0, 0, 0, 1]
+        scale [1, 1, 0.2391]
+        material: gunmetal
+        blend: "Intersection"
+        group: 97
+        parent: "pod-left"
       }
 
       shape Cylinder "podHinge-left" {
@@ -6120,7 +6164,7 @@ prototypes {
       shape Superellipsoid "archBandHollow-right" {
         id: 991
         position [-0.2, 0.4265, 0.0125]
-        scale [0.097, 0.42, 0.109]
+        scale [0.097, 0.33, 0.109]
         material: shinCream
         blend: "SmoothSubtraction"
         smooth: 0.008
@@ -6144,7 +6188,7 @@ prototypes {
         scale [0.162, 0.112, 0.3]
         material: shinCream
         blend: "SmoothSubtraction"
-        smooth: 0.012
+        smooth: 0.006
         group: 78
         parent: "shin-right"
         profile {
@@ -6205,7 +6249,7 @@ prototypes {
         scale [0.132, 0.117, 0.226]
         material: shinCream
         blend: "SmoothSubtraction"
-        smooth: 0.01
+        smooth: 0.006
         group: 81
         parent: "shin-right"
         profile {
@@ -7052,7 +7096,7 @@ prototypes {
         id: 1235
         position [-0.232, 0.8746, -0.3066]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
-        scale [0.1562, 0.0971, 0.0234]
+        scale [0.1321, 0.0822, 0.0234]
         material: charcoal
         group: 106
         parent: "pod-right"
@@ -7079,7 +7123,7 @@ prototypes {
         id: 1237
         position [-0.2172, 0.8571, -0.3114]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
-        scale [0.1421, 0.0831, 0.0125]
+        scale [0.1181, 0.0682, 0.0125]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -7096,7 +7140,7 @@ prototypes {
         id: 1238
         position [-0.2236, 0.8647, -0.3093]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
-        scale [0.0703, 0.0437, 0.0055]
+        scale [0.0595, 0.037, 0.0055]
         material: cyan
         parent: "nozzle-right"
         exponent: softness
@@ -7106,10 +7150,54 @@ prototypes {
         id: 1239
         position [-0.2212, 0.8617, -0.3101]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
-        scale [0.0281, 0.0175, 0.0047]
+        scale [0.0238, 0.0148, 0.0047]
         material: glow
         parent: "nozzle-right"
         exponent: softness
+      }
+
+      shape Prism "nozzleLip-right" {
+        id: 1240
+        position [-0.229, 0.8711, -0.3075]
+        rotation [-0.28, 0.7246, -0.5959, 0.2037]
+        scale [0.154, 0.104, 0.0156]
+        material: gunmetal
+        group: 107
+        parent: "pod-right"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        taper: 1
+        rounding: 0.006
+      }
+
+      shape Prism "nozzleLipHole-right" {
+        id: 1241
+        position [-0.229, 0.8711, -0.3075]
+        rotation [-0.28, 0.7246, -0.5959, 0.2037]
+        scale [0.1353, 0.0853, 0.0312]
+        material: gunmetal
+        blend: "SmoothSubtraction"
+        smooth: 0.003
+        group: 107
+        parent: "pod-right"
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 1
+        }
+        taper: 1
+      }
+
+      shape Box "nozzleLipClip-right" {
+        id: 1242
+        position [-1.04, 1.13, -0.4239]
+        rotation [0, 1, 0, 0]
+        scale [1, 1, 0.2391]
+        material: gunmetal
+        blend: "Intersection"
+        group: 107
+        parent: "pod-right"
       }
 
       shape Cylinder "podHinge-right" {
