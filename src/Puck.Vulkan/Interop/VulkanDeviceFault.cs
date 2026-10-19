@@ -3,7 +3,8 @@ using Puck.Vulkan.Bindings;
 
 namespace Puck.Vulkan.Interop;
 
-/// <summary>Retrieves and retains one lost device's driver diagnostics without submitting more GPU work.</summary>
+/// <summary>Retrieves and retains one lost device's driver diagnostics without submitting more GPU work: the fault
+/// report and, when the device records them, its breadcrumbs (<see cref="VulkanDeviceCheckpoints"/>).</summary>
 public sealed unsafe class VulkanDeviceFault {
     /// <summary>The optional device extension.</summary>
     public const string ExtensionName = "VK_EXT_device_fault";
@@ -14,6 +15,7 @@ public sealed unsafe class VulkanDeviceFault {
     private readonly delegate* unmanaged[Cdecl]<nint, VkDeviceFaultCountsExt*, VkDeviceFaultInfoExt*, VkResult> m_query;
     private readonly Lock m_lock = new();
     private readonly string? m_unavailable;
+    private readonly VulkanDeviceCheckpoints? m_checkpoints;
 
     private string? m_report;
 
@@ -25,8 +27,10 @@ public sealed unsafe class VulkanDeviceFault {
     /// <param name="device">The owning device handle.</param>
     /// <param name="procedures">The device's procedure resolver.</param>
     /// <param name="enabled">Whether device creation enabled the extension and feature.</param>
-    public VulkanDeviceFault(nint device, VulkanProcResolver procedures, bool enabled) {
+    /// <param name="checkpoints">The device's breadcrumbs, read after the fault report, or <see langword="null"/>.</param>
+    public VulkanDeviceFault(nint device, VulkanProcResolver procedures, bool enabled, VulkanDeviceCheckpoints? checkpoints = null) {
         m_device = device;
+        m_checkpoints = checkpoints;
         if (enabled) {
             m_query = ((delegate* unmanaged[Cdecl]<nint, VkDeviceFaultCountsExt*, VkDeviceFaultInfoExt*, VkResult>)procedures.ResolveOptionalDeviceProc(
                 deviceHandle: device, functionName: "vkGetDeviceFaultInfoEXT"u8));
@@ -36,11 +40,15 @@ public sealed unsafe class VulkanDeviceFault {
 
     /// <summary>Returns the driver's report after <c>VK_ERROR_DEVICE_LOST</c>. Query failures remain diagnostic text,
     /// so they cannot replace the original device-loss exception. The first report is retained for later failures.</summary>
-    /// <returns>The fault description, typed addresses and vendor records, or why they could not be read.</returns>
+    /// <returns>The fault description, typed addresses and vendor records, then the breadcrumbs, or why they could not be
+    /// read.</returns>
     public string ReadAfterDeviceLoss() {
         lock (m_lock) {
             if (m_report is not null) { return m_report; }
             try { m_report = Query(); } catch (Exception exception) { m_report = $"VK_EXT_device_fault query failed: {exception.GetType().Name}: {exception.Message}"; }
+            if (m_checkpoints is not null) {
+                try { m_report += $"\n{m_checkpoints.Read()}"; } catch (Exception exception) { m_report += $"\n{VulkanDeviceCheckpoints.ExtensionName} query failed: {exception.GetType().Name}: {exception.Message}"; }
+            }
             return m_report;
         }
     }

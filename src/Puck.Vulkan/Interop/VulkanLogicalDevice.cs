@@ -64,6 +64,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
         GraphicsQueue = graphicsQueue;
         PresentQueue = presentQueue;
         m_logicalDeviceApi = logicalDeviceApi;
+        device.Checkpoints.Watch(queue: graphicsQueue.Handle);
     }
 
     /// <summary>Destroys the owned device, then ends its entries in the device-local memory counts. Safe to call more

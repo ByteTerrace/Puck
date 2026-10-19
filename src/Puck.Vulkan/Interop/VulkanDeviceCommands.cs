@@ -211,7 +211,8 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <see langword="null"/> to count none.</param>
     /// <exception cref="InvalidOperationException">The device does not expose a required core entry point.</exception>
     /// <param name="deviceFaultEnabled">Whether the device was created with deviceFault enabled.</param>
-    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false) {
+    /// <param name="checkpointsEnabled">Whether the device was created with <see cref="VulkanDeviceCheckpoints.ExtensionName"/>.</param>
+    public VulkanDeviceCommands(nint deviceHandle, VulkanProcResolver procedures, GpuDeviceMemoryWork? memory = null, bool deviceFaultEnabled = false, bool checkpointsEnabled = false) {
         ArgumentNullException.ThrowIfNull(argument: procedures);
 
         VulkanArgument.RequireHandle(
@@ -221,7 +222,8 @@ public sealed unsafe class VulkanDeviceCommands {
         );
 
         Handle = deviceHandle;
-        Fault = new VulkanDeviceFault(device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
+        Checkpoints = new VulkanDeviceCheckpoints(device: deviceHandle, enabled: checkpointsEnabled, procedures: procedures);
+        Fault = new VulkanDeviceFault(checkpoints: Checkpoints, device: deviceHandle, enabled: deviceFaultEnabled, procedures: procedures);
         Timestamps = new VulkanTimestampCommands(deviceHandle: deviceHandle, procedures: procedures);
         Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
@@ -586,6 +588,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public nint Handle { get; }
     /// <summary>Gets the diagnostics queried only after this device is lost.</summary>
     public VulkanDeviceFault Fault { get; }
+    /// <summary>Gets the device's per-pass breadcrumbs, which its device-loss report reads.</summary>
+    public VulkanDeviceCheckpoints Checkpoints { get; }
     /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
     /// when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }

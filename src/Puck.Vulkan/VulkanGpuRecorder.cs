@@ -125,12 +125,15 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             device: Device
         ).ThrowIfFailed(device: Device, operation: "vkBeginCommandBuffer");
     /// <inheritdoc/>
-    public void BeginDebugGroup(nint commandBufferHandle, string label) =>
+    /// <remarks>The label is also the device's breadcrumb (<see cref="VulkanDeviceCheckpoints"/>).</remarks>
+    public void BeginDebugGroup(nint commandBufferHandle, string label) {
         recordingApi.BeginDebugLabel(
             commandBufferHandle: commandBufferHandle,
             device: Device,
             label: label
         );
+        Device.Checkpoints.Mark(commandBuffer: commandBufferHandle, label: label);
+    }
     /// <inheritdoc/>
     /// <remarks>The group is the set number, <c>firstSet</c>. A set's own group is the one
     /// <see cref="VulkanLogicalDevice.SetGroups"/> recorded when it was allocated.</remarks>

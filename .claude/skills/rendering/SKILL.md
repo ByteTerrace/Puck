@@ -375,7 +375,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   timestamps are recorded only under `world.gpu-timing`; read pass times there,
   beside the capture. A removed
   Direct3D 12 device prints its DRED record as `[d3d12-dred]` lines;
-  `gpu.faults remove` removes one on purpose.
+  `gpu.faults remove` removes one on purpose. A lost Vulkan device reports
+  `VK_EXT_device_fault` and its last pass checkpoints
+  (`VK_NV_device_diagnostic_checkpoints`) in the loss's message.
 - Under `--debug-layers`, any `[vulkan-debug] validation`, `SYNC-HAZARD-*` or
   `[d3d12-debug]` line is a bug to fix in the engine, never a message to filter.
   `--debug-layers full` adds Direct3D 12 GPU-based validation and Vulkan

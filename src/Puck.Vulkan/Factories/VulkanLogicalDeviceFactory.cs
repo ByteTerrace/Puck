@@ -193,6 +193,14 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             featureStructureTypes.Add(item: VulkanDeviceFault.FeatureStructureType);
         }
         Console.Error.WriteLine(value: $"[device-fault] VK_EXT_device_fault {(deviceFault ? "ENABLED" : "unavailable")}");
+
+        var checkpoints = m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: VulkanDeviceCheckpoints.ExtensionName, instance: instance, physicalDeviceHandle: physicalDeviceHandle);
+
+        if (checkpoints) {
+            extensions.Add(item: VulkanDeviceCheckpoints.ExtensionName);
+        }
+        Console.Error.WriteLine(value: $"[device-fault] {VulkanDeviceCheckpoints.ExtensionName} {(checkpoints ? "ENABLED" : "unavailable")}");
         if (SupportsPipelineExecutableProperties(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
