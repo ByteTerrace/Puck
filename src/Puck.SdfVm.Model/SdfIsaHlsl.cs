@@ -216,6 +216,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MAX_NOISE_OCTAVES", value: SdfProgramBuilder.MaxNoiseOctaves);
         declarations.Count(name: "SDF_MAX_SWEEP_STRANDS", value: SdfProgramBuilder.MaxSweepStrands);
         declarations.Count(name: "SDF_MAX_CONVEX_VERTICES", value: SdfPrismProfile.MaxConvexVertices);
+        declarations.Count(name: "SDF_CONVEX_COUNT_BITS", value: SdfPrismProfile.ConvexCountBits);
         declarations.Count(name: "SDF_MAX_PATH_EDGES", value: SdfPathProfile.MaxEdges);
         declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
         declarations.Real(name: "SDF_SCREEN_EMISSION_DIRECT_GAIN", value: SdfScreenEmission.DirectGain);

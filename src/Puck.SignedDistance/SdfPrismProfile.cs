@@ -32,10 +32,23 @@ public enum SdfPrismProfileKind {
 /// coincident or collinear vertices, and convex. Ignored by every other kind.</param>
 /// <param name="Path">Required only for Path; its points are normalized profile coordinates.</param>
 public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadius = 0.15f, int Sides = 6, IReadOnlyList<Vector2>? Vertices = null, SdfPathProfile? Path = null) {
-    /// <summary>The most vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry — the side table's
-    /// per-shape budget (<see cref="SdfProgramBuilder.MaxConvexPolygonWordsPerShape"/> covers it) and the packed
-    /// instruction's 4-bit vertex-count lane.</summary>
-    public const int MaxConvexVertices = 8;
+    /// <summary>The most vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry: as many as a
+    /// <see cref="SdfPrismProfileKind.Polygon"/> has sides, so every regular polygon lowers to the convex polygon of its
+    /// scaled vertices, which the fixed-point evaluator answers exactly at any scale. The side table's per-shape budget
+    /// (<see cref="SdfProgramBuilder.MaxConvexPolygonWordsPerShape"/>) covers it, and the packed instruction's
+    /// vertex-count lane (<see cref="ConvexCountBits"/>) holds it less one.</summary>
+    public const int MaxConvexVertices = 32;
+    /// <summary>The low bits of a <see cref="SdfShapeType.ConvexPolygon"/> instruction's packed reference that hold its
+    /// vertex count less one; the bits above hold its table's first vector (<see cref="PackConvexReference"/>).</summary>
+    public const int ConvexCountBits = 5;
+    /// <summary>Packs a <see cref="SdfShapeType.ConvexPolygon"/> instruction's reference to its vertex table: the table's
+    /// first vector above <see cref="ConvexCountBits"/> bits of the vertex count less one. KEEP IN SYNC with
+    /// sdfConvexPolygonSolid in field/sdf-shapes.hlsli.</summary>
+    /// <param name="tableVector">The table's first vector in the packed program.</param>
+    /// <param name="count">The vertex count, from <see cref="MinConvexVertices"/> through <see cref="MaxConvexVertices"/>.</param>
+    /// <returns>The packed reference.</returns>
+    public static uint PackConvexReference(int tableVector, int count) =>
+        ((((uint)tableVector) << ConvexCountBits) | ((uint)(count - 1)));
     /// <summary>The fewest vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry.</summary>
     public const int MinConvexVertices = 3;
 

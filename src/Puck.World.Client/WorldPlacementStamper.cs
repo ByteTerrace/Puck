@@ -444,6 +444,7 @@ public static class WorldPlacementStamper {
                 );
 
                 var emitted = 0;
+                var previousWarped = false;
 
                 for (var shapeIndex = 0; (shapeIndex < creation.Shapes!.Count); shapeIndex++) {
                     var shape = creation.Shapes[shapeIndex];
@@ -464,11 +465,19 @@ public static class WorldPlacementStamper {
 
                     // The copy's shapes keep their tight instances but bake as one mesh, their union, so two plates
                     // that share a face draw it once rather than fighting over it. The copy's first emitted shape opens
-                    // the union, so a hidden first shape never joins this copy to the previous one.
+                    // the union, so a hidden first shape never joins this copy to the previous one. A warped shape bakes
+                    // alone, and so does the shape after it: its scope divides its field by its warp's bound, so beside an
+                    // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
+                    // closes into slabs across the neighbour.
+                    var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null));
+
                     _ = builder.BeginInstance(
-                        bakesWithPrevious: (emitted++ > 0),
+                        bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
-                        boundRadius: (boundRadius + PlacementBoundMargin)
+                        boundRadius: (boundRadius + PlacementBoundMargin),
+                        // Cellular relief creases along every cell wall, so it declares a thirty-second of its cell as
+                        // the detail its whole surface bakes at.
+                        detail: ((shape.Cells is { } cells) ? ((placement.Scale / cells.Frequency) / 32f) : 0f)
                     );
                     CreationStampEmitter.EmitShapeStamp(
                         builder: builder,
@@ -483,6 +492,7 @@ public static class WorldPlacementStamper {
                         paletteIds: paletteIds
                     );
                     _ = builder.EndInstance();
+                    previousWarped = warped;
                 }
 
                 // Embossed text bakes as a group of its own, refined to its glyphs' detail: inside the shapes' union its

@@ -277,9 +277,39 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: $"[world.view {seat}: seat {seat} has no authority claim — this world declares fewer local seats]");
                 }
 
+                // The clock the seat's world presents by: its step and the spread of its snapshots' arrivals.
+                Span<double> intervals = stackalloc double[63];
+                var count = seatLocation.Endpoint.Mirror.SnapshotArrivalIntervals(milliseconds: intervals);
+                var clock = "clock: no snapshots yet";
+
+                if (count > 0) {
+                    var held = intervals[..count];
+                    var mean = 0.0;
+                    var low = double.MaxValue;
+                    var high = 0.0;
+
+                    foreach (var interval in held) {
+                        mean += interval;
+                        low = Math.Min(val1: low, val2: interval);
+                        high = Math.Max(val1: high, val2: interval);
+                    }
+                    mean /= count;
+
+                    var spread = 0.0;
+
+                    foreach (var interval in held) {
+                        spread += ((interval - mean) * (interval - mean));
+                    }
+
+                    clock = string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"clock: step {(seatLocation.Endpoint.Mirror.StepSeconds * 1000f):0.0} ms, {count} arrivals {mean:0.0} ms apart (min {low:0.0} max {high:0.0} sd {Math.Sqrt(spread / count):0.0}), alpha {seatLocation.Endpoint.InterpolationAlpha:0.00}"
+                    );
+                }
+
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.view {seat}: {seatLocation.Endpoint.Identity}:{(seatLocation.EntityIndex + 1)}@{seatLocation.Epoch}]"
+                    handler: $"[world.view {seat}: {seatLocation.Endpoint.Identity}:{(seatLocation.EntityIndex + 1)}@{seatLocation.Epoch} {clock}]"
                 ));
             },
             routing: CommandRouting.Immediate

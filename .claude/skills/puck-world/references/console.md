@@ -503,6 +503,18 @@ buffered this tick — fence with world.wait`), or a patch fault refuses by
 name and submits nothing. No `--write`: writing to disk stays `world.save`.
 Laws: `WorldSculptCommandModuleLawTests`.
 
+**`creation.shape` reads, `world.slice` looks.** `creation.shape <prototype>
+[<shape-name>...]` (`WorldShapeLawCommandModule`, through the acting
+principal's read view, headless too) answers each shape's law from
+`CreationShapeLaws`: its lowering, `distance=exact|bound|uncertified`, the
+fixed-point evaluator's and contact's verdicts; `puck creation shape` is the
+offline twin. `world.slice` (`WorldSliceCommandModule`, presentation only)
+samples a plane of the live residency's field through the bake and writes the
+distance and `|grad d|` panels to a PNG, its statistics on stderr as
+`[world.slice] … -> <path>`; `world.wait bakes <seconds>` fences it. Laws:
+`WorldShapeLawCommandModuleLawTests`, `WorldSliceCommandModuleLawTests`,
+`SdfFieldSliceLawTests`.
+
 ### Field and list-element doors — one level inside a row
 
 Four more verbs, all in `WorldRowCommandModule`, address ONE FIELD or ONE LIST

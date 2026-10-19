@@ -63,10 +63,10 @@ only.
 |---|---|---|
 | `Trapezoid` | uses the shape's `taper` | yes |
 | `RoundedRectangle` | `cornerRadius` as a fraction of the smaller half-extent, [0,1] | yes |
-| `Polygon` | `sides` in [3, 32] | yes up to 8 sides (a convex polygon); **no** past 8 |
+| `Polygon` | `sides` in [3, 32] | yes (the convex polygon of its scaled vertices) |
 | `Ellipse` | none | yes |
 | `ChamferedRectangle` | `cornerRadius` as a chamfer fraction, [0,1] | yes |
-| `Convex` | `vertices`, 3 to 8 points; `cornerRadius` rounds them uniformly | yes |
+| `Convex` | `vertices`, 3 to 32 points; `cornerRadius` rounds them uniformly | yes |
 | `Path` | `path` contours; `cornerRadius: 0`; bounded line/Bezier/arc flattening, optional stroke or filled-outline shear | no — renderable only |
 
 Path uses extrusion only, up to 128 compiled edges, and explicit normalized-space
@@ -230,8 +230,8 @@ folds may not carry either.
 
 ## Contact admission
 
-- **Refused by name:** non-detail Polygon prisms of more than eight sides when the solid row
-  requires deterministic field contact; Revolve where contact is owed;
+- **Refused by name:** non-detail Path prisms when the solid row requires
+  deterministic field contact; Revolve where contact is owed;
   folds that cannot expand within the contact copy budget.
 - **Accepted but omitted:** creation contact emission skips sweeps entirely
   (including single-strand sweeps) and detail shapes; it omits flare, shear,
@@ -253,16 +253,13 @@ A uniform scale is always admitted, so this only bites an anisotropic shape.
 |---|---|
 | Sphere, Ellipsoid, Superellipsoid, Box, Plane | RoundCone |
 | Torus when `scale.x == scale.z` (an elliptic section revolved) | Torus when `scale.x != scale.z` |
-| Prism with a Trapezoid, RoundedRectangle, ChamferedRectangle, Ellipse or Convex profile, or a Polygon profile of at most 8 sides (or of more, scaled alike in X and Y) | Prism with a Polygon profile of more than 8 sides scaled differently in X and Y |
+| Prism with any profile but Path (a Path prism scales its edges natively, but no fixed-point evaluator answers it at any scale) | none |
 | Capsule and Cone when `scale.x == scale.z`; Cylinder at any scale (elliptic when `scale.x != scale.z`) | Capsule and Cone when `scale.x != scale.z` |
 
 None of the right column is refused by name — each validates, renders, and fails
 only when the contact field is constructed. For an anisotropic solid, prefer a
-left-column spelling: a `RoundedRectangle` or `ChamferedRectangle` prism takes
-its half-extents natively where a `Convex` one cannot. Keeping a convex outline
-means scaling the prism uniformly with the outline's XY ratio baked into its
-vertices, restoring the extrusion depth with an admitted cut when the uniform
-scale changed it.
+left-column spelling: every prism profile but Path takes its half-extents
+natively, a Convex or Polygon one by scaling its vertices into place.
 
 `creation stats` constructs the world's deterministic contact field through the
 same builder used at boot. A residual nonuniform Scale in a solid placement

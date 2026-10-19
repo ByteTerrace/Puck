@@ -3,7 +3,7 @@ basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth"
 documentId: "eval-contact-mismatch"
 
 placements {
-  placement "bollard" {
+  placement "kerb" {
     prototype: "subject"
     position [2, 0, 2]
     solid
@@ -16,15 +16,38 @@ prototypes {
       schema: "puck.creation.v1"
       name: "subject"
       palette [
-        { color: "#B8452B", specular: 0.15, roughness: 0.5 }
+        { color: "#8A8F96", specular: 0.15, roughness: 0.7 }
       ]
-      shape Prism "bollard" {
+      shape Prism "kerb" {
         material: 0
-        position [0, 0.4, 0]
-        scale [0.15, 0.4, 0.15]
+        position [0, 0.3, 0]
+        scale [0.6, 0.3, 0.2]
         profile {
-          kind: "Polygon"
-          sides: 12
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [-0.5, -0.5]
+                segments [
+                  {
+                    end [0.5, -0.5]
+                  }
+                  {
+                    end [0.5, 0]
+                  }
+                  {
+                    end [-0.5, 0]
+                    arcCenter [0, 0]
+                  }
+                  {
+                    end [-0.5, -0.5]
+                  }
+                ]
+              }
+            ]
+          }
         }
       }
     }

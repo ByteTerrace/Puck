@@ -119,10 +119,12 @@ public sealed class AnisotropicPrimitiveLawTests {
         Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
     }
 
-    // A regular polygon prism of at most eight sides: its vertices scaled by its X and Y into the polygon its section is.
+    // A regular polygon prism of any side count: its vertices scaled by its X and Y into the polygon its section is.
     [InlineData(5, 0.3f, 0.12f, 0.05f)]
     [InlineData(8, 0.2f, 0.7f, 0.3f)]
     [InlineData(3, 1.1f, 0.4f, 0.08f)]
+    [InlineData(12, 0.6f, 0.35f, 0.2f)]
+    [InlineData(32, 0.4f, 0.4f, 0.1f)]
     [Theory]
     public void ARegularPolygonPrismAnswersItsTrueDistance(int sides, float x, float y, float z) {
         var scale = new Vector3(x: x, y: y, z: z);
@@ -143,21 +145,6 @@ public sealed class AnisotropicPrimitiveLawTests {
         }
 
         Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
-    }
-    // More sides than a convex polygon holds, scaled alike in X and Y, is the native regular polygon at the scale: no
-    // scale op at all.
-    [Fact]
-    public void AManySidedPolygonScaledAlikeInXAndYIsNative() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = SdfSolidGeometry.AppendScaledPrimitive(chain: builder.ResetPoint(), material: material, profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Polygon, Sides: 12),
-            scale: new Vector3(x: 0.4f, y: 0.4f, z: 0.1f), type: SdfSolidPrimitive.Prism);
-
-        var program = builder.Build();
-
-        Assert.DoesNotContain(collection: program.Instructions, filter: static instruction => (instruction.Op == SdfOp.Scale));
-        Assert.Contains(collection: program.Instructions, filter: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && ((SdfShapeType)instruction.Shape == SdfShapeType.RegularPolygon)));
     }
 
     // The signed distance to a polygon in double precision: the nearest of its edge segments, negative inside.
