@@ -144,8 +144,9 @@ ChamferSubtraction, GrooveUnion, and PipeUnion. The round seam blends use
 `cells { amplitude, frequency, mode, randomness, seed }` adds cellular
 relief in the shape's rigid frame. F1 admits randomness in [0,0.46];
 F2MinusF1 admits [0,0.20]. Frequency is in (0,8], amplitude in [0,4], and
-the derivative factor 1+amplitude*frequency*L must be at most 8
-(L=1 for F1; L=2 for F2MinusF1).
+the relief slope amplitude*frequency*L must stay under 1 (L=1 for F1; L=2
+for F2MinusF1): a steeper relief pinches and folds the surface over itself
+and sheds islands, which no bake meshes cleanly.
 A closed primitive and per-shape scope are required: Sweep, grouped/detail shapes, and creations requiring
 an outer scope refuse cells. Both emitters scale frequency inversely and
 amplitude directly with placement scale. Bounds include amplitude/2
@@ -265,8 +266,8 @@ unlike every other primitive's unit-size law (`SdfSolidGeometry`'s dimension tab
 `panel`/`trims`/`flare`/`shear`/`bumps`/`domain` on the same shape — a sweep is not a closed solid
 (`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip it outright, like `detail`) and needs none of
 their scopes. `bulge`/the radius taper/`strandOffset` are each refused past a ratio to the authored radii
-(`SdfProgramBuilder.MaxSweepBulgeRatio`/`MaxSweepTaperRatio`/`MaxSweepStrandOffsetRatio`) — the envelope the shape's
-conservative margin is numerically calibrated against. `strands` above 1 is
+(`SdfProgramBuilder.MaxSweepBulgeRatio`/`MaxSweepTaperRatio`/`MaxSweepStrandOffsetRatio`) — the envelope
+`SweepLawTests` verifies the shape's field over. `strands` above 1 is
 render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved; `body.rig <body> <shape>` adds the parent that shape's motion chains under and the rigid delta the last frame composed for it, the read-back for a live `parent` or `swings` edit. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit

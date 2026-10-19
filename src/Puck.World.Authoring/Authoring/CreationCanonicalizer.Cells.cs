@@ -46,12 +46,12 @@ public static partial class CreationCanonicalizer {
             );
         }
         if (
-            !float.IsFinite(f: cells.Parameters.StepFactor) ||
-            (cells.Parameters.StepFactor > CreationNoiseDocument.MaxStepFactor)
+            !float.IsFinite(f: cells.Parameters.ReliefSlope) ||
+            (cells.Parameters.ReliefSlope >= SdfCellDisplacement.MaxReliefSlope)
         ) {
             Refuse(
                 field: "amplitude",
-                message: $"cells derivative bound exceeds {CreationNoiseDocument.MaxStepFactor}."
+                message: $"cells relief slope (amplitude × frequency, × 2 for F2MinusF1) {cells.Parameters.ReliefSlope:0.###} must stay under {SdfCellDisplacement.MaxReliefSlope}: a steeper relief pinches and folds the surface over itself and sheds islands."
             );
         }
         // The VM has one field-scope save. A second scope cannot isolate this shape from a group's
