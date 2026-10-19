@@ -269,6 +269,12 @@ Rules the catalog encodes:
   document at the compose boundary; `UpsertTune`/`UpsertPatch` load their
   referenced document off disk and canonicalize it there. Both REJECT a
   carried hash the pipeline did not itself compute.
+- **A creation row hashes once.** `WorldPrototype.CanonicalHash` (what `Hash`
+  falls back to and what the validator compares `HashRaw` against)
+  canonicalizes on first read and caches on the row instance, as
+  `EngineDocument` does. `Document`'s `init` clears both caches, so a `with`
+  that replaces the document re-derives them. An edit builds a new row or
+  document, never mutates a creation document's lists in place.
 - **Pipeline overrides bind at the mutation door.** `TryPrepareMutation` runs
   `TryAdmitPipelineOverrides` after whole-document validation, for every kind:
   a `views.graphs` row that names a `source` (a `package` row is skipped)
