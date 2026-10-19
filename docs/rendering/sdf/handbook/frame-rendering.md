@@ -700,7 +700,14 @@ samples cannot resolve the surface (`SdfSampledLattice.Refine`):
   between them. "Steeply" is measured against the field's own change over a
   step there, since a scoped, flared or non-uniformly scaled shape's field reads
   well under the distance (a fifth of it on the Moth's shins), and a test in
-  world units misses every sheet such a field holds;
+  world units misses every sheet such a field holds. A solid's edge or corner
+  that a line crosses near its tip, or grazes, is as thin along the line, but
+  the lines beside it cross its body two samples thick or more, which a sheet
+  thinner than a cell cannot: such a cell does not refine, and the contour's
+  tangent planes keep the edge sharp at the lattice's own spacing. An acute rim
+  (a cone's foot) or a cut tilted against the lattice would otherwise refine in
+  patches along its length, and the merged cells around each patch cut the
+  crease at the coarse spacing;
 - a crossed cell whose outside corners report different materials;
 - a crossed cell whose corner signs hold more than one surface patch, two sheets
   in one cell.
@@ -736,17 +743,31 @@ the gradient in field units per world unit for this). Where every
 plane passes through one point and two of them turn apart by more than thirty
 degrees, the point is a crease or corner (a feature): it is solved again with a
 bias only the planes' common null space feels, so it lies on the crease rather
-than drawn a few hundredths of a cell toward the crossings' mean, and it is taken
-only inside its cell (`SdfDualContouring.Place`): a point past it, as a thin
-wedge's tip or a crease the next cell holds gives, folds the quads the vertex
-shares with its neighbours into teeth along the edge. A point that is no
-feature and lies past the cell is pulled back along the line from the
-crossings' mean, not clamped axis by axis, which would pin it to the cell's
-faces and step the vertices along an unresolved edge into a staircase aligned
-with the lattice. A merged piece
-of a refined cell that measured nothing is placed the same way from its fine
-crossings' planes (`MergedFeature`), so an edge keeps its line through the cells
-around a refined run (a seam between two materials). A feature vertex takes its
+than drawn a few hundredths of a cell toward the crossings' mean
+(`SdfDualContouring.Place`). A crease that steps across the lattice
+diagonally, a curved rim's or a tilted cut's, often lies just past the cell
+that sees both its faces, in a neighbour whose own crossings see only one of
+them: the planes meet outside every cell that sees them, and no vertex lies on
+the crease there. A vertex clamped into its cell sits off both faces, and the
+mesh steps from a base vertex millimetres inside a cone's rim straight up to a
+side vertex, cutting the corner in a regular row of notches that shade as dark
+teeth. So a convex crease up to half a cell past the cell is handed to the
+neighbour that holds it (`HandOff`): that cell's vertex moves onto the crease,
+which bounds the patch it holds, and the cell that found it keeps its vertex
+inside itself. A vertex taken past its cell instead lands beside the
+neighbour's and folds the quads they share. A straight crease, whose planes the
+mean-biased solution meets too, keeps that point past the cell, as does a
+concave one. A point that is no feature and lies past the cell is pulled back
+along the line from the crossings' mean, not clamped axis by axis, which would
+pin it to the cell's faces and step the vertices along an unresolved edge into
+a staircase aligned with the lattice. A merged piece of a refined cell that
+measured nothing is placed the same way from its fine crossings' planes, solved
+in its coarse cell (`MergedFeature`), so an edge keeps its line through the
+cells around a refined run (a seam between two materials). Each quad splits
+along the diagonal whose triangles turn least from their corners' normals,
+leaving crease vertices out (`SdfSampledLattice`), so a quad beside a crease
+puts its crease vertex in both triangles rather than joining the two faces'
+vertices across the crease. A feature vertex takes its
 normal from the crossings whose planes pass through it, as does a vertex whose
 crossings all face one way (one flat face); any other reads the gradients the
 lattice interpolates at it.
