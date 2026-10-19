@@ -31,6 +31,21 @@ point in client pixels (display pixels offscreen); `clear` returns to hardware
 input. The point follows the published pane or whole-display view even without
 a local seat or drawn HUD cursor. A true headless host refuses GPU inspection.
 
+`view.annotate` circles problem areas on screen to point them out. F3 in the
+debug world (a `view.annotate toggle` binding row in `avatars/moth.puck`) or
+`view.annotate on|off|toggle` switches annotate mode. In annotate mode a left
+drag in the window draws the ellipse that fits the drag box, a click draws a
+small dot ring, a right click clears every outline, and no pointer button or
+drag reaches a binding or the camera. The outlines are magenta over a dark halo,
+numbered in the order they were drawn, and a banner shows while the mode is on.
+Leaving the mode keeps the outlines until `view.annotate clear`; `undo` removes
+the newest. They draw on the overlay, so `world.screenshot` and the MCP frame
+capture include them. `view.annotate list` (or bare `view.annotate`) echoes the mode and each outline as `center=<x>,<y> radius=<rx>,<ry>`
+in fractions of the window's width and height, origin top-left, and
+`view.annotate add <cx> <cy> <rx> [<ry>]` keeps one at those fractions. It is
+presentation only: nothing reaches the simulation. A headless boot keeps and
+lists outlines but has no window to draw them in; offscreen draws no overlay.
+
 `world.inspect on|off` toggles the acting seat's editor panel; bare
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,

@@ -346,14 +346,34 @@ and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam
 
-`WorldSourcePassthrough` is the one window input filter (`IWindowInputFilter`):
-the pump offers it every raw event before the observer, and an event it
-consumes (a key a focused passthrough source takes, a click or wheel over a
-passthrough pane) never reaches the observer or the command router. Only
-`source.passthrough open`, run as typed text from the host's own console, makes
-a pane a passthrough source; never add a document field, binding or other
-principal's door to it. A new raw-event consumer that must withhold events from
-the game joins that filter rather than adding a second one.
+`WorldWindowInputFilters` is the one window input filter capability
+(`IWindowInputFilter`): the pump offers it every raw event before the observer,
+and it offers each event to `WorldAnnotationInput` and then
+`WorldSourcePassthrough` until one consumes it. A consumed event (a pointer
+button or relative motion in annotate mode, a key a focused passthrough source
+takes, a click or wheel over a passthrough pane) never reaches the observer,
+the held-input reassertion or the command router. Only `source.passthrough
+open`, run as typed text from the host's own console, makes a pane a
+passthrough source; never add a document field, binding or other principal's
+door to it. A new raw-event consumer that must withhold events from the game
+joins that fan-out rather than registering a second capability.
+
+Annotate mode (`WorldAnnotations`, toggled by `view.annotate`) is a
+window-wide presentation mode, not a seat mode: nothing reaches the
+simulation. While it is on, `WorldAnnotationInput` consumes every pointer
+button and relative motion, so no click reaches a binding or the pointer store
+and no drag orbits or steers; a left drag keeps the ellipse fitting its box in
+normalized client coordinates (the display stretches the client, so they are
+also normalized overlay coordinates), a click keeps a dot ring, and a right
+click clears. A release whose press it consumed is consumed even after the mode
+ends, and one it did not see passes on, so no button sticks on either side.
+The absolute position always passes on. `AnnotationWriter` draws the outlines
+in the overlay's `Annotation` channel (after the editor, before the wheel and
+cursor, unclipped), as ellipse records of the ring element kind
+(`OverlayFrameBuilder.WriteEllipse`: word 3 the vertical radius, word 10 the
+stroke half-width). `player.signal` hands a synthesized mouse event to the
+observers, not the filters, so a scripted drag cannot draw; `view.annotate
+add` keeps an outline from text instead.
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
@@ -498,6 +518,16 @@ Free Cam do not alter the logical movement basis.
   text (its definition carries no document directory) nor its session screens
   (no message carries a remote screen session); its cameras and producers
   show.
+- `view.annotate [on|off|toggle|clear|undo|list|add <cx> <cy> <rx> [<ry>]]` —
+  the on-screen annotation outlines (`WorldAnnotationCommandModule`, core
+  registered, Immediate, bindable; the debug world binds F3 to `toggle` in
+  `avatars/moth.puck`, through the row's `text` payload). Bare lists. `list`
+  echoes `[view.annotate: on|off circles=N/16]` and one
+  `[view.annotate: <i> center=<x>,<y> radius=<rx>,<ry>]` line per outline,
+  fractions of the window's width and height, origin top-left, numbered as the
+  overlay labels them. `add` keeps one (ry defaults to rx) and refuses a
+  center outside [0, 1], a radius outside (0, 1] and a seventeenth outline.
+  Headless it keeps and lists; only a windowed overlay draws.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
