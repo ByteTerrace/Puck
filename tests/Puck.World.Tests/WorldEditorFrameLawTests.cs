@@ -172,7 +172,7 @@ public sealed class WorldEditorFrameLawTests {
     [Fact]
     public void AGridAcrossAnAdjacencyLiesAlongTheDestinationsAxesAtItsFollowedHeight() {
         var destination = Destination(basis: Fixtures.BuildDocument());
-        using var north = EditorEndpoints.Of(definition: destination, identity: North, link: new RecordingLink(definition: destination), pose: Slab);
+        using var north = EditorEndpoints.Of(definition: destination, identity: North, link: new RecordingLink(), pose: Slab);
 
         var (client, continuum, _) = Across(destination: destination, north: north);
 
@@ -236,7 +236,7 @@ public sealed class WorldEditorFrameLawTests {
     public void APlaceAcrossAnAdjacencyLandsAtTheDestinationsOwnCoordinatesOnItsPitch() {
         using var row = HostRow.Build(definition: (Fixtures.BuildDocument() with { CreationsRaw = [Crate] }), name: "boot");
         var destination = Destination(basis: row.Server.Definition);
-        var link = new RecordingLink(definition: destination);
+        var link = new RecordingLink();
         using var north = EditorEndpoints.Of(definition: destination, identity: North, link: link, pose: Slab);
 
         var (client, continuum, routes) = Across(destination: destination, north: north);

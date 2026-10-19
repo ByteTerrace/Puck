@@ -161,7 +161,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
                 definition: definition,
                 roster: new PlayerRoster(
                     definition: definition,
-                    link: new SilentLink(definition: definition),
+                    link: new SilentLink(),
                     seatBindings: new WorldSeatBindings(definition: definition)
                 ),
                 seatRouter: routes

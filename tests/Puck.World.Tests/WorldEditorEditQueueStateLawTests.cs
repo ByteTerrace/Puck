@@ -95,7 +95,6 @@ public sealed class WorldEditorEditQueueStateLawTests {
         source: source,
         verb: WorldEditorCommandModule.NudgeCommand
     ));
-    private static IServerLink LinkOf(WorldDefinition definition) => new RecordingLink(definition: definition);
     // A document that carries nothing but its version.
     private static WorldDeliveredDocument At(WorldDocumentVersion version) => new(Definition: Basis, Lifetime: 0, Version: version);
 
@@ -104,7 +103,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var world = new World();
         var sent = new Sent();
         var queue = new WorldEditorEditQueue(activation: world.Activation);
-        var source = world.SourceFor(link: LinkOf(definition: Basis));
+        var source = world.SourceFor(link: new RecordingLink());
         var origin = Row(id: "a", x: 0f);
         var first = Row(id: "a", x: 1f);
         var second = Row(id: "a", x: 2f);
@@ -137,7 +136,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var world = new World();
         var sent = new Sent();
         var queue = new WorldEditorEditQueue(activation: world.Activation);
-        var source = world.SourceFor(link: LinkOf(definition: Basis));
+        var source = world.SourceFor(link: new RecordingLink());
         var moved = Row(id: "a", x: 1f);
         WorldPlacement? basis = null;
         string? minted = null;
@@ -186,7 +185,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var other = new World();
         var sent = new Sent();
         var queue = new WorldEditorEditQueue(activation: world.Activation);
-        var source = world.SourceFor(link: LinkOf(definition: Basis));
+        var source = world.SourceFor(link: new RecordingLink());
 
         world.Deliver(rows: [Row(id: "a", x: 0f)], sequence: 0L);
         _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: Row(id: "a", x: 1f), source: source);
@@ -209,8 +208,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var moving = new World { Activation = world.Activation };
         var fresh = new Sent();
         var live = new WorldEditorEditQueue(activation: world.Activation);
-        var near = world.SourceFor(link: LinkOf(definition: Basis));
-        var far = moving.SourceFor(link: LinkOf(definition: Basis));
+        var near = world.SourceFor(link: new RecordingLink());
+        var far = moving.SourceFor(link: new RecordingLink());
 
         moving.Deliver(rows: [Row(id: "a", x: 0f)], sequence: 0L);
         _ = Offer(principal: Principal.Console, queue: live, sent: fresh, row: Row(id: "a", x: 1f), source: near);
@@ -231,7 +230,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var world = new World();
         var sent = new Sent();
         var queue = new WorldEditorEditQueue(activation: world.Activation);
-        var source = world.SourceFor(link: LinkOf(definition: Basis));
+        var source = world.SourceFor(link: new RecordingLink());
         var origin = Row(id: "a", x: 0f);
         Thread? refusal = null;
         WorldEditorEditQueue.Settlement settled = default;
@@ -283,8 +282,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var slow = new World { Activation = fast.Activation };
         var sent = new Sent();
         var queue = new WorldEditorEditQueue(activation: fast.Activation);
-        var near = fast.SourceFor(link: LinkOf(definition: Basis));
-        var far = slow.SourceFor(link: LinkOf(definition: Basis));
+        var near = fast.SourceFor(link: new RecordingLink());
+        var far = slow.SourceFor(link: new RecordingLink());
         var origin = Row(id: "a", x: 0f);
         var moved = Row(id: "a", x: 1f);
         WorldPlacement? basis = null;
@@ -319,7 +318,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var random = new Random(Seed: 1729);
         string[] ids = ["a", "b", "c"];
         Principal[] principals = [Principal.Console, Principal.Seat(slot: 0), Principal.Seat(slot: 1)];
-        IServerLink[] links = [LinkOf(definition: Basis), LinkOf(definition: Basis)];
+        IServerLink[] links = [new RecordingLink(), new RecordingLink()];
         var value = 0f;
 
         var (confirms, refusalsDropping, supersedes, stale, undos, released, crossings, abandoned, closings, malformed, crossSource, lagging) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);

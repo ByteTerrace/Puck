@@ -440,7 +440,7 @@ public sealed class WorldStateReadRoutingLawTests {
 
                 return new Lease();
             },
-            submissions: new SilentLink(definition: remote)
+            submissions: new SilentLink()
         );
         using var boot = new WorldAuthorityEndpoint(
             adjacencies: static () => null,
@@ -460,7 +460,7 @@ public sealed class WorldStateReadRoutingLawTests {
 
                 return new Lease();
             },
-            submissions: new SilentLink(definition: local)
+            submissions: new SilentLink()
         );
 
         // The authority this client observes reads through the client's own mirror.

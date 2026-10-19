@@ -127,10 +127,6 @@ public sealed class LinkQuerySeamCodecLawTests {
         );
     }
     [Fact]
-    public void PopulationChannels_RoundTrips() {
-        _ = Assert.IsType<WorldQuery.PopulationChannels>(@object: RoundTripQuery(query: new WorldQuery.PopulationChannels()));
-    }
-    [Fact]
     public void PreferredControllerProfile_RoundTrips() {
         var device = new InputDeviceId(
             Value: Guid.NewGuid(),

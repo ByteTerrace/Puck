@@ -79,7 +79,7 @@ public sealed class SeatRouteDeliveryLawTests {
 
                 return new Lease();
             },
-            submissions: new SilentLink(definition: local)
+            submissions: new SilentLink()
         );
         using var north = new WorldAuthorityEndpoint(
             adjacencies: static () => null,
@@ -97,7 +97,7 @@ public sealed class SeatRouteDeliveryLawTests {
 
                 return new Lease();
             },
-            submissions: new SilentLink(definition: remote)
+            submissions: new SilentLink()
         );
 
         // The boot claim is published before anything subscribes, so it owes no edge.

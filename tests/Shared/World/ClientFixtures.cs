@@ -15,7 +15,7 @@ internal static class ClientFixtures {
         definition: definition,
         roster: new PlayerRoster(
             definition: definition,
-            link: new SilentLink(definition: definition),
+            link: new SilentLink(),
             seatBindings: new WorldSeatBindings(definition: definition)
         ),
         seatRouter: new WorldSeatAuthorityRouter()
@@ -57,18 +57,11 @@ internal static class ClientFixtures {
         return reads;
     }
 }
-/// <summary>The narrowest link a <see cref="PlayerRoster"/> can be built over: it answers the one construction-time
-/// channel query from <paramref name="definition"/> and drops everything else.</summary>
-/// <param name="definition">The document whose channels the query answers with.</param>
-internal sealed class SilentLink(WorldDefinition definition) : IServerLink {
+/// <summary>The narrowest link a <see cref="PlayerRoster"/> can be built over: it answers nothing and drops
+/// everything.</summary>
+internal sealed class SilentLink : IServerLink {
     /// <inheritdoc/>
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-        if (query is WorldQuery.PopulationChannels) {
-            completion(obj: new QueryAnswer(
-                Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                Text: string.Empty
-            ));
-        }
     }
     /// <inheritdoc/>
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => 0L;

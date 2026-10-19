@@ -95,7 +95,7 @@ internal sealed partial class PlayerCommandModule {
 
             // The instance's OWN channel table — a spawned instance's document may declare channels differently from
             // the boot world's, so this is compiled from ITS definition, never
-            // the boot instance's m_channels.
+            // the boot instance's channel table.
             var instanceChannels = WorldChannelTable.Compile(channels: instance.Server.Definition.Channels);
 
             instance.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(
@@ -213,7 +213,7 @@ internal sealed partial class PlayerCommandModule {
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
             Principal: context.Principal,
             EntityIndex: resolvedIndex,
-            Intent: m_channels.RoleOrdinals.Intent(
+            Intent: Channels.RoleOrdinals.Intent(
                 moveAdvance: FixedQ4816.FromDouble(value: forward),
                 moveStrafe: FixedQ4816.FromDouble(value: strafe),
                 turn: FixedQ4816.FromDouble(value: yaw),

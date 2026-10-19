@@ -232,7 +232,7 @@ internal sealed partial class PlayerCommandModule {
     }
     // The declared screen with the given engine index, or null when no screen declares it.
     private WorldScreen? FindScreen(int screenIndex) {
-        foreach (var screen in m_definition.Screens) {
+        foreach (var screen in m_server.Definition.Screens) {
             if (screen.Index == screenIndex) {
                 return screen;
             }

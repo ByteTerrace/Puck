@@ -1,8 +1,10 @@
 using Xunit;
 
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.Testing;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
 
@@ -15,6 +17,8 @@ namespace Puck.World.Server.Tests;
 public sealed class BodyActionStateLaneLawTests {
     private const string AmmoSlot = "ammo";
     private const string CooldownSlot = "cooldown";
+    private const string FreshSlot = "fresh";
+    private const string StashSlot = "stash";
     private const string RangedSlot = "ranged";
     private const string SettedSlot = "setted";
 
@@ -382,7 +386,106 @@ public sealed class BodyActionStateLaneLawTests {
             )
         );
     }
+    // A rebuild starts a fresh simulation: participant slots return to their authored initials, a newly declared slot
+    // is born rather than reading zero, and an identity slot stays with the identity that owns it.
+    [Fact]
+    public void ARebuildRebirthsBodySlotsAndKeepsOnlyAnIdentitysOwnSlots() {
+        using var fixture = Fixtures.FreshServer(definition: RebuildDocument(withFreshSlot: false));
+        var population = fixture.Server.Population;
+        var owner = WorldIdentity.FromProjection(
+            defaults: fixture.Server.Definition.PlayerDefaults,
+            projection: new WorldIdentityProjection(
+                ColorHex: "#808080",
+                Id: "rebuild-owner",
+                MoveSpeed: null,
+                Name: "rebuild-owner",
+                TurnSpeed: null
+            )
+        );
 
+        population.ActivateSeat(
+            profile: owner,
+            slot: 0
+        );
+        population.ActivateSeat(
+            profile: null,
+            slot: 1
+        );
+
+        for (var ordinal = 0; (ordinal < 2); ordinal++) {
+            WriteLane(
+                lane: StateLane.Participant,
+                name: AmmoSlot,
+                ordinal: ordinal,
+                raw: CarriedAmmo.Value,
+                server: fixture.Server
+            );
+            WriteLane(
+                lane: StateLane.Identity,
+                name: StashSlot,
+                ordinal: ordinal,
+                raw: CarriedAmmo.Value,
+                server: fixture.Server
+            );
+        }
+
+        var candidate = RebuildDocument(withFreshSlot: true);
+
+        fixture.Server.EnqueueRebuild(
+            principal: Principal.Console,
+            request: new WorldRebuildRequest(
+                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate)),
+                Definition: candidate,
+                Force: true,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: "action-state-rebuild-probe.world.json")
+            )
+        );
+        fixture.Step();
+
+        Assert.NotNull(@object: fixture.Server.Body(index: 0)!.Profile);
+        Assert.Equal(
+            expected: CarriedAmmo.Value,
+            actual: LaneValue(
+                lane: StateLane.Identity,
+                name: StashSlot,
+                ordinal: 0,
+                server: fixture.Server
+            )
+        );
+
+        for (var ordinal = 0; (ordinal < 2); ordinal++) {
+            Assert.Equal(
+                expected: AuthoredAmmo.Value,
+                actual: LaneValue(
+                    lane: StateLane.Participant,
+                    name: AmmoSlot,
+                    ordinal: ordinal,
+                    server: fixture.Server
+                )
+            );
+            Assert.Equal(
+                expected: FixedQ4816.FromInteger(value: 5).Value,
+                actual: LaneValue(
+                    lane: StateLane.Identity,
+                    name: FreshSlot,
+                    ordinal: ordinal,
+                    server: fixture.Server
+                )
+            );
+        }
+
+        // Control: a body with no identity owns no identity slot, so its stash is born again like a fresh boot's.
+        Assert.Equal(
+            expected: FixedQ4816.One.Value,
+            actual: LaneValue(
+                lane: StateLane.Identity,
+                name: StashSlot,
+                ordinal: 1,
+                server: fixture.Server
+            )
+        );
+    }
     // A rule's bodyState read answers what the lane holds after the body's step, a timer in seconds; a body that is
     // not there reads zero; the snapshot entry carries the same presented values for a render lane; and a slot the
     // world does not declare is refused by name.
@@ -517,6 +620,35 @@ public sealed class BodyActionStateLaneLawTests {
                             ])
                     ),
                 ],
+                World: baseDocument.State
+            ),
+        });
+    }
+    private static WorldDefinition RebuildDocument(bool withFreshSlot) {
+        var baseDocument = Fixtures.BuildDocument();
+        var stash = new ActionStateSlot(
+            Name: StashSlot,
+            Kind: ActionStateKind.Counter,
+            Initial: 1f
+        );
+
+        return (baseDocument with {
+            StateRaw = new WorldStateSection(
+                Body: [new ActionStateSlot(
+                        Name: AmmoSlot,
+                        Kind: ActionStateKind.Counter,
+                        Initial: 3f
+                    )],
+                Identity: (withFreshSlot
+                    ? [
+                        stash,
+                        new ActionStateSlot(
+                            Name: FreshSlot,
+                            Kind: ActionStateKind.Counter,
+                            Initial: 5f
+                        ),
+                    ]
+                    : [stash]),
                 World: baseDocument.State
             ),
         });

@@ -25,7 +25,7 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>identity.bindings.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldDefinition definition, WorldOwnedWorlds ownedWorlds) : ICommandModule {
+internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldServer server, WorldOwnedWorlds ownedWorlds) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;
@@ -39,9 +39,9 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     private readonly Func<WorldWindowInputObservers?> m_windowObservers = windowObservers;
     private readonly IInputClock m_clock = clock;
     private readonly WorldOwnedWorlds m_ownedWorlds = ownedWorlds;
-    // The declared channel table world.affordances echoes alongside the command manifest — the second vocabulary
-    // a binding destination may name, and it goes through the same affordance gate a command name does.
-    private readonly IReadOnlyList<WorldChannel> m_channels = definition.Channels;
+    // The boot instance, whose installed document's channels world.affordances echoes alongside the command manifest
+    // — the second vocabulary a binding destination may name, read live so a load or reload is reflected at once.
+    private readonly WorldServer m_server = server;
 
     // The player.bind destination grammar: channel:<name> declares a channel destination instead of a plain command
     // name. An optional trailing token modifies the destination: scale:<value> (channel only, its scale) or
@@ -502,7 +502,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         var channelCount = 0;
 
-        foreach (var channel in m_channels) {
+        foreach (var channel in m_server.Definition.Channels) {
             _ = builder.Append(value: ((channelCount > 0)
                 ? ","
                 : "["))

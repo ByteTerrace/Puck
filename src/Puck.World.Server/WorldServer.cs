@@ -167,8 +167,8 @@ public sealed partial class WorldServer : IWorldServerHost {
 
     // The engagement fold — the seat/peer→screen route decision, its per-tick pad fold, and the
     // screen-removal admin cleanup. Assigned in the constructor (not a field initializer: it needs the constructor's
-    // own population/definition parameters), never rebuilt afterward — channels are boot-fixed, so its compiled
-    // per-screen translation tables never go stale.
+    // own population/definition parameters), never rebuilt afterward: it recompiles a policy whenever the live row or
+    // the population's channel table under it is replaced.
     private readonly WorldEngagement m_engagement;
     private readonly WorldRenderEnvelope m_envelope;
     // The world-scoped event feed (four of the five senses-lane families — see WorldEventFeed's own remarks for why
@@ -615,8 +615,8 @@ public sealed partial class WorldServer : IWorldServerHost {
             solids: population.SolidField
         );
         // The engagement fold — over the population and THIS server's own grant table (m_grants was assigned earlier
-        // in this constructor body, at the WorldGrants construction above). Never rebuilt: channels are boot-fixed, and
-        // it reads each screen's and kit's policy from the live document, recompiling a row only after an edit replaces it.
+        // in this constructor body, at the WorldGrants construction above). Never rebuilt: it reads each screen's and
+        // kit's policy from the live document, recompiling one only after an edit replaces its row or the channel table.
         m_engagement = new WorldEngagement(
             definition: () => m_document.Definition,
             grants: m_grants,

@@ -122,7 +122,7 @@ public sealed class WorldEditorPlacementLawTests {
         var routes = new WorldSeatAuthorityRouter();
         var registry = BuildRegistry(routes: routes, row: row, seats: seats);
         var awayDocument = AwayDocument(row: row);
-        var awayLink = new RecordingLink(definition: awayDocument);
+        var awayLink = new RecordingLink();
         using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
 
         // Select in the boot world: the nudge moves the boot crate and makes it the seat's current placement there.
@@ -168,7 +168,7 @@ public sealed class WorldEditorPlacementLawTests {
         var routes = new WorldSeatAuthorityRouter();
         var registry = BuildRegistry(echoes: echoes, routes: routes, row: row, seats: new WorldEditorSeats());
         var awayDocument = AwayDocument(row: row);
-        var awayLink = new RecordingLink(definition: awayDocument);
+        var awayLink = new RecordingLink();
         using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
         var step = new Vector3(x: Pitch, y: 0f, z: 0f);
 

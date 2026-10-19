@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldStampPool stamps) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -78,7 +78,6 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     private readonly WorldPopulation m_population = population;
     private readonly WorldClient m_client = client;
     private readonly WorldScreenBinder m_screens = screens;
-    private readonly WorldDefinition m_definition = definition;
     private readonly IServerLink m_link = link;
     private readonly WorldServer m_server = server;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
@@ -87,10 +86,11 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // The creation-stamp pool, read (never stepped) by body.rig: the driver/effector state is presentation-side and
     // exists nowhere else, so this is the one door onto it.
     private readonly WorldStampPool m_stamps = stamps;
-    // The BOOT world's compiled channel table — name→ordinal resolution for body.press and PickerDirection's
-    // pre-join Turn-role check. Validation has already run by the time a WorldDefinition reaches here, so every
-    // declared name resolves. NEVER the source a bound channel verb dispatches against — see m_seatBindings.
-    private readonly WorldChannelTable m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+    // The boot instance's live channel table — name→ordinal resolution for a typed press, fly or tether on a body
+    // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets
+    // it at the same tick boundary the kit ordinals move. Never the source a bound channel verb dispatches against —
+    // see m_seatBindings.
+    private WorldChannelTable Channels => m_population.Channels;
     // The per-seat CURRENTLY ROUTED channel vocabulary (WorldSeatBindings.Channels, kept in sync with each seat's
     // WorldSeatAuthorityRouter claim by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
     // channel NAME through that table to one of the fixed ordinal commands registered below; ChannelVerb checks the
