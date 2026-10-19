@@ -84,6 +84,8 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) => throw Reach(member: "IGpuRecorder.CopyBuffer");
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionImageLayout");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.MemoryBarrier");
+    void IGpuRecorder.BeginBarriers(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.BeginBarriers");
+    void IGpuRecorder.EndBarriers(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.EndBarriers");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionBuffer");
 
     // A revision read reaches no device: a holder reads it to decide whether a refused build is due again.

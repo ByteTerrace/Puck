@@ -378,6 +378,10 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.MemoryBarriersColumn);
     }
+    public void BeginBarriers(nint commandBufferHandle) =>
+        inner.BeginBarriers(commandBufferHandle: commandBufferHandle);
+    public void EndBarriers(nint commandBufferHandle) =>
+        inner.EndBarriers(commandBufferHandle: commandBufferHandle);
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         inner.TransitionBuffer(
             bufferHandle: bufferHandle,

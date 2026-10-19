@@ -769,6 +769,66 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void PipelineBarriers(VulkanDeviceCommands device, nint commandBufferHandle, uint sourceStageMask, uint destinationStageMask, (uint Source, uint Destination)? memory, ReadOnlySpan<VulkanBufferBarrier> buffers, ReadOnlySpan<VulkanImageBarrier> images) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        // vkCmdPipelineBarrier consumes the host structs synchronously; a batch is a few to a few dozen barriers.
+        var global = new VkMemoryBarrier {
+            DstAccessMask = (memory?.Destination ?? 0u),
+            SType = StructureTypeMemoryBarrier,
+            SrcAccessMask = (memory?.Source ?? 0u),
+        };
+        var bufferBarriers = new VkBufferMemoryBarrier[buffers.Length];
+        var imageBarriers = new VkImageMemoryBarrier[images.Length];
+
+        for (var index = 0; (index < buffers.Length); index++) {
+            bufferBarriers[index] = new VkBufferMemoryBarrier {
+                Buffer = buffers[index].Buffer,
+                DstAccessMask = buffers[index].DestinationAccessMask,
+                DstQueueFamilyIndex = VulkanQueueFamily.Ignored,
+                Offset = 0,
+                SType = StructureTypeBufferMemoryBarrier,
+                Size = WholeSize,
+                SrcAccessMask = buffers[index].SourceAccessMask,
+                SrcQueueFamilyIndex = VulkanQueueFamily.Ignored,
+            };
+        }
+        for (var index = 0; (index < images.Length); index++) {
+            imageBarriers[index] = new VkImageMemoryBarrier {
+                DstAccessMask = images[index].DestinationAccessMask,
+                DstQueueFamilyIndex = VulkanQueueFamily.Ignored,
+                Image = images[index].Image,
+                NewLayout = images[index].NewLayout,
+                OldLayout = images[index].OldLayout,
+                SType = StructureTypeImageMemoryBarrier,
+                SrcAccessMask = images[index].SourceAccessMask,
+                SrcQueueFamilyIndex = VulkanQueueFamily.Ignored,
+                SubresourceRange = new VkImageSubresourceRange {
+                    AspectMask = images[index].AspectMask,
+                    BaseArrayLayer = 0,
+                    BaseMipLevel = 0,
+                    LayerCount = 1,
+                    LevelCount = 1,
+                },
+            };
+        }
+        fixed (VkBufferMemoryBarrier* bufferPointer = bufferBarriers)
+        fixed (VkImageMemoryBarrier* imagePointer = imageBarriers) {
+            device.CmdPipelineBarrier(
+                commandBufferHandle,
+                sourceStageMask,
+                destinationStageMask,
+                0,
+                (memory.HasValue ? 1u : 0u),
+                (memory.HasValue ? ((nint)(&global)) : 0),
+                ((uint)bufferBarriers.Length),
+                ((nint)bufferPointer),
+                ((uint)imageBarriers.Length),
+                ((nint)imagePointer)
+            );
+        }
+    }
+    /// <inheritdoc/>
     public void PipelineMemoryBarrier(
         VulkanDeviceCommands device,
         nint commandBufferHandle,

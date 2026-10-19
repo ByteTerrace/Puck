@@ -211,6 +211,17 @@ public interface IVulkanCommandBufferRecordingApi {
         uint sourceStageMask,
         uint destinationStageMask
     );
+    /// <summary>Records a batch of barriers in one <c>vkCmdPipelineBarrier</c>: an optional global memory barrier, then
+    /// buffer and image barriers, all scoped to the union of their stages.</summary>
+    /// <param name="device">The command table of the logical device.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
+    /// <param name="sourceStageMask">The union of the barriers' source stages, as <c>VkPipelineStageFlagBits</c>.</param>
+    /// <param name="destinationStageMask">The union of their destination stages.</param>
+    /// <param name="memory">The global memory barrier's source and destination accesses, or <see langword="null"/>
+    /// for none.</param>
+    /// <param name="buffers">The buffer barriers.</param>
+    /// <param name="images">The image barriers; no two name one image.</param>
+    void PipelineBarriers(VulkanDeviceCommands device, nint commandBufferHandle, uint sourceStageMask, uint destinationStageMask, (uint Source, uint Destination)? memory, ReadOnlySpan<VulkanBufferBarrier> buffers, ReadOnlySpan<VulkanImageBarrier> images);
     /// <summary>Records a clear of a 2D, single-layer color image to the given RGBA color.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

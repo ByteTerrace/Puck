@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interop;
@@ -17,6 +18,9 @@ namespace Puck.Vulkan;
 /// <param name="recordingApi">The native recording API.</param>
 public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulkanCommandBufferRecordingApi recordingApi) : IGpuRecorder {
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
+    // The open runs of barriers (BeginBarriers), by command buffer; a command buffer records on one thread at a time.
+    private readonly Dictionary<nint, BarrierBatch> m_batches = [];
+    private readonly Lock m_batchGate = new();
 
     private static uint ToVulkanAccess(GpuAccess access) {
         var result = 0U;
@@ -290,7 +294,11 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             device: Device
         );
     /// <inheritdoc/>
-    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
+    public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        if (BatchOf(commandBufferHandle: commandBufferHandle) is { } batch) {
+            batch.Memory(destination: ToVulkanAccess(access: destinationAccessMask), destinationStages: ToVulkanStage(stage: destinationStageMask), source: ToVulkanAccess(access: sourceAccessMask), sourceStages: ToVulkanStage(stage: sourceStageMask));
+            return;
+        }
         recordingApi.PipelineMemoryBarrier(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
@@ -299,6 +307,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
+    }
     /// <inheritdoc/>
     public void PushConstants(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         GpuPushConstantBinding.ValidateRange(
@@ -318,7 +327,11 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     /// <inheritdoc/>
     /// <remarks>Records a buffer memory barrier over the whole buffer; Vulkan buffers carry no layout, so the accesses
     /// and stages are the whole transition.</remarks>
-    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
+    public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        if (BatchOf(commandBufferHandle: commandBufferHandle) is { } batch) {
+            batch.Buffer(barrier: new VulkanBufferBarrier(Buffer: bufferHandle, DestinationAccessMask: ToVulkanAccess(access: destinationAccessMask), SourceAccessMask: ToVulkanAccess(access: sourceAccessMask)), destinationStages: ToVulkanStage(stage: destinationStageMask), sourceStages: ToVulkanStage(stage: sourceStageMask));
+            return;
+        }
         recordingApi.PipelineBufferBarrier(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
@@ -328,16 +341,27 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
+    }
     /// <inheritdoc/>
     /// <remarks>A transition of a depth image covers the depth aspect: one into or out of
     /// <see cref="GpuImageLayout.DepthAttachment"/>, which only a depth image takes, or of any image
     /// <see cref="VulkanGpuImage.IsDepth"/> names, such as a sampled depth moving between reads; every other transition
     /// covers the color aspect.</remarks>
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) =>
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
+        var aspect = (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment) || VulkanGpuImage.IsDepth(imageHandle: imageHandle))
+            ? VulkanGpuFormats.DepthAspect
+            : VulkanGpuFormats.ColorAspect);
+
+        if (BatchOf(commandBufferHandle: commandBufferHandle) is { } batch) {
+            // One call must not move an image twice: a second transition of it records the run so far first.
+            if (batch.Holds(image: imageHandle)) {
+                Flush(batch: batch, commandBufferHandle: commandBufferHandle);
+            }
+            batch.Image(barrier: new VulkanImageBarrier(AspectMask: aspect, DestinationAccessMask: ToVulkanAccess(access: destinationAccessMask), Image: imageHandle, NewLayout: ToVulkanLayout(layout: newLayout), OldLayout: ToVulkanLayout(layout: oldLayout), SourceAccessMask: ToVulkanAccess(access: sourceAccessMask)), destinationStages: ToVulkanStage(stage: destinationStageMask), sourceStages: ToVulkanStage(stage: sourceStageMask));
+            return;
+        }
         recordingApi.TransitionImageLayout(
-            aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment) || VulkanGpuImage.IsDepth(imageHandle: imageHandle))
-                ? VulkanGpuFormats.DepthAspect
-                : VulkanGpuFormats.ColorAspect),
+            aspectMask: aspect,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
             destinationStageMask: ToVulkanStage(stage: destinationStageMask),
@@ -348,6 +372,56 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
+    }
+    /// <inheritdoc/>
+    /// <remarks>The run's barriers record as one <c>vkCmdPipelineBarrier</c> scoped to the union of their stages, which
+    /// orders every barrier at least as strongly as its own stages would.</remarks>
+    public void BeginBarriers(nint commandBufferHandle) {
+        lock (m_batchGate) {
+            if (!m_batches.TryGetValue(key: commandBufferHandle, value: out var batch)) {
+                batch = new BarrierBatch();
+                m_batches.Add(key: commandBufferHandle, value: batch);
+            }
+            batch.Depth++;
+        }
+    }
+    /// <inheritdoc/>
+    public void EndBarriers(nint commandBufferHandle) {
+        BarrierBatch? closed = null;
+
+        lock (m_batchGate) {
+            if (m_batches.TryGetValue(key: commandBufferHandle, value: out var batch) && (--batch.Depth == 0)) {
+                _ = m_batches.Remove(key: commandBufferHandle);
+                closed = batch;
+            }
+        }
+        if (closed is not null) {
+            Flush(batch: closed, commandBufferHandle: commandBufferHandle);
+        }
+    }
+    // The open run of barriers on a command buffer, or null.
+    private BarrierBatch? BatchOf(nint commandBufferHandle) {
+        lock (m_batchGate) {
+            return (m_batches.TryGetValue(key: commandBufferHandle, value: out var batch) ? batch : null);
+        }
+    }
+    // Records a run's barriers as one call and empties it.
+    private void Flush(BarrierBatch batch, nint commandBufferHandle) {
+        if (batch.IsEmpty) {
+            return;
+        }
+
+        recordingApi.PipelineBarriers(
+            buffers: CollectionsMarshal.AsSpan(list: batch.Buffers),
+            commandBufferHandle: commandBufferHandle,
+            destinationStageMask: batch.DestinationStages,
+            device: Device,
+            images: CollectionsMarshal.AsSpan(list: batch.Images),
+            memory: batch.MemoryAccesses,
+            sourceStageMask: batch.SourceStages
+        );
+        batch.Clear();
+    }
     /// <inheritdoc/>
     public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) {
         var vulkanFramebuffer = ((VulkanGpuFramebuffer)framebuffer);
@@ -454,5 +528,48 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             instanceCount: 1,
             vertexOffset: 0
         );
+    }
+
+    // A run of barriers waiting for its EndBarriers: a global memory barrier whose accesses accumulate, buffer and image
+    // barriers, and the union of every barrier's stages.
+    private sealed class BarrierBatch {
+        private readonly HashSet<nint> m_images = [];
+
+        public int Depth;
+        public uint SourceStages { get; private set; }
+        public uint DestinationStages { get; private set; }
+        public (uint Source, uint Destination)? MemoryAccesses { get; private set; }
+        public List<VulkanBufferBarrier> Buffers { get; } = [];
+        public List<VulkanImageBarrier> Images { get; } = [];
+        public bool IsEmpty => ((MemoryAccesses is null) && (Buffers.Count == 0) && (Images.Count == 0));
+
+        public bool Holds(nint image) => m_images.Contains(item: image);
+        public void Memory(uint source, uint destination, uint sourceStages, uint destinationStages) {
+            var accesses = (MemoryAccesses ?? (0u, 0u));
+
+            MemoryAccesses = ((accesses.Source | source), (accesses.Destination | destination));
+            Stages(destination: destinationStages, source: sourceStages);
+        }
+        public void Buffer(VulkanBufferBarrier barrier, uint sourceStages, uint destinationStages) {
+            Buffers.Add(item: barrier);
+            Stages(destination: destinationStages, source: sourceStages);
+        }
+        public void Image(VulkanImageBarrier barrier, uint sourceStages, uint destinationStages) {
+            Images.Add(item: barrier);
+            _ = m_images.Add(item: barrier.Image);
+            Stages(destination: destinationStages, source: sourceStages);
+        }
+        public void Clear() {
+            Buffers.Clear();
+            Images.Clear();
+            m_images.Clear();
+            MemoryAccesses = null;
+            SourceStages = 0u;
+            DestinationStages = 0u;
+        }
+        private void Stages(uint source, uint destination) {
+            SourceStages |= source;
+            DestinationStages |= destination;
+        }
     }
 }

@@ -347,10 +347,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             resource: ((ID3D12Resource*)imageHandle)
         );
 
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &barrier
-        );
+        Emit(barrier: barrier, commandList: commandList, state: state);
         DirectXResourceStates.Set(
             resource: imageHandle,
             state: after
@@ -377,10 +374,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             pResource = ((ID3D12Resource*)null),
         };
 
-        commandList->ResourceBarrier(
-            NumBarriers: 1,
-            pBarriers: &barrier
-        );
+        Emit(barrier: barrier, commandList: commandList, state: state);
     }
     /// <inheritdoc/>
     public void TransitionBuffer(
@@ -431,9 +425,41 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
                 return;
         }
 
-        ((ID3D12GraphicsCommandList*)state.CommandList)->ResourceBarrier(
+        Emit(barrier: resourceBarrier, commandList: ((ID3D12GraphicsCommandList*)state.CommandList), state: state);
+    }
+    /// <inheritdoc/>
+    /// <remarks>The run's barriers record as one <c>ResourceBarrier</c> call, in the order they came; the tracked states
+    /// move as each barrier is planned.</remarks>
+    public void BeginBarriers(nint commandBufferHandle) =>
+        DecodeState(commandBufferHandle: commandBufferHandle).BarrierDepth++;
+    /// <inheritdoc/>
+    public void EndBarriers(nint commandBufferHandle) {
+        var state = DecodeState(commandBufferHandle: commandBufferHandle);
+
+        if ((--state.BarrierDepth > 0) || (state.PendingBarriers.Count == 0)) {
+            return;
+        }
+
+        var barriers = CollectionsMarshal.AsSpan(list: state.PendingBarriers);
+
+        fixed (D3D12_RESOURCE_BARRIER* pointer = barriers) {
+            ((ID3D12GraphicsCommandList*)state.CommandList)->ResourceBarrier(
+                NumBarriers: ((uint)barriers.Length),
+                pBarriers: pointer
+            );
+        }
+        state.PendingBarriers.Clear();
+    }
+    // Records one barrier, or holds it for its open run's one call.
+    private static void Emit(D3D12_RESOURCE_BARRIER barrier, ID3D12GraphicsCommandList* commandList, DirectXCommandBufferState state) {
+        if (state.BarrierDepth > 0) {
+            state.PendingBarriers.Add(item: barrier);
+            return;
+        }
+
+        commandList->ResourceBarrier(
             NumBarriers: 1,
-            pBarriers: &resourceBarrier
+            pBarriers: &barrier
         );
     }
     /// <inheritdoc/>

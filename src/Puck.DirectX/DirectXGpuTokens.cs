@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
@@ -14,6 +15,11 @@ public sealed class DirectXCommandBufferState {
 
     /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
     public DirectXBufferStates BufferStates { get; } = new();
+    /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
+    /// call.</summary>
+    internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
+    /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
+    internal int BarrierDepth { get; set; }
 
     internal void ReleaseRetainedResources() {
         foreach (var resource in RetainedResources) { resource.Dispose(); }

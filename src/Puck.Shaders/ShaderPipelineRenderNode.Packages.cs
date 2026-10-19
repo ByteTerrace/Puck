@@ -451,6 +451,18 @@ public sealed partial class ShaderPipelineRenderNode {
             recorder: recorder,
             slot: slot
         );
+
+        var mayStandIn = ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0) && (OwnImageInput(pass: pass, slot: slot) < 0));
+
+        // A pass that will draw nothing records its reads' barriers, which leave each input shader-readable for the output
+        // standing for it, and none for the outputs it would have written.
+        if (mayStandIn && (pass.Package is not IRenderGraphPackageReadback) && pass.Package!.DrawsNothing(passBlock: passBlock)) {
+            RecordAccesses(command: handle, pass: pass, readsOnly: true, recorder: recorder, slot: slot);
+            _ = region.Write(bytes: passBlock, offset: 0);
+            region.Flush(slot: slot);
+            ApplyOutcome(outcome: RenderGraphPackageOutcome.DrewNothing, pass: pass, slot: slot);
+            return;
+        }
         RecordAccesses(
             command: handle,
             pass: pass,
@@ -480,7 +492,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
-            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0) && (OwnImageInput(pass: pass, slot: slot) < 0)),
+            MayStandIn: mayStandIn,
             Outputs: outputs,
             PassBlock: passBlock,
             Reads: Reads,

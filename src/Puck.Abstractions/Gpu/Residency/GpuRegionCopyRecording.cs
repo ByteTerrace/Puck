@@ -83,6 +83,9 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     /// next recording empty.</summary>
     /// <returns>The command buffer holding the recording, or zero when nothing was owed.</returns>
     public nint Finish() {
+        if (m_copied.Count > 0) {
+            recorder.BeginBarriers(commandBufferHandle: m_commandBuffer);
+        }
         foreach (var buffer in m_copied) {
             recorder.TransitionBuffer(
                 bufferHandle: buffer.BufferHandle,
@@ -92,6 +95,9 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
                 sourceAccessMask: GpuAccess.ShaderWrite,
                 sourceStageMask: GpuStage.ComputeShader
             );
+        }
+        if (m_copied.Count > 0) {
+            recorder.EndBarriers(commandBufferHandle: m_commandBuffer);
         }
 
         var commandBuffer = m_commandBuffer;

@@ -168,4 +168,14 @@ public interface IGpuRecorder {
     /// <param name="sourceStageMask">The prior stages.</param>
     /// <param name="destinationStageMask">The following stages.</param>
     void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask);
+    /// <summary>Opens a run of barriers on a command buffer that a backend may record as one call: until the matching
+    /// <see cref="EndBarriers"/>, the caller records nothing on the buffer but <see cref="TransitionImageLayout"/>,
+    /// <see cref="MemoryBarrier"/> and <see cref="TransitionBuffer"/>. The default records each barrier as it comes.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    void BeginBarriers(nint commandBufferHandle) {
+    }
+    /// <summary>Closes the run <see cref="BeginBarriers"/> opened, recording what it holds.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    void EndBarriers(nint commandBufferHandle) {
+    }
 }

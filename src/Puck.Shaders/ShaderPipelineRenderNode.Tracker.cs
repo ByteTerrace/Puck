@@ -106,12 +106,29 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         m_initializationPending = false;
     }
-    // Records the planned barrier of every access a pass makes, in the plan's order.
-    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuRecorder recorder) {
+    // Records the planned barrier of every access a pass makes, in the plan's order, as one run of barriers
+    // (IGpuRecorder.BeginBarriers) a backend records in one call.
+    // A pass that draws nothing (readsOnly) records the barriers of its reads alone and leaves each storage it would have
+    // written where SkipAccess leaves it.
+    private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuRecorder recorder, bool readsOnly = false) {
+        recorder.BeginBarriers(commandBufferHandle: command);
+        try {
+            RecordAccessBarriers(command: command, pass: pass, readsOnly: readsOnly, recorder: recorder, slot: slot);
+        } finally {
+            recorder.EndBarriers(commandBufferHandle: command);
+        }
+    }
+    private void RecordAccessBarriers(RuntimePass pass, int slot, nint command, IGpuRecorder recorder, bool readsOnly) {
         var accesses = pass.Accesses;
 
         for (var index = 0; (index < accesses.Length); index++) {
             var access = accesses[index];
+
+            if (readsOnly && access.Use.Writes) {
+                SkipAccess(access: access, slot: slot);
+                continue;
+            }
+
             var resource = m_resources[access.Storage];
             var instance = InstanceIndex(
                 previous: access.PreviousFrame,
@@ -168,27 +185,30 @@ public sealed partial class ShaderPipelineRenderNode {
     // holds, or its planned prior as a planned override. A host-owned instance starts every frame in the host's hands.
     private void SkipAccesses(RuntimePass pass, int slot) {
         foreach (var access in pass.Accesses) {
-            if (access.PriorKind == ShaderPipelinePriorKind.Host) {
-                continue;
-            }
-
-            var resource = m_resources[access.Storage];
-
-            if (resource.History) { continue; }
-            var instance = InstanceIndex(
-                previous: access.PreviousFrame,
-                resource: resource,
-                slot: slot
-            );
-
-            if (resource.HasOverride[instance]) {
-                continue;
-            }
-
-            resource.Override[instance] = access.Prior;
-            resource.HasOverride[instance] = true;
-            resource.OverridePlanned[instance] = true;
+            SkipAccess(access: access, slot: slot);
         }
+    }
+    private void SkipAccess(ShaderPipelineAccess access, int slot) {
+        if (access.PriorKind == ShaderPipelinePriorKind.Host) {
+            return;
+        }
+
+        var resource = m_resources[access.Storage];
+
+        if (resource.History) { return; }
+        var instance = InstanceIndex(
+            previous: access.PreviousFrame,
+            resource: resource,
+            slot: slot
+        );
+
+        if (resource.HasOverride[instance]) {
+            return;
+        }
+
+        resource.Override[instance] = access.Prior;
+        resource.HasOverride[instance] = true;
+        resource.OverridePlanned[instance] = true;
     }
     private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) {
         switch (barrier.Kind) {

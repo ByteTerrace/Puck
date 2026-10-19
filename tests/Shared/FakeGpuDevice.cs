@@ -276,6 +276,8 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuRecorder.TransitionImageLayout");
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
+    void IGpuRecorder.BeginBarriers(nint commandBufferHandle) => Hit(key: "IGpuRecorder.BeginBarriers");
+    void IGpuRecorder.EndBarriers(nint commandBufferHandle) => Hit(key: "IGpuRecorder.EndBarriers");
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         BufferTransitions?.Add(item: (bufferHandle, sourceAccessMask, destinationAccessMask, sourceStageMask, destinationStageMask));
         Hit(key: "IGpuRecorder.TransitionBuffer");

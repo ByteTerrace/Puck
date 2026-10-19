@@ -146,6 +146,15 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being recorded.</param>
     /// <returns><see langword="true"/> when the pass records nothing this frame.</returns>
     bool Skips(in FrameContext context) => false;
+    /// <summary>Returns whether this frame's recording would draw nothing and leave each output standing for its input
+    /// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>), asked once its pass block is filled and before its barriers
+    /// are recorded, only of a recording that may stand in (<see cref="RenderGraphPackageRecording.MayStandIn"/>). The
+    /// instance then records the barriers of the pass's reads alone, leaves each output where its last recorded access
+    /// left it, records no work, and lets each output stand for its input, as <see cref="Record"/> drawing nothing
+    /// would. The default never answers yes, leaving the decision to <see cref="Record"/>.</summary>
+    /// <param name="passBlock">The pass block the instance filled for this frame.</param>
+    /// <returns><see langword="true"/> when the recording would draw nothing.</returns>
+    bool DrawsNothing(ReadOnlySpan<byte> passBlock) => false;
     /// <summary>Returns the identity of every package-owned input determining this pass's output, or null to execute.
     /// The node asks after <see cref="Skips"/> and before recording. The recorder may use its existing preparation of
     /// borrowed dependencies here, preserving that preparation's counting and queue ordering; it records no access to

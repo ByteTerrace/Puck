@@ -217,6 +217,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             }
         }
 
+        // Whether a placement leaves the pass nothing to draw: its source is not shown, and it owes no letterbox, which a
+        // letterboxing pass whose source is not shown still owes wherever nothing else shows, unless what the host shows
+        // covers the output.
+        private bool Hidden(ReadOnlySpan<byte> passBlock, in RenderGraphPlacement placement) =>
+            (!placement.Shown &&
+            !(placement.Uncovered && (BinaryPrimitives.ReadUInt32LittleEndian(source: passBlock[m_letterboxOffset..]) != 0u)));
         public void Dispose() {
             if (m_disposed) {
                 return;
@@ -231,6 +237,13 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
             m_built.Dispose();
         }
+        /// <inheritdoc/>
+        /// <remarks>A pass whose source is not shown draws nothing, unless it owes the letterbox wherever nothing else
+        /// shows.</remarks>
+        public bool DrawsNothing(ReadOnlySpan<byte> passBlock) =>
+            ((m_placements is not null) &&
+            m_placements.TryGet(instance: m_instance, pass: m_pass, placement: out var placement) &&
+            Hidden(passBlock: passBlock, placement: in placement));
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             if (
                 (m_placements is not null) &&
@@ -240,17 +253,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     placement: out var placement
                 )
             ) {
-                // A letterboxing pass whose source is not shown still owes the letterbox wherever nothing else shows,
-                // unless what the host shows covers the output.
-                var letterboxes = (
-                    !placement.Shown &&
-                    placement.Uncovered &&
-                    (BinaryPrimitives.ReadUInt32LittleEndian(source: recording.PassBlock[m_letterboxOffset..]) != 0u)
-                );
+                var hidden = Hidden(passBlock: recording.PassBlock, placement: in placement);
 
                 if (
-                    !placement.Shown &&
-                    !letterboxes &&
+                    hidden &&
                     recording.MayStandIn
                 ) {
                     return RenderGraphPackageOutcome.DrewNothing;
@@ -273,10 +279,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
                 // A source shown nowhere that must still draw writes the letterbox everywhere when it owes it, its empty
                 // rect covering nothing, and otherwise copies its base everywhere.
-                if (
-                    !placement.Shown &&
-                    !letterboxes
-                ) {
+                if (hidden) {
                     BinaryPrimitives.WriteUInt32LittleEndian(
                         destination: recording.PassBlock[m_letterboxOffset..],
                         value: 0u
