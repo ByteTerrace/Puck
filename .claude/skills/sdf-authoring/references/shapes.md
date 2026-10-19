@@ -162,6 +162,11 @@ after raising either value. For a part that widens steadily toward one end, a
 linear `flare` (`amount: 0`, `startScale` below 1) with a matching `shear` to
 keep one edge straight is safe.
 
+A hollow shell (an outer shape with a smaller one subtracted) needs walls at least
+about 4 cm thick to survive the mesh bake: the Moth's pod plates at 2.2 cm baked
+with their backs missing, the core showing through, while the same shapes at
+4.4 cm baked whole. The validator accepts the thin version, so look at a capture.
+
 Creation contact emission omits `flare`, `shear`, `bumps`, and `erode`.
 This is an authoring-path omission, not a statement that their low-level VM
 operations all lack fixed-point interpreters. `cells` also leaves contact at

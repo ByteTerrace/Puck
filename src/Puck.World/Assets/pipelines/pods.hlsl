@@ -12,6 +12,8 @@
 #define VIEW -1
 #define AA 2
 #define MAX_STEPS 160
+// The lens: 1.9 frames the pods close; 0.866 is the World operator camera's 60-degree view, for comparing with it.
+#define FOCAL 1.9
 
 #include "pods.interface.hlsli"
 
@@ -289,7 +291,7 @@ float3 render(float2 uv, int view, bool orbit) {
     float3 fw = normalize(target - ro);
     float3 rt = normalize(cross(fw, float3(0, 1, 0)));
     float3 up = cross(rt, fw);
-    float3 rd = normalize(fw * 1.9 + uv.x * rt + uv.y * up);
+    float3 rd = normalize(fw * FOCAL + uv.x * rt + uv.y * up);
 
     float3 background = lerp(float3(0.70, 0.68, 0.67), float3(0.80, 0.78, 0.77), uv.y + 0.5);
     float t = 0.; float2 h = float2(1., 0.); bool hit = false;
