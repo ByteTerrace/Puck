@@ -8,7 +8,8 @@ namespace Puck.Vulkan;
 /// enabled when Vulkan 1.3 core grants it to every device, or when it needs a device feature that
 /// <see cref="Factories.VulkanLogicalDeviceFactory"/> requires at creation and refuses a device without. A module
 /// declaring any other capability is refused by name when it is created, so a shader can never reach a device that was
-/// not created to run it, as a <c>discard</c> compiled to <c>OpDemoteToHelperInvocation</c> once did.
+/// not created to run it: a fragment <c>discard</c>, which compiles to <c>OpDemoteToHelperInvocation</c>, is refused,
+/// since no shader needs one and no device is created with <c>shaderDemoteToHelperInvocation</c>.
 /// </summary>
 public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V <c>Shader</c> capability, which every graphics and compute module declares.</summary>
@@ -24,9 +25,6 @@ public static class VulkanShaderCapabilities {
     public const uint GroupNonUniformArithmetic = 63u;
     /// <summary>The SPIR-V <c>GroupNonUniformBallot</c> capability, for subgroup ballots.</summary>
     public const uint GroupNonUniformBallot = 64u;
-    /// <summary>The SPIR-V <c>DemoteToHelperInvocation</c> capability, which a fragment's <c>discard</c> compiles to; it
-    /// needs the <c>shaderDemoteToHelperInvocation</c> feature.</summary>
-    public const uint DemoteToHelperInvocation = 5379u;
 
     // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions.
     private const uint SpirvMagic = 0x07230203u;
@@ -44,7 +42,6 @@ public static class VulkanShaderCapabilities {
         (GroupNonUniform, "GroupNonUniform", "Vulkan 1.1 core"),
         (GroupNonUniformArithmetic, "GroupNonUniformArithmetic", "Vulkan 1.1 core"),
         (GroupNonUniformBallot, "GroupNonUniformBallot", "Vulkan 1.1 core"),
-        (DemoteToHelperInvocation, "DemoteToHelperInvocation", "the shaderDemoteToHelperInvocation feature every device is created with"),
     ];
 
     /// <summary>Returns the capabilities a SPIR-V module declares, in declaration order.</summary>

@@ -6,7 +6,8 @@ namespace Puck.Abstractions.Gpu;
 /// (<see cref="GpuRegion.RecordCarry"/>), and a region owing a copy records it (<see cref="GpuRegion.RecordCopy"/>).
 /// The first copy is preceded by one memory barrier that orders every earlier read of a staged destination by the
 /// regions' reader stages, in this or an earlier submission, before the copies write it, and <see cref="Finish"/> makes
-/// each copied buffer's writes visible to those stages with one buffer barrier. A recording with nothing owed records
+/// each copied buffer's writes visible to those stages with one buffer barrier. Regions copying through one pipeline bind
+/// it once, at the first of them. A recording with nothing owed records
 /// nothing and never begins its command buffer. A region recorded with <c>handsToReaders</c> false gets no such barrier.
 /// <para>Direct3D 12 carries a buffer's state from one command list to the next of one submission, and each list's first
 /// transition of a buffer starts from the state its declared prior access names, so a buffer transitions in only one
@@ -24,6 +25,8 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     private readonly List<IGpuBuffer> m_copied = [];
 
     private nint m_commandBuffer;
+    // The copy pipeline the recording last bound, which the next region copying through it does not bind again.
+    private nint m_boundPipeline;
 
     /// <summary>Flushes a region's share of the slot and records the carry a grown region owes, which hands its new
     /// destination to the readers itself when no copy follows, then the copy it owes, recording first, at the
@@ -68,8 +71,10 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
 
         region.RecordCopy(
             commandBuffer: m_commandBuffer,
+            pipelineBound: (region.CopyPipelineHandle == m_boundPipeline),
             slot: slot
         );
+        m_boundPipeline = region.CopyPipelineHandle;
         if (handsToReaders) {
             m_copied.Add(item: region.Buffer(slot: slot));
         }
@@ -93,6 +98,7 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
 
         m_copied.Clear();
         m_commandBuffer = 0;
+        m_boundPipeline = 0;
 
         return commandBuffer;
     }

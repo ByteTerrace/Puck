@@ -430,9 +430,9 @@ since a completed submission alone makes no device write visible to the host;
 The logical-device factory refuses a device, naming the feature, unless it reports
 `fragmentStoresAndAtomics` (the mesh pass's fragments count the texels they write),
 `shaderSampledImageArrayDynamicIndexing` (the SDF screen shading indexes its sources and samplers),
-`shaderStorageImageExtendedFormats` (incoming shadow visibility writes use R8 or R8G8 storage images)
-and `shaderDemoteToHelperInvocation` (a fragment `discard`, which DXC compiles to
-`OpDemoteToHelperInvocation`). Before a shader module is created,
+and `shaderStorageImageExtendedFormats` (incoming shadow visibility writes use R8 or R8G8 storage
+images). No shader discards a fragment, so a `discard`, which DXC compiles to
+`OpDemoteToHelperInvocation`, is refused like any capability no device enables. Before a shader module is created,
 `VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses, naming the module
 and the capability, any capability outside `VulkanShaderCapabilities.Enabled`: Vulkan core's
 `Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required feature grants,
