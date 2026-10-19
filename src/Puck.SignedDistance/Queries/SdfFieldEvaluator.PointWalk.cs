@@ -216,6 +216,11 @@ public sealed partial class SdfFieldEvaluator {
                         localPosition = FoldPoint(instruction: in instruction, localPosition: localPosition);
                         break;
                     }
+                case SdfOp.AxialProfile:
+                case SdfOp.RotatePlane: {
+                        localPosition = WarpPoint(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition);
+                        break;
+                    }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
                 case SdfOp.Dilate: {
@@ -341,6 +346,51 @@ public sealed partial class SdfFieldEvaluator {
                 }
         }
     }
+    // The render reading's warps (SdfFieldReading.Render), kept out of WalkPoints with the folds. KEEP IN SYNC with
+    // mapCore's SDF_OP_AXIAL_PROFILE and SDF_OP_ROTATE_PLANE (field/sdf-map.hlsli). AxialProfile: t = saturate((top - p_axis)
+    // / span) (Data0.z, Data0.w = 1/span), s = max(Data1.y + amount·t + bulge·sin(πt), FlareMinScale), the other two axes
+    // divided by s and the distance scale times the host-baked correction Data1.x. RotatePlane: the plane's (u, v) turned
+    // by rate·(p_driver - offset) (Data0.x, Data0.y), u and v as mapCore picks them from the plane.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static FixedVector3 WarpPoint(in CompiledInstruction instruction, FixedVector3 localPosition, ref FixedQ4816 distanceScale) {
+        if (instruction.Op == SdfOp.AxialProfile) {
+            var axis = (int)instruction.Shape;
+            var t = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((instruction.Data0Z - Component(axis: axis, point: localPosition)) * instruction.Data0W));
+            // sin(πt) is the sine of t half turns: t's raw Q48.16 bits shifted to a 2^64 fraction of a turn.
+            var (sine, _) = FixedQ4816.SinCosTurns(fractionalTurns: (((ulong)t.Value) << 47));
+            var scale = FixedQ4816.Max(x: ((instruction.Data1Y + (instruction.Data0X * t)) + (instruction.Data0Y * sine)), y: FlareMinScale);
+
+            distanceScale *= instruction.Data1X;
+
+            return new FixedVector3(
+                X: ((axis == 0) ? localPosition.X : (localPosition.X / scale)),
+                Y: ((axis == 1) ? localPosition.Y : (localPosition.Y / scale)),
+                Z: ((axis == 2) ? localPosition.Z : (localPosition.Z / scale))
+            );
+        }
+
+        var (u, v) = PlaneAxes(plane: instruction.Shape);
+        var (sin, cos) = FixedQ4816.SinCos(angle: (instruction.Data0X * (Component(axis: (int)instruction.Blend, point: localPosition) - instruction.Data0Y)));
+        var pu = Component(axis: u, point: localPosition);
+        var pv = Component(axis: v, point: localPosition);
+
+        return WithComponents(point: localPosition, u: u, uValue: ((cos * pu) + (sin * pv)), v: v, vValue: ((cos * pv) - (sin * pu)));
+    }
+    // SDF_FLARE_MIN_SCALE in fixed point.
+    private static readonly FixedQ4816 FlareMinScale = FixedQ4816.FromDouble(value: SdfProgramBuilder.FlareMinScale);
+    // The axes a RotatePlane turns, as mapCore picks them: u is Y in the YZ plane and X otherwise, v is Y in the XY plane
+    // and Z otherwise.
+    private static (int U, int V) PlaneAxes(uint plane) => (((plane == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((plane == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
+    private static FixedQ4816 Component(FixedVector3 point, int axis) => axis switch {
+        0 => point.X,
+        1 => point.Y,
+        _ => point.Z,
+    };
+    private static FixedVector3 WithComponents(FixedVector3 point, int u, FixedQ4816 uValue, int v, FixedQ4816 vValue) => new(
+        X: ((u == 0) ? uValue : ((v == 0) ? vValue : point.X)),
+        Y: ((u == 1) ? uValue : ((v == 1) ? vValue : point.Y)),
+        Z: ((u == 2) ? uValue : ((v == 2) ? vValue : point.Z))
+    );
     // The field edits (Onion, CellDisplace, Dilate), kept out of WalkPoints with the folds.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static FixedQ4816 EditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) => instruction.Op switch {

@@ -27,6 +27,13 @@ public sealed class SdfFieldSlice {
     public const int MinResolution = 16;
     /// <summary>The gradient magnitude's distance from one past which a sample counts as off: two percent.</summary>
     public const float GradientTolerance = 0.02f;
+    /// <summary>The gradient magnitude below which a sample outside the near band counts as flat (<see cref="Clipping"/>).</summary>
+    public const float ClipGradient = 0.1f;
+    /// <summary>The share of the answered samples outside the near band that must read flat before the slice counts as
+    /// clipped (<see cref="Clipping"/>).</summary>
+    public const float ClipShare = 0.02f;
+    /// <summary>The colour, linear RGB, both panels paint a clipped sample: a dull magenta no other reading uses.</summary>
+    public static readonly Vector3 ClippedColour = new(x: 0.55f, y: 0.25f, z: 0.55f);
     // The points a lattice samples: five evaluations each fits one reference frame's share of the bake.
     private const int ChunkPoints = (SdfMeshPathBake.FrameTaps / 5);
     // The cell the sampler's gradient taps read a sixty-fourth of: taps a millimetre from the point, independent of the
@@ -38,6 +45,8 @@ public sealed class SdfFieldSlice {
     private readonly Vector4[] m_points;
     private readonly float[] m_values;
     private readonly Vector3[] m_gradients;
+    // Whether a sample's kept value came from the lattice over the unowned segments rather than the one over the instances.
+    private readonly bool[] m_world;
     // Per chunk: whether each of its two lattices (every instance, then the unowned segments) answered.
     private readonly bool[] m_answered;
     private readonly bool[] m_inFlight;
@@ -75,6 +84,7 @@ public sealed class SdfFieldSlice {
         m_points = new Vector4[(resolution * resolution)];
         m_values = new float[m_points.Length];
         m_gradients = new Vector3[m_points.Length];
+        m_world = new bool[m_points.Length];
         Chunks = ((m_points.Length + (ChunkPoints - 1)) / ChunkPoints);
         m_answered = new bool[(2 * Chunks)];
         m_inFlight = new bool[(2 * Chunks)];
@@ -168,6 +178,7 @@ public sealed class SdfFieldSlice {
         Array.Clear(array: m_inFlight);
         Array.Fill(array: m_values, value: float.PositiveInfinity);
         Array.Clear(array: m_gradients);
+        Array.Clear(array: m_world);
     }
     /// <summary>Answers a lattice with its samples, keeping at each point the smaller of its two lattices' values and
     /// that value's gradient.</summary>
@@ -184,6 +195,7 @@ public sealed class SdfFieldSlice {
 
             if (value < m_values[(first + index)]) {
                 m_values[(first + index)] = value;
+                m_world[(first + index)] = ((ticket & 1) != 0);
                 m_gradients[(first + index)] = new Vector3(
                     x: BinaryPrimitives.ReadSingleLittleEndian(source: record[8..]),
                     y: BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]),
@@ -209,18 +221,63 @@ public sealed class SdfFieldSlice {
     /// <returns>The gradient.</returns>
     public Vector3 Gradient(int column, int row) => m_gradients[((row * Resolution) + column)];
 
-    /// <summary>Describes the answered slice: its plane and square, the field's range, the share of samples inside, and
-    /// the gradient magnitude's least, mean and greatest values and the share of samples further than
-    /// <see cref="GradientTolerance"/> from one, over every sample that answers a shape and over those within one band of
-    /// the surface. An exact field reads one throughout; a bound reads below one, an overestimating warp above.</summary>
+    /// <summary>Gets the half width, in metres of field, of the band about the surface whose samples the near-surface
+    /// statistics read: three of the slice's pixels, so the band holds the surface's own neighbourhood whatever the band
+    /// spacing.</summary>
+    public float NearBand => (3f * ((2f * Half) / Resolution));
+
+    /// <summary>Finds the samples the sampler answered no true field at: outside the surface, a field that has stopped
+    /// rising. When at least <see cref="ClipShare"/> of the answered samples outside rise slower than
+    /// <see cref="ClipGradient"/>, the slice is clipped from the twentieth percentile of their values (the ceiling) up:
+    /// every such sample, and every sample outside at or above the ceiling. A ridge between two shapes, which reads a low
+    /// gradient on a few samples, stays under the share; a bound that rises at a tenth of the distance or slower reads as
+    /// clipped too.</summary>
+    /// <returns>Each sample's clipping, and the ceiling, or positive infinity when nothing is clipped.</returns>
+    public (bool[] Clipped, float Ceiling) Clipping() {
+        var clipped = new bool[m_values.Length];
+        var flat = new List<float>();
+        var outside = 0;
+
+        for (var index = 0; (index < m_values.Length); index++) {
+            if (!(m_values[index] < Far) || !(m_values[index] > 0f)) { continue; }
+            outside++;
+            if (m_gradients[index].Length() < ClipGradient) {
+                flat.Add(item: m_values[index]);
+                clipped[index] = true;
+            }
+        }
+        if ((outside == 0) || (flat.Count < (ClipShare * outside))) {
+            Array.Clear(array: clipped);
+            return (clipped, float.PositiveInfinity);
+        }
+
+        flat.Sort();
+
+        var ceiling = flat[(flat.Count / 20)];
+
+        for (var index = 0; (index < m_values.Length); index++) {
+            clipped[index] |= ((m_values[index] < Far) && (m_values[index] > 0f) && (m_values[index] >= ceiling));
+        }
+        return (clipped, ceiling);
+    }
+    /// <summary>Describes the answered slice: its plane and square, the field's range, the share of samples inside, the
+    /// clipped share and its ceiling (<see cref="Clipping"/>), the share whose value the lattice over the unowned segments
+    /// answered, and the gradient magnitude's least, mean and greatest values and the share of samples further than
+    /// <see cref="GradientTolerance"/> from one, over the unclipped samples that answer a shape and over those within
+    /// <see cref="NearBand"/> of the surface. An exact field reads one there; a bound reads below one, an overestimating
+    /// warp above.</summary>
     /// <returns>One line, without brackets.</returns>
     public string Describe() {
+        var (clipped, ceiling) = Clipping();
         var all = new Statistics();
         var near = new Statistics();
         var inside = 0;
         var answered = 0;
+        var world = 0;
+        var cut = 0;
         var low = float.PositiveInfinity;
         var high = float.NegativeInfinity;
+        var band = NearBand;
 
         for (var index = 0; (index < m_values.Length); index++) {
             var value = m_values[index];
@@ -228,13 +285,18 @@ public sealed class SdfFieldSlice {
             if (!(value < Far)) { continue; }
             answered++;
             inside += ((value < 0f) ? 1 : 0);
+            world += (m_world[index] ? 1 : 0);
             low = MathF.Min(x: low, y: value);
             high = MathF.Max(x: high, y: value);
+            if (clipped[index]) {
+                cut++;
+                continue;
+            }
 
             var magnitude = m_gradients[index].Length();
 
             all.Add(magnitude: magnitude);
-            if (MathF.Abs(x: value) <= Bands) { near.Add(magnitude: magnitude); }
+            if (MathF.Abs(x: value) <= band) { near.Add(magnitude: magnitude); }
         }
 
         var text = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Axis.ToString().ToLowerInvariant()}={Offset:0.###} centre=({Centre.X:0.###},{Centre.Y:0.###}) half={Half:0.###} {Resolution}x{Resolution} bands={Bands:0.####}");
@@ -242,15 +304,22 @@ public sealed class SdfFieldSlice {
         if (answered == 0) {
             return $"{text} no shape answered";
         }
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{text} d=[{low:0.####},{high:0.####}] inside={((100.0 * inside) / m_values.Length):0.#}% |grad d| {all.Describe()} near-surface {near.Describe()}");
+
+        var clipping = ((cut == 0)
+            ? "clipped=0%"
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"clipped={((100.0 * cut) / answered):0.#}% from d={ceiling:0.####}"));
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{text} d=[{low:0.####},{high:0.####}] inside={((100.0 * inside) / m_values.Length):0.#}% {clipping} world={((100.0 * world) / answered):0.#}% |grad d| {all.Describe()} near-surface(|d|<={band:0.####}) {near.Describe()}");
     }
     /// <summary>Draws the answered slice as two panels side by side, each <see cref="Resolution"/> pixels square: on the
     /// left the distance, warm outside and cool inside, darkening toward the surface, a thin line every
     /// <see cref="Bands"/> metres of field and a thick one on the surface; on the right the gradient magnitude, white
     /// within <see cref="GradientTolerance"/> of one, blue toward one half and below (a bound), red toward one and a half and
-    /// above (an overestimate), with the surface drawn black. A sample that answers no shape is grey on both.</summary>
+    /// above (an overestimate), with the surface drawn black. A sample that answers no shape is grey on both, and a clipped
+    /// sample (<see cref="Clipping"/>) is <see cref="ClippedColour"/> on both.</summary>
     /// <returns>The image, eight-bit RGBA rows from the top, <c>2·Resolution</c> pixels wide.</returns>
     public byte[] Render() {
+        var (clipped, _) = Clipping();
         var width = (2 * Resolution);
         var rgba = new byte[((width * Resolution) * 4)];
         var pixel = ((2f * Half) / Resolution);
@@ -263,7 +332,9 @@ public sealed class SdfFieldSlice {
                 // field's rate is, so its bands bunch where the gradient runs high and spread where it runs low.
                 var line = (pixel * MathF.Max(x: magnitude, y: 1.0e-3f));
                 var (distance, gradient) = ((value < Far)
-                    ? (DistanceColour(bands: Bands, line: line, value: value), GradientColour(line: line, magnitude: magnitude, value: value))
+                    ? (clipped[((row * Resolution) + column)]
+                        ? (ClippedColour, ClippedColour)
+                        : (DistanceColour(bands: Bands, line: line, value: value), GradientColour(line: line, magnitude: magnitude, value: value)))
                     : (new Vector3(value: 0.5f), new Vector3(value: 0.5f)));
 
                 Write(colour: distance, column: column, rgba: rgba, row: row, width: width);

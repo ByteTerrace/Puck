@@ -1005,10 +1005,15 @@ Facts a script needs:
   sampler, the one field walk, reads the residency's program at every sample
   with its gradient, a frame's bake share at a time and before any pending
   group; outside an instance's influence sphere it answers the sphere's bound.
-  The verb echoes the armed slice; the file and the gradient statistics land on
-  stderr as `[world.slice] … |grad d| min= mean= max= off= near-surface … ->
-  <path>`, and `world.wait bakes <seconds>` holds a script until then. It needs
-  a renderer (windowed or offscreen).
+  Where the answered field stops rising away from the surface (at least 2% of
+  the outside samples rise slower than a tenth of a metre a metre), the samples
+  from that ceiling up are clipped: painted dull magenta on both panels and left
+  out of the statistics. The verb echoes the armed slice; the file and the
+  statistics land on stderr as `[world.slice] … d=[min,max] inside= clipped=
+  from d= world= |grad d| min= mean= max= off= near-surface(|d|<=…) … -> <path>`
+  (`world=` is the share the unowned segments answered, `near-surface` the
+  samples within three pixels of the surface), and `world.wait bakes <seconds>`
+  holds a script until then. It needs a renderer (windowed or offscreen).
 - Row-valued mutation verbs take one inline-JSON argument in the exact wire
   shape of the document section; a malformed row echoes its error and mutates
   nothing. These verbs are Simulation-routed, so the line is not parsed at

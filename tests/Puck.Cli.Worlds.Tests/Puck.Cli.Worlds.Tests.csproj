@@ -22,6 +22,7 @@
         <Compile Include="../Shared/Cli/TrackedPuckSources.cs" Link="TrackedPuckSources.cs" />
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/SdfMeshContour.cs" Link="SdfMeshContour.cs" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Cli.Testing" />
