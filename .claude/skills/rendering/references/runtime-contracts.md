@@ -55,6 +55,18 @@ teardown order. A lease never retired: a frame slot whose submission is never
 made, a cancelled capture, a reconfiguration in the middle of a capture. A
 lease retired twice. A steady frame that allocates lease bookkeeping.
 
+**A frame's submissions reach the queue as one batch.** `RenderGraphRuntime`
+opens a batch around its renders (`IGpuQueueSubmitter.BeginBatch`,
+`FlushBatch`); on Vulkan the nodes' submissions join one `vkQueueSubmit`
+(`VulkanSubmissionBatch`), and every fence they arm signals only once the whole
+batch retires, so a lease, a retirement or a readback keyed on a node's fence
+completes no earlier than the frame's last submission. Anything that must see
+deferred work first flushes it: a wait on a deferred fence, `SubmitAndWait`,
+the device's wait for idle and every other submission through
+`VulkanQueueSubmitter`. Direct3D 12 submits as it goes, since its tracked
+resource states assume a buffer decays to `COMMON` at each
+`ExecuteCommandLists`.
+
 ## 2. Nothing resolves silently to nothing
 
 **Rule.** A read, alias, package, source or capture that cannot be served

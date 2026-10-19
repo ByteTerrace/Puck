@@ -473,6 +473,9 @@ internal sealed class FakeGpuDevice :
             fenced: false
         );
     }
+    // The fake submits at once, so a batch only records that it was opened and flushed.
+    void IGpuQueueSubmitter.BeginBatch() => Hit(key: "IGpuQueueSubmitter.BeginBatch");
+    void IGpuQueueSubmitter.FlushBatch() => Hit(key: "IGpuQueueSubmitter.FlushBatch");
     IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description, in GpuObjectName name) {
         Hit(key: "IGpuRenderPassFactory.Create");
 

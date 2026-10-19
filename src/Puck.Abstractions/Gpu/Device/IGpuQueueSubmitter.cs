@@ -5,6 +5,13 @@ namespace Puck.Abstractions.Gpu;
 /// device context exposes (the Vulkan logical device's graphics queue; the Direct3D 12 context's direct command
 /// queue) — so every submission against a device context is serialized on the same queue. The submitter keeps a list of
 /// external waits (<see cref="AddExternalWait"/>) that its next submission carries and then clears.
+/// <para>A batch (<see cref="BeginBatch"/>, <see cref="FlushBatch"/>) defers the submissions made inside it and hands
+/// them to the queue together, in their order, with their waits: a frame's render-graph nodes reach the queue in one
+/// call rather than one each. Anything that must see the deferred work first flushes it: waiting on a fence a deferred
+/// submission arms, <see cref="SubmitAndWait"/>, the device context's wait for idle, and every other submission to the
+/// device's queue. Every fence a batch's submissions arm signals once the whole batch retires. A backend whose queue
+/// boundaries carry meaning may submit as it goes instead (Direct3D 12, whose buffers decay to <c>COMMON</c> at the end of
+/// every <c>ExecuteCommandLists</c>).</para>
 /// </summary>
 public interface IGpuQueueSubmitter {
     /// <summary>Adds a wait to the list the next submission carries: that submission, and on Direct3D 12 everything
@@ -29,6 +36,12 @@ public interface IGpuQueueSubmitter {
     /// the queue to go idle; Direct3D 12 waits for the whole device).</summary>
     /// <param name="commandBufferHandles">The command buffer handles to submit.</param>
     void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles);
+    /// <summary>Opens a batch: the submissions made until <see cref="FlushBatch"/> are deferred and reach the queue
+    /// together. Opening an open batch keeps it open.</summary>
+    void BeginBatch();
+    /// <summary>Hands the batch's deferred submissions to the queue, in their order, and closes it; a closed batch with
+    /// nothing deferred does nothing.</summary>
+    void FlushBatch();
     /// <summary>Creates a reusable submission fence on the bound device, for the fenced
     /// <see cref="Submit(ReadOnlySpan{nint}, IGpuSubmissionFence)"/> overload.</summary>
     /// <returns>The created fence (unsignaled; waiting before any fenced submit is a no-op).</returns>

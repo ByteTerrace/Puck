@@ -104,6 +104,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
             instance: this
         );
 
+        // Work deferred to an open batch reaches the queue before the wait drains it.
+        Commands.Batch.Flush(device: Commands);
+
         var result = m_logicalDeviceApi.WaitIdle(device: Commands);
 
         result.ThrowIfFailed(device: Commands, operation: "vkDeviceWaitIdle");
