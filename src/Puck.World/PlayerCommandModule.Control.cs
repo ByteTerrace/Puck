@@ -594,7 +594,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: MoveStrafeCommand,
-            description: "An action movement pair (Axis2D, +Y forward / +X strafe right) that preserves body heading and follows live camera yaw every tick, so lateral input is a true strafe and holding forward while looking turns the trajectory. Standard binds the left gamepad stick here; player.move remains available for latched movement-facing control.",
+            description: "An action movement pair (Axis2D, +Y forward / +X strafe right) that preserves body heading and follows live camera yaw every tick, so lateral input is a true strafe and holding forward while looking turns the trajectory. A world's binding profile binds the left gamepad stick here (the Moth basis does); player.move remains available for latched movement-facing control.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => MoveRouter(
                 args: args,
@@ -618,7 +618,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: LookSteerCommand,
-            description: "An action look channel (Axis2D, +X turns/looks right / +Y looks up): orbits the camera and, while deflected, writes its planar yaw into FaceX/FaceZ so horizontal look turns the upright body. Standard binds the right gamepad stick here; player.look remains available for authored free orbit.",
+            description: "An action look channel (Axis2D, +X turns/looks right / +Y looks up): orbits the camera and, while deflected, writes its planar yaw into FaceX/FaceZ so horizontal look turns the upright body. A world's binding profile binds the right gamepad stick here (the Moth basis does); player.look remains available for authored free orbit.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => LookRouter(
                 args: args,
@@ -630,7 +630,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: FreeLookCommand,
-            description: "Held modifier: a player.look.steer right stick continues orbiting the camera but stops writing body heading, while left-stick movement resolves against authoritative character heading instead of camera yaw. Standard authors LT + RB here. Independent from player.orbit, which arms pointer motion.",
+            description: "Held modifier: a player.look.steer right stick continues orbiting the camera but stops writing body heading, while left-stick movement resolves against authoritative character heading instead of camera yaw. A world's binding profile binds it to a gamepad chord. Independent from player.orbit, which arms pointer motion.",
             valueKind: CommandValueKind.Digital,
             held: true,
             handler: context => HeldFlag(
@@ -641,7 +641,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: OrbitCommand,
-            description: "Held: while down, pointer motion orbits the seat camera (yaw/pitch at playerDefaults.seatLook's pointer sensitivities); the body is untouched. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
+            description: "Held: while down, pointer motion orbits the seat camera (yaw/pitch at seatDefaults.seatCameraFeel's pointer sensitivities); the body is untouched. Bind it once — the router delivers the release to a held verb. Presentation-only: nothing reaches the sim.",
             valueKind: CommandValueKind.Digital,
             held: true,
             handler: context => HeldFlag(
@@ -663,7 +663,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: MotionControlsCommand,
-            description: "Toggles the seat's motion-input mode. Standard authors LT + North; each press alternates on/off. While enabled, gamepad angular velocity controls camera look through playerDefaults.seatLook.gyro's full-axis projection and authored follow yields. Presentation-only today; the generic mode also admits a future orientation/tilt movement adapter.",
+            description: "Toggles the seat's motion-input mode. A world's binding profile binds it; each press alternates on/off. While enabled, gamepad angular velocity controls camera look through seatDefaults.seatCameraFeel.gyro's full-axis projection and authored follow yields. Presentation-only today; the generic mode also admits a future orientation/tilt movement adapter.",
             valueKind: CommandValueKind.Digital,
             handler: context => {
                 _ = m_roster.Seat(slot: context.Slot)?.ToggleMotionControls();

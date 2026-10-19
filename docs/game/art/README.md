@@ -18,7 +18,7 @@ Live avatar implementations, authored SDF primitives, and in-game controls live 
 
 - [Moth flight studio](../../../src/Puck.World/Assets/worlds/avatars/moth.md)—Authored body geometry, vanity slots, controls, and live iteration recipes.
 
-- [Moth courtyard](../../../src/Puck.World/Assets/worlds/moth-courtyard.md)—Playable environment combining authored terrain, lighting, and avatar locomotion.
+- [Moth courtyard](../../../experimental/src/Puck.World/Assets/worlds/moth-courtyard.md)—Quarantined prior art: a playable environment combining authored terrain, lighting, and avatar locomotion.
 
 ## Rendering aesthetics
 

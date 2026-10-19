@@ -65,7 +65,7 @@ macOS, and nothing here is verified there.
   holds the preview configurations. Trust the folder when Claude Code asks,
   because the marketplace entry loads only in a trusted project. Settings are
   repository-wide: keep no per-machine settings file, and put a setting every
-  machine should share in `.claude/settings.json`. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  machine should share in `.claude/settings.json`. There is no Claude-specific memory file, on purpose: Claude Code reads
   [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
   ([documentation policy](#documentation-policy)).
 - **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
