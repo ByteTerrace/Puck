@@ -18,6 +18,9 @@ internal sealed class SdfMeshMaterialCut {
     /// <summary>The bisection rounds after the first: each halves the interval a boundary lies in along its edge.</summary>
     public const int Rounds = 4;
 
+    // The cosine past which a boundary point's two edge ends face apart as a crease's two sides do (thirty-two degrees, the
+    // turn SdfContour.SplitAtCreases splits a crease at).
+    private const float CreaseCosine = 0.848f;
     // The offset, in metres, outside the surface a material point lies, where a field hit would be accepted.
     private const float Lift = 0.0005f;
     // The bilinear coordinates of a quad's quarter centres, in the order the quarter rule reads their materials: a quad's
@@ -186,16 +189,32 @@ internal sealed class SdfMeshMaterialCut {
             _ = Add(normal: Normal(vertex: vertex), point: Position(vertex: vertex));
         }
 
-        // Each searched edge's boundary point, between the last interval's ends.
-        var first = (uint)positions.Count;
+        // Each searched edge's boundary point, between the last interval's ends, as one vertex for the piece on each end's
+        // side. Where the ends' normals turn apart past CreaseCosine the boundary runs along a crease (a raised plate's foot,
+        // a bezel's rim), and each piece takes its own end's normal there: a normal blended across the crease shades the
+        // piece on the face as a spike of the face beyond it.
+        var lowSide = new uint[m_edges.Count];
+        var highSide = new uint[m_edges.Count];
 
         for (var edge = 0; (edge < m_edges.Count); edge++) {
+            var (low, high) = m_edges[edge];
             var (position, normal) = Along(edge: edge, t: (0.5f * (m_from[edge] + m_to[edge])));
+            var (lowNormal, highNormal) = (Vector3.Normalize(value: Normal(vertex: low)), Vector3.Normalize(value: Normal(vertex: high)));
 
-            _ = Add(normal: normal, point: position);
+            if (Vector3.Dot(vector1: lowNormal, vector2: highNormal) < CreaseCosine) {
+                lowSide[edge] = Add(normal: lowNormal, point: position);
+                highSide[edge] = Add(normal: highNormal, point: position);
+            } else {
+                lowSide[edge] = highSide[edge] = Add(normal: normal, point: position);
+            }
         }
 
-        uint On(int a, int b) => (first + (uint)m_edgeOf[Key(a: a, b: b)]);
+        // The boundary vertex of the edge between `a` and `b` for the piece on `a`'s side.
+        uint On(int a, int b) {
+            var edge = m_edgeOf[Key(a: a, b: b)];
+
+            return ((a < b) ? lowSide[edge] : highSide[edge]);
+        }
 
         Span<int> triangle = stackalloc int[3];
 
@@ -213,22 +232,19 @@ internal sealed class SdfMeshMaterialCut {
                         Triangle(a: (uint)v0, b: (uint)v1, c: (uint)v2, material: m0);
                     } else if ((m0 != m1) && (m1 != m2) && (m2 != m0)) {
                         // Three materials: a quad of each about the point between the three edges' boundary points.
-                        var (e01, e12, e20) = (On(a: v0, b: v1), On(a: v1, b: v2), On(a: v2, b: v0));
                         var centre = Add(
-                            normal: ((normals[(int)e01] + normals[(int)e12]) + normals[(int)e20]),
-                            point: (((positions[(int)e01] + positions[(int)e12]) + positions[(int)e20]) / 3f)
+                            normal: ((normals[(int)On(a: v0, b: v1)] + normals[(int)On(a: v1, b: v2)]) + normals[(int)On(a: v2, b: v0)]),
+                            point: (((positions[(int)On(a: v0, b: v1)] + positions[(int)On(a: v1, b: v2)]) + positions[(int)On(a: v2, b: v0)]) / 3f)
                         );
 
-                        Quad(a: (uint)v0, b: e01, c: centre, d: e20, material: m0);
-                        Quad(a: (uint)v1, b: e12, c: centre, d: e01, material: m1);
-                        Quad(a: (uint)v2, b: e20, c: centre, d: e12, material: m2);
+                        Quad(a: (uint)v0, b: On(a: v0, b: v1), c: centre, d: On(a: v0, b: v2), material: m0);
+                        Quad(a: (uint)v1, b: On(a: v1, b: v2), c: centre, d: On(a: v1, b: v0), material: m1);
+                        Quad(a: (uint)v2, b: On(a: v2, b: v0), c: centre, d: On(a: v2, b: v1), material: m2);
                     } else {
                         // Two materials: the corner on its own is cut off by the line between its edges' boundary points.
                         var (odd, s1, s2) = ((m1 == m2) ? (v0, v1, v2) : ((m0 == m2) ? (v1, v2, v0) : (v2, v0, v1)));
-                        var (e1, e2) = (On(a: odd, b: s1), On(a: s2, b: odd));
-
-                        Triangle(a: (uint)odd, b: e1, c: e2, material: m_vertices[odd]);
-                        Quad(a: e1, b: (uint)s1, c: (uint)s2, d: e2, material: m_vertices[s1]);
+                        Triangle(a: (uint)odd, b: On(a: odd, b: s1), c: On(a: odd, b: s2), material: m_vertices[odd]);
+                        Quad(a: On(a: s1, b: odd), b: (uint)s1, c: (uint)s2, d: On(a: s2, b: odd), material: m_vertices[s1]);
                     }
                 }
 
