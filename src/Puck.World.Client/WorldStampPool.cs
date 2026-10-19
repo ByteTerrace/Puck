@@ -196,8 +196,13 @@ public sealed partial class WorldStampPool {
         // transformSlot use), sized once to the fixed per-stamp shape budget.
         public readonly bool[] PartFollows = new bool[WorldPlacementPolicy.MaxAnimatedStampShapes];
         // The rigid delta each shape's animation produced this frame, kept so a later shape naming it as `parent`
-        // rides it; PartParent is the resolved parent index per shape (−1 = the root), filled on first pack.
-        public readonly Quaternion[] PartDeltaRotation = new Quaternion[WorldPlacementPolicy.MaxAnimatedStampShapes];
+        // rides it and a pose read (LatchedShapePose) answers with what was drawn; PartParent is the resolved parent
+        // index per shape (−1 = the root), filled on first pack. The rotations start at identity, so a read before the
+        // first pack answers the rest pose.
+        public readonly Quaternion[] PartDeltaRotation = Enumerable.Repeat(
+            count: WorldPlacementPolicy.MaxAnimatedStampShapes,
+            element: Quaternion.Identity
+        ).ToArray();
         public readonly Vector3[] PartDeltaTranslation = new Vector3[WorldPlacementPolicy.MaxAnimatedStampShapes];
         public readonly int[] PartParent = new int[WorldPlacementPolicy.MaxAnimatedStampShapes];
 
@@ -1326,8 +1331,8 @@ public sealed partial class WorldStampPool {
     /// <returns><see langword="true"/> when the live creation look publishes the part.</returns>
     /// <remarks>The pose carries the shape's COMPOSED delta — its own swings and slides, the parent chain, and any
     /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
-    /// and the rendered geometry answer with the same pose. A shape with no animation has an identity delta, so its
-    /// anchor is the authored pose exactly as before.</remarks>
+    /// and the rendered geometry answer with the same pose (<see cref="TryShapePosition"/> reads the same latch). A
+    /// shape with no animation has an identity delta, so its anchor is its authored pose.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
         if (
             !TryFindBody(
@@ -1347,20 +1352,31 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        var shape = shapes[shapeSlot];
+        pose = LatchedShapePose(
+            client: client,
+            live: live,
+            shapeSlot: shapeSlot,
+            shapes: shapes
+        );
+
+        return true;
+    }
+    // A live registration's shape as the last PackTransforms drew it: the rest or frame pose, the composed delta (own
+    // swings and slides, the parent chain, effector corrections) and the part follower, all read off the latch that
+    // pack left. PackRegistration is the one evaluator; this reads its results, because the drivers advance once a
+    // frame and a second evaluation would double-advance them or answer at a phase nothing was drawn at. A
+    // domain-bearing shape's slot holds only its parent's delta frame, and composing its rest pose onto that delta is
+    // what its drawn geometry shows.
+    private static SdfAnchor LatchedShapePose(Registration live, int shapeSlot, IReadOnlyList<ShapeDocument> shapes, IWorldStampSource client) {
         var poses = FramePoses(
             frameCursor: live.EffectiveCursor,
             live: live
         );
-
         var (localPosition, localRotation) = BasePose(
             poses: poses,
-            shape: shape
+            shape: shapes[shapeSlot]
         );
 
-        // The same composed delta the write pass applies, read off the last pack's latch rather than recomputed: the
-        // drivers advance once a frame, so recomputing here would either double-advance them or answer at a phase
-        // nothing was drawn at.
         if (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) {
             WorldGaitDrivers.Apply(
                 deltaRotation: live.PartDeltaRotation[shapeSlot],
@@ -1379,8 +1395,6 @@ public sealed partial class WorldStampPool {
             value: (localPosition * scale)
         ));
 
-        // Read the part follower's latched value (the last PackTransforms step), never re-step it here — a follower
-        // steps at most once per frame.
         if (
             (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes) &&
             live.PartFollows[shapeSlot] &&
@@ -1389,12 +1403,10 @@ public sealed partial class WorldStampPool {
             worldPosition = live.PartFollower[shapeSlot].Value;
         }
 
-        pose = new SdfAnchor(
+        return new SdfAnchor(
             Position: worldPosition,
             Orientation: Quaternion.Normalize(value: (rootRotation * localRotation))
         );
-
-        return true;
     }
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -1493,11 +1505,15 @@ public sealed partial class WorldStampPool {
 
         return true;
     }
-    /// <summary>Resolves a live registration's current-frame world position for one of its shapes (or its root when
-    /// <paramref name="shapeId"/> is null) — the placement-anchor seam the audio director rides. Returns
-    /// <see langword="false"/> when no live registration holds the placement (a static placement resolves through the
-    /// stamp math instead), and for an attached row whose target body is not active this frame (the row contributes
-    /// nothing, the same verdict <see cref="PackTransforms"/> already renders as a hidden stamp).</summary>
+    /// <summary>Resolves a live registration's world position for one of its shapes (or its root when
+    /// <paramref name="shapeId"/> is null or names no shape) as the last <see cref="PackTransforms"/> drew it — the
+    /// placement-anchor seam the audio director, the overlay facts and placement-anchored camera views ride. A shape's
+    /// position carries its composed delta (its own swings and slides, the parent chain, effector corrections) and its
+    /// part follower, read off the pack's latch with no rig evaluation of its own; before the first pack it is the
+    /// rest or frame pose. Returns <see langword="false"/> when no live registration holds the placement (a static
+    /// placement resolves through the stamp math instead), and for an attached row whose target body is not active
+    /// this frame (the row contributes nothing, the same verdict <see cref="PackTransforms"/> renders as a hidden
+    /// stamp).</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
@@ -1536,57 +1552,27 @@ public sealed partial class WorldStampPool {
             return false;
         }
 
-        var (rootPosition, rootRotation, placementScale) = FollowedRootPose(
+        if (shapeId is { } targetShapeId) {
+            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+
+            for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
+                if (shapes[shapeIndex].Id == targetShapeId) {
+                    position = LatchedShapePose(
+                        client: client,
+                        live: live,
+                        shapeSlot: shapeIndex,
+                        shapes: shapes
+                    ).Position;
+
+                    return true;
+                }
+            }
+        }
+
+        position = FollowedRootPose(
             client: client,
             live: live
-        );
-
-        if (shapeId is not { } targetShapeId) {
-            position = rootPosition;
-
-            return true;
-        }
-
-        var poses = FramePoses(
-            frameCursor: live.EffectiveCursor,
-            live: live
-        );
-        var shapes = (live.Creation.EngineDocument.Shapes ?? []);
-
-        for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
-            var shape = shapes[shapeIndex];
-
-            if (shape.Id != targetShapeId) {
-                continue;
-            }
-
-            if (
-                (shapeIndex < WorldPlacementPolicy.MaxAnimatedStampShapes) &&
-                live.PartFollows[shapeIndex] &&
-                live.PartFollower[shapeIndex].Seeded
-            ) {
-                position = live.PartFollower[shapeIndex].Value;
-
-                return true;
-            }
-
-            var local = (((poses is not null) && poses.TryGetValue(
-                key: targetShapeId,
-                value: out var pose
-            ))
-                ? pose.Position
-                : shape.Position
-            );
-
-            position = (rootPosition + Vector3.Transform(
-                rotation: rootRotation,
-                value: (local * placementScale)
-            ));
-
-            return true;
-        }
-
-        position = rootPosition;
+        ).Position;
 
         return true;
     }

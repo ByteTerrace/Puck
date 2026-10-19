@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Assets.Documents;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
@@ -90,6 +91,34 @@ public sealed class WorldStampPoolLiveRigEditLawTests {
         Assert.True(condition: ((shape.TurnRadians > 0f) || (shape.Delta != Vector3.Zero)), userMessage: "the read-back shows no chained delta on a swinging arm.");
         Assert.Equal(expected: -1, actual: (scene.Pool.TryBodyRig(bodyIndex: 0, shapeName: "absent", state: out var absent) ? absent!.Shape!.Value.Index : 0));
     }
+    // TryShapePosition answers where the frame drew each shape — the torso's own swing, and the arm carried by its
+    // parent chain — so a placement anchor (the audio director, the overlay facts, a camera view) rides the moving part.
+    [Fact]
+    public void AShapePositionFollowsTheSwingTheFrameDrew() {
+        const string Seat = "seat";
+
+        var scene = new Scene(creation: Creation(arm: Arm(parent: "torso")), background: false, placementId: Seat);
+        var rest = Arm().Position.Value;
+        var travel = 0f;
+
+        for (var frame = 0; (frame < 120); frame++) {
+            scene.Frame();
+
+            foreach (var (shapeId, slot) in ((int, int)[])[(0, (ArmSlot - 1)), (1, ArmSlot)]) {
+                Assert.True(condition: scene.Pool.TryShapePosition(client: scene.Client, placementId: Seat, position: out var read, shapeId: shapeId));
+
+                var drawn = scene.Drawn(slot: slot);
+
+                Assert.True(condition: (Vector3.Distance(value1: read, value2: drawn) < 1e-5f), userMessage: $"frame {frame}: shape {shapeId} read {read}, drawn at {drawn}.");
+
+                if (shapeId == 1) {
+                    travel = MathF.Max(x: travel, y: Vector3.Distance(value1: read, value2: rest));
+                }
+            }
+        }
+
+        Assert.True(condition: (travel > 0.05f), userMessage: $"the arm read only {travel} from its rest position.");
+    }
 
     // The real scene emitter over one client, composed as a presenter composes it, with body 0 wearing the creation.
     private sealed class Scene {
@@ -98,11 +127,27 @@ public sealed class WorldStampPoolLiveRigEditLawTests {
         private readonly RecordingDresser m_dresser = new();
         private readonly WorldSceneEmitter m_emitter;
         private readonly SdfCompositionFrameSource m_frames;
+        private readonly string? m_placementId;
         private long m_sequence = 1;
         private ulong m_tick;
 
-        public Scene(WorldPrototype creation, bool background) {
+        public Scene(WorldPrototype creation, bool background, string? placementId = null) {
+            m_placementId = placementId;
+
             var definition = CreationDomainParentLawTests.Definition(creation: creation);
+
+            // An inhabitant's placement row, which the body's stamp census resolves its creation through.
+            if (placementId is not null) {
+                definition = (definition with {
+                    PlacementRowsRaw = [new WorldPlacement(
+                        Id: placementId,
+                        Position: new DocumentVector3(value: Vector3.Zero),
+                        PrototypeId: creation.Id,
+                        Scale: 1f,
+                        YawDegrees: 0f
+                    )],
+                });
+            }
             var routes = new WorldSeatAuthorityRouter();
 
             m_client = new WorldClient(
@@ -158,7 +203,11 @@ public sealed class WorldStampPoolLiveRigEditLawTests {
             return travel;
         }
 
-        private void Frame() {
+        public WorldClient Client => m_client;
+
+        // The position the last frame drew the slot at.
+        public Vector3 Drawn(int slot) => m_dresser.Transforms[slot].Position;
+        public void Frame() {
             m_client.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: "a",
                 Entries: ((EntitySnapshot[])[new EntitySnapshot(
@@ -171,6 +220,7 @@ public sealed class WorldStampPoolLiveRigEditLawTests {
                     Kit: 0,
                     Look: 0,
                     Orientation: Quaternion.Identity,
+                    PlacementId: m_placementId,
                     Position: Vector3.Zero
                 )]),
                 Revision: 1,
