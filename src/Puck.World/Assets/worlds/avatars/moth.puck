@@ -473,6 +473,15 @@ bindingOverlays [
                   raw [5, 0, 0, 0]
                 }
               }
+              {
+                command: "view.annotate"
+                id: "annotate"
+                label: "Annotate"
+                sources [
+                  "keyboard.f3"
+                ]
+                text: "toggle"
+              }
             ]
             id: "base"
           }
