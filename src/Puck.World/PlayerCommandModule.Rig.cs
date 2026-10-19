@@ -33,8 +33,8 @@ internal sealed partial class PlayerCommandModule {
         if (instanceTarget.Instance is { } instance) {
             return CommandResult.Error(output: $"[body.rig: instance '{instance.Name}' has no client presentation, so it stamps no creation look — body.rig reads this world only]");
         }
-        if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Error(output: "[body.rig: expected at most 1 value — an optional body index]");
+        if (instanceTarget.EffectiveCount > 2) {
+            return CommandResult.Error(output: "[body.rig: expected at most 2 values — an optional body index, then an optional shape name]");
         }
         if (!WorldArgs.TryParseIndex(
             args: in args,
@@ -46,9 +46,12 @@ internal sealed partial class PlayerCommandModule {
         )) {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
+        var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
+
         if (
             !m_stamps.TryBodyRig(
             bodyIndex: index,
+            shapeName: shapeName,
             state: out var state
         ) ||
             (state is null)
@@ -74,6 +77,12 @@ internal sealed partial class PlayerCommandModule {
             if (effector.Bones < Puck.World.Authoring.CreationEffectorDocument.MinChainBones) {
                 _ = line.Append(value: $" bones={effector.Bones}");
             }
+        }
+
+        if (state.Shape is { } shape) {
+            _ = line.Append(value: ((shape.Index < 0)
+                ? $" shape:{shape.Name} none"
+                : $" shape:{shape.Name} parent={(shape.Parent ?? "root")} delta={Point(value: shape.Delta)} turn={Scalar(value: shape.TurnRadians)}"));
         }
 
         _ = line.Append(value: ']');

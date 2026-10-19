@@ -920,6 +920,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         if (!TryResolveListContainer(
             array: out var array,
+            createIn: section.RowType,
             error: out var containerError,
             listPath: listPath,
             root: read.Row!,
@@ -1784,8 +1785,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     );
     // Resolves listPath's OWN array node off root — every segment (including intermediate selectors, e.g. the
     // "shapes[name=forearmL]" in "document.shapes[name=forearmL].swings") is walked, landing ON the list field
-    // itself rather than one level short of it, which is what world.row.add/.remove operate over.
-    private static bool TryResolveListContainer(JsonNode root, string listPath, string verb, out JsonArray? array, out CommandResult error) {
+    // itself rather than one level short of it, which is what world.row.add/.remove operate over. Given the row's CLR
+    // type, an absent list whose declared member is a list is created empty (an omitted optional list, such as a shape
+    // with no swings), so world.row.add can append the first element.
+    private static bool TryResolveListContainer(JsonNode root, string listPath, string verb, out JsonArray? array, out CommandResult error, Type? createIn = null) {
         array = null;
 
         if (!WorldRowFieldPath.TryParse(
@@ -1796,6 +1799,28 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             error = CommandResult.Error(output: $"[{verb}: {parseError}]");
 
             return false;
+        }
+
+        if (
+            (createIn is not null) &&
+            !segments[^1].HasBracket &&
+            WorldRowFieldPath.TryNavigate(
+                container: out var owner,
+                error: out _,
+                path: listPath,
+                root: root,
+                segments: segments.AsSpan(start: 0, length: (segments.Length - 1))
+            ) &&
+            (owner is JsonObject ownerObject) &&
+            (!ownerObject.TryGetPropertyValue(propertyName: segments[^1].Name, jsonNode: out var present) || (present is null)) &&
+            WorldRowFieldPath.TryResolveClrType(error: out _, leafType: out var listType, rowType: createIn, segments: segments) &&
+            (WorldRowFieldPath.ElementTypeOf(collectionType: listType!) is not null)
+        ) {
+            array = [];
+            ownerObject[segments[^1].Name] = array;
+            error = default;
+
+            return true;
         }
 
         if (!WorldRowFieldPath.TryNavigate(
@@ -2075,7 +2100,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.row.add",
-            description: "Inserts ONE element into a LIST field inside a row: world.row.add <path> <key> <listPath> <json> [after=<selector>] for a keyed section, world.row.add <path> <listPath> <json> [after=<selector>] for a keyless one. <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.palette, document.shapes[name=forearmL].swings — the same grammar world.row.set's literal form and world.row.step resolve a field through, walked all the way to the list itself); <json> is the new element's inline JSON. Omitting after= appends; after=<n> inserts after that 0-based index; after=<field>=<value> inserts after the element whose own field equals value, refused by name when it names none or more than one, listing the candidates. Composes and submits a whole-row upsert through the SAME section table world.row.set uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. Buffers and applies at the tick boundary; a full-document revalidation rejects loudly.",
+            description: "Inserts ONE element into a LIST field inside a row: world.row.add <path> <key> <listPath> <json> [after=<selector>] for a keyed section, world.row.add <path> <listPath> <json> [after=<selector>] for a keyless one. <listPath> is the dotted/bracketed path TO the list field (document.shapes, document.palette, document.shapes[name=forearmL].swings — the same grammar world.row.set's literal form and world.row.step resolve a field through, walked all the way to the list itself), and a list field the row omits (a shape with no swings yet) is created to hold the first element when the row's own type declares the member a list; <json> is the new element's inline JSON. Omitting after= appends; after=<n> inserts after that 0-based index; after=<field>=<value> inserts after the element whose own field equals value, refused by name when it names none or more than one, listing the candidates. Composes and submits a whole-row upsert through the SAME section table world.row.set uses; two edits to the same row in one tick window collide and are refused by name — fence with world.wait. Buffers and applies at the tick boundary; a full-document revalidation rejects loudly.",
             handler: (context, args) => {
                 if (!authority.TryResolveInstance(
                     context: context,

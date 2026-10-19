@@ -25,6 +25,17 @@ pivot, in creation units, capped at 4.
 `wave` is `sine` (the default), `halfSine`, `linear`, `constant`, or
 `curve:<row>`.
 
+A live edit of `parent`, `swings` or `slides` (`world.row.set`, `world.row.add`,
+`world.reload`) applies on the next frame: any change to a creation's content
+changes its hash, and the stamp pool replaces the registration, re-resolving
+the parent chain, the effectors and the tight group bounds from the edited
+document. `parent` carries only the parent's animated delta, so a shape
+reparented at rest does not move until the new parent's motion differs from the
+old one's. `body.rig <body> <shape>` reads back the parent the shape's motion
+chains under and the delta the last frame composed for it
+(`shape:<name> parent=<name>|root delta=(x, y, z) turn=r`).
+`WorldStampPoolLiveRigEditLawTests` pins both edits through the scene emitter.
+
 A shape carrying `domain` folds may carry neither, since a fold rides its
 parent's frame. It may still carry a `parent`: the folded shape rides its own
 per-shape slot, packed with the rigid delta the parent's chain imparts (identity
