@@ -5,8 +5,9 @@ namespace Puck.SignedDistance.Baking;
 /// <summary>A contoured surface in world space: a vertex per surface patch of each crossed cell, with its normal, and a
 /// quad per sign-changing lattice edge, wound counter-clockwise seen from outside, with the material the field reported at
 /// the edge's outside end, whose nearest shape is the one the edge crosses. A quad whose last two vertices are one vertex
-/// is a triangle; any other splits into two triangles along its first diagonal, its first vertex to its third, the
-/// diagonal whose triangles face out where only one does.</summary>
+/// is a triangle; any other splits into two triangles along its first diagonal, its first vertex to its third: the
+/// diagonal whose triangles face out where only one does, else the one whose triangles turn least from the normals of
+/// their corners that lie on no crease.</summary>
 /// <param name="Positions">Three floats per vertex.</param>
 /// <param name="Normals">Three floats per vertex: the unit outward normal.</param>
 /// <param name="Quads">Four vertex indices per quad.</param>
@@ -207,8 +208,8 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// surface by manifold dual contouring, placing each vertex by the tangent planes of
 /// its crossings: each crossing's gradient and value are measured where the edge crosses, and the plane passes through
 /// the crossing moved back onto the surface by that value, so a sharp edge between two faces stays sharp at any cell
-/// size, its vertex reaching up to half a cell past its own cell where the next cell holds the edge but not the crossings
-/// of both faces.
+/// size. Where the edge lies up to half a cell past the cell that sees both its faces, in a neighbour that sees one, the
+/// vertex of a straight edge reaches past its cell to it, and a curved convex edge moves onto the neighbour's vertex.
 /// <para>Where the samples cannot resolve the surface, the lattice refines (<see cref="Refine"/>): a cell crossed by a
 /// sheet or gap thinner than a cell along an axis, whether a sample caught it or it passed between two, a cell whose
 /// outside corners report different materials, and a cell two separate sheets cross are sampled again at a finer spacing
@@ -224,6 +225,9 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 public sealed class SdfSampledLattice {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
     private const int MaxFineSamples = 4_000_000;
+    // How much less one diagonal's triangles must turn from their corners' normals than the other's for a quad to split
+    // along it (SplitsAlongFirstDiagonal): below it, the two splits of a quad flat to within its normals' noise tie.
+    private const double TurnTie = 1.0e-3;
 
     private readonly Vector3 m_origin;
     private readonly Vector3 m_cell;
@@ -305,7 +309,9 @@ public sealed class SdfSampledLattice {
     /// Chooses the cells the samples cannot resolve and returns the fine samples that resolve them, <paramref name="factor"/>
     /// to a cell along each axis: a cell next to a lattice edge a sheet or gap thinner than a cell crosses (a run of one
     /// sample between two of the other sign whose crossings lie less than a cell apart, or two samples of one sign whose
-    /// values fall steeply toward each other from both sides and meet below the surface), a crossed cell whose outside
+    /// values fall steeply toward each other from both sides and meet below the surface, where no line beside it crosses
+    /// the solid or gap two samples thick, as beside a solid's edge or corner the line crosses near its tip or grazes,
+    /// which the contour keeps sharp at the lattice's spacing), a crossed cell whose outside
     /// corners report different owned materials, a crossed cell whose corner signs hold more than one surface patch, and
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
     /// <paramref name="regions"/>.
@@ -337,6 +343,37 @@ public sealed class SdfSampledLattice {
         var any = false;
 
         int CellIndex(int x, int y, int z) => (x + (cellsX * (y + (cellsY * z))));
+        // Whether one of the four lattice lines beside sample `at`'s line along `axis` holds two neighbouring samples
+        // inside (`inside`), or outside, from `first` to `last` along it: the solid or gap there is a step thick or
+        // more. A sheet or gap thinner than a step, crossed along a line within a step, is as thin along the lines beside
+        // it, while a solid's edge or corner a line crosses near its tip, or grazes, thickens beside it into the body.
+        bool Thickens(Span<int> at, int axis, bool inside, int first, int last) {
+            Span<int> p = stackalloc int[3];
+
+            for (var offset = 1; (offset < 3); offset++) {
+                var across = ((axis + offset) % 3);
+
+                for (var direction = -1; (direction <= 1); direction += 2) {
+                    at.CopyTo(destination: p);
+                    p[across] += direction;
+                    if ((p[across] < 0) || (p[across] >= samples[across])) {
+                        continue;
+                    }
+
+                    var run = 0;
+
+                    for (var step = Math.Max(val1: 0, val2: first); (step <= Math.Min(val1: last, val2: (samples[axis] - 1))); step++) {
+                        p[axis] = step;
+                        run = (((m_values[Index(x: p[0], y: p[1], z: p[2])] < 0f) == inside) ? (run + 1) : 0);
+                        if (run >= 2) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
         // Marks the cells around the lattice edge from sample `at` along `axis`.
         void MarkEdge(Span<int> at, int axis) {
             var u = ((axis + 1) % 3);
@@ -448,12 +485,17 @@ public sealed class SdfSampledLattice {
                         var after = ValueAt(i: (i + 1));
                         var inside = (value < 0f);
 
-                        // A run of one sample between two of the other sign: a sheet or gap the lattice caught once.
+                        // A run of one sample between two of the other sign: a sheet or gap the lattice caught once. A
+                        // solid's edge or corner the line crosses near its tip (an acute rim's, a tilted cut's) is as thin
+                        // along the line, but thickens beside it (Thickens), and the contour's tangent planes keep it
+                        // sharp at the lattice's own spacing.
                         if (((before < 0f) != inside) && ((after < 0f) != inside)) {
                             var middle = MathF.Abs(value);
                             var thickness = ((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after))));
 
-                            if (thickness < 1f) {
+                            at[axis] = i;
+
+                            if ((thickness < 1f) && !Thickens(at: at, axis: axis, first: (i - 1), inside: inside, last: (i + 1))) {
                                 at[axis] = (i - 1);
                                 MarkEdge(at: at, axis: axis);
                                 at[axis] = i;
@@ -480,7 +522,9 @@ public sealed class SdfSampledLattice {
                         slope = MathF.Max(slope, Slope(x: at[0], y: at[1], z: at[2]));
                         at[axis] = i;
 
-                        if (PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                        // A solid's edge or corner the line grazes falls toward the pair from both sides as a sheet does,
+                        // but the lines beside the pair cross its body a step thick or more (Thickens).
+                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
@@ -1130,16 +1174,7 @@ public sealed class SdfSampledLattice {
         for (var quad = 0; (quad < materials.Length); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(
-                n0: Vertex(values: normals, vertex: quads[at]),
-                n1: Vertex(values: normals, vertex: quads[(at + 1)]),
-                n2: Vertex(values: normals, vertex: quads[(at + 2)]),
-                n3: Vertex(values: normals, vertex: quads[(at + 3)]),
-                v0: Vertex(values: positions, vertex: quads[at]),
-                v1: Vertex(values: positions, vertex: quads[(at + 1)]),
-                v2: Vertex(values: positions, vertex: quads[(at + 2)]),
-                v3: Vertex(values: positions, vertex: quads[(at + 3)])
-            )) {
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: surface.Features, normals: normals, positions: positions, quad: quads.AsSpan(start: at, length: 4))) {
                 (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
             }
         }
@@ -1155,14 +1190,18 @@ public sealed class SdfSampledLattice {
             Features = surface.Features,
             Solved = surface.Solved,
         };
-
-        static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     }
 
-    // Whether quad (v0, v1, v2, v3), with corner normals n0 to n3, splits along its first diagonal, v0 to v2, rather than
-    // its second: the diagonal whose two triangles both face the way the corner normals point, else the shorter one.
-    // Every quad of a contour splits by this one rule.
-    private static bool SplitsAlongFirstDiagonal(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 n0, Vector3 n1, Vector3 n2, Vector3 n3) {
+    // Whether a quad of four vertex indices splits along its first diagonal, its first corner to its third, rather than
+    // its second: the diagonal whose two triangles both face the way the corner normals point, where only one's do; else
+    // the one whose triangles turn least from the normals of their corners that lie on no crease (Turn); else the
+    // shorter. A quad around an edge beside a crease that steps across the lattice holds a crease vertex, a vertex of
+    // each face and a fourth: split one way, a triangle joins the two faces' vertices across the crease and cuts its
+    // corner; split the other, the crease vertex is a corner of both triangles and each lies on one face. Every quad of a
+    // contour splits by this one rule.
+    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, bool[] features, ReadOnlySpan<int> quad) {
+        var (v0, v1, v2, v3) = (Vertex(values: positions, vertex: quad[0]), Vertex(values: positions, vertex: quad[1]), Vertex(values: positions, vertex: quad[2]), Vertex(values: positions, vertex: quad[3]));
+        var (n0, n1, n2, n3) = (Vertex(values: normals, vertex: quad[0]), Vertex(values: normals, vertex: quad[1]), Vertex(values: normals, vertex: quad[2]), Vertex(values: normals, vertex: quad[3]));
         var outward = (
             X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
             Y: (((((double)n0.Y) + n1.Y) + n2.Y) + n3.Y),
@@ -1171,10 +1210,44 @@ public sealed class SdfSampledLattice {
         var alongFirst = (Faces(a: v0, b: v1, c: v2, outward: outward) && Faces(a: v0, b: v2, c: v3, outward: outward));
         var alongSecond = (Faces(a: v0, b: v1, c: v3, outward: outward) && Faces(a: v1, b: v2, c: v3, outward: outward));
 
-        return ((alongFirst == alongSecond)
-            ? (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3))
-            : alongFirst);
+        if (alongFirst != alongSecond) {
+            return alongFirst;
+        }
+
+        var turnFirst = (Turn(a: quad[0], b: quad[1], c: quad[2], features: features, normals: normals, positions: positions) + Turn(a: quad[0], b: quad[2], c: quad[3], features: features, normals: normals, positions: positions));
+        var turnSecond = (Turn(a: quad[0], b: quad[1], c: quad[3], features: features, normals: normals, positions: positions) + Turn(a: quad[1], b: quad[2], c: quad[3], features: features, normals: normals, positions: positions));
+
+        return ((Math.Abs(value: (turnFirst - turnSecond)) > TurnTie)
+            ? (turnFirst < turnSecond)
+            : (DistanceSquared(a: v0, b: v2) <= DistanceSquared(a: v1, b: v3)));
     }
+    // How far triangle (a, b, c), wound counter-clockwise, turns from the normals of its corners that lie on no crease:
+    // one minus the cosine between its facing and each such corner's normal, summed. A crease vertex's normal blends
+    // the faces meeting there and says nothing of which one a triangle lies on.
+    private static double Turn(int a, int b, int c, float[] positions, float[] normals, bool[] features) {
+        var (ax, ay, az) = (((double)positions[(3 * a)]), ((double)positions[((3 * a) + 1)]), ((double)positions[((3 * a) + 2)]));
+        var (ux, uy, uz) = ((positions[(3 * b)] - ax), (positions[((3 * b) + 1)] - ay), (positions[((3 * b) + 2)] - az));
+        var (vx, vy, vz) = ((positions[(3 * c)] - ax), (positions[((3 * c) + 1)] - ay), (positions[((3 * c) + 2)] - az));
+        var (nx, ny, nz) = (((uy * vz) - (uz * vy)), ((uz * vx) - (ux * vz)), ((ux * vy) - (uy * vx)));
+        var length = Math.Sqrt(d: (((nx * nx) + (ny * ny)) + (nz * nz)));
+
+        if (!(length > 0.0)) {
+            return 0.0;
+        }
+
+        var turn = 0.0;
+
+        foreach (var corner in (ReadOnlySpan<int>)[a, b, c]) {
+            if ((corner < features.Length) && features[corner]) {
+                continue;
+            }
+
+            turn += (1.0 - ((((nx * normals[(3 * corner)]) + (ny * normals[((3 * corner) + 1)])) + (nz * normals[((3 * corner) + 2)])) / length));
+        }
+
+        return turn;
+    }
+    private static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     // Whether triangle (a, b, c), wound counter-clockwise, faces the way `outward` points: (b - a) x (c - a) . outward.
     private static bool Faces(Vector3 a, Vector3 b, Vector3 c, (double X, double Y, double Z) outward) {
         var ux = (((double)b.X) - a.X);
