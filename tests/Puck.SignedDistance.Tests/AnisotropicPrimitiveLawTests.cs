@@ -10,11 +10,17 @@ namespace Puck.SignedDistance.Tests;
 /// THE LAW: a primitive authored at a non-uniform scale lowers to a native shape whose field is its true distance, not
 /// the <see cref="SdfOp.Scale"/> op's lower bound <c>f(S⁻¹p)·min(s)</c>. Each lowered primitive's program carries no
 /// non-uniform scale, <see cref="SdfFieldEvaluator"/> accepts it, and at points inside, beside and far from the surface
-/// its distance is within <see cref="Tolerance"/> of the scaled primitive's Euclidean distance computed in double
+/// its distance is within <see cref="ToleranceAt"/> of the scaled primitive's Euclidean distance computed in double
 /// precision.
 /// </summary>
 public sealed class AnisotropicPrimitiveLawTests {
-    private const double Tolerance = 2e-4;
+    // Q48.16's resolution, which the evaluator's squared distances round to before their square root.
+    private const double Resolution = (1.0 / 65536.0);
+
+    // The evaluator's distance at a true distance d: within 2e-4 of it, and within the square root of a few ulps of a
+    // squared distance, about Resolution / d away from the surface and up to √Resolution at it.
+    private static double ToleranceAt(double distance) =>
+        (2e-4 + (Math.Sqrt(d: ((distance * distance) + (3.0 * Resolution))) - Math.Abs(value: distance)));
 
     // A torus scaled alike in X and Z: its minor section an ellipse in every meridian, revolved at the scaled major radius.
     [InlineData(0.8f, 0.3f)]
@@ -32,12 +38,12 @@ public sealed class AnisotropicPrimitiveLawTests {
             var expected = EllipseDistanceLawTests.Reference(px: (radius - radial), py: point.Y, semiX: (0.4 * radial), semiY: (0.4 * vertical));
             var actual = Distance(evaluator: evaluator, point: point);
 
-            if (!(Math.Abs(value: (actual - expected)) <= Tolerance)) {
+            if (!(Math.Abs(value: (actual - expected)) <= ToleranceAt(distance: expected))) {
                 failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
             }
         }
 
-        Assert.Empty(collection: failures);
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
     }
 
     // A cylinder scaled differently in X and Z: an elliptic section extruded along its height.
@@ -57,12 +63,12 @@ public sealed class AnisotropicPrimitiveLawTests {
                 new Vector2(x: (float)Math.Max(val1: section, val2: 0.0), y: (float)Math.Max(val1: height, val2: 0.0)).Length());
             var actual = Distance(evaluator: evaluator, point: point);
 
-            if (!(Math.Abs(value: (actual - expected)) <= Tolerance)) {
+            if (!(Math.Abs(value: (actual - expected)) <= ToleranceAt(distance: expected))) {
                 failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
             }
         }
 
-        Assert.Empty(collection: failures);
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
     }
 
     // An ellipse prism: its section the ellipse its scale's X and Y span, extruded through its Z.
@@ -81,14 +87,58 @@ public sealed class AnisotropicPrimitiveLawTests {
             var expected = Extruded(section: EllipseDistanceLawTests.Reference(px: point.X, py: point.Y, semiX: x, semiY: semiY), depth: (Math.Abs(value: point.Z) - z));
             var actual = Distance(evaluator: evaluator, point: point);
 
-            if (!(Math.Abs(value: (actual - expected)) <= Tolerance)) {
+            if (!(Math.Abs(value: (actual - expected)) <= ToleranceAt(distance: expected))) {
                 failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
             }
         }
 
-        Assert.Empty(collection: failures);
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
     }
 
+    // A convex prism: its unit-square vertices scaled by its X and Y into the polygon its section is, extruded through its Z.
+    [InlineData(0.3f, 0.12f, 0.05f)]
+    [InlineData(1.6f, 0.2f, 0.4f)]
+    [InlineData(0.04f, 0.5f, 0.02f)]
+    [Theory]
+    public void AConvexPrismAnswersItsTrueDistance(float x, float y, float z) {
+        Vector2[] unit = [new(x: -0.9f, y: -0.6f), new(x: -0.7f, y: 0.8f), new(x: 0.2f, y: 1f), new(x: 1f, y: 0.1f), new(x: 0.6f, y: -0.9f)];
+        var scale = new Vector3(x: x, y: y, z: z);
+        var evaluator = Evaluator(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Convex, CornerRadius: 0f, Vertices: unit), scale: scale, type: SdfSolidPrimitive.Prism);
+        Vector2[] polygon = [.. unit.Select(selector: vertex => (vertex * new Vector2(x: x, y: y)))];
+        var failures = new List<string>();
+
+        foreach (var point in Points(reach: (1.4f * MathF.Max(MathF.Max(x, y), z)))) {
+            var expected = Extruded(section: Polygon(point: new Vector2(x: point.X, y: point.Y), vertices: polygon), depth: (Math.Abs(value: point.Z) - z));
+            var actual = Distance(evaluator: evaluator, point: point);
+
+            if (!(Math.Abs(value: (actual - expected)) <= ToleranceAt(distance: expected))) {
+                failures.Add(item: $"{scale} at {point}: {actual}, expected {expected}");
+            }
+        }
+
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
+    }
+
+    // The signed distance to a polygon in double precision: the nearest of its edge segments, negative inside.
+    private static double Polygon(Vector2 point, Vector2[] vertices) {
+        var nearest = double.MaxValue;
+        var inside = false;
+
+        for (var index = 0; (index < vertices.Length); index++) {
+            var a = vertices[index];
+            var b = vertices[((index + 1) % vertices.Length)];
+            double ex = (b.X - a.X), ey = (b.Y - a.Y), px = (point.X - a.X), py = (point.Y - a.Y);
+            var t = Math.Clamp(value: (((px * ex) + (py * ey)) / ((ex * ex) + (ey * ey))), min: 0.0, max: 1.0);
+            double dx = (px - (t * ex)), dy = (py - (t * ey));
+
+            nearest = Math.Min(val1: nearest, val2: Math.Sqrt(d: ((dx * dx) + (dy * dy))));
+            if (((a.Y > point.Y) != (b.Y > point.Y)) && (point.X < (a.X + (((point.Y - a.Y) / (b.Y - a.Y)) * (b.X - a.X))))) {
+                inside = !inside;
+            }
+        }
+
+        return (inside ? -nearest : nearest);
+    }
     // A section's distance extruded through a slab: exact inside and out.
     private static double Extruded(double section, double depth) =>
         (Math.Min(val1: Math.Max(val1: section, val2: depth), val2: 0.0) + Math.Sqrt(d: (Math.Pow(x: Math.Max(val1: section, val2: 0.0), y: 2.0) + Math.Pow(x: Math.Max(val1: depth, val2: 0.0), y: 2.0))));

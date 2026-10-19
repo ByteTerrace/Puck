@@ -149,26 +149,40 @@ public static class SdfSolidGeometry {
             rounding,
             detail: detail
         ),
-            // Vertices are authored unscaled (like Polygon's unit circumradius), so they ride the SAME
-            // Scale(polygonScale) wrap; CornerRadius reads as a fraction of the RAW vertices' own inradius, the
-            // profile's sole rounding control — the separate rounding field has no independent ceiling here
-            // (SdfSolidGeometry.MaxRounding's Convex arm is 0), so it is summed in defensively rather than dropped:
-            // ClampRounding still bounds the total, exactly as every other profile's builder clamps rather than trusts.
-            SdfPrismProfileKind.Convex => chain.Scale(scale: polygonScale).ConvexPolygon(
-            profile.Vertices!,
-            ((profile.CornerRadius * SdfProgramBuilder.ConvexPolygonInradius(vertices: profile.Vertices!)) + scaledRounding),
-            lift,
-            (revolve
-            ? (revolveOffset / polygonScale.X)
-            : 1f),
-            material,
-            blend,
-            smooth,
+            // The vertices are authored in the unit square and scaled into place here: an affine image of a convex polygon is
+            // the convex polygon of its scaled vertices, whose field is its exact distance. CornerRadius reads as a fraction
+            // of the scaled polygon's inradius, the profile's sole rounding control; the separate rounding field has no
+            // independent ceiling here (MaxRounding's Convex arm is 0), so it is summed in rather than dropped, and the
+            // builder's ClampRounding bounds the total.
+            SdfPrismProfileKind.Convex => ConvexProfile(
+            chain: chain,
+            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))],
+            cornerFraction: profile.CornerRadius,
+            rounding: rounding,
+            lift: lift,
+            liftAmount: (revolve
+            ? revolveOffset
+            : scale.Z),
+            material: material,
+            blend: blend,
+            smooth: smooth,
             detail: detail
         ),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(profile)),
         };
     }
+    private static SdfProgramBuilder ConvexProfile(SdfProgramBuilder chain, Vector2[] vertices, float cornerFraction, float rounding,
+        SdfLift lift, float liftAmount, int material, SdfBlendOp blend, float smooth, bool detail) =>
+        chain.ConvexPolygon(
+            vertices,
+            ((cornerFraction * SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices)) + rounding),
+            lift,
+            liftAmount,
+            material,
+            blend,
+            smooth,
+            detail: detail
+        );
     private static Vector3 EffectiveScale(Vector3 scale) =>
         Vector3.Max(
             value1: Vector3.Abs(value: scale),
