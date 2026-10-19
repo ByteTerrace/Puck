@@ -29,7 +29,8 @@ let shinCream = 17 // #EED3A6, the back pods' cream bands
 let shinViolet = 18 // #9D66C6 greaves under their #EED3A6 arch band and side panel
 let gunmetal = 19 // #43464E heel lens housing and heel block
 let steel = 20 // #8B9099 the lens housing's bright ring
-let glow = 21 // #D8FDFF the heel lenses' white-hot cores
+let thrusterGlow = 21 // #D8FDFF the heel and back-pod thruster lenses' white-hot cores, lit by flight mode (lane 2)
+let thrusterCyan = 22 // #1F9BAE the heel and back-pod thruster lenses, lit by flight mode (lane 2)
 
 let archBackOutline = [
   [-1, -1]
@@ -2974,6 +2975,15 @@ prototypes {
           roughness: 0.2
           specular: 0.04
           emissive: 3
+          emissiveLane: 2
+          coat: 0
+        }
+        {
+          color: "#1F9BAE"
+          roughness: 0.25
+          specular: 0.04
+          emissive: 2.4
+          emissiveLane: 2
           coat: 0
         }
       ]
@@ -4957,7 +4967,7 @@ prototypes {
         id: 205
         position [0.2, 0.15, -0.19]
         scale [0.05, 0.05, 0.012]
-        material: cyan
+        material: thrusterCyan
         parent: "boot-left"
         exponent: softness
       }
@@ -4966,7 +4976,7 @@ prototypes {
         id: 980
         position [0.2, 0.15, -0.196]
         scale [0.022, 0.022, 0.01]
-        material: glow
+        material: thrusterGlow
         parent: "boot-left"
         exponent: softness
       }
@@ -5520,7 +5530,7 @@ prototypes {
         position [0.2236, 0.8647, -0.3093]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
         scale [0.0595, 0.037, 0.0055]
-        material: cyan
+        material: thrusterCyan
         parent: "nozzle-left"
         exponent: softness
       }
@@ -5530,7 +5540,7 @@ prototypes {
         position [0.2212, 0.8617, -0.3101]
         rotation [-0.5959, 0.2037, -0.28, 0.7246]
         scale [0.0238, 0.0148, 0.0047]
-        material: glow
+        material: thrusterGlow
         parent: "nozzle-left"
         exponent: softness
       }
@@ -6596,7 +6606,7 @@ prototypes {
         id: 273
         position [-0.2, 0.15, -0.19]
         scale [0.05, 0.05, 0.012]
-        material: cyan
+        material: thrusterCyan
         parent: "boot-right"
         exponent: softness
       }
@@ -6605,7 +6615,7 @@ prototypes {
         id: 981
         position [-0.2, 0.15, -0.196]
         scale [0.022, 0.022, 0.01]
-        material: glow
+        material: thrusterGlow
         parent: "boot-right"
         exponent: softness
       }
@@ -7159,7 +7169,7 @@ prototypes {
         position [-0.2236, 0.8647, -0.3093]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
         scale [0.0595, 0.037, 0.0055]
-        material: cyan
+        material: thrusterCyan
         parent: "nozzle-right"
         exponent: softness
       }
@@ -7169,7 +7179,7 @@ prototypes {
         position [-0.2212, 0.8617, -0.3101]
         rotation [-0.28, 0.7246, -0.5959, 0.2037]
         scale [0.0238, 0.0148, 0.0047]
-        material: glow
+        material: thrusterGlow
         parent: "nozzle-right"
         exponent: softness
       }
