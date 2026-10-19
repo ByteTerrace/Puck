@@ -46,6 +46,11 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
+    // Per slot, the infinity-view image each array element of the slot's set binds now, and the tables whose filler a
+    // zero there stands for; a filler that already sits in an element is not written again, while a leased image always
+    // is, since its handle may name a new image once the old one is released.
+    private readonly nint[][] m_skyViewImages;
+    private readonly SdfWorldTables?[] m_skyViewTables;
     // Per frame slot, the image each screen element of the pass set binds (zero before its first write), and which
     // screens the residency declares and the frame's sky samples.
     private readonly nint[][] m_screens;
@@ -68,6 +73,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        m_skyViewTables = new SdfWorldTables?[context.InFlightFrames];
+        m_skyViewImages = new nint[context.InFlightFrames][];
+        for (var slot = 0; (slot < m_skyViewImages.Length); slot++) { m_skyViewImages[slot] = new nint[SdfWorldPackage.SkyViewCount]; }
         m_screens = new nint[context.InFlightFrames][];
         for (var slot = 0; (slot < m_screens.Length); slot++) {
             m_screens[slot] = new nint[SdfWorldTables.MaxScreenSurfaces];
@@ -323,13 +331,26 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
                 images[packed] = image;
             }
         }
+        var bound = m_skyViewImages[recording.Slot];
+        var filler = tables.SampledFiller.ImageViewHandle;
+
+        // A slot's set written with other tables' filler holds nothing this frame can trust.
+        if (!ReferenceEquals(objA: m_skyViewTables[recording.Slot], objB: tables)) {
+            bound.AsSpan().Clear();
+            m_skyViewTables[recording.Slot] = tables;
+        }
         for (var layer = 0; (layer < images.Length); layer++) {
+            if ((images[layer] == filler) && (bound[layer] == filler)) {
+                continue;
+            }
+
             m_context.Services.Bindings.WriteSampledImage(
                 arrayElement: ((uint)layer),
                 binding: m_sets.BindingOf(member: SdfWorldPackage.SkyViewImages),
                 descriptorSetHandle: set,
                 imageViewHandle: images[layer]
             );
+            bound[layer] = images[layer];
         }
     }
     // The member a pass reads a fragment version through.

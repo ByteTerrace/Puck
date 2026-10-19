@@ -101,7 +101,8 @@ public sealed class PostProcessPackageLawTests {
         return node;
     }
     // The recording the law pins for four frames: the fullscreen pass the package is drawn by, with no push and no combined
-    // sampler; the input written at the package's source binding and the frame slot's work counters at theirs; and the two
+    // sampler; the input written at the package's source binding every frame, and the frame slot's work counters at theirs
+    // once a slot's set, in the first two frames, the two in-flight slots, after which the set already binds them; and the two
     // blocks each draw reads, in hex. The frame group block holds the frame counter, counting from one, and the tick rate;
     // the pass block holds the 64x64 extent, the default flicker rate of 24, then the bound config (intensity, seed, then
     // the package's remaining fields) and the pass's work counter row, zero.
@@ -112,7 +113,7 @@ public sealed class PostProcessPackageLawTests {
         Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
-        Writes: [.. Enumerable.Repeat(count: 4, element: new[] { $"1 {Input.ImageViewHandle}", "3 work counters" }).SelectMany(selector: static pair => pair)]
+        Writes: [$"1 {Input.ImageViewHandle}", "3 work counters", $"1 {Input.ImageViewHandle}", "3 work counters", $"1 {Input.ImageViewHandle}", $"1 {Input.ImageViewHandle}"]
     );
     private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => TestLiveness.Until(
         reason: () => "The pass never published a frame.",

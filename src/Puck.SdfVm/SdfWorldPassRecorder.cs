@@ -67,6 +67,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly nint m_meshPool;
 
     private readonly nint[] m_meshSets = [];
+    // The buffers each mesh set binds now, per slot: its mesh region, its dynamic transforms and its work counters.
+    private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
@@ -150,8 +152,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         try {
             m_meshSets = new nint[slots];
+            m_meshSetBuffers = new IGpuBuffer?[slots][];
 
             for (var slot = 0; (slot < slots); slot++) {
+                m_meshSetBuffers[slot] = new IGpuBuffer?[3];
                 m_meshSets[slot] = bindings.AllocateSet(
                     descriptorSetLayoutHandle: tables.MeshPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
                     name: new GpuObjectName(
@@ -564,10 +568,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         if (count > 0) {
             tables.WriteMeshTables(
+                bound: m_meshSetBuffers[slot],
                 set: set,
                 slot: tables.CurrentSlot
             );
             tables.WriteMeshWorkCounters(
+                bound: ref m_meshSetBuffers[slot][2],
                 counters: WorkCountersOf(recording: in recording).Buffer,
                 set: set
             );

@@ -15,6 +15,9 @@ public sealed class RenderGraphPackageWorkCounters {
     private readonly string m_pass;
     private readonly int m_rowOffset;
     private readonly int m_detailRowOffset;
+    // The counter buffer each pass set binds now, compared by object, since a handle value may name a new buffer once the
+    // old one is released; the sets live as long as this writer.
+    private readonly Dictionary<nint, IGpuBuffer> m_bound = [];
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphPackageWorkCounters"/> class for one package
     /// pass.</summary>
@@ -36,7 +39,7 @@ public sealed class RenderGraphPackageWorkCounters {
     }
 
     /// <summary>Writes a frame's row into the recording's pass block and binds the frame slot's counter buffer in the
-    /// slot's pass set.</summary>
+    /// slot's pass set, unless the set already binds it.</summary>
     /// <param name="recording">The frame's recording, whose <see cref="RenderGraphPackageRecording.WorkCounters"/> names
     /// the row.</param>
     /// <param name="passSet">The slot's pass set (<see cref="RenderGraphPackageSets.PassSet"/>).</param>
@@ -49,6 +52,10 @@ public sealed class RenderGraphPackageWorkCounters {
             value: counters.Row
         );
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[m_detailRowOffset..], value: recording.WorkDetailRow);
+        if (m_bound.TryGetValue(key: passSet, value: out var bound) && ReferenceEquals(objA: bound, objB: counters.Buffer)) {
+            return;
+        }
+        m_bound[passSet] = counters.Buffer;
         m_bindings.WriteBuffer(
             binding: m_binding,
             bufferHandle: counters.Buffer.BufferHandle,

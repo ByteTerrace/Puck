@@ -93,12 +93,23 @@ public sealed partial class SdfWorldTables {
     }
 
     // Writes a ring slot's mesh region, and the dynamic transforms the vertices of a mesh with members ride, into a mesh
-    // pass set of the mesh interface.
-    internal void WriteMeshTables(nint set, int slot) {
-        WriteInterfaceBuffer(buffer: m_meshRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: set);
-        WriteInterfaceBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.DynamicTransforms, set: set);
+    // pass set of the mesh interface, each only when the set does not already bind that buffer: bound holds, per set, the
+    // buffer objects it was last written with (region, then transforms), compared by object, since a handle value may
+    // name a new buffer once the old one is released.
+    internal void WriteMeshTables(nint set, int slot, IGpuBuffer?[] bound) {
+        WriteMeshBuffer(bound: ref bound[0], buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
+        WriteMeshBuffer(bound: ref bound[1], buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
     }
-    // Writes the work counters a mesh pass's fragments count into, at the mesh interface's binding.
-    internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters) =>
-        WriteInterfaceBuffer(buffer: counters, layout: SdfWorldInterfaces.MeshLayout, member: ShaderWorkCounters.Buffer, set: set);
+    // Writes the work counters a mesh pass's fragments count into, at the mesh interface's binding, when the set does not
+    // already bind them.
+    internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters, ref IGpuBuffer? bound) =>
+        WriteMeshBuffer(bound: ref bound, buffer: counters, member: ShaderWorkCounters.Buffer, set: set);
+    private void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
+        if (ReferenceEquals(objA: bound, objB: buffer)) {
+            return;
+        }
+
+        WriteInterfaceBuffer(buffer: buffer, layout: SdfWorldInterfaces.MeshLayout, member: member, set: set);
+        bound = buffer;
+    }
 }
