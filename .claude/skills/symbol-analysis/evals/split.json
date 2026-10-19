@@ -1,12 +1,15 @@
 {
   "seed": 964823564,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the 3 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 2 of the 3 cases, on case counts only, before any case had been run. Cases added since are assigned by the rule above, never by hand.",
   "train": [
     "y01-implementers-of-frame-source",
-    "y02-unused-extension-type"
+    "y02-unused-extension-type",
+    "y04-workspace-load-fails-in-fresh-worktree"
   ],
   "test": [
-    "y03-declarations-of-a-file"
+    "y03-declarations-of-a-file",
+    "y05-alias-hides-a-reference",
+    "y06-overrides-and-derived"
   ]
 }

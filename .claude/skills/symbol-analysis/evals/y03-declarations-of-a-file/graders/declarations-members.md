@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-puck\s+declarations\b[^\n]*--members
+declarations\b[^\n]*--members

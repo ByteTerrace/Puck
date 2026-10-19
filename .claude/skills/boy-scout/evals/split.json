@@ -1,14 +1,16 @@
 {
   "seed": 2389215498,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (4 draws in all) until train held 3 of the 5 cases, on case counts only, before any case had been run. New cases go to test by hand until it holds about 10.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (4 draws in all) until train held 3 of the 5 cases, on case counts only, before any case had been run. Cases added since are assigned by the rule above, never by hand.",
   "train": [
     "b01-typo-link-and-unrelated-bug",
     "b02-rename-moves-citations",
-    "b03-doc-task-reveals-a-code-bug"
+    "b03-doc-task-reveals-a-code-bug",
+    "b07-formatting-sweep"
   ],
   "test": [
     "b04-serializer-option-docs-set",
-    "b05-private-refactor-audit"
+    "b05-private-refactor-audit",
+    "b06-stale-doc-in-an-untouched-file"
   ]
 }
