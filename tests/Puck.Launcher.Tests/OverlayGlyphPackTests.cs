@@ -16,7 +16,7 @@ public sealed class OverlayGlyphPackTests {
         [new(
                 '!',
                 1,
-                null,
+                new(Bottom: 0, Left: 0, Right: 1, Top: 1),
                 new(
                     Bottom: 2,
                     Left: 0,
@@ -26,7 +26,7 @@ public sealed class OverlayGlyphPackTests {
             ), new(
                 secondUnicode,
                 1,
-                null,
+                new(Bottom: 0, Left: 0, Right: 1, Top: 1),
                 second
             )],
         [],
@@ -60,7 +60,7 @@ public sealed class OverlayGlyphPackTests {
         );
         Assert.Equal(
             0x7f7f7f7fu,
-            pack.PackedSdf[(OverlayGlyphSdfPack.GlyphIndex(codePoint: 'W') * 4)]
+            pack.Words[(OverlayGlyphSdfPack.GlyphIndex(codePoint: 'W') * 4)]
         );
     }
     [InlineData(2, 0, 3, 2)]

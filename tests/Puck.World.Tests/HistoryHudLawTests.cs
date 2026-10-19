@@ -39,7 +39,7 @@ public sealed class HistoryHudLawTests {
         var glyphs = OverlayGlyphSdfPack.TryCreate(monoFont: new FontAtlas(
             kind: FontAtlasKind.Sdf, imagePath: "history-hud.png", size: 1f, distanceRange: 1f, width: 1, height: 1,
             metrics: default,
-            glyphs: [new FontAtlasGlyph(unicode: '0', advance: 1f, planeBounds: null,
+            glyphs: [new FontAtlasGlyph(unicode: '0', advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f),
                 atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f))],
             kerningPairs: [], imageData: new FontAtlasImageData(height: 1, rgbaPixels: [255, 255, 255, 255], width: 1)
         ));

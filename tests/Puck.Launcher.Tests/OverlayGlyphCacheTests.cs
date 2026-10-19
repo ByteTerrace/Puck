@@ -10,8 +10,8 @@ public sealed class OverlayGlyphCacheTests {
     private const string Layout = """
         {"atlas":{"type":"mtsdf","size":32,"distanceRange":8,"width":4,"height":2},
          "metrics":{},"glyphs":[
-          {"unicode":33,"advance":1,"atlasBounds":{"left":0.5,"top":0.5,"right":1.5,"bottom":1.5}},
-          {"unicode":57344,"advance":1,"atlasBounds":{"left":2.5,"top":0.5,"right":3.5,"bottom":1.5}}]}
+          {"unicode":33,"advance":1,"planeBounds":{"left":0,"bottom":0,"right":1,"top":1},"atlasBounds":{"left":0.5,"top":0.5,"right":1.5,"bottom":1.5}},
+          {"unicode":57344,"advance":1,"planeBounds":{"left":0,"bottom":0,"right":1,"top":1},"atlasBounds":{"left":2.5,"top":0.5,"right":3.5,"bottom":1.5}}]}
         """;
 
     private static void WriteSources(string directory, byte red = 11) {
@@ -39,21 +39,21 @@ public sealed class OverlayGlyphCacheTests {
         Assert.Equal(2, icons.AtlasCellHeight);
         // Every source texel, including the right/bottom center endpoints, is copied in row order.
         Assert.Equal(new uint[] { 0xff00000d, 0xff00000e, 0xff000011, 0xff000012 },
-            icons.SdfWords[(95 * 4)..].ToArray());
+            icons.Words[(95 * 4)..(96 * 4)].ToArray());
         var files = Directory.GetFiles(path: directory.RootPath, searchPattern: "*.pack");
 
         Assert.Equal(2, files.Length);
         var stamp = new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2001);
 
         foreach (var file in files) { File.SetLastWriteTimeUtc(lastWriteTimeUtc: stamp, path: file); }
-        Assert.Equal(ascii.SdfWords.ToArray(), new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack()!.SdfWords.ToArray());
-        Assert.Equal(icons.SdfWords.ToArray(), new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000])!.SdfWords.ToArray());
+        Assert.Equal(ascii.Words.ToArray(), new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack()!.Words.ToArray());
+        Assert.Equal(icons.Words.ToArray(), new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000])!.Words.ToArray());
         Assert.All(files, file => Assert.Equal(stamp, File.GetLastWriteTimeUtc(path: file)));
         WriteSources(directory: directory.RootPath, red: 31);
         var changed = new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000]);
 
         Assert.NotNull(@object: changed);
-        Assert.Equal(0xff000021u, changed.SdfWords[(95 * 4)]);
+        Assert.Equal(0xff000021u, changed.Words[(95 * 4)]);
         var layoutPath = Path.Combine(path1: directory.RootPath, path2: "jetbrains-mono-regular.json");
 
         File.WriteAllText(layoutPath, Layout.Replace(newValue: "\"distanceRange\":6", oldValue: "\"distanceRange\":8"));
@@ -85,7 +85,7 @@ public sealed class OverlayGlyphCacheTests {
         var actual = new OverlayGlyphAtlasSet(directory.RootPath).LoadOverlayPack(extraCodePoints: [0xe000]);
 
         Assert.NotNull(@object: actual);
-        Assert.Equal(expected.SdfWords.ToArray(), actual.SdfWords.ToArray());
+        Assert.Equal(expected.Words.ToArray(), actual.Words.ToArray());
         // The refused cache was not served: the rebuild rewrote the file as this build writes it.
         Assert.Equal(original, File.ReadAllBytes(path: path));
     }
@@ -100,6 +100,22 @@ public sealed class OverlayGlyphCacheTests {
         Assert.NotNull(@object: pack);
         Assert.Equal(47, pack.AtlasCellWidth);
         Assert.Equal(83, pack.AtlasCellHeight);
-        Assert.Contains(collection: pack.PackedSdf, filter: word => (word != 0));
+        Assert.Contains(collection: pack.Words.ToArray(), filter: word => (word != 0));
+        // JetBrains Mono advances 0.6 em at 48 texels to the em; '!' sits centred in its cell, whose left edge is
+        // half a texel left of the plane bound at -0.17917 em.
+        Assert.Equal(28.8f, pack.Advance, 0.001f);
+        Assert.Equal(28.8f, pack.AdvanceOf(glyph: OverlayGlyphSdfPack.GlyphIndex(codePoint: 'W')), 0.001f);
+        Assert.Equal(9.1f, pack.OriginOf(glyph: OverlayGlyphSdfPack.GlyphIndex(codePoint: '!')), 0.001f);
+
+        // A 12 px run's 18 px cell scales 0.6 em by 18 / 83 texels: "console" travels seven 6.246 px advances.
+        var builder = new OverlayFrameBuilder(glyphs: pack, height: 600, width: 800, theme: OverlayThemeValues.Zero,
+            leases: new OverlayChannelLeases(capacity: new OverlayCapacity(
+                BindingBarMaxBanks: 0, BindingBarMaxModifiers: 0, BindingBarMaxSlotsPerBank: 0,
+                HudElementsPerPanel: 0, HudElementsPerSeatPanel: 0, HudPanels: 0, HudSeatPanelsPerSeat: 0,
+                MarkerMaxChipsPerSeat: 0, Seats: 0, WheelMaxRings: 0, WheelMaxSectorsPerRing: 0
+            )));
+
+        Assert.Equal(18, OverlayFrameBuilder.CellHeight(sizePx: 12f));
+        Assert.Equal((7f * 6.2458f), builder.TextWidth(cellHeight: 18, chars: "console".Length), 0.01f);
     }
 }

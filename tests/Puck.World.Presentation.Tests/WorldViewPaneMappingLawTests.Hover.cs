@@ -17,7 +17,8 @@ public sealed partial class WorldViewPaneMappingLawTests {
             atlasCellWidth: 1,
             distanceRange: 1f,
             glyphCount: 1,
-            packedSdf: [0u]
+            advance: 1f,
+            words: [0u, 0u, 0x3F800000u]
         ),
         height: Display,
         leases: new OverlayChannelLeases(capacity: new OverlayCapacity(
@@ -41,7 +42,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     private CursorWriter? m_cursorWriter;
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
+    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount);
     // The outline a pane's rect owes: four one-pixel edges (the zero theme's hairline, raised to a pixel) inside the rect,
     // top, bottom, left and right, in normalized frame space, derived here in display pixels.
     private static (float X, float Y, float Width, float Height)[] EdgesOf(NormalizedRect pane) {

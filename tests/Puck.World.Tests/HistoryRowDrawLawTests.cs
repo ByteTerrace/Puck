@@ -17,7 +17,7 @@ public sealed class HistoryRowDrawLawTests {
         var glyphs = OverlayGlyphSdfPack.TryCreate(monoFont: new FontAtlas(
             kind: FontAtlasKind.Sdf, imagePath: "history-row.png", size: 1f, distanceRange: 1f, width: 1, height: 1,
             metrics: default,
-            glyphs: [.. "0123456789".Select(selector: static digit => new FontAtlasGlyph(unicode: digit, advance: 1f, planeBounds: null,
+            glyphs: [.. "0123456789".Select(selector: static digit => new FontAtlasGlyph(unicode: digit, advance: 1f, planeBounds: new FontAtlasBounds(Bottom: 0f, Left: 0f, Right: 1f, Top: 1f),
                 atlasBounds: new FontAtlasBounds(Bottom: 1f, Left: 0f, Right: 1f, Top: 0f)))],
             kerningPairs: [], imageData: new FontAtlasImageData(height: 1, rgbaPixels: [255, 255, 255, 255], width: 1)
         ));

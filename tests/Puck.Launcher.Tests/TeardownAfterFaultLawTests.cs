@@ -51,7 +51,7 @@ public sealed class TeardownAfterFaultLawTests {
             [new(
                 '!',
                 1,
-                null,
+                new(Bottom: 0, Left: 0, Right: 1, Top: 1),
                 new(
                     Bottom: 2,
                     Left: 0,
