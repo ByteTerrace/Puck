@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-shaders generate|building\s+`?Puck\.SdfVm|build
+shaders generate|build(ing)?\s+(of\s+)?`?(src/)?Puck\.SdfVm

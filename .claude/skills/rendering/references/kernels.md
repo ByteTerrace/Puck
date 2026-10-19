@@ -79,8 +79,7 @@ pipelines in and retires the old ones; a failed load or pipeline build keeps
 the previous kernels, and so does a tree whose kernels do not read the host's
 interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
-kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
-`sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
+kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images, baked bricks, and world state
 survive; the cadence signature is invalidated. A reload also builds again the
 views kernel if the residency refused it (its creation failed; `NotReadyReason`
 names it), even when the tree leaves its bytecode unchanged: that, or a device
@@ -102,14 +101,17 @@ and the sky.
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
-`bricks`, the brick staging copy, the bake dispatches and the pool's barriers
-when that work is pending; `upload`, the region copies; and `environment`, the
+`bricks`, the brick pool's writes (a queued host-baked brick's staging and copy,
+the brick bake's slices and the barriers around them) when that work is
+pending; `upload`, the region copies; and `environment`, the
 CPU candidate projection that decides whether the sky's environment map and
 coefficients owe a device refresh: they do when lighting-visible irradiance
 differs by at least 1/255 while ambient, reflections, sky-coloured fog or haze
 reads it (`SdfWorldTables.SkyEnvironment.cs`). The residency's `sdf.environment`
 graph producer records the map and its reduction (`sdf-sky-environment.comp`,
-then `sdf-sky-environment-reduce.comp`) in passes of its own. An upload
+then `sdf-sky-environment-reduce.comp`) in passes of its own, and with them the
+screen reduction (`sdf-screen-emission.comp`, one group per acquired screen
+image) that direct screen lights read as `sdfScreenLights`. An upload
 skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a bake sample, and each bounded
 volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
@@ -130,7 +132,7 @@ of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls, and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-mesh-bake-mask.comp` | Writes each of the frame's bake lattices' instance selection; only while a bake is pending (`Skips`). |
 | `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours, or draws as a field slice (`SdfFieldSlice`); only while a bake or a slice is pending. |
 | `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | Draw every mesh draw from the cascade's light camera into its sampled depth alone, 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
@@ -269,3 +271,41 @@ plane through the bake kernel with its tetrahedral gradient and writes a PNG of
 the distance bands beside `|grad d|` (a far field that stops rising reads
 `clipped=` and paints magenta, out of the statistics); `creation.shape` reads each shape's
 exactness off its lowering without a GPU.
+
+## Captures, faults and validation
+
+- **GPU captures.** Boot with `--capture-tool pix` (Direct3D 12) or
+  `--capture-tool renderdoc` (either backend), then `gpu.capture <path>
+  [<frames>]` captures the next frames and narrates `[gpu.capture] <tool> wrote
+  <file>`. A crossing lands on the same tick every run, so put
+  `world.wait <ticks>` before the capture to catch it; a steady frame is any
+  frame after `[sdf.mesh-gi] done`. Launch through `dotnet <dll>` or
+  `dotnet run`, never `Puck.World.exe`. Read a capture with RenderDoc on either
+  backend: `renderdoccmd convert -f x.rdc -o x.zip.xml -c zip.xml` exports every
+  call of the frame with its parameters and debug names, which is how
+  submissions, barriers and copies are counted. PIX analysis (`pixtool`, the PIX
+  UI) needs Windows developer mode and a PIX timing capture an answered UAC
+  prompt; both are the owner's to grant. Pass timestamps are recorded only under
+  `world.gpu-timing`; read pass times there, beside the capture.
+- **Device faults.** A removed Direct3D 12 device prints its DRED record as
+  `[d3d12-dred]` lines; `gpu.faults remove` removes one on purpose. A lost
+  Vulkan device reports `VK_EXT_device_fault` and its last pass checkpoints
+  (`VK_NV_device_diagnostic_checkpoints`) in the loss's message.
+- **Validation layers.** Under `--debug-layers`, any `[vulkan-debug]
+  validation`, `SYNC-HAZARD-*` or `[d3d12-debug]` line is a bug to fix in the
+  engine, never a message to filter. `--debug-layers full` adds Direct3D 12
+  GPU-based validation and Vulkan GPU-assisted validation (out-of-bounds access,
+  groupshared races) and best practices; the boot's bake takes minutes under
+  it, so wait on `[sdf.mesh-bake] done` before judging a frame. Its
+  `[vulkan-debug] best-practices` lines are advice to triage, not failures, and
+  the layer's own `validation WARNING` notices at device creation (adjusted
+  features, core plus GPU-assisted being slow) are not about the engine.
+- **`Fatal error. Internal CLR error. (0x80131506)`.** Check a World run that
+  dies this way against the pinned JIT's GC hole around inline P/Invoke first
+  ([toolchain cautions](../../../../docs/development/contributing.md#hardware-and-toolchain-cautions)):
+  a CsWin32 COM call in an optimized loop can hit it, and the debug layer makes
+  it likelier because each call stays in native code longer. The managed stack
+  it prints is whichever thread allocated, not the culprit.
+  `DirectXCommandListRecorder.RecordBackBuffer` (`Puck.DirectX.Presentation`)
+  keeps `[MethodImpl(MethodImplOptions.NoOptimization)]` until that note says
+  the JIT is fixed.
