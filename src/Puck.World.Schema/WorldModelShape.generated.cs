@@ -1628,6 +1628,7 @@ public static partial class WorldModelShape {
                 M("bleed", typeof(global::System.String), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Bleed", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Bleed),
                 M("receive", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Receive", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Receive),
                 M("paints", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Authoring.PalettePaintDocument>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Paints", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Paints),
+                M("emissiveLane", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "EmissiveLane", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).EmissiveLane),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.PaletteInsetDocument), true, JsonTypeInfoKind.Object, null,

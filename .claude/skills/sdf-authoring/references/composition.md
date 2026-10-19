@@ -182,8 +182,9 @@ Erosion emits on both branches â€” the shape's own scope and the enclosing one â
 so a shape inside a group or creation scope shares that pop's clamp rather than
 losing the facet. What a static placement lacks is a lane to drive it: static,
 animated, and attached registrations supply zero-valued lanes, so a static
-erosion resolves at zero every frame. State-driven erosion belongs on an
-inhabited placement for that reason, not because static emission drops it.
+erosion resolves at zero. Even on an inhabited placement erosion is baked: it
+holds the lanes the bake read when the program last changed, so it cannot
+follow live state ([render lanes](surface.md#render-lanes)).
 
 ## The budget
 

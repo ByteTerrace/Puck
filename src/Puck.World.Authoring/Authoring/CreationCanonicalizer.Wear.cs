@@ -140,6 +140,12 @@ public static partial class CreationCanonicalizer {
                 Path: $"palette[{index}].receive"
             ));
         }
+        if (!SdfMaterial.IsEmissiveLane(lane: entry.EmissiveLane)) {
+            errors.Add(item: new(
+                Message: $"emissiveLane must be a render lane in [0, 3]; got {entry.EmissiveLane}.",
+                Path: $"palette[{index}].emissiveLane"
+            ));
+        }
         Color(entry.Fill, "fill");
         Color(entry.Bleed, "bleed");
 

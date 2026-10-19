@@ -8,6 +8,7 @@
 |---|---|---|---|
 | `color` | `#RRGGBB` or `state.<row>[.<key>]` | required | linear-RGB albedo; also the metallic reflectance tint |
 | `emissive` | finite ≥ 0 | 0 | `albedo × emissive` added after shading, so it glows through shadow |
+| `emissiveLane` | [0, 3] | absent | scales `emissive` by `saturate(lane)` at shading time, from each inhabited body's own lanes; absent keeps `emissive` static. A placement without lanes reads zero and stays dark |
 | `specular` | finite ≥ 0 | 0 | dielectric reflectance at normal incidence. With `metal` also 0 the GGX term is skipped entirely |
 | `roughness` | [0, 1] | 0.202 | 0 is a mirror-tight highlight, 1 the broadest lobe |
 | `sheen` | [0, 1] | 0 | fresnel edge lift multiplied into the lit color — a painted catch along a bevel, never a halo |
@@ -23,7 +24,7 @@
 | `paints` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
-name** outside [0, 1]. There is no `shininess` member; it is refused as unmapped.
+name** outside [0, 1], and `emissiveLane` outside [0, 3]. There is no `shininess` member; it is refused as unmapped.
 A palette slot has no `bounce` member either; it is refused as unmapped, and
 `fill` is the artistic tint. A light's `bounce` is a separate transport gain.
 
@@ -210,13 +211,23 @@ stage separate lane expressions over a common range. Check healthy and depleted
 endpoints and sample the intervening hp values: every plate must transition in
 order, and no hp value should leave all three mid-erosion.
 
-Three consumers address a lane by index, each validated to [0, 3]:
+Four consumers address a lane by index, each validated to [0, 3]:
 
-| Consumer | Spelling |
-|---|---|
-| shape erosion | `shapes[].erode = { lane, from, to, noise }` |
-| material weathering | `palette[].weathering.lane` |
-| volume intensity | `volumes[].intensityLane` |
+| Consumer | Spelling | Reads the lane |
+|---|---|---|
+| shape erosion | `shapes[].erode = { lane, from, to, noise }` | in the bake: frozen at the value the bake read |
+| material weathering | `palette[].weathering.lane` | at shading time, every frame |
+| material emission | `palette[].emissiveLane` | at shading time, every frame |
+| volume intensity | `volumes[].intensityLane` | at shading time, every frame |
+
+Every view draws the residency's baked meshes, and erosion is geometry: the
+bake samples the lanes the frames hold while a new program bakes (at boot, or
+after an edit that rebuilds the program), and the mesh it bakes keeps drawing
+until the next program (`SdfMeshPathBake`). A lane change alone starts no bake, so **erode cannot show or
+hide a part live**; at boot the lanes usually read 0, and a part that only
+appears as a lane rises bakes empty (`no surface after 0 refinements` in the
+bake log). Use the shading-time consumers for live state: `emissiveLane` turns a
+glow on and off, `weathering.lane` drives wear.
 
 Nothing in the renderer knows what the number means. Put the meaning in the
 state row's own name and in the lane expression.

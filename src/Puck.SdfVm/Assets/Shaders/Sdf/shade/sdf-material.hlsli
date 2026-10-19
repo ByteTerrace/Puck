@@ -31,6 +31,7 @@ struct SdfMaterialData {
     float4 depositResponse;
     uint paintFirst; // the vector of the material's first paint (SdfProgram.PackPaint)
     uint paintCount; // its paints, drawn in order
+    uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -87,8 +88,16 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.depositResponse = asfloat(sdfWords[materialBase + 19u]);
     data.paintFirst = sdfWords[materialBase + 20u].x;
     data.paintCount = sdfWords[materialBase + 20u].y;
+    data.emissiveLane = sdfWords[materialBase + 20u].z;
 
     return data;
+}
+// Scales a lane-driven emissive by its render lane, saturated; `lanes` are the shaded surface's frame-slot lanes,
+// zero for a surface without a slot. A static emissive (lane 0 in the packed word) is untouched.
+void sdfApplyEmissiveLane(float4 lanes, inout SdfMaterialData material) {
+    if (material.emissiveLane != 0u) {
+        material.emissive *= saturate(lanes[min(material.emissiveLane - 1u, 3u)]);
+    }
 }
 // Thin wrapper for callers that only shade the base color (debug views, palette ramps).
 // The Trowbridge-Reitz (GGX) normal distribution: alpha2 / (pi * d^2), d = nh^2*(alpha2-1)+1.
