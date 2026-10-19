@@ -2868,6 +2868,13 @@ never writes the store, so it reads a store a running World owns.
 - `--history` (with `--group`) also audits every stored mesh of the group's
   geometry whatever identity stored it, oldest first: how each build's bake of
   the same field compares.
+- `--cpu` bakes the selected groups itself and audits those meshes, reading no
+  store (`Puck.Cli.Mesh.MeshCpuBake`): the bake's own lattices, refinement and
+  contour (`SdfMeshPathBake`), each lattice answered on the CPU through the
+  group's field as the bake kernel answers it, a value, material and
+  tetrahedral gradient a sample, with taps at least half a millimetre out since
+  the evaluator answers in steps of 2⁻¹⁶ m. A bake change is measured this way
+  with no device; a group whose field the evaluator refuses is named as such.
 
 Per group it prints the distance off the surface at vertices, triangle
 centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
