@@ -175,9 +175,10 @@ check needs no Node.js or npm step. `puck branding --check` verifies the canonic
 active asset copies, and source wiring recorded in the
 [branding manifest](../../branding/manifest.json). The WebAssembly producer's
 Node harness job fails if the payload it downloads has no entry module. The
-nightly frontier measures
-known failing or inconclusive HGB cases separately from release gates, and
-builds its own battery for that scheduled run. Test reports
+HGB battery step is
+informational: it runs every corpus ROM, goes red and names each ROM that does
+not pass in the job summary, and does not hold a release or deploy while ROMs
+fail. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
 Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader

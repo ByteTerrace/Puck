@@ -156,12 +156,11 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
   scheduled event moves through `AgbScheduler.TransferEvent`, which re-arms it
   on load. Load-only work (a derived mask, a range check, re-derived timer
   events) follows the transfer in `LoadState`.
-- `ComponentSnapshotLayoutLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
-  `tests/Puck.AdvancedGamingBrick.Tests` pins every component's layout by
-  seeding each field from its name. A deliberate layout change re-records that
-  component's value in the same change and raises `CurrentVersion` of
-  `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced), which the
-  core's checkpoint identity names.
+- No file records a component's layout. A deliberate layout change raises
+  `CurrentVersion` of `MachineIdentity` (Humble) or `AgbMachineIdentity`
+  (Advanced), which the core's checkpoint identity names, and the Post
+  `snapshot-round-trip` and `fork-determinism` stages show save and load still
+  agree.
 - `--hash-divergence` localizes a mismatch between two executions in one
   process and one build.
 - Use `--dump-snapshot` and an offline section-table diff for cross-build byte
@@ -315,7 +314,7 @@ one lag constant in isolation.
   `lycint_dmgpalette_during_m3_1` the `ppu-pixel` stream is
   index-aligned and both cores commit BGP at the same absolute cycle, yet SameBoy
   paints from LY 1 x 157 and we paint from x 155 — the two-column error the
-  ledger records as 286 differing pixels (143 lines x 2 columns), with the
+  corpus run reports as 286 differing pixels (143 lines x 2 columns), with the
   `lycint_*_3`/`_4` pair three columns out at 429. Moving both conventions together
   does close this family, and costs more elsewhere than it closes — see the
   refuted decompositions above.

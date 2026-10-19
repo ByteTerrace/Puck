@@ -368,7 +368,7 @@ dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
 ```
 
 ```bash
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate --artifacts artifacts/hgb-post
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts artifacts/hgb-post
 ```
 
 ```bash

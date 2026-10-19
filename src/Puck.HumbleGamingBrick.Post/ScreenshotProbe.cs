@@ -8,8 +8,8 @@ namespace Puck.HumbleGamingBrick.Post;
 /// and compares it pixel-exact against the first of a case's expected-image candidates that exists on disk (a
 /// suite's device-tag fallback chain, e.g. mealybug's <c>_dmg_blob.png</c> then <c>_dmg_b.png</c>). This framebuffer's
 /// DMG shades and CGB <c>(X&lt;&lt;3)|(X&gt;&gt;2)</c> channel expansion already match the shared "common palette" most
-/// of the corpus's screenshots are rendered under (<see cref="LedgerCase.Palette"/> <see cref="ScreenshotPalette.Common"/>,
-/// no conversion applied); a case whose <see cref="LedgerCase.Palette"/> is <see cref="ScreenshotPalette.GambatteCgb"/>
+/// of the corpus's screenshots are rendered under (<see cref="SuiteCase.Palette"/> <see cref="ScreenshotPalette.Common"/>,
+/// no conversion applied); a case whose <see cref="SuiteCase.Palette"/> is <see cref="ScreenshotPalette.GambatteCgb"/>
 /// runs the framebuffer through <see cref="GambatteCgbPalette"/> first. A mismatch beyond that is either a rendering
 /// divergence or a resolution mismatch, both reported as a failure.
 /// </summary>
@@ -24,17 +24,17 @@ internal static class ScreenshotProbe {
         return transformed;
     }
 
-    /// <summary>Resolves a screenshot case's expected image: the first of <see cref="LedgerCase.ExpectedImageCandidates"/>
+    /// <summary>Resolves a screenshot case's expected image: the first of <see cref="SuiteCase.ExpectedImageCandidates"/>
     /// that exists on disk.</summary>
-    /// <param name="ledgerCase">The case to resolve.</param>
+    /// <param name="suiteCase">The case to resolve.</param>
     /// <returns>The winning candidate's path, or <see langword="null"/> when none exist (or none are configured).</returns>
-    public static string? ResolveExpectedImage(LedgerCase ledgerCase) =>
-        ledgerCase.ExpectedImageCandidates?.FirstOrDefault(predicate: File.Exists);
+    public static string? ResolveExpectedImage(SuiteCase suiteCase) =>
+        suiteCase.ExpectedImageCandidates?.FirstOrDefault(predicate: File.Exists);
     /// <summary>Runs a case to a verdict.</summary>
-    /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedImageCandidates"/> must be non-empty.</param>
+    /// <param name="suiteCase">The case to run; <see cref="SuiteCase.ExpectedImageCandidates"/> must be non-empty.</param>
     /// <returns>The probe outcome, carrying the differing-pixel count and both images on a pixel mismatch.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
-        var candidates = ledgerCase.ExpectedImageCandidates;
+    public static ProbeOutcome Run(SuiteCase suiteCase) {
+        var candidates = suiteCase.ExpectedImageCandidates;
 
         if (
             (candidates is null) ||
@@ -46,7 +46,7 @@ internal static class ScreenshotProbe {
             );
         }
 
-        var imagePath = ResolveExpectedImage(ledgerCase: ledgerCase);
+        var imagePath = ResolveExpectedImage(suiteCase: suiteCase);
 
         if (imagePath is null) {
             return new ProbeOutcome(
@@ -58,16 +58,16 @@ internal static class ScreenshotProbe {
             );
         }
 
-        var rom = File.ReadAllBytes(path: ledgerCase.FullPath);
+        var rom = File.ReadAllBytes(path: suiteCase.FullPath);
 
         using var machine = PostMachine.Build(
-            model: ledgerCase.Model,
+            model: suiteCase.Model,
             rom: rom
         );
         using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         PostMachine.RunFrames(
-            frames: ledgerCase.FrameCap,
+            frames: suiteCase.FrameCap,
             instance: machine
         );
 
@@ -79,7 +79,7 @@ internal static class ScreenshotProbe {
         }
 
         var framebuffer = machine.GetRequiredService<IFramebuffer>();
-        var actualRgba = FramebufferRgba.Pack(pixels: (ledgerCase.Palette switch {
+        var actualRgba = FramebufferRgba.Pack(pixels: (suiteCase.Palette switch {
             ScreenshotPalette.GambatteCgb => Transformed(pixels: framebuffer.Pixels),
             _ => framebuffer.Pixels,
         }));
@@ -122,7 +122,7 @@ internal static class ScreenshotProbe {
 
         return ((diffPixels == 0)
             ? new ProbeOutcome(
-                Detail: $"pixel-exact against {Path.GetFileName(path: imagePath)} after {ledgerCase.FrameCap} frames",
+                Detail: $"pixel-exact against {Path.GetFileName(path: imagePath)} after {suiteCase.FrameCap} frames",
                 Verdict: ProbeVerdict.Pass
             )
             : new ProbeOutcome(
@@ -132,7 +132,7 @@ internal static class ScreenshotProbe {
                     Width: framebuffer.Width
                 ),
                 DiffPixelCount: diffPixels,
-                Detail: $"{diffPixels} differing pixel(s) against {Path.GetFileName(path: imagePath)} after {ledgerCase.FrameCap} frames",
+                Detail: $"{diffPixels} differing pixel(s) against {Path.GetFileName(path: imagePath)} after {suiteCase.FrameCap} frames",
                 ExpectedImage: new ProbeImage(
                     Height: expected.Height,
                     Rgba: expected.RgbaPixels,

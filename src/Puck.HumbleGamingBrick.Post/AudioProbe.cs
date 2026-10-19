@@ -16,10 +16,10 @@ internal static class AudioProbe {
     private const int RawSampleRate = 2_097_152;
 
     /// <summary>Runs a case to a verdict.</summary>
-    /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedAudio"/> must be set.</param>
+    /// <param name="suiteCase">The case to run; <see cref="SuiteCase.ExpectedAudio"/> must be set.</param>
     /// <returns>The probe outcome.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
-        var expectation = ledgerCase.ExpectedAudio;
+    public static ProbeOutcome Run(SuiteCase suiteCase) {
+        var expectation = suiteCase.ExpectedAudio;
 
         if (expectation is null) {
             return new ProbeOutcome(
@@ -28,16 +28,16 @@ internal static class AudioProbe {
             );
         }
 
-        var rom = File.ReadAllBytes(path: ledgerCase.FullPath);
+        var rom = File.ReadAllBytes(path: suiteCase.FullPath);
 
         using var machine = PostMachine.Build(
-            model: ledgerCase.Model,
+            model: suiteCase.Model,
             rom: rom
         );
         using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         var sink = machine.GetRequiredService<IAudioSink>();
-        var priorFrames = (ledgerCase.FrameCap - 1);
+        var priorFrames = (suiteCase.FrameCap - 1);
 
         if (priorFrames > 0) {
             PostMachine.RunFrames(
@@ -67,7 +67,7 @@ internal static class AudioProbe {
 
         if (samples.Length < 2) {
             return new ProbeOutcome(
-                Detail: $"no audio samples produced for the final frame (frame cap {ledgerCase.FrameCap})",
+                Detail: $"no audio samples produced for the final frame (frame cap {suiteCase.FrameCap})",
                 Verdict: ProbeVerdict.Inconclusive
             );
         }
@@ -93,7 +93,7 @@ internal static class AudioProbe {
         return new ProbeOutcome(
             Detail: $"{(silent
             ? "silent"
-            : "varying")} over {(samples.Length / 2)} samples after {ledgerCase.FrameCap} frames (expected {(expectSilence
+            : "varying")} over {(samples.Length / 2)} samples after {suiteCase.FrameCap} frames (expected {(expectSilence
             ? "silence"
             : "sound")})",
             Verdict: (passed

@@ -1,11 +1,11 @@
 namespace Puck.HumbleGamingBrick.Post;
 
-/// <summary>Dispatches a <see cref="LedgerCase"/> to its <see cref="ProbeKind"/>'s implementation and normalizes the
-/// result to one shared <see cref="ProbeOutcome"/> shape, so <see cref="LedgerEvaluator"/> never branches on probe kind.</summary>
+/// <summary>Dispatches a <see cref="SuiteCase"/> to its <see cref="ProbeKind"/>'s implementation and normalizes the
+/// result to one shared <see cref="ProbeOutcome"/> shape, so <see cref="SuiteEvaluator"/> never branches on probe kind.</summary>
 internal static class ProbeRunner {
-    private static ProbeOutcome RunAcceptance(LedgerCase ledgerCase) {
+    private static ProbeOutcome RunAcceptance(SuiteCase suiteCase) {
         var (passed, detail) = AcceptanceRomProbe.Run(
-            romCase: ToRomCase(ledgerCase: ledgerCase)
+            romCase: ToRomCase(suiteCase: suiteCase)
         );
 
         return new ProbeOutcome(
@@ -18,20 +18,20 @@ internal static class ProbeRunner {
         );
     }
     private static ProbeOutcome RunRomProbe<TResult>(
-        LedgerCase ledgerCase,
+        SuiteCase suiteCase,
         Func<RomCase, (TResult Result, string Detail)> run,
         Func<TResult, ProbeVerdict> toVerdict
     ) {
-        var (result, detail) = run(ToRomCase(ledgerCase: ledgerCase));
+        var (result, detail) = run(ToRomCase(suiteCase: suiteCase));
 
         return new ProbeOutcome(
             Detail: detail,
             Verdict: toVerdict(result)
         );
     }
-    private static ProbeOutcome RunConformance(LedgerCase ledgerCase) =>
+    private static ProbeOutcome RunConformance(SuiteCase suiteCase) =>
         RunRomProbe<ConformanceRomResult>(
-            ledgerCase: ledgerCase,
+            suiteCase: suiteCase,
             run: ConformanceRomProbe.Run,
             toVerdict: static result => result switch {
                 ConformanceRomResult.Pass => ProbeVerdict.Pass,
@@ -39,9 +39,9 @@ internal static class ProbeRunner {
                 _ => ProbeVerdict.Inconclusive,
             }
         );
-    private static ProbeOutcome RunGbMicrotest(LedgerCase ledgerCase) =>
+    private static ProbeOutcome RunGbMicrotest(SuiteCase suiteCase) =>
         RunRomProbe<GbMicrotestResult>(
-            ledgerCase: ledgerCase,
+            suiteCase: suiteCase,
             run: GbMicrotestProbe.Run,
             toVerdict: static result => result switch {
                 GbMicrotestResult.Pass => ProbeVerdict.Pass,
@@ -49,9 +49,9 @@ internal static class ProbeRunner {
                 _ => ProbeVerdict.Inconclusive,
             }
         );
-    private static ProbeOutcome RunRegisterSignature(LedgerCase ledgerCase) =>
+    private static ProbeOutcome RunRegisterSignature(SuiteCase suiteCase) =>
         RunRomProbe<RegisterSignatureResult>(
-            ledgerCase: ledgerCase,
+            suiteCase: suiteCase,
             run: RegisterSignatureProbe.Run,
             toVerdict: static result => result switch {
                 RegisterSignatureResult.Pass => ProbeVerdict.Pass,
@@ -59,42 +59,42 @@ internal static class ProbeRunner {
                 _ => ProbeVerdict.Inconclusive,
             }
         );
-    private static RomCase ToRomCase(LedgerCase ledgerCase) =>
+    private static RomCase ToRomCase(SuiteCase suiteCase) =>
         new(
-            FrameCap: ledgerCase.FrameCap,
-            FullPath: ledgerCase.FullPath,
-            Group: ledgerCase.Suite,
-            Model: ledgerCase.Model,
-            Name: Path.GetFileNameWithoutExtension(path: ledgerCase.FullPath)
+            FrameCap: suiteCase.FrameCap,
+            FullPath: suiteCase.FullPath,
+            Group: suiteCase.Suite,
+            Model: suiteCase.Model,
+            Name: Path.GetFileNameWithoutExtension(path: suiteCase.FullPath)
         );
 
     /// <summary>Runs a runnable case's probe.</summary>
-    /// <param name="ledgerCase">The case to run.</param>
+    /// <param name="suiteCase">The case to run.</param>
     /// <returns>The normalized outcome.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
-        return ledgerCase.Probe switch {
+    public static ProbeOutcome Run(SuiteCase suiteCase) {
+        return suiteCase.Probe switch {
             ProbeKind.ConformanceSerial => RunConformance(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.AcceptanceFibonacci => RunAcceptance(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.RegisterSignature => RunRegisterSignature(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.GbMicrotest => RunGbMicrotest(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.Screenshot => ScreenshotProbe.Run(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.HexPattern => HexPatternProbe.Run(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
             ProbeKind.Audio => AudioProbe.Run(
-            ledgerCase: ledgerCase
+            suiteCase: suiteCase
         ),
-            _ => throw new NotSupportedException(message: $"Unhandled probe kind '{ledgerCase.Probe}'."),
+            _ => throw new NotSupportedException(message: $"Unhandled probe kind '{suiteCase.Probe}'."),
         };
     }
 }

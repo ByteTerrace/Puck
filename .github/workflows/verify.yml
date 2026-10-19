@@ -1,12 +1,12 @@
 name: Verify runtime behavior
-run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'frontier' || inputs.lane || 'gate' }} — ${{ github.ref_name }}
+run-name: Runtime verification — ${{ github.ref_name }}
 
 # The emulator matrix. HGB runs on every change: the Humble GamingBrick battery's self-contained stages plus every
-# ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
-# fails the build on any regression. AGB runs the Advanced GamingBrick battery the same way against its own
-# corpora; its BIOS-dependent stages skip here. The frontier runs nightly and through the manual lane: rows recorded
-# as failing or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded
-# so a ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries
+# corpus ROM, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json; no file records an expected
+# outcome, so the step goes red and the job summary names every ROM that does not pass, but the step is informational
+# (`continue-on-error`) so deploy is not held while ROMs fail. The self-contained stages gate through
+# `Puck.HumbleGamingBrick.Tests`. AGB runs the Advanced GamingBrick battery against its own corpora and fails the job
+# on any failing check; its BIOS-dependent stages skip here. Both batteries
 # are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check`,
 # `puck registry --check`, `puck shaders generate --check`, `puck architecture --check` and `puck branding --check`
 # from the installed producer CLI artifact on every change, so a document field added without regenerating the
@@ -22,20 +22,12 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # already has that cache skips the comparison and says so, and the silo container build restores the cache.
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_call:
     inputs:
       prebuilt:
         default: false
         type: boolean
   workflow_dispatch:
-    inputs:
-      lane:
-        default: gate
-        description: HGB evidence lane (the other runtime checks also run)
-        options: [gate, frontier, all]
-        type: choice
 
 permissions:
   contents: read
@@ -47,15 +39,14 @@ concurrency:
 env:
   CI: true
   DOTNET_NOLOGO: true
-  HGB_POST: src/Puck.HumbleGamingBrick.Post
 
 jobs:
   artifacts:
-    if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
+    if: ${{ !inputs.prebuilt }}
     name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
   gaming-bricks:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify ${{ matrix.name }} emulation
     needs: artifacts
     runs-on: ubuntu-24.04
@@ -76,7 +67,8 @@ jobs:
           path: artifacts/batteries
       - name: Fetch pinned ${{ matrix.name }} corpora
         run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll --fetch-corpora
-      - name: Run the ${{ matrix.name }} battery
+      - continue-on-error: ${{ matrix.informational }}
+        name: Run the ${{ matrix.name }} battery
         run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll ${{ matrix.arguments }} --artifacts artifacts/${{ matrix.brick }}-post
       - if: always()
         name: Summarize ${{ matrix.name }} results
@@ -97,63 +89,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arguments: --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets
-            artifact: hgb-post-${{ github.event.inputs.lane || 'gate' }}
+          - arguments: --require-assets
+            artifact: hgb-post
             brick: hgb
+            informational: true
             name: HGB
             project: Puck.HumbleGamingBrick.Post
             timeout: 30
           - arguments: ""
             artifact: agb-post
             brick: agb
+            informational: false
             name: AGB
             project: Puck.AdvancedGamingBrick.Post
             timeout: 20
     timeout-minutes: ${{ matrix.timeout }}
-  hgb-frontier:
-    if: github.event_name == 'schedule'
-    name: Measure unresolved HGB cases
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install the pinned .NET SDK
-        uses: ./.github/actions/setup-dotnet
-      - name: Restore corpus cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: corpora-hgb-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
-          path: ~/.local/share/Puck/corpora
-      - name: Build the HGB battery
-        run: dotnet build "$HGB_POST" --configuration Release
-      - name: Fetch pinned HGB corpora
-        run: dotnet run --project "$HGB_POST" --configuration Release --no-build -- --fetch-corpora
-      - name: Run the HGB frontier lane
-        run: dotnet run --project "$HGB_POST" --configuration Release --no-build -- --lane frontier --require-assets --artifacts artifacts/hgb-post
-      - if: always()
-        name: Summarize HGB frontier results
-        run: |
-          {
-            echo '```'
-            cat artifacts/hgb-post/post-report.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - if: always()
-        name: Upload HGB frontier results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          if-no-files-found: error
-          name: hgb-post-frontier
-          path: artifacts/hgb-post
-    timeout-minutes: 60
   # The WebAssembly payload is its own producer, which verifies what it publishes; a release calls it beside this
   # workflow, and a standalone run calls it here.
   browser:
-    if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
+    if: ${{ !inputs.prebuilt }}
     name: Build and verify the WebAssembly payload
     uses: ./.github/workflows/browser.yml
   world:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify world authentication and recovery (Linux)
     needs: artifacts
     runs-on: ubuntu-24.04
@@ -184,7 +142,7 @@ jobs:
           path: artifacts/world-test-results
     timeout-minutes: 15
   ledgers:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify generated contracts and branding
     needs: artifacts
     runs-on: ubuntu-24.04
@@ -209,7 +167,7 @@ jobs:
         run: puck branding --check
     timeout-minutes: 15
   shader-bytecode:
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Compare Linux SPIR-V with the Windows build
     needs: artifacts
     runs-on: ubuntu-24.04

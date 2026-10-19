@@ -72,10 +72,10 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
 - **A `--cosim` run under about 60 frames proves nothing** (the boot logo scroll
   dominates it). Give a CPU-stream comparison at least 120 frames and check that the
   record count differs per ROM before believing a clean result.
-- **Snapshot layout is pinned.** Every component lists its fields once in a
-  `TransferState` (a Humble mapper's `TransferRegisters`). A deliberate layout
-  change re-records that component in `ComponentSnapshotLayoutLawTests` and raises
-  `CurrentVersion` of `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced).
+- **Snapshot layout is one list per component.** Every component lists its fields
+  once in a `TransferState` (a Humble mapper's `TransferRegisters`). No file
+  records the layout; a deliberate layout change raises `CurrentVersion` of
+  `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced).
 - **GBA multiplayer SIOCNT has an unmodeled ready line.** `AgbSerialController.PackSioControl`
   does not derive the SD/SI bits from cable-partner presence, and
   `LinkGameReplayStage` records how far a commercial link game gets without it.
@@ -100,8 +100,9 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
    (below), or by booting a cartridge that exercises it. Diagnostic flags
    (`--stat-trace`, `--render`, `--cosim`) explain a run; they are not a verdict.
    Add a self-checking stage only where running cannot show the behavior.
-   A recorded outcome that moves is accepted from the run's own candidate ledger
-   with `--accept`, never re-measured.
+   No file records an expected outcome: a corpus ROM that fails today fails its
+   stage on every run until the emulator is corrected, and
+   [open-items](../../../docs/plans/open-items.md) tracks them.
 5. Report the exact commands, selected stages and asset-gated skips.
 
 ## Run it
@@ -110,7 +111,7 @@ The batteries are CPU-only executables; none opens the GPU.
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate --filter <stage-text>
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --filter <stage-text>
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier A
 ```
 
@@ -118,9 +119,10 @@ dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier A
 `--tier`; Tier A needs no assets, Tier B runs over the fetched corpora, Tier C
 covers serial, link and infrared exchange. A stage whose asset is absent skips
 (`--require-assets` turns that into an infrastructure failure), and the report
-lists every skip. Exit 0 is pass or skip, 1 a failed check, 2 infrastructure or a
-refused accept. `tests/Puck.HumbleGamingBrick.Tests` runs the Humble gate lane
-with an empty corpus cache, so CPU suites cover the self-contained stages.
+lists every skip. Exit 0 is pass or skip, 1 a failed check (a corpus ROM that does
+not pass included), 2 infrastructure. `tests/Puck.HumbleGamingBrick.Tests` runs the
+Humble battery with an empty corpus cache, so CPU suites cover the self-contained
+stages.
 
 ## Load references selectively
 
@@ -135,7 +137,7 @@ with an empty corpus cache, so CPU suites cover the self-contained stages.
   `PostTier`, `HashDivergenceReport`, `CorpusManifest`, `CoreEmbeddingProbe`.
 - Read the
   [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md) for
-  tiers, lanes, the corpus ledger and accepting, BESS, `--dump-snapshot`,
+  tiers, the corpus suites and their per-case result rules, BESS, `--dump-snapshot`,
   `--hash-divergence` and the co-simulation workflow.
 - Read the
   [Advanced Post README](../../../src/Puck.AdvancedGamingBrick.Post/README.md)

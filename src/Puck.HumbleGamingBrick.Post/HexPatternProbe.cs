@@ -5,7 +5,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <summary>
 /// Runs a gambatte <c>_out&lt;hex&gt;</c> case and compares the framebuffer against gambatte's own monochrome digit
 /// pattern, ported from <c>test/testrunner.cpp</c>'s <c>tileFromChar</c>/<c>tilesAreEqual</c>/<c>frameBufferMatchesOut</c>.
-/// Each hex digit of <see cref="LedgerCase.ExpectedHexPattern"/> is an 8x8 glyph drawn at a flat pixel offset of
+/// Each hex digit of <see cref="SuiteCase.ExpectedHexPattern"/> is an 8x8 glyph drawn at a flat pixel offset of
 /// <c>digitIndex * 8</c> into the row-major framebuffer — not clamped to one scanline, so a pattern longer than one
 /// screen row (20 digits at 160px wide) continues into the next row exactly as the reference tester's own pointer
 /// arithmetic does. A pixel is expected pure white or pure black once the low 3 bits of each channel are masked off
@@ -59,10 +59,10 @@ internal static class HexPatternProbe {
     }
 
     /// <summary>Runs a case to a verdict.</summary>
-    /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedHexPattern"/> must be non-empty.</param>
+    /// <param name="suiteCase">The case to run; <see cref="SuiteCase.ExpectedHexPattern"/> must be non-empty.</param>
     /// <returns>The probe outcome.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
-        var pattern = ledgerCase.ExpectedHexPattern;
+    public static ProbeOutcome Run(SuiteCase suiteCase) {
+        var pattern = suiteCase.ExpectedHexPattern;
 
         if (string.IsNullOrEmpty(value: pattern)) {
             return new ProbeOutcome(
@@ -71,15 +71,15 @@ internal static class HexPatternProbe {
             );
         }
 
-        var rom = File.ReadAllBytes(path: ledgerCase.FullPath);
+        var rom = File.ReadAllBytes(path: suiteCase.FullPath);
 
         using var machine = PostMachine.Build(
-            model: ledgerCase.Model,
+            model: suiteCase.Model,
             rom: rom
         );
 
         PostMachine.RunFrames(
-            frames: ledgerCase.FrameCap,
+            frames: suiteCase.FrameCap,
             instance: machine
         );
 
@@ -117,7 +117,7 @@ internal static class HexPatternProbe {
 
                     if ((pixels[index] & ChannelMask) != expected) {
                         return new ProbeOutcome(
-                            Detail: $"pixel mismatch at digit {digit} ('{pattern[digit]}') after {ledgerCase.FrameCap} frames",
+                            Detail: $"pixel mismatch at digit {digit} ('{pattern[digit]}') after {suiteCase.FrameCap} frames",
                             Verdict: ProbeVerdict.Fail
                         );
                     }
@@ -126,7 +126,7 @@ internal static class HexPatternProbe {
         }
 
         return new ProbeOutcome(
-            Detail: $"matches pattern '{pattern}' after {ledgerCase.FrameCap} frames",
+            Detail: $"matches pattern '{pattern}' after {suiteCase.FrameCap} frames",
             Verdict: ProbeVerdict.Pass
         );
     }
