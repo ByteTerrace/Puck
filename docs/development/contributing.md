@@ -721,7 +721,13 @@ unverified when no device run exists.
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
   `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run, and
-  take a timing on a console session.
+  take a timing on a console session. A capture's replay runs the GPU at its
+  working clocks there, so RenderDoc's per-event GPU durations
+  (`GPUCounter.EventGPUDuration`) compare one kernel across two builds or two
+  backends; on an RTX 4070 over Remote Desktop the debug world presented about
+  every 100 ms and the GPU held P8 at 210 MHz under Vulkan, P5 at 400 to 540 MHz
+  under Direct3D 12, which made Vulkan's passes read twice as slow live while
+  their replays ran faster than Direct3D 12's.
 - In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
   Store alias, which waits on standard input until the command times out. Use
   the repository's own tools, or `sed`, `awk` or `perl`, instead.

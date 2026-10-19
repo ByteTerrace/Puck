@@ -469,7 +469,7 @@ writes the first, `aᵢ Tᵢ Cᵢ`, as the lit image's color; the alpha holds `a
 The resolve computes each kind's **in-scatter weight** `aᵢ Wᵢₖ`, the fog's, the
 haze's and the medium's, from each sample's own visibility record along the
 output pixel's ray, and reads them beside the color at every tap of the same
-reconstruction footprint (`reconstruction.hlsli`'s footprint and combine); the
+reconstruction footprint (`reconstruction.hlsli`'s footprint and running sum); the
 temporal path sums them with the same Gaussian weights and reprojects them with
 the same history weights. The composite then adds each `Gₖ` times its resolved
 weight and the sky runs times one minus the resolved coverage, so a pixel's

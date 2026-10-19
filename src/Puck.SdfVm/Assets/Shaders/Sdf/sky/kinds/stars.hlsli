@@ -47,7 +47,15 @@ float4 sdfSkyStarsLayer(SdfSkyStars stars, SdfSkyLayer layer, SdfSkySample sampl
     float luminosity = min(1.0, (stars.LuminosityFloor * pow(max(((float)h2.x * SDF_INV_2POW32), 1e-6), -0.6666667)));
     float spectrum = (((float)h2.y * SDF_INV_2POW32) * 6.0);
     uint spectrumIndex = min((uint)spectrum, 5u);
-    float3 tint = lerp(SdfStarSpectrum[spectrumIndex], SdfStarSpectrum[(spectrumIndex + 1u)], (spectrum - (float)spectrumIndex));
+    float3 tint = float3(0.0, 0.0, 0.0);
+
+    // The span is chosen by comparison so every index is a constant: NVIDIA's Vulkan compiler copies a dynamically
+    // indexed constant array into per-thread memory.
+    [unroll] for (uint span = 0u; (span < 6u); span++) {
+        if (span == spectrumIndex) {
+            tint = lerp(SdfStarSpectrum[span], SdfStarSpectrum[(span + 1u)], (spectrum - (float)spectrumIndex));
+        }
+    }
 
     if ((sample.tier > SDF_SKY_TIER_LOW) && (((float)h2.z * SDF_INV_2POW32) < stars.TwinkleShare)) {
         // Two sines at distinct small harmonics of the period, phase-offset per star, multiplied: an irregular dip

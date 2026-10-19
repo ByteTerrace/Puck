@@ -52,12 +52,16 @@ void applyInset(float3 position, float3 normal, float3 ray, inout SdfMaterialDat
     float phase = (float)sdfPcg3d(uint3(asuint(material.paintModulation.y), 0u, 0u)).x * SDF_INV_2POW32 * 2.0 * SDF_PI;
     radius *= 1.0 + material.paintControls.w * sin(atan2(uv.y, uv.x) * material.paintModulation.x + phase);
     float3 color = material.paintStops[0].rgb;
-    [loop] for (uint i = 1u; i < count; i++) {
-        float4 left = material.paintStops[i - 1u];
-        float4 right = material.paintStops[i];
-        float width = max((right.w - left.w) * material.paintControls.z, 1.0e-6);
-        float blend = smoothstep(right.w - width, right.w, radius);
-        color = lerp(color, right.rgb, blend);
+    // Unrolled to the array's length and guarded, so every index is a constant: NVIDIA's Vulkan compiler keeps a
+    // dynamically indexed local array in per-thread memory, and DXC's SPIR-V unroller keeps a loop with a break rolled.
+    [unroll] for (uint i = 1u; i < 4u; i++) {
+        if (i < count) {
+            float4 left = material.paintStops[i - 1u];
+            float4 right = material.paintStops[i];
+            float width = max((right.w - left.w) * material.paintControls.z, 1.0e-6);
+            float blend = smoothstep(right.w - width, right.w, radius);
+            color = lerp(color, right.rgb, blend);
+        }
     }
     material.albedo = color;
 }
