@@ -1,6 +1,90 @@
 ---
-max_turns: 20
-allowed_tools: [Read, Glob, Grep, Skill, Edit, Bash]
+max_turns: 10
+allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-this heatsink has twelve fin shapes that i placed by hand one at a time and its painful to adjust - every time i want to change the spacing i have to edit all twelve. fixtures/fin-stack.puck, prototype 'subject'. is there a way to make this less awful?
+this heatsink has twelve fin shapes that i placed by hand one at a time and its painful to adjust - every time i want to change the spacing i have to edit all twelve. heres the file (fin-stack.puck), prototype 'subject'. is there a way to make this less awful?
+
+```puck
+schema: "puck.world.definition.v1"
+documentId: "eval-fin-stack"
+
+placements {}
+
+prototypes {
+  prototype "subject" {
+    document {
+      schema: "puck.creation.v1"
+      name: "subject"
+      palette [
+        { color: "#8B9096", specular: 0.3, roughness: 0.35 }
+      ]
+      shape Box "base" {
+        material: 0
+        position [0, 1.0, 0]
+        scale [0.3, 0.04, 0.16]
+      }
+      shape Box "fin0" {
+        material: 0
+        position [-0.275, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin1" {
+        material: 0
+        position [-0.225, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin2" {
+        material: 0
+        position [-0.175, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin3" {
+        material: 0
+        position [-0.125, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin4" {
+        material: 0
+        position [-0.075, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin5" {
+        material: 0
+        position [-0.025, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin6" {
+        material: 0
+        position [0.025, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin7" {
+        material: 0
+        position [0.075, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin8" {
+        material: 0
+        position [0.125, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin9" {
+        material: 0
+        position [0.175, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin10" {
+        material: 0
+        position [0.225, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+      shape Box "fin11" {
+        material: 0
+        position [0.275, 1.09, 0]
+        scale [0.01, 0.05, 0.15]
+      }
+    }
+  }
+}
+```

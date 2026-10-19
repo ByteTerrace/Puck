@@ -1,11 +1,11 @@
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Discovers <see cref="LedgerCase"/>s for every corpus suite beyond the original blargg/mooneye-acceptance pair —
+/// Discovers <see cref="SuiteCase"/>s for every corpus suite beyond the original blargg/mooneye-acceptance pair —
 /// one method per suite, each reading that suite's own <c>game-boy-test-roms-howto.md</c> exit condition and
 /// success/failure convention. A suite whose howto makes a case impossible to check mechanically (button input, an
-/// undecoded result convention, no shipped expected image) is still discovered, just recorded
-/// <see cref="CaseDisposition.Unrunnable"/> with the reason — never silently dropped, so the ledger shows exactly what is and is not
+/// undecoded result convention, no shipped expected image) is still discovered, just reported as
+/// <see cref="CaseDisposition.Unrunnable"/> with the reason — never silently dropped, so a run shows exactly what is and is not
 /// covered.
 /// </summary>
 internal static class SuiteCatalog {
@@ -60,8 +60,8 @@ internal static class SuiteCatalog {
             path1: root,
             path2: relative
         );
-    private static LedgerCase[] FromRomCases(IReadOnlyList<RomCase> cases, string suiteRoot, ProbeKind probe) =>
-        cases.Select(selector: romCase => new LedgerCase(
+    private static SuiteCase[] FromRomCases(IReadOnlyList<RomCase> cases, string suiteRoot, ProbeKind probe) =>
+        cases.Select(selector: romCase => new SuiteCase(
             FrameCap: romCase.FrameCap,
             FullPath: romCase.FullPath,
             Model: romCase.Model,
@@ -110,7 +110,7 @@ internal static class SuiteCatalog {
     // Builds the Audio or HexPattern case a matched out-tag implies: whatever follows the tag is either an
     // audio0/audio1 marker or the maximal run of hex digits (frameBufferMatchesOut stops at the first character
     // tileFromChar rejects, so trailing text past the digits — e.g. a second model's tag — is never consumed here).
-    private static LedgerCase? GambatteResultCase(string rom, string relativePath, ConsoleModel model, string stem, string? tag) {
+    private static SuiteCase? GambatteResultCase(string rom, string relativePath, ConsoleModel model, string stem, string? tag) {
         if (tag is null) {
             return null;
         }
@@ -124,7 +124,7 @@ internal static class SuiteCatalog {
             comparisonType: StringComparison.Ordinal,
             value: "audio0"
         )) {
-            return new LedgerCase(
+            return new SuiteCase(
                 ExpectedAudio: AudioExpectation.Silence,
                 FrameCap: GambatteFrameCap,
                 FullPath: rom,
@@ -139,7 +139,7 @@ internal static class SuiteCatalog {
             comparisonType: StringComparison.Ordinal,
             value: "audio1"
         )) {
-            return new LedgerCase(
+            return new SuiteCase(
                 ExpectedAudio: AudioExpectation.Sound,
                 FrameCap: GambatteFrameCap,
                 FullPath: rom,
@@ -153,7 +153,7 @@ internal static class SuiteCatalog {
         var hex = new string(value: value.TakeWhile(predicate: static c => char.IsAsciiHexDigit(c: c)).ToArray());
 
         return ((hex.Length > 0)
-            ? new LedgerCase(
+            ? new SuiteCase(
                 ExpectedHexPattern: hex,
                 FrameCap: GambatteFrameCap,
                 FullPath: rom,
@@ -165,7 +165,7 @@ internal static class SuiteCatalog {
             : null
         );
     }
-    private static IReadOnlyList<LedgerCase> ManualSpritePriorityRoms(string? root, string suite, string suiteRelativeDirectory) {
+    private static IReadOnlyList<SuiteCase> ManualSpritePriorityRoms(string? root, string suite, string suiteRelativeDirectory) {
         if (root is null) {
             return [];
         }
@@ -184,7 +184,7 @@ internal static class SuiteCatalog {
         }
 
         return [
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [Path.Combine(
                         path1: directory,
                         path2: "sprite_priority-dmg.png"
@@ -196,7 +196,7 @@ internal static class SuiteCatalog {
                 RelativePath: "sprite_priority.gb",
                 Suite: suite
             ),
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [Path.Combine(
                         path1: directory,
                         path2: "sprite_priority-cgb.png"
@@ -218,7 +218,7 @@ internal static class SuiteCatalog {
             newChar: '/',
             oldChar: Path.DirectorySeparatorChar
         );
-    private static LedgerCase[] SingleCgbAcidCase(string? root, string suite, string suiteRelativeDirectory, string fileStem) {
+    private static SuiteCase[] SingleCgbAcidCase(string? root, string suite, string suiteRelativeDirectory, string fileStem) {
         if (root is null) {
             return [];
         }
@@ -237,7 +237,7 @@ internal static class SuiteCatalog {
         }
 
         return [
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [Path.Combine(
                         path1: directory,
                         path2: (fileStem + ".png")
@@ -251,7 +251,7 @@ internal static class SuiteCatalog {
             ),
         ];
     }
-    private static LedgerCase[] SingleUnrunnableCase(string? root, string suite, string suiteRelativeDirectory, string romFileName, string reason) {
+    private static SuiteCase[] SingleUnrunnableCase(string? root, string suite, string suiteRelativeDirectory, string romFileName, string reason) {
         if (root is null) {
             return [];
         }
@@ -270,7 +270,7 @@ internal static class SuiteCatalog {
         }
 
         return [
-            new LedgerCase(
+            new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: 1,
                 FullPath: rom,
@@ -280,7 +280,7 @@ internal static class SuiteCatalog {
                 Suite: suite,
                 UnrunnableReason: reason
             ),
-            new LedgerCase(
+            new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: 1,
                 FullPath: rom,
@@ -297,7 +297,7 @@ internal static class SuiteCatalog {
             path1: root,
             path2: relative
         );
-    private static IReadOnlyList<LedgerCase> TaggedLedgerCases(string? root, string suite, string suiteRelativeDirectory, bool recurse, int frameCap, ProbeKind probe) {
+    private static IReadOnlyList<SuiteCase> TaggedSuiteCases(string? root, string suite, string suiteRelativeDirectory, bool recurse, int frameCap, ProbeKind probe) {
         if (root is null) {
             return [];
         }
@@ -318,9 +318,9 @@ internal static class SuiteCatalog {
         );
     }
 
-    /// <summary>Wraps <see cref="RomCatalog.AcceptanceRoms"/> as ledger cases, keyed relative to the corpus's on-disk
+    /// <summary>Wraps <see cref="RomCatalog.AcceptanceRoms"/> as suite cases, keyed relative to the corpus's on-disk
     /// <c>mooneye-test-suite/acceptance/</c> directory.</summary>
-    public static IReadOnlyList<LedgerCase> AcceptanceLedgerCases(string? root, string group, string relativeDirectory, bool recurse) {
+    public static IReadOnlyList<SuiteCase> AcceptanceSuiteCases(string? root, string group, string relativeDirectory, bool recurse) {
         if (root is null) {
             return [];
         }
@@ -348,7 +348,7 @@ internal static class SuiteCatalog {
     /// a register-signature case. ROM stems are matched longest-first and each PNG is claimed by at most one ROM, so
     /// e.g. <c>m3-bg-lcdc-ds.gb</c>'s own <c>-ds-cgbBCE.png</c> is not also offered to the shorter <c>m3-bg-lcdc.gb</c>.
     /// </summary>
-    public static IReadOnlyList<LedgerCase> AgeRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> AgeRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -362,7 +362,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
         var leafDirectories = Directory
             .EnumerateDirectories(
             path: suiteRoot,
@@ -427,7 +427,7 @@ internal static class SuiteCatalog {
 
         return cases;
 
-        static void AddModelCase(List<LedgerCase> cases, string relativePath, string rom, ConsoleModel model, string[] ownImages, string[] markers) {
+        static void AddModelCase(List<SuiteCase> cases, string relativePath, string rom, ConsoleModel model, string[] ownImages, string[] markers) {
             var candidates = ownImages
                 .Where(predicate: image => markers.Any(predicate: marker => Path.GetFileName(path: image).Contains(
                 comparisonType: StringComparison.OrdinalIgnoreCase,
@@ -440,7 +440,7 @@ internal static class SuiteCatalog {
                 .ToArray();
 
             cases.Add(item: ((candidates.Length > 0)
-                ? new LedgerCase(
+                ? new SuiteCase(
                     ExpectedImageCandidates: candidates,
                     FrameCap: AgeScreenshotFrameCap,
                     FullPath: rom,
@@ -449,7 +449,7 @@ internal static class SuiteCatalog {
                     RelativePath: relativePath,
                     Suite: "age"
                 )
-                : new LedgerCase(
+                : new SuiteCase(
                     FrameCap: AgeRegisterFrameCap,
                     FullPath: rom,
                     Model: model,
@@ -460,16 +460,16 @@ internal static class SuiteCatalog {
         }
     }
     /// <summary>The blargg <c>mem_timing-2/rom_singles</c> ROMs.</summary>
-    public static IReadOnlyList<LedgerCase> BlarggMemTiming2SinglesRoms(string? root) =>
-        ConformanceLedgerCases(
+    public static IReadOnlyList<SuiteCase> BlarggMemTiming2SinglesRoms(string? root) =>
+        ConformanceSuiteCases(
             group: "mem-timing-2-singles",
             model: ConsoleModel.DmgC,
             root: root,
             subPath: "mem_timing-2/rom_singles"
         );
     /// <summary>The blargg <c>oam_bug/rom_singles</c> ROMs, read the same way as every other conformance group.</summary>
-    public static IReadOnlyList<LedgerCase> BlarggOamBugSinglesRoms(string? root) =>
-        ConformanceLedgerCases(
+    public static IReadOnlyList<SuiteCase> BlarggOamBugSinglesRoms(string? root) =>
+        ConformanceSuiteCases(
             group: "oam-bug-singles",
             model: ConsoleModel.DmgC,
             root: root,
@@ -477,7 +477,7 @@ internal static class SuiteCatalog {
         );
     /// <summary>The blargg top-level ROMs that report by screen content rather than the <c>$A000</c> block: <c>halt_bug.gb</c>,
     /// <c>interrupt_time/interrupt_time.gb</c>, <c>oam_bug/oam_bug.gb</c>, and <c>mem_timing-2/mem_timing.gb</c>.</summary>
-    public static IReadOnlyList<LedgerCase> BlarggVisualRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> BlarggVisualRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -491,7 +491,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         AddVisual(
             cases: cases,
@@ -524,7 +524,7 @@ internal static class SuiteCatalog {
 
         return cases;
 
-        static void AddVisual(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative) =>
+        static void AddVisual(List<SuiteCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative) =>
             AddDualModelScreenshotCase(
                 cases: cases,
                 cgbImageRelative: cgbImageRelative,
@@ -537,7 +537,7 @@ internal static class SuiteCatalog {
     }
 
     private static void AddDualModelScreenshotCase(
-        List<LedgerCase> cases,
+        List<SuiteCase> cases,
         string suiteRoot,
         string suite,
         string romRelative,
@@ -554,7 +554,7 @@ internal static class SuiteCatalog {
             return;
         }
 
-        cases.Add(item: new LedgerCase(
+        cases.Add(item: new SuiteCase(
             ExpectedImageCandidates: [FromRelative(
                 relative: dmgImageRelative,
                 root: suiteRoot
@@ -566,7 +566,7 @@ internal static class SuiteCatalog {
             RelativePath: romRelative,
             Suite: suite
         ));
-        cases.Add(item: new LedgerCase(
+        cases.Add(item: new SuiteCase(
             ExpectedImageCandidates: [FromRelative(
                 relative: cgbImageRelative,
                 root: suiteRoot
@@ -581,8 +581,8 @@ internal static class SuiteCatalog {
     }
 
     /// <summary>BullyGB ships one ROM and one image shared across both models (the howto's own DMG-C failure is a
-    /// recorded fact the ledger records, not a reason to skip the model).</summary>
-    public static IReadOnlyList<LedgerCase> BullyRoms(string? root) {
+    /// known result, not a reason to skip the model).</summary>
+    public static IReadOnlyList<SuiteCase> BullyRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -606,7 +606,7 @@ internal static class SuiteCatalog {
         );
 
         return [
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: BullyFrameCap,
                 FullPath: rom,
@@ -615,7 +615,7 @@ internal static class SuiteCatalog {
                 RelativePath: "bully.gb",
                 Suite: "bully"
             ),
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: BullyFrameCap,
                 FullPath: rom,
@@ -627,7 +627,7 @@ internal static class SuiteCatalog {
         ];
     }
     /// <summary>cgb-acid2 ships a single CGB-only <c>.gbc</c> cartridge and image.</summary>
-    public static IReadOnlyList<LedgerCase> CgbAcid2Roms(string? root) =>
+    public static IReadOnlyList<SuiteCase> CgbAcid2Roms(string? root) =>
         SingleCgbAcidCase(
             fileStem: "cgb-acid2",
             root: root,
@@ -635,16 +635,16 @@ internal static class SuiteCatalog {
             suiteRelativeDirectory: "cgb-acid2"
         );
     /// <summary>cgb-acid-hell ships a single CGB-only <c>.gbc</c> cartridge and image.</summary>
-    public static IReadOnlyList<LedgerCase> CgbAcidHellRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> CgbAcidHellRoms(string? root) =>
         SingleCgbAcidCase(
             fileStem: "cgb-acid-hell",
             root: root,
             suite: "cgb-acid-hell",
             suiteRelativeDirectory: "cgb-acid-hell"
         );
-    /// <summary>Wraps <see cref="RomCatalog.ConformanceRoms"/> as ledger cases, keyed relative to the corpus's
+    /// <summary>Wraps <see cref="RomCatalog.ConformanceRoms"/> as suite cases, keyed relative to the corpus's
     /// on-disk <c>blargg/</c> directory.</summary>
-    public static IReadOnlyList<LedgerCase> ConformanceLedgerCases(string? root, string group, string subPath, ConsoleModel model) {
+    public static IReadOnlyList<SuiteCase> ConformanceSuiteCases(string? root, string group, string subPath, ConsoleModel model) {
         if (root is null) {
             return [];
         }
@@ -664,7 +664,7 @@ internal static class SuiteCatalog {
         );
     }
 
-    private static IReadOnlyList<LedgerCase> CreateDualModelAcidCase(string? root, string suite, int frameCap) {
+    private static IReadOnlyList<SuiteCase> CreateDualModelAcidCase(string? root, string suite, int frameCap) {
         if (root is null) {
             return [];
         }
@@ -683,7 +683,7 @@ internal static class SuiteCatalog {
         }
 
         return [
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [Path.Combine(
                     path1: directory,
                     path2: $"{suite}-dmg.png"
@@ -695,7 +695,7 @@ internal static class SuiteCatalog {
                 RelativePath: $"{suite}.gb",
                 Suite: suite
             ),
-            new LedgerCase(
+            new SuiteCase(
                 ExpectedImageCandidates: [Path.Combine(
                     path1: directory,
                     path2: $"{suite}-cgb.png"
@@ -711,7 +711,7 @@ internal static class SuiteCatalog {
     }
 
     /// <summary>dmg-acid2 runs its one ROM on both target models against their respective expected images.</summary>
-    public static IReadOnlyList<LedgerCase> DmgAcid2Roms(string? root) =>
+    public static IReadOnlyList<SuiteCase> DmgAcid2Roms(string? root) =>
         CreateDualModelAcidCase(
             frameCap: AcidScreenshotFrameCap,
             root: root,
@@ -732,7 +732,7 @@ internal static class SuiteCatalog {
     /// either model is recorded <see cref="CaseDisposition.Unrunnable"/> on its one applicable model — DMG, unless
     /// its extension is <c>.gbc</c>.
     /// </summary>
-    public static IReadOnlyList<LedgerCase> GambatteRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> GambatteRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -746,7 +746,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
         var roms = EnumerateFiles(
             directory: suiteRoot,
             pattern: "*.gb",
@@ -794,7 +794,7 @@ internal static class SuiteCatalog {
                 cases.Add(item: dmgCase);
                 routed = true;
             } else if (dmgImage is not null) {
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     ExpectedImageCandidates: [dmgImage],
                     FrameCap: GambatteFrameCap,
                     FullPath: rom,
@@ -810,7 +810,7 @@ internal static class SuiteCatalog {
                 cases.Add(item: cgbCase);
                 routed = true;
             } else if (cgbImage is not null) {
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     ExpectedImageCandidates: [cgbImage],
                     FrameCap: GambatteFrameCap,
                     FullPath: rom,
@@ -833,7 +833,7 @@ internal static class SuiteCatalog {
                     : ConsoleModel.DmgC
                 );
 
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     Disposition: CaseDisposition.Unrunnable,
                     FrameCap: GambatteFrameCap,
                     FullPath: rom,
@@ -850,7 +850,7 @@ internal static class SuiteCatalog {
     }
     /// <summary>GBMicrotest is DMG-only per its howto (verified on a DMG-CPU-08); every case reads
     /// <c>$FF80</c>-<c>$FF82</c>, with <c>is_if_set_during_ime0</c> alone needing the longer frame budget the howto calls out.</summary>
-    public static IReadOnlyList<LedgerCase> GbMicrotestRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> GbMicrotestRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -864,7 +864,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         foreach (var rom in EnumerateFiles(
             directory: suiteRoot,
@@ -873,7 +873,7 @@ internal static class SuiteCatalog {
         )) {
             var name = Path.GetFileNameWithoutExtension(path: rom);
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 FrameCap: (string.Equals(
                     a: name,
                     b: "is_if_set_during_ime0",
@@ -896,7 +896,7 @@ internal static class SuiteCatalog {
     }
     /// <summary>little-things-gb's <c>firstwhite</c> (screenshot, shared across models) and <c>tellinglys</c>
     /// (requires pressing every button in sequence — recorded unrunnable).</summary>
-    public static IReadOnlyList<LedgerCase> LittleThingsRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> LittleThingsRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -910,7 +910,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
         var firstwhite = Path.Combine(
             path1: directory,
             path2: "firstwhite.gb"
@@ -922,7 +922,7 @@ internal static class SuiteCatalog {
                 path2: "firstwhite-dmg-cgb.png"
             );
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: LittleThingsFrameCap,
                 FullPath: firstwhite,
@@ -931,7 +931,7 @@ internal static class SuiteCatalog {
                 RelativePath: "firstwhite.gb",
                 Suite: "little-things-gb"
             ));
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: LittleThingsFrameCap,
                 FullPath: firstwhite,
@@ -950,7 +950,7 @@ internal static class SuiteCatalog {
         if (File.Exists(path: tellinglys)) {
             const string Reason = "requires pressing every Game Boy button in sequence and then waiting 5 emulated seconds; not mechanical without button-input orchestration";
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: LittleThingsFrameCap,
                 FullPath: tellinglys,
@@ -960,7 +960,7 @@ internal static class SuiteCatalog {
                 Suite: "little-things-gb",
                 UnrunnableReason: Reason
             ));
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: LittleThingsFrameCap,
                 FullPath: tellinglys,
@@ -976,7 +976,7 @@ internal static class SuiteCatalog {
     }
     /// <summary>The MBC3 Bank Tester drives its bank display by button input its howto does not spell out
     /// mechanically; recorded unrunnable on both models rather than skipped.</summary>
-    public static IReadOnlyList<LedgerCase> Mbc3TesterRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> Mbc3TesterRoms(string? root) =>
         SingleUnrunnableCase(
             reason: "bank selection is driven by button input this Post battery does not orchestrate",
             romFileName: "mbc3-tester.gb",
@@ -990,7 +990,7 @@ internal static class SuiteCatalog {
     /// (<c>_dmg_blob</c>/<c>_dmg_b</c>, <c>_cgb_c</c>/<c>_cgb_d</c>). A ROM with neither of a model's images shipped
     /// (every <c>dma/</c> and <c>mbc/</c> case today) is recorded unrunnable for that model rather than skipped.
     /// </summary>
-    public static IReadOnlyList<LedgerCase> MealybugRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> MealybugRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -1004,7 +1004,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         foreach (var subfolder in ((string[])["ppu", "dma", "mbc"])) {
             var directory = Path.Combine(
@@ -1052,7 +1052,7 @@ internal static class SuiteCatalog {
 
         return cases;
 
-        static void AddCase(List<LedgerCase> cases, string relativePath, string rom, ConsoleModel model, string directory, string stem, string primary, string fallback) {
+        static void AddCase(List<SuiteCase> cases, string relativePath, string rom, ConsoleModel model, string directory, string stem, string primary, string fallback) {
             var candidates = new[] {
                 Path.Combine(
                 path1: directory,
@@ -1065,7 +1065,7 @@ internal static class SuiteCatalog {
             };
 
             cases.Add(item: (candidates.Any(predicate: File.Exists)
-                ? new LedgerCase(
+                ? new SuiteCase(
                     ExpectedImageCandidates: candidates,
                     FrameCap: MealybugScreenshotFrameCap,
                     FullPath: rom,
@@ -1074,7 +1074,7 @@ internal static class SuiteCatalog {
                     RelativePath: relativePath,
                     Suite: "mealybug"
                 )
-                : new LedgerCase(
+                : new SuiteCase(
                     Disposition: CaseDisposition.Unrunnable,
                     FrameCap: MealybugScreenshotFrameCap,
                     FullPath: rom,
@@ -1088,8 +1088,8 @@ internal static class SuiteCatalog {
     }
     /// <summary>The mooneye <c>emulator-only/</c> cartridge-controller ROMs (mbc1/mbc2/mbc5) — untagged, so both
     /// target models run every case — read through the same serial Fibonacci signature as <c>acceptance/</c>.</summary>
-    public static IReadOnlyList<LedgerCase> MooneyeEmulatorOnlyRoms(string? root) =>
-        TaggedLedgerCases(
+    public static IReadOnlyList<SuiteCase> MooneyeEmulatorOnlyRoms(string? root) =>
+        TaggedSuiteCases(
             frameCap: AcceptanceFrameCap,
             probe: ProbeKind.AcceptanceFibonacci,
             recurse: true,
@@ -1099,7 +1099,7 @@ internal static class SuiteCatalog {
         );
     /// <summary>The mooneye <c>manual-only/sprite_priority.gb</c> screenshot case, on both target models, against the
     /// howto's own replacement "common palette" images.</summary>
-    public static IReadOnlyList<LedgerCase> MooneyeManualRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> MooneyeManualRoms(string? root) =>
         ManualSpritePriorityRoms(
             root: root,
             suite: "mooneye-manual",
@@ -1107,8 +1107,8 @@ internal static class SuiteCatalog {
         );
     /// <summary>The mooneye <c>misc/</c> boot-state and I/O ROMs — built with the same harness as <c>acceptance/</c>,
     /// so the same serial Fibonacci signature and revision-tag convention apply.</summary>
-    public static IReadOnlyList<LedgerCase> MooneyeMiscRoms(string? root) =>
-        TaggedLedgerCases(
+    public static IReadOnlyList<SuiteCase> MooneyeMiscRoms(string? root) =>
+        TaggedSuiteCases(
             frameCap: AcceptanceFrameCap,
             probe: ProbeKind.AcceptanceFibonacci,
             recurse: true,
@@ -1118,7 +1118,7 @@ internal static class SuiteCatalog {
         );
     /// <summary>rtc3test selects one of three subtests by pressing buttons at startup; recorded unrunnable on both
     /// models rather than skipped.</summary>
-    public static IReadOnlyList<LedgerCase> Rtc3TestRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> Rtc3TestRoms(string? root) =>
         SingleUnrunnableCase(
             reason: "selecting a subtest requires pressing A / down+A / down+down+A at startup; not mechanical without button-input orchestration",
             romFileName: "rtc3test.gb",
@@ -1133,7 +1133,7 @@ internal static class SuiteCatalog {
     /// and <c>div_write_trigger_10</c>, which rely on hardware every revision shares — so every other <c>apu/</c> case
     /// runs on <see cref="ConsoleModel.CgbE"/> only, while every other sub-suite runs on both target models.
     /// </summary>
-    public static IReadOnlyList<LedgerCase> SameSuiteRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> SameSuiteRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -1147,7 +1147,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         foreach (var rom in EnumerateFiles(
             directory: suiteRoot,
@@ -1173,7 +1173,7 @@ internal static class SuiteCatalog {
             foreach (var model in (isCgbOnlyApuCase
                 ? ((ConsoleModel[])[ConsoleModel.CgbE])
                 : ((ConsoleModel[])[ConsoleModel.DmgC, ConsoleModel.CgbE]))) {
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     FrameCap: SameSuiteFrameCap,
                     FullPath: rom,
                     Model: model,
@@ -1190,7 +1190,7 @@ internal static class SuiteCatalog {
     /// share one image across both models, <c>palettely</c>/<c>scxly</c> ship separate per-model images,
     /// <c>statcount.gb</c> (the non-auto variant) has no shipped image, and <c>fairylake</c>/<c>winpos</c> are called
     /// out by name as having none either.</summary>
-    public static IReadOnlyList<LedgerCase> ScribbleTestsRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> ScribbleTestsRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -1204,7 +1204,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         AddShared(
             cases: cases,
@@ -1264,7 +1264,7 @@ internal static class SuiteCatalog {
 
         return cases;
 
-        static void AddShared(List<LedgerCase> cases, string suiteRoot, string romRelative, string imageRelative, int frameCap) {
+        static void AddShared(List<SuiteCase> cases, string suiteRoot, string romRelative, string imageRelative, int frameCap) {
             var rom = FromRelative(
                 relative: romRelative,
                 root: suiteRoot
@@ -1279,7 +1279,7 @@ internal static class SuiteCatalog {
                 root: suiteRoot
             );
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: frameCap,
                 FullPath: rom,
@@ -1288,7 +1288,7 @@ internal static class SuiteCatalog {
                 RelativePath: romRelative,
                 Suite: "scribbltests"
             ));
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: frameCap,
                 FullPath: rom,
@@ -1298,7 +1298,7 @@ internal static class SuiteCatalog {
                 Suite: "scribbltests"
             ));
         }
-        static void AddSeparate(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative, int frameCap) =>
+        static void AddSeparate(List<SuiteCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative, int frameCap) =>
             AddDualModelScreenshotCase(
                 cases: cases,
                 cgbImageRelative: cgbImageRelative,
@@ -1308,7 +1308,7 @@ internal static class SuiteCatalog {
                 suite: "scribbltests",
                 suiteRoot: suiteRoot
             );
-        static void AddUnrunnable(List<LedgerCase> cases, string suiteRoot, string romRelative, string reason) {
+        static void AddUnrunnable(List<SuiteCase> cases, string suiteRoot, string romRelative, string reason) {
             var rom = FromRelative(
                 relative: romRelative,
                 root: suiteRoot
@@ -1318,7 +1318,7 @@ internal static class SuiteCatalog {
                 return;
             }
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: ScribbleDefaultFrameCap,
                 FullPath: rom,
@@ -1328,7 +1328,7 @@ internal static class SuiteCatalog {
                 Suite: "scribbltests",
                 UnrunnableReason: reason
             ));
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 Disposition: CaseDisposition.Unrunnable,
                 FrameCap: ScribbleDefaultFrameCap,
                 FullPath: rom,
@@ -1341,14 +1341,14 @@ internal static class SuiteCatalog {
         }
     }
     /// <summary>strikethrough ships one ROM and a separate per-model image.</summary>
-    public static IReadOnlyList<LedgerCase> StrikethroughRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> StrikethroughRoms(string? root) =>
         CreateDualModelAcidCase(
             frameCap: StrikethroughFrameCap,
             root: root,
             suite: "strikethrough"
         );
     /// <summary>Each turtle-tests case ships one image shared across both models.</summary>
-    public static IReadOnlyList<LedgerCase> TurtleTestsRoms(string? root) {
+    public static IReadOnlyList<SuiteCase> TurtleTestsRoms(string? root) {
         if (root is null) {
             return [];
         }
@@ -1362,7 +1362,7 @@ internal static class SuiteCatalog {
             return [];
         }
 
-        var cases = new List<LedgerCase>();
+        var cases = new List<SuiteCase>();
 
         foreach (var rom in EnumerateFiles(
             directory: suiteRoot,
@@ -1383,7 +1383,7 @@ internal static class SuiteCatalog {
             if (!File.Exists(path: image)) {
                 const string Reason = "no expected screenshot shipped beside this ROM";
 
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     Disposition: CaseDisposition.Unrunnable,
                     FrameCap: TurtleFrameCap,
                     FullPath: rom,
@@ -1393,7 +1393,7 @@ internal static class SuiteCatalog {
                     Suite: "turtle-tests",
                     UnrunnableReason: Reason
                 ));
-                cases.Add(item: new LedgerCase(
+                cases.Add(item: new SuiteCase(
                     Disposition: CaseDisposition.Unrunnable,
                     FrameCap: TurtleFrameCap,
                     FullPath: rom,
@@ -1407,7 +1407,7 @@ internal static class SuiteCatalog {
                 continue;
             }
 
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: TurtleFrameCap,
                 FullPath: rom,
@@ -1416,7 +1416,7 @@ internal static class SuiteCatalog {
                 RelativePath: relativePath,
                 Suite: "turtle-tests"
             ));
-            cases.Add(item: new LedgerCase(
+            cases.Add(item: new SuiteCase(
                 ExpectedImageCandidates: [image],
                 FrameCap: TurtleFrameCap,
                 FullPath: rom,
@@ -1432,8 +1432,8 @@ internal static class SuiteCatalog {
     /// <summary>The wilbertpol fork's <c>acceptance/</c> ROMs — same revision-tag convention as mooneye's own, but
     /// this fork never emits its Fibonacci-or-<c>0x42</c> signature over serial, so <see cref="RegisterSignatureProbe"/>
     /// reads it straight from the register file after the fork's <c>0xED</c> lockup trap.</summary>
-    public static IReadOnlyList<LedgerCase> WilbertpolAcceptanceRoms(string? root) =>
-        TaggedLedgerCases(
+    public static IReadOnlyList<SuiteCase> WilbertpolAcceptanceRoms(string? root) =>
+        TaggedSuiteCases(
             frameCap: WilbertpolFrameCap,
             probe: ProbeKind.RegisterSignature,
             recurse: true,
@@ -1442,8 +1442,8 @@ internal static class SuiteCatalog {
             suiteRelativeDirectory: "mooneye-test-suite-wilbertpol/acceptance"
         );
     /// <summary>The wilbertpol fork's <c>emulator-only/</c> ROMs, register-signature read.</summary>
-    public static IReadOnlyList<LedgerCase> WilbertpolEmulatorOnlyRoms(string? root) =>
-        TaggedLedgerCases(
+    public static IReadOnlyList<SuiteCase> WilbertpolEmulatorOnlyRoms(string? root) =>
+        TaggedSuiteCases(
             frameCap: WilbertpolFrameCap,
             probe: ProbeKind.RegisterSignature,
             recurse: true,
@@ -1453,15 +1453,15 @@ internal static class SuiteCatalog {
         );
     /// <summary>The wilbertpol fork's <c>manual-only/sprite_priority.gb</c> screenshot case (visual, so the fork's
     /// no-serial rule does not apply).</summary>
-    public static IReadOnlyList<LedgerCase> WilbertpolManualRoms(string? root) =>
+    public static IReadOnlyList<SuiteCase> WilbertpolManualRoms(string? root) =>
         ManualSpritePriorityRoms(
             root: root,
             suite: "wilbertpol-manual",
             suiteRelativeDirectory: "mooneye-test-suite-wilbertpol/manual-only"
         );
     /// <summary>The wilbertpol fork's <c>misc/</c> ROMs, register-signature read.</summary>
-    public static IReadOnlyList<LedgerCase> WilbertpolMiscRoms(string? root) =>
-        TaggedLedgerCases(
+    public static IReadOnlyList<SuiteCase> WilbertpolMiscRoms(string? root) =>
+        TaggedSuiteCases(
             frameCap: WilbertpolFrameCap,
             probe: ProbeKind.RegisterSignature,
             recurse: true,

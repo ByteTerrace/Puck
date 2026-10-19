@@ -90,10 +90,12 @@ Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
-The arcade district (`modules/arcade.puck`) is the worked example: its
-cabinet screens route engageable with kit `arcadePad`. No shipped world authors a
-portal face; the `portal-window` canary's fixture is the worked portal example, and
-a portal face shows its destination without being engageable.
+The quarantined arcade district
+(`experimental/src/Puck.World/Assets/worlds/modules/arcade.puck`) is the worked
+example: its cabinet screens route engageable with kit `arcadePad`. The live
+debug world's `portal` placement is the worked portal face (its glass is a
+derived face screen onto the garden); a portal face shows its destination
+without being engageable.
 
 ## The command kinds
 
@@ -331,7 +333,8 @@ every `body.*` verb's: it defaults to body 0 (seat 1's body), is bounded to
 `0..bodies.capacity - 1`, and `body.engage <target> 1` is driven by body:1,
 seat 2's body. `body.engage` and `body.disengage [body]` resolve it through the
 one `ResolveTarget` the other `body.*` verbs use, a stripped `capture:` token
-counting as absent (`EngageBodyIndexLawTests`). `body.disengage` submits
+counting as absent (the quarantined `EngageBodyIndexLawTests`, under
+`experimental/tests/Puck.World.Tests/`). `body.disengage` submits
 `DissolveControl`.
 
 ## Replay visibility
@@ -417,10 +420,9 @@ Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
-the screen path needs a declared screen: the flagship's arcade district declares
-engageable cabinet screens (kit `arcadePad`, none at index 0), so
-validate any other screen layout against a scratch
-world copy. Remember actor ≠ target: every seat holds wide grants by default, so
+the screen path needs a declared engageable screen, and no live world declares
+one, so author it in a scratch world (the quarantined arcade district's
+cabinet screens, kit `arcadePad`, are the pattern). Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:
 `world.grant … control body:<n>`/`drive body:<n>` is 0-based; `player.*` verbs are

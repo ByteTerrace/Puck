@@ -127,7 +127,7 @@ public sealed class MeshCommandTests {
         var (refusal, output) = Invoke("mesh", "audit", "--world", world, "--group", "sheared", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         Assert.Equal(expected: 0, actual: refusal);
-        Assert.Contains(expectedSubstring: "sheared (sheared): field refused: SdfFieldEvaluator is warp-free this wave and cannot interpret", actualString: output);
+        Assert.Contains(expectedSubstring: "sheared (sheared): field refused: SdfFieldEvaluator cannot interpret", actualString: output);
 
         var (audited, report) = Invoke("mesh", "audit", "--world", world, "--group", "plain", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 

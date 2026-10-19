@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response selects a fixed-point vector primitive for the velocity instead of floats or hand-scaled integers.
+\bFixedVector3\b

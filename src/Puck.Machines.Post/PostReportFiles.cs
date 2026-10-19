@@ -26,7 +26,6 @@ public static partial class PostReportFiles {
     }
     private sealed class CaseCountsDto {
         public required int Error { get; init; }
-        public required int ExpectedFail { get; init; }
         public required int Mismatch { get; init; }
         public required int Pass { get; init; }
         public required int Skip { get; init; }
@@ -56,10 +55,6 @@ public static partial class PostReportFiles {
                 Error = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.Error
-            ),
-                ExpectedFail = Count(
-                cases: result.Outcome.Cases,
-                verdict: PostCaseVerdict.ExpectedFail
             ),
                 Mismatch = Count(
                 cases: result.Outcome.Cases,
@@ -100,8 +95,7 @@ public static partial class PostReportFiles {
     }
     /// <summary>Writes <c>results.junit.xml</c>: one <c>testsuite</c> per stage, one <c>testcase</c> per case row (or one
     /// for the stage itself when it has no rows). A <see cref="PostCaseVerdict.Mismatch"/> is a JUnit failure, a
-    /// <see cref="PostCaseVerdict.Error"/> a JUnit error, a <see cref="PostCaseVerdict.Skip"/> a JUnit skip, and an
-    /// <see cref="PostCaseVerdict.ExpectedFail"/> a passing case whose output carries the recorded reason.</summary>
+    /// <see cref="PostCaseVerdict.Error"/> a JUnit error, and a <see cref="PostCaseVerdict.Skip"/> a JUnit skip; a passing case carries its detail as output.</summary>
     /// <param name="path">The file to write.</param>
     /// <param name="report">The run's report.</param>
     public static void WriteJUnit(string path, PostReport report) {

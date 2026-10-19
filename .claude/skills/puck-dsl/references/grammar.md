@@ -17,11 +17,13 @@ identifier                                    // a bare flag statement, only whe
 
 A container value is always a block and a scalar always takes a colon, at
 every depth and inside an object literal too — a colon in front of `{`/`[` is
-**PUCK040**. A name that merely stands for a container keeps its colon
-(`origin: bounds`), because the rule is about the punctuation in front of a
-literal, not what the value turns out to be; a call's named argument keeps its
-colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a
-statement.
+**PUCK040**. Inside an object literal an array member is written
+`{ name: "lit", pixels ["00000000", "11111111"] }`. A name or a call that
+merely produces a container keeps its colon (`origin: bounds`,
+`pixels: map(range(0, 8), row => "00000000")`), because the rule is about the
+punctuation in front of a literal, not what the value turns out to be; a call's
+named argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call
+syntax rather than a statement.
 
 ## Names
 
@@ -118,7 +120,7 @@ appears in an expression, so it is never mistaken for a machine or state name.
 
 ## Units
 
-`deg rad s ms m mm cm hz % pct` — what each is worth (the conversion
+`deg rad s ms min h m mm cm hz % pct` — what each is worth (the conversion
 arithmetic) lives in the core; *which* field of a given vocabulary is
 dimensioned is that vocabulary's own table. A unit suffix on a field the table
 doesn't cover is **PUCK024**; a unit the field's own dimension doesn't admit is
@@ -302,7 +304,10 @@ The world vocabulary's rule body lowers `if`/`else if`/`else` to the state
 engine's conditional effect (`ActionEffect.If`), reusing the `when` gate's own
 predicate lowering for the condition — see the [world transpiler
 guide](../../../../src/Puck.World.Transpiler/README.md#rules). `repeat`/`break`
-have nothing to lower onto there, so PUCK037 fires for them.
+have nothing to lower onto there, so PUCK037 fires for them, naming the
+rule's `forEach` as the alternative. Its effects carry `=` (`setState`) and
+`+=` (`addState`); any other compound operator is PUCK039, whose message
+spells the long form (`x = x - …`).
 Cartridge rules support all three, `if`/`repeat`/`break` (`rom-forge` owns
 that grammar).
 

@@ -128,8 +128,9 @@ Part of [`puck.world.definition.v1`](documents.md). See
   moves. The template renders and collides as nothing; an authored id
   spelling `/` refuses by name. Read back with `world.placements` (`dealt
   from <row> (<n> of <capacity>)` / `dealt by <template>`); `world.budget`
-  counts every template's offsets. The granaries module
-  (`modules/granaries.puck`) is the worked example.
+  counts every template's offsets. The quarantined granaries module
+  (`experimental/src/Puck.World/Assets/worlds/modules/granaries.puck`) is the
+  worked example.
 
 ## Owned-world identities
 

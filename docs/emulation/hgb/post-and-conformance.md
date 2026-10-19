@@ -2,49 +2,45 @@
 
 `Puck.HumbleGamingBrick.Post` is the executable battery for the Humble
 Gaming Brick's deterministic machine contracts and focused diagnostics. Its
-repository stages and recorded ledger provide repeatable checks. External ROM
-suites and other emulators provide evidence for hardware behavior; a passing
+repository stages and the corpus ROM suites provide repeatable checks. External
+ROM suites and other emulators provide evidence for hardware behavior; a passing
 comparison is not, by itself, proof of physical-hardware parity.
 
 ## The Post test architecture
 
 The battery runs ordered stages. Self-contained stages check the core,
-snapshots, hosting, links, firmware boundaries, and other contracts. Ledger
-stages discover ROM cases, dispatch them through `ProbeRunner`, and compare
-their recorded outcomes through `LedgerEvaluator`. The current lane names and
-the complete option table are maintained in the [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md).
+snapshots, hosting, links, firmware boundaries, and other contracts. Corpus
+stages discover ROM cases, dispatch them through `ProbeRunner`, and report what
+each ROM did through `SuiteEvaluator`. No file records an expected outcome: a
+ROM that does not pass fails its stage on every run, and the failures stay
+visible until the emulator is corrected. The complete option table is
+maintained in the [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md).
 
-### Execution lanes
+### Running the battery
 
-Fetch the pinned external corpora once for a cache, then choose a lane:
+Fetch the pinned external corpora once for a cache, then run the battery:
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane frontier
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane all
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
 ```
 
-| Lane | Rows selected | Use |
-|---|---|---|
-| `gate` | Recorded `pass`, unrecorded, and `unrunnable` rows | Developer loop, and every change through CI's runtime verification workflow (`verify.yml`). The `tests/Puck.HumbleGamingBrick.Tests` suite runs it with an empty corpus cache, so its self-contained stages run in every CPU test pass and its corpus stages skip. |
-| `frontier` | Recorded `fail`, `inconclusive`, and `unrunnable` rows | Nightly or on-demand accuracy investigation. |
-| `all` | Every row | A landing that changes emulator accuracy. |
-
-Use `--tier A|B|C` or `--filter <text>` to narrow a run. There is no
-`conformance` lane; the default is `all`. A plain run therefore measures every
-row. The project README documents optional commercial-cartridge inputs,
-artifact paths, acceptance controls, exit codes, and the lane-selection rules.
+Use `--tier A|B|C` or `--filter <text>` to narrow a run. The
+`tests/Puck.HumbleGamingBrick.Tests` suite runs the battery with an empty
+corpus cache, so its self-contained stages run in every CPU test pass and its
+corpus stages skip. CI's runtime verification workflow (`verify.yml`) runs the
+whole battery over the pinned corpora. The project README documents optional
+commercial-cartridge inputs, artifact paths, and exit codes.
 
 ## Test ROM corpora
 
 `corpora.json` names the external archives, versions, SHA-256 values, and roots
-used by the ledger. `--fetch-corpora` downloads and verifies those archives into
+the corpus stages read. `--fetch-corpora` downloads and verifies those archives into
 the local cache; it does not run the battery. Missing optional assets skip their
 cases, or become infrastructure failures with `--require-assets`.
 
-The ledger includes suites such as the following. Their results are evidence
-for the named behavior and are recorded per suite, ROM path, and console model.
+The corpus stages include suites such as the following. Their results are evidence
+for the named behavior and are reported per suite, ROM path, and console model.
 
 ### Mooneye GB (Gekkio)
 
@@ -60,9 +56,9 @@ for the named behavior and are recorded per suite, ROM path, and console model.
 - `mem_timing` checks memory access timing during PPU conflicts.
 - `dmg_sound` checks APU length, envelope, and frequency-sweep clocks.
 
-The current project README lists the additional suites, probe kinds, ledger
-fields, and the exact recorded-outcome rules. Do not describe these external
-suites as an independent hardware oracle.
+The current project README lists the additional suites, probe kinds, and the
+per-case result rules. Do not describe these external suites as an independent
+hardware oracle.
 
 ## Refuted PPU schedule decompositions
 
@@ -83,7 +79,7 @@ from 3 exact to 2 and its differing-pixel total goes 26,135 → 43,957 with all 
 moved rows worse, AGE goes 2,886 → 8,462, and gambatte goes 285,900 → 427,834
 and 82 cases net. The cost is the pipeline's move and nothing else: restoring
 only the pipeline's absolute position (a longer mode-3 entry latency) returns
-mealybug bit-for-bit to its recorded ledger. Nor can the pipeline be held while
+mealybug bit-for-bit to its earlier differing-pixel counts. Nor can the pipeline be held while
 the LYC interrupt moves in its place — a two-dot-later interrupt view takes
 `acceptance-ppu` from 34 to 20 — and holding the pipeline while moving only the
 read view blocks on `intr_2_mode0_timing_sprites` (DmgC and CgbE), first

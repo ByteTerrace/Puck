@@ -22,8 +22,14 @@ A swing is `{ driver, pivot, axis, amplitude, phase, wave }`, rotating
 capped at π except for the `linear` wave. A slide is the same shape without a
 pivot, in creation units, capped at 4.
 
-`wave` is `sine` (the default), `halfSine`, `linear`, `constant`, or
-`curve:<row>`.
+`wave` is `sine` (the default), `halfSine` (`max(0, sin)`), `linear` (the
+argument itself, unbounded), `constant` (1, so the facet is a pose the driver's
+weight blends in), or `curve:<row>`, which samples a world `curves` row by arc
+fraction: the argument's fraction of a turn maps onto the row's arc length and
+the sampled Z is the value. A curve wave on a `state.<row>` driver is how a part
+holds still until a cell crosses a threshold and then moves: draw the row flat
+to the threshold, then rising, and pick the cadence that maps the cell's range
+onto one turn.
 
 A live edit of `parent`, `swings` or `slides` (`world.row.set`, `world.row.add`,
 `world.reload`) applies on the next frame: any change to a creation's content
@@ -70,7 +76,7 @@ before it, the rule a shape's `parent` follows.
 | `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed (vertical travel reads zero, and so never trips `moving`), `turnRate` is positive turning left |
 | `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
 | `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
-| `state.<row>[.<key>]` | read a state row |
+| `state.<row>[.<key>]` | set directly: the cell's numeric value at the frame's tick, times the cadence, is the phase (a cycle-trait clock, a counter, an `hp` cell) |
 | `driver.<name>` | set directly: cadence × the phase an earlier driver reached this frame, so several drivers ride one cycle (cadence 2 is twice its rate) and never leave step |
 
 `dynamics` names a world `dynamics` row a setting driver's phase follows through

@@ -17,8 +17,8 @@ subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against: the island's own `references`
-  section names its four quilt shards (`shards/quilt-*`) by document path.
+  portal facet's `destination` resolves against (the debug world's portal frame
+  names the garden this way).
 - **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
   geometry. `uniform` is an authored acceleration vector. `attractors` names a
   placement plus explicit mass; optional `points` instead names a placement,
@@ -88,293 +88,90 @@ subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-## The one world and its districts
+## Worlds have no in-code definition
 
-`puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias (`imports[].as`, names compose as `<alias>$<name>`, placements and prototypes included, `exports` names the only rows a host may read, write, or bind; `world.imports` echoes every layer). The primitives the districts read: a placement `deal` facet deals one child placement per cell of a keyed row (`<template>/<key>`, laid out by the template's `distribution` region; `PlacementDealLawTests`); an observation writes rows of any cell kind and nothing else (`WorldObservationLawTests`); a `respond[].when` is a closed union of a lattice-field condition and a state-cell condition (`PlacementResponseLawTests`); an owned identity carries a keyed Int `facts` row mirrored into the reserved body-scope `identity` row, written by the `setIdentityFact` effect, echoed by `identity.facts` (`IdentityFactsLawTests`); a `machine` screen's content may be a `puck.cartridge.v1` document compiled at bind by the brick's forge (`MachineCartridgeLawTests`); an `inhabit` facet's `count` may name an Int cell instead of an authored literal — the cell-driven placement starts every structural install at zero live bodies and is admitted/retired only by `WorldPopulation.ReconcileInhabitCounts`, called on every state-value mutation apply so a rule-written cell reconciles the same tick, clamped to the tighter of the peer capacity and the distribution's own sample count and never retiring a seat-driven body (`InhabitCountLawTests`). A world authoring no `simulation.rateHz` runs at 30 Hz; a stress fixture authors 240 by name. Three derived limits shape a district: sixteen drive-reach ordinals across channels and target registers, one physical field topology per document, and the four-million work-unit rule budget (`RuleCapacity.MaxWorkUnitsPerTick`) where a body-pair interaction costs capacity squared; `modules/README.md` records what each decided.
+Every world is an authored document; the engine ships no content default. A
+boot with no `--world` loads the debug world
+(`src/Puck.World/Assets/worlds/debug.puck`), and an explicit path or the
+default that cannot be loaded refuses the boot by name
+(`src/Puck.World.Schema/WorldDefinitionLoader.cs`). The island
+(`experimental/src/Puck.World/Assets/worlds/puck.world.json`), its district
+modules and the game packages are quarantined prior art: read them for worked
+examples, never boot or repair them.
 
-## Worlds have no in-code definition — the shipped `puck.world.json` walkthrough
+Engine facts those worlds exercised, which hold for any world:
 
-A boot with no `--world` override loads
-`experimental/src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
-`standard.puck`. The basis carries the standards, defined AS STATE — a `transforms` text row
-(`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
-`state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
-resolves to `WorldThemeSection.Absent`, all zeros, which the console panel draws as a 120×16 px
-black corner: 1 px glyph cells, no chrome) — plus the infinite SAFETY NET and its debug
-texture: one SOLID Plane placement (`groundPlane`) at y = −64, catching anything that falls (never
-the level's own floor), its single shape rendered and collided from the same declaration, under the
-unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`
-over `state.colors.groundPrimary`/`groundSecondary`, a NON-SOLID placement — a solid placement
-carrying a wallpaper fold refuses by name, so the plane stays the sole collision truth). `placements.policy` is OPTIONAL —
-authored by a world that wants editor candidates or an explicit initial reserve, and then whole (a partial block refuses
-at parse naming the missing member). Unauthored it derives
-(`WorldPlacementPolicyDefaults.DeriveFrom`): zero placement and screen headroom, no derived
-faces, no candidate ring, no preview deadline, and a scale envelope spanning exactly the rows' authored scales, so the basis's static
-rows need no policy at all. Console placement mutations can grow the renderer beyond its initial reserve without
-an authored policy. The `debugRoom` prototype's unrotated shapes use
-`state.transforms.identity`, its palette is `state.colors.*`, the seat rig's pivot is
-`state.transforms.origin` (the `IDocumentSpatialValue` machinery: `DocumentVector2`/`DocumentVector3`/
-`DocumentQuaternion` fields accept a literal array OR a text-cell reference, resolved at the
-completed-document boundary, reference preserved on canonical write-back). A `prototypes[].document`'s
-coordinates are AUTHOR-frame, not world-frame: `puck.creation.v1` authors with +Z the front a shape
-faces — a half-turn about Y from the engine's −Z-forward — and `CreationFrame.ToEngine` converts once
-at `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world `(−x, y, −z)`; pinned by
-`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). Every shape modifier
-— `rounding`/`chamfer` (edge radii), `dilate`/`onion` (inflation radius, shell thickness), `smooth`
-(the blend radius against neighboring shapes), and a `panel`'s `inset`/`depth` — is authored in
-creation units and scales with the placement on both emission paths: the static stamper's
-`Scale(transform.Scale)` chain op re-multiplies a modifier baked into the primitive's own local
-geometry (rounding/chamfer/a panel's inset/depth), while `dilate`/`onion`/`smooth` act on the running
-world-space field directly and so are multiplied by the placement scale explicitly before emission;
-the animated stamp pool mirrors both rules against the body look's scale. Pinned by
-`WorldStampPoolShapeUnitsLawTests`/`CreationStampEmitterUnitsLawTests`. A shape's `flare` (`ShapeFlareDocument`) declares `axis` (0..2), positive
-`startScale`, `amount`, `bulge`, `top`, and positive `span`.
-Its perpendicular scale is startScale + amount*t + bulge*sin(pi*t), with
-t=clamp((top-p[axis])/span,0,1). `shear` is an object with `linear`,
-`quadratic`, `cubic`, and distinct `target`/`driver` axes in 0..2.
-`bumps` is a bounded list of `{center,radii,push}` Gaussian displacements;
-all radii are positive. Both emission paths bound the composed inverse warp
-and use a per-shape scope when no outer scope is active.
-
-`blend` accepts Union, SmoothUnion, Subtraction, Intersection, Xor,
-SmoothIntersection, SmoothSubtraction, ChamferUnion, ChamferIntersection,
-ChamferSubtraction, GrooveUnion, and PipeUnion. The round seam blends use
-`smooth` as their single radius. There is no `groove` width field.
-
-`cells { amplitude, frequency, mode, randomness, seed }` adds cellular
-relief in the shape's rigid frame. F1 admits randomness in [0,0.46];
-F2MinusF1 admits [0,0.20]. Frequency is in (0,8], amplitude in [0,4], and
-the relief slope amplitude*frequency*L must stay under 1 (L=1 for F1; L=2
-for F2MinusF1): a steeper relief pinches and folds the surface over itself
-and sheds islands, which no bake meshes cleanly.
-A closed primitive and per-shape scope are required: Sweep, grouped/detail shapes, and creations requiring
-an outer scope refuse cells. Both emitters scale frequency inversely and
-amplitude directly with placement scale. Bounds include amplitude/2
-outward relief. Worked seam and cell examples live in
-[the authoring README](../../../../src/Puck.World.Authoring/README.md#round-seams-and-cellular-relief).
-
-`erode { lane, from, to, noise? }` selects an integer lane 0..3.
-t=saturate((lane-from)/(to-from)); t>=1 skips the shape. Noise is tapered
-by 4*t*(1-t), leaving both endpoints exact. Unequal finite endpoints are
-required; reversed ranges grow the shape as the lane rises. Unbound lanes
-read zero. Erosion is render-only and uses the same scope as the shape's warps.
-It is baked into the mesh at the lanes the bake read, so it does not follow a
-live lane; `palette[].emissiveLane` and `weathering.lane` do
-([render lanes](../../sdf-authoring/references/surface.md#render-lanes)).
-
-A creation's `volumes` list declares `flow` media with `position`,
-`rotation`, positive `halfExtent`, optional `parent`, and a required
-`ramp` of 1..4 ascending `{density,color}` stops. Controls are `axis`,
-`width`, `spread`, `fade`, `noiseScale`, `noiseDepth`, `speed`, `seed`, `steps`,
-`intensity`, `extinction`, `pulseAmplitude`, `pulseFrequency`, and optional
-`intensityLane`
-(0..3; absent means unit gain). Media composite behind opaque-depth clipping
-and have no collider. See the authoring README's volume reference.
-
-A creation also carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 16 —
-`{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
-`speed`/`verticalSpeed`/`turnRate`/`travelDirection`/`lateralAcceleration`/`forwardAcceleration` (instantaneous, optionally followed through a world `dynamics` row) or `driver.<name>` (an earlier driver's phase), with optional `cadenceBy`/`weightBy` reading an earlier driver through a world `curves` row, and `when` is one token or an array of ≤ 4 that
-must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, the client-derived `moving`/
-`still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), or a `state.<row>[.<key>]`
-reference that holds while the cell's STORED value is nonzero — so a walker gated
-`["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
-per-shape `swings` (≤ 8) and `slides` (≤ 4) naming a driver, an `axis` (plus a
-`pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
-`constant` is the POSE BLEND, `amplitude · w`, how a climbing posture comes in on the `HoldingUnwalkable` gate;
-`curve:<row>` samples the world's `curves` row by arc fraction, Z as the value — see
-[documents-render.md](documents-render.md)), plus a per-shape
-`parent` naming an EARLIER shape whose motion carries it (pivots included — the joint chain of a
-limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a numeric state cell
-(`DocumentScalar`, resolved by the same walk as every document reference — a numeric cell is offered
-as its decimal spelling), and a driver's `signal` may be `state.<row>[.<key>]`, read at the frame's
-tick (a `cycle` row is a shared clock; a cell carrying a `dynamics` trait reads its EASED sample, so
-a second-order follower on a rule-written target is a pose blend the simulation owns). In a driver
-signal, a gate token, an effector's `state` target, and a look's `motion.poses`, a key that is exactly
-`$body` is the wearing body's 0-based index (`state.airPose.$body` on a row keyed by body); a key that
-only contains that text (`$bodyguard`, `air$body`) names the cell spelled that way
-(`WorldGaitDrivers.TryResolveBodyKey`). A body with no such cell reads 0. A look's `motion.poses` maps a creation frame name to such a reference: the frame holds
-while the cell's STORED value is nonzero (a pose is a truth, never an eased sample) and overrides the
-cue and replay cursor (a blink a `scheduleState`/`generate` rule pair schedules). The world validator refuses an undeclared curve or driver `dynamics` row, a non-numeric signal, gate, or pose
-row, and a pose naming no frame (`ValidateCreationBindings`, `ValidateLooks`). A look's `motion.lanes` is an array of up to four optional
-`ExpressionProgram` entries. Indices 0..3 map directly to
-`DynamicTransform.Lanes` on every dynamic slot owned by the look.
-Interior nulls remain in place; absent and trailing null entries read zero.
-Expressions use eased state. Invalid arithmetic, failed reads, or unsupported
-operators produce zero. Erosion, weathering, and flow intensity select a lane
-explicitly; the engine assigns no semantic names to those indices. One primitive covers a walker's limbs, a climber's, a wheel, a rotor, a
-tail, and a bobbing hull. It is presentation-only: `WorldStampPool.PackTransforms` composes it onto
-the per-frame dynamic transforms and nothing else reads it, so the SDF program, the colliders, the
-solid field, and simulation state are untouched — pinned by `CreationAnimationLawTests`, with the
-grammar and the worked rigs in `Puck.World.Authoring`'s README. A fourth, composing AFTER the
-drivers and the parent chain: an `effectors` list (≤ 8 — `{name, chain, tip, target, when, weight,
-plant, align}`) corrects the driver-posed skeleton so a named tip reaches a target. `chain` names the bones
-root→tip, each descending from the one before through `parent` (a bone's joint is the pivot of its
-first swing, its authored `joint` when it swings nothing, else its own position); two bones close
-analytically in the plane the driver-posed limb already bends in, three to eight sweep by cyclic
-coordinate descent. `target.kind` is `surface` (march the client's ONE shared static-scene
-`SdfFieldEvaluator` — the same one the chase camera's clearance sweep reads, held on `WorldClient`
-— from the posed tip along an author-frame `direction` up to `reach`, landing `standoff` off the
-hit's own normal; a `wallpaper` domain fold anywhere in the world makes that field unbuildable, so
-every probe there misses), `body` (another entity's root plus `offset`, in that body's attitude), or
-`state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
-driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
-when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
-`align` turns the solved tip about its own origin so its rest axis against the probe lies along the
-latched contact normal (world up without a surface), scaled by the same eased weight, which keeps a
-planted boot's sole flat however the chain bent to reach it.
-Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. A shape's `panel`
-(`ShapePanelDocument`) is a second-material inset face region — a plate that reads as two shapes
-(an ivory inset in a lilac armor plate, say) for the price of one against `CreationDocument.StampShapeCount`'s
-per-stamp budget (a panelled shape charges 2). `inset` erodes a copy of the shape on every local axis (clamped
-to the shape's smallest local half-extent, `SdfSolidGeometry.HalfExtent`); `depth` places it along `face`
-(a local direction, normalized; null = `+Z`; zero-length refused by name) and composes it with `material` —
-positive recesses it (Subtraction, the floor exactly `depth` below the plate's face), negative raises it proud by
-exactly `|depth|` (Union) — clamped to `±2·h′` (`h′` = the eroded copy's own half-extent along `face`; deeper is
-an enclosed void or a detached slab). Both are creation units, scaled by the placement on both emission paths (the
-static stamper's own `Scale(transform.Scale)` chain op reaches them automatically; the animated pool multiplies them
-by the placement scale explicitly before resolving); `ShapePanelDocument.Resolve` is the one derivation both emission
-paths read. Render-only: the deterministic fixed-point contact
-evaluator never reads it, so a panelled solid placement's collider is unchanged. Refused by name on a Plane, a
-domain-folded or grouped shape, and a creation that otherwise needs its own field scope (any other shape's
-non-Union blend, an engraved text run, or a noise facet) — a panel needs a one-deep field scope of its own and
-none of those leave one to nest into. A shape's `trims` (`ShapeTrimDocument[]`, at most 4) paint a second-material
-band on the shape's own surface wherever it sits near another, EARLIER-declared shape (`shape`, matched by name) —
-a Subtraction cutter riding the host's own `group` is the common case, or a plain plane-like Box authored purely to
-mark a seam. Each trim charges 2 against `StampShapeCount` (the host's own copy plus the reference's), opens a
-scope of its own AFTER the host's own emission (one per trim, sequential — never nested), and composes: the host's
-own copy nudged narrowly closer than its own plain (already-present) instance by `inset` (creation units, `[0,
-ShapeTrimDocument.MaxInset]`, default `0.003`) — a real Dilate at a POSITIVE radius, so it loses to the plain
-surface everywhere by default and wins only where the Intersection with the reference's own copy — its own pose,
-scale grown by `width` (creation units, positive) — does not push the candidate past it, i.e. near the reference;
-`max(a, b) >= a` is why a genuine erosion could never win there. Refused by name on a shape carrying `domain` ops
-or a non-zero `group`, and on a creation that otherwise needs its own field scope — the same reasons `panel`
-refuses them; and refused by name when the REFERENCE carries `domain` ops or a non-zero `group`, since its copy is
-re-emitted from its own slot and authored pose alone (a fold's slot carries only its parent's delta frame, a grouped
-member rides its group's chain) and would land in the wrong place. Render-only, like `panel`: the deterministic fixed-point contact evaluator never reads it. A shape's
-`detail` (bool, null = false) marks it VISUAL-ONLY: it never holds contact geometry
-(`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip a detail shape outright, unlike Panel/Trims,
-which only skip their SECOND copy), while the baked frame samples it like any other shape, so a thin subtraction (a
-seam) or a small union carrying its own material (a rivet) bakes into the view's mesh and paints its footprint through
-the bake's point-sampled materials. Refused by name alongside `panel` or
-`trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
-`curve` (`ShapeCurveDocument`) is a quadratic Bezier — control points `a`/`b`/`c` (each `state.<row>[.<key>]`-bindable),
-a radius tapering linearly between `radiusStart`/`radiusEnd` plus a mid-span `bulge`, optionally 1-4 `strands` orbiting
-the curve at `strandOffset` with rate `twist` — admitted ONLY on, and required on, `type: sweep` (refused elsewhere,
-and a `sweep` with no `curve`, both by name). The primitive's control points and radii already carry creation-unit
-dimensions directly, so `scale` must be uniform (refused otherwise, by name) and bakes onto them as one multiplier,
-unlike every other primitive's unit-size law (`SdfSolidGeometry`'s dimension table). Refused by name alongside
-`panel`/`trims`/`flare`/`shear`/`bumps`/`domain` on the same shape — a sweep is not a closed solid
-(`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip it outright, like `detail`) and needs none of
-their scopes. `bulge`/the radius taper/`strandOffset` are each refused past a ratio to the authored radii
-(`SdfProgramBuilder.MaxSweepBulgeRatio`/`MaxSweepTaperRatio`/`MaxSweepStrandOffsetRatio`) — the envelope
-`SweepLawTests` verifies the shape's field over. `strands` above 1 is
-render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved; `body.rig <body> <shape>` adds the parent that shape's motion chains under and the rigid delta the last frame composed for it, the read-back for a live `parent` or `swings` edit. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
-census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
-QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
-(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the `wren` look, and grants — is the
-world document's own. A field trait's `color` speaks the same grammar (resolved live at
-emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
-distances; `world.fields` echoes the authored token).
-The `provingCourt` placement carries the `debugRoom` placement (one of the island's districts,
-beside the garden and market courts): a 48 m platform (top at y = −0.5)
-carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
-the body in front of it — `proving-arrival`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
-reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
-spawn point; the island's seats spawn where its authored `bodies.seatSpawns` say). Author-frame
-layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
-ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
-`collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
-the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
-`pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere pull can crawl
-floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
-`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — What it measures (`body.fly` from each
-spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
-body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
-penetration resolved across `up`, the approach clamp horizontal only); the 0.1 and 0.25 m rises are stepped by the capsule's rounded
-bottom and the 0.5 m rise blocks (there is no authored step height); a wall stops at radius + skin
-with y, pitch and roll unchanged; the high overhang is inert and the low one blocks; the pit and the
-edge both land the body upright on the net. The pit carries an SDF fact worth knowing before
-authoring any carve: `max(a, −b)` is exact only inside the subject, so inside the void the field
-reads the CARVE BOX'S OWN faces and the subject's carved-away faces as surfaces (a phantom floor the
-contact solver grounds on, a phantom lip ~radius wide at the rim) — the carve extends from below the
-net to above head height for exactly that reason, and a void that must be exact is built from union
-geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
-`yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
-`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndPack`), each a different
-hold list over the same primitives (see [documents-motion.md](documents-motion.md)): the spider (`spiderKit`) pulls any face in a `[0, 180]` cone,
-the dragonfly (`dragonflyKit`, the same `walk` program every kit here shares) holds the air on full
-lift with its own row's `thrust` climbing, and keeps its altitude
-through the producer's `altitudeGain`, the hound (`houndKit`) walks the ground hold with a four-beat
-gait and planted paws; Wren's own hold list is `wall` (pull, `spend` against the `stamina` body slot,
-`jump` releases), `ground`, `air`, and her hands and feet are `effectors` on surface targets. Their
-homes sit away from the pit and the platform edge — a wander radius that reaches either walks the
-creature onto the safety net, which it then paces beneath the platform.
-Away from the debugRoom cluster, near the pond, a `drinkMe` bottle placement (colors from the
-`drinkMeColors` text row) carries a `region`, and a second, physically separate `eatMe` cake placement
-carries its own region straddling the approach back toward the `table` spawn point. Two `Region`
-INTERACTIONS — `left: "wren"` (a one-cell carrier row naming body 0, never the aggregate
-`$region:<placementId>` occupant count, which fires for ANY body standing in the region regardless of
-who), both Edge mode — write body 0's cell of the keyed `scale` state row (`bodies.scaleRow`, envelope
-`[0.05, 1]`): `drink-me-shrink` (`right: "drinkMe"`) sets it to 0.15 once on entering the bottle's
-region, and `eat-me-restore` (`right: "eatMe"`) sets it back to 1 once on entering the cake's. Edge is
-load-bearing, not a style choice: a `Level` trigger re-fires its `setState` every tick the co-occurrence
-holds, which for a body simply standing in the region is a document mutation, a stderr journal line, and
-a client definition delivery EVERY tick — the same per-tick-write anti-pattern `ActionTriggerMode`'s own
-remarks warn a Level-triggered write against. The two regions are never nested or otherwise contained
-one inside the other — the shrink region has no reach into where the restore region would fire, and the
-restore region has no reach back into the shrink region's own interior — so leaving one always reaches
-the other's edge before either could re-trigger itself. `Server.WorldBody.Scale` scales collider
-volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity fall/rise and its
-vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
-rendered rig AND the seat chase camera's orbit distance and look-at height
-(`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
-speck on screen. The `table` spawn point sits inside the `eatMe` region already, so an
-unshrunk arrival reads `scale=1` from the first tick; `drinkMe` sits north of it. `body.where`'s `scale=` echo is the read-back.
-Body-vs-body contact, overlap events, the cross-boundary continuum trajectory, the adjacency sweep's
-LOCAL side, and the self-collision sweep all read each body's live-scaled collider volumes; a rigid
-body's mass, inertia, bounding radius, centre of mass (`com=` on `body.where`), and linear rest
-threshold scale with it too (`WorldBody.ScaleRigid`). Only the adjacency sweep's REMOTE side (a
-neighbour authority's own entities) still reads an unscaled collider, since no delivered snapshot yet
-carries a remote entity's live Scale.
-
-Physical chess is not part of the shipped island: it is the Parlor package's
-`worlds/parlor/chess.puck`, whose tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
-Its candidate matcher unions four lossless bit-plane differences, rejects changes outside the move
-footprint, and directly compares the at most four affected cells. Every pre-move read uses `lastLegal`, never a refused observation.
-Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
-castling rights, en passant target, accepted check values, and promotion completion together.
-Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate occupants from
-being accepted, including identical-code overlaps: it is the sampled on-board
-piece count minus occupied squares. A `:between:0:63` count reduction over
-`pieceCell` supplies the census without sampling writes; the occupied count is
-64 minus the empty-square mask's population. The [state reduction contract](../../../../docs/reference/state/expressions.md#reductions)
-owns range bounds, `:where:` composition, live reads, and pricing.
-Board-history fingerprints remain diagnostic, not repetition adjudication.
-The `chess.puck` source owns these contracts, including the closed -6..7 encoding, the
-topology shifts, and the bit-extract/deposit projection of home-piece losses into castling rights. The existing two-rule settle counter
-avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
-conditional expression cannot combine its gates.
-Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
-[Puck.State](../../../../docs/reference/state/expressions.md#periodic-bit-masks) owns their Int-only domain and refusal contract.
-`src/Puck.State/Expressions/ExpressionOperators.cs` owns context-free operator spelling, arity,
-type signature, and cost; keep payload-bearing literal/state/board lowering specialized.
-The compiler folds successful constant subexpressions after full validation,
-using the runtime evaluator; never elide a live read or a refusing conditional branch.
-Chess's fixed transit masks use hexadecimal base patterns and `byteSwap` for rank reflection.
-The board is
-rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
-`boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for
-`pieceSetColors`) — the tabletop otherwise renders as a bare top with no board pattern. A body's walker
-capsule (radius 0.35, live-scaled by `Scale` like every other collider — `scale=1` near the table, so
-its full radius applies there) still reaches roughly 0.4 m from its own center, well past a single
-0.2 m cell — so a body cannot stand ANYWHERE on the board's own 1.6 m footprint (let alone tread among
-the pieces) without risking contact; a proof keeps the body at a safe standoff beside the
-table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having the body touch
-one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
-`world.tabletop` echoes them back, but no client code paints a highlight from it; a
-highlight is an addon's to draw.
-An explicit path or the shipped default that cannot be loaded refuses the boot by name. The loader is
-`src/Puck.World.Schema/WorldDefinitionLoader.cs`.
+- **Placement primitives.** A placement `deal` facet deals one child placement
+  per cell of a keyed row (`<template>/<key>`, laid out by the template's
+  `distribution` region; `PlacementDealLawTests`). An observation writes rows of
+  any cell kind and nothing else (`WorldObservationLawTests`). A `respond[].when`
+  is a closed union of a lattice-field condition and a state-cell condition
+  (`PlacementResponseLawTests`). An `inhabit` facet's `count` may name an Int
+  cell: such a placement starts every structural install at zero live bodies,
+  and `WorldPopulation.ReconcileInhabitCounts`, called on every state-value
+  mutation apply, admits and retires bodies the same tick a rule writes the
+  cell, clamped to the peer capacity and the distribution's sample count and
+  never retiring a seat-driven body (`InhabitCountLawTests`).
+- **Identity facts and machine content.** An owned identity carries a keyed
+  Int `facts` row mirrored into the reserved body-scope `identity` row, written
+  by the `setIdentityFact` effect and echoed by `identity.facts`
+  (`IdentityFactsLawTests`). A `machine` screen's content may be a
+  `puck.cartridge.v1` document compiled at bind by the brick's forge
+  (`MachineCartridgeLawTests`).
+- **Derived limits.** Sixteen drive-reach ordinals across channels and target
+  registers; one physical field topology per document; and the rule budget
+  `RuleCapacity.MaxWorkUnitsPerTick` (four million work units), where a
+  body-pair interaction costs capacity squared.
+- **Placement policy.** `placements.policy` is optional, and whole when
+  authored (a partial block refuses at parse naming the missing member).
+  Unauthored it derives (`WorldPlacementPolicyDefaults.DeriveFrom`): zero
+  placement and screen headroom, no derived faces, no candidate ring, no
+  preview deadline, and a scale envelope spanning exactly the rows' authored
+  scales. Console placement mutations can grow the renderer beyond its initial
+  reserve without an authored policy.
+- **Author frame.** A `prototypes[].document`'s coordinates are author-frame:
+  `puck.creation.v1` authors with +Z the front a shape faces, a half-turn about
+  Y from the engine's −Z-forward, and `CreationFrame.ToEngine` converts once at
+  `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world
+  `(−x, y, −z)`; `CreationAuthorFrameLawTests`).
+- **Creation shapes and animation** (modifiers, `flare`/`shear`/`bumps`,
+  blends, `cells`, `erode`, `volumes`, `panel`/`trims`/`detail`, sweeps, and
+  the `drivers`/`swings`/`effectors` animation `WorldStampPool.PackTransforms`
+  composes, read back with `body.rig`) are `sdf-authoring`'s:
+  [shapes](../../sdf-authoring/references/shapes.md),
+  [composition](../../sdf-authoring/references/composition.md),
+  [rig](../../sdf-authoring/references/rig.md) and
+  [surface](../../sdf-authoring/references/surface.md). All of it is
+  presentation-only except the shapes' contact geometry.
+- **Body scale.** `Server.WorldBody.Scale` (a body's cell of the keyed
+  `bodies.scaleRow`) scales collider volumes, move speed and turn rate, hold
+  probes, standoff and reach, a hold's own gravity and vertical envelope, and a
+  pull's rate; the client multiplies the same cell into the rendered rig and
+  the seat chase camera's orbit distance and look-at height
+  (`Client.WorldFramePresenter.ResolveCamera`). A rigid body's mass, inertia,
+  bounding radius, centre of mass and rest threshold scale with it
+  (`WorldBody.ScaleRigid`); `body.where`'s `scale=` and `com=` read it back.
+  Only the adjacency sweep's remote side still reads an unscaled collider.
+- **Contact.** `FixedContactPushMath` treats a non-walkable, non-ceiling
+  normal as a wall: penetration resolves across `up` and the approach clamps
+  horizontally. There is no authored step height; a capsule climbs only the
+  rises its rounded bottom rides. A `Subtraction` carve (`max(a, −b)`) is exact
+  only inside the subject: inside the void the field reads the carve box's own
+  faces and the subject's carved faces as surfaces, which the contact solver
+  grounds on, so a carve that must be exact is built from union geometry.
+- **Interactions that write state.** A `Region` interaction that writes a cell
+  is `Edge` mode: a `Level` trigger re-fires its `setState` every tick the
+  co-occurrence holds, a mutation, a journal line and a client delivery per
+  tick. `body.pose spawn:<id> [body]` is the console mirror of a rule's `pose`
+  effect naming a spawn point.
+- **Expressions.** `src/Puck.State/Expressions/ExpressionOperators.cs` owns
+  context-free operator spelling, arity, type signature and cost; keep
+  payload-bearing literal, state and board lowering specialized. The compiler
+  folds successful constant subexpressions after full validation using the
+  runtime evaluator, and never elides a live read or a refusing conditional
+  branch. [Reductions](../../../../docs/reference/state/expressions.md#reductions)
+  and [periodic bit masks](../../../../docs/reference/state/expressions.md#periodic-bit-masks)
+  (`replicationMask`, `repeatBits`) are documented with `Puck.State`.
 
 ## Authoring a creation in code — the sculpting library
 
@@ -396,9 +193,8 @@ whole-document revalidation or the per-section `Mutate` grant check.
 its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
 is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
 each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
-several documents each own one disjoint slice of a world — the garden's
-own `src/Puck.World/Assets/worlds/games/{poker,dominoes,billiards,bowling,tictactoe,hexlines,mancala,solitaire}.puck`, each
-imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
+several documents each own one disjoint slice of a world (the debug world imports `skies.puck`, `shapes.puck`,
+`theme` and `controls`) rather than forcing every slice through the single-parent basis chain. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
 preserved across a split, only content is; compare two composed trees by canonicalizing each keyed list (sort by
@@ -471,32 +267,26 @@ site spelling a private name, quoting the JSON path and the export list that wou
 `Facet`: effect destinations, transform targets, and a board facet's `occupancy` are `actions`; HUD/overlay/camera
 bindings are `bindings`; every other read position is `reads`). The member is stripped from the composed tree, a
 document loaded as a world with `exports` on it refuses at validation, and `world.imports` prints each layer's
-`exports[...]`. Law suites:
-`experimental/tests/Puck.World.Games.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
+`exports[...]`. Law suites: `tests/Puck.World.Games.Tests/ModuleExportsLawTests.cs`,
 `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldExportsLawTests.cs`.
 Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
-**`standard.puck` — the standard library, not a world.** The engine ships
-no content default: what a world shares is AUTHORED. `standard.puck`
-carries the `transforms` and `colors` state rows, the `theme`, the ground
-safety-net placements and prototypes, a body sleep default, and an import of the
-`quality.puck` render presets; the island (`puck.world.json`) names it as its
-`basis` and authors its own channels, bindings, kits, body-motion programs and
-chase rig, and the quilt shards take the island as theirs. Another world takes a
-different basis (the Parlor games share `parlor.basis.puck`). The live debug world and garden take
-the Moth avatar as their basis and import `theme.puck` (the standard theme) and
-`controls.puck` (cursor, key hints, icons, binding bar, play wheel) as documents. Absent means
+**Shared content is authored, never an engine default.** The live debug world
+and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
+kit, motion programs, camera, seat camera feel) as their basis and import
+`theme.puck` (the standard theme) and `controls.puck` (cursor, key hints, icons,
+binding bar, play wheel) as documents; `quality.puck`, `skies.puck` and
+`shapes.puck` beside them are imported the same way. The quarantined
+`standard.puck` library and the island built on it are prior art. Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
 property non-null between parse and validation which the validator refuses for
 any document whose `bodies.capacity` is nonzero — the same derived refusal
-`kits` carries, so a seatless document may still author neither. A world takes
-the standard set by naming `standard` as its `basis`; a world that
-wants only its own `layouts` and other prototype-specific sections over that
-basis authors just those sections in its own body — the ordinary basis-refine
-rule above, no second file involved.
+`kits` carries, so a seatless document may still author neither. A world that
+wants only its own `layouts` and other sections over its basis authors just
+those sections in its own body (the ordinary basis-refine rule above).
 
 ## The validator — the one thick gate
 

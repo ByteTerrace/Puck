@@ -50,8 +50,8 @@ of scope here.
   rendered picture compared pixel for pixel with an independent reference
   renderer, controller, OAM DMA and APU fixtures, nestest's PPU column, and a
   nestest boot driven through the controller.
-- **In progress:** NTSC accuracy. AccuracyCoin runs in the battery against a
-  recorded outcome ledger, so no passing test can regress, and its recorded
+- **In progress:** NTSC accuracy. AccuracyCoin runs in the battery and reports
+  every test's own result, so the stage fails while any test fails, and those
   failures are the package's work list.
 - **Not started:** every package below NTSC accuracy. In particular the
   `humble-gaming-deck` engine is an `IMachineEngine` that no extension
@@ -198,9 +198,8 @@ The Deck gets its own Post battery, `Puck.HumbleGamingDeck.Post`, over the
 shared scaffold, keeping the tier meanings: Tier A is self-contained, Tier B
 runs external corpora and skips when they are absent, Tier C covers sustained
 scenarios, peripherals, and cross-machine contracts. It keeps the Humble
-battery's outcome ledger, which pins recorded results so they cannot regress,
-and adds an accuracy report that requires zero applicable failures, because a
-ledger can stay green while preserving a recorded failure.
+battery's reporting, where each corpus case's own result is the stage's result,
+and adds an accuracy report that requires zero applicable failures.
 
 External corpora stay outside the repository and are fetched by the battery's
 pinned, hash-checked manifest, as the Humble battery already fetches its

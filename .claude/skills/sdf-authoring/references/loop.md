@@ -12,7 +12,7 @@ Both names are correct in their own place; neither works in the other's.
 world.row.set creations <id> document.shapes[name=<shape>].<field> <json>
 world.row.add creations <id> document.shapes[name=<shape>].swings <json> [after=<selector>]
 world.row.remove creations <id> document.shapes <selector>
-world.row.step creations.<id>.<field>
+world.row.step creations.<id>.document.shapes[name=<shape>].<field> <delta>
 world.row     creations <id> document.shapes[name=<shape>]
 ```
 
@@ -110,11 +110,14 @@ world.wait 4
 
 ## Offline verbs
 
-A `.puck` source compiles and validates first — `creation stats` and
-`schema --check` both take JSON, never `.puck`, directly:
+Run every verb from your lane's private copy of the head's CLI. The
+`creation` and `mesh` verbs read a `.puck` source directly, compiling it in
+memory with its relative `basis` resolved from the source's directory; a
+compiled `.world.json` written somewhere else loses that basis and fails to
+load.
 
 ```bash
-puck compile <file>.puck --output <file>.world.json --validate
+puck compile <file>.puck --validate
 puck lint <file>.puck --strict
 ```
 
@@ -127,11 +130,10 @@ a Path prism profile under a `solid` placement, and a residual
 nonuniform `Scale`, likewise surface only there.
 
 ```bash
-dotnet run --project src/Puck.Cli -- creation stats --world <path> [--prototype <id>]
-dotnet run --project src/Puck.Cli -- creation shape --world <path> --prototype <id> [--shape <name>...]
-dotnet run --project src/Puck.Cli -- creation sculpts
-dotnet run --project src/Puck.Cli -- creation sculpt <name> --world <path>
-dotnet run --project src/Puck.Cli -- schema --check
+puck creation stats --world <path> [--prototype <id>]
+puck creation shape --world <path> --prototype <id> [--shape <name>...]
+puck creation sculpts
+puck creation sculpt <name> --world <path>
 ```
 
 `creation stats` loads and validates the whole document, then prints
@@ -170,9 +172,6 @@ gauge. To see a field rather than read it,
 before writing and leaving the file untouched on refusal. The live twins are
 `creation.sculpts` and `creation.sculpt <name>`, which patch the live document
 all-or-nothing.
-
-`schema --check` exits 1 on drift between the code and the generated section
-schemas.
 
 ## Authoring in C# instead of JSON — a live but unused path
 

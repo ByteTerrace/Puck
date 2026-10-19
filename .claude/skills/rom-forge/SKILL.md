@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: Maps Puck's data-first cartridge authoring in Puck.GamingBricks.Forge, its CGB and AGB native document compilers, and the in-engine forge console. Covers authoring, compiling, and decompiling `.puck` cartridge sources (`puck.cartridge.v1`) and their diagnostics, plus SM83/Thumb emitters, hardware kernels, Tune audio documents, boot-ROM tools and emulator-driven verification. Use for ROM source schemas, `.puck` cartridge authoring or compile/decompile errors, cartridge editing/build/play/export, native rule or graphics generation, and cartridge/boot/save seams. The `.puck` language core (grammar, CLI verbs) belongs to the puck-dsl skill; emulator core behavior belongs to gaming-bricks.
+description: Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/AGB native compilers, cost. Emulator core is gaming-bricks.
 ---
 
 # ROM documents and native compilers
@@ -33,23 +33,32 @@ into a C# template. `Puck.GamingBricks.Forge` depends on Abstractions, Assets an
 2. `puck compile <name>.cgb.puck --output <name>.cgb.cartridge.json --validate`.
    `--validate` runs `CartridgeDocuments.Validate` over the lowered JSON;
    lowering alone proves only that the source was well formed.
-3. In a running `Puck.World`, `forge.open <file>.cartridge.json` for a local
-   draft, or `forge.play <screen-index> <file>.cartridge.json` to hot-load into a
-   screen. **Both verbs take only compiled JSON**: `forge.play` refuses a path
-   not ending in `.cartridge.json`, and there is no in-engine compile of a
-   `.puck` cartridge.
+3. In a running `Puck.World`, `forge.open <file>.cartridge.json` loads the
+   compiled JSON as the console's draft, then `forge.play <screen-index>
+   <file>.cartridge.json` hot-loads the draft into a screen. There is no
+   in-engine compile of a `.puck` cartridge, and `forge.open` reads only JSON.
+   `forge.play` needs a draft first (`forge: create or open a draft first`
+   otherwise), and its path is an output: it writes the draft's canonical source
+   there, then inserts it, and refuses a path not ending in `.cartridge.json`.
+   A world screen whose `source` is a machine may instead name the
+   `.cartridge.json` as its `contentPath`; the engine compiles it at bind.
 4. Look at it: `capture.start`, or a screenshot. Cartridges are verified in a
    world, never in a bespoke driver.
+
+`puck decompile <name>.cartridge.json --output <name>.cgb.puck` turns a document
+back into source; the source it writes compiles back to the same bytes.
 
 The committed `.cartridge.json` beside each source is derived: regenerate it by
 compiling the source and commit both halves.
 `CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`
 byte-compares them. Never hand-edit the JSON.
 
-`forge.play` saves canonical source and submits a `WorldScreenOp.Insert` with
-the acting principal through `IServerLink`; never bypass the server's screen
-authority. Failed draft edits leave the draft intact; compile, save and play
-always validate.
+`forge.play` inserts through the screen's named machine
+(`WorldMachineCommandModule.InsertContent`) when the screen has one, otherwise
+by submitting a `WorldScreenOp.Insert` with the acting principal through
+`IServerLink`; never bypass the server's screen authority. Both need Control
+over the screen. Failed draft edits leave the draft intact; check, save, build,
+export and play always validate.
 
 ## Contracts that bite
 
@@ -72,8 +81,10 @@ always validate.
   entries.
 - **A sound is a music track or a one-shot effect.** A track is one to four
   voice parts, one to a channel, and validation refuses an effect on any voice
-  a track occupies, since the effect would cut that part off. Put the effect on
-  a free voice or move the music part.
+  a track occupies, since the effect would cut that part off. An effect may sit
+  only on the pulse-1, noise or wave voice (never pulse 2), so with music on
+  pulse 1 and pulse 2 the choices are an effect on noise or wave, or moving the
+  music part off pulse 1 and the effect onto it.
 - **Keep the two sound drivers in register sync.** Stream step widths are
   `duration` plus five register bytes for pulse one and wave, four for pulse two
   and noise; `AgbSoundDriver` maps the same registers to the AGB's legacy sound
@@ -85,7 +96,9 @@ always validate.
 
 `CartridgeCost` prices a document in abstract work units against
 `CartridgeCostProfile`'s per-target weights; `CartridgeDocuments.Estimate`
-reports the frame bound and nothing refuses on it. Weights come from
+reports the frame bound and nothing refuses on it. Cost is advice, never a gate:
+do not add a cost refusal, because the one hard refusal is capacity
+(`CartridgeCapacityException`, an image that outgrew its machine). Weights come from
 `puck cartridge-cost`, which boots `CartridgeCostMeasurement`'s probe documents
 on both machines. Never hand-count an emitter's instructions into a weight or
 adjust a weight to make a document fit; a new primitive is measured by adding
@@ -103,17 +116,20 @@ cartridges; never move a table value to make a boot agree with it. The builder
 solves its straight-line tail against the emitted image; never hand-count
 instruction timings into its constants. Runtime packages embed generated images
 (`HgbFirmware.GetImage`) and never reference Forge. Regenerate with
-`puck firmware` and verify the bytes.
+`puck firmware hgb --output <dir>` (or `puck firmware agb`) and check the bytes
+with `--verify`, which compares without writing.
 
 ## Seeing it work
 
 - Compile a cartridge and play it in a world (above). For World integration,
   drive the real host over stdin (`puck-world`); a build alone is not a play
   test.
-- The forge suites (`tests/Puck.HumbleGamingBrick.Forge.Tests`,
-  `tests/Puck.AdvancedGamingBrick.Forge.Tests`, whose `CartridgeCompilerTests`
-  runs cartridges on both real emulators) are there to run when they reach the
-  change.
+- The cartridge suites are `tests/Puck.AdvancedGamingBrick.Forge.Tests`
+  (`CartridgeCompilerTests`, `CartridgeMemoryTests` and the per-feature
+  `Cartridge*Tests` run cartridges on both real emulators),
+  `tests/Puck.GamingBricks.Transpiler.Tests` (the round trip) and
+  `tests/Puck.HumbleGamingBrick.Forge.Tests` (boot ROM and bundle container).
+  Run them when they reach the change: `dotnet test <project> -c Release`.
 - **Settle out of OAM DMA before reading the bus.** A fixed stepping boundary
   can land inside OAM DMA, where WRAM reads 0xFF. Every SM83 verifier calls
   `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames; use

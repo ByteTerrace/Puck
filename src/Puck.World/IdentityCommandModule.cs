@@ -513,7 +513,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.motion",
-            description: "Sets identity-owned motion slots: identity.motion <speed|turn-speed> <value> [player]. Camera preferences are authored as playerDefaults.seatLook on the identity document.",
+            description: "Sets identity-owned motion slots: identity.motion <speed|turn-speed> <value> [player]. Camera preferences are authored as seatDefaults.seatCameraFeel on the identity document.",
             handler: SetMotion,
             routing: CommandRouting.Simulation
         );

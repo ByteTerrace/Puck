@@ -1,6 +1,6 @@
 namespace Puck.HumbleGamingBrick.Post;
 
-/// <summary>The reporting channel a ledger-gated ROM case is read through.</summary>
+/// <summary>The reporting channel a corpus ROM case is read through.</summary>
 internal enum ProbeKind {
     /// <summary>The blargg <c>0xA000</c> result block, read through <see cref="ConformanceRomProbe"/>.</summary>
     ConformanceSerial,
@@ -61,18 +61,18 @@ internal sealed record ProbeImage(byte[] Rgba, int Width, int Height);
 /// <param name="ActualImage">The framebuffer a failed screenshot comparison produced; <see langword="null"/> otherwise.</param>
 /// <param name="ExpectedImage">The expected image a failed screenshot comparison ran against; <see langword="null"/> otherwise.</param>
 internal sealed record ProbeOutcome(ProbeVerdict Verdict, string Detail, int? DiffPixelCount = null, ProbeImage? ActualImage = null, ProbeImage? ExpectedImage = null);
-/// <summary>Whether a ledger case is meant to run the emulator at all.</summary>
+/// <summary>Whether a suite case is meant to run the emulator at all.</summary>
 internal enum CaseDisposition {
-    /// <summary>Run the probe and compare its verdict against the ledger.</summary>
+    /// <summary>Run the probe and report its verdict.</summary>
     Runnable,
     /// <summary>The corpus's own howto or README makes this case impossible to check mechanically (button input,
-    /// an undecoded result convention); recorded with a reason instead of run.</summary>
+    /// an undecoded result convention); reported skipped with a reason instead of run.</summary>
     Unrunnable,
 }
-/// <summary>One ledger-gated ROM case: where it lives, which model and probe it runs under, and — for a screenshot
+/// <summary>One corpus ROM case: where it lives, which model and probe it runs under, and — for a screenshot
 /// case — the expected-image candidates to try in order (the first that exists on disk wins).</summary>
-/// <param name="Suite">The ledger suite key (also the stage-name suffix).</param>
-/// <param name="RelativePath">The ROM's path relative to its suite's on-disk root, forward-slash separated — the ledger key together with <paramref name="Suite"/> and <paramref name="Model"/>.</param>
+/// <param name="Suite">The suite key (also the stage-name suffix).</param>
+/// <param name="RelativePath">The ROM's path relative to its suite's on-disk root, forward-slash separated.</param>
 /// <param name="FullPath">The absolute path to the ROM image.</param>
 /// <param name="Model">The console model to run the case on.</param>
 /// <param name="Probe">The probe to run for a <see cref="CaseDisposition.Runnable"/> case.</param>
@@ -83,7 +83,7 @@ internal enum CaseDisposition {
 /// <param name="Palette">For <see cref="ProbeKind.Screenshot"/>, the color convention the expected image was rendered under.</param>
 /// <param name="ExpectedHexPattern">For <see cref="ProbeKind.HexPattern"/>, the hex digits gambatte's convention expects drawn at the top of the screen.</param>
 /// <param name="ExpectedAudio">For <see cref="ProbeKind.Audio"/>, whether the final rendered frame is expected silent or sounding.</param>
-internal sealed record LedgerCase(
+internal sealed record SuiteCase(
     string Suite,
     string RelativePath,
     string FullPath,
@@ -97,10 +97,7 @@ internal sealed record LedgerCase(
     string? ExpectedHexPattern = null,
     AudioExpectation? ExpectedAudio = null
 ) {
-    /// <summary>Gets the ledger key this case is recorded under.</summary>
-    public (string Suite, string Path, string Model) Key =>
-        (Suite, RelativePath, ModelKey);
-    /// <summary>Gets the model as the ledger spells it: the exact <see cref="ConsoleModel"/> member name.</summary>
+    /// <summary>Gets the exact <see cref="ConsoleModel"/> member name.</summary>
     public string ModelKey =>
         Model.ToString();
 }

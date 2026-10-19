@@ -12,7 +12,7 @@
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The gate-lane fact launches the battery executable; the layout and hang-guard laws read the Humble core and
+        <!-- The battery fact launches the battery executable; the round-trip and hang-guard laws read the Humble core and
              Puck.Machines.Post through it. -->
         <ProjectReference Include="../../src/Puck.HumbleGamingBrick.Post/Puck.HumbleGamingBrick.Post.csproj" />
     </ItemGroup>

@@ -65,7 +65,7 @@ macOS, and nothing here is verified there.
   holds the preview configurations. Trust the folder when Claude Code asks,
   because the marketplace entry loads only in a trusted project. Settings are
   repository-wide: keep no per-machine settings file, and put a setting every
-  machine should share in `.claude/settings.json`. There is no `CLAUDE.md`, on purpose: Claude Code reads
+  machine should share in `.claude/settings.json`. There is no Claude-specific memory file, on purpose: Claude Code reads
   [`AGENTS.md`](../../AGENTS.md) natively when no memory file exists
   ([documentation policy](#documentation-policy)).
 - **Codex.** Install the CLI (`npm install -g @openai/codex`), sign in
@@ -536,20 +536,19 @@ adds one. Treat it as an absent capability, not a pending one.
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate --artifacts artifacts/hgb-post
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts artifacts/hgb-post
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
 
 The Humble battery's reference corpora are declared in its `corpora.json`
 (pinned archive, version, SHA-256); `--fetch-corpora` fills the local cache
-once and the stages resolve it without configuration. `--lane gate` measures
-every row recorded as passing and must stay green; `--lane frontier` measures
-the recorded fails and inconclusives; a plain run measures both. The recipe above
+once and the stages resolve it without configuration. A run reports what each
+corpus ROM did and exits 1 while any ROM fails; no file records an expected
+outcome. The recipe above
 writes to CI's `artifacts/hgb-post` directory, where a run leaves its report table,
 its JSON summary and its JUnit results (all three written by `PostReport` in
-`src/Puck.Machines.Post`) and the candidate ledger; `--accept` promotes the candidate under the refusal rules
-in the project README. Iterate with `--filter`; never chain runs to record.
+`src/Puck.Machines.Post`). Iterate with `--filter`.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and
 it exposes lockstep, trace, I/O-dump, render-hash, and divergence diagnostics;

@@ -129,7 +129,8 @@ public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw);
 /// <param name="Principal">The acting identity the submission is checked against — the server drops it (loud, once per
 /// denial episode) unless the principal holds <see cref="WorldCapability.Drive"/> over the target body.</param>
 /// <param name="HeldChannels">The live-held device channel image overlaid regardless of tape/producer precedence —
-/// only composition-channel ordinals (6 and up) are meaningful; movement-role ordinals ride <paramref name="Intent"/>
+/// only ordinals the world's channel table does not resolve to a claimed movement role are meaningful (channels take
+/// consecutive ordinals in document order); movement-role ordinals ride <paramref name="Intent"/>
 /// directly. Replaces the old <c>ActionLanes HeldLanes</c> bitmask.</param>
 /// <param name="MeasuredHoldTicks">An externally conditioned input-hold measurement in simulation ticks. No
 /// simulation code samples a clock; this tick-stamped value is recorded with the intent.</param>

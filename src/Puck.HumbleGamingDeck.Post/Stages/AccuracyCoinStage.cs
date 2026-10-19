@@ -1,7 +1,4 @@
-using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Puck.HumbleGamingDeck.Post;
 
@@ -11,10 +8,8 @@ namespace Puck.HumbleGamingDeck.Post;
 /// bit 0 set, for a pass, and an error code shifted left two with bit 1 set for a failure; its test table in ROM names
 /// each result address, which the report uses. $FF means skipped. The ROM targets the RP2A03G and RP2C02G.
 /// <para>
-/// The stage is a ratchet: <c>AccuracyCoinExpectations.json</c> in the checkout records every test's outcome, and
-/// any test whose outcome differs, better or worse, fails the stage. A run writes its outcomes to
-/// <c>accuracy-coin.candidate.json</c> under the artifacts directory; a fix that turns a failure into a pass is landed
-/// by copying that candidate over the recorded ledger in the same change.
+/// The report carries one case per test: a pass, a skip for $FF, and a mismatch for a failure code or a test that never
+/// reported. The stage fails when any test fails or never reports, and names the failing tests with their outcomes.
 /// </para>
 /// https://github.com/100thCoin/AccuracyCoin
 /// </summary>
@@ -46,7 +41,6 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
 
         var image = File.ReadAllBytes(path: imagePath);
         var names = TestNames(image: image);
-        var expected = LoadExpectations();
         using var instance = HgdMachineFactory.Create(configuration: new HgdMachineConfiguration(
             cartridge: HgdCartridge.Load(image: image)));
         var machine = instance.Machine;
@@ -80,9 +74,8 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: $"the all-test run had not finished after {FrameLimit} frames");
         }
 
-        var outcomes = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var cases = new List<PostCaseResult>(capacity: names.Count);
-        var changes = new StringBuilder();
+        var failures = new StringBuilder();
         var passed = 0;
 
         foreach (var (address, name) in names.OrderBy(keySelector: static pair => pair.Key)) {
@@ -92,47 +85,27 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
                 2 => $"FAIL {(result >> 2)}",
                 _ => ((result == 0xFF) ? "SKIP" : $"NOT RUN ${result:X2}"),
             });
-            var recorded = expected.GetValueOrDefault(key: name);
-            var matches = string.Equals(a: recorded, b: outcome, comparisonType: StringComparison.Ordinal);
+            var verdict = ((result & 3) switch {
+                1 => PostCaseVerdict.Pass,
+                _ => ((result == 0xFF) ? PostCaseVerdict.Skip : PostCaseVerdict.Mismatch),
+            });
 
-            outcomes[name] = outcome;
-            if (outcome.StartsWith(comparisonType: StringComparison.Ordinal, value: "PASS")) {
+            if (verdict == PostCaseVerdict.Pass) {
                 ++passed;
-            }
-            if (!matches) {
-                _ = changes.Append(provider: CultureInfo.InvariantCulture, handler: $"{name}: {(recorded ?? "unrecorded")} -> {outcome}; ");
+            } else if (verdict == PostCaseVerdict.Mismatch) {
+                _ = failures.Append(value: $"{name}: {outcome}; ");
             }
             cases.Add(item: new(Detail: $"${address:X4}: {outcome}", Duration: TimeSpan.Zero,
-                Name: name, Verdict: (!matches ? PostCaseVerdict.Mismatch
-                    : (((result & 3) == 1) ? PostCaseVerdict.Pass : PostCaseVerdict.ExpectedFail))));
+                Name: name, Verdict: verdict));
         }
-        foreach (var name in expected.Keys.Where(predicate: name => !outcomes.ContainsKey(key: name))) {
-            _ = changes.Append(provider: CultureInfo.InvariantCulture, handler: $"{name}: recorded but absent; ");
-            cases.Add(item: new(Detail: "recorded but absent from the ROM test table", Duration: TimeSpan.Zero,
-                Name: name, Verdict: PostCaseVerdict.Mismatch));
-        }
-        _ = Directory.CreateDirectory(path: context.ArtifactsDirectory);
-        File.WriteAllText(
-            contents: (JsonSerializer.Serialize(
-                jsonTypeInfo: AccuracyCoinJsonContext.Default.DictionaryStringString,
-                value: new Dictionary<string, string>(collection: outcomes)
-            ) + "\n"),
-            path: Path.Combine(path1: context.ArtifactsDirectory, path2: "accuracy-coin.candidate.json")
-        );
 
         var summary = $"{passed} of {names.Count} tests pass after {frames} frames";
 
-        return ((changes.Length == 0)
-            ? PostStageOutcome.Pass(cases: cases, detail: $"{summary}; every outcome matches the recorded ledger")
-            : PostStageOutcome.Fail(cases: cases, detail: $"{summary}; outcomes differ from the recorded ledger: {changes}"));
+        return ((failures.Length == 0)
+            ? PostStageOutcome.Pass(cases: cases, detail: summary)
+            : PostStageOutcome.Fail(cases: cases, detail: $"{summary}; failing: {failures}"));
     }
 
-    private static Dictionary<string, string> LoadExpectations() {
-        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.HumbleGamingDeck.Post/AccuracyCoinExpectations.json");
-
-        return (JsonSerializer.Deserialize(json: File.ReadAllText(path: path), jsonTypeInfo: AccuracyCoinJsonContext.Default.DictionaryStringString)
-            ?? throw new InvalidDataException(message: "AccuracyCoinExpectations.json must contain an outcome ledger."));
-    }
     // Each entry of AccuracyCoin's test table is the test's name, an $FF terminator, the little-endian result address on
     // page 4, and the test's entry point. DRAW entries keep their results on page 3 and are not tests.
     private static Dictionary<ushort, string> TestNames(ReadOnlySpan<byte> image) {
@@ -160,7 +133,3 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
         return names;
     }
 }
-/// <summary>The source-generated serializer for the AccuracyCoin outcome ledger.</summary>
-[JsonSerializable(typeof(Dictionary<string, string>))]
-[JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
-internal sealed partial class AccuracyCoinJsonContext : JsonSerializerContext;

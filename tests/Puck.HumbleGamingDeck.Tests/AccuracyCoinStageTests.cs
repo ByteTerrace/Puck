@@ -6,78 +6,52 @@ using Puck.Testing;
 
 namespace Puck.HumbleGamingDeck.Tests;
 
-/// <summary>Checks the AccuracyCoin runner's ratchet and infrastructure reports through its executable.</summary>
+/// <summary>Checks the AccuracyCoin runner's result reporting and infrastructure reports through its executable.</summary>
 public sealed class AccuracyCoinStageTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new(prefix: "puck-hgd-accuracy-");
 
     public void Dispose() => m_directory.Dispose();
-    /// <summary>Checks unchanged outcomes, improvements, regressions, and changed failure or success codes.</summary>
+    /// <summary>Checks that a passing result exits clean, a skip is neutral, and a failure or a test that never reported fails the run.</summary>
     /// <param name="result">The fixture's result byte.</param>
-    /// <param name="recorded">The ledger outcome.</param>
     /// <param name="exitCode">The required process exit code.</param>
     /// <param name="caseVerdict">The required case classification.</param>
     /// <returns>The asynchronous check.</returns>
-    [InlineData(0x01, "PASS", 0, "Pass")]
-    [InlineData(0x06, "FAIL 1", 0, "ExpectedFail")]
-    [InlineData(0x41, "PASS variant 16", 0, "Pass")]
-    [InlineData(0x56, "FAIL 21", 0, "ExpectedFail")]
-    [InlineData(0xFF, "SKIP", 0, "ExpectedFail")]
-    [InlineData(0x00, "PASS", 1, "Mismatch")]
-    [InlineData(0x01, "FAIL 1", 1, "Mismatch")]
-    [InlineData(0x06, "PASS", 1, "Mismatch")]
-    [InlineData(0x0A, "FAIL 1", 1, "Mismatch")]
-    [InlineData(0x09, "PASS variant 1", 1, "Mismatch")]
+    [InlineData(0x01, 0, "Pass")]
+    [InlineData(0x41, 0, "Pass")]
+    [InlineData(0xFF, 0, "Skip")]
+    [InlineData(0x06, 1, "Mismatch")]
+    [InlineData(0x56, 1, "Mismatch")]
+    [InlineData(0x00, 1, "Mismatch")]
     [Theory]
-    public async Task RatchetRequiresEveryOutcomeToMatch(byte result, string recorded, int exitCode, string caseVerdict) {
-        var root = CreateCheckout(recorded: recorded, result: result);
+    public async Task EveryTestResultIsReported(byte result, int exitCode, string caseVerdict) {
+        var root = CreateCheckout(result: result);
         var stage = await Run(root: root, exitCode: exitCode);
 
         Assert.Equal(expected: ((exitCode == 0) ? "Pass" : "Fail"), actual: stage.GetProperty(propertyName: "Verdict").GetString());
         Assert.Equal(expected: 1, actual: stage.GetProperty(propertyName: "Cases").GetProperty(propertyName: caseVerdict).GetInt32());
-        using var candidate = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(path1: root, path2: "artifacts/accuracy-coin.candidate.json")));
-
-        Assert.True(condition: candidate.RootElement.TryGetProperty(propertyName: "Probe", value: out _));
     }
-    /// <summary>A candidate becomes authoritative immediately when copied to the checkout ledger.</summary>
+    /// <summary>A failing test reaches JUnit as a failure named for the test.</summary>
     /// <returns>The asynchronous check.</returns>
     [Fact]
-    public async Task RerecordingUsesTheCheckoutWithoutRebuilding() {
-        var root = CreateCheckout(recorded: "FAIL 1", result: 1);
+    public async Task FailingTestProducesAJUnitFailure() {
+        var root = CreateCheckout(result: 0x06);
 
         _ = await Run(root: root, exitCode: 1);
-        File.Copy(sourceFileName: Path.Combine(path1: root, path2: "artifacts/accuracy-coin.candidate.json"),
-            destFileName: Path.Combine(path1: root, path2: "src/Puck.HumbleGamingDeck.Post/AccuracyCoinExpectations.json"), overwrite: true);
-        _ = await Run(root: root, exitCode: 0);
-    }
-    /// <summary>A recorded test absent from the ROM must fail JUnit as well as the process.</summary>
-    /// <returns>The asynchronous check.</returns>
-    [Fact]
-    public async Task AbsentRecordedTestProducesAJUnitFailure() {
-        var root = CreateCheckout(recorded: "PASS", result: 1);
-
-        File.WriteAllText(path: Path.Combine(path1: root, path2: "src/Puck.HumbleGamingDeck.Post/AccuracyCoinExpectations.json"),
-            contents: """{ "Probe": "PASS", "Absent": "PASS" }""");
-        var stage = await Run(root: root, exitCode: 1);
-
-        Assert.Equal(expected: 1, actual: stage.GetProperty(propertyName: "Cases").GetProperty(propertyName: "Mismatch").GetInt32());
         var report = XDocument.Load(uri: Path.Combine(path1: root, path2: "artifacts/results.junit.xml"));
         var failure = Assert.Single(collection: report.Descendants(name: "failure"));
 
-        Assert.Equal(expected: "Absent", actual: failure.Parent!.Attribute(name: "name")!.Value);
+        Assert.Equal(expected: "Probe", actual: failure.Parent!.Attribute(name: "name")!.Value);
     }
-    /// <summary>Missing assets, rejected hashes and unreadable ledgers produce reports with exit code two.</summary>
+    /// <summary>Missing assets and rejected hashes produce reports with exit code two.</summary>
     /// <param name="fault">The missing or invalid input.</param>
     /// <returns>The asynchronous check.</returns>
     [InlineData("missing-cache")]
     [InlineData("missing-explicit")]
     [InlineData("wrong-hash")]
-    [InlineData("missing-ledger")]
-    [InlineData("null-ledger")]
     [Theory]
     public async Task InfrastructureFailuresReachTheReports(string fault) {
-        var root = CreateCheckout(recorded: "PASS", result: 1);
+        var root = CreateCheckout(result: 1);
         var corpus = Path.Combine(path1: root, path2: "cache/accuracy-coin/fixture");
-        var ledger = Path.Combine(path1: root, path2: "src/Puck.HumbleGamingDeck.Post/AccuracyCoinExpectations.json");
 
         switch (fault) {
             case "missing-cache":
@@ -87,21 +61,14 @@ public sealed class AccuracyCoinStageTests : IDisposable {
             case "wrong-hash":
                 File.WriteAllBytes(path: Path.Combine(path1: corpus, path2: "AccuracyCoin.nes"), bytes: [0]);
                 break;
-            case "missing-ledger":
-                File.Delete(path: ledger);
-                break;
-            case "null-ledger":
-                File.WriteAllText(contents: "null", path: ledger);
-                break;
         }
         var stage = await Run(arguments: ((fault == "missing-explicit") ? ["--accuracy-coin", corpus] : []), exitCode: 2,
             root: root);
 
         Assert.Equal(expected: "Infra", actual: stage.GetProperty(propertyName: "Verdict").GetString());
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: root, path2: "artifacts/accuracy-coin.candidate.json")));
     }
 
-    private string CreateCheckout(byte result, string recorded) {
+    private string CreateCheckout(byte result) {
         var root = m_directory.RootPath;
         var project = Path.Combine(path1: root, path2: "src/Puck.HumbleGamingDeck.Post");
         var corpus = Path.Combine(path1: root, path2: "cache/accuracy-coin/fixture");
@@ -129,7 +96,6 @@ public sealed class AccuracyCoinStageTests : IDisposable {
         entry.CopyTo(array: image, index: 0x115);
         image[(16 + 0x7FFD)] = 0x80;
         File.WriteAllBytes(path: Path.Combine(path1: corpus, path2: "AccuracyCoin.nes"), bytes: image);
-        File.WriteAllText(path: Path.Combine(path1: project, path2: "AccuracyCoinExpectations.json"), contents: $$"""{ "Probe": "{{recorded}}" }""");
         File.WriteAllText(path: Path.Combine(path1: project, path2: "corpora.json"), contents: $$"""
             [
               { "Name": "nes6502-sst", "Version": "fixture", "Archive": "https://example.invalid/sst.zip", "Sha256": "{{new string(c: '0', count: 64)}}" },

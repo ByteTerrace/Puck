@@ -403,7 +403,7 @@ the SAME three-way split (a document-mounted addon lists under
 
 `FoldChannelContributions` computes, per
 occupied seat and ordinal, `Puck.Maths.FixedContributionFold.Evaluate`:
-`quantize(clamp(clamp(h + poolDelta, h ± radius) + trustedDelta, min, max))`
+`quantize(clamp(clamp(h + poolDelta, h ± radius) + outsidePoolDelta, min, max))`
 — raw `long` accumulation, `Int128` intermediates, ONE end clamp (a
 saturating per-add would be order-dependent), pool radius from the seat's
 ceiling (raw 0 sentinel → null → no pool), binary channels quantized at the

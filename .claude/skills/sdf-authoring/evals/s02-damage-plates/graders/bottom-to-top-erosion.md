@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response erodes every plate bottom to top as hp decreases, staged by lanes or by erode ranges.
+The response stages the plates bottom first as hp falls: plateLower comes away before plateMid, and plateMid before plateUpper.

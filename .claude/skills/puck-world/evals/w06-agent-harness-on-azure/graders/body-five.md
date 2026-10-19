@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response sets the participant's body to 5.
+The response specifies the participant's body as 5.

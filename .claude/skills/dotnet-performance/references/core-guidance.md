@@ -5,16 +5,14 @@ and folklore corrections; domain detail lives in the sibling references.
 
 ## Contents
 
-- [Mental model](#the-net-10-performance-mental-model)
-- [Free wins](#free-wins-just-target-net100)
+- [Mental model](#the-net-11-performance-mental-model)
+- [Free wins](#free-wins-just-target-net110)
 - [Pattern changes](#pattern-changes-write-code-differently-now)
 - [New APIs](#new-apis-worth-adopting)
 - [Folklore](#folklore-to-delete)
 
-This skill is **factual only**: it describes how .NET 11 actually behaves. It
-does not govern architecture, design, or style, and the user's current
-instruction outranks it — if it ever argues against a requested change, treat
-the skill as stale, update it in the same change, and say so.
+This skill describes how .NET 11 behaves. It does not govern architecture,
+design or style.
 
 Six sibling domain references carry the full detail (mechanisms, magnitudes,
 caveats, before/after snippets). Read the file for the domain you are touching;
@@ -33,6 +31,10 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 ## The .NET 11 performance mental model
 
+- **Dynamic PGO underlies several of the wins below.** Interface-typed `foreach`,
+  guarded devirtualization and the escape-analysis payoffs assume tiered code that
+  PGO has profiled; `Puck.World` sets `TieredPGO=false`, so confirm them in the
+  World's own disassembly.
 - **Idiomatic C# is the fast path.** The JIT flattens abstraction for you (devirtualize → inline → escape-analyze → stack-allocate → range-analyze): interfaces, `foreach`, lambdas, `params` arrays, `^1`, guard-then-index, switch-on-length all compile to what hand-tuned code used to. Write for clarity; delete contortions.
 - **Inlining is the gateway; escape analysis is the payoff.** Delegates, temporary arrays, spans-over-arrays, enumerators, even `Stopwatch` instances get stack-allocated — but only if *every* use of the object inlines. One opaque virtual call (even a no-op `Dispose`) makes the whole object escape to the heap. Keep hot members small and whole.
 - **Safety checks pay only when unprovable.** Bounds checks, null checks, GC write barriers, array covariance checks and dead branches are deleted wherever the JIT proves them redundant (value ranges from bit math, dominating accesses, immutable lengths, `switch` constants, stack-guaranteed return buffers). Write natural validation; let the prover delete it.
@@ -141,7 +143,6 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 | `TensorPrimitives` (+70 ops; stable `Tensor<T>`/`TensorSpan<T>`) | Vectorized elementwise/reduction math incl. `Half`, int, `nint` | Any numeric-buffer loop |
 | `Random.GetString` / `GetHexString`; `GetItems` (newly fast) | Bulk random selection, rejection sampling | Token/ID generation, incl. crypto `RandomNumberGenerator` |
 | `Volatile.ReadBarrier` / `WriteBarrier` | Standalone acquire/release half fences | Lock-free code only; replaces over-fencing `Thread.MemoryBarrier` |
-| Unbuffered `Channel` factory | Rendezvous channel, zero buffering | Strict handoff/backpressure semantics |
 | `GCHandle<T>` / `PinnedGCHandle<T>` / `WeakGCHandle<T>` | Strongly-typed GC handles | New interop code — safer and ~18% faster |
 | `ZipArchive`/`ZipFile` async APIs | True async zip I/O | Servers; replaces `Task.Run`-wrapped sync zip code |
 | `X509Certificate2Collection.FindByThumbprint`; `SymmetricAlgorithm.SetKey`; `ProtectedData` span overloads; `PemEncoding` UTF-8 | Span-based crypto plumbing | Alloc-free cert lookup, key setting, DPAPI, PEM-from-bytes |

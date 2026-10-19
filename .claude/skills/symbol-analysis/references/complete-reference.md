@@ -82,7 +82,9 @@ references <name>   references to a source symbol, solution-wide
   --quiet / -h
 ```
 
-Output is records and nothing else — no counts, no banner:
+The mode flags are not exclusive at the parser; the first one set wins, in the
+order `--declarations`, `--implementers`, `--overrides`, `--derived`. Output is
+records and nothing else — no counts, no banner:
 
 ```
 src/Puck.Abstractions/Memory/AllocatorExtensions.cs:14:24 decl Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
@@ -162,7 +164,11 @@ tree — the two walk one identical file set, see the walk contract below;
   answers "no references" indistinguishably from a true zero. Verified against a
   solution naming a missing project: exit 2 with the diagnostic, and
   `--allow-partial` turns the same run into exit 0 with the partial answer.
-  `Puck.slnx` itself loads with no diagnostics at all (verified, repeatedly).
+  The commonest cause is an unrestored tree such as a fresh worktree: the
+  design-time build resolves an incomplete reference closure, the message counts
+  the projects with no `obj/project.assets.json`, and the remedy is
+  `dotnet restore Puck.slnx -nodeReuse:false`, never `--allow-partial`. A
+  restored `Puck.slnx` loads with no diagnostics.
 - **Loading is not a pure read.** It runs a design-time build, which creates
   `obj/<Configuration>/net11.0/` and writes `AssemblyInfo.cs`,
   `AssemblyInfoInputs.cache` and `GeneratedMSBuildEditorConfig.editorconfig`
@@ -247,28 +253,26 @@ path then position, with a `cref` relation under `--doc`. Exit codes are the sam
 
 `--base` is the cheap implementers query when a build is unavailable or
 unwanted: `declarations --base ISdfFrameSource src` returns the same types
-that `references ISdfFrameSource --implementers` does (verified). It matches
+that `references ISdfFrameSource --implementers` does over the same tree
+(verified; the references run also reaches `tests/`). It matches
 base-list *text*, so it cannot see an implementation inherited through a base
 class, and an alias would fool it — that is the price of not building.
 
 ## Recipes
 
+The common questions are the table in `SKILL.md`. The rest:
+
 | Intent | Command |
 |---|---|
-| Who uses this symbol? | `puck references <name>` |
-| Is this safe to delete? | `puck references <name> --no-doc`, then `puck search -M 0 -l <name>` for the uncompiled files |
-| Where do these two same-named things differ? | `puck references <name> --declarations`, then re-run with `--containing <namespace-or-type>` |
-| What implements this interface? | `puck references <name> --implementers` (or `puck declarations --base <name> src` with no build) |
-| What overrides this member? | `puck references <name> --overrides` |
-| What derives from this type? | `puck references <name> --derived` |
-| What does this file/tree declare? | `puck declarations --members <path>` |
+| Implementers without a build | `puck declarations --base <name> src` |
 | What carries this attribute? | `puck declarations --attribute <frag> --members src` |
 | What do the docs point at? | `puck declarations --doc --name <frag> src` |
 | Machine-readable | add `--json` to either verb |
 
 ## When neither verb fits
 
-Code metrics, call-graph shape, or any walk the flags do not express: write a
+Comment, lock and clone sweeps are `puck scan`. For code metrics, call-graph
+shape, or any other walk the flags do not express, write a
 single-file .NET file-based app in the **session scratchpad** (never in the repo)
 and run it with
 `dotnet run -c Release -p:NuGetAudit=false <file>.cs -- <args>`. Release is

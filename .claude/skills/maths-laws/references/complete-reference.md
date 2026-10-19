@@ -14,11 +14,11 @@ Read the relevant section when `SKILL.md` routes here.
 - [Mutation proof](#8-validating-that-a-new-law-actually-bites)
 - [Deliberate corrections](#9-rule-4--a-deliberate-correction-is-expected-to-move-values)
 
-This skill is **factual and procedural only**: how the suite is shaped, what a
-declaration owes, and how to check a new law discriminates. It does not design
-the kernel under test. The user's current instruction outranks it — if it
-argues against a change you were asked to make, it is stale; update it in the
-same change and say so.
+How the suite is shaped, what a declaration owes, and how to check that a new
+law discriminates. It does not design the kernel under test. The owner's target
+for the suite (the smallest set of tests that reaches 100% line coverage, plus
+an approved keep-list) is in `AGENTS.md` and governs which laws to write at
+all: [what a law is for](../SKILL.md#what-a-law-is-for).
 
 Sources of record, all more detailed than this file:
 [tests/Puck.Maths.Tests/README.md](../../../../tests/Puck.Maths.Tests/README.md)
@@ -58,7 +58,10 @@ do), because the loader reads every `*.json` in the directory and keys by id.
 ``Puck.Maths.PresentedAlgebra`2`` and a closed one carries its assembly-qualified
 arguments. Copy the string verbatim from an existing row wherever the same member
 already appears rather than reconstructing it. `Flavor` is `None` unless `Kind`
-is `SharedSubstrate`. The seven prose slots map onto the `Legs.cs` factories:
+is `SharedSubstrate`. The seven prose slots map onto the named `Legs.cs`
+factories below. No code calls those factories: a JSON row is materialized
+directly (`LegText.ToLeg`), and `LegLedgerTests` enforces what the factories
+encode, so the table is the vocabulary a row's slots follow:
 
 | Factory | Slots it fills |
 |---|---|
@@ -98,13 +101,10 @@ failure names the offending ids.** Every change already runs that tier, so
 adding a law means editing two files, and forgetting the second is a named
 failure, not a silent gap.
 
-**Why it is data.** The leg text is the ONE thing no gate can check — nothing
-reads the bodies a leg describes, so a leg claiming independence it does not have
-passes everything. That makes a human reading legs the only defence the property
-has, and four-hundred-character string literals buried among generic combinators
-in a six-thousand-line file defeat that reading. It also means a family can be
-reviewed and edited on its own, and that several authors can add laws at once
-without contending for one file.
+**Why it is data.** Nothing reads the bodies a leg describes, so a person
+reading the legs is the only check on a leg that claims independence it does not
+have; declarations in their own files stay readable, and a family can be edited
+without contending for one C# file.
 
 Where things live, and nothing crosses:
 
@@ -148,6 +148,7 @@ Reuse a family; do not invent one for a type that has one.
 | `PureBinary` / `PureScalarBinary` | Quads / Pairs | SelfContained |
 | `RoundTrip`, `IdentityElement`, `ConjugateSymmetry`, `NormMultiplicativity` | Pairs / Quads | SelfContained |
 | `DivergenceCanary(…, fused, perProduct, minimumDivergences)` | `Vectors` | Divergence |
+| `KnownFalse(lawId, counterexample)` | none (a fixed witness) | Divergence |
 | `Claim(lawId, claim)` | none (own basis) | Claim |
 | `SweptClaim(lawId, domain, tier, width, claim)` | `Vectors` | Claim |
 
@@ -171,7 +172,7 @@ explicit, so plain `dotnet test` runs Smoke + Default.
 | Tier | Selected by | Declared budget | When it runs |
 |---|---|---|---|
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
-| Default (Smoke + Default) | a plain run | < 30 s | **every change**, unconditionally |
+| Default (Smoke + Default) | a plain run | < 30 s declared; under a minute in practice | **every change**, unconditionally |
 | Deep | `--explicit on --filter-trait tier=Deep` | minutes | before you commit, and before any rounding change lands |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
 
@@ -212,12 +213,14 @@ case or operand count) or it is `puck bench`'s measurement, not a law.
   the exhaustive four-operand edge cross product (`Domains.Quads` switches to
   the full product only at Deep) and a 4096-draw random batch. A Deep case
   whose operands are not strictly stronger than its Default sibling's is
-  buying nothing. Say `MIRROR of <id> at strictly stronger operands` in the leg
-  so the ledger reads honestly.
+  buying nothing. A mirror adds no line coverage, so write one only when the
+  lead or owner asks; where one stays, say `MIRROR of <id> at strictly stronger
+  operands` in the leg so the ledger reads honestly.
 - **Smoke sentinels** mirror the **hottest kernel** of a family on
   `SmokeDomain` (block 64, 16 random draws). A smoke row carries *no new
   evidence* and its leg says so: `MIRROR of <id> at SmokeDomain: no new
-  evidence`. Add one only when the kernel is genuinely the family's hot path.
+  evidence`. Under the owner's target a sentinel is a deletion candidate, not
+  something to add.
 
 Deep and Default siblings normally share a domain **key**, so they advance one
 frontier counter together.
@@ -227,8 +230,10 @@ frontier counter together.
 ## 3. Legs: what the statement stands on
 
 A leg is a declared answer to "what does agreement here actually prove?".
-`Legs.cs`'s factories are the only constructors — illegal combinations cannot
-be spelled.
+Each row of the table is a factory in `Legs.cs`. In a `laws/*.json` row, fill
+the matching `Kind`, `Flavor` and prose slots; the leg gate rejects an illegal
+combination (a flavorless shared-substrate leg, a delegation twin with nothing
+cited, a canary with no absolute sibling) by name.
 
 | Factory | Kind | Use when |
 |---|---|---|
@@ -244,7 +249,7 @@ be spelled.
 | `Leg.SharedUpstream(subject, against, shared)` | shared-substrate | both sides consume one upstream computation neither owns |
 | `Leg.Structural(statement)` | structural | purity, refusal, an identity element, a certificate shape, a measured floor |
 | `Leg.PinnedAsObserved(statement, documented)` | structural | behaviour diverges from the member's own XML doc |
-| `Leg.RelativeCanary(subject, against, absolute)` | relative-canary | two disciplines **required to differ**; name the absolute sibling |
+| `Leg.RelativeCanary(subject, against, absolute)` | structural, with `Absolute` set | two disciplines **required to differ**; name the absolute sibling |
 
 **Name evidence honestly, and name the shared thing.** On any
 shared-substrate leg the `shared` field must say *what* is shared and *which*
@@ -252,8 +257,8 @@ shared-substrate leg the `shared` field must say *what* is shared and *which*
 sibling copy" is the level of detail required; "they share rounding" is not.
 The gate rejects an empty `shared`, but only a reviewer can reject a vague one.
 
-**The trust vocabulary the leg prose uses** (the campaign's three conditions —
-use these words, they are what the ledger's registers are read against):
+**The trust vocabulary the leg prose uses** (three conditions; use these
+words, they are what the ledger's registers are read against):
 
 - **(A) kernel envelope** — every kernel behaviour the leg leans on is
   independently pinned *over the regime this law uses*.
@@ -278,15 +283,16 @@ use these words, they are what the ledger's registers are read against):
   alternative reading stated.
 
 **Doc gaps.** When behaviour and the member's XML doc disagree, pin the
-behaviour with `Leg.PinnedAsObserved(statement, documented)` — never a plain
-`Leg.Structural`. It writes the `DOC GAP:` citation the ledger's
-*behaviour pinned as observed* register is derived from, and `documented` is
-required (an empty one throws at the factory). The register closes only by
+behaviour with a structural leg whose citation opens `DOC GAP:` and says what
+the XML doc claims (the spelling `Leg.PinnedAsObserved(statement, documented)`
+writes) — never a plain structural leg. The ledger's *behaviour pinned as
+observed* register is derived from that citation, a doc-gap citation on any
+other leg kind fails the leg gate, and one that does not say what the doc
+claims fails it too. In a `laws/*.json` row that is `"Kind": "Structural"` with
+`"Citation": "DOC GAP: <what the doc claims>"`. The register closes only by
 **correcting the code or the doc and re-spelling the leg**; editing
 `leg-ledger.md` closes nothing — the leg gate fails a hand-edited copy, and a
-recording run rewrites it. The
-tool-side label grammar has no token for this, so a doc gap can only be spelled
-in `LawRegistry.cs` or one of its per-family partials.
+recording run rewrites it.
 
 **What the leg gate checks.** Checks 1–2 run in
 `LegLedgerTests.LawLegsAreDeclared` at tier `Default`; check 3 runs inside
@@ -548,13 +554,16 @@ is decorative and its text must say so as an `ENVELOPE`.
    is a duplicate).
 5. Restore the kernel, discard the worktree. Never commit probe artifacts.
 
-Commands (`maths-usage` owns the routing; these are the ones a probe needs):
+Commands (`maths-usage` owns the routing; these are the ones a probe needs).
+Build first with `dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj
+-c Release -nodeReuse:false`; `dotnet test` forwards switches it does not know
+to the test host, which exits 5, so the tests run with `--no-build`:
 
 ```text
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --filter-trait tier=Smoke
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive
 ```
 
 For a fast single-case loop, filter on the display name — which *is* the law

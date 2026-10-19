@@ -1,9 +1,9 @@
 # Views — authored cameras and seat control
 
-The `views` section owns camera structure. `playerDefaults.seatLook` owns only
-portable human input preference. The split is strict: pitch
-limits and axis framing belong to `views.seatControl` and the rig, and `seatLook`
-carries neither (strict parse refuses any unmapped member).
+The `views` section owns camera structure. `seatDefaults.seatCameraFeel`
+(`WorldSeatCameraFeel`) owns only portable human input preference. The split is
+strict: pitch limits and axis framing belong to `views.seatControl` and the rig,
+and the feel carries neither (strict parse refuses any unmapped member).
 
 Primary code:
 
@@ -36,111 +36,72 @@ Primary code:
 
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`bodies.capacity > 0`), the same derived refusal
-`kits` carries, and a seatless document may author none. The standard chase
-framing below is AUTHORED — `puck.world.json` states its own (JSON, its wire
-form, since that is the shipped flagship world's own committed source today):
+`kits` carries, and a seatless document may author none. The live seat camera
+is authored in the Moth basis (`src/Puck.World/Assets/worlds/avatars/moth.puck`),
+which the debug world and the garden inherit:
 
-```json
-"views": {
-  "seatControl": {
-    "yawReference": "World",
-    "minPitch": -0.35,
-    "maxPitch": 1.2
-  },
-  "seatRig": {
-    "name": "seatChase",
-    "version": "puck.camera.program.v1",
-    "operations": [
-      { "$type": "orbit", "distance": 5.4626001, "yaw": "state.look.behind", "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
-      { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-      { "$type": "fieldOfView", "fieldOfViewRadians": 0.9599311 },
-      { "$type": "dynamics", "row": "chase" }
+```text
+views {
+  // The seat's own camera comes first, so it is what a boot shows; the named inspection cameras follow.
+  layout "play" {
+    seatCount: 0
+    slots [ { height: 1, width: 1, x: 0, y: 0 } ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+  cameraLayout("three-quarter")
+  // … more inspection layouts …
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.5
+    yawReference: "World"
+  }
+
+  seatRig "moth-camera" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
+      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true)
+      fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
+      dynamics(row: `camera-boom`)
     ]
-  },
-  "layouts": []
-},
-"dynamics": [
-  { "name": "chase", "f": 0.9549, "zeta": 1, "r": 1 }
-],
-"playerDefaults": {
-  "seatLook": {
-    "yawSensitivity": 0.001,
-    "pitchSensitivity": 0.001,
-    "invertYaw": false,
-    "invertPitch": false,
-    "stickLookRate": 2.6,
-    "gyro": {
-      "scale": 1.0,
-      "deadZone": [0.02, 0.02, 0.02],
-      "invertX": false,
-      "invertY": false,
-      "invertZ": false,
-      "yaw": [0, -1, -1],
-      "pitch": [1, 0, 0]
-    }
+  }
+}
+
+seatDefaults {
+  seatCameraFeel {
+    invertPitch: false
+    invertYaw: false
+    pitchSensitivity: 0.001
+    stickLookRate: 3.5
+    yawSensitivity: 0.001
   }
 }
 ```
 
-The identical structure authored in `.puck` — `views`/`dynamics`/`playerDefaults`
-are ordinary named blocks and array properties, with no dedicated sugar of
-their own (grammar and diagnostics belong to the `puck-dsl` skill; this is
-just the vocabulary applied):
+The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
+and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
+a `WorldSeatCameraFeel`). The console's row path for the feel is
+`playerDefaults.seatLook` (`world.row.set playerDefaults.seatLook <json>`), and
+`world.view.camera` reads the effective feel and control back. An absent feel
+is `WorldSeatCameraFeel.Default`: zero pointer and stick response, so every look
+input turns the camera by nothing. The camera boom's smoothing is the
+`camera-boom` row of the world's `dynamics` table.
 
-```
-views {
-    seatControl {
-        yawReference: "World"
-        minPitch: -0.35
-        maxPitch: 1.2
-    }
-    seatRig {
-        name: "seatChase"
-        version: "puck.camera.program.v1"
-        operations [
-            orbit(distance: 5.4626001, yaw: "state.look.behind", pitch: 0.4145069, pivotOffset: [0, 0, 0])
-            lookAt(subject: { $type: "reference" }, targetOffset: [0, 1, 0], worldAxes: false)
-            fieldOfView(fieldOfViewRadians: 0.9599311)
-            dynamics(row: "chase")
-        ]
-    }
-    layouts []
-}
-
-dynamics [
-    { name: "chase", f: 0.9549, zeta: 1, r: 1 }
-]
-
-playerDefaults {
-    seatLook {
-        yawSensitivity: 0.001
-        pitchSensitivity: 0.001
-        invertYaw: false
-        invertPitch: false
-        stickLookRate: 2.6
-        gyro {
-            scale: 1.0
-            deadZone [0.02, 0.02, 0.02]
-            invertX: false
-            invertY: false
-            invertZ: false
-            yaw [0, -1, -1]
-            pitch [1, 0, 0]
-        }
-    }
-}
-```
-
+The first authored layout is what a boot shows; `view.override layout <name>`
+selects another. Grammar for the `.puck` forms above belongs to `puck-dsl`.
 `orbit`/`fieldOfView` accept the named arguments shown; `orbit`'s first three
-positional arguments (unused above) would name `distance`/`pitch`/`yaw` in
-that order. Every other op is written by name only — the general call-form
-escape hatch, never a positional shorthand.
+positional arguments would name `distance`/`pitch`/`yaw` in that order. Every
+other op is written by name only.
 
 What arms a pointer drag is a binding, not a feel: `player.orbit` (held —
 pointer motion orbits the camera) and `player.steer` (held — orbits AND the body
 faces where the camera looks) are bound on both edges like any held command
 (a press row plus an `activateOn: Completed` row on the same source). The engine
-default binds `mouse.button2 → player.orbit`. `player.steer` writes the camera's
+binds nothing by default: the Moth basis's `bindingOverlays` bind
+`mouse.button1 → player.orbit`, `mouse.button2 → player.steer`, the right stick
+to `player.look.steer` and its press to `player.look.recenter`. `player.steer` writes the camera's
 facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
 facing snap turns the body, so binding it needs those three channels declared and
 `seatControl.yawReference: World` (the validator refuses otherwise).
@@ -166,7 +127,7 @@ in its accumulated arrival turn (`WorldFrameIsometry.AccumulateTurn`), which
 commits and routes carry and `WorldRoutedSeatTurns` holds per seat. Pitch values are radians,
 finite, ordered, and within `[-pi/2, pi/2]`.
 
-`seatLook` carries pointer radians-per-pixel, right-stick radians-per-second,
+`seatCameraFeel` carries pointer radians-per-pixel, right-stick radians-per-second,
 gyro projection, and inversion. `gyro.deadZone` and `invertX/Y/Z` act on each
 physical axis independently; the dot products against the full 3D `yaw` and
 `pitch` weight vectors then produce semantic look-right/look-up rates. Thus all
@@ -174,18 +135,16 @@ three axes can participate, be combined, or be remapped without code changes.
 A joined identity's preference travels; otherwise the routed world's default
 applies. Neither can override the routed world's `seatControl`.
 
-Motion input is a separate, generic toggled mode. The standard profile binds
-`LT → North` to `player.motion.controls`, and `gamepad.gyro` to
-`player.motion.angular`. Each North press toggles the mode; it remains active
-after the buttons release. The command is intentionally not gyro-named so a
-later orientation/tilt-to-move adapter can share it. `LT → RB → LB` explicitly
-submits the same `player.state.cell.toggle look behind 0 3.14159265` line as
-`LT → LB`, toggling the `state.look.behind` yaw bound above; the shorter `LT + RB`
-chord holds `player.look.free`: right-stick
-yaw/pitch continues to orbit the camera, but yaw does not write body heading
-and left-stick movement resolves against authoritative character heading until
-either button releases. The hold also suppresses automatic camera follow.
-Keyboard `LT + Left Ctrl` retains held recenter.
+Motion input is a separate, generic toggled mode: `player.motion.controls`
+toggles it (it stays active after the buttons release) and
+`player.motion.angular` feeds the gyro's angular velocity through the feel's
+gyro projection. The command is intentionally not gyro-named so a later
+orientation/tilt-to-move adapter can share it. `player.look.free` holds free
+look: right-stick yaw/pitch continues to orbit the camera, but yaw does not
+write body heading and left-stick movement resolves against authoritative
+character heading until it releases; the hold also suppresses automatic camera
+follow. No live world binds these three; the quarantined standard profile bound
+them to `LT` chords.
 
 Binding contexts can derive a complete control group from gameplay state. A
 family named `state:<row>` reads the routed world's declared state row after a
@@ -575,7 +534,7 @@ Free Cam do not alter the logical movement basis.
   with no authored layout; a composition-grant denial prints on stderr.
 - `view.override camera pose|look|orbit|turn|swing|move|fov <numbers>` — the
   OPERATOR CAMERA, the lever for aiming a view from the console. Seat look
-  sensitivity (`seatLook`, zero unless a world authors it) is a player input
+  sensitivity (`seatCameraFeel`, zero unless a world authors it) is a player input
   setting, so `player.look` is the wrong tool and stays as it is. `pose <x> <y>
   <z> <yaw> <pitch> [<fov>]`, `look <x> <y> <z> <tx> <ty> <tz> [<fov>]` and
   `orbit <tx> <ty> <tz> <distance> <yaw> <pitch> [<fov>]` set an absolute pose;
@@ -652,7 +611,7 @@ and prove lateral translation without a facing change; while holding left-stick
 forward, move right-stick X and prove the trajectory turns with heading. Repeat across
 a traveler crossing to prove the same seat state and destination structure are
 used. Refusal controls: omit `views.seatControl`, author
-`minPitch`/`maxPitch`/`worldAxes` under `seatLook`, invert the pitch interval, or name an unknown yaw reference.
+`minPitch`/`maxPitch`/`worldAxes` under `seatCameraFeel`, invert the pitch interval, or name an unknown yaw reference.
 
 For a camera program: author an unknown op `$type`, put `anchor` anywhere but
 first, put `clampPitch` after its `orbit`, omit `fieldOfView`, name an

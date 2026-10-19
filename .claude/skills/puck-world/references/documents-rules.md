@@ -36,7 +36,8 @@ fires `pose(key: $each, spawnPoint: "hero")`.
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
-rule restyles a body — the arena module's (`modules/arena.puck`) `look-*` rules drive one
+rule restyles a body — the quarantined arena module's
+(`experimental/src/Puck.World/Assets/worlds/modules/arena.puck`) `look-*` rules drive one
 `lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
@@ -62,8 +63,8 @@ bodies). Rule-authored
 transfers resolve their `key`, `from`, and `to` before each transaction step;
 direct mutations use literal keys and zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.
-The [Solitaire guide](../../../../experimental/src/Puck.World/Assets/worlds/games/README.md)
-owns the collection's table selector, pile IDs, and request protocol.
+The quarantined [Solitaire guide](../../../../experimental/src/Puck.World/Assets/worlds/games/README.md)
+records the collection's table selector, pile IDs, and request protocol.
 A placement's `parent` composes its frame over another's, and a
 `board`-named Grid topology anchors its origin to that placement. `$local:<name>` reads a value the
 enclosing rule's `locals` list computed for this evaluation (feed-forward,
@@ -154,7 +155,7 @@ node's orbit). A `symmetryOrbit` generator source draws a node uniformly over
 `ring` or over `node`'s orbit under `word`, dealing the orbit under `mode`.
 `$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
-ties to the lowest index) — the arena module's `auto-target` rule is
+ties to the lowest index) — the quarantined arena module's `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
 terms again: like `pose`, it has no `WorldMutation` ordinal — it writes the
 same snapshot `world.save` does to the world's own loaded file
@@ -281,7 +282,7 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-The arena module (`experimental/src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
+The quarantined arena module (`experimental/src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
 that schedule a burn/freeze deadline, and `Level` rules that act while `$tick`
 has not yet reached it.
@@ -326,7 +327,8 @@ from a key cell (a flood under a settled-cell budget, -2 when it runs out); a pl
 adjacent components whose only boundary cell is the key cell) keyed on the empty cell — admissible iff
 `boundaryAt > 0 || enclosedAt > 0` — and the `clearEnclosed` transform sweeps those components once the value lands;
 a position's exact identity is `$board:fingerprint:<row>` (`$board:canonical` folds symmetric images together, so a
-ko check against a `history` ring reads the fingerprint; `games/go.puck` is the worked example);
+ko check against a `history` ring reads the fingerprint; the quarantined
+`experimental/src/Puck.World/Assets/worlds/games/go.puck` is the worked example);
 `world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.

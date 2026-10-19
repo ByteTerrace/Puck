@@ -1,6 +1,8 @@
 # Maths-usage complete reference
 
-Read the relevant section when `SKILL.md` routes here.
+Read the section `SKILL.md` routes here for. The wing READMEs own each
+contract; this file maps a question to its wing and states the cross-wing
+rules.
 
 ## Contents
 
@@ -9,11 +11,6 @@ Read the relevant section when `SKILL.md` routes here.
 - [Determinism contract](#2-obey-the-determinism-contract)
 - [Verification](#3-verify)
 - [Governance](#4-governance)
-
-Factual and procedural only — which primitive to reach for, which rules bind,
-and how to prove a change. It does not design your code. The user's current
-instruction outranks it: if this file argues against a change you were asked to
-make, it is stale — update it in the same change and say so.
 
 ## First contact
 
@@ -33,7 +30,7 @@ agent's.
 
 | Your question | Wing | What lives there | Read first |
 |---|---|---|---|
-| Which number type? How does this round, wrap or saturate? A position, a velocity, a rotation, a transform, a rate integrated over ticks | [FixedPoint](../../../../src/Puck.Maths/FixedPoint/README.md) | Signed and unsigned Q48.16, the unit-interval fractions, vectors, complex/dual/split, quaternions, rigid transforms, `FixedPosition`, the rate accumulators, and the fused-arithmetic and text substrate | "Choosing a scalar", then "Load-bearing invariants" |
+| Which number type? How does this round, wrap or saturate? A position, a velocity, a rotation, a transform, a rate integrated over ticks | [FixedPoint](../../../../src/Puck.Maths/FixedPoint/README.md) | Signed and unsigned Q48.16 (and the Q16.48 and Q32.32 splits), the unit-interval fractions, vectors, complex/dual/split, quaternions, rigid transforms, `FixedPosition`, the rate accumulators, `FixedInterval`, mass properties and symmetric solves, `CurvatureSpline`, and the fused-arithmetic and text substrate | "Choosing a scalar", then "Load-bearing invariants" |
 | Randomness of any shape — a roll, a weighted pick, noise, scatter, a shuffle, a Monte Carlo estimator — or a seed / stream / snapshot question | [Sampling](../../../../src/Puck.Maths/Sampling/README.md) | `Pcg32XshRr`, `WeightedSampler`/`AliasTable<T>`, `FieldNoise`, `LowDiscrepancy`, `DigitalNetSampler`, `StratifiedShuffle`, `InvertibleBitMix`, `ConeDirectionTable`, `SecureRandom`, `ProbabilityFunctions` | "Choosing a primitive", then "The rules a consumer inherits" |
 | Arithmetic that must be **exact** — mod p, `GF(2^k)`, region arithmetic over a span of field values, a primality decision | [FiniteFields](../../../../src/Puck.Maths/FiniteFields/README.md) | `BinaryPolynomial`, `BinaryField<T>` (k = 1…128 over a packed carrier), the canonical `BinaryFields` moduli, `PrimeField64`, `QuadraticExtensionField64` | "At a glance", then "Primality on `ulong`" |
 | One relation over several carriers; "is this construction a special case of something the library already has?" | [Algebra](../../../../src/Puck.Maths/Algebra/README.md) | `QuadraticAlgebra<TScalar>`, `GeometricAlgebra`/`Multivector`, `MonogenicAlgebra<TScalar>`, `DoublingAlgebra<TInner>`/`IConjugationRing<TSelf>` | "At a glance" — then §4 here before proposing a collapse |
@@ -221,9 +218,10 @@ stable, and never add a path that reproduces old-wrong behaviour.
   it so is written beside the code, with a law at the bound's edges.
 - **Wrap is the default; saturation and refusal are named.** Bare operators are
   unchecked; `checked` forms throw *after* the operation's rounding;
-  `AddSaturating`/`SubtractSaturating` clamp. Some saturators have **no** `Try…`
-  sibling, so do not assume a member reports its boundary — the unpaired ones
-  are enumerated at
+  `AddSaturating`/`SubtractSaturating` clamp on the unsigned and unit types and
+  `FixedSaturate` clamps `FixedQ4816` and vectors. Some saturators have **no**
+  `Try…` sibling, so do not assume a member reports its boundary — the unpaired
+  ones are enumerated at
   [load-bearing invariants](../../../../src/Puck.Maths/FixedPoint/README.md#load-bearing-invariants).
 - **Ties go to even, and there are exactly three exceptions** — `Exp2`,
   `Log2` and `Atan2`, which narrow half up. Each says so at the member and the
@@ -249,10 +247,10 @@ stable, and never add a path that reproduces old-wrong behaviour.
   termination rests on a theorem rather than on a validation — the Selfridge
   parameter walk, the descent to the smallest non-residue — fails by HANGING,
   and a hang is not a red test. Such a loop owes two guards with **distinct**
-  messages: a deterministic step budget, which says the predicate is broken, and
-  a wrap guard, which says the range is exhausted. Both, because they catch
-  different things: `FirstPrimeAtOrAbove(2⁶⁴ − 40)` returned **3** by stepping
-  past the carrier and wrapping — a wrong answer no budget can catch. Prefer a
+  messages: a deterministic step budget, which says the predicate is broken,
+  and a wrap guard, which says the range is exhausted. Both, because they catch
+  different things: a next-prime walk from `2⁶⁴ − 40` that steps past the
+  carrier wraps and answers **3**, a wrong answer no budget can catch. Prefer a
   deterministic bound to a wall-clock timeout wherever the loop is
   instrumentable; a timeout puts machine speed into a pass/fail verdict. The one
   exception is a guard inside a primitive whose termination rests on its own
@@ -279,7 +277,7 @@ stable, and never add a path that reproduces old-wrong behaviour.
 ## 3. Verify
 
 `tests/Puck.Maths.Tests` is the machine-checked story a `src/Puck.Maths` change
-gets — a committed four-tier suite — and the tiers below are all of it.
+gets: a four-tier suite of law cases.
 
 **Is a contract claim actually tested?** Every case is declared in
 `tests/Puck.Maths.Tests/laws/<family>.json` with the public members it covers
@@ -295,7 +293,9 @@ beside them.
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 ```
 
-That is the Default tier — Smoke + Default, **under thirty seconds**. It is
+(`dotnet test` forwards switches it does not know, `-nodeReuse:false` included,
+to the test host, which exits 5. Build first with `-nodeReuse:false`, then run
+this with `--no-build`.) That is the Default tier — Smoke + Default, **under a minute** (declared budget: thirty seconds). It is
 cheap on purpose and it is where the *structural* gates live: the coverage
 ratchet and both leg gates carry the `Default` trait, so this run is the only
 one that checks a new public member is classified, that legs are declared and
@@ -312,33 +312,26 @@ in a change loop.
 | Tier | Command | Budget | When |
 |---|---|---|---|
 | Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
-| **Default** | *(a plain run — no filter)* | < 30 s | the quick check for a change |
+| **Default** | *(a plain run — no filter)* | declared < 30 s; under a minute in practice | the quick check for a change |
 | Deep | `--explicit on --filter-trait tier=Deep` | minutes | optional breadth, worth it for a rounding change |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
-**Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
+**Do not run the `Exhaustive` tier reflexively.** It takes tens of minutes;
 narrow it with `--explicit on --filter-display-name '<law-id>*'` when one law is the question. Run it only
 when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.
 
-To look closer at what you touched, these are the families that cover it:
-
-| You touched | Families |
-|---|---|
-| A rounding path, a value kernel, an exhaustive claim | the suite with `--explicit on --filter-trait tier=Deep` |
-| `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
-| `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
-| `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
-| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | the `sampling.*` law family — cases live in `laws/sampling.json`, and `DigitalNetSampler`'s also in `laws/digital-net.json` |
-| `MonotonicPartitioner` | the `core.*` law family — cases live in `laws/monotonic-partitioner.json` |
-| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) and the `integer.*` family (`laws/integer-magic-constants.json`, `laws/integer-bit-kernels.json`) |
-| `SecureRandom`'s refusal edge | the `sampling.*` law family (`laws/sampling.json`) |
-| The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
-| `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
-| `PrimeField64` / `QuadraticExtensionField64` | the `prime-field.*` and `extension-field.*` law families |
-| `PrimeExploration` / `PrimeConstellation` / `PrimeWheel30` / `PrimeExtensions` on `ulong` | the `prime-exploration.*` and `prime-selection.*` law families (`laws/prime-*.json`); their Deep and `exhaustive.prime-selection-*` mirrors carry the published 10^15 and 10^16 counts and ranks |
-| Quadratic integer arithmetic | the `quadratic-integer.*` and `algebra.quadratic-*` law families (`laws/quadratic-integer.json`, `laws/doubling-tower.json`) |
+To find the cases that cover a member, search the declarations for its name:
+`puck search -M 0 '"Name": "<Member>"' tests/Puck.Maths.Tests/laws`. The row's
+`Id` prefix is the family, and a file's name need not match its family:
+`laws/world-coord.json` covers only `BinaryIntegerFunctions` (family `core`),
+`laws/digital-net.json` holds `sampling.*` cases, and `laws/doubling-tower.json`
+holds `algebra.*` cases. The wing READMEs' "Verifying changes" sections name the
+families that matter for each wing, for example
+[Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes).
+The `exhaustive.prime-selection-*` cases carry the published 10^15 and 10^16
+prime counts and ranks.
 
 **What green means, and does not.** A green battery means no probe failed. It
 does not by itself mean no probe *diverged*: a defect that turns a subject

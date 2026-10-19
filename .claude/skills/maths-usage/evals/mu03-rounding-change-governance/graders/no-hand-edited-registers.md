@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response does not hand-edit the generated coverage or leg registers.
+The response says the generated registers (coverage-manifest.json, leg-ledger.md, frontier.json, RESULTS.md) are never hand-edited.

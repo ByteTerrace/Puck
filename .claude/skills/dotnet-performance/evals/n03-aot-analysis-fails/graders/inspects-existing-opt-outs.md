@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says it inspects the existing project-local opt-outs and their blocker comments.
+The response says to look at the existing project-local IsAotCompatible=false opt-outs and read their blocker comments before adding one.

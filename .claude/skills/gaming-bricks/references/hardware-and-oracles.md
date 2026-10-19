@@ -156,12 +156,13 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
   scheduled event moves through `AgbScheduler.TransferEvent`, which re-arms it
   on load. Load-only work (a derived mask, a range check, re-derived timer
   events) follows the transfer in `LoadState`.
-- `ComponentSnapshotLayoutLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
-  `tests/Puck.AdvancedGamingBrick.Tests` pins every component's layout by
-  seeding each field from its name. A deliberate layout change re-records that
-  component's value in the same change and raises `CurrentVersion` of
-  `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced), which the
-  core's checkpoint identity names.
+- No file records a component's layout. A deliberate layout change raises
+  `CurrentVersion` of `MachineIdentity` (Humble) or `AgbMachineIdentity`
+  (Advanced), which the core's checkpoint identity names.
+  `ComponentSnapshotRoundTripLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
+  `tests/Puck.AdvancedGamingBrick.Tests` seeds each component's fields from
+  their names, saves, loads into a differently seeded twin and requires the
+  same bytes back, so a field saved but not loaded fails.
 - `--hash-divergence` localizes a mismatch between two executions in one
   process and one build.
 - Use `--dump-snapshot` and an offline section-table diff for cross-build byte
@@ -315,7 +316,7 @@ one lag constant in isolation.
   `lycint_dmgpalette_during_m3_1` the `ppu-pixel` stream is
   index-aligned and both cores commit BGP at the same absolute cycle, yet SameBoy
   paints from LY 1 x 157 and we paint from x 155 — the two-column error the
-  ledger records as 286 differing pixels (143 lines x 2 columns), with the
+  corpus run reports as 286 differing pixels (143 lines x 2 columns), with the
   `lycint_*_3`/`_4` pair three columns out at 429. Moving both conventions together
   does close this family, and costs more elsewhere than it closes — see the
   refuted decompositions above.
@@ -386,9 +387,12 @@ self-checking Post stage or golden replay is a gate.
 - The SingleStepTests/sm83 corpus has documented conflicts for STOP (`10`) and
   EI (`fb`). The corpus models STOP as a flat one-byte instruction, while the
   core consumes the pad byte when no interrupt is pending and leaves it when
-  one is pending. The corpus also re-arms EI when IME is already enabled,
-  while the acceptance `ei_sequence` behavior pins the core's no-op. Keep
-  these as explicit oracle-conflict skips, not silent exclusions.
+  one is pending (`ExecuteStop` in `Sm83.Decode.cs`; the pending test is
+  `IE & IF`, independent of IME). The Tier-A `sm83-stop-pending-interrupt`
+  stage covers the pending edge the corpus cannot. The corpus also re-arms EI
+  when IME is already enabled, while the acceptance `ei_sequence` behavior
+  pins the core's no-op. Keep these as explicit oracle-conflict skips in the
+  `sst-sm83` stage, not silent exclusions.
 - BESS import/export is diagnostic cross-emulator evidence. Its
   self-consistency checks do not turn a foreign emulator into a gate.
 - The Advanced commercial link-game stage currently documents an unmodeled

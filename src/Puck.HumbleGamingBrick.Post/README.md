@@ -7,13 +7,16 @@ provides focused diagnostics.
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --filter <stage-text>
 ```
 
 The first command fills the local corpus cache from the archives pinned in
 [corpora.json](corpora.json); it is needed once per version bump. The second
-is the developer loop and the pull-request gate. A plain run with no `--lane`
-measures every row.
+iterates on the stages whose names contain the text; a plain run with no
+`--filter` or `--tier` runs every stage over every case. No file records what a
+case is expected to do: each ROM's own result is the run's result, and a ROM
+that does not pass fails its stage on every run until the emulator is
+corrected.
 
 The xUnit gate launches the already-built battery directly from the test output
 directory and drains both output streams while it runs. Cancelling that test
@@ -31,48 +34,32 @@ by the stage rather than escaping from a background thread.
 
 | Argument | Purpose |
 |---|---|
-| `--lane gate|frontier|all` | Which ledger rows to measure; see [Lanes](#lanes). Default `all`. |
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
-| `--parallelism <n>` | Cases measured at once inside a ledger stage; default one per logical processor. |
+| `--parallelism <n>` | Cases run at once inside a corpus stage; default one per logical processor. |
 | `--roms <directory>` | A reference-ROM root instead of the cached `game-boy-test-roms` corpus. |
 | `--sst <directory>` | A SingleStepTests/sm83 root instead of the cached `sm83-sst` corpus. |
 | `--link-rom <file>` | A link-capable commercial cartridge for `link-game-replay`; the stage skips without it. |
 | `--trade-rom <file>` | The cross-generation trade cartridge for the scripted trade stages; they skip without it. |
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
-| `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping—catches a corpus missing entirely, not just one absent ROM. |
+| `--require-assets` | A suite with no discovered case fails infra (exit 2) instead of skipping—catches a corpus missing entirely, not just one absent ROM. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
 | `--corpus-cache <directory>` | Cache root used for both fetching and resolving corpora. |
-| `--accept` | After the run, promote its candidate ledger to `Expectations.json`; see [Accepting](#accepting). |
-| `--accept-candidate <file>` | Promote a candidate a previous run wrote (a build agent's artifact, say) without running anything. |
-| `--accept-regressions` | With an accept, acknowledge that at least one case regressed from a recorded verdict—otherwise the write is refused. |
-| `--accept-shrink` | With an accept, acknowledge that at least one recorded case is no longer discovered—otherwise the write is refused. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
-check failed. Exit code 2 means infrastructure prevented a stage from running,
-or an accept was refused.
+check failed, a corpus ROM that does not pass included. Exit code 2 means
+infrastructure prevented a stage from running.
 
-Every run writes four files under the artifacts directory: by default,
+Every run writes three files under the artifacts directory: by default,
 `artifacts/gb-post/post-report.txt` (the table, with a duration column),
 `artifacts/gb-post/summary.json` (per-stage verdict, duration, and case counts),
-`artifacts/gb-post/results.junit.xml` (one test case per ledger row
+and `artifacts/gb-post/results.junit.xml` (one test case per corpus ROM
 or vector family, named `path[model]`, which any continuous-integration
-reporter reads), and `artifacts/gb-post/Expectations.candidate.json` (what this run measured,
-merged over the rows it did not). A screenshot row that mismatches also leaves
-`<suite>/<path>[model].actual.png` and `.diff.png` beside them.
+reporter reads). A failing screenshot case also leaves
+`<stage>/<path>[model].actual.png` and `.diff.png` beside them, for the first
+twenty failures of a stage.
 
-## Lanes
-
-A ledger row's lane is derived from its recorded outcome, never listed by
-hand:
-
-| Lane | Rows | Cost | Where it runs |
-|---|---|---|---|
-| `gate` | recorded `pass`, unrecorded, and `unrunnable` | a passing case exits at its signature after a few frames | every change, through CI's runtime verification workflow (`verify.yml`); `tests/Puck.HumbleGamingBrick.Tests` runs it with an empty corpus cache, so the CPU suites run its self-contained stages |
-| `frontier` | recorded `fail` and `inconclusive`, and `unrunnable` | every case runs to its frame cap | nightly, and on demand while working on accuracy |
-| `all` | every row | both | a landing that touches accuracy |
-
-The self-contained Tier-A and Tier-C stages run under every lane. The
+The self-contained Tier-A and Tier-C stages need no corpus. The
 commercial-cartridge stages run only when their cartridge is named.
 
 The `embedding` Tier-A stage exercises default factory composition and the
@@ -88,10 +75,10 @@ the cartridge and host behavior, not startup animation. Bundled cold startup
 has its own [`bundled-firmware` stage](#the-authored-boot-rom).
 
 Every case's work is bounded by its frame cap, never by elapsed time, so a
-slow host changes how long a case takes and never its row. Cases inside a stage run on every processor at once, alongside the other
+slow host changes how long a case takes and never its result. Cases inside a stage run on every processor at once, alongside the other
 concurrent stages; only `trio-lockstep`, `throughput`, and `zero-alloc`, whose
 results measure the processor, run alone after them. The
-`ledger-parallel-equivalence` stage proves the measured rows do not depend on
+`parallel-equivalence` stage proves the measured results do not depend on
 that.
 
 ## Tiers
@@ -99,7 +86,7 @@ that.
 | Tier | Coverage | Assets |
 |---|---|---|
 | A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; bundled-firmware startup and restoration; live firmware-reconfiguration boundary; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
-| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus—every suite under the reference-ROM root, see [Corpus ledger](#corpus-ledger); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
+| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the corpus ROM suites—every suite under the reference-ROM root, see [Corpus suites](#corpus-suites); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
 | C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages need `--link-rom` or `--trade-rom` |
 
 Missing optional assets produce a skip rather than a failure (or, under
@@ -107,31 +94,19 @@ Missing optional assets produce a skip rather than a failure (or, under
 cartridge and vendor boot images are not committed to the repository. Puck's
 own generated firmware is checked in and bundled by the runtime package.
 
-## Corpus ledger
+## Corpus suites
 
 Every Tier-B ROM suite under the resolved corpus root—blargg and mooneye's
 `acceptance/` (the original two), plus AGE, both acid tests, mealybug, both
 mooneye-test-suite trees (`acceptance/`, `emulator-only/`, `misc/`,
 `manual-only/`) and the wilbertpol fork of them, SameSuite, GBMicrotest,
 gambatte, little-things-gb, scribbltests, strikethrough, turtle-tests, bully,
-rtc3test, and the MBC3 Bank Tester—is gated the same mechanical way: a
-per-(suite, ROM path, model) row in `Expectations.json` records what that case
-is expected to do, and each `LedgerRomStage` (`SuiteCatalog` discovers its
-cases, `LedgerEvaluator` applies the rules below, `ProbeRunner` dispatches to
-the probe named on the row) compares the ROM's actual behavior against it.
-`Expectations.json` is generated, never hand-edited—the stage is the runner
-that fails when it disagrees with its own source—and every run writes the candidate
-that would replace it; see [Accepting](#accepting).
-
-A row records the suite, the ROM's path relative to that suite's on-disk root,
-the model (the exact `ConsoleModel` the case ran on—`DmgC`, `CgbE`, `Agb`,
-`Mgb`, `Sgb2`, and so on, not a coarse family tag), the probe kind, the ROM
-bytes' FNV-1a hash, and the outcome (`pass`/`fail`/`unrunnable`/`inconclusive`),
-with a `Reason` for anything but `pass`, a `DiffPixels` count for a screenshot
-`fail`, and—for a `screenshot` case—an `ExpectedImageHash`: the winning
-expected-image candidate's FNV-1a hash, pinned the same way the ROM's is, so a
-swapped or corrupted fixture is a recorded mismatch rather than a silently
-different comparison.
+rtc3test, and the MBC3 Bank Tester—runs the same mechanical way: each
+`SuiteRomStage` (`SuiteCatalog` discovers its cases, `SuiteEvaluator` applies
+the rules below, `ProbeRunner` dispatches to the case's probe) runs every
+(suite, ROM path, model) case and reports what the ROM did. A case is named
+`path[model]`, where the model is the exact `ConsoleModel` the case ran on
+(`DmgC`, `CgbE`, `Agb`, `Mgb`, `Sgb2`, and so on, not a coarse family tag).
 
 Probe kinds:
 
@@ -165,7 +140,7 @@ Probe kinds:
   DMG shades and CGB `(X<<3)|(X>>2)` channel expansion already match every
   suite's "common palette" convention except gambatte's own CGB screenshots,
   which are rendered under gambatte's own weighted RGB mix—a case's
-  `LedgerCase.Palette` selects that conversion (`GambatteCgbPalette`) before
+  `SuiteCase.Palette` selects that conversion (`GambatteCgbPalette`) before
   the comparison runs. A `ScreenshotProbe` case whose expected image still
   cannot be decoded reports `Inconclusive` instead of throwing, so one bad
   image never takes its whole suite's stage down as an infrastructure
@@ -189,59 +164,25 @@ Probe kinds:
   the same `LivenessGate` a `screenshot` case uses—a dead machine's silent
   audio ring would otherwise trivially satisfy `_outaudio0`.
 
-Stage semantics, per case: the gate requires the recorded and actual outcome
-to be **equal**—`pass`, `fail`, and `inconclusive` are three distinct
-recorded verdicts, none folded into another, so a regression into
-inconclusiveness (a liveness-gate catch, an undecodable glyph, a vanished
-expected image) is caught exactly like a regression into `fail`.
+Stage semantics, per case:
 
-- Actual equals the recorded outcome → counted (`N pass`, `M recorded-fail`,
-  `L recorded-inconclusive`, `K unrunnable`).
-- A recorded `fail` that now passes → the stage **fails**
-  (`ratchet: now passes; accept the candidate ledger`)—a fix is a deliberate,
-  accepted act, never a silently-loosened gate.
-- Any other change of outcome (most importantly a recorded `pass` that now
-  fails or turns inconclusive) → **fails** as a regression.
-- A recorded `fail` whose actual outcome is still `fail` but whose
-  screenshot `DiffPixels` changed → **fails**, naming both counts.
-- A ROM present on disk with no ledger row → **fails** as `unrecorded`; the
-  candidate carries the row.
-- A ROM, or a screenshot case's expected image, whose bytes no longer match
-  its recorded hash → **fails** as a hash mismatch, whatever the probe then
-  found, so a swapped fixture is never silently absorbed into a pixel diff.
-- A ledger row for a suite this run's own discovery does not produce a
-  matching case → skipped, or (`--require-assets`) an infra failure. This is
-  computed against the ledger's own rows for the suite, so it also catches a
-  corpus root that resolves to nothing at all (a typo'd `--roms`, say) —
-  discovery finding zero cases is not by itself proof there was nothing to
-  find.
+- A probe that reports success: the case passes.
+- A probe that reports failure (the ROM's own failure signature, or a
+  screenshot, hex pattern or audio check that differs): the case fails, naming
+  the probe's detail.
+- A probe that produces no result within the case's frame budget, or that a
+  liveness gate or an undecodable glyph or image stops: the case fails as
+  `inconclusive`, with the reason. A ROM that never reports is not a pass.
+- A case the corpus's own howto makes impossible to check mechanically (button
+  input, an undecoded result convention): skipped, with the reason.
+- A case that throws: an error, which also fails the stage.
+- A suite with no cases under the corpus root: the stage skips, or
+  (`--require-assets`) is an infrastructure failure, so a typo'd `--roms` is
+  caught.
 
-## Accepting
-
-There is no recording run. Every run writes a candidate ledger, by default
-`artifacts/gb-post/Expectations.candidate.json`:
-the existing ledger with every row this run measured replaced, every row of a
-discovered suite whose ROM is no longer on disk removed, and every row of a
-suite this run did not discover (an unselected `--tier`/`--filter`/`--lane`,
-or a corpus this checkout does not carry) carried over unchanged—so the
-diff between the two only ever shows what this run measured. Every changed
-row is printed (`ratchet:` for a recorded `fail` resolving to `pass`,
-`regression:` for any other change of verdict, `dropped:` for a recorded
-case no longer discovered, `added:` for a case with no row), and `--accept`
-promotes the candidate in the same process. `--accept-candidate <file>` does
-the same for a candidate another run wrote—a nightly build's artifact—with
-no battery run at all. Either is refused (exit 2, nothing written) when:
-
-- Any stage in the run ended in infrastructure failure, or any case could not
-  be measured—a ledger built from an incomplete run is worse than no ledger.
-- At least one case regressed from a recorded verdict, unless
-  `--accept-regressions` is passed.
-- At least one recorded case is no longer discovered, unless
-  `--accept-shrink` is passed.
-
-Both flags are acknowledgments, not defaults. Accept after a deliberate
-emulator correction changes a recorded outcome, in the same change; never to
-paper over an unexplained regression.
+The stage passes when no case failed or errored. Its detail line counts `pass`,
+`fail` and `unrunnable` cases and names a bounded sample of the failures;
+`summary.json` and the JUnit report carry every case.
 
 ## Corpora
 

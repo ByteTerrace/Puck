@@ -224,7 +224,7 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 
 ## 11. Codegen facts the repository relies on in .NET 11
 
-`Math.BigMul(ulong, ulong, out ulong)` and the signed overload now lower to one `MUL`/`IMUL` that returns both halves in registers (dotnet/runtime#117261), so the 128-bit product needs no `UInt128` detour or hand-split halves. RyuJIT still if-converts a select only outside loops (dotnet/runtime#96380, milestone 12.0), so an in-loop `CMOV` still needs the `NoInlining` leaf pattern the [`maths-usage`](../../maths-usage/SKILL.md) skill describes.
+`Math.BigMul(ulong, ulong, out ulong)` and the signed overload now lower to one `MUL`/`IMUL` that returns both halves in registers (dotnet/runtime#117261), so the 128-bit product needs no `UInt128` detour or hand-split halves. RyuJIT still if-converts a select only outside loops (dotnet/runtime#96380, milestone 12.0), so an in-loop `CMOV` still needs the `NoInlining` leaf pattern the [`maths-usage` prime kernel notes](../../maths-usage/references/prime-kernels.md) describe.
 
 ---
 

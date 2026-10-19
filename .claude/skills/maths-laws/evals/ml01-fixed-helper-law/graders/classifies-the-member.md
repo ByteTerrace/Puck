@@ -1,0 +1,6 @@
+---
+type: llm
+weight: 1
+---
+
+The response lists the new public member under the declaration's Members so the coverage ratchet classifies it.

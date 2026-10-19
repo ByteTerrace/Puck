@@ -159,12 +159,10 @@ tests".
 [AccuracyCoin](https://github.com/100thCoin/AccuracyCoin), the suite that
 separates today's most accurate emulators, by pressing Start on its menu, and
 reads each test's result byte from RAM page 4; the ROM's own test table names
-them. It is a ratchet: `AccuracyCoinExpectations.json`, beside the battery,
-records every test's outcome, and any test whose outcome changes, better or
-worse, fails the stage. The failures it records are the NTSC accuracy
-package's work list. A run writes `accuracy-coin.candidate.json` to the
-artifacts directory, and a fix lands by copying that file over the ledger in
-the same change. The Tier B stages skip an absent corpus and reject an
+them. Each test is one case in the report: a pass, a skip for the ROM's $FF
+marker, or a failure carrying the ROM's error code; the stage fails while any
+test fails or never reports, and names them. The failures are the NTSC
+accuracy package's work list. No file records an expected outcome. The Tier B stages skip an absent corpus and reject an
 incomplete corpus supplied as present.
 
 The corpus manifest uses the shared
@@ -178,7 +176,8 @@ hashes are the authority for downloaded bytes; a hash mismatch is refused.
 
 The battery writes `post-report.txt`, `summary.json`, and `results.junit.xml`
 under `artifacts/hgd-post`, or the directory selected by `--artifacts`.
-The test project launches the Tier A executable and separately pins component
-snapshot layouts, M2 edge timing at every alignment, and loader-header cases.
+The test project launches the Tier A executable and separately checks M2 edge
+timing at every alignment, loader-header cases, and the AccuracyCoin stage's
+result reporting against a fixture cartridge.
 
 [Humble Gaming Deck](README.md) · [Machine emulation](../README.md)

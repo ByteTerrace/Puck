@@ -376,7 +376,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
             if (!IsSupportedOp(op: instruction.Op, reading: reading)) {
                 throw new ArgumentException(
-                    message: $"SdfFieldEvaluator is warp-free this wave and cannot interpret instruction {index}'s op {instruction.Op}. See SdfFieldEvaluator.cs's KEEP-IN-SYNC header for the full excluded-op rule.",
+                    message: $"SdfFieldEvaluator cannot interpret instruction {index}'s op {instruction.Op}: it needs runtime trigonometry, a dynamic transform buffer or another resource this fixed-point evaluator does not have. See SdfFieldEvaluator.cs's KEEP-IN-SYNC header for the full excluded-op rule.",
                     paramName: nameof(instructions)
                 );
             }
