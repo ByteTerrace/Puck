@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-touch[\s\S]{0,240}rebuild|rebuild[\s\S]{0,240}touch
+(git restore|touch)[\s\S]{0,240}rebuild|rebuild[\s\S]{0,240}(git restore|touch)

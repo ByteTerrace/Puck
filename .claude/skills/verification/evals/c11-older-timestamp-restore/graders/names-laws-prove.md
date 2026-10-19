@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-touch|rewrite|checkout|git restore
+laws prove

@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-(gpu|contend|contention|compete|timeout)
+CoverageGpuOnly\.txt

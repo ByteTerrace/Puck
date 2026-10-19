@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-(zero warnings|0 warnings|no warnings)
+zero[- ]warnings?|0 warnings|no warnings

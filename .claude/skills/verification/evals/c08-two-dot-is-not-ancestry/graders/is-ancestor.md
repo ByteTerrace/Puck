@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-is-ancestor|ancestor|ancestry
+merge-base\s+--is-ancestor

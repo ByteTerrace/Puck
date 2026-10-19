@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Says how to show a Puck change works before it lands, in pre-release mode - a zero-warning build of what it touched and the change run or measured - and how to read a result. Covers running verbs from a private copy of the head's own CLI, never testing binaries a failed build left behind, which work uses the GPU and how GPU work shares a machine, flake versus failure, and tests that build a scratch repository. Use before calling a change verified or handing back a lane, when running parity, canaries, GPU tests or docs checks, when deciding whether a test is worth writing, when a check fails, and when judging whether one branch contains another. Owners: maths-laws (Maths suite), gaming-bricks (emulator suites), rendering (GPU, captures), puck-world (World runs).
+description: Verifies a Puck change. Use for the landing bar, a failed or timed-out canary or test (flake or failure), GPU legs and what runs beside them, the puck CLI copy, coverage, branch bases.
 ---
 
 # Verification
@@ -11,63 +11,83 @@ verification is running the change, not defending what landed before it.
 [Contributing § Verification](../../../docs/development/contributing.md#verification)
 describes the suites, and the [CLI reference](../../../docs/reference/cli.md)
 owns each verb's flags. When this file and the code disagree, the code wins.
+What the owner says in a session overrides this skill and is written into it in
+that session.
 
 ## The landing bar
 
 1. A zero-warning, zero-error Release build of what the change touched
    (`dotnet build <project> -c Release -nodeReuse:false`, or `Puck.slnx` when it
    reaches shared projects), on the lane's head with the integration branch's
-   current tip merged in.
+   current tip merged in. A build or check that passed before the integration
+   branch moved says nothing about the merged head: merge the tip, then build
+   and run again.
 2. The change shown working by running or measuring it: run `Puck.World` or the
    verb, drive a stdin script, take a capture, read a count. The commit body
    says what you ran and what it showed.
 3. Tests kept honest: write one only where running cannot show the behavior and
    it will outlive the next rewrite; a test the change breaks is updated or
-   deleted in the same change. Run the tests you added or touched. CI requires
-   100% line coverage of live `src/` from the CPU suites (`puck artifacts
-   coverage` in `build.yml`), so new code lands with a test that reaches it and
-   code nothing reaches is deleted. Code only a GPU reaches goes in
-   `build/CoverageGpuOnly.txt`, the one exclusion list. To see a suite's
-   coverage locally, run it as
-   `dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
-   and merge with `puck artifacts coverage --results <dir>`. A line counts where
-   a sequence point starts: a branch body, a lambda body on a line of its own
-   and a switch-expression arm are lines of their own, and a method ending in a
-   null-conditional call (`x?.M();`) or returning from inside a `foreach` can
-   leave its closing brace unhit. Code that keeps its device work in a listed
-   file reaches it from the CPU side through one expression (a conditional or
-   `&&` over a helper there), not a guarded statement.
+   deleted in the same change. Run the tests you added or touched.
 
-A change to simulation state stays deterministic; `puck test --reproduce` shows
-two runs agree. Gates, parity, canaries, counters and `puck laws prove` are
-tools to use when they pay for themselves, never preconditions.
+Gates, parity, canaries, counters, baselines, `puck laws prove` and review
+passes are tools to use when they pay for themselves, never preconditions. A
+change to simulation state stays deterministic; `puck test --reproduce` shows
+two runs agree.
+
+### Coverage
+
+CI checks 100% line coverage of live `src/` from the CPU suites on every push
+to `main` (`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside
+what deploy waits for). New code lands with a test that reaches it, and code
+nothing reaches is deleted, not tested. Code only a GPU reaches goes in
+`build/CoverageGpuOnly.txt`, the one exclusion list. To see a suite's coverage
+locally, run it as
+`dotnet <suite>.dll --filter-not-trait Category=Gpu --coverage --coverage-output-format cobertura --coverage-output <dir>/<suite>.cobertura.xml --coverage-settings build/CodeCoverage.config`
+and merge with `puck artifacts coverage --results <dir>`. A line counts where a
+sequence point starts: a branch body, a lambda body on a line of its own and a
+switch-expression arm are lines of their own, and a method ending in a
+null-conditional call (`x?.M();`) or returning from inside a `foreach` can
+leave its closing brace unhit. Code that keeps its device work in a listed file
+reaches it from the CPU side through one expression (a conditional or `&&` over
+a helper there), not a guarded statement.
 
 ## Run verbs from your own CLI copy
 
 Build `src/Puck.Cli` in Release in your worktree, copy
 `src/Puck.Cli/bin/Release/net11.0/` to a directory only your lane uses
 (`<scratchpad>/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
-the worktree root. Never run the globally installed `puck`: it lags the head.
-Refresh the copy after a change the CLI reaches. A generator or ledger verb run
-without `--check` rewrites the file it owns; `--check` only reports drift.
-Restore a fresh worktree once (`dotnet restore Puck.slnx -nodeReuse:false`)
-before its first build with `--no-restore` or `puck references`: both fail
-on an unrestored tree.
+the worktree root. Never run the globally installed `puck` on PATH: it is
+another build of another head. Refresh the copy after a change the CLI reaches.
+A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
+`branding`) run without `--check` rewrites the files it owns; `--check` only
+reports drift. Restore a fresh worktree once
+(`dotnet restore Puck.slnx -nodeReuse:false`) before its first build with
+`--no-restore` or `puck references`: both fail on an unrestored tree.
 
 ## Build before you test
 
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.
-- Pass `-nodeReuse:false` to every build and restore.
+- Pass `-nodeReuse:false` to every build and restore: a reused MSBuild node
+  outlives the build and holds memory (`puck host load` counts them as
+  `reuseNodes`).
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
+- MSBuild rebuilds by file time. A file copied back over a mutant keeps its
+  older time, so the build keeps the mutated assembly although `git diff` shows
+  the source restored. Restore with `git restore` or touch the file, rebuild,
+  and confirm from the run that the fix is what executed. `puck laws prove
+  <law> --fix <revision>` proves a law against its fix in its own clone and
+  never touches your tree.
 
 ## Writing a test
 
 Prefer type enforcement when the compiler can hold the contract: a required,
-non-null parameter checks every call site, where a regex over source misses
-some.
+non-null parameter checks every call site, where a law that scans source with a
+regular expression misses some. When a scan law misses a real site, replace it
+with the type and delete the scan; a law that cannot fail at a real site pins
+nothing.
 
 In xUnit v3, `Assert.Throws`, `Record.Exception` and their async forms rethrow
 the skip exception, so a test that wraps a call which can skip reports
@@ -76,24 +96,30 @@ the skip exception, so a test that wraps a call which can skip reports
 ## What uses the GPU
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
-or offscreen `Puck.World` run, and any test that opens a device. A full
-`Puck.World.Tests` run opens the GPU through its device laws (classes marked
-`[Trait("Category", "Gpu")]`); run suites beside other GPU work with
-`--filter-not-trait Category=Gpu`. `puck docs citations` boots `Puck.World` to
-read its help vocabulary, so it is GPU work unless given `--enumeration <file>`;
-`puck docs links` only reads files and runs at any time. A World run with
-effective `host.presentation: none` uses no GPU.
+or offscreen `Puck.World` run, and any test run that can select a device law.
+Device laws are test classes marked `[Trait("Category", "Gpu")]`, in
+`Puck.World.Tests`, `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` and
+`Puck.Platform.Windows.Tests`; a full run of one of those suites is GPU work
+even though most of it is CPU. Beside another GPU job, run suites with
+`--filter-not-trait Category=Gpu`. `puck docs citations` boots `Puck.World`
+(headless, then windowed) to read its help vocabulary, so it is GPU work unless
+given `--enumeration <file>`; `puck docs links` only reads files and runs at any
+time. A World run with effective `host.presentation: none` uses no GPU.
 
 - One GPU job per GPU at a time; two GPU-bound jobs contend for the device and
   time out. CPU work, builds included, runs beside a GPU job.
-- Wait for an idle GPU with `puck host load` (`--watch` prints `GPU busy` and
-  `GPU idle`). A process search of your own matches its own command line;
-  exclude it before concluding another job is running.
+- Ask the machine with `puck host load`: it names the process holding the GPU
+  (`GPU busy (Puck.World 4242)`) or prints `GPU idle`, and `--watch` prints each
+  transition once. It never counts itself. A process search of your own
+  (`Get-Process`, `pgrep`, `tasklist | findstr`) matches its own command line:
+  exclude its PID before concluding another job is running, and never skip or
+  postpone a granted leg on that match alone.
 - Stop only the processes you started, by the PIDs you recorded.
 
 ## Flake or failure
 
-Re-run a failed leg once, alone, with nothing else running on the GPU.
+Re-run a failed leg once, alone, with nothing else running on the GPU and no
+heavy build beside it.
 
 - **Flake:** the first failure was a timeout, a bind or listener wait, a
   readiness wait or a temporary-directory teardown error, and the leg passes
@@ -101,30 +127,35 @@ Re-run a failed leg once, alone, with nothing else running on the GPU.
 - **Failure:** the leg fails again, or the first failure was a wrong value: a
   pixel or tile verdict, a state hash, a counted work line, a refusal reason, a
   content assertion, a validation-layer message. Never re-run a wrong value
-  hoping for green. If the change meant to move that value, update the check;
-  otherwise fix the code.
+  hoping for green, whatever ran beside it. If the change meant to move that
+  value, update the check; otherwise fix the code.
 
 Before stopping a hung test host or World process, capture its managed stacks
-(`dotnet-stack report -p <pid>`).
+with `dotnet-stack report -p <pid>` (a global tool:
+`dotnet tool install -g dotnet-stack`).
 
 ## Branches
 
-A two-dot range lists commits reachable from one side and not the other; it
-says nothing about ancestry. Check a base with
-`git merge-base --is-ancestor <base> <head>` and its exit status.
+`git log A..B` lists commits reachable from B and not from A. It says nothing
+about where B branched or whether A is an ancestor of B: a lane cut from an
+older tip and one cut from the current tip can list the same commits. Check a
+base with `git merge-base --is-ancestor <base> <head>` and its exit status, and
+count how far behind it is with `git rev-list --count <base>..<integration tip>`.
 
 ## Tests that create a repository
 
 A test that creates a scratch git repository disables automatic maintenance in
-it (`maintenance.auto=false` and `gc.auto=0`): background maintenance started by
-its commands outlives the test and can touch other repositories that share
-objects with it.
+it (`git config maintenance.auto false` and `git config gc.auto 0`). Commands
+in the scratch repository start background `git maintenance` or `gc --auto`
+that outlives the test, and through alternates or a shared object store it can
+prune or repack objects another worktree on the machine still reads.
 
 ## Route adjacent work
 
 | Skill | Route there for |
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
+| [`review-passes`](../review-passes/SKILL.md) | An optional review-and-fix pass and verifying its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |
