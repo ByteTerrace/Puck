@@ -7808,7 +7808,15 @@ export type WorldPrototype = {
    */
   id: DocumentIdentifier;
   /**
-   * The canonical (validated + normalized) creation document.
+   * The SHA-256 hex64 of the document's canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load — an author never writes a content hash by hand; see Hash.
+   */
+  hash?: string | null;
+  /**
+   * Opaque triangles every static placement of the prototype draws beside its field, or null for none.
+   */
+  mesh?: WorldPrototypeMesh | null;
+  /**
+   * Gets the canonical (validated + normalized) creation document, the author's own bytes.
    */
   document: {
     /**
@@ -8969,14 +8977,6 @@ export type WorldPrototype = {
       isKnownKind?: boolean;
     } | null)[] | null;
   } | null;
-  /**
-   * The SHA-256 hex64 of the document's canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load — an author never writes a content hash by hand; see Hash.
-   */
-  hash?: string | null;
-  /**
-   * Opaque triangles every static placement of the prototype draws beside its field, or null for none.
-   */
-  mesh?: WorldPrototypeMesh | null;
 };
 
 export type WorldPrototypeMesh = {

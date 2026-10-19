@@ -4411,10 +4411,11 @@ public static partial class WorldModelShape {
             [],
             [
                 M("id", typeof(global::Puck.Assets.Documents.DocumentIdentifier), typeof(global::Puck.World.WorldPrototype), "Id", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Id),
-                M("document", typeof(global::Puck.World.Authoring.CreationDocument), typeof(global::Puck.World.WorldPrototype), "Document", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Document),
                 M("hash", typeof(global::System.String), typeof(global::Puck.World.WorldPrototype), "HashRaw", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).HashRaw),
                 M("mesh", typeof(global::Puck.World.WorldPrototypeMesh), typeof(global::Puck.World.WorldPrototype), "Mesh", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Mesh),
+                M("document", typeof(global::Puck.World.Authoring.CreationDocument), typeof(global::Puck.World.WorldPrototype), "Document", Read | Write, static value => ((global::Puck.World.WorldPrototype)value).Document),
                 M("engineDocument", typeof(global::Puck.World.Authoring.CreationDocument), typeof(global::Puck.World.WorldPrototype), "EngineDocument", None),
+                M("canonicalHash", typeof(global::System.String), typeof(global::Puck.World.WorldPrototype), "CanonicalHash", None),
             ],
             []),
         T(typeof(global::Puck.World.WorldPrototypeMesh), true, JsonTypeInfoKind.Object, null,
