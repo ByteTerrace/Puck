@@ -148,9 +148,16 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// (<see cref="Describe"/>).</para>
 /// </summary>
 public sealed class SdfMeshPathBake {
-    /// <summary>The field evaluations one frame's bake dispatch makes at most, past its first lattice: the bake pass's
-    /// share of the frame.</summary>
+    /// <summary>The field evaluations one frame's bake dispatch makes at most, past its first lattice, in a frame of
+    /// <see cref="ReferenceFrameSeconds"/>: the bake pass's share of the frame. A longer frame takes the same share of its
+    /// time (<see cref="FrameBudget"/>), and every lattice is sized by this share alone, so the meshes do not depend on the
+    /// frame rate.</summary>
     public const int FrameTaps = 150_000;
+    /// <summary>The frame, in seconds, <see cref="FrameTaps"/> is the bake's share of: a 60 Hz frame, so a display at 60 Hz
+    /// or faster takes one share a frame, and only a frame longer than two reference frames takes more.</summary>
+    public const double ReferenceFrameSeconds = (1.0 / 60.0);
+    /// <summary>The most reference frames' shares one frame takes, however long it is.</summary>
+    public const int MaxFrameShares = 8;
     // Samples along the longest axis of a coarse or refining lattice, and of the final one.
     private const int CoarseSamples = 33;
     private const int FinalSamples = (SdfWorldPackage.MeshBakeMaxSamplesPerAxis);
@@ -284,6 +291,13 @@ public sealed class SdfMeshPathBake {
     // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
     private readonly List<object> m_takenTickets = [];
+    /// <summary>Returns the field evaluations a frame presented over <paramref name="frameSeconds"/> takes: the same share
+    /// of its time a reference frame's <see cref="FrameTaps"/> are, between one and <see cref="MaxFrameShares"/> shares.</summary>
+    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds; zero or less is a reference
+    /// frame.</param>
+    /// <returns>The frame's evaluations.</returns>
+    public static int FrameBudget(double frameSeconds) =>
+        (FrameTaps * ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares)));
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
     /// owes one and has none in flight, in the groups' order, up to a batch, and every later call of the same frame answers
     /// the same, so the frame's mask and bake passes agree. Taking them in order rather than round robin finishes the groups
@@ -319,7 +333,7 @@ public sealed class SdfMeshPathBake {
                     if ((entries + next.Samples + group.PoseRows.Length) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
                     // A frame's lattices stay within its share of field evaluations; its first is always taken, and no
                     // lattice holds more than a share.
-                    if ((lattices.Count > 0) && ((taps + next.Taps) > FrameTaps)) { break; }
+                    if ((lattices.Count > 0) && ((taps + next.Taps) > m_frameBudget)) { break; }
                     group.InFlight = true;
                     samples += next.Samples;
                     entries += (next.Samples + group.PoseRows.Length);
@@ -339,15 +353,22 @@ public sealed class SdfMeshPathBake {
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
     private long m_frameTaken = -1;
+    private int m_frameBudget = FrameTaps;
     private SdfMeshBakeBatch? m_frameBatch;
     private Vector4[] m_pointTable = [];
 
     /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and writes its points
     /// into the tables' point table, which the bake kernel reads.</summary>
     /// <param name="frame">The package frame.</param>
+    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes its share
+    /// (<see cref="FrameBudget"/>).</param>
     /// <param name="tables">The residency's tables.</param>
-    public void Stage(long frame, SdfWorldTables tables) {
+    public void Stage(long frame, double frameSeconds, SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
+
+        lock (m_gate) {
+            if (m_frameTaken != frame) { m_frameBudget = FrameBudget(frameSeconds: frameSeconds); }
+        }
 
         if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
         if (m_pointTable.Length < batch.TableEntries) { m_pointTable = new Vector4[SdfWorldPackage.MeshBakeMaxSamples]; }

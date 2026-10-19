@@ -78,7 +78,7 @@ is always which one you're in—because the fix for each is different.
                    Fix lives in the bake's resolution and the cascades.
 
   bake-bound    ── the mask and bake passes are the wall, while a bake is
-                   pending. FrameTaps bounds them; a settled scene has none.
+                   pending. FrameBudget bounds them; a settled scene has none.
 
   pace-bound    ── none. The GPU is idle; the frame rate is the
                    present cadence, not the render cost.

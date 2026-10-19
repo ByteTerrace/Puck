@@ -149,7 +149,7 @@ lit history converges, visual edits leave its sample count and ring standing.
 ## What each pass costs
 
 The passes scale with different things. `mask` and `bake` scale with the
-field evaluations a frame's lattices take, which `SdfMeshPathBake.FrameTaps`
+field evaluations a frame's lattices take, which `SdfMeshPathBake.FrameBudget`
 bounds, and run only while a bake is pending. The three cascades and `mesh`
 scale with the triangles drawn and the fragments they cover. `surface` and
 `views` scale with the render grid's pixels: every pixel runs the same fixed
@@ -640,7 +640,13 @@ word), and the bake pass runs
 interpreter, one call site, with only the group's instances in the walk
 (`sdfMapOmitWorldSegments` drops the unowned segments from it). A frame's
 lattices stay within its share of field evaluations (`SdfMeshPathBake.FrameTaps`,
-a gradient sample counting five), so a frame that bakes keeps its budget. A frame
+a gradient sample counting five), so a frame that bakes keeps its budget. The
+share is of a 60 Hz frame: a frame presented over longer takes as many shares as
+whole 60 Hz frames it spans, up to eight (`SdfMeshPathBake.FrameBudget`), so a
+slow display, a remote desktop's ten frames a second among them, bakes at the
+rate a 60 Hz one does, while a display at 60 Hz or faster takes one share a frame.
+Every lattice is sized by one share, so the meshes do not depend on the frame
+rate. A frame
 takes its lattices in the groups' order, not round robin, so the groups finish in
 order and each lands in the shared mesh library (`SdfMeshLibrary`) as it finishes: a
 body that crosses into another world mid-bake leaves the groups it finished there,

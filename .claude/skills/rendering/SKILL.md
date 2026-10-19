@@ -273,8 +273,9 @@ owns the explanation.
   placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
   belongs in the record, never in a mesh's words.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
-  field evaluations a frame's bake dispatch makes (a gradient sample counts
-  five); every lattice is chunked to fit it (final lattices in slabs, material
+  field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample counts
+  five), and a longer frame takes a share for each whole 60 Hz frame it spans, up
+  to eight (`FrameBudget`); every lattice is chunked to fit one share (final lattices in slabs, material
   and gradient, fine and material points in chunks). Gradients are measured only
   at the samples `SdfDualContouring` reads a normal at
   (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight

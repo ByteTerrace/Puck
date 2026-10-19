@@ -491,7 +491,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         // The bake takes its batch before the upload, which carries the batch's surface points.
-        MeshPathBake.Stage(frame: PackageFrame, tables: tables);
+        MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.Pending);
 
         tables.UpdateTablesSignature();
