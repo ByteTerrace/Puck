@@ -54,8 +54,9 @@ macOS, and nothing here is verified there.
   [Installing the checkout's CLI on PATH](../reference/cli.md#installing-the-checkouts-cli-on-path)
   describes, for running verbs by hand. An installed tool keeps its commit while
   the checkout moves on: `puck --version` warns on stderr when the two differ, so
-  reinstall after pulling. The agents' MCP server does not use it: it runs the
-  checkout's Release build of `src/Puck.Cli` through `.claude/hooks/puck-mcp.ps1`
+  reinstall after pulling. The agents' MCP server never uses it: it runs the
+  checkout's Release build of `src/Puck.Cli` through `.claude/hooks/puck-mcp.ps1`,
+  building it first on a fresh clone
   ([the MCP adapter](../../src/Puck.Mcp/README.md)).
 - **Claude Code.** The project's settings are shared and versioned:
   `.claude/settings.json` turns auto memory off, selects the Concise output

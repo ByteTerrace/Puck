@@ -94,11 +94,18 @@ that launches World needs no console line. Without either, no endpoint exists.
 The checkout's MCP configurations (`.mcp.json`, `.codex/config.toml`,
 `.vscode/mcp.json`) start the adapter through `.claude/hooks/puck-mcp.ps1`,
 which runs `puck mcp --profile operator` from the checkout's own Release build
-of `src/Puck.Cli`. It copies the build to `.claude/mcp-cli/<build stamp>/`
-first, so a running adapter never locks the build output, and a rebuilt CLI
-reaches agents the next time the client restarts the server (`/mcp` in Claude
-Code). With no Release build of `src/Puck.Cli` it falls back to the installed
-`puck` and says so on stderr. Other clients launch the same adapter directly:
+of `src/Puck.Cli`. A linked worktree with no build of its own uses its main
+checkout's build, and a checkout with no build at all builds `src/Puck.Cli`
+first (one build at a time per checkout), so the first start on a fresh clone
+takes as long as that build. It never runs the installed `puck`, which keeps
+the commit it was installed at. It copies the build to
+`.claude/mcp-cli/<build stamp>/` first, so a running adapter never locks the
+build output, and a rebuilt CLI reaches agents the next time the client
+restarts the server (`/mcp` in Claude Code). A copy is deleted only once no
+adapter runs from it. The configurations allow ten minutes for that first
+start: `MCP_TIMEOUT` under `env` in `.claude/settings.json` and
+`startup_timeout_sec` in `.codex/config.toml`. Other clients launch the same
+adapter directly:
 
 ```text
 puck mcp --profile operator
