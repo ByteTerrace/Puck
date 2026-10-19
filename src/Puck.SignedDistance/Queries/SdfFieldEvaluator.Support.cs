@@ -48,6 +48,7 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Plane or
             SdfShapeType.Vesica or
             SdfShapeType.RoundedRectangle or
+            SdfShapeType.Ellipse or
             SdfShapeType.Trapezoid or
             SdfShapeType.ChamferedRectangle or
             SdfShapeType.RoundCone or

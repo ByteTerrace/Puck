@@ -36,8 +36,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets the indices of the program's instances the group selects, in program order; empty for the world
     /// group.</summary>
     public IReadOnlyList<int> InstanceIndices => m_instances;
-    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by.</summary>
-    public List<(Vector3 Center, float Radius)> Members { get; } = [];
+    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, and the finest
+    /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice.</summary>
+    public List<(Vector3 Center, float Radius, float Detail)> Members { get; } = [];
     /// <summary>Gets the geometry the group bakes while its instances are appended: a world group's names its segments'
     /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
     public SdfMeshGeometryBuilder Geometry { get; } = new(dynamic: dynamic);
@@ -122,7 +123,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {
-                group.Members.Add(item: (instance.Center, radius));
+                group.Members.Add(item: (instance.Center, radius, instance.Detail));
             }
             staticRun = (instance.IsDynamic ? null : group);
             // A bound past the reach bakes over the reach instead, which the geometry then holds.

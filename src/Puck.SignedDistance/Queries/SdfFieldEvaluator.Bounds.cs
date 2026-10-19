@@ -521,6 +521,7 @@ public sealed partial class SdfFieldEvaluator {
         SdfShapeType.Plane,
         SdfShapeType.Vesica,
         SdfShapeType.RoundedRectangle,
+        SdfShapeType.Ellipse,
         SdfShapeType.Trapezoid,
         SdfShapeType.ChamferedRectangle,
         SdfShapeType.RoundCone,
@@ -834,7 +835,7 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W, inverseLengthSquared: instruction.Data1Y),
             SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
             SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
-            SdfShapeType.RoundedRectangle => (LiftedBounds(
+            SdfShapeType.RoundedRectangle or SdfShapeType.Ellipse => (LiftedBounds(
                 p: p,
                 instruction: instruction,
                 liftAmount: instruction.Data0W,
@@ -1072,6 +1073,7 @@ public sealed partial class SdfFieldEvaluator {
     }
     private static FixedInterval ProfileBounds(in CompiledInstruction instruction, IntervalVector2 p) => ((SdfShapeType)instruction.Shape) switch {
         SdfShapeType.RoundedRectangle => RoundedRectangle2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
+        SdfShapeType.Ellipse => Ellipse2DBounds(p: p, semiX: instruction.Data0X, semiY: instruction.Data0Y),
         SdfShapeType.Trapezoid => Trapezoid2DBounds(p: p, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
         SdfShapeType.ChamferedRectangle => ChamferBox2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
         SdfShapeType.ConvexPolygon => ConvexPolygon2DBounds(p: p, vertices: (instruction.ConvexPolygonVertices ?? [])),

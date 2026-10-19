@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Queries;
 // implementation (like SdfProgram's own host-side AnalyzeBounds/AnalyzeLipschitz passes), not a codegen of the
 // shader. Touching mapCore's RESET/TRANSLATE/ROTATE/SCALE/REPEAT/REPEAT_LIMITED/SYMMETRY_PLANE/ELONGATE/ONION/
 // DILATE/PUSH_FIELD/POP_FIELD/SHAPE cases, or blendShape/evaluateShape's Sphere/Box/ScreenSlab/Torus/Plane/
-// RoundCone/Capsule/Cylinder/Vesica/RoundedRectangle/Trapezoid/Superellipsoid/ConvexPolygon bodies, means
+// RoundCone/Capsule/Cylinder/Vesica/RoundedRectangle/Trapezoid/Superellipsoid/ConvexPolygon/Ellipse bodies, means
 // updating this file's mirror in the SAME change (and vice versa) — a divergence is silent (both sides compile and
 // run; only the ANSWER differs).
 //
@@ -24,8 +24,8 @@ namespace Puck.SignedDistance.Queries;
 // Scalable primitives must bake anisotropy into a native shape spelling (CreationGeometry does this for boxes,
 // spheres/ellipsoids, axially symmetric cylinders/cones, and planes). It
 // similarly rejects
-// three shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D; Ellipse: an analytic
-// cubic solve with acos/pow), one needing texture sampling (Glyph), and SampledRegion, whose brick pool is an engine
+// two shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D), one needing texture
+// sampling (Glyph), and SampledRegion, whose brick pool is an engine
 // resource this evaluator cannot access — every other shape in <see cref="SdfShapeType"/> is supported. The constructor
 // throws <see cref="ArgumentException"/> naming the FIRST
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
@@ -567,6 +567,14 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             d: instruction.Data0Y,
             b: instruction.Data0Z
         ),
+            SdfShapeType.Ellipse => (SdfEllipse(
+            p: p,
+            semiX: instruction.Data0X,
+            semiY: instruction.Data0Y,
+            liftAmount: instruction.Data0W,
+            lift: instruction.Data1Y,
+            capChamfer: instruction.Data1Z
+        ) - instruction.Data1W),
             SdfShapeType.RoundedRectangle => (SdfRoundedRectangle(
             p: p,
             halfWidth: instruction.Data0X,

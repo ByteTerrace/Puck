@@ -1713,7 +1713,7 @@ public static partial class WorldDefinitionValidator {
                                 continue;
                             }
 
-                            if (requiresField && (solidShape.Profile?.Kind is SdfPrismProfileKind.Polygon or SdfPrismProfileKind.Ellipse or SdfPrismProfileKind.Path)) {
+                            if (requiresField && ((((solidShape.Profile?.Kind == SdfPrismProfileKind.Polygon) && (solidShape.Profile.Sides > SdfPrismProfile.MaxConvexVertices)) || (solidShape.Profile?.Kind == SdfPrismProfileKind.Path)))) {
                                 errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} uses profile {solidShape.Profile.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.");
                             }
 
@@ -1726,6 +1726,7 @@ public static partial class WorldDefinitionValidator {
 
                             if (!ShapeDomainOps.TryExpand(
                                 domain: solidShape.Domain,
+                                subject: solidShape.Position,
                                 frames: out var solidFrames,
                                 refusal: out var solidRefusal
                             )) {

@@ -20,7 +20,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The history color the resolve writes for the next frame.</summary>
     public const string HistoryColorWritten = "historyColorRW";
     /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
-    /// visibility identity of the nearest render-extent sample the resolve read, then its ray distance and the sample
+    /// visibility identity of the render-extent sample nearest the pixel's center, then its ray distance and the sample
     /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport's two
     /// words as <see cref="Parts.Transport"/> packs them.</summary>
     public const string HistorySurface = "historySurface";

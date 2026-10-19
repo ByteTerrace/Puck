@@ -131,6 +131,7 @@ internal sealed class WorldColliderSet : IContactField {
                 // counting the authored shape once would under-report the census the placement budget is read against.
                 var shapeCopies = (ShapeDomainOps.TryExpand(
                     domain: shape.Domain,
+                    subject: shape.Position,
                     frames: out var frames,
                     refusal: out _
                 )

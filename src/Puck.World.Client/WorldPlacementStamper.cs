@@ -316,7 +316,7 @@ public static class WorldPlacementStamper {
             : null
         );
         // A creation whose parts carve each other (or that carries noise relief) is one SCOPED candidate against the
-        // world field. A scope-free, text-free creation instead emits one TIGHT instance per shape — union-family
+        // world field. A scope-free creation instead emits one TIGHT instance per shape, and its embossed text one more — union-family
         // members mask bit-identically, and per-shape bounds keep a big creation (a tree's whole-canopy reach) from
         // masking every tile it merely overlaps.
         var scoped = (
@@ -341,8 +341,6 @@ public static class WorldPlacementStamper {
         );
         var perShape = (
             !scoped &&
-            !hasText &&
-            ((hidden is not null) || (creation.TextRuns is not { Count: > 0 })) &&
             (creation.Shapes is { Count: > 0 })
         );
 
@@ -383,6 +381,39 @@ public static class WorldPlacementStamper {
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
     private readonly struct StaticInstanceVisitor(SdfProgramBuilder builder, CreationDocument creation, bool hasText, bool[]? hidden, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+        // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke,
+        // about a tenth of its em.
+        private static float TextDetail(CreationDocument creation, float scale) {
+            var detail = float.PositiveInfinity;
+
+            foreach (var run in (creation.TextRuns ?? [])) {
+                detail = MathF.Min(detail, MathF.Min((run.Depth ?? 0.02f), (0.1f * run.EmHeight)));
+            }
+
+            return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
+        }
+        private void EmitTextRuns(CreationStampInstance instance) {
+            // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
+            var ids = paletteIds;
+
+            CreationStampEmitter.EmitText(
+                builder: builder,
+                document: creation,
+                transform: new CreationStampTransform(
+                    Origin: instance.Origin,
+                    Rotation: rotation,
+                    Scale: placement.Scale,
+                    ReflectionNormal: instance.ReflectionNormal
+                ),
+                fontFor: textCatalog!.Resolve,
+                materialFor: run => ids[Math.Clamp(
+                    value: (run.Material ?? 0),
+                    max: (ids.Length - 1),
+                    min: 0
+                )],
+                textLayouts: textLayouts
+            );
+        }
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
@@ -454,6 +485,18 @@ public static class WorldPlacementStamper {
                     _ = builder.EndInstance();
                 }
 
+                // Embossed text bakes as a group of its own, refined to its glyphs' detail: inside the shapes' union its
+                // relief falls below the union's lattice and perturbs the contour of every shape it bakes with.
+                if (hasText) {
+                    _ = builder.BeginInstance(
+                        boundCenter: instance.Origin,
+                        boundRadius: (reach + PlacementBoundMargin),
+                        detail: TextDetail(creation: creation, scale: placement.Scale)
+                    );
+                    EmitTextRuns(instance: instance);
+                    _ = builder.EndInstance();
+                }
+
                 return;
             }
 
@@ -476,26 +519,7 @@ public static class WorldPlacementStamper {
                 reflectionNormal: instance.ReflectionNormal
             );
             if (hasText) {
-                // A lambda cannot read a struct's fields, so a run's material reads the palette through a local.
-                var ids = paletteIds;
-
-                CreationStampEmitter.EmitText(
-                    builder: builder,
-                    document: creation,
-                    transform: new CreationStampTransform(
-                        Origin: instance.Origin,
-                        Rotation: rotation,
-                        Scale: placement.Scale,
-                        ReflectionNormal: instance.ReflectionNormal
-                    ),
-                    fontFor: textCatalog!.Resolve,
-                    materialFor: run => ids[Math.Clamp(
-                        value: (run.Material ?? 0),
-                        max: (ids.Length - 1),
-                        min: 0
-                    )],
-                    textLayouts: textLayouts
-                );
+                EmitTextRuns(instance: instance);
             }
             if (
                 scoped &&

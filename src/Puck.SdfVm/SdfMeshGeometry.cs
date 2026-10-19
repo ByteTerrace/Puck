@@ -86,6 +86,12 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(in bound)));
         m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(in count)));
+        // A declared detail refines the lattice, so the mesh depends on it.
+        if (!range.IsDynamic && (range.Detail > 0f)) {
+            var detail = range.Detail;
+
+            m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(in detail)));
+        }
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {

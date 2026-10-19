@@ -315,7 +315,8 @@ public sealed partial class WorldStampPool {
                     chain: chain
                         .TransformDynamic(slot: slot)
                         .Scale(scale: new Vector3(value: placementScale)),
-                    domain: domain
+                    domain: domain,
+                    subject: shapePosition
                 )
                     .Translate(offset: shapePosition)
                     .Rotate(rotation: ((shapeRotation == default)

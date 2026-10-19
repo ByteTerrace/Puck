@@ -190,8 +190,18 @@ public static class SdfDomainExpansion {
                         val2: 1
                     );
                     // The sector fold rotates a point by -angle·sector, so its branches are the +angle·sector rotations.
-                    var mirrorRemainder = MirrorRemainder(unitNormal: UnitAxis(index: v));
                     var polarOrigin = FixedVector3.FromVector3(value: polar.Origin);
+                    // A mirrored fold reflects across the plane through the axis and its subject (SdfDomainOp.Polar),
+                    // whose normal is the subject's in-plane direction turned a quarter from the plane's first axis
+                    // toward its second; a subject on the axis leaves the first axis as the bisector.
+                    var (planeU, _) = SdfDomainOp.Polar.PlaneOf(axis: polar.Axis);
+                    var relative = (FixedVector3.FromVector3(value: polar.Subject) - polarOrigin);
+                    var alongU = Component(vector: relative, index: planeU);
+                    var alongV = Component(vector: relative, index: v);
+                    var mirrorNormal = (((alongU == FixedQ4816.Zero) && (alongV == FixedQ4816.Zero))
+                        ? UnitAxis(index: v)
+                        : ((UnitAxis(index: planeU) * (-alongV)) + (UnitAxis(index: v) * alongU)).Normalize());
+                    var mirrorRemainder = MirrorRemainder(unitNormal: mirrorNormal);
 
                     if (!WithinBudget(
                         accumulated: accumulated,
@@ -266,6 +276,11 @@ public static class SdfDomainExpansion {
 
         return true;
     }
+    private static FixedQ4816 Component(FixedVector3 vector, int index) => index switch {
+        0 => vector.X,
+        1 => vector.Y,
+        _ => vector.Z,
+    };
     private static FixedVector3 UnitAxis(int index) {
         return index switch {
             0 => new FixedVector3(

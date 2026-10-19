@@ -123,10 +123,12 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="bakesWithPrevious">Whether the instance bakes into one mesh with the instance declared just before
     /// it, when that one is static too (<see cref="SdfInstanceRange.BakesWithPrevious"/>): the shapes of one rigid
     /// copy, each with its own tight bound, baked as their union.</param>
+    /// <param name="detail">The finest feature, in world units, the instance carries that its bound does not imply; zero
+    /// for none, and a negative or non-finite value reads as zero (<see cref="SdfInstanceRange.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false, float detail = 0f) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -140,6 +142,7 @@ public sealed partial class SdfProgramBuilder {
             slot: 0
         );
         m_openInstanceBakesWithPrevious = bakesWithPrevious;
+        m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
 
         return this;
     }
@@ -250,7 +253,8 @@ public sealed partial class SdfProgramBuilder {
             Radius: m_openInstanceRadius,
             Slot: m_openInstanceSlot,
             Active: m_openInstanceActive,
-            BakesWithPrevious: m_openInstanceBakesWithPrevious
+            BakesWithPrevious: m_openInstanceBakesWithPrevious,
+            Detail: m_openInstanceDetail
         ));
 
         m_openInstanceFirst = -1;

@@ -263,9 +263,10 @@ public sealed class ConvexProfileLawTests {
             material
         ));
     }
-    // THE LAW: every vertex lies in the unit square. The profile rides the shape's own XY scale like every other
+    // THE LAW: every profile vertex lies in the unit square. The profile rides the shape's own XY scale like every other
     // Prism profile, and SdfSolidGeometry.Reach's Prism arm (sqrt(3) x max scale) covers exactly that frame — a vertex
-    // past it would leave the cull bound short and clip the prism at its tile edges.
+    // past it would leave the cull bound short and clip the prism at its tile edges. The builder's polygon is the
+    // profile already scaled into place, so it takes a convex hull of any size and bounds it by its own vertices.
     [Fact]
     public void AVertexOutsideTheUnitSquareIsRefusedByName() {
         Vector2[] tooWide = [new(
@@ -283,17 +284,19 @@ public sealed class ConvexProfileLawTests {
             )];
 
         Assert.False(condition: SdfPrismProfile.IsValidConvexHull(vertices: tooWide));
+        Assert.False(condition: new SdfPrismProfile(Kind: SdfPrismProfileKind.Convex, Vertices: tooWide).IsValid());
+        Assert.True(condition: SdfPrismProfile.IsConvexHull(vertices: tooWide));
 
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.ConvexPolygon(
+        _ = builder.ConvexPolygon(
             tooWide,
             0f,
             SdfLift.Extrude,
             1f,
             material
-        ));
+        );
 
         // The control: the same outline on the unit square's own boundary is admitted.
         Vector2[] onTheBoundary = [new(

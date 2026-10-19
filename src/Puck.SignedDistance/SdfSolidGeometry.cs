@@ -41,6 +41,8 @@ public static class SdfSolidGeometry {
         y: 0.5f,
         z: 0f
     );
+    // The turn that carries an extruded profile's depth axis (Z) onto a primitive's height (Y), its profile plane onto XZ.
+    private static readonly Quaternion EllipticCylinderTurn = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 2f));
     private static readonly Vector3 EllipsoidRadii = new(
         x: 1f,
         y: 1f,
@@ -103,6 +105,37 @@ public static class SdfSolidGeometry {
             rounding,
             detail: detail
         ),
+            // A regular polygon of at most MaxConvexVertices sides, at any scale, is the convex polygon of its vertices scaled
+            // into place (vertex k at k·2π/n from +Y toward +X, the shader's convention, which runs clockwise): its exact
+            // distance, rounded as the regular polygon rounds. With more sides it is exact only while X and Y scale alike,
+            // as a native regular polygon; scaled apart it keeps the unit polygon under its scale.
+            SdfPrismProfileKind.Polygon when (profile.Sides <= SdfPrismProfile.MaxConvexVertices) => ConvexProfile(
+            chain: chain,
+            vertices: RegularVertices(sides: profile.Sides, scale: new Vector2(x: scale.X, y: scale.Y)),
+            cornerFraction: 0f,
+            rounding: rounding,
+            lift: lift,
+            liftAmount: (revolve
+            ? revolveOffset
+            : scale.Z),
+            material: material,
+            blend: blend,
+            smooth: smooth,
+            detail: detail
+        ),
+            SdfPrismProfileKind.Polygon when (scale.X == scale.Y) => chain.RegularPolygon(
+            profile.Sides,
+            scale.X,
+            lift,
+            (revolve
+            ? revolveOffset
+            : scale.Z),
+            material,
+            blend,
+            smooth,
+            rounding,
+            detail: detail
+        ),
             SdfPrismProfileKind.Polygon => chain.Scale(scale: polygonScale).RegularPolygon(
             profile.Sides,
             1f,
@@ -116,29 +149,20 @@ public static class SdfSolidGeometry {
             scaledRounding,
             detail: detail
         ),
-            SdfPrismProfileKind.Ellipse => (revolve
-            ? chain.Ellipse(
-                scale.X,
-                scale.Y,
-                SdfLift.Revolve,
-                revolveOffset,
-                material,
-                blend,
-                smooth,
-                rounding,
-                detail: detail
-            )
-            : chain.Scale(scale: scale).Ellipse(
-                1f,
-                1f,
-                SdfLift.Extrude,
-                1f,
-                material,
-                blend,
-                smooth,
-                scaledRounding,
-                detail: detail
-            )),
+            // The ellipse's own semi-axes are the scale, so either lift answers its exact distance.
+            SdfPrismProfileKind.Ellipse => chain.Ellipse(
+            scale.X,
+            scale.Y,
+            lift,
+            (revolve
+            ? revolveOffset
+            : scale.Z),
+            material,
+            blend,
+            smooth,
+            rounding,
+            detail: detail
+        ),
             SdfPrismProfileKind.ChamferedRectangle => chain.ChamferedRectangle(
             scale.X,
             scale.Y,
@@ -156,26 +180,46 @@ public static class SdfSolidGeometry {
             rounding,
             detail: detail
         ),
-            // Vertices are authored unscaled (like Polygon's unit circumradius), so they ride the SAME
-            // Scale(polygonScale) wrap; CornerRadius reads as a fraction of the RAW vertices' own inradius, the
-            // profile's sole rounding control — the separate rounding field has no independent ceiling here
-            // (SdfSolidGeometry.MaxRounding's Convex arm is 0), so it is summed in defensively rather than dropped:
-            // ClampRounding still bounds the total, exactly as every other profile's builder clamps rather than trusts.
-            SdfPrismProfileKind.Convex => chain.Scale(scale: polygonScale).ConvexPolygon(
-            profile.Vertices!,
-            ((profile.CornerRadius * SdfProgramBuilder.ConvexPolygonInradius(vertices: profile.Vertices!)) + scaledRounding),
-            lift,
-            (revolve
-            ? (revolveOffset / polygonScale.X)
-            : 1f),
-            material,
-            blend,
-            smooth,
+            // The vertices are authored in the unit square and scaled into place here: an affine image of a convex polygon is
+            // the convex polygon of its scaled vertices, whose field is its exact distance. CornerRadius reads as a fraction
+            // of the scaled polygon's inradius, the profile's sole rounding control; the separate rounding field has no
+            // independent ceiling here (MaxRounding's Convex arm is 0), so it is summed in rather than dropped, and the
+            // builder's ClampRounding bounds the total.
+            SdfPrismProfileKind.Convex => ConvexProfile(
+            chain: chain,
+            vertices: [.. profile.Vertices!.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y)))],
+            cornerFraction: profile.CornerRadius,
+            rounding: rounding,
+            lift: lift,
+            liftAmount: (revolve
+            ? revolveOffset
+            : scale.Z),
+            material: material,
+            blend: blend,
+            smooth: smooth,
             detail: detail
         ),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(profile)),
         };
     }
+    private static Vector2[] RegularVertices(int sides, Vector2 scale) => [.. Enumerable.Range(start: 0, count: sides)
+        .Select(selector: vertex => {
+            var (sin, cos) = MathF.SinCos(x: ((vertex * MathF.Tau) / sides));
+
+            return new Vector2(x: (sin * scale.X), y: (cos * scale.Y));
+        })];
+    private static SdfProgramBuilder ConvexProfile(SdfProgramBuilder chain, Vector2[] vertices, float cornerFraction, float rounding,
+        SdfLift lift, float liftAmount, int material, SdfBlendOp blend, float smooth, bool detail) =>
+        chain.ConvexPolygon(
+            vertices,
+            ((cornerFraction * SdfProgramBuilder.ConvexPolygonInradius(vertices: vertices)) + rounding),
+            lift,
+            liftAmount,
+            material,
+            blend,
+            smooth,
+            detail: detail
+        );
     private static Vector3 EffectiveScale(Vector3 scale) =>
         Vector3.Max(
             value1: Vector3.Abs(value: scale),
@@ -467,6 +511,11 @@ public static class SdfSolidGeometry {
         SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
         SdfSweepParameters? curve = null) {
         ArgumentNullException.ThrowIfNull(chain);
+        // A native lowering spells the scale into its shape's dimensions, so a non-finite scale is refused here by name
+        // rather than as whichever dimension it reaches first.
+        if (!Puck.Maths.VectorFunctions.IsFinite(vector: scale)) {
+            throw new ArgumentOutOfRangeException(message: "A scale must be finite on every component.", paramName: nameof(scale));
+        }
         if (
             (profile is not null) &&
             ((type != SdfSolidPrimitive.Prism) || !profile.IsValid())
@@ -654,6 +703,18 @@ public static class SdfSolidGeometry {
             radii: (EllipsoidRadii * effectiveScale),
             smooth: smooth
         ),
+            // A torus scaled alike in X and Z is its minor section stretched into an ellipse, revolved at the stretched major
+            // radius: the exact distance of the scaled torus, since the section never reaches the axis.
+            SdfSolidPrimitive.Torus when (effectiveScale.X == effectiveScale.Z) => chain.Ellipse(
+            blend: blend,
+            detail: detail,
+            lift: SdfLift.Revolve,
+            liftAmount: (TorusMajor * effectiveScale.X),
+            material: material,
+            semiX: (TorusMinor * effectiveScale.X),
+            semiY: (TorusMinor * effectiveScale.Y),
+            smooth: smooth
+        ),
             SdfSolidPrimitive.Capsule when (effectiveScale.X == effectiveScale.Z) => chain.Capsule(
             blend: blend,
             detail: detail,
@@ -684,6 +745,20 @@ public static class SdfSolidGeometry {
             material: material,
             radius: (CylinderRadius * effectiveScale.X),
             rounding: rounding,
+            smooth: smooth
+        ),
+            // A cylinder scaled differently in X and Z is the extrusion of the ellipse its section stretches into, along its
+            // height: the ellipse's extrusion axis turned onto Y, its exact distance with its rims rounded or bevelled.
+            SdfSolidPrimitive.Cylinder => chain.Rotate(rotation: EllipticCylinderTurn).Ellipse(
+            blend: blend,
+            capChamfer: chamfer,
+            detail: detail,
+            lift: SdfLift.Extrude,
+            liftAmount: (CylinderHalfHeight * effectiveScale.Y),
+            material: material,
+            rounding: rounding,
+            semiX: (CylinderRadius * effectiveScale.X),
+            semiY: (CylinderRadius * effectiveScale.Z),
             smooth: smooth
         ),
             SdfSolidPrimitive.Cone when (effectiveScale.X == effectiveScale.Z) => chain.Trapezoid(

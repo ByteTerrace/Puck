@@ -26,6 +26,9 @@ namespace Puck.SignedDistance;
 /// it: the baked-mesh path's group of one rigid copy is the run of instances it heads, so shapes that share a face
 /// bake as their union rather than as meshes fighting over the face. Meaningless for a dynamic instance, whose group is
 /// its slot's.</param>
+/// <param name="Detail">The finest feature, in world units, a static instance carries that its bound does not imply, such
+/// as an embossed glyph's relief; zero for none. The bake contours the instance's region of its union at no coarser a
+/// spacing. Meaningless for a dynamic instance.</param>
 public readonly record struct SdfInstanceRange(
     int First,
     int End,
@@ -34,5 +37,6 @@ public readonly record struct SdfInstanceRange(
     float Radius,
     int Slot,
     bool Active = true,
-    bool BakesWithPrevious = false
+    bool BakesWithPrevious = false,
+    float Detail = 0f
 );
