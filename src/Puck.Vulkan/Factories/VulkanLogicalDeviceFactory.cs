@@ -8,7 +8,7 @@ namespace Puck.Vulkan.Factories;
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
 /// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>fragmentStoresAndAtomics</c> and
-/// <c>shaderDemoteToHelperInvocation</c> always, refusing a device without any of them,
+/// <c>shaderStorageImageExtendedFormats</c> always, refusing a device without any of them,
 /// and the optional pipeline-executable-properties,
 /// storage-image-without-format, external memory and semaphore,
 /// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
@@ -44,9 +44,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES; its first VkBool32 is timelineSemaphore, which a
     // Direct3D 12 shared fence imported as a semaphore needs.
     private const uint StructureTypePhysicalDeviceTimelineSemaphoreFeatures = 1000207000;
-    // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES (core in Vulkan 1.3, the EXT value
-    // promoted, verified against the Vulkan SDK 1.4.350 header); its first VkBool32 is shaderDemoteToHelperInvocation.
-    private const uint StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures = 1000276000;
     private const string SwapchainExtension = "VK_KHR_swapchain";
 
     /// <summary>Win32 external-memory import, for sampling a texture another backend (Direct3D 12) produced
@@ -88,12 +85,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
-    ];
-    // The feature structures every device is created with, each through the single-flag chain (its first VkBool32 is the
-    // feature), with its name and what needs it; a device reporting any of them absent is refused naming it. A SPIR-V
-    // capability a feature here grants is listed in VulkanShaderCapabilities.Enabled.
-    private static readonly (uint StructureType, string Feature, string Need)[] RequiredFeatureStructures = [
-        (StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures, "shaderDemoteToHelperInvocation", "the SDF impostor card's fragments need to discard the texels outside its silhouette (OpDemoteToHelperInvocation)"),
     ];
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
     // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
@@ -177,11 +168,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         nint physicalDeviceHandle
     ) {
         var extensions = new List<string> { SwapchainExtension };
-        var featureStructureTypes = new List<uint>(collection: RequiredFeatureStructureTypesOf(supported: structureType => m_physicalDeviceApi.IsExtensionFeatureSupported(
-            instance: instance,
-            physicalDeviceHandle: physicalDeviceHandle,
-            structureType: structureType
-        )));
+        var featureStructureTypes = new List<uint>();
 
         var deviceFault = (m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceFault.ExtensionName, instance: instance, physicalDeviceHandle: physicalDeviceHandle) &&
@@ -255,29 +242,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
 
         return (extensions, featureStructureTypes);
-    }
-
-    /// <summary>Returns the feature structures every device is created with: <c>shaderDemoteToHelperInvocation</c>, which a
-    /// fragment's <c>discard</c> compiles to and the SDF impostor card's fragments use.</summary>
-    /// <param name="supported">Whether the device reports a feature structure's feature, by its structure type.</param>
-    /// <returns>The structure types to chain.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="supported"/> is <see langword="null"/>.</exception>
-    /// <exception cref="GpuDeviceUnavailableException">The device does not report a required feature; the message names
-    /// it.</exception>
-    public static IReadOnlyList<uint> RequiredFeatureStructureTypesOf(Func<uint, bool> supported) {
-        ArgumentNullException.ThrowIfNull(argument: supported);
-
-        var structureTypes = new List<uint>();
-
-        foreach (var (structureType, feature, need) in RequiredFeatureStructures) {
-            if (!supported(arg: structureType)) {
-                throw VulkanResultExtensions.Unavailable(reason: $"The Vulkan device does not report {feature}, which {need}.");
-            }
-
-            structureTypes.Add(item: structureType);
-        }
-
-        return structureTypes;
     }
 
     private IReadOnlyList<uint> ComposeFeatureIndices(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
