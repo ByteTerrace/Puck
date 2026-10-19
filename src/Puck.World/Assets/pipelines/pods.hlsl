@@ -22,30 +22,32 @@ static const float PI = 3.14159265;
 static const float VIOLET = 1., CREAM = 2., GUNMETAL = 3., BLACK = 4., CYAN = 5., GREY = 6., CORE = 7., FRAME = 8., SPINE = 9.;
 
 // ---- the casing, in metres ----
-static const float3 POD_C = float3(0.17, 1.2, -0.02);
-static const float ROLL = 0.12;              // radians about z: the bottom leans away from the spine
-static const float3 SHELL_R = float3(0.14, 0.6, 0.13);
+static const float3 POD_C = float3(0.185, 1.24, -0.02);
+static const float ROLL = 0.2;
+static const float POD_HEIGHT = 0.95;         // the pod's height relative to the frame its features are authored in              // radians about z: the bottom leans away from the spine
+static const float3 SHELL_R = float3(0.155, 0.6, 0.13);
 static const float FACE_Z = 0.09;            // the casing's back is flattened into a broad face this far out
-static const float BEVEL_D = 0.13;
+static const float BEVEL_D = 0.145;
 static const float INNER_BEVEL_D = 0.142;     // the chamfer along the inner edge, facing the spine
-static const float TAPER = 0.5;             // how much narrower the casing is at its bottom than at its waist
+static const float TAPER = 0.7;             // how much narrower the casing is at its bottom than at its waist
 static const float TOP_Y = 0.44;             // the shoulder's top edge
-static const float TOP_OUTER_D = 0.3;        // its broad outer chamfer
+static const float TOP_OUTER_D = 0.26;        // its broad outer chamfer
 static const float TOP_INNER_D = 0.38;       // its small chamfer at the spine
 static const float SHELL_T = 0.022;          // casing thickness
 static const float WRAP = 0.055;             // how far the casing wraps around its sides toward her body
-static const float INNER_X = 0.052;          // the straight inner edge, beside the spine (world x)
+static const float INNER_X = 0.04;          // the straight inner edge, beside the spine (world x)
 // Plates: bands run across the casing on planes tilted BAND_TILT (falling toward the outer edge), split by grooves
 // into an inner and an outer column at COLUMN_X.
-static const float BAND_TILT = 0.5;
+static const float BAND_TILT = 0.3;
+static const float BAND_ARCH = 1.6;          // the bands arch, highest near the inner edge
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
 static const float PLATE_ROUND = 0.005;      // how soft each plate's edge is where it meets a groove
 static const float COLUMN_X = 0.0;
 // The bottom cut, in the pod's frame: a plane from the inner edge part-way down to the pointed outer tip, facing in,
 // down and back; the casing is open under it and its rim is trimmed in gunmetal.
-static const float3 CUT_P = float3(-0.125, -0.19, 0.0);
-static const float3 CUT_N = float3(-0.5, -0.55, 0.67);
+static const float3 CUT_P = float3(-0.125, -0.08, 0.0);
+static const float3 CUT_N = float3(-0.74, -0.56, 0.37);
 static const float TRIM_W = 0.009;
 // The inner core the casing wraps, blended into the thruster housing that swells out of the open rim.
 static const float3 CORE_R = float3(0.1, 0.43, 0.075);
@@ -68,7 +70,7 @@ static const float RING_DEPTH = 0.012;
 static const float2 VENT_C = float2(-0.045, 0.35);
 // The spine.
 static const float3 SPINE_C = float3(0., 1.33, -0.03);
-static const float3 SPINE_HALF = float3(0.07, 0.27, 0.05);
+static const float3 SPINE_HALF = float3(0.052, 0.25, 0.05);
 static const float SPINE_BLOCK = 0.095;
 static const float2 VENT_FRAME = float2(0.034, 0.028);
 static const float2 VENT_SLOT = float2(0.022, 0.011);
@@ -101,7 +103,7 @@ float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 float cmax(float a, float b, float r) { return max(max(a, b), (a + b + r) * 0.7071); }
 void add(inout float2 h, float d, float m) { if (d < h.x) h = float2(d, m); }
 
-float3 podFrame(float3 p) { float3 s = float3(abs(p.x), p.y, p.z) - POD_C; s.xy = mul(s.xy, rot(ROLL)); return s; }
+float3 podFrame(float3 p) { float3 s = float3(abs(p.x), p.y, p.z) - POD_C; s.xy = mul(s.xy, rot(ROLL)); s.y /= POD_HEIGHT; return s; }
 float3 nozzleAxis() { return normalize(CUT_N); }   // square to the opening, so the face lies flush in it
 float3 nozzleCentre() {
     float3 n = normalize(CUT_N);
@@ -118,7 +120,7 @@ float casingOuter(float3 s) {
     // The top is an angular shoulder: a nearly flat edge, a broad chamfer down to the outer side and a small one at
     // the spine.
     d = smax(d, s.y - TOP_Y, 0.03);
-    d = smax(d, dot(s.xy, normalize(float2(0.77, 0.63))) - TOP_OUTER_D, 0.04);
+    d = smax(d, dot(s.xy, normalize(float2(0.77, 0.63))) - TOP_OUTER_D, 0.08);
     d = smax(d, dot(s.xy, normalize(float2(-0.707, 0.707))) - TOP_INNER_D, 0.02);
     d = smax(d, s.z - FACE_Z, 0.02);
     d = smax(d, dot(s.xz, normalize(float2(0.8, 0.6))) - BEVEL_D, 0.025);
@@ -131,6 +133,7 @@ float2 pod(float3 q) {
     float2 h = float2(1e9, 0.);
     float3 s = q - POD_C;
     s.xy = mul(s.xy, rot(ROLL));
+    s.y /= POD_HEIGHT;
     float outer = casingOuter(s);
     float inner = casingOuter(s * (SHELL_R / (SHELL_R - SHELL_T)) ) * ((SHELL_R.x - SHELL_T) / SHELL_R.x);
     float back = -(s.z + WRAP);
@@ -138,7 +141,7 @@ float2 pod(float3 q) {
     float cut = dot(s - CUT_P, normalize(CUT_N));
     float casing = smax(smax(smax(max(outer, -inner), back, 0.004), edge, 0.005), cut, 0.003);
     // Grooves between plates and between the columns, stopping short of the trimmed rim.
-    float b = s.y + BAND_TILT * s.x;
+    float b = s.y + BAND_TILT * s.x + BAND_ARCH * s.x * s.x;
     const float edges[4] = { 0.27, 0.16, 0.01, -0.14 };
     float seamD = 1e9;
     for (int i = 0; i < 4; i++) seamD = min(seamD, abs(b - edges[i]));
@@ -203,7 +206,7 @@ float spine(float3 p) {
     float d = min(block, strip);
     float cap = roundBox(q - float3(0., SPINE_HALF.y - 0.045, 0.004), float3(SPINE_HALF.x, 0.045, SPINE_HALF.z - 0.004), 0.018);
     float lower = roundBox(q - float3(0., -SPINE_HALF.y + 0.06, 0.), float3(SPINE_HALF.x * 1.05, 0.06, SPINE_HALF.z), 0.016);
-    float core = sdBox(q - float3(0., -SPINE_HALF.y - 0.06, -0.012), float3(SPINE_HALF.x * 0.7, 0.08, SPINE_HALF.z - 0.014), 0.012);
+    float core = sdBox(q - float3(0., -SPINE_HALF.y - 0.02, -0.012), float3(SPINE_HALF.x * 0.7, 0.04, SPINE_HALF.z - 0.014), 0.012);
     // The column behind the blocks, set well back, closes the gaps.
     float back = sdBox(q - float3(0., 0., -0.02), float3(SPINE_HALF.x * 0.75, SPINE_HALF.y, SPINE_HALF.z - 0.02), 0.004);
     return min(min(min(d, cap), min(lower, core)), back);
@@ -211,6 +214,7 @@ float spine(float3 p) {
 float2 map(float3 p) {
     float3 q = float3(abs(p.x), p.y, p.z);
     float2 h = pod(q);
+    h.x *= min(POD_HEIGHT, 1.);
     add(h, spine(p), SPINE);
     return h;
 }
@@ -252,7 +256,7 @@ float3 albedo(float m) {
 
 // A camera by view index: its target, yaw, pitch and distance.
 void camera(int view, out float3 target, out float yaw, out float pitch, out float dist) {
-    target = float3(0., 1.25, -0.02); yaw = 0.; pitch = -0.72; dist = 1.75;
+    target = float3(0., 1.25, -0.02); yaw = 0.; pitch = -0.45; dist = 1.75;
     if (view == 1) { yaw = 0.62; pitch = -0.32; }
     if (view == 2) { yaw = 1.5708; pitch = -0.1; }
     if (view == 3) { yaw = 0.; pitch = 0.; }
