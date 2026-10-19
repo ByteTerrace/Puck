@@ -3458,6 +3458,10 @@ export type WorldBindingBarAuthoring = {
    */
   modifiers?: boolean;
   /**
+   * Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page's name.
+   */
+  pageLabel?: boolean;
+  /**
    * Whether a slot with no bound act on its bank's page should not render at all, rather than drawing the disabled tier-0 plate. A player's own BindingBarPreferences.HideUnbound overrides this.
    */
   hideUnbound?: boolean;

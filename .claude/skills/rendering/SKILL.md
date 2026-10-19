@@ -199,7 +199,9 @@ owns the explanation.
   teeth along the edge). A convex crease up to half a cell past its cell is
   handed to the neighbour that holds it (`SdfDualContouring.HandOff`), whose
   vertex moves onto it; clamped instead, a diagonal or curved crease loses its
-  vertices in a row of notches. A feature takes its crossings' normals, each quad
+  vertices in a row of notches. The cell that hands it over keeps its vertex on
+  its crossings' side of the crease (`BesideCrease`), or the quads it shares
+  with the crease vertex fold. A feature takes its crossings' normals, each quad
   splits along the diagonal that turns least from its non-crease corners'
   normals, and
   `SdfContour.SplitAtCreases` splits it per side at 32 degrees, just past the
@@ -209,7 +211,9 @@ owns the explanation.
   onto the surface where a rounding near the cell's size left it proud; one the
   contour kept beside a sharp convex crease (`SdfContour.Beside`) that lies
   inside the solid stays a crease vertex when moved, or its face's normal shades
-  the other face's quads beside the edge.
+  the other face's quads beside the edge. A gradient shorter than a tenth of the
+  field's typical slope straddles a crease and moves nothing
+  (`SdfMeshPathBake.KinkGradient`): value over length is no distance there.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel
@@ -218,7 +222,9 @@ owns the explanation.
   against the step's length (`SdfSampledLattice.PassesBetween`).
 - **Sheets thinner than the fine cell are closed before they contour**
   (`SdfSampledLattice.CloseSheets`): left to their samples they hole, fray into
-  slivers where they thin, and their two faces cross. Only features and single-face cells read crossing
+  slivers where they thin, and their two faces cross. An acute wedge reads as a
+  sheet along a line near its tip; a line a few fine steps beside it inside for
+  two steps tells it apart (`Thickens`), or its rim closes into lumps. Only features and single-face cells read crossing
   normals: elsewhere (a fillet under the cell) they smudge flat faces, so other
   vertices keep the interpolated gradients. Such a vertex on a fillet under the
   cell carries the fillet's normal, so `SdfContour.SplitAtCreases` gives the

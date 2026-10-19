@@ -71,8 +71,9 @@ for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
 bar draws. The live example is `Assets/worlds/controls.puck`, which the debug world
 and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
-(two layouts, `keys` and `pad`, switched by `state.bar.layout`, and an `iconRow`
-keyed by entry id), authors the `icons` table, and appends a `play-wheel` row. The first world row, when one
+(the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
+right stick's press; `modifiers: false` and `pageLabel: false` drop the modifier row and the page name, and an
+`iconRow` keyed by entry id), authors the `icons` table, and appends a `play-wheel` row. The first world row, when one
 is authored, supplies the world
 floor; the selected identity's own first row may replace it for that seat,
 matching the existing first-row binding-layer consumer in `WorldIdentity`.

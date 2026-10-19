@@ -97,6 +97,9 @@ internal static class SdfDualContouring {
     // How near, in cells, every tangent plane of a patch must pass to a point past its cell for the point to count as a
     // sharp feature the vertex keeps (Place, ISdfContourLattice.FeatureReach).
     private const double FeatureResidual = 0.01;
+    // How near, in cells, a convex crease past a cell lies for the cell to keep it where its in-cell point lies within
+    // NearPlane of both faces (Place): its vertex already lies on the crease, at the cell's face.
+    private const double TouchedCrease = 0.05;
     // The mean-point bias a feature past its cell is solved with (Place): small enough to leave the planes it meets, large
     // enough to fix the point along their common null space.
     private const double FeatureBias = 1.0e-4;
@@ -692,6 +695,9 @@ internal static class SdfDualContouring {
 
             beside = !straight;
             handOff = (beside && !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz)));
+            if (handOff) {
+                (ix, iy, iz) = OwnSide(crease: (x, y, z), faceA: faceA, faceB: faceB, held: (ix, iy, iz), mean: (mx, my, mz), planes: local);
+            }
             inside = ((low.X + (ix * ex)), (low.Y + (iy * ey)), (low.Z + (iz * ez)));
         }
 
@@ -1202,6 +1208,7 @@ internal static class SdfDualContouring {
         var cell = new CellSolve(A00: a00, A01: a01, A02: a02, A11: a11, A12: a12, A22: a22, B0: b0, B1: b1, B2: b2, Mean: mean);
         var cellPlanes = planes[..(4 * planeCount)];
         var result = mean;
+        var ownFace = -1;
 
         if (cell.Solve(bias: MeanBias, x: out var sx, y: out var sy, z: out var sz)) {
             var inside = ((sx >= 0.0) && (sx <= 1.0) && (sy >= 0.0) && (sy <= 1.0) && (sz >= 0.0) && (sz <= 1.0));
@@ -1216,10 +1223,11 @@ internal static class SdfDualContouring {
             // point is taken inside the cell, or within FeatureResidual of it, as near as the planes are known to meet. A
             // curved convex crease up to FeatureReach past the cell, whose planes the mean-biased point does not meet, is
             // the neighbour's that holds it (`beyond`, HandOff), and this cell's vertex stays inside the cell
-            // (CellSolve.Inside): one taken past its cell lands beside the neighbour's and folds the quads they share into
-            // teeth. A crease the point inside the cell already lies on, within NearPlane of both faces (OnBoth), is no
-            // notch, and handed over it would leave two vertices a sliver apart. A straight one, whose planes the
-            // mean-biased point meets too, keeps that point past the cell below. A curved face's
+            // (CellSolve.Inside, BesideCrease): one taken past its cell lands beside the neighbour's and folds the quads
+            // they share into teeth. A crease within TouchedCrease of the cell that the point inside it already lies on
+            // stays this cell's: handed over, it would drag the neighbour's vertex along the crease and leave the two a
+            // sliver apart. A straight one, whose planes the mean-biased point meets too, keeps that point past the cell
+            // below. A curved face's
             // crossings that turn more (a tube a cell or two across) do not all pass through one point, and none of this
             // applies.
             if ((grid.FeatureReach > 0.0) && cell.Solve(bias: FeatureBias, x: out var fx, y: out var fy, z: out var fz) &&
@@ -1235,9 +1243,11 @@ internal static class SdfDualContouring {
                 } else if (feature && (past <= grid.FeatureReach) && ConvexCrease(faceA: faceA, faceB: faceB, planes: cellPlanes, point: mean) &&
                     !Meets(x: sx, y: sy, z: sz, planes: cellPlanes)) {
                     beside = true;
-                    if (!OnBoth(point: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), faceA: faceA, faceB: faceB, planes: cellPlanes)) {
+                    result = BesideCrease(crease: (fx, fy, fz), faceA: faceA, faceB: faceB, held: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), mean: mean, ownFace: out ownFace, planes: cellPlanes);
+                    if ((ownFace < 0) || (past > TouchedCrease)) {
                         beyond = (fx, fy, fz);
                     }
+                    placed = true;
                 }
             }
             // A sharp feature whose faces' planes meet just past the cell (an edge the next cell holds but whose crossings
@@ -1256,7 +1266,18 @@ internal static class SdfDualContouring {
         // the planes draw away from it (to their meeting point, or past the cell and back) may lie proud of a surface that
         // rounds within the cell.
         solved = (((((result.X - mean.X) * (result.X - mean.X)) + ((result.Y - mean.Y) * (result.Y - mean.Y))) + ((result.Z - mean.Z) * (result.Z - mean.Z))) > (SolvedDrift * SolvedDrift));
-        crossingNormal = NearNormal(all: crossingNormal, normals: crossingNormals[..(3 * planeCount)], planes: planes[..(4 * planeCount)], point: result);
+        if (ownFace >= 0) {
+            var (ox, oy, oz) = (0.0, 0.0, 0.0);
+
+            for (var plane = 0; (plane < planeCount); plane++) {
+                if ((((planes[(4 * plane)] * planes[(4 * ownFace)]) + (planes[((4 * plane) + 1)] * planes[((4 * ownFace) + 1)])) + (planes[((4 * plane) + 2)] * planes[((4 * ownFace) + 2)])) >= CreaseCosine) {
+                    (ox, oy, oz) = ((ox + crossingNormals[(3 * plane)]), (oy + crossingNormals[((3 * plane) + 1)]), (oz + crossingNormals[((3 * plane) + 2)]));
+                }
+            }
+            crossingNormal = (ox, oy, oz);
+        } else {
+            crossingNormal = NearNormal(all: crossingNormal, normals: crossingNormals[..(3 * planeCount)], planes: planes[..(4 * planeCount)], point: result);
+        }
         flat = Flat(normals: crossingNormals[..(3 * planeCount)]);
 
         return result;
@@ -1354,7 +1375,7 @@ internal static class SdfDualContouring {
 
             return sum;
         }
-        private static (double X, double Y, double Z) Clip((double X, double Y, double Z) from, (double X, double Y, double Z) to) {
+        public static (double X, double Y, double Z) Clip((double X, double Y, double Z) from, (double X, double Y, double Z) to) {
             var t = 1.0;
 
             t = Math.Min(val1: t, val2: Reach(from: from.X, to: to.X));
@@ -1366,6 +1387,40 @@ internal static class SdfDualContouring {
             static double Reach(double from, double to) => ((to > 1.0) ? ((1.0 - from) / (to - from)) : ((to < 0.0) ? (from / (from - to)) : 1.0));
         }
     }
+    // The point of a cell beside a convex crease past it (Place), from the cell's in-cell point `held`
+    // (CellSolve.Inside): where `held` lies within NearPlane of both faces, a few hundredths of a cell inside the solid
+    // beside the crease vertex the neighbour holds (HandOff), it moves onto the plane of the face the crossings'
+    // mean lies nearer (`ownFace`, whose crossings give the vertex its normal), so the strip between the two vertices lies
+    // on that face rather than folding across the corner; else it keeps to the crossings' side of the crease (OwnSide).
+    private static (double X, double Y, double Z) BesideCrease((double X, double Y, double Z) crease, (double X, double Y, double Z) held, (double X, double Y, double Z) mean, int faceA, int faceB, ReadOnlySpan<double> planes, out int ownFace) {
+        if (!OnBoth(faceA: faceA, faceB: faceB, planes: planes, point: held)) {
+            ownFace = -1;
+
+            return OwnSide(crease: crease, faceA: faceA, faceB: faceB, held: held, mean: mean, planes: planes);
+        }
+
+        ownFace = ((Off(face: faceA, planes: planes, point: mean) <= Off(face: faceB, planes: planes, point: mean)) ? faceA : faceB);
+
+        var (nx, ny, nz, d) = (planes[(4 * ownFace)], planes[((4 * ownFace) + 1)], planes[((4 * ownFace) + 2)], planes[((4 * ownFace) + 3)]);
+        var off = ((((nx * held.X) + (ny * held.Y)) + (nz * held.Z)) - d);
+
+        return (Math.Clamp(value: (held.X - (off * nx)), min: 0.0, max: 1.0), Math.Clamp(value: (held.Y - (off * ny)), min: 0.0, max: 1.0), Math.Clamp(value: (held.Z - (off * nz)), min: 0.0, max: 1.0));
+    }
+    // The in-cell point `held` (CellSolve.Inside) of a cell beside a convex crease past it, kept on the side of the crease
+    // the cell's crossings hold: where it lies clearly nearer one face's plane (by SolvedDrift) and the crossings' mean
+    // clearly nearer the other's (by NearPlane), it has crossed past the neighbour's vertex on the crease and folds the
+    // quads they share, and the point is instead where the segment from the mean toward the crease leaves the cell.
+    private static (double X, double Y, double Z) OwnSide((double X, double Y, double Z) crease, (double X, double Y, double Z) held, (double X, double Y, double Z) mean, int faceA, int faceB, ReadOnlySpan<double> planes) {
+        var (meanA, meanB) = (Off(face: faceA, planes: planes, point: mean), Off(face: faceB, planes: planes, point: mean));
+        var (heldA, heldB) = (Off(face: faceA, planes: planes, point: held), Off(face: faceB, planes: planes, point: held));
+
+        return ((((meanA <= meanB) != (heldA <= heldB)) && (Math.Abs(value: (meanA - meanB)) > NearPlane) && (Math.Abs(value: (heldA - heldB)) > SolvedDrift))
+            ? CellSolve.Clip(from: mean, to: crease)
+            : held);
+    }
+    // How far plane `face` of `planes` (nx, ny, nz, d each) passes from the point.
+    private static double Off(int face, ReadOnlySpan<double> planes, (double X, double Y, double Z) point) =>
+        Math.Abs(value: ((((planes[(4 * face)] * point.X) + (planes[((4 * face) + 1)] * point.Y)) + (planes[((4 * face) + 2)] * point.Z)) - planes[((4 * face) + 3)]));
     // Whether planes `faceA` and `faceB` of `planes` both pass within NearPlane of the point, the distance at which a
     // vertex lies on a plane for its normal (NearNormal): a point on both lies on their crease.
     private static bool OnBoth((double X, double Y, double Z) point, int faceA, int faceB, ReadOnlySpan<double> planes) {
