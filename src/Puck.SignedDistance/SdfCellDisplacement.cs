@@ -47,10 +47,18 @@ public readonly record struct SdfCellDisplacement(float Frequency, float Amplitu
         }
     }
 
+    /// <summary>The relief slope a creation's cells stay under (<c>CreationCanonicalizer</c>). Where the relief's slope
+    /// reaches the surface's own, the field's gradient vanishes: the surface pinches, folds over itself and sheds islands
+    /// no bake contours cleanly, and its ridges turn by more than a right angle.</summary>
+    public const float MaxReliefSlope = 1f;
+
     /// <summary>The greatest outward relief: both distance functions are nonnegative.</summary>
     public float OutwardReach => (0.5f * Amplitude);
-    /// <summary>The local derivative bound including an initially unit-Lipschitz field.</summary>
-    public float StepFactor => (1f + ((Amplitude * Frequency) * ((Mode == SdfCellMode.F1)
+    /// <summary>The bound on the relief's own slope, amplitude times frequency times the feature distance's: one for F1,
+    /// two for F2 - F1.</summary>
+    public float ReliefSlope => ((Amplitude * Frequency) * ((Mode == SdfCellMode.F1)
         ? 1f
-        : 2f)));
+        : 2f));
+    /// <summary>The local derivative bound including an initially unit-Lipschitz field.</summary>
+    public float StepFactor => (1f + ReliefSlope);
 }

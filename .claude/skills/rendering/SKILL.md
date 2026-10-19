@@ -220,7 +220,13 @@ owns the explanation.
   (`SdfSampledLattice.CloseSheets`): left to their samples they hole, fray into
   slivers where they thin, and their two faces cross. Only features and single-face cells read crossing
   normals: elsewhere (a fillet under the cell) they smudge flat faces, so other
-  vertices keep the interpolated gradients.
+  vertices keep the interpolated gradients. Such a vertex on a fillet under the
+  cell carries the fillet's normal, so `SdfContour.SplitAtCreases` gives the
+  corners of its quads that face more than 32 degrees from that normal a copy
+  with their face's normal (a plinth's 6 mm BoxRound fillet at 21 mm cells
+  otherwise shades a band a cell wide along every edge). The material cut
+  samples and searches by place, not by copy (`SdfMeshMaterialCut`), so the
+  pieces either side of a split edge meet at one boundary point.
 - **A static copy is one group.** Its shapes bake as their union
   (`SdfInstanceRange.BakesWithPrevious`) on a cubic lattice past the per-axis
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
@@ -360,6 +366,12 @@ owns its flags.
   creation's groups (`--prototype`, `--group <shape>`); a later run over the same
   store proves a fix. `--images <dir>` draws each worst cluster on the CPU,
   shading beside face normals: the offline twin of `world.debug-view normals`.
+- **`--cpu` measures a bake change with no GPU.** It drives `SdfMeshPathBake`
+  with each lattice answered through the group's CPU field, so a contour,
+  refinement or field change shows in the audit without a boot. Where the
+  fixed-point field and the kernel's agree, its mesh matches a stored Direct3D
+  12 bake of the group to the triangle; a field the evaluator refuses (a path, a
+  warp, a multi-strand sweep) needs a World boot.
 - **The store is keyed by the bake identity of the build that booted.** From
   your own worktree's CLI, audit a World you ran from the same checkout, or name
   another build with `--build <its Puck.World bin dir>`; a rebuilt build's

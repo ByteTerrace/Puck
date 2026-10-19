@@ -149,7 +149,7 @@ curve from a `Sweep`, a profiled `Prism`, or `shear` instead.
 | `shear` | `{ linear, quadratic, cubic, target, driver }` | coefficients ±4; target and driver must be **distinct** axes in 0..2 |
 | `bumps` | up to 4 × `{ center, radii, push }` | push magnitude ≤ 2; radii floored at 0.001 |
 | `erode` | `{ lane, from, to, noise }` | lane 0..3; from and to must differ; noise defaults to 1 cell per unit |
-| `cells` | `{ frequency, amplitude, seed, mode, randomness }` | frequency (0, 8]; amplitude [0, 4]; mode `F1` or `F2MinusF1`; randomness ≤ 0.46 (F1) or ≤ 0.2 (F2MinusF1); the derived march factor must stay ≤ 8 |
+| `cells` | `{ frequency, amplitude, seed, mode, randomness }` | frequency (0, 8]; amplitude [0, 4]; mode `F1` or `F2MinusF1`; randomness ≤ 0.46 (F1) or ≤ 0.2 (F2MinusF1); the relief slope amplitude × frequency (× 2 for F2MinusF1) must stay under 1, past which the surface pinches, folds over itself and sheds islands |
 
 An erosion's range is consumed against the shape's **bound radius**
 (`SdfSolidGeometry.Reach`), not its thinnest dimension, so a flat plate is
@@ -200,14 +200,9 @@ Its shape scale must be uniform. Erosion has its own admission rules.
 | `strandOffset` | ≥ 0 and ≤ 2 × the larger radius |
 | `twist` | finite, in turns along the curve |
 
-The renderer subtracts this conservative margin from the raw sweep distance:
-
-`abs(bulge) + 0.7*strandOffset*(1 + abs(twist)) + 0.9*abs(radiusEnd-radiusStart)`
-
-That subtraction moves the zero surface outward; it is visible thickness.
-Increasing twist can fuse strands. Reduce twist before increasing strand
-offset, since twist multiplies the offset penalty. Judge the result in a
-capture instead of treating the nominal radii as the visible radii.
+The solid is the union of the spheres of radius `r(t)` swept along each
+strand, and the field is the least gap to them over `t`, so the visible radii
+are the authored ones. Strands closer than twice their radius fuse.
 
 ### Composition
 

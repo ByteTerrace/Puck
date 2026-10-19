@@ -769,7 +769,7 @@ template galleryPrototypes() {
     document {
       shape Sphere "subject" {
         cells {
-          amplitude: 0.28
+          amplitude: 0.18
           frequency: 4
           mode: "F1"
           randomness: 0.46
@@ -786,7 +786,7 @@ template galleryPrototypes() {
     document {
       shape Sphere "subject" {
         cells {
-          amplitude: 0.2
+          amplitude: 0.09
           frequency: 4
           mode: "F2MinusF1"
           randomness: 0.2

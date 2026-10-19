@@ -13,7 +13,7 @@ namespace Puck.World.Client.Tests;
 
 public sealed class ShapeCellsLawTests {
     private static readonly ShapeCellsDocument Cells = new(
-        Amplitude: .25f,
+        Amplitude: .2f,
         Frequency: 2f,
         Mode: SdfCellMode.F2MinusF1,
         Randomness: .2f,
@@ -130,8 +130,8 @@ public sealed class ShapeCellsLawTests {
         );
         Assert.InRange(
             instructions.Single(predicate: i => (i.Op == SdfOp.PopField)).Data1.Y,
-            .49999f,
-            .50001f
+            ((1f / Cells.Parameters.StepFactor) - .00001f),
+            ((1f / Cells.Parameters.StepFactor) + .00001f)
         );
     }
     [Fact]
@@ -179,7 +179,7 @@ public sealed class ShapeCellsLawTests {
     public void InvalidFieldsAndUnisolatableCombinationsAreRefusedByPath() {
         foreach (var (cells, field) in new[] {
             (Cells with { Frequency = 0f }, "frequency"), (Cells with { Frequency = 9f }, "frequency"),
-            (Cells with { Amplitude = -1f }, "amplitude"), (Cells with { Amplitude = float.NaN }, "amplitude"),
+            (Cells with { Amplitude = -1f }, "amplitude"), (Cells with { Amplitude = float.NaN }, "amplitude"), (Cells with { Amplitude = .25f }, "amplitude"),
             (Cells with { Mode = ((SdfCellMode)9) }, "mode"), (Cells with { Randomness = .21f }, "randomness"),
             (Cells with { Randomness = -.01f }, "randomness"), (Cells with { Randomness = float.NaN }, "randomness"),
         }) {

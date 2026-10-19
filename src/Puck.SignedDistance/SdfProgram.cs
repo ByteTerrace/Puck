@@ -1386,8 +1386,8 @@ public sealed partial class SdfProgram {
     // unbounded plane as 0 (planes are never warped in practice, and any bounded shape sharing the chain dominates the
     // max). Over-estimating rho only slows the march, never makes it unsafe.
     private static float ShapeReachRadius(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
-        // Keep Sweep's geometric chain reach separate from its field cull sphere, which also includes the
-        // subtractive conservative margin — see SdfProgram.Sweep.cs.
+        // A Sweep's chain reach is about the local origin, its field cull sphere about its control polygon's hull — see
+        // SdfProgram.Sweep.cs.
         if (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep) {
             return SweepShapeReachRadius(
                 instruction: instruction,

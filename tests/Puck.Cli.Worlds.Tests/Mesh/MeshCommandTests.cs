@@ -148,6 +148,26 @@ public sealed class MeshCommandTests {
         Assert.Contains(expectedSubstring: "podCap-left: no stored mesh", actualString: guidance);
         Assert.Contains(expectedSubstring: "the store holds no mesh of the selected groups", actualString: guidance);
     }
+    // With --cpu the verb bakes the selected groups itself, through the bake's own lattices answered by the field
+    // evaluator, and reads no store: a plain box audits clean, and a group whose field the evaluator refuses is named.
+    [Fact]
+    public void AnOfflineBakeAuditsAGroupWithNoDeviceAndNoStore() {
+        using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
+        var world = Placed(path: TempWorldCopy(directory: directory));
+        var (baked, report) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "plain", "--cache-dir", directory.PathOf(name: "empty"));
+
+        Assert.Equal(expected: 0, actual: baked);
+        Assert.Contains(expectedSubstring: "baked offline on the CPU", actualString: report);
+        Assert.Contains(expectedSubstring: ": 1 audited, 0 with no stored mesh, 0 refused", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"plain \(plain\): \d+ triangles, .* score 0\.0", actualString: report);
+        Assert.Contains(expectedSubstring: "topology: 0 folds, 0 flipped", actualString: report);
+
+        var (refused, refusal) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "sheared");
+
+        Assert.Equal(expected: 1, actual: refused);
+        Assert.Contains(expectedSubstring: "sheared (sheared): field refused", actualString: refusal);
+        Assert.Contains(expectedSubstring: "the CPU bake found no surface in the selected groups", actualString: refusal);
+    }
     [Fact]
     public void EveryUsageTheVerbCannotServeIsRefusedByName() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");

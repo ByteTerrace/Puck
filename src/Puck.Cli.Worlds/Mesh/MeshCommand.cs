@@ -47,14 +47,16 @@ public static class MeshCommand {
         var worstOption = new Option<int>(name: "--worst") { DefaultValueFactory = static _ => 10, Description = "The clusters the closing list reports across every group, worst first." };
         var imagesOption = new Option<string?>(name: "--images") { Description = "A directory to write a PNG of each cluster of the closing list into: the mesh around its worst sample from three sides, shading normals beside face normals." };
         var historyOption = new Option<bool>(name: "--history") { Description = "Also audit, for each selected group, every mesh the store holds under any bake identity whose vertices lie on the group's field, oldest first: how earlier builds' bakes of the same geometry compare. Needs --group." };
+        var cpuOption = new Option<bool>(name: "--cpu") { Description = "Bake each selected group offline on the CPU, the bake's own lattices answered through the field evaluator (MeshCpuBake), and audit that mesh in place of a stored one: a bake change measured with no device. Reads no store." };
         var command = new Command(
-            description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store; never bakes and never writes it.",
+            description: "Measures each baked mesh a World stored for a world against the field it was baked from: off-surface error at vertices, centroids and edge midpoints, face and shading normal error against the field gradient, folds, flips, slivers, open edges and uncovered surface, then each group's worst defect clusters with their rest-pose positions and the shapes nearest them. Reads the store, or with --cpu bakes offline; never writes the store.",
             name: "audit"
-        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption };
+        ) { worldOption, prototypeOption, groupOption, cacheOption, buildOption, identityOption, backendOption, topOption, worstOption, imagesOption, historyOption, cpuOption };
 
         command.SetAction(action: parseResult => Run(request: new AuditRequest(
             Backend: parseResult.GetValue(option: backendOption)!,
             Build: parseResult.GetValue(option: buildOption),
+            Cpu: parseResult.GetValue(option: cpuOption),
             CacheRoot: parseResult.GetValue(option: cacheOption),
             Group: parseResult.GetValue(option: groupOption),
             History: parseResult.GetValue(option: historyOption),
@@ -95,22 +97,31 @@ public static class MeshCommand {
         var buildDirectory = Path.GetFullPath(path: (request.Build ?? AppContext.BaseDirectory));
         var meshes = Path.GetFullPath(path: ((request.CacheRoot is null) ? Puck.Abstractions.PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: request.CacheRoot, path2: "meshes")));
 
-        if (!TryIdentity(buildDirectory: buildDirectory, extension: extension, identity: out var identity, request: request)) { return 2; }
+        var identity = default(UInt128);
+
+        if (!request.Cpu && !TryIdentity(buildDirectory: buildDirectory, extension: extension, identity: out identity, request: request)) { return 2; }
 
         var scene = RestScene.Compose(definition: definition, sourcePath: fullPath);
-        var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms);
+        var farDistance = WorldRenderFarDistance.Resolve(defaults: definition.Render);
+        var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: scene.Program, transforms: scene.Transforms);
         var store = new SdfMeshStore(directory: meshes);
         var options = new SdfMeshAuditOptions { Clusters = Math.Max(request.Top, request.Worst) };
         var results = new Outcome?[groups.Count];
+        var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
+        var baked = (request.Cpu
+            ? MeshCpuBake.Bake(
+                fields: selected
+                    .Where(predicate: group => SdfMeshAudit.TryEvaluator(field: out _, program: SdfMeshAudit.Field(group: group, program: scene.Program), refusal: out _))
+                    .ToDictionary(keySelector: static group => group.Selector, elementSelector: group => SdfMeshAudit.Field(group: group, program: scene.Program)),
+                frame: new SdfFrame(Program: scene.Program, ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = scene.Transforms, FarDistance = farDistance }
+            )
+            : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
-            var owner = scene.Owner(group: group);
 
-            if ((request.Prototype is not null) && ((owner is null) || !string.Equals(a: owner.Creation.Id, b: request.Prototype, comparisonType: StringComparison.Ordinal))) { return; }
-            if ((request.Group is not null) && !scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)) { return; }
-
-            results[ordinal] = Audit(group: group, options: options, owner: owner, scene: scene, store: store, identity: identity);
+            if (!selected.Contains(value: group)) { return; }
+            results[ordinal] = Audit(baked: baked, group: group, options: options, owner: scene.Owner(group: group), scene: scene, store: store, identity: identity);
         });
 
         var audited = results.Count(predicate: static result => (result?.Report is not null));
@@ -119,7 +130,9 @@ public static class MeshCommand {
         var output = new StringBuilder();
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh audit: {CliPaths.ToDisplay(fullPath: fullPath)}, {considered} group(s) of {groups.Count}: {audited} audited, {considered - stored} with no stored mesh, {stored - audited} refused\n");
-        output.Append(provider: CultureInfo.InvariantCulture, handler: $"  store {meshes}, bake identity {identity:x32} ({((request.Identity is null) ? $"{request.Backend}, build {buildDirectory}" : "named")})\n");
+        output.Append(value: (request.Cpu
+            ? "  baked offline on the CPU through the field evaluator\n"
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"  store {meshes}, bake identity {identity:x32} ({((request.Identity is null) ? $"{request.Backend}, build {buildDirectory}" : "named")})\n")));
 
         var ordered = Enumerable.Range(start: 0, count: groups.Count)
             .Where(predicate: ordinal => (results[ordinal] is not null))
@@ -137,6 +150,10 @@ public static class MeshCommand {
         WriteWorst(images: request.Images, ordered: ordered, output: output, results: results, worst: request.Worst);
         Console.Out.Write(value: output.ToString());
 
+        if ((stored == 0) && request.Cpu) {
+            Console.Error.WriteLine(value: $"{Verb}: the CPU bake found no surface in the selected groups.");
+            return 1;
+        }
         if (stored == 0) {
             Console.Error.WriteLine(value: $"{Verb}: the store holds no mesh of the selected groups under bake identity {identity:x32}. Boot the world once with the build whose meshes to audit (Puck.World --world {CliPaths.ToDisplay(fullPath: fullPath)}{((request.CacheRoot is null) ? string.Empty : $" --cache-dir {request.CacheRoot}")}) to bake and store them, then audit with --build naming its directory.");
             return 1;
@@ -166,15 +183,22 @@ public static class MeshCommand {
             return false;
         }
     }
-    // One group's audit: its stored mesh measured against its field, or why it was not.
-    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options) {
+    // Whether the request selects a group: by the prototype its body wears and by its label.
+    private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
+        var owner = scene.Owner(group: group);
+
+        return ((request.Prototype is null) || ((owner is not null) && string.Equals(a: owner.Creation.Id, b: request.Prototype, comparisonType: StringComparison.Ordinal)))
+            && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal));
+    }
+    // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
+    private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked) {
         var label = scene.Label(group: group, owner: owner);
         var toWorld = scene.ToWorld(group: group);
 
         if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program), refusal: out var why)) {
-            var held = store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out _, refusal: out _);
+            var held = ((baked is null) && store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out _, refusal: out _));
 
-            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: (held ? $"field {why}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
+            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: ((held || (baked is not null)) ? $"field {why}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
         }
 
         // A shape whose own field no evaluator reads cannot be named nearest; the group's field still holds it.
@@ -184,6 +208,11 @@ public static class MeshCommand {
             .Select(selector: static shape => (shape.Name, shape.Field!))
             .ToList();
 
+        if (baked is not null) {
+            var own = baked.GetValueOrDefault(key: group.Selector);
+
+            return new Outcome(Field: field, Label: label, Mesh: own, Owner: owner, Refusal: ((own is null) ? "no surface baked" : null), Report: ((own is null) ? null : SdfMeshAudit.Audit(field: field, mesh: own, options: options, shapes: shapes)), Stored: (own is not null), ToWorld: toWorld);
+        }
         if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out var refusal)) {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
         }
@@ -286,7 +315,7 @@ public static class MeshCommand {
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
-    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History);
+    private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History, bool Cpu);
     // A group's audit: its report, or why there is none, with its label, the map from its frame to world space, and the
     // mesh and fields it was measured with.
     private sealed record Outcome(string Label, string? Refusal, SdfMeshAuditReport? Report, bool Stored, Func<Vector3, Vector3> ToWorld, RestBody? Owner, SdfMesh? Mesh, SdfFieldEvaluator? Field);
