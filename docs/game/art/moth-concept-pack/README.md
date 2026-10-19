@@ -46,6 +46,14 @@ proposal because the character hides those surfaces in the source. Use sheet 5
 to resolve exterior proportions and sheet 6 for movement; sheet 7 does not
 establish exact dimensions or additional hardware.
 
+The thruster references (08–13) each show the pods through their own camera, so
+no view's perspective belongs in the 3D form. The nozzle sits square to the
+opening it fills, its axis the opening's normal (in, down and a little back) and
+its face flush with the opening. Its lens faces a viewer only where that viewer
+looks along the normal. The lens looks face-on in the rear and rear-low sheets
+because of how those sheets were drawn; never aim the nozzle at a camera to
+reproduce that.
+
 The owner source and subsequent owner feedback take precedence. Sheet 1 anchors overall identity and costume; sheet 2 clarifies surface treatment and expression. Sheet 5 anchors the compact pack; sheet 6 supplies its movement intent. Sheets 3–4 remain historical explorations. Generated perspective views are not exact orthographic blueprints: use one shared rig to verify hinge travel, armor clearance and exhaust separation through the complete motions. Small perspective or seam differences do not authorize new parts or outlets. Incidental slogans on the sheets are not game copy, lore or implementation requirements.
 
 For implementation priorities, use the [hero brief](../armored-chibi-hero-brief.md). The [studio guide](../../../../src/Puck.World/Assets/worlds/avatars/moth.md) documents the existing playable prototype and its live iteration controls; it does not establish the finished visual standard.
