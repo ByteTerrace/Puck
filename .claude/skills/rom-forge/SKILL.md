@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: Maps Puck's data-first cartridge authoring: `puck.cartridge.v1` documents (`*.cartridge.json`, `*.cgb.puck`, `*.agb.puck`), the cartridge `.puck` vocabulary, the native CGB and AGB compilers (`HgbCartridgeCompiler`, `AgbCartridgeCompiler`), the cost model, Tune audio, boot-ROM tools and the in-engine `forge.*` console. Load it when authoring, compiling or decompiling a cartridge, when `puck compile --validate`, `forge.play`, `forge.open` or `forge.check` refuses, when a cartridge fails validation (sounds and voices, palettes, map writes, capacity, `CartridgeCapacityException`), when a rule, graphic, sound or save needs native SM83 or Thumb generation, or when a forge test reads wrong values from a running emulator (OAM DMA, `VerifyMachineDriver`). It excludes `.puck` grammar, lint and the compile verbs' own flags (puck-dsl), emulator core behavior and the Post batteries (gaming-bricks), and driving the World or its screens (puck-world).
+description: Authors and compiles Puck cartridges (puck.cartridge.v1, *.cgb.puck, *.agb.puck, forge.play, forge.open, puck compile --validate), CGB/AGB native compilers, cost. Emulator core is gaming-bricks.
 ---
 
 # ROM documents and native compilers

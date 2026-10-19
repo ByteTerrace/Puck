@@ -1,6 +1,6 @@
 ---
 name: gaming-bricks
-description: Maps and guards Puck's deterministic Game Boy, Color and Advance emulators (`src/Puck.HumbleGamingBrick`, `src/Puck.AdvancedGamingBrick`, `src/Puck.Machines`) and the Humble Gaming Deck NES core. Load it before fixing or diagnosing emulator hardware behavior: SM83 opcodes (`Sm83.Decode.cs`: STOP, HALT, EI), timer and serial edges, PPU and STAT dot timing (`Ppu.cs`), APU, DMA, mappers, GBA ARM7TDMI, SIOCNT and link cables (`AgbSerialController`); before touching snapshot layout, replay and fork determinism, or boot mode; and when a Post battery (`--cosim`, `--stat-trace`, `--render`, `--accept`) or a mooneye, blargg, SameSuite, gambatte, mealybug, SingleStepTests or SameBoy result disagrees with the core. Excludes cartridge document authoring and the CGB/AGB compilers (rom-forge), and engine, renderer and world design (rendering, puck-world).
+description: Fixes and diagnoses Puck's GB/GBC/GBA emulators (SM83 STOP/HALT/EI, PPU/STAT timing, APU, serial and SIOCNT links, snapshots) and their Post batteries (--cosim, --filter). Cartridges are rom-forge.
 ---
 
 # Gaming Bricks
@@ -157,5 +157,6 @@ with an empty corpus cache, so CPU suites cover the self-contained stages.
 | [`content-search`](../content-search/SKILL.md) | Finding stage names, registers, opcodes, ROM identifiers, or timing constants textually. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, implementations, or rename and deletion safety. |
 | [`puck-world`](../puck-world/SKILL.md) | Integrating an emulator into world/session behavior beyond the emulator-host seam. |
+| [`rendering`](../rendering/SKILL.md) | The renderer, SDF and shaders that present a machine's framebuffer; the emulator itself has no GPU path. |
 | [`rom-forge`](../rom-forge/SKILL.md) | Authoring or compiling the cartridge under test — `puck.cartridge.v1`, the `.puck` DSL, or the native CGB/AGB compilers, rather than the emulator core executing it. |
 | [`verification`](../verification/SKILL.md) | The landing bar, building before testing, and reading a flaky versus failing leg. |
