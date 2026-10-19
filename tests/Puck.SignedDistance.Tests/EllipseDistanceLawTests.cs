@@ -71,11 +71,31 @@ public sealed class EllipseDistanceLawTests {
         Assert.Empty(collection: failures);
     }
 
-    private static SdfFieldEvaluator Evaluator(float semiX, float semiY, SdfLift lift, float liftAmount) {
+    // A revolved ellipse away from the program's origin: the evaluator's frame search bounds it over cubes out to 2^46 m,
+    // whose radial intervals centre far past the ellipse, where the projection's normalized squares would overflow, so
+    // those bounds are unbounded; the evaluator builds and answers the distance about the moved axis.
+    [Fact]
+    public void ARevolvedEllipseAwayFromTheOriginBuildsAndAnswersItsDistance() {
+        var offset = new Vector3(x: 0f, y: 1.2f, z: 0f);
+        var evaluator = Evaluator(liftAmount: 0.3f, lift: SdfLift.Revolve, semiX: 0.15f, semiY: 0.3f, translate: offset);
+
+        foreach (var point in Points(semiX: 0.15f, semiY: 0.3f)) {
+            if ((point.X + 0.3f) <= 0f) {
+                continue;
+            }
+
+            var expected = Reference(px: point.X, py: point.Y, semiX: 0.15f, semiY: 0.3f);
+            var actual = Distance(evaluator: evaluator, point: (offset + new Vector3(x: (0.3f + point.X), y: point.Y, z: 0f)));
+
+            Assert.True(condition: (Math.Abs(value: (actual - expected)) <= Tolerance), userMessage: $"at {point}: {actual}, expected {expected}");
+        }
+    }
+
+    private static SdfFieldEvaluator Evaluator(float semiX, float semiY, SdfLift lift, float liftAmount, Vector3 translate = default) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.ResetPoint().Ellipse(lift: lift, liftAmount: liftAmount, material: material, semiX: semiX, semiY: semiY);
+        _ = builder.ResetPoint().Translate(offset: translate).Ellipse(lift: lift, liftAmount: liftAmount, material: material, semiX: semiX, semiY: semiY);
 
         return new SdfFieldEvaluator(program: builder.Build());
     }

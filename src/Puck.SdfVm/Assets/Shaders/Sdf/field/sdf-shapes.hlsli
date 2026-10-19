@@ -277,8 +277,8 @@ float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
 // with SdfProgramBuilder.ConvexPolygon / SdfProgram's table-offset patch).
 float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
     uint packed = asuint(data0.x);
-    uint count = (packed & 0xFu);
-    uint tableOffset = (packed >> 4u);
+    uint count = ((packed & ((1u << SDF_CONVEX_COUNT_BITS) - 1u)) + 1u);
+    uint tableOffset = (packed >> SDF_CONVEX_COUNT_BITS);
 
     return (((data1.y > 0.5)
         ? sdfExtrudeChamfer2D(sdfConvexPolygon2D(p.xy, tableOffset, count), p.z, data0.w, data1.z)

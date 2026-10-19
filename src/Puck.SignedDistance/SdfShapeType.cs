@@ -69,7 +69,7 @@ public enum SdfShapeType : uint {
     // cap-chamfer/edge-rounding lanes), but its 2D profile is a validated convex vertex list too large to fit inline
     // — the vertices live in a side table appended to the packed program's own word stream (the SAME sdfWords buffer
     // every other table already lives in, so no new GPU binding is needed), and the shape instruction carries only a
-    // packed (tableOffset, vertexCount) reference. Data0.x = asfloat(packed uint: (tableOffset << 4) | vertexCount),
+    // packed (tableOffset, vertexCount) reference. Data0.x = asfloat(packed uint: (tableOffset << 5) | (vertexCount - 1)),
     // Data0.w = lift amount; Data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius) — the same
     // family lanes RoundedRectangle carries. The table itself is <c>ceil(vertexCount/2)</c> uvec4 entries, two
     // packed (x, y) float-bit vertices each, vertices in the shape's local XY plane, clockwise. KEEP IN SYNC with

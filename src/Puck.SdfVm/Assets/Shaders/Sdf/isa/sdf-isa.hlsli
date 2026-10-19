@@ -184,7 +184,8 @@
 #define SDF_MAX_DISPATCH_GROUPS         65535u
 #define SDF_MAX_NOISE_OCTAVES           8u
 #define SDF_MAX_SWEEP_STRANDS           4u
-#define SDF_MAX_CONVEX_VERTICES         8u
+#define SDF_MAX_CONVEX_VERTICES         32u
+#define SDF_CONVEX_COUNT_BITS           5u
 #define SDF_MAX_PATH_EDGES              128u
 #define SDF_SCREEN_EMISSION_EDGE        4u
 #define SDF_SCREEN_EMISSION_DIRECT_GAIN 2.5

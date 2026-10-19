@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldStampPool stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldStampPool stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -344,6 +344,13 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
             name: "view.isolate",
             description: "LIVE shape isolation, for inspecting part of a creation alone: view.isolate <prototype> <shape-name>... keeps the named shapes of that prototype and every shape parented beneath them, transitively, wherever the prototype renders in the boot world (its body stamps and its animated, attached and static placements), and hides every other shape of it from rendering: a hidden shape emits nothing into the frame's program, so it bakes into no mesh and casts no shadow, and the paints and volumes parented to it, the prototype's mesh and its text go with it. A hidden shape's transform still packs, so a hidden parent still poses and animates the shapes beneath it (swings, effectors, gait). A name ending in * keeps every shape whose name starts with what precedes it (thigh-*). view.isolate toggle <prototype> <shape-name>... turns isolation off when that exact selection is already live and sets it otherwise, so one bound key flips between the named shapes alone and the whole creation. view.isolate off restores every shape; view.isolate alone echoes the live isolation. Echoes [view.isolate: <prototype> kept=<n> hidden=<n> names=<names>] or [view.isolate: off]; refuses by name, changing nothing, a prototype the live document does not author and a name that matches none of its shapes. One isolation at a time, replacing the last. Session presentation only: no document field, no simulation effect, nothing a replay hashes; it rebuilds the program, and the changed groups bake (or load) their own meshes. Headless it records the isolation and echoes it, with nothing to draw.",
             handler: (context, args) => Isolate(args: args),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.motion",
+            description: "Echoes how evenly a seat's presentation moves from frame to frame: world.view.motion [frames] reads the last frames (default 120, at most 240) the presenter framed the traced seat in: the frame interval, how far the presented body and the camera's eye moved each frame (mean, spread, stalls under a fifth of the mean and jumps over twice it) and the range of the interpolation fraction its world presented by, naming the worlds that presented it. Hold a movement key while it records: an even walk reads a small spread with no stalls or jumps, and judder the frame rate does not show reads as stalls and jumps. world.view.motion seat <n> traces seat n (1-based) and forgets what was held; world.view.motion reset forgets it. Presentation only; a headless world frames no seat and holds none. A query (always echoes).",
+            handler: (_, args) => Motion(args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

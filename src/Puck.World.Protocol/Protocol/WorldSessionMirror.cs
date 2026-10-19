@@ -230,6 +230,10 @@ public sealed class WorldSessionMirror : IClientSink {
     // thread calling WorldSessionSceneEmitter both live in this SAME process, so a real elapsed-time read between
     // them is an honest measure, not a cross-machine clock assumption.
     private long m_snapshotArrivalTimestamp = Stopwatch.GetTimestamp();
+    // The last ArrivalHistory snapshot arrival timestamps, a ring under m_snapshotWriteGate (SnapshotArrivalIntervals).
+    private const int ArrivalHistory = 64;
+    private readonly long[] m_arrivals = new long[ArrivalHistory];
+    private int m_arrivalCount;
 
     /// <summary>Initializes the mirror with an empty placeholder definition — <c>Server.WorldServer.AttachSink</c>
     /// always delivers the live definition synchronously before returning its lease, so no caller ever observes this
@@ -608,10 +612,14 @@ public sealed class WorldSessionMirror : IClientSink {
                 location: ref m_stepSecondsBits,
                 value: BitConverter.SingleToInt32Bits(value: ((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)))
             );
+            var arrival = Stopwatch.GetTimestamp();
+
             _ = Interlocked.Exchange(
                 location1: ref m_snapshotArrivalTimestamp,
-                value: Stopwatch.GetTimestamp()
+                value: arrival
             );
+            m_arrivals[(m_arrivalCount % ArrivalHistory)] = arrival;
+            m_arrivalCount++;
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
 
             lock (m_stampGate) {
@@ -828,6 +836,26 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 PreviousPosition(int index) => m_previousPosition[index];
+    /// <summary>Copies the wall-clock intervals between the most recent snapshot arrivals, oldest first: the evenness of
+    /// the clock <see cref="InterpolationAlpha"/> presents by.</summary>
+    /// <param name="milliseconds">The destination, in milliseconds; at most its length are copied.</param>
+    /// <returns>The number of intervals copied.</returns>
+    public int SnapshotArrivalIntervals(Span<double> milliseconds) {
+        lock (m_snapshotWriteGate) {
+            var held = Math.Min(val1: m_arrivalCount, val2: ArrivalHistory);
+            var count = Math.Min(val1: Math.Max(val1: (held - 1), val2: 0), val2: milliseconds.Length);
+            var first = (m_arrivalCount - count - 1);
+
+            for (var index = 0; (index < count); index++) {
+                var from = m_arrivals[((first + index) % ArrivalHistory)];
+                var to = m_arrivals[((first + index + 1) % ArrivalHistory)];
+
+                milliseconds[index] = Stopwatch.GetElapsedTime(startingTimestamp: from, endingTimestamp: to).TotalMilliseconds;
+            }
+
+            return count;
+        }
+    }
     /// <summary>Computes the honest presentation fraction through a delivered snapshot interval from its own step
     /// width and arrival time.</summary>
     public static float ResolveInterpolationAlpha(float stepSeconds, long arrivalTimestamp) {

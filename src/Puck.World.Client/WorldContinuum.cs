@@ -403,7 +403,9 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
 
         var entity = Route(slot: slot).Entity;
 
-        if (!endpoint.TryEntityPose(
+        // Interpolated as the world's own scene draws the body, so the seat's camera moves every frame, not at each
+        // snapshot the world delivers.
+        if (!endpoint.TryPresentedEntityPose(
             entity: in entity,
             orientation: out orientation,
             position: out position

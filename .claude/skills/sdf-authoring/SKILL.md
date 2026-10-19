@@ -76,7 +76,7 @@ budget" and "Composition" below — the stamp-budget count and the
 panel/trim/cells scope refusal both fire here, over every `prototypes[]`
 document, whether or not a placement uses it. What `--validate` does **not**
 run is emission or contact construction (`Morph`/`StairsUnion`/
-`StairsSubtraction`, the Polygon/Ellipse contact refusal, and a residual
+`StairsSubtraction`, the Path contact refusal, and a residual
 nonuniform `Scale`) — that tier is `creation stats`, described next.
 
 Never `puck decompile` over a `.puck` file you want to keep editing: a
@@ -278,7 +278,7 @@ rides its parent's frame.
 ## Render-only versus deterministic
 
 A solid placement requiring deterministic field contact refuses non-detail
-`Polygon` prism profiles of more than eight sides. `Revolve` and domain folds that cannot
+`Path` prism profiles. `Revolve` and domain folds that cannot
 expand are also refused where contact is owed. In contrast, `flare`, `shear`,
 `bumps`, `erode`, panels, trims, cells, sweeps, and creation noise may validate
 but are omitted from creation contact geometry (cells keep the base primitive).
@@ -299,6 +299,13 @@ dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --
 ```
 
 A hand-authored JSON document starts at `creation stats` directly.
+
+Whether one shape's distance is exact, a bound, or uncertified, whether
+the fixed-point evaluator takes it and what contact makes of it: `creation
+shape --world <file> --prototype <id> [--shape <name>]`, or `creation.shape
+<prototype> [<shape-name>]` live. `world.slice <placement> <x|y|z> <path.png>`
+writes the field's distance bands and `|grad d|` through the running World
+([loop](references/loop.md)).
 
 Then run the game and look — a claim about how something reads is not verified
 until you have looked at a capture. The offscreen and windowed recipes, with the
