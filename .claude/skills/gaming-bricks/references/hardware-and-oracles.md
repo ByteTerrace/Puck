@@ -158,9 +158,11 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
   events) follows the transfer in `LoadState`.
 - No file records a component's layout. A deliberate layout change raises
   `CurrentVersion` of `MachineIdentity` (Humble) or `AgbMachineIdentity`
-  (Advanced), which the core's checkpoint identity names, and the Post
-  `snapshot-round-trip` and `fork-determinism` stages show save and load still
-  agree.
+  (Advanced), which the core's checkpoint identity names.
+  `ComponentSnapshotRoundTripLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
+  `tests/Puck.AdvancedGamingBrick.Tests` seeds each component's fields from
+  their names, saves, loads into a differently seeded twin and requires the
+  same bytes back, so a field saved but not loaded fails.
 - `--hash-divergence` localizes a mismatch between two executions in one
   process and one build.
 - Use `--dump-snapshot` and an offline section-table diff for cross-build byte
