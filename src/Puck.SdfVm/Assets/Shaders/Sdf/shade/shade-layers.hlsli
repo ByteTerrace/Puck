@@ -5,15 +5,17 @@
 // shape dispatch (evaluateShape) and never through the field, gives the albedo the paint's colour inside the shape, or
 // within its stroke of the shape's surface, the edge antialiased over `footprint`, the world size of the pixel at the
 // hit. `worldPoint` is the hit in world space and `layerPoint` in the winning frame; a paint riding a slot reads that
-// slot's frame. A hit outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. KEEP IN
-// SYNC with SdfProgram.PackPaint.
-void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, inout SdfMaterialData material) {
-    uint count = min(material.paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
-    if ((count == 0u) || !sdfProgramRange(material.paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
+// slot's frame. A hit outside the shape's bound box, widened by the stroke and the pixel, costs one rotation. It reads
+// and writes the albedo alone (sdfMaterialPaints), so the caller loads the rest of the material after it: a material
+// live across the shape dispatch held the views pass at 168 registers on Direct3D 12. KEEP IN SYNC with
+// SdfProgram.PackPaint.
+void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint paintFirst, uint paintCount, inout float3 albedo) {
+    uint count = min(paintCount, SDF_MAX_PAINTS_PER_MATERIAL);
+    if ((count == 0u) || !sdfProgramRange(paintFirst, count, SDF_PAINT_VECTORS_PER_ENTRY)) return;
     float edge = max((0.5 * footprint), 1.0e-6);
 
     [loop] for (uint i = 0u; i < count; i++) {
-        uint base = (material.paintFirst + (i * SDF_PAINT_VECTORS_PER_ENTRY));
+        uint base = (paintFirst + (i * SDF_PAINT_VECTORS_PER_ENTRY));
         float4 frame = asfloat(sdfWords[base]);
         float4 colorStroke = asfloat(sdfWords[base + 5u]);
         float4 slotCenter = asfloat(sdfWords[base + 6u]);
@@ -31,7 +33,7 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, inout
         float4 scale = asfloat(sdfWords[base + 2u]);
         float d = (evaluateShape(asuint(frame.w), (local / scale.xyz), asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
         if (colorStroke.w > 0.0) d = (abs(d) - colorStroke.w);
-        material.albedo = lerp(material.albedo, colorStroke.rgb, (1.0 - smoothstep(-edge, edge, d)));
+        albedo = lerp(albedo, colorStroke.rgb, (1.0 - smoothstep(-edge, edge, d)));
     }
 }
 // Refract into the authored local plane, then sample its radial ramp. No view-facing frame is synthesized.

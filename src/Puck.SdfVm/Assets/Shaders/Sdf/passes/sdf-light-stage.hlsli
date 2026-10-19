@@ -62,7 +62,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // screenIndex and never indexes the material table.
             color = (ScreenGlassColor * (ScreenGlassBase + (ScreenGlassSunTint * sunDiffuse)));
         } else {
-            SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
             float3 layerPoint = surfacePoint;
             float3 layerNormal = normal;
             float3 layerRay = p.rayDirection;
@@ -73,7 +72,17 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
                 layerNormal = rotatePointByInverseQuaternion(normal, frameRotation);
                 layerRay = rotatePointByInverseQuaternion(p.rayDirection, frameRotation);
             }
-            sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, shadeMaterial);
+            // The paints draw on the albedo before the rest of the material is loaded, so none of it is live across their
+            // shape dispatch.
+            uint paintFirst;
+            uint paintCount;
+            float3 paintedAlbedo = sdfMaterialPaints(material, paintFirst, paintCount);
+
+            sdfApplyPaints(surfacePoint, layerPoint, p.pixelFootprint * s.t, paintFirst, paintCount, paintedAlbedo);
+
+            SdfMaterialData shadeMaterial = sdfMaterialLoad(material);
+
+            shadeMaterial.albedo = paintedAlbedo;
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
             applyWeathering(layerPoint, layerNormal, normal.y, s.curvature, p.pixelFootprint * s.t, s.lanes, shadeMaterial);
             sdfApplyEmissiveLane(s.lanes, shadeMaterial);

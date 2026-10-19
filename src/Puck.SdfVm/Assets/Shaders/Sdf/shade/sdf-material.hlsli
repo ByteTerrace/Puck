@@ -92,6 +92,25 @@ SdfMaterialData sdfMaterialLoad(int material) {
 
     return data;
 }
+// A material's albedo and its paints' range (paintFirst and paintCount, as sdfMaterialLoad reads them), loaded alone so
+// the paints draw before the rest of the material is live: zero paints for a material the table does not hold.
+float3 sdfMaterialPaints(int material, out uint paintFirst, out uint paintCount) {
+    uint4 header = sdfProgramWord(0);
+
+    paintFirst = 0u;
+    paintCount = 0u;
+    if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))
+        || !sdfProgramRange(SDF_PROGRAM_MATERIAL_OFFSET(header), SDF_PROGRAM_MATERIAL_COUNT(header), SDF_MATERIAL_VECTORS_PER_ENTRY)) {
+        return float3(1.0, 0.0, 1.0);
+    }
+
+    uint materialBase = SDF_PROGRAM_MATERIAL_OFFSET(header) + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
+
+    paintFirst = sdfWords[materialBase + 20u].x;
+    paintCount = sdfWords[materialBase + 20u].y;
+
+    return asfloat(sdfWords[materialBase]).rgb;
+}
 // Scales a lane-driven emissive by its render lane, saturated; `lanes` are the shaded surface's frame-slot lanes,
 // zero for a surface without a slot. A static emissive (lane 0 in the packed word) is untouched.
 void sdfApplyEmissiveLane(float4 lanes, inout SdfMaterialData material) {
