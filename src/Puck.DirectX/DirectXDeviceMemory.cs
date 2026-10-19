@@ -58,11 +58,12 @@ public static unsafe class DirectXDeviceMemory {
     /// <param name="resource">The resource.</param>
     /// <param name="role">What the resource is for.</param>
     public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role) {
-        if (
-            (memory is null) ||
-            (resource is null) ||
-            !GpuDeviceMemoryWork.IsCounted(role: role)
-        ) {
+        if ((memory is null) || (resource is null)) {
+            return;
+        }
+        // A role the ledger holds no bytes of still counts as one allocation (GpuDeviceMemoryWork.Allocations).
+        if (!GpuDeviceMemoryWork.IsCounted(role: role)) {
+            _ = memory.CountAllocated(allocation: ((nint)resource), bytes: 0L, device: DeviceOf(resource: resource), role: role);
             return;
         }
 
@@ -96,6 +97,10 @@ public static unsafe class DirectXDeviceMemory {
     /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
     /// <param name="resource">The resource about to be released, or zero.</param>
     public static void CountReleased(GpuDeviceMemoryWork? memory, nint resource) {
+        // A placed resource returns its range to its heap, which alone the counts hold.
+        if ((0 != resource) && DirectXHeapArena.Release(resource: resource)) {
+            return;
+        }
         if (
             (memory is null) ||
             (0 == resource)

@@ -12,6 +12,12 @@ namespace Puck.Vulkan.Interop;
 /// again or reused for another device.
 /// </summary>
 public sealed unsafe class VulkanDeviceCommands {
+    /// <summary>Gets the submissions this device defers while a batch is open, which every submission to its queue and
+    /// its wait for idle flush first.</summary>
+    public VulkanSubmissionBatch Batch { get; } = new();
+    /// <summary>Gets the memory this device sub-allocates its buffers and offscreen images from.</summary>
+    public VulkanMemoryArena Arena => (m_arena ??= new VulkanMemoryArena(device: this));
+    private VulkanMemoryArena? m_arena;
     /// <summary>The <c>vkAcquireNextImageKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
     /// <summary>The <c>vkAllocateCommandBuffers</c> entry point.</summary>
@@ -630,6 +636,10 @@ public sealed unsafe class VulkanDeviceCommands {
             destroy: destroy,
             handle: handle
         );
+        // Memory the arena bound the resource to goes back to its block; any other is the resource's own.
+        if ((0 != handle) && (m_arena?.Release(resource: handle) == true)) {
+            return;
+        }
         Destroy(
             destroy: FreeMemory,
             handle: memoryHandle

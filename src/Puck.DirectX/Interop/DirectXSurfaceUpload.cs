@@ -328,7 +328,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             pTotalBytes: &uploadBytes
         );
 
-        var texture = DirectXTextures.CreateCommitted(
+        var texture = DirectXTextures.Create(
             calls: m_calls,
             device: device,
             format: dxgiFormat,
@@ -340,7 +340,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         ID3D12Resource* uploadBuffer;
 
         try {
-            uploadBuffer = DirectXBuffers.CreateCommitted(
+            uploadBuffer = DirectXBuffers.Create(
                 calls: m_calls,
                 device: device,
                 heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,

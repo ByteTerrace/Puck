@@ -6,8 +6,8 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Creates the backend's committed textures, as <see cref="DirectXBuffers"/> creates its buffers. Every texture the
-/// backend allocates goes through <see cref="CreateCommitted"/>, so every one is a single-mip, single-sample, 2D texture
+/// Creates the backend's textures, placed in a device's heaps or committed, as <see cref="DirectXBuffers"/> creates its
+/// buffers. Every texture the backend allocates goes through <see cref="Create"/>, so every one is a single-mip, single-sample, 2D texture
 /// on a default heap in the driver's layout, and differs only in its extent, format, heap flags, initial state, resource
 /// flags and optimized clear value.
 /// </summary>
@@ -93,10 +93,12 @@ public static unsafe class DirectXTextures {
     /// release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <param name="calls">The answerer of the creation call, or <see langword="null"/> for the device's own
     /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
+    /// <param name="arena">The device's heaps to place it in (<see cref="DirectXHeapArena"/>), which count it, or
+    /// <see langword="null"/> to commit it.</param>
     /// <returns>The texture, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null) {
+    public static ID3D12Resource* Create(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null, DirectXHeapArena? arena = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -106,6 +108,14 @@ public static unsafe class DirectXTextures {
             height: height,
             width: width
         );
+        // A device's arena places the texture in a heap it shares, which it counts. A shared or flagged heap, or no arena,
+        // commits it, and so does a render target or depth stencil: a placed one must be cleared, discarded or copied
+        // before its first use, where a committed one starts zeroed.
+        if ((arena is not null) && (heapFlags == D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE) &&
+            ((flags & (D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) == 0)) {
+            return arena.Create(clearValue: clearValue, description: in description, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: initialState, role: GpuMemoryRole.DeviceLocal);
+        }
+
         var texture = DirectXCommandCalls.CreateCommittedResource(
             calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
             clearValue: clearValue,
@@ -124,7 +134,7 @@ public static unsafe class DirectXTextures {
 
         return texture;
     }
-    /// <summary>Returns the description <see cref="CreateCommitted"/> creates a texture from: one mip level, one array
+    /// <summary>Returns the description <see cref="Create"/> creates a texture from: one mip level, one array
     /// layer, one sample, the layout the device chooses.</summary>
     /// <param name="format">The texture format.</param>
     /// <param name="width">The width, in texels.</param>

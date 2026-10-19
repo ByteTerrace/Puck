@@ -108,6 +108,8 @@ internal sealed class RefusingGpuDevice :
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.Submit");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reach(member: "IGpuQueueSubmitter.Submit(fence)");
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.SubmitAndWait");
+    void IGpuQueueSubmitter.BeginBatch() => throw Reach(member: "IGpuQueueSubmitter.BeginBatch");
+    void IGpuQueueSubmitter.FlushBatch() => throw Reach(member: "IGpuQueueSubmitter.FlushBatch");
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => throw Reach(member: "IGpuQueueSubmitter.AddExternalWait");
     IGpuShaderModule IGpuShaderModuleFactory.Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) => throw Reach(member: "IGpuShaderModuleFactory.Create");
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => throw Reach(member: "IGpuBufferFactory.CreateHostVisible");

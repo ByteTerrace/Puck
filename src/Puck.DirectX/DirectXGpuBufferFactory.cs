@@ -35,7 +35,8 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             usage: usage
         );
 
-        var buffer = DirectXBuffers.CreateCommitted(
+        var buffer = DirectXBuffers.Create(
+            arena: deviceContext.HeapArena,
             device: Device,
             flags: ((0 != (usage & GpuBufferUsage.Storage))
                 ? D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
@@ -91,7 +92,8 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
     public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) {
         ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
 
-        var buffer = DirectXBuffers.CreateCommitted(
+        var buffer = DirectXBuffers.Create(
+            arena: deviceContext.HeapArena,
             device: Device,
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
@@ -141,7 +143,8 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
             ? HostVisibleState
             : DeviceLocalState
         );
-        var buffer = DirectXBuffers.CreateCommitted(
+        var buffer = DirectXBuffers.Create(
+            arena: deviceContext.HeapArena,
             device: Device,
             heapType: heapType,
             initialState: state,

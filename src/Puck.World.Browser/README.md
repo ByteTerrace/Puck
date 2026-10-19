@@ -339,7 +339,7 @@ row (most of the catalog) parses and compiles cleanly with no deferral at all.
 `BrowserSession`'s effect host (`Engine/BrowserRuleReader.cs`) is a
 `Puck.State.Rules.ArenaEffectHost` over the session's `StateArena`, widened to
 `IWorldFacts` (`Puck.World.Schema/IWorldFacts.cs`)—the world's
-eighteen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
+operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
 `ArgBodyOperand`, …) plus the two body-reference resolutions and the two
 host-owned row reads `Puck.World.Server.WorldServer` answers from real bodies,
 machines, a clock, and adjacencies. This engine ships none of those, so `BrowserRuleReader`
@@ -350,7 +350,7 @@ body"/"no such machine" reads already commit to for an absent host, applied
 here for "there is no host at all": population `0`, physics vacuously
 quiescent, no region occupants, no machine byte, no argmax/argmin/nearest
 body (`-1`), the engine's largest representable distance between two bodies
-that do not exist, no line of sight, never parked, perfectly upright, a link
+that do not exist, no line of sight, never parked, perfectly upright, at the origin, a link
 never established, a zero channel, no navigation state, and no board cell under a body (`-1`).
 `PlacementInfluenceOperand` alone reads `RuleFact.Absent`—an unrepresented
 influence provider is unknowable, never a falsely safe zero, exactly as

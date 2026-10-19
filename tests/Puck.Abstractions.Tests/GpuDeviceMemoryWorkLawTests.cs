@@ -5,7 +5,7 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuDeviceMemoryWork"/>: allocations and releases count at the size each allocation was counted
-/// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, only the adapter's roles count, a release of an object never
+/// with, the peak is the most bytes held at once, the aperture rows count the host-mapped part, only the adapter's roles count bytes though every allocation counts once, a release of an object never
 /// counted counts nothing, an allocation is counted once per device, the same handle on two devices is two entries, a
 /// device's teardown names every allocation it still holds, and the class legend makes the byte counts
 /// per-backend-deterministic and the peak pacing.
@@ -59,6 +59,8 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Assert.False(condition: Allocate(work: work, allocation: 0x10, bytes: 4096L, role: GpuMemoryRole.HostVisible));
         Assert.False(condition: work.CountReleased(allocation: 0x10, device: Device));
         Assert.Equal(expected: (0L, 0L), actual: (Read(kind: GpuDeviceMemoryWork.Allocated, work: work), work.Held));
+        // Every native allocation counts as one, whatever its role holds.
+        Assert.Equal(expected: 1L, actual: Read(kind: GpuDeviceMemoryWork.Allocations, work: work));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuDeviceMemoryWork.IsCounted(role: ((GpuMemoryRole)7)));
     }
     // The aperture rows are the part of the device-local rows the host maps: a small heap on a discrete adapter, which each
@@ -147,6 +149,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
                 ("gpu.memory.host-visible-device-local.allocated", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.host-visible-device-local.released", "bytes", WorkClass.PerBackendDeterministic),
                 ("gpu.memory.host-visible-device-local.peak", "bytes", WorkClass.Pacing),
+                ("gpu.memory.allocations", "count", WorkClass.PerBackendDeterministic),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]
         );

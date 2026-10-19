@@ -131,7 +131,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
         ).Length;
     // A small texture in the common state, the External layout's, on the context's current device.
     private static ID3D12Resource* Source(DirectXDeviceContext context) =>
-        DirectXTextures.CreateCommitted(
+        DirectXTextures.Create(
             device: ((ID3D12Device*)context.Device.Handle),
             format: DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
             height: Extent,

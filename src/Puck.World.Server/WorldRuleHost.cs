@@ -306,6 +306,22 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    public RuleFact Read(BodyPositionOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        if (Host.Body(index: ResolveBodyRef(bodyRef: operand.Body)) is not { } body) {
+            return RuleFact.Finite(value: FixedQ4816.Zero);
+        }
+
+        var position = body.FixedPosition;
+
+        return RuleFact.Finite(value: operand.Axis switch {
+            0 => position.X,
+            1 => position.Y,
+            _ => position.Z,
+        });
+    }
+    /// <inheritdoc/>
     public RuleFact Read(BodyStateOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 

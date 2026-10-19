@@ -524,6 +524,10 @@ file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger
         inner.SubmitAndWait(commandBufferHandles: commandBufferHandles);
         Ledger.Complete(submission: Ledger.Seal(fence: null));
     }
+    public void BeginBatch() =>
+        inner.BeginBatch();
+    public void FlushBatch() =>
+        inner.FlushBatch();
 }
 file sealed class CountingShaderModuleFactory(IGpuShaderModuleFactory inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuShaderModuleFactory {
     public IGpuShaderModule Create(GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) =>

@@ -16,7 +16,6 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
     private const uint SampleCount1Bit = 1;
     private const uint SharingModeExclusive = 0;
     private const uint StructureTypeImageCreateInfo = 14;
-    private const uint StructureTypeMemoryAllocateInfo = 5;
 
     private static void ValidateCreateRequest(VulkanOffscreenImageCreateRequest request) {
         ArgumentNullException.ThrowIfNull(
@@ -88,35 +87,19 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 request.PhysicalDeviceHandle,
                 out var memoryProperties
             );
-            var allocateInfo = new VkMemoryAllocateInfo {
-                AllocationSize = memoryRequirements.Size,
-                MemoryTypeIndex = VulkanMemoryTypes.FindIndex(
-                memoryProperties: in memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits,
-                preferredProperties: MemoryPropertyDeviceLocalBit,
-                requireProperties: false,
-                resourceDescription: "an offscreen color image"
-            ),
-                SType = StructureTypeMemoryAllocateInfo,
-            };
-
-            request.Device.AllocateMemory(
-                request.Device.Handle,
-                in allocateInfo,
-                0,
-                out memoryHandle
-            ).ThrowIfFailed(device: request.Device, operation: "vkAllocateMemory");
-            request.Device.CountAllocated(
-                allocationSize: allocateInfo.AllocationSize,
-                memoryHandle: memoryHandle,
+            memoryHandle = request.Device.Arena.Bind(
+                image: true,
+                memoryTypeIndex: VulkanMemoryTypes.FindIndex(
+                    memoryProperties: in memoryProperties,
+                    memoryTypeBits: memoryRequirements.MemoryTypeBits,
+                    preferredProperties: MemoryPropertyDeviceLocalBit,
+                    requireProperties: false,
+                    resourceDescription: "an offscreen color image"
+                ),
+                requirements: in memoryRequirements,
+                resource: imageHandle,
                 role: GpuMemoryRole.DeviceLocal
             );
-            request.Device.BindImageMemory(
-                request.Device.Handle,
-                imageHandle,
-                memoryHandle,
-                0
-            ).ThrowIfFailed(device: request.Device, operation: "vkBindImageMemory");
 
             return new VulkanOffscreenImageCreateResult(
                 ImageHandle: imageHandle,

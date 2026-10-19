@@ -168,6 +168,8 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.WriteSampler"] = (rig => rig.Services.Bindings.WriteSampler(arrayElement: 0, binding: 2, descriptorSetHandle: 4, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteStorageImage"] = (rig => rig.Services.Bindings.WriteStorageImage(arrayElement: 0, binding: 0, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuPipelineFactory.Create(graphics)"] = (rig => rig.Pipelines.Create(description: null!, fragmentShaderModule: null!, name: default, renderPass: null!, vertexShaderModule: null!).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
+            ["IGpuQueueSubmitter.BeginBatch"] = (rig => rig.Services.QueueSubmitter.BeginBatch(), none),
+            ["IGpuQueueSubmitter.FlushBatch"] = (rig => rig.Services.QueueSubmitter.FlushBatch(), none),
             ["IGpuQueueSubmitter.AddExternalWait"] = (rig => rig.Services.QueueSubmitter.AddExternalWait(wait: new GpuExternalWait(Fence: new SignalledFence(), Value: 1UL)), none),
             ["IGpuQueueSubmitter.CreateSubmissionFence"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence(), none),
             ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),

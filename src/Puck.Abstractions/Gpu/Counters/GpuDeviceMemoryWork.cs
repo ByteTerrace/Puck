@@ -49,6 +49,9 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     public static WorkKind ApertureReleased { get; } = new(name: "gpu.memory.host-visible-device-local.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind reporting the most aperture bytes held at once.</summary>
     public static WorkKind AperturePeak { get; } = new(name: "gpu.memory.host-visible-device-local.peak", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the native allocations the device made, of every role: each <c>vkAllocateMemory</c>,
+    /// or each Direct3D 12 heap or committed resource, whatever it holds.</summary>
+    public static WorkKind Allocations { get; } = new(name: "gpu.memory.allocations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
     /// <summary>Initializes a new instance of the <see cref="GpuDeviceMemoryWork"/> class.</summary>
     /// <param name="backend">The backend's name, as a report labels it (<c>vulkan</c>, <c>directx</c>).</param>
@@ -123,6 +126,12 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
+        lock (m_gate) {
+            m_counts.Add(
+                amount: 1L,
+                kind: Allocations
+            );
+        }
 
         if (!IsCounted(role: role)) {
             return false;
@@ -249,6 +258,6 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class Counts {
-        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak];
+        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, Allocations];
     }
 }

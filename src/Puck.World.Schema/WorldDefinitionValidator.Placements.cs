@@ -1277,6 +1277,10 @@ public static partial class WorldDefinitionValidator {
             // forever.
             for (var lane = 0; (lane < (look.Motion.Lanes?.Count ?? 0)); lane++) {
                 foreach (var instruction in (look.Motion.Lanes![lane]?.Instructions ?? [])) {
+                    // The lane evaluator reads any other operator as zero, which would leave the lane dark silently.
+                    if (!WorldLookLaneVocabulary.Supports(instruction: instruction)) {
+                        errors.Add(item: $"{path}.motion.lanes[{lane}] uses '{instruction.Operation}', which a render lane cannot evaluate; a lane takes constants, state reads, + - * /, negation, abs, sign, min, max and clamp.");
+                    }
                     if (
                         (instruction.Payload is InstructionPayload.State { Name.Call.Channel: WorldBodyStateReads.ChannelName } operand) &&
                         !(
