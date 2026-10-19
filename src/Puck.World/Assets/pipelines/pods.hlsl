@@ -43,17 +43,19 @@ static const float BAND_ARCH = 1.6;          // the bands arch, highest near the
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
 static const float PLATE_CHAMFER = 0.005;    // the crisp chamfer on each plate's edge where it meets a groove
-static const float TOPS[5] = { 0.62, 0.27, 0.16, 0.01, -0.14 };   // each plate's top edge, in the band coordinate
+static const float TOPS[5] = { 0.62, 0.28, 0.17, 0.04, -0.08 };   // each plate's top edge, in the band coordinate
 static const float KICK = -0.12;             // radians each plate swings out about its top edge
 static const float TUCK = 0.02;              // how far a plate's top runs up beneath the plate above
 static const float PLATE_GAP = 0.002;
+static const float SKIRT_KICK = 1.6;         // the bottom plate swings out further than the rest
+static const float SKIRT_GROW = 1.05;         // and is this much broader
 static const float PLATE_EDGE = 0.006;
 static const float COLUMN_X = 0.0;
 // The bottom cut, in the pod's frame: a plane from the inner edge part-way down to the pointed outer tip, facing in,
 // down and back; the casing is open under it and its rim is trimmed in gunmetal.
 static const float3 CUT_P = float3(-0.125, -0.08, 0.0);
 static const float3 CUT_N = float3(-0.74, -0.56, 0.37);
-static const float TRIM_W = 0.009;
+static const float TRIM_W = 0.013;
 // The inner core the casing wraps, blended into the thruster housing that swells out of the open rim.
 static const float3 CORE_R = float3(0.1, 0.43, 0.075);
 static const float3 CORE_SHIFT = float3(-0.01, -0.02, -0.01);
@@ -79,10 +81,10 @@ static const float3 SPINE_HALF = float3(0.052, 0.25, 0.05);
 static const float SPINE_BLOCK = 0.095;
 static const float2 VENT_FRAME = float2(0.034, 0.028);
 static const float2 VENT_SLOT = float2(0.022, 0.011);
-static const float2 PANEL_C = float2(0.05, -0.085);
+static const float2 PANEL_C = float2(0.05, -0.025);
 static const float2 PANEL = float2(0.04, 0.012);
 static const float2 RIVET_ROUND = float2(-0.06, 0.08);
-static const float2 RIVET_SQUARE = float2(-0.07, -0.06);
+static const float2 RIVET_SQUARE = float2(-0.07, -0.03);
 
 float2x2 rot(float a) { float c = cos(a), s = sin(a); return float2x2(c, -s, s, c); }
 float sdEllipsoid(float3 p, float3 r) {
@@ -151,13 +153,14 @@ float2 pod(float3 q) {
         float hi = TOPS[i], lo = (i < 4) ? TOPS[i + 1] : -0.7;
         float3 r = s;
         float2 yz = float2(r.y - hi, r.z);
-        yz = mul(yz, rot((i == 0) ? 0. : KICK));   // the cap is the fixed plate the rest hang from
+        yz = mul(yz, rot((i == 0) ? 0. : (i == 4) ? KICK * SKIRT_KICK : KICK));   // the cap is the fixed plate the rest hang from
         r.y = yz.x + hi; r.z = yz.y;
+        if (i == 4) r.xz /= SKIRT_GROW;   // the skirt is broader than the plates above it, a hood over the thruster
         float o = casingOuter(r);
         float n = casingOuter(r * (SHELL_R / (SHELL_R - SHELL_T))) * ((SHELL_R.x - SHELL_T) / SHELL_R.x);
         float bb = r.y + BAND_TILT * r.x + BAND_ARCH * r.x * r.x;
         float slab = max(lo + PLATE_GAP - bb, bb - hi - ((i > 0) ? TUCK : 0.)) * 0.7;
-        float piece = max(max(o, -n), slab);
+        float piece = max(max(o, -n), slab) * ((i == 4) ? SKIRT_GROW : 1.);
         piece = cmax(piece, slab + PLATE_EDGE, PLATE_EDGE);   // a crisp chamfer along the plate's own top and bottom edges
         if (piece < plates) { plates = piece; mat = ((i & 1) == 1) ? CREAM : VIOLET; }
     }
