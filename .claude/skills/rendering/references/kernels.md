@@ -266,5 +266,6 @@ shaded point looking along the sun direction under `material-id`.
 The debug views see the mesh, not the field: no pixel kernel walks the program.
 The field's own diagnostic is `world.slice` (`SdfFieldSlice`), which samples a
 plane through the bake kernel with its tetrahedral gradient and writes a PNG of
-the distance bands beside `|grad d|`; `creation.shape` reads each shape's
+the distance bands beside `|grad d|` (a far field that stops rising reads
+`clipped=` and paints magenta, out of the statistics); `creation.shape` reads each shape's
 exactness off its lowering without a GPU.

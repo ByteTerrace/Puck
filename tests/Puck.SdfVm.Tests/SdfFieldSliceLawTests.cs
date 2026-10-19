@@ -116,7 +116,7 @@ public sealed class SdfFieldSliceLawTests {
 
         Assert.StartsWith(expectedStartString: "z=0.3 centre=(0.2,0.5) half=1 64x64 bands=0.1 d=[-0.19", actualString: described, comparisonType: StringComparison.Ordinal);
         // The stencil's float rounding reads a thousandth either side of one.
-        Assert.Matches(expectedRegexPattern: @"\|grad d\| min=(0\.999|1) mean=1 max=(1\.001|1) off=0% near-surface min=(0\.999|1) mean=1 max=(1\.001|1) off=0%$", actualString: described);
+        Assert.Matches(expectedRegexPattern: @"clipped=0% world=100% \|grad d\| min=(0\.999|1) mean=1 max=(1\.001|1) off=0% near-surface\(\|d\|<=0\.0938\) min=(0\.999|1) mean=1 max=(1\.001|1) off=0%$", actualString: described);
 
         var rgba = slice.Render();
 
@@ -220,7 +220,46 @@ public sealed class SdfFieldSliceLawTests {
 
         Assert.True(condition: bake.Probe(slice: distant));
         _ = Drive(bake: bake, done: () => (completions > 1), instances: Far, world: static _ => 5f);
-        Assert.EndsWith(expectedEndString: "near-surface none", actualString: distant.Describe(), comparisonType: StringComparison.Ordinal);
+        // A field that never rises reads wholly clipped, and has nothing left to describe.
+        Assert.EndsWith(expectedEndString: "clipped=100% from d=5 world=100% |grad d| none near-surface(|d|<=0.375) none", actualString: distant.Describe(), comparisonType: StringComparison.Ordinal);
+    }
+    // The sampler answering a clipped field: the sphere's distance up to a ceiling of 0.1288 m, then a plateau that rises at
+    // a fiftieth of the distance. The near band reads the sphere's true gradient of one; the plateau is clipped, left out
+    // of the statistics and painted the clipped colour, not blue; the samples under the ceiling still read one.
+    [Fact]
+    public void AClippedLatticeReadsOneNearTheSurfaceAndPaintsItsPlateauClipped() {
+        const float Ceiling = 0.1288f;
+        static float Clipped(Vector3 point) {
+            var distance = Sphere(point: point);
+
+            return ((distance <= Ceiling) ? distance : (Ceiling + (0.02f * (distance - Ceiling))));
+        }
+
+        var bake = new SdfMeshPathBake { Residency = "slice-clipped" };
+        var frame = Frame(half: new Vector3(value: 0.25f));
+        var completions = 0;
+        var slice = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.2f, centre: new Vector2(x: SphereCentre.X, y: SphereCentre.Y), completed: _ => completions++, half: 2f, offset: (SphereCentre.Z + 0.4f), resolution: 128);
+
+        _ = bake.Dress(frame: frame);
+        Assert.True(condition: bake.Probe(slice: slice));
+        _ = Drive(bake: bake, done: () => (completions > 0), frame: frame, instances: Clipped, world: Far);
+
+        var described = slice.Describe();
+
+        Assert.Matches(expectedRegexPattern: @"d=\[-0\.19\d*,0\.1\d*\] inside=\d+(\.\d)?% clipped=(8|9)\d(\.\d)?% from d=0\.1[23]\d* world=0% \|grad d\| min=0\.\d+ mean=(0\.9\d*|1) max=(1\.00\d|1) off=\d+(\.\d)?% near-surface\(\|d\|<=0\.0938\) min=(0\.999|1) mean=1 max=(1\.001|1) off=0%$", actualString: described);
+
+        var (clipped, ceiling) = slice.Clipping();
+
+        Assert.InRange(actual: ceiling, low: Ceiling, high: (Ceiling + 0.01f));
+        Assert.True(condition: clipped[0]);
+
+        var rgba = slice.Render();
+        var magenta = new Vector3(x: MathF.Round(x: (SdfFieldSlice.ClippedColour.X * 255f)), y: MathF.Round(x: (SdfFieldSlice.ClippedColour.Y * 255f)), z: MathF.Round(x: (SdfFieldSlice.ClippedColour.Z * 255f)));
+
+        // A far corner is clipped on both panels; a point 0.05 m outside the sphere reads white on the gradient panel.
+        Assert.Equal(expected: magenta, actual: Pixel(column: 0, rgba: rgba, row: 0, width: 256));
+        Assert.Equal(expected: magenta, actual: Pixel(column: 128, rgba: rgba, row: 0, width: 256));
+        Assert.Equal(expected: new Vector3(value: 255f), actual: Pixel(column: (128 + 80), rgba: rgba, row: 64, width: 256));
     }
     [Fact]
     public void ASliceNoShapeAnswersSaysSoAndDrawsGrey() {
