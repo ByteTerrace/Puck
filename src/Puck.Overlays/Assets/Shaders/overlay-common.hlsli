@@ -107,6 +107,28 @@ float OverlaySdfBilinear(ByteAddressBuffer data, uint atlasBase, int glyph, floa
     return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
 }
 
+// The pack's per-glyph metric table, just past the last glyph's cell — KEEP IN SYNC with OverlayGlyphSdfPack.MetricWords:
+// per glyph, the pen origin's offset from the cell's left edge, then the advance, both float atlas texels. A glyph's
+// cell is wider than its advance (it carries the distance field's padding), so a run places each cell at its pen
+// position minus that offset and neighbouring cells overlap. An out-of-range glyph reads 0.
+#define OVERLAY_GLYPH_METRIC_WORDS 2u
+
+float OverlayGlyphMetric(ByteAddressBuffer data, uint atlasBase, int glyph, int glyphCount, int cellW, int cellH, uint word) {
+    if ((glyph < 0) || (glyph >= glyphCount)) {
+        return 0.0;
+    }
+
+    return OverlayFloat(data, (atlasBase + (uint)(glyphCount * cellW * cellH) + ((uint)glyph * OVERLAY_GLYPH_METRIC_WORDS) + word));
+}
+
+float OverlayGlyphOrigin(ByteAddressBuffer data, uint atlasBase, int glyph, int glyphCount, int cellW, int cellH) {
+    return OverlayGlyphMetric(data, atlasBase, glyph, glyphCount, cellW, cellH, 0u);
+}
+
+float OverlayGlyphAdvance(ByteAddressBuffer data, uint atlasBase, int glyph, int glyphCount, int cellW, int cellH) {
+    return OverlayGlyphMetric(data, atlasBase, glyph, glyphCount, cellW, cellH, 1u);
+}
+
 // Samples one glyph cell at an arbitrary pixel-space cell origin/size: x = fill coverage, y = the darker outline
 // band's coverage (the floats-over-a-lit-world contrast toolkit, from the SAME field at zero extra taps).
 // `screenPxRange` is the caller's own distanceRange(texels) x screen-px-per-texel; `glyphCount` bounds-checks a

@@ -18,7 +18,8 @@
 //   [0, tokenEnd)          the design-token slab (colors + geometry scalars; OverlayTokenBlock.cs)
 //   [atlasBase, panelBase) the shared atlas' per-glyph SDF cells (one RGBA texel per word, uploaded once) — indices
 //                          0..94 the printable-ASCII block, 95.. this boot's appended icon glyphs, total count
-//                          carried in the pass block (glyphCount below), never a compile-time constant
+//                          carried in the pass block (glyphCount below), never a compile-time constant — then the
+//                          per-glyph metric table (overlay-common.hlsli's OverlayGlyphOrigin/OverlayGlyphAdvance)
 //   [panelBase, elementBase) the panel records · [elementBase, textBase) the element records ·
 //   [textBase, clipBase)   the glyph-code words the text runs index (one pre-resolved index per word) ·
 //   [clipBase, ...)        the clip table (normalized x, y, w, h per rect; record word 9 indexes it, 0 = unclipped).
@@ -117,6 +118,49 @@ bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
     return ((fragXy.x < clipXy.x) || (fragXy.y < clipXy.y) || (fragXy.x >= (clipXy.x + clipWh.x)) || (fragXy.y >= (clipXy.y + clipWh.y)));
 }
 
+// A label of one or two atlas glyphs (glyph1 < 0 for one) in a glyph-local frame where a glyph cell is 2 * halfH units
+// tall. The glyphs sit at their pen positions, the second one advance after the first, so their padded cells overlap;
+// the union of the cells centres on the frame's origin, which puts a lone glyph's cell exactly on it. Returns the
+// strongest coverage and outline (SampleGlyphCoverage's pair) of the cells covering p, zero outside them.
+float2 sampleGlyphLabel(int glyph0, int glyph1, float2 p, float halfH, uint atlasBase, int glyphCount, int atlasCellW, int atlasCellH, float screenPxRange) {
+    if (abs(p.y) > halfH) {
+        return float2(0.0, 0.0);
+    }
+
+    float unit = ((2.0 * halfH) / float(atlasCellH));
+    float cellW = (float(atlasCellW) * unit);
+    float origin0 = (OverlayGlyphOrigin(overlayData, atlasBase, glyph0, glyphCount, atlasCellW, atlasCellH) * unit);
+    float left = -origin0;
+    float right = (left + cellW);
+    float left1 = 0.0;
+
+    if (glyph1 >= 0) {
+        left1 = ((OverlayGlyphAdvance(overlayData, atlasBase, glyph0, glyphCount, atlasCellW, atlasCellH) - OverlayGlyphOrigin(overlayData, atlasBase, glyph1, glyphCount, atlasCellW, atlasCellH)) * unit);
+        left = min(left, left1);
+        right = max(right, (left1 + cellW));
+    }
+
+    // x is measured from the first glyph's pen.
+    float x = (p.x + ((left + right) * 0.5));
+    float v = ((p.y + halfH) / (2.0 * halfH));
+    float u0 = ((x + origin0) / cellW);
+    float2 coverage = float2(0.0, 0.0);
+
+    if ((u0 >= 0.0) && (u0 < 1.0)) {
+        coverage = SampleGlyphCoverage(overlayData, atlasBase, glyph0, glyphCount, float2(u0, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
+    }
+
+    if (glyph1 >= 0) {
+        float u1 = ((x - left1) / cellW);
+
+        if ((u1 >= 0.0) && (u1 < 1.0)) {
+            coverage = max(coverage, SampleGlyphCoverage(overlayData, atlasBase, glyph1, glyphCount, float2(u1, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25));
+        }
+    }
+
+    return coverage;
+}
+
 // ---- the pass -----------------------------------------------------------------------------------------------------
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
@@ -211,8 +255,9 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     // ---- elements (rects, text, icons, rings, wedges, sampled frames, in submission order) -------------------------
     // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing/WriteFrame:
     //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring, 4 = frame, 5 = wedge) | (word4 bits 4.. vary by kind)
-    //   text:     colorRole << 4 · 0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) ·
-    //             5 glyph start · 6 glyph count · 7 alpha
+    //   text:     colorRole << 4 · 0..1 pen origin (normalized) · 2 the glyph advance (normalized width) · 3 the glyph
+    //             cell's height (normalized; its width keeps the atlas cell's aspect) · 5 glyph start · 6 glyph count ·
+    //             7 alpha
     //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
     //   icon:     (accentRole << 4, 0 = the accent token) · 0..1 plate center (normalized) · 2 plate half (px) ·
     //             3 badge half (px) · 5 iconGlyph0 · 6 state bits · 7..8 badge offset (px) · 10 iconGlyph1 ·
@@ -266,22 +311,39 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
             color = lerp(color, fill.rgb, (mask * fill.a * alpha));
         } else if (kind == 0u) {
-            // A text run: a row of monospace glyph cells; codes are pre-resolved atlas indices.
-            float2 cellSize = (ab * dims);
+            // A text run: a row of monospace glyphs at a fixed advance; codes are pre-resolved atlas indices. Glyph k's
+            // pen sits at k advances, and its padded cell, wider than the advance, spans [pen - origin, pen - origin +
+            // cellW) with the glyph's own origin offset, so neighbouring cells overlap: every glyph whose cell covers
+            // the pixel is sampled and the strongest coverage and outline win.
+            float advance = (ab.x * dims.x);
+            float cellH = (ab.y * dims.y);
+            float texelPx = (cellH / float(atlasCellH));
+            float cellW = (float(atlasCellW) * texelPx);
             uint count = OverlayWord(overlayData, (o + 6u));
             float alpha = OverlayFloat(overlayData, (o + 7u));
-            float runWidth = (cellSize.x * (float)count);
+            float runWidth = (advance * (float)count);
 
-            if ((local.x < 0.0) || (local.y < 0.0) || (local.x >= runWidth) || (local.y >= cellSize.y)) {
+            if ((local.x < -cellW) || (local.y < 0.0) || (local.x >= (runWidth + cellW)) || (local.y >= cellH)) {
                 continue;
             }
 
-            int column = (int)floor(local.x / cellSize.x);
-            uint glyph = OverlayWord(overlayData, (textBase + OverlayWord(overlayData, (o + 5u)) + (uint)column));
-            float2 cellLocal = float2((local.x - (column * cellSize.x)), local.y);
+            uint glyphStart = (textBase + OverlayWord(overlayData, (o + 5u)));
             // screenPxRange = distanceRange(texels) x screen-px-per-texel (the on-screen cell maps the atlas cell).
-            float screenPxRange = (passGroup.sdf.x * (cellSize.y / passGroup.counts.w));
-            float2 sample = SampleGlyphCoverage(overlayData, atlasBase, (int)glyph, glyphCount, cellLocal, cellSize, atlasCellW, atlasCellH, screenPxRange, passGroup.sdf.y);
+            float screenPxRange = (passGroup.sdf.x * texelPx);
+            float2 sample = float2(0.0, 0.0);
+            // A run carries ASCII glyphs, whose pen origins lie inside their cells, so only glyphs within one cell width
+            // either side can cover the pixel.
+            int first = max(0, (int)floor((local.x - cellW) / advance));
+            int last = min(((int)count - 1), (int)floor((local.x + cellW) / advance));
+
+            for (int k = first; (k <= last); k++) {
+                int glyph = (int)OverlayWord(overlayData, (glyphStart + (uint)k));
+                float cellX = ((local.x - (float(k) * advance)) + (OverlayGlyphOrigin(overlayData, atlasBase, glyph, glyphCount, atlasCellW, atlasCellH) * texelPx));
+
+                if ((cellX >= 0.0) && (cellX < cellW)) {
+                    sample = max(sample, SampleGlyphCoverage(overlayData, atlasBase, glyph, glyphCount, float2(cellX, local.y), float2(cellW, cellH), atlasCellW, atlasCellH, screenPxRange, passGroup.sdf.y));
+                }
+            }
 
             color = lerp(color, float3(0.0, 0.01, 0.015), (sample.y * 0.85 * alpha));
             color = lerp(color, OverlayTokenColor(overlayData, role).rgb, (sample.x * alpha));
@@ -516,29 +578,18 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 float2 iconLocal = (slotLocal / max(iconHalf, 1e-5));
 
                 if (max(abs(iconLocal.x), abs(iconLocal.y)) < 1.6) {
-                    int iconLen = ((iconGlyph1 != 0u) ? 2 : 1);
                     // The icon is centered in the plate; each glyph cell preserves the atlas aspect at a fixed height.
                     float iconHalfH = 0.82;
-                    float iconCellW = ((2.0 * iconHalfH) * (float(atlasCellW) / float(atlasCellH)));
-                    float iconTotalW = (iconCellW * float(iconLen));
-                    float lx = (iconLocal.x + (iconTotalW * 0.5));
-                    int ci = (int)floor(lx / iconCellW);
+                    // screenPxRange from the on-screen glyph height (2*iconHalfH glyph-local units x iconHalf px).
+                    float glyphPxH = ((2.0 * iconHalfH) * iconHalf);
+                    float screenPxRange = max((passGroup.sdf.x * (glyphPxH / float(atlasCellH))), 1.0);
+                    float2 coverage = sampleGlyphLabel(
+                        ((int)iconGlyph0 - 1), ((iconGlyph1 != 0u) ? ((int)iconGlyph1 - 1) : -1), iconLocal, iconHalfH,
+                        atlasBase, glyphCount, atlasCellW, atlasCellH, screenPxRange);
+                    float3 iconHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_TEXT_PRIMARY).rgb;
 
-                    if ((ci >= 0) && (ci < iconLen) && (abs(iconLocal.y) <= iconHalfH)) {
-                        int glyphIndex = ((int)((ci == 0) ? iconGlyph0 : iconGlyph1) - 1);
-                        float u = ((lx - (float(ci) * iconCellW)) / iconCellW);
-                        float v = ((iconLocal.y + iconHalfH) / (2.0 * iconHalfH));
-                        // screenPxRange from the on-screen glyph height (2*iconHalfH glyph-local units x iconHalf px).
-                        float glyphPxH = ((2.0 * iconHalfH) * iconHalf);
-                        float screenPxRange = max((passGroup.sdf.x * (glyphPxH / float(atlasCellH))), 1.0);
-                        float2 coverage = SampleGlyphCoverage(
-                            overlayData, atlasBase, glyphIndex, glyphCount,
-                            float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
-                        float3 iconHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_TEXT_PRIMARY).rgb;
-
-                        color = lerp(color, (iconHue * 0.3), (coverage.y * fill * alpha * 0.85));
-                        color = lerp(color, iconHue, (coverage.x * fill * alpha));
-                    }
+                    color = lerp(color, (iconHue * 0.3), (coverage.y * fill * alpha * 0.85));
+                    color = lerp(color, iconHue, (coverage.x * fill * alpha));
                 }
             }
 
@@ -558,28 +609,17 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 if (max(abs(glyphLocal.x), abs(glyphLocal.y)) < 1.6) {
                     color = lerp(color, badgeBackingColor, ((1.0 - smoothstep(1.0, (1.0 + (glyphAa * 2.0)), length(glyphLocal))) * alpha * 0.85));
 
-                    int labelLen = ((char1 != 0u) ? 2 : 1);
                     // The label is centered in the badge; each char cell preserves the atlas aspect at a fixed height.
                     float labelHalfH = 0.82;
-                    float charCellW = ((2.0 * labelHalfH) * (float(atlasCellW) / float(atlasCellH)));
-                    float totalW = (charCellW * float(labelLen));
-                    float lx = (glyphLocal.x + (totalW * 0.5));
-                    int ci = (int)floor(lx / charCellW);
+                    // screenPxRange from the on-screen char height (2*labelHalfH glyph-local units x glyphHalf px).
+                    float charPxH = ((2.0 * labelHalfH) * glyphHalf);
+                    float screenPxRange = max((passGroup.sdf.x * (charPxH / float(atlasCellH))), 1.0);
+                    float2 coverage = sampleGlyphLabel(
+                        ((int)char0 - 1), ((char1 != 0u) ? ((int)char1 - 1) : -1), glyphLocal, labelHalfH,
+                        atlasBase, glyphCount, atlasCellW, atlasCellH, screenPxRange);
 
-                    if ((ci >= 0) && (ci < labelLen) && (abs(glyphLocal.y) <= labelHalfH)) {
-                        int glyphIndex = ((int)((ci == 0) ? char0 : char1) - 1);
-                        float u = ((lx - (float(ci) * charCellW)) / charCellW);       // [0, 1]
-                        float v = ((glyphLocal.y + labelHalfH) / (2.0 * labelHalfH)); // [0, 1], top-down
-                        // screenPxRange from the on-screen char height (2*labelHalfH glyph-local units x glyphHalf px).
-                        float charPxH = ((2.0 * labelHalfH) * glyphHalf);
-                        float screenPxRange = max((passGroup.sdf.x * (charPxH / float(atlasCellH))), 1.0);
-                        float2 coverage = SampleGlyphCoverage(
-                            overlayData, atlasBase, glyphIndex, glyphCount,
-                            float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
-
-                        color = lerp(color, (badgeInkColor * 0.3), (coverage.y * alpha * 0.85));
-                        color = lerp(color, badgeInkColor, (coverage.x * alpha));
-                    }
+                    color = lerp(color, (badgeInkColor * 0.3), (coverage.y * alpha * 0.85));
+                    color = lerp(color, badgeInkColor, (coverage.x * alpha));
                 }
             }
         }

@@ -119,7 +119,7 @@ public sealed class OverlayFrameBuilder {
 
         m_inverseWidth = (1f / width);
         m_inverseHeight = (1f / height);
-        PanelBaseWords = (OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count);
+        PanelBaseWords = (OverlayTokenBlock.WordCount + glyphs.Words.Length);
         ElementBaseWords = (PanelBaseWords + (MaxPanels * PanelWords));
         TextBaseWords = (ElementBaseWords + (MaxElements * ElementWords));
         ClipBaseWords = (TextBaseWords + TextWordCapacity);
@@ -131,9 +131,7 @@ public sealed class OverlayFrameBuilder {
             theme: in theme
         );
 
-        for (var index = 0; (index < glyphs.PackedSdf.Count); index++) {
-            m_scratch[(OverlayTokenBlock.WordCount + index)] = glyphs.PackedSdf[index];
-        }
+        glyphs.Words.CopyTo(destination: m_scratch.AsSpan(start: OverlayTokenBlock.WordCount));
     }
 
     // The open channel's index. A write with no channel scope open is a programming error, never a data condition:
@@ -337,14 +335,12 @@ public sealed class OverlayFrameBuilder {
             val1: 1,
             val2: ((int)MathF.Round(x: (sizePx * DesignTokens.Glyph.CellAspectRatio)))
         );
-    /// <summary>The on-screen glyph cell width for a cell height, preserving the atlas' cell aspect.</summary>
+    /// <summary>Returns the pen advance of one text-run glyph at a cell height: the font's advance at the scale that
+    /// maps the atlas cell's height onto <paramref name="cellHeight"/>. The drawn cell keeps the atlas cell's aspect,
+    /// padding included, so it is wider than the advance and overlaps its neighbours.</summary>
     /// <param name="cellHeight">The cell height, px.</param>
-    /// <returns>The cell width, px.</returns>
-    public float CellWidth(int cellHeight) =>
-        MathF.Max(
-            x: 1f,
-            y: MathF.Round(x: ((cellHeight * ((float)m_glyphs.AtlasCellWidth)) / m_glyphs.AtlasCellHeight))
-        );
+    /// <returns>The advance, px.</returns>
+    public float GlyphAdvance(int cellHeight) => ((cellHeight * m_glyphs.Advance) / m_glyphs.AtlasCellHeight);
     /// <summary>The records one channel lost at its own reservation this frame. Non-zero means that channel
     /// exceeded the hard maximum it declares — no other channel's content was touched. Distinct from
     /// <see cref="Refused"/>: this is a capacity failure, never a deliberate authored limit.</summary>
@@ -411,11 +407,11 @@ public sealed class OverlayFrameBuilder {
     /// <returns>The channel's hard reservation.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
     public OverlayChannelReservation ReservationOf(OverlayChannel channel) => m_reservations[IndexOf(channel: channel)];
-    /// <summary>The on-screen width of a run of characters at a cell height.</summary>
+    /// <summary>Returns the on-screen width of a run of characters at a cell height: the pen travel of its advances.</summary>
     /// <param name="chars">The character count.</param>
     /// <param name="cellHeight">The cell height, px.</param>
     /// <returns>The run width, px.</returns>
-    public float TextWidth(int chars, int cellHeight) => (chars * CellWidth(cellHeight: cellHeight));
+    public float TextWidth(int chars, int cellHeight) => (chars * GlyphAdvance(cellHeight: cellHeight));
     /// <summary>Re-fills the token slab (the static prefix's front <see cref="OverlayTokenBlock.WordCount"/> words)
     /// from a newly resolved theme, in place — the glyph atlas immediately after it is untouched. The caller (the
     /// composition root, on a definition-revision change) is responsible for re-uploading
@@ -703,8 +699,8 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
     /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside
-    /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
-    /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text
+    /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 pen origin (normalized) · 2 the glyph
+    /// advance (normalized width) · 3 the glyph cell's height (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text
     /// region) · 6 glyph count · 7 alpha · 9 clip index.</summary>
     /// <param name="x">The run origin's left, px.</param>
     /// <param name="y">The run origin's top, px.</param>
@@ -776,7 +772,7 @@ public sealed class OverlayFrameBuilder {
 
         m_scratch[offset] = Pack(value: (x * m_inverseWidth));
         m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
-        m_scratch[(offset + 2)] = Pack(value: (CellWidth(cellHeight: cellHeight) * m_inverseWidth));
+        m_scratch[(offset + 2)] = Pack(value: (GlyphAdvance(cellHeight: cellHeight) * m_inverseWidth));
         m_scratch[(offset + 3)] = Pack(value: (cellHeight * m_inverseHeight));
         m_scratch[(offset + 4)] = (((uint)role) << 4);
         m_scratch[(offset + 5)] = ((uint)start);
@@ -879,7 +875,7 @@ public sealed class OverlayFrameBuilder {
     public static int WordCountOf(OverlayGlyphSdfPack glyphs, OverlayChannelLeases leases) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
-        var total = (((((OverlayTokenBlock.WordCount + glyphs.PackedSdf.Count) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + leases.TextWordCapacity) + (MaxClips * ClipWords));
+        var total = (((((OverlayTokenBlock.WordCount + glyphs.Words.Length) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + leases.TextWordCapacity) + (MaxClips * ClipWords));
 
         return (total + 3) & ~3;
     }

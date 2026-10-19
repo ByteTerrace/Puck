@@ -18,7 +18,8 @@ public sealed class OverlayFrameCrossFadeLawTests {
             atlasCellWidth: 1,
             distanceRange: 1f,
             glyphCount: 1,
-            packedSdf: [0u]
+            advance: 1f,
+            words: [0u, 0u, 0x3F800000u]
         ),
         height: Height,
         leases: new OverlayChannelLeases(capacity: new OverlayCapacity(
@@ -57,7 +58,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
         theme: new OverlayThemeStore()
     );
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
+    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount);
     private static OverlayHudElement FrameElement(int sourceA, int sourceB, float mix) => new(
         Kind: OverlayHudElementKind.Frame,
         Rect: new OverlayHudRect(

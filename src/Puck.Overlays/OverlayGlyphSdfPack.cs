@@ -13,6 +13,14 @@ namespace Puck.Overlays;
 /// bilinear sampling + MEDIAN-OF-3 + a screenPxRange coverage ramp (see <c>Assets/Shaders/overlay-common.hlsli</c>).
 /// Carrying all four channels is what graduates the overlays to true multi-channel reconstruction: a replicated
 /// single-channel atlas medians to exactly its own value, while a true MTSDF atlas medians to sharp corners.
+/// <para>
+/// A cell is the glyph's distance-field box, padding included, so it is wider than the glyph's advance (the shipped
+/// JetBrains Mono cell is 47 texels, its advance 28.8): text advances by <see cref="Advance"/>, and neighbouring cells
+/// overlap. Where the pen origin sits inside a cell differs per glyph (the atlas centres each glyph's ink in its
+/// cell), so the words end in a per-glyph metric table, <see cref="MetricWords"/> words per glyph from
+/// <see cref="MetricBaseWords"/>: the pen origin's offset from the cell's left edge, then the glyph's advance, both
+/// float atlas texels. A shader places glyph <c>g</c>'s cell at its pen position minus that offset.
+/// </para>
 /// </summary>
 /// <remarks>
 /// <see cref="TryCreate"/> is a pure function of whatever <see cref="FontAtlas"/> and appended codepoint list it is
@@ -26,8 +34,8 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphSdfPack {
     private const int PackHashBytes = 32;
-    private const int HashStart = 28;
-    private const int PackHeaderBytes = (((sizeof(uint) * 6) + sizeof(float)) + (PackHashBytes * 3));
+    private const int HashStart = 32;
+    private const int PackHeaderBytes = (((sizeof(uint) * 6) + (sizeof(float) * 2)) + (PackHashBytes * 3));
     // The pack is ~1.4 MiB of already-flattened cells (larger once a world appends icon glyphs), but building it
     // from the atlas decodes the WHOLE combined MTSDF PNG (4435x4440 RGBA ~79 MiB, >=150 MiB transient with the
     // decoder's scanlines) at every startup. The binary artifact below persists the finished pack beside the atlas,
@@ -38,40 +46,59 @@ public sealed class OverlayGlyphSdfPack {
 
     // 'P','O','G','P' + format version; raise the version whenever the pack layout changes.
     private const uint PackMagic = 0x50474F50u;
-    private const uint PackVersion = 3u;
+    private const uint PackVersion = 4u;
 
     /// <summary>The number of glyphs in the ASCII block (printable ASCII 0x20-0x7E).</summary>
     public const int AsciiGlyphCount = (0x7F - 0x20);
     /// <summary>The first code point in the ASCII block (space).</summary>
     public const int FirstChar = 0x20;
+    /// <summary>The words each glyph's entry in the metric table holds: the pen origin's offset from the cell's left
+    /// edge, then the advance, both float atlas texels. KEEP IN SYNC with <c>OverlayGlyphOrigin</c> and
+    /// <c>OverlayGlyphAdvance</c> in <c>overlay-common.hlsli</c>.</summary>
+    public const int MetricWords = 2;
 
-    private readonly uint[] m_packedSdf;
+    private readonly uint[] m_words;
 
-    private OverlayGlyphSdfPack(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount) {
+    private OverlayGlyphSdfPack(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount) {
+        Advance = advance;
         AtlasCellHeight = atlasCellHeight;
         AtlasCellWidth = atlasCellWidth;
         DistanceRange = distanceRange;
         GlyphCount = glyphCount;
-        m_packedSdf = packedSdf;
+        m_words = words;
     }
 
+    /// <summary>Gets the font's monospace advance, in atlas texels: the pen step between neighbouring glyphs of a text run,
+    /// narrower than <see cref="AtlasCellWidth"/>, whose cell carries the distance field's padding.</summary>
+    public float Advance { get; }
     /// <summary>The source cell height, in atlas texels — the vertical extent of one glyph's block in
-    /// <see cref="PackedSdf"/>.</summary>
+    /// <see cref="Words"/>.</summary>
     public int AtlasCellHeight { get; }
     /// <summary>The source cell width, in atlas texels — the horizontal stride of one glyph's block in
-    /// <see cref="PackedSdf"/>.</summary>
+    /// <see cref="Words"/>.</summary>
     public int AtlasCellWidth { get; }
     /// <summary>The signed-distance band width, in atlas texels — the screenPxRange numerator.</summary>
     public float DistanceRange { get; }
     /// <summary>The total glyph count this pack carries: <see cref="AsciiGlyphCount"/> plus however many codepoints
     /// were appended at <see cref="TryCreate"/>.</summary>
     public int GlyphCount { get; }
-    /// <summary>The per-glyph contiguous SDF texels, one RGBA texel per <see cref="uint"/> (little-endian
-    /// R|G|B|A). Word index of glyph g's atlas texel (x, y) is
-    /// <c>((g * AtlasCellWidth * AtlasCellHeight) + (y * AtlasCellWidth) + x)</c>.</summary>
-    public IReadOnlyList<uint> PackedSdf => m_packedSdf;
-    /// <summary>The packed SDF words as a span — the storage-buffer upload view.</summary>
-    public ReadOnlySpan<uint> SdfWords => m_packedSdf;
+    /// <summary>Gets the first word of the per-glyph metric table, just past the last glyph's cell.</summary>
+    public int MetricBaseWords => (GlyphCount * AtlasCellWidth * AtlasCellHeight);
+    /// <summary>Gets the pack's words, the storage-buffer upload view: the per-glyph contiguous SDF texels, one RGBA texel
+    /// per <see cref="uint"/> (little-endian R|G|B|A), word index of glyph g's atlas texel (x, y)
+    /// <c>((g * AtlasCellWidth * AtlasCellHeight) + (y * AtlasCellWidth) + x)</c>; then, from
+    /// <see cref="MetricBaseWords"/>, <see cref="MetricWords"/> float words per glyph (see <see cref="OriginOf"/> and
+    /// <see cref="AdvanceOf"/>).</summary>
+    public ReadOnlySpan<uint> Words => m_words;
+
+    /// <summary>Returns the advance of one glyph, in atlas texels.</summary>
+    /// <param name="glyph">The glyph index, below <see cref="GlyphCount"/>.</param>
+    /// <returns>The glyph's advance.</returns>
+    public float AdvanceOf(int glyph) => BitConverter.UInt32BitsToSingle(value: m_words[((MetricBaseWords + (glyph * MetricWords)) + 1)]);
+    /// <summary>Returns where one glyph's pen origin lies in its cell, in atlas texels from the cell's left edge.</summary>
+    /// <param name="glyph">The glyph index, below <see cref="GlyphCount"/>.</param>
+    /// <returns>The pen origin's offset.</returns>
+    public float OriginOf(int glyph) => BitConverter.UInt32BitsToSingle(value: m_words[(MetricBaseWords + (glyph * MetricWords))]);
 
     /// <summary>Reads a prepacked artifact, returning <see langword="null"/> when the file is absent, malformed, a
     /// different format version or shape, or keyed to different source bytes (a rebaked atlas or a different appended
@@ -113,6 +140,7 @@ public sealed class OverlayGlyphSdfPack {
         var distanceRange = BinaryPrimitives.ReadSingleLittleEndian(source: span[16..]);
         var wordCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[20..]);
         var glyphCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[24..]);
+        var advance = BinaryPrimitives.ReadSingleLittleEndian(source: span[28..]);
 
         if (
             !span.Slice(
@@ -135,10 +163,11 @@ public sealed class OverlayGlyphSdfPack {
             (cellWidth <= 0) ||
             (cellHeight <= 0) ||
             !float.IsFinite(f: distanceRange) || (distanceRange <= 0) ||
+            !float.IsFinite(f: advance) || (advance <= 0) ||
             (glyphCount < AsciiGlyphCount) ||
             (wordCount <= 0) ||
-            ((((long)cellWidth) * cellHeight) > (wordCount / glyphCount)) ||
-            (wordCount != ((((long)glyphCount) * cellWidth) * cellHeight)) ||
+            (((((long)cellWidth) * cellHeight) + MetricWords) > (wordCount / glyphCount)) ||
+            (wordCount != (((long)glyphCount) * ((((long)cellWidth) * cellHeight) + MetricWords))) ||
             (bytes.Length != (PackHeaderBytes + (((long)wordCount) * sizeof(uint))))
         ) {
             return null;
@@ -152,11 +181,12 @@ public sealed class OverlayGlyphSdfPack {
         }
 
         return new OverlayGlyphSdfPack(
+            advance: advance,
             atlasCellHeight: cellHeight,
             atlasCellWidth: cellWidth,
             distanceRange: distanceRange,
             glyphCount: glyphCount,
-            packedSdf: words
+            words: words
         );
     }
     /// <summary>Writes this pack as the prepacked artifact (atomic temp-then-move, so a concurrent reader never sees
@@ -166,7 +196,7 @@ public sealed class OverlayGlyphSdfPack {
     /// <param name="jsonHash">The SHA-256 of the source mono layout JSON bytes.</param>
     /// <param name="extraHash">The SHA-256 of the appended codepoint list (32 zero bytes when none).</param>
     internal void WritePack(string path, ReadOnlySpan<byte> pngHash, ReadOnlySpan<byte> jsonHash, ReadOnlySpan<byte> extraHash) {
-        var bytes = new byte[(PackHeaderBytes + (m_packedSdf.Length * sizeof(uint)))];
+        var bytes = new byte[(PackHeaderBytes + (m_words.Length * sizeof(uint)))];
         var span = bytes.AsSpan();
 
         BinaryPrimitives.WriteUInt32LittleEndian(
@@ -191,11 +221,15 @@ public sealed class OverlayGlyphSdfPack {
         );
         BinaryPrimitives.WriteInt32LittleEndian(
             destination: span[20..],
-            value: m_packedSdf.Length
+            value: m_words.Length
         );
         BinaryPrimitives.WriteInt32LittleEndian(
             destination: span[24..],
             value: GlyphCount
+        );
+        BinaryPrimitives.WriteSingleLittleEndian(
+            destination: span[28..],
+            value: Advance
         );
         pngHash.CopyTo(destination: span.Slice(
             length: PackHashBytes,
@@ -212,10 +246,10 @@ public sealed class OverlayGlyphSdfPack {
 
         var payload = span[PackHeaderBytes..];
 
-        for (var index = 0; (index < m_packedSdf.Length); index++) {
+        for (var index = 0; (index < m_words.Length); index++) {
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: payload[(index * sizeof(uint))..],
-                value: m_packedSdf[index]
+                value: m_words[index]
             );
         }
 
@@ -239,8 +273,9 @@ public sealed class OverlayGlyphSdfPack {
     /// <summary>Flattens a shared SDF atlas into the per-glyph cell pack: the ASCII block (indices 0..94) plus, in
     /// order, one cell per entry of <paramref name="extraCodePoints"/> (index = <see cref="AsciiGlyphCount"/> + i —
     /// the caller's own ordering, never re-derived). Returns <see langword="null"/> when <paramref name="monoFont"/>
-    /// is <see langword="null"/>, carries no usable ASCII glyph bounds, or a requested cell is not an equal-sized,
-    /// pixel-aligned rectangle contained in the image. Integer edges and half-integer texel-center bounds are
+    /// is <see langword="null"/>, carries no usable ASCII glyph bounds or advance, a requested cell is not an equal-sized,
+    /// pixel-aligned rectangle contained in the image, or a glyph with a cell has no plane bounds to place its pen
+    /// origin. Integer edges and half-integer texel-center bounds are
     /// supported; center bounds include both endpoint texels. Variable-cell generated atlases require the layout-based
     /// text path, not this fixed-grid pack. A requested extra codepoint the font does
     /// not declare leaves a blank cell — the same gap the ASCII block's own boundless glyphs (e.g. space) take.</summary>
@@ -254,7 +289,7 @@ public sealed class OverlayGlyphSdfPack {
 
         // Probe the first glyph that HAS atlas bounds for the uniform cell size — SPACE carries no bounds in the
         // committed atlas (no ink, no cell); boundless glyphs stay blank cells in the pack.
-        FontAtlasBounds? probed = null;
+        FontAtlasGlyph? probed = null;
 
         for (var unicode = FirstChar; ((unicode < (FirstChar + AsciiGlyphCount)) && (probed is null)); unicode++) {
             if (
@@ -262,13 +297,21 @@ public sealed class OverlayGlyphSdfPack {
                 glyph: out var probe,
                 unicode: unicode
             ) &&
-                (probe.AtlasBounds is { } bounds)
+                (probe.AtlasBounds is not null)
             ) {
-                probed = bounds;
+                probed = probe;
             }
         }
 
-        if (probed is not { } probeBounds) {
+        if (probed is not { AtlasBounds: { } probeBounds }) {
+            return null;
+        }
+
+        // Plane bounds are em units and atlas bounds texels, Size texels to the em. The probe's advance is the run
+        // advance: the grid is monospace.
+        var advance = (probed.Advance * font.Size);
+
+        if (!float.IsFinite(f: advance) || (advance <= 0)) {
             return null;
         }
 
@@ -298,7 +341,7 @@ public sealed class OverlayGlyphSdfPack {
         var cellStrideLong = (((long)atlasCellWidth) * atlasCellHeight);
         var glyphCountLong = (((long)AsciiGlyphCount) + extraCount);
 
-        if (cellStrideLong > ((Array.MaxLength / sizeof(uint)) / glyphCountLong)) { return null; }
+        if ((cellStrideLong + MetricWords) > ((Array.MaxLength / sizeof(uint)) / glyphCountLong)) { return null; }
         if (
             (image.Width != font.Width) ||
             (image.Height != font.Height) ||
@@ -319,14 +362,15 @@ public sealed class OverlayGlyphSdfPack {
                 unicode: unicode
             ) &&
                 (glyph.AtlasBounds is { } bounds) &&
-                !FitsCell(bounds: bounds)
+                (!FitsCell(bounds: bounds) || (glyph.PlaneBounds is not { } plane) || !float.IsFinite(f: plane.Left) || !float.IsFinite(f: glyph.Advance))
             ) {
                 return null;
             }
         }
         var cellStride = ((int)cellStrideLong);
         var glyphCount = (AsciiGlyphCount + extraCount);
-        var packedSdf = new uint[(glyphCount * cellStride)];
+        var metricBase = (glyphCount * cellStride);
+        var words = new uint[(metricBase + (glyphCount * MetricWords))];
         var imageWidth = image.Width;
         var imageHeight = image.Height;
 
@@ -352,7 +396,7 @@ public sealed class OverlayGlyphSdfPack {
                     var sourceBase = (((sourceY * imageWidth) + sourceX) * 4);
 
                     // All four channels ride along (little-endian R|G|B|A); overlays median RGB at shade time.
-                    packedSdf[((glyphBase + (y * atlasCellWidth)) + x)] =
+                    words[((glyphBase + (y * atlasCellWidth)) + x)] =
                         pixels[sourceBase]
                         | (((uint)pixels[(sourceBase + 1)]) << 8)
                         | (((uint)pixels[(sourceBase + 2)]) << 16)
@@ -361,42 +405,40 @@ public sealed class OverlayGlyphSdfPack {
             }
         }
 
-        for (var index = 0; (index < AsciiGlyphCount); index++) {
-            if (
-                font.TryGetGlyph(
-                glyph: out var glyph,
-                unicode: (FirstChar + index)
-            ) &&
-                (glyph.AtlasBounds is { } bounds)
-            ) {
-                CopyGlyphCell(
-                    bounds: bounds,
-                    glyphIndex: index
-                );
-            }
-        }
+        for (var index = 0; (index < glyphCount); index++) {
+            var origin = 0f;
+            var glyphAdvance = advance;
 
-        for (var index = 0; (index < extraCount); index++) {
-            if (
-                font.TryGetGlyph(
+            if (font.TryGetGlyph(
                 glyph: out var glyph,
-                unicode: extraCodePoints![index]
-            ) &&
-                (glyph.AtlasBounds is { } bounds)
-            ) {
-                CopyGlyphCell(
-                    bounds: bounds,
-                    glyphIndex: (AsciiGlyphCount + index)
-                );
+                unicode: ((index < AsciiGlyphCount)
+                    ? (FirstChar + index)
+                    : extraCodePoints![(index - AsciiGlyphCount)])
+            )) {
+                glyphAdvance = (glyph.Advance * font.Size);
+
+                if ((glyph.AtlasBounds is { } bounds) && (glyph.PlaneBounds is { } plane)) {
+                    CopyGlyphCell(
+                        bounds: bounds,
+                        glyphIndex: index
+                    );
+                    // The cell starts at floor(bounds.Left), and bounds.Left is the plane's left edge: the pen
+                    // origin lies plane.Left em to its left.
+                    origin = ((bounds.Left - MathF.Floor(x: bounds.Left)) - (plane.Left * font.Size));
+                }
             }
+
+            words[(metricBase + (index * MetricWords))] = BitConverter.SingleToUInt32Bits(value: origin);
+            words[((metricBase + (index * MetricWords)) + 1)] = BitConverter.SingleToUInt32Bits(value: glyphAdvance);
         }
 
         return new OverlayGlyphSdfPack(
+            advance: advance,
             atlasCellHeight: atlasCellHeight,
             atlasCellWidth: atlasCellWidth,
             distanceRange: font.DistanceRange,
             glyphCount: glyphCount,
-            packedSdf: packedSdf
+            words: words
         );
     }
 }

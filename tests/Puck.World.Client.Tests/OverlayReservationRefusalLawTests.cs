@@ -9,7 +9,7 @@ namespace Puck.World.Client.Tests;
 [Collection(ConsoleRedirectionCollection.Name)]
 public sealed class OverlayReservationRefusalLawTests {
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
+    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount);
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "m_channelWriters")]
     private static extern ref Action<OverlayFrameBuilder>?[] Writers(OverlayFrameComposer composer);
 
@@ -18,7 +18,7 @@ public sealed class OverlayReservationRefusalLawTests {
         var composer = new OverlayFrameComposer(
             sources: new UnifiedOverlaySources(Console: null, BindingBar: null, Toast: null, FeedTick: null),
             capacity: WorldOverlayCapacity.FromSchema(),
-            glyphs: CreateGlyphs(atlasCellHeight: 1, atlasCellWidth: 1, distanceRange: 1, glyphCount: 1, packedSdf: [0]),
+            glyphs: CreateGlyphs(atlasCellHeight: 1, atlasCellWidth: 1, distanceRange: 1, glyphCount: 1, advance: 1f, words: [0u, 0u, 0x3F800000u]),
             frameSources: new EmptyFrames(), width: 800, height: 600, theme: OverlayThemeValues.Zero);
         var reserved = composer.Builder.ReservationOf(channel: OverlayChannel.Console).TextWords;
         var admitted = new string(c: 'a', count: (reserved - 2));

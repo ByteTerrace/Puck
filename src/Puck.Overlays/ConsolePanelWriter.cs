@@ -70,7 +70,7 @@ public sealed class ConsolePanelWriter {
         var pad = theme.Space.Space3;
         var bandHeight = theme.Space.HeightConsoleHead;
         var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MonoSize);
-        var cellWidth = builder.CellWidth(cellHeight: cellHeight);
+        var advance = builder.GlyphAdvance(cellHeight: cellHeight);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
 
         // The grid fills the top-left without overrunning: cols across, rows up to ~55% of the height, then the
@@ -80,14 +80,14 @@ public sealed class ConsolePanelWriter {
         var cols = Math.Clamp(
             max: MaxColumns,
             min: 8,
-            value: ((int)(availableWidth / cellWidth))
+            value: ((int)(availableWidth / advance))
         );
         var rows = Math.Clamp(
             max: MaxRows,
             min: 4,
             value: ((int)(availableHeight / cellHeight))
         );
-        var panelWidth = ((cols * cellWidth) + (2f * pad));
+        var panelWidth = ((cols * advance) + (2f * pad));
         var panelHeight = ((bandHeight + (2f * pad)) + (rows * cellHeight));
 
         builder.WritePanel(
@@ -216,7 +216,7 @@ public sealed class ConsolePanelWriter {
                     chars: frame.Input.Length,
                     cellHeight: cellHeight
                 ),
-                val2: ((contentX + (cols * cellWidth)) - inputX)
+                val2: ((contentX + (cols * advance)) - inputX)
             );
 
             builder.WriteRect(

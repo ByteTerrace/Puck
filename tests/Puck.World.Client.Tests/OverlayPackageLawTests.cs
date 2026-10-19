@@ -34,7 +34,7 @@ public sealed partial class OverlayPackageLawTests {
     );
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, uint[] packedSdf, int glyphCount);
+    private static extern OverlayGlyphSdfPack CreateGlyphs(int atlasCellWidth, int atlasCellHeight, float distanceRange, float advance, uint[] words, int glyphCount);
     private static RenderGraphDefinition Graph() => new(
         Name: "root",
         Outputs: ["composed"],
@@ -304,7 +304,8 @@ public sealed partial class OverlayPackageLawTests {
                     atlasCellWidth: 1,
                     distanceRange: 1f,
                     glyphCount: 1,
-                    packedSdf: [0u]
+                    advance: 1f,
+                    words: [0u, 0u, 0x3F800000u]
                 ),
                 sources: new UnifiedOverlaySources(
                     BindingBar: null,
