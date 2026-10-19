@@ -131,8 +131,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
     private readonly Vector3[] m_color = new Vector3[EntityCapacity];
-    // The kit row index per entity — carried for kit-keyed render selection (today's rig visuals are index-keyed via
-    // the avatar catalog, so nothing branches on it yet).
+    // The kit row index per entity: the chase camera reads the framed body's collider through it.
     private readonly byte[] m_kit = new byte[EntityCapacity];
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
@@ -1011,6 +1010,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         rows: Definition.Looks,
         index: LookIndex(index: index)
     );
+    /// <summary>Gets the entity's kit row index from the latest snapshot, which selects the collider a chase camera keeps
+    /// its eye out of.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The index into the delivered definition's kit rows.</returns>
+    public int Kit(int index) => m_kit[index];
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>

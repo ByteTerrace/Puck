@@ -45,6 +45,11 @@ scratch/shadow payloads.
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a
 replaced identity map that cannot rename an earlier captured answer.
 
+`WorldCameraClearanceLawTests` resolves the chase eye against walls and the
+debug world's Moth collider: it stays outside the body and the walls, keeps a
+clear sightline and its heading, and rises over the body when a wall or corner
+behind leaves no room.
+
 ## Verification
 
 Run the suite's CPU laws from the repository root:
