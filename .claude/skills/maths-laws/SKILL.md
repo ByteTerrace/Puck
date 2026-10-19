@@ -1,67 +1,104 @@
 ---
 name: maths-laws
-description: Authors and validates tests/Puck.Maths.Tests law cases, subjects, oracles, domains, legs, waivers, claims, coverage classifications, and mutation proofs. Use for any edit under that project; when adding, renaming, or changing a public Puck.Maths member; or when pinning a Maths documentation and behavior divergence. Enforces declaration-first cases, honest independent evidence, generated-register ownership, tier budgets, and the coverage ratchet. maths-usage owns choosing primitives and routine tier routing; engine and emulator gates are out of scope.
+description: Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindings, oracles, legs, waivers, the coverage ratchet, puck baselines maths-ledger. Primitive choice: maths-usage.
 ---
 
 # Writing a Puck.Maths law that bites
 
 This skill owns authoring and validating `tests/Puck.Maths.Tests`. The suite's
-current implementation and tests are authoritative; reconcile its README, XML
-documentation, and this skill with them when guidance disagrees.
+code and tests are authoritative; reconcile its README, XML documentation and
+this skill with them when they disagree.
+
+## What a law is for
+
+`AGENTS.md` sets the owner's target for the suite: the smallest set of tests
+that reaches 100% line coverage, plus a short keep-list of invariant tests that
+coverage cannot see (determinism, exact fixed-point results). That shapes every
+decision here.
+
+- Write a law where running the change cannot show the behavior: an exact
+  fixed-point result, a refusal or overflow boundary, a determinism property.
+  CI requires 100% line coverage of live `src/`, so a new public member lands
+  with a law (or an existing test) that reaches it.
+- Author at the `Default` tier. A Smoke sentinel or Deep mirror repeats a
+  Default statement and adds no line coverage; add one only when the lead or
+  owner asks for it, and delete a mirror you touch whose operands are no
+  stronger than its sibling's.
+- The suite's own machinery (the coverage ratchet, the leg gate, declaration
+  parity, the recorded registers) was written by agents and is a tool, not a
+  precondition. When it blocks a deletion, rename or restructure, change it in
+  the same change.
 
 ## Required workflow
 
-1. Declare every law in TWO places and nowhere else: the declaration — id, tier,
-   covered members, legs — as a JSON row in `tests/Puck.Maths.Tests/laws/<family>.json`,
-   and one binding in `LawRegistry.cs` (`ClaimCase`, `SweptCase`, or
-   `Case(id, run)` for any other run). Never add an isolated
-   `[Fact]` that bypasses registration. A declaration without a binding, or a
-   binding without a declaration, fails the Default-tier parity gate by name.
-2. Choose the cheapest honest tier and stay within its budget — by measured COST,
-   not by whether the word "exhaustive" fits. `Exhaustive` holds full-carrier
-   sweeps and the explicitly selected expensive combinatorial-prime checks.
-   Those prime checks state their finite operands and never imply full-carrier
-   proof. Cases in this tier take their own basis rather than consuming a `Domain`.
-3. State the claim, subject, operand domain, and evidence legs explicitly.
-4. Use the existing `Laws.cs` combinators and shared domains rather than
-   reimplementing their loops.
+1. Declare a law in two places and nowhere else: the declaration (id, tier,
+   covered members, legs) as a JSON row in
+   `tests/Puck.Maths.Tests/laws/<family>.json`, and one binding in
+   `LawRegistry.cs` or its per-family partial (`ClaimCase`, `SweptCase`, or
+   `Case(id, run)` for any other run). A bare `[Fact]` runs but credits no
+   member to the ratchet and declares no leg. A declaration without a binding,
+   or a binding without a declaration, fails
+   `LawDeclarationTests.EveryDeclarationHasExactlyOneCase` by name.
+2. Choose the cheapest honest tier by measured cost, not by whether the word
+   "exhaustive" fits. `Exhaustive` holds full-carrier sweeps and expensive
+   finite combinatorial-prime checks, which take their own basis rather than a
+   `Domain` and never imply a full-carrier proof.
+3. State the claim, subject, operand domain and evidence legs explicitly.
+4. Instantiate the existing `Laws.cs` combinators and shared domains instead of
+   re-implementing their loops.
 5. Give the claim independent evidence. A second expression of the same
-   implementation is not an oracle.
+   implementation is not an oracle: reference arithmetic lives in `Oracles.cs`,
+   computed in `BigInteger`, and never calls a `Puck.Maths` kernel.
 6. Classify every affected public Maths member in the coverage ratchet with a
-   real law or a precise waiver.
-7. Regenerate machine-owned registers and reports with
-   `puck baselines maths-ledger`; never hand-edit them. A test run writes
-   only to the build output and never changes the checkout.
-8. When it is in doubt whether a new law can fail, apply a plausible mutation
-   in a worktree of your own and watch it go red, or run
+   covering law (`Members` in the declaration) or a precise waiver
+   (`Coverage.WaiverDeclarations`). The ratchet fails on every run for a member
+   classified nowhere and cannot heal itself.
+7. Regenerate the machine-owned registers with `puck baselines maths-ledger`
+   and commit them; never hand-edit `coverage-manifest.json`, `leg-ledger.md`,
+   `frontier.json` or `RESULTS.md`. A test run writes only to the build output.
+8. When it is in doubt whether a new law can fail, apply a plausible one-line
+   mutation in a worktree of your own and watch the law go red, or run
    `puck laws prove <law> --fix <commit>` (`--file-list` for an uncommitted
-   fix). Never hand-revert files in a shared tree.
-   Most Maths laws are rows of one theory, which `puck laws prove` cannot
-   select one at a time; prove such a row with an exact one-line mutation in
-   a scratch worktree, failing at the intended assertion, and name the
-   mutation in the commit.
+   fix). Most laws are rows of one theory, which `puck laws prove` cannot
+   select one at a time; prove such a row with an exact mutation, failing at
+   the intended assertion, and name the mutation in the commit. Never
+   hand-revert files in a shared tree.
+
+Deleting a law removes its JSON row, its binding and any oracle only it used,
+then regenerates the registers.
 
 ## Run a tier
 
-A plain `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`
-runs Smoke + Default. Deep and Exhaustive cases are explicit: select one with
-`--explicit on --filter-trait tier=<tier>`, and Smoke alone with
-`--filter-trait tier=Smoke`. Without `--explicit on`, a Deep or Exhaustive
-filter selects no test.
+Build the test project with `-nodeReuse:false`, then run it:
+
+```text
+dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
+```
+
+`dotnet test` forwards switches it does not know to the test host, which exits
+5, so `-nodeReuse:false` belongs to the build step only. The plain run is Smoke
+plus Default and includes the ratchet and leg gates, which only a run that
+includes the Default tier checks. Deep and Exhaustive cases are explicit:
+`--explicit on --filter-trait tier=<tier>`, and without `--explicit on` such a
+filter selects no test. One law runs with
+`--explicit on --filter-display-name '<law-id>*'`; the trailing wildcard is
+required.
 
 ## Load the full reference selectively
 
 Read [references/complete-reference.md](references/complete-reference.md) for
-the exact `Case` shape and combinators, tier budgets, leg taxonomy, oracle
-standards, domain construction, coverage categories and waivers, claim-body
-rules, mutation procedure, or deliberate-correction rules.
+the exact `Case` shape and combinators, tier budgets, the leg taxonomy and its
+markers (`ENVELOPE:`, `OWED:`, `MIRROR of`, `DOC GAP:`), oracle standards,
+domain construction, coverage categories and waivers, claim-body rules, the
+mutation procedure and deliberate-correction rules.
 
 ## Route adjacent work
 
 | Skill | Use when |
 |---|---|
 | [`maths-usage`](../maths-usage/SKILL.md) | Selecting a Maths primitive, applying consumer determinism rules, or deciding which verification tier an implementation change owes. |
-| [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names, or textual patterns across the suite. |
-| [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers, or rename and deletion safety. |
+| [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names or textual patterns across the suite. |
+| [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers or rename and deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
 | [`verification`](../verification/SKILL.md) | The landing bar, optional checks beyond the law suite, and the CLI copy. |

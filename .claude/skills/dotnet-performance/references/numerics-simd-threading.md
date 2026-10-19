@@ -204,7 +204,7 @@ public sealed class C(int value)
 
 ### Unbuffered (rendezvous) channel
 
-- dotnet/runtime#116097 adds an unbuffered channel factory alongside `CreateUnbounded`/`CreateBounded`/`CreateUnboundedPrioritized`: writes complete only when paired with a reader — strict handoff/backpressure with no buffer. New API.
+- dotnet/runtime#116097 proposes an unbuffered channel factory alongside `CreateUnbounded`/`CreateBounded`/`CreateUnboundedPrioritized`: writes complete only when paired with a reader — strict handoff/backpressure with no buffer. The `Channel` class of the pinned net11.0 runtime exposes only those three factories, so do not write code against an unbuffered one; a bounded channel of capacity 1 is the closest shape available.
 
 ---
 

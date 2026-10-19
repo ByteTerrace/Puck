@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response treats the accumulator remainder as authoritative snapshot state.
+The response says the accumulator's sub-unit remainder (with its TicksPerSecond) is authoritative simulation state that must be saved in snapshots and state hashes.
