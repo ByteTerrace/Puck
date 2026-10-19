@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
+using Puck.Vulkan.Messages;
 using Xunit;
 
 namespace Puck.Vulkan.Tests;
@@ -12,7 +14,10 @@ namespace Puck.Vulkan.Tests;
 /// of their memory type, role and kind at aligned offsets, a resource past half a block gets its own, host-visible blocks
 /// map once and hand each resource its offset, a pool keeps one empty block and frees the next, a failed bind or map
 /// gives back what it took, destroying a resource the arena bound returns its range instead of freeing memory, and the
-/// device's counts see one allocation per block.
+/// device's counts see one allocation per block. A device lost mid-frame tears down with resources still bound: every
+/// block is unmapped and freed once before the device is destroyed, no destroy after that reaches the driver, a late or
+/// repeated destroy never frees a block, the retired arena binds and maps nothing, and a rebuilt device's arena starts
+/// afresh.
 /// </summary>
 public sealed unsafe class VulkanMemoryArenaLawTests {
     // A bind of this resource fails, and memory of this type refuses its mapping.
@@ -87,6 +92,61 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         Assert.False(condition: arena.Release(resource: 3));
     }
 
+    [Fact]
+    public void ALostDeviceTearsDownWithBlocksLiveFreeingEachOnceAndTouchingNothingAfterDestroy() {
+        Calls = [];
+        NextMemory = 1000;
+        var work = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+        var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi());
+        var sync = new SynchronizationApi();
+        var queue = new VulkanGpuQueueSubmitter(new Context(logical: logical), new VulkanQueueSubmitter(), sync);
+        var small = new VkMemoryRequirements { Alignment = 256UL, Size = 1000UL };
+        var arena = device.Arena;
+        var buffers = new VulkanNativeBufferApi();
+
+        // Mid-frame: a device-local buffer and image, and a mapped staging buffer, all live when the device is lost.
+        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal);
+        _ = arena.Bind(image: true, memoryTypeIndex: 0, requirements: in small, resource: 2, role: GpuMemoryRole.DeviceLocal);
+        _ = arena.Bind(image: false, memoryTypeIndex: 1, requirements: in small, resource: 3, role: GpuMemoryRole.HostVisible);
+        var staging = new VulkanBufferHandles(Buffer: 3, Device: device, Memory: 1002);
+        Assert.Equal(expected: ((nint)0x10000), actual: buffers.Map(handles: staging, sizeBytes: 1000UL));
+        using var fence = queue.CreateSubmissionFence();
+        queue.Submit(commandBufferHandles: [42], fence: fence);
+        sync.Lost = true;
+        _ = Assert.Throws<DeviceLostException>(testCode: fence.Wait);
+
+        // Recovery tears the device down with every resource still bound: each block unmapped and freed once, before the
+        // device is destroyed, and the counts end with nothing held.
+        Calls.Clear();
+        logical.Dispose();
+        logical.Dispose();
+        Assert.Equal(expected: ["free 1000", "free 1001", "unmap 1002", "free 1002", "destroy device"], actual: Calls);
+        Assert.True(condition: device.IsDestroyed);
+        Assert.Equal(expected: 0L, actual: work.Held);
+
+        // The owners release their resources late, one twice: nothing reaches the driver, and no block is freed again.
+        Calls.Clear();
+        device.Destroy(destroy: device.DestroyBuffer, handle: 1, memoryHandle: 1000);
+        device.Destroy(destroy: device.DestroyImage, handle: 2, memoryHandle: 1001);
+        buffers.Unmap(handles: staging);
+        buffers.Destroy(handles: staging);
+        buffers.Destroy(handles: staging);
+        device.Destroy(destroy: device.DestroyBuffer, handle: 0, memoryHandle: 1000);
+        Assert.Empty(collection: Calls);
+        Assert.False(condition: arena.TryMapped(pointer: out _, resource: 3));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => buffers.Map(handles: staging, sizeBytes: 1000UL));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 4, role: GpuMemoryRole.DeviceLocal));
+
+        // The rebuilt device's arena is its own: it allocates afresh and frees only its own blocks.
+        var rebuilt = new VulkanDeviceCommands(18, Procedures(), memory: work);
+        using (var rebuiltLogical = new VulkanLogicalDevice(rebuilt, default, new VkQueue(familyIndex: 0, handle: 32), default, new LogicalApi())) {
+            Assert.Equal(expected: 1003, actual: rebuilt.Arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal));
+            rebuilt.Destroy(destroy: rebuilt.DestroyBuffer, handle: 1, memoryHandle: 1003);
+        }
+        Assert.Equal(expected: [$"alloc 1003 {Block} type=0", "bind buffer 1 1003 0", "destroy buffer 1", "free 1003", "destroy device"], actual: Calls);
+    }
+
     private static VulkanProcResolver Procedures() => new(getDeviceProcAddr: &Resolve, getInstanceProcAddr: &Resolve);
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Resolve(nint handle, byte* name) => (Marshal.PtrToStringUTF8(ptr: ((nint)name)) switch {
@@ -97,6 +157,8 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         "vkMapMemory" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, nint*, VkResult>)&MapMemory)),
         "vkUnmapMemory" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&UnmapMemory)),
         "vkDestroyBuffer" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroyBuffer)),
+        "vkDestroyImage" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroyImage)),
+        "vkQueueSubmit" => ((nint)((delegate* unmanaged[Cdecl]<nint, uint, nint, nint, VkResult>)&Submit)),
         _ => ((nint)((delegate* unmanaged[Cdecl]<void>)&Trap)),
     });
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -130,4 +192,33 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     private static void UnmapMemory(nint device, nint memory) => Calls!.Add(item: $"unmap {memory}");
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void DestroyBuffer(nint device, nint buffer, nint allocator) => Calls!.Add(item: $"destroy buffer {buffer}");
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void DestroyImage(nint device, nint image, nint allocator) => Calls!.Add(item: $"destroy image {image}");
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static VkResult Submit(nint queue, uint count, nint submits, nint fence) => VkResult.Success;
+
+    private sealed class Context(VulkanLogicalDevice logical) : IVulkanDeviceContext {
+        public VulkanInstance Instance => throw new NotSupportedException();
+        public VulkanLogicalDevice LogicalDevice => logical;
+        public VkPhysicalDevice PhysicalDevice => throw new NotSupportedException();
+        public VulkanSurface Surface => throw new NotSupportedException();
+    }
+    private sealed class LogicalApi : IVulkanLogicalDeviceApi {
+        public VkResult CreateLogicalDevice(VulkanLogicalDeviceCreateRequest request, out VulkanDeviceCommands? device) => throw new NotSupportedException();
+        public void DestroyDevice(VulkanDeviceCommands device) => Calls!.Add(item: "destroy device");
+        public nint GetDeviceQueue(VulkanDeviceCommands device, uint queueFamilyIndex, uint queueIndex) => throw new NotSupportedException();
+        public VkResult WaitIdle(VulkanDeviceCommands device) => throw new NotSupportedException();
+    }
+    // One fence, signaled until the device is lost.
+    private sealed class SynchronizationApi : IVulkanFrameSynchronizationApi {
+        public bool Lost;
+
+        public VkResult CreateFence(VulkanFrameSynchronizationCreateRequest request, out nint fenceHandle) { fenceHandle = 23; return VkResult.Success; }
+        public VkResult CreateSemaphore(VulkanFrameSynchronizationCreateRequest request, out nint semaphoreHandle) => throw new NotSupportedException();
+        public void DestroyFence(VulkanDeviceCommands device, nint fenceHandle) { }
+        public void DestroySemaphore(VulkanDeviceCommands device, nint semaphoreHandle) => throw new NotSupportedException();
+        public VkResult GetFenceStatus(VulkanDeviceCommands device, nint fenceHandle) => (Lost ? VkResult.ErrorDeviceLost : VkResult.Success);
+        public VkResult ResetFence(VulkanDeviceCommands device, nint fenceHandle) => VkResult.Success;
+        public VkResult WaitForFence(VulkanDeviceCommands device, nint fenceHandle, ulong timeout) => (Lost ? VkResult.ErrorDeviceLost : VkResult.Success);
+    }
 }

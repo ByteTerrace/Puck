@@ -593,6 +593,13 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <summary>Gets the device-local memory counts this table's allocations and frees join, or <see langword="null"/>
     /// when it counts none.</summary>
     public GpuDeviceMemoryWork? Memory { get; }
+    /// <summary>Gets whether the device has been destroyed (<see cref="MarkDestroyed"/>), after which a destroy through
+    /// this table calls nothing: a resource its owner releases late, after a device loss tore the device down, no longer
+    /// names a live device.</summary>
+    public bool IsDestroyed { get; private set; }
+
+    /// <summary>Records that <c>vkDestroyDevice</c> destroyed the device.</summary>
+    public void MarkDestroyed() => IsDestroyed = true;
 
     /// <summary>Destroys or frees one object this device owns through the object type's entry point, skipping a zero
     /// handle. Every <c>vkDestroy*</c> child-object entry point and <c>vkFreeMemory</c> share this shape, and this is
@@ -600,7 +607,7 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="destroy">The entry point from this table: <see cref="DestroyPipeline"/>, <see cref="FreeMemory"/>, and so on.</param>
     /// <param name="handle">The native handle to release, or zero.</param>
     public void Destroy(delegate* unmanaged[Cdecl]<nint, nint, nint, void> destroy, nint handle) {
-        if (0 != handle) {
+        if ((0 != handle) && !IsDestroyed) {
             // The same field value this table resolved, so an address comparison identifies vkFreeMemory.
             if (((nint)destroy) == ((nint)FreeMemory)) {
                 _ = Memory?.CountReleased(
@@ -640,8 +647,10 @@ public sealed unsafe class VulkanDeviceCommands {
             destroy: destroy,
             handle: handle
         );
-        // Memory the arena bound the resource to goes back to its block; any other is the resource's own.
-        if ((0 != handle) && (m_arena?.Release(resource: handle) == true)) {
+        // A block of the arena is the arena's alone to free: the resource's range goes back to it, and no destroy, late or
+        // repeated, frees the block itself. Any other memory is the resource's own.
+        if (m_arena?.Owns(memory: memoryHandle) == true) {
+            if (0 != handle) { _ = m_arena.Release(resource: handle); }
             return;
         }
         Destroy(

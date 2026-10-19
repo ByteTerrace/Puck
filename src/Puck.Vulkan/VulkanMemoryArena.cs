@@ -11,7 +11,10 @@ namespace Puck.Vulkan;
 /// host-visible memory is mapped once for its life, and a resource's mapping is the block's at its offset. A block every
 /// resource left is freed, but one empty block a pool keeps, so a bake that frees and makes staging buffers does not
 /// allocate again. The device's memory counts (<see cref="GpuDeviceMemoryWork"/>) count blocks, the memory the device
-/// actually holds. Thread-safe.
+/// actually holds. A block is the arena's alone to free (<see cref="Owns"/>), exactly once: by the release that leaves a
+/// pool a second empty block, or by <see cref="FreeAll"/>, which unmaps and frees every block left as the device is torn
+/// down, whatever resources are still bound to it (a device loss leaves them so; freeing memory a lost device's resources
+/// are bound to is valid), and retires the arena, which then binds and maps nothing. Thread-safe.
 /// </summary>
 public sealed unsafe class VulkanMemoryArena {
     /// <summary>The bytes of a shared block.</summary>
@@ -24,6 +27,10 @@ public sealed unsafe class VulkanMemoryArena {
     private readonly Lock m_gate = new();
     private readonly Dictionary<(uint Type, GpuMemoryRole Role, bool Image), List<Block>> m_pools = [];
     private readonly Dictionary<nint, (Block Block, ulong Offset, ulong Size)> m_slices = [];
+    // The memory of every block the arena holds, and once retired of every block it freed as it retired: no other
+    // allocation reuses a retired arena's handles, since its device is being destroyed.
+    private readonly HashSet<nint> m_blocks = [];
+    private bool m_retired;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanMemoryArena"/> class.</summary>
     /// <param name="device">The device whose memory it allocates.</param>
@@ -47,8 +54,11 @@ public sealed unsafe class VulkanMemoryArena {
     /// <param name="memoryTypeIndex">The memory type it binds to.</param>
     /// <param name="role">What its memory is for, which decides whether the block is counted and mapped.</param>
     /// <returns>The block's memory, which the resource's handles name.</returns>
+    /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     public nint Bind(nint resource, bool image, in VkMemoryRequirements requirements, uint memoryTypeIndex, GpuMemoryRole role) {
         lock (m_gate) {
+            ObjectDisposedException.ThrowIf(condition: m_retired, instance: this);
+
             var key = (memoryTypeIndex, role, image);
 
             if (!m_pools.TryGetValue(key: key, value: out var pool)) {
@@ -117,7 +127,7 @@ public sealed unsafe class VulkanMemoryArena {
     /// <returns>Whether the arena bound the resource to mapped memory.</returns>
     public bool TryMapped(nint resource, out nint pointer) {
         lock (m_gate) {
-            if (m_slices.TryGetValue(key: resource, value: out var slice) && (slice.Block.Mapped != 0)) {
+            if (!m_retired && m_slices.TryGetValue(key: resource, value: out var slice) && (slice.Block.Mapped != 0)) {
                 pointer = (slice.Block.Mapped + ((nint)slice.Offset));
                 return true;
             }
@@ -126,11 +136,26 @@ public sealed unsafe class VulkanMemoryArena {
 
         return false;
     }
-    /// <summary>Frees every block, as the device is destroyed.</summary>
+    /// <summary>Gets whether a memory handle is one of the arena's blocks, which only the arena frees, maps and
+    /// unmaps; a retired arena still owns the blocks it freed as it retired.</summary>
+    /// <param name="memory">The memory handle.</param>
+    /// <returns>Whether it is one of the arena's blocks.</returns>
+    public bool Owns(nint memory) {
+        lock (m_gate) {
+            return m_blocks.Contains(item: memory);
+        }
+    }
+    /// <summary>Unmaps and frees every block once, as the device is torn down, and retires the arena. A second call
+    /// does nothing.</summary>
     public void FreeAll() {
         lock (m_gate) {
+            if (m_retired) {
+                return;
+            }
+
+            m_retired = true;
             foreach (var pool in m_pools.Values) {
-                foreach (var block in pool) { Free(block: block); }
+                foreach (var block in pool) { Free(block: block, forget: false); }
             }
             m_pools.Clear();
             m_slices.Clear();
@@ -172,10 +197,14 @@ public sealed unsafe class VulkanMemoryArena {
             }
         }
 
+        _ = m_blocks.Add(item: memory);
+
         return new Block(key: key, mapped: mapped, memory: memory, ranges: new GpuMemoryRanges(capacity: bytes));
     }
-    // Unmaps and frees a block, counting its release.
-    private void Free(Block block) {
+    // Unmaps and frees a block, counting its release; a block a release frees is forgotten, since a later allocation may
+    // reuse its handle.
+    private void Free(Block block, bool forget = true) {
+        if (forget) { _ = m_blocks.Remove(item: block.Memory); }
         if (block.Mapped != 0) {
             m_device.UnmapMemory(m_device.Handle, block.Memory);
         }

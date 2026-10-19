@@ -111,10 +111,15 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
         );
     /// <inheritdoc/>
     /// <exception cref="VulkanException">The native memory mapping call failed.</exception>
+    /// <exception cref="InvalidOperationException">The buffer is bound to an arena block that is not mapped, or no
+    /// longer is, since the arena retired.</exception>
     public nint Map(VulkanBufferHandles handles, ulong sizeBytes) {
-        // A buffer the arena bound is mapped for its block's life, at its offset.
+        // A buffer the arena bound is mapped for its block's life, at its offset; only the arena maps a block.
         if (handles.Device.Arena.TryMapped(pointer: out var blockMapping, resource: handles.Buffer)) {
             return blockMapping;
+        }
+        if (handles.Device.Arena.Owns(memory: handles.Memory)) {
+            throw new InvalidOperationException(message: "A buffer bound to an arena block that holds no mapping cannot be mapped.");
         }
 
         handles.Device.MapMemory(
@@ -130,8 +135,8 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     }
     /// <inheritdoc/>
     public void Unmap(VulkanBufferHandles handles) {
-        // A block stays mapped while it lives.
-        if (handles.Device.Arena.TryMapped(pointer: out _, resource: handles.Buffer)) {
+        // A block stays mapped while it lives, and only the arena unmaps it.
+        if (handles.Device.Arena.Owns(memory: handles.Memory)) {
             return;
         }
 

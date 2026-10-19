@@ -15,8 +15,8 @@ public sealed class HeapArenaCollection;
 /// Laws over a device's heap arena (<see cref="DirectXHeapArena"/>) on fake device calls: resources share a heap of their
 /// type, category and role at the alignment the device reports, a resource past half a heap gets its own, a resource's
 /// release finds its range through the token it carries rather than its address, a pool keeps one empty heap and
-/// releases the next, a failed placement or tag gives back what it took, and the device's counts see one allocation per
-/// heap. No device is created.
+/// releases the next, a failed placement or tag gives back what it took, the device's counts see one allocation per
+/// heap, and teardown releases each heap once and retires the arena. No device is created.
 /// </summary>
 [Collection(name: nameof(HeapArenaCollection))]
 [SupportedOSPlatform("windows10.0.10240")]
@@ -93,6 +93,11 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         Assert.Equal(expected: 0, actual: arena.Heaps);
         Assert.Equal(expected: ["release heap 1", "release heap 2", "release heap 3"], actual: calls.Log);
         Assert.False(condition: DirectXHeapArena.Release(calls: calls, resource: texture));
+        // Torn down again, as a lost device's recovery may: nothing is released twice, and the retired arena places nothing.
+        calls.Log.Clear();
+        arena.FreeAll();
+        Assert.Empty(collection: calls.Log);
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal));
         Assert.True(condition: work.TryRead(kind: GpuDeviceMemoryWork.Released, value: out var released));
         Assert.Equal(expected: allocated, actual: released);
 

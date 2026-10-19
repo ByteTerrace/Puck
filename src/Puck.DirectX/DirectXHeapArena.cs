@@ -17,7 +17,9 @@ namespace Puck.DirectX;
 /// (<see cref="DirectXDeviceMemory.CountReleased"/>) returns its range (<see cref="Release"/>), found through a token the
 /// resource itself carries (private data under <see cref="TokenKey"/>), never through its address, which a later resource
 /// may reuse. A placed resource holds its heap, so releasing the arena's reference never frees memory a resource still
-/// sits in. Thread-safe.
+/// sits in: <see cref="FreeAll"/> releases every heap once as the device is torn down, whatever resources a device loss
+/// left in them, and retires the arena, which then places nothing; a resource released after it returns no range.
+/// Thread-safe.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXHeapArena {
@@ -38,6 +40,7 @@ public sealed unsafe class DirectXHeapArena {
     private readonly GpuDeviceMemoryWork? m_memory;
 
     private readonly Lock m_gate = new();
+    private bool m_retired;
     private readonly Dictionary<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role), List<Heap>> m_pools = [];
 
     /// <summary>Initializes a new instance of the <see cref="DirectXHeapArena"/> class.</summary>
@@ -70,6 +73,7 @@ public sealed unsafe class DirectXHeapArena {
     /// <returns>The resource, owned by the caller, who reports its release (<see cref="DirectXDeviceMemory.CountReleased"/>).</returns>
     /// <exception cref="DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">A creation failed for another reason.</exception>
+    /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     public ID3D12Resource* Create(in D3D12_RESOURCE_DESC description, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue, GpuMemoryRole role) {
         var resourceDescription = description;
         var info = m_calls.AllocationInfo(description: &resourceDescription);
@@ -83,6 +87,7 @@ public sealed unsafe class DirectXHeapArena {
         var offset = 0UL;
 
         lock (m_gate) {
+            ObjectDisposedException.ThrowIf(condition: m_retired, instance: this);
             if (!m_pools.TryGetValue(key: key, value: out var pool)) {
                 pool = [];
                 m_pools.Add(key: key, value: pool);
@@ -146,9 +151,15 @@ public sealed unsafe class DirectXHeapArena {
 
         return true;
     }
-    /// <summary>Releases every heap, as the device is released.</summary>
+    /// <summary>Releases every heap once, as the device is released, and retires the arena. A second call does
+    /// nothing.</summary>
     public void FreeAll() {
         lock (m_gate) {
+            if (m_retired) {
+                return;
+            }
+
+            m_retired = true;
             foreach (var pool in m_pools.Values) {
                 foreach (var heap in pool) { Free(heap: heap); }
             }
