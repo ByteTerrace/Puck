@@ -25,7 +25,8 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// <item>a dynamic instance's transform into its own slot by that role rather than the slot's number, which each program
 /// assigns;</item>
 /// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, or world space),
-/// rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/>. The bake samples such an instruction
+/// rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/>, and, under a slot of the group's own, by
+/// that slot's offset from it, which names the member a vertex of the mesh rides (<see cref="SdfMesh.Members"/>). The bake samples such an instruction
 /// through that slot's transform in the frame, so the shapes of a stamp-pool blend group, each riding its own slot inside
 /// the group's instance, take their places and turns from the frame's transforms rather than from the
 /// instructions;</item>
@@ -144,9 +145,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
                     Keep(slot: slot, pose: Pose.Identity, transforms: transforms);
                 } else {
                     var pose = RelativePose(ownSlot: ownSlot, slot: slot, transforms: transforms);
+                    var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
                     instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
                     m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(in pose)));
+                    m_hash.Append(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(in offset)));
                     Keep(slot: slot, pose: pose, transforms: transforms);
                 }
                 break;

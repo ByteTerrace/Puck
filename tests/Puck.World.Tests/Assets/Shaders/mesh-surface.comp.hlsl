@@ -8,6 +8,8 @@
 // Each case: (the hit point, the draw) and (the ray direction, the triangle).
 [[vk::binding(1, 3)]] StructuredBuffer<float4> meshCases : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> meshResults : register(u2, space3);
+// The frame's dynamic transforms a mesh with members reads; no case's mesh has members, so one zero row stands in.
+[[vk::binding(3, 3)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t3, space3);
 
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli"
 

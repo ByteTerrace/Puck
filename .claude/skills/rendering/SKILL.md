@@ -246,6 +246,19 @@ owns the explanation.
   meshes, whatever their materials. The draw
   record's word 31 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
   sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
+- **A group's vertices follow their own shape's slot.** A dynamic group whose
+  shapes ride slots besides its own gets one more points round over its finished
+  mesh: the bake kernel answers each vertex's winning slot in the first gradient
+  word of a points lattice without gradients, and the mesh keeps each other slot
+  as a member (`SdfMesh.Members`: its offset from the group's slot and the pose
+  it was baked at) and each vertex's member (`SdfMesh.VertexMembers`). Word 32 of
+  the draw record names the members (`SdfMeshRegion.SkinFlag`), and every mesh
+  read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
+  carries a member's vertex out through that slot's live (or previous) transform,
+  so the mesh interface binds the dynamic transforms. A cut or intersection face
+  keeps the slot of the shape it shapes (`sdfComposeCandidate`); only a union-family
+  winner hands its slot on. Rigid per-vertex skinning stretches a blend seam
+  between members that move far apart.
 - **Meshes keep their words; draws repack only their records.** The tables
   place each mesh whole in an arena past a reserve of draw records
   (`SdfMeshRegionArena`), where it stays while a draw names it, so

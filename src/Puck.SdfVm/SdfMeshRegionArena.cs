@@ -100,8 +100,9 @@ public sealed class SdfMeshRegionArena {
             var vertexWord = m_end;
             var materialWord = checked(vertexWord + (mesh.Positions.Length * SdfMeshRegion.VertexWords));
             var indexWord = checked(materialWord + mesh.TriangleMaterials.Length);
+            var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked(indexWord + mesh.Indices.Length));
 
-            m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord));
+            m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
             m_end = checked(m_end + words);
             m_placed.Add(item: mesh);
         }

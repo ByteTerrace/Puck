@@ -62,16 +62,20 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
 void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int instanceIndex, int frameSlot, float smooth, bool trackMaterial) {
     if (trackMaterial) {
         bool candidateWins;
+        // A cut or an intersection shapes the surface it wins on, which still belongs to the shape it shapes: the mesh
+        // bake's vertex there rides that shape's slot rather than the cutter's (SdfMesh.Members). Only a union-family
+        // winner hands its slot on.
+        bool handsSlot = true;
 
         switch (blend) {
             case SDF_BLEND_INTERSECTION:
             case SDF_BLEND_SMOOTH_INTERSECTION:
-            case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (candidate > result.distance); break; }
+            case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (candidate > result.distance); handsSlot = false; break; }
             case SDF_BLEND_SUBTRACTION:
             case SDF_BLEND_SMOOTH_SUBTRACTION:
             case SDF_BLEND_CHAMFER_SUBTRACTION:
             case SDF_BLEND_GROOVE_SUBTRACTION:
-            case SDF_BLEND_PIPE_SUBTRACTION:     { candidateWins = (-candidate > result.distance); break; }
+            case SDF_BLEND_PIPE_SUBTRACTION:     { candidateWins = (-candidate > result.distance); handsSlot = false; break; }
             default:                             { candidateWins = (candidate < result.distance); break; }
         }
 
@@ -79,7 +83,7 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
             result.material = material;
             result.lanes = lanes;
             result.instanceIndex = instanceIndex;
-            result.frameSlot = frameSlot;
+            result.frameSlot = (handsSlot ? frameSlot : result.frameSlot);
         }
     }
 

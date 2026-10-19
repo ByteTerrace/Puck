@@ -122,6 +122,7 @@ public sealed class SdfKernelInterfaces {
                     member.IsBlockMember
                 )),
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
+                Read(element: ShaderValueType.Float4, name: SdfWorldPackage.DynamicTransforms),
                 ShaderWorkCounters.BufferMember,
             ],
             name: "sdf-mesh",

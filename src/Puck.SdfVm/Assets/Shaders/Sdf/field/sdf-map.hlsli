@@ -903,7 +903,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                                     result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                                     result.lanes = candidateWins ? composeLanes : savedFieldLanes;
                                     result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
-                                    result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                                    // A cut face rides the shape it cuts (sdfComposeCandidate).
+                                    result.frameSlot = savedFieldSlot;
                                 }
                             } else {
                                 result.distance = min(min(a, b), dStairs);

@@ -796,6 +796,19 @@ that frame and draws at the slot's live transform, and its draw names that slot
 writes into the visibility record so views places material layers in the body's
 frame and reads its lanes; a static group's mesh is in world space.
 
+A group whose shapes ride slots of their own beside the group's (a stamp-pool
+blend group, each shape on its own slot) follows them as they move apart: once
+its mesh is built, one more points round asks which slot wins at each vertex,
+and the mesh keeps each such slot as a member, its offset from the group's slot
+and the pose it was baked at, with each vertex's member (`SdfMesh.Members`,
+`SdfMesh.VertexMembers`; the draw record's word 32 names them). Every read of a
+mesh vertex carries a member's vertex through the inverse of that baked pose and
+out through the slot's transform in the frame, the previous frame's for motion,
+so a hinged part blended into a group swings with its slot. A cut or
+intersection face rides the shape it shapes rather than the cutter. A seam
+between two members that move far apart stretches, since each vertex follows one
+slot rigidly.
+
 The tables keep each mesh at the words it was first placed at
 (`SdfMeshRegionArena`: a reserve of draw records, then each mesh whole), so a
 frame whose bodies moved packs only its draw records (`SdfMeshRegion.WriteDraws`),
