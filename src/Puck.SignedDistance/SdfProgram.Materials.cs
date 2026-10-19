@@ -6,7 +6,8 @@ public sealed partial class SdfProgram {
     // MaterialVectorsPerEntry float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit;
-    // 20 the paints: (first paint's vector, paint count, 0, 0) as uint bits.
+    // 20 the paints and the emissive lane: (first paint's vector, paint count, emissive lane + 1 or 0 for a static
+    // emissive, 0) as uint bits.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
@@ -64,7 +65,7 @@ public sealed partial class SdfProgram {
                 value: new(
                     x: BitConverter.UInt32BitsToSingle(value: ((paints.Count > 0) ? (uint)paintCursor : 0u)),
                     y: BitConverter.UInt32BitsToSingle(value: (uint)paints.Count),
-                    z: 0f,
+                    z: BitConverter.UInt32BitsToSingle(value: ((m.EmissiveLane is { } lane) ? (((uint)lane) + 1u) : 0u)),
                     w: 0f
                 )
             );

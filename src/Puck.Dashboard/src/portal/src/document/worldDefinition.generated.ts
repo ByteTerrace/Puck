@@ -8064,6 +8064,10 @@ export type WorldPrototype = {
           strandOffset?: number | null;
         } | null;
       } | null)[] | null;
+      /**
+       * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
+       */
+      emissiveLane?: number | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).

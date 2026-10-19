@@ -64,6 +64,12 @@ public sealed partial class SdfProgramBuilder {
         );
         RequireNonNegative(value: (material.Bleed ?? Vector3.One), paramName: nameof(material), subject: "A material bleed tint");
         RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
+        if (!SdfMaterial.IsEmissiveLane(lane: material.EmissiveLane)) {
+            throw new ArgumentOutOfRangeException(
+                nameof(material),
+                $"A material emissive lane must name a render lane in [0, 3]; got {material.EmissiveLane}."
+            );
+        }
         if (!SdfMaterialLayers.IsValid(
             inset: material.Inset,
             weathering: material.Weathering,
