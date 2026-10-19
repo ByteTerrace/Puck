@@ -363,7 +363,13 @@ settles. Run it from PowerShell with `--ablation with-without`, which adds a
 no-skill baseline arm and reports the score delta, a Sonnet-class
 `--judge-model`, and `-j` no higher than 4 on a shared machine. The agent
 under test runs in an empty temporary directory, not the repository, so a
-case measures what the skill itself teaches. Re-run a reply that starts with
+case measures what the skill itself teaches. Nothing is copied into that
+directory and Bash and Edit are denied unless `--allow-tools` grants them, so
+a case inlines any source it needs into its prompt and grades what the reply
+says, never a tool run. A prompt shaped as a bare order ("fix X") sends the
+agent searching the empty directory without loading the skill; phrase it as
+the developer's question, naming the Puck files, verbs or symptoms involved,
+without stating the answer a grader checks. Re-run a reply that starts with
 "API Error"; never score one. One run per case swings by about 0.2, so read a
 delta under about 0.1 as noise. A rule added to fix a failing case is stated
 generally, never as that case's answer.
