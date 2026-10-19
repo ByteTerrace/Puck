@@ -1,0 +1,82 @@
+{
+  "schema": "puck.release.profile.v1",
+  "publish": {
+    "mode": "ReadyToRun",
+    "entryAssembly": "Puck.World.dll",
+    "compiler": "None"
+  },
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "debugLayers": [
+    "vulkan",
+    "directx"
+  ],
+  "functional": [],
+  "resolutions": [
+    {
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "workloads": [
+    {
+      "name": "debug",
+      "world": "Assets/worlds/debug.world.json",
+      "warmupTicks": 900,
+      "soakTicks": 1800,
+      "worldReloads": 2,
+      "pipeline": null,
+      "timeoutSeconds": 900
+    }
+  ],
+  "thresholds": [
+    {
+      "workload": "debug",
+      "backend": "vulkan",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": 1107296256
+    },
+    {
+      "workload": "debug",
+      "backend": "vulkan",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": 1809842176
+    },
+    {
+      "workload": "debug",
+      "backend": "directx",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": 1135607808
+    },
+    {
+      "workload": "debug",
+      "backend": "directx",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": null,
+      "peakDeviceLocalBytes": 1826619392
+    }
+  ],
+  "deferred": [
+    {
+      "check": "FrameTime",
+      "reason": "Frame-time median and tail need wall-clock and GPU timing, which are deferred with no date; qualification sets no frame-time threshold."
+    },
+    {
+      "check": "ReloadStall",
+      "reason": "How long a reload stalls presentation needs wall-clock timing, which is deferred with no date; qualification counts that every reload installs, never how long it took."
+    }
+  ]
+}

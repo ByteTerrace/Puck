@@ -1808,24 +1808,24 @@ it depends on and fails.
 The qualification of the packaged candidate has its tool and its profile;
 [Qualifying a package](../development/qualification.md) is the owning
 explanation. The release profile,
-`experimental/tests/Puck.Qualification/release.profile.json`, records the publish mode
+`tests/Puck.Qualification/release.profile.json`, records the publish mode
 (framework-dependent ReadyToRun, since `Puck.World` is not AOT-compatible),
-compiler discovery `None`, the validation layers on both backends, the
-functional canaries, and the stability matrix: both backends, 1280×800 and
-1920×1080, and two workloads, `flagship`, which boots the shipped flagship
-world because the forcing world is not authored yet, and the shipped ink
-pipeline. The functional set includes every `pipeline-*` canary, with
-`pipeline-geometry` and `pipeline-echo` among them, and `no-device-compile`;
-`ReleaseProfileLawTests` fails when a `pipeline-*` canary is missing from it.
-Warm-up, soak and churn are counted in ticks and frames.
+compiler discovery `None`, the validation layers on both backends, and the
+stability matrix: both backends, 1280×800 and 1920×1080, and one workload,
+`debug`, which boots the debug world, the one live world. Its functional list
+is empty while every canary, the `pipeline-*` set and `no-device-compile`
+among them, is quarantined, and so are the flagship and ink-pipeline
+workloads. Warm-up, soak and churn are counted in ticks and frames.
 `puck qualify <package>` runs that matrix on a published package's own World
 from a clean install and a cold pipeline cache, reads its evidence from
 `world.counters` and `pipeline.inspect`, and judges each cell pass, fail or
 blocked. The debug-layer run answers the buffer-transition question above.
 The peak owned pipeline bytes threshold is set for every pipeline cell. The
-peak device-local bytes threshold is judged from `memory.<backend>`, but every
-cell leaves it null until a reading of the published package on the reference
-devices sets it. A leak at teardown fails a cell on both backends: the Vulkan
+peak device-local bytes threshold is judged from `memory.<backend>`, and every
+cell's report records the reading it is set from; each `debug` cell's is its
+RTX 4070 reading with a tenth added
+([thresholds](../development/qualification.md#thresholds)), and the AMD
+devices have no reading yet. A leak at teardown fails a cell on both backends: the Vulkan
 validation layer reports every object alive at `vkDestroyDevice`, and the
 Direct3D 12 device context prints each object its debug layer still holds as a
 `[d3d12-debug] live` line. A cell on a backend the profile lists under
@@ -7266,9 +7266,8 @@ programme is done.
   on a machine with no usable GPU driver exits 2 with the unsupported line, run
   against the render root's teardown as it stands.
 - **Hardware: P1b's reference-GPU qualification.** Keeps P1b open. `puck
-  qualify` over the release profile on the RTX 4070 and the AMD devices, the
-  Direct3D 12 cells included, whose published-package readings set the peak
-  device-local thresholds.
+  qualify` over the release profile on the AMD devices; the RTX 4070's debug-world
+  cells pass on both backends and set the peak device-local thresholds.
 - **Hardware: P1b's driver-removal exercise.** Keeps P1b open. A
   driver-initiated removal (a timeout detection and recovery) recovers as an
   injected loss does.

@@ -7,9 +7,9 @@ checkout, so what it proves is true of the bytes that ship. It needs a GPU on
 each backend it runs, so it runs on a GPU machine with no build or other GPU
 work beside it, like `puck parity` and the GPU canaries.
 
-While the debug world is the one live world, the release profile and the
-canaries and worlds it names are quarantined under `experimental/`, and
-qualification is not run until the owner calls for it
+While the debug world is the one live world, the release profile qualifies it
+alone: its stability matrix boots the debug world, and its functional list is
+empty, because every canary is quarantined under `experimental/`
 ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 ## Running it
@@ -18,10 +18,14 @@ Publish the World the way CI's artifact producer does, then qualify the
 output directory:
 
 ```text
-dotnet build src/Puck.World -c Release
-dotnet publish src/Puck.World -c Release --no-build --no-restore -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
-puck qualify artifacts/world --profile experimental/tests/Puck.Qualification/release.profile.json
+dotnet build src/Puck.World -c Release -p:PuckShaderSpirvEnabled=true
+dotnet publish src/Puck.World -c Release --no-build --no-restore -p:PuckShaderSpirvEnabled=true -p:AppendRuntimeIdentifierToOutputPath=false -o artifacts/world
+puck qualify artifacts/world --profile tests/Puck.Qualification/release.profile.json
 ```
+
+On Windows a build or publish of one project ships Direct3D 12 bytecode alone,
+and every Vulkan cell of its package is refused; `PuckShaderSpirvEnabled`
+adds SPIR-V, as CI and a solution build do.
 
 A CI download of the published World is the same directory and qualifies the
 same way. `puck qualify <package> --profile <file> --list` checks the package
@@ -33,10 +37,10 @@ profile's publish mode, then installs a clean copy of the package in the run's
 run directory and qualifies that copy. It runs in two halves:
 
 1. **The functional canaries** the profile names, run on the copy's World
-   through `puck canary --world-artifact`. These are every `pipeline-*`
-   canary, `no-device-compile`, and the other offscreen GPU proofs, each checked
-   on both backends. `ReleaseProfileLawTests` holds the profile to naming every
-   `pipeline-*` canary and only offscreen ones.
+   through `puck canary --world-artifact`, each checked on both backends. The
+   profile names none while every canary is quarantined; the quarantined
+   profile named every `pipeline-*` canary, `no-device-compile` and the other
+   offscreen GPU proofs.
 2. **The stability matrix**: every workload at every resolution on every
    backend, offscreen. Each cell boots from a fresh state root, so its
    pipeline cache starts cold. It boots an overlay document written beside the
@@ -54,10 +58,8 @@ evidence survive (see [the CLI conventions](../reference/cli.md#conventions)).
 
 ## The release profile
 
-The profile is `experimental/tests/Puck.Qualification/release.profile.json`, a
-`puck.release.profile.v1` document, quarantined with the canaries and worlds it
-names while the debug world is the one live world, so `puck qualify` has no
-default profile. `puck schema` generates its schema at
+The profile is `tests/Puck.Qualification/release.profile.json`, a
+`puck.release.profile.v1` document; `puck qualify` has no default profile. `puck schema` generates its schema at
 `tests/Puck.Qualification/puck.release.profile.v1.schema.json`, and `puck qualify` refuses a profile that names a member the schema does
 not have, leaves out a required one, or describes a matrix it cannot run.
 
@@ -106,18 +108,19 @@ the Direct3D 12 debug layer stops the device from being created, the
 Direct3D 12 cells are blocked and name the reason.
 
 **The matrix.** Two backends (Vulkan, then Direct3D 12), two resolutions
-(1280×800, the Steam Deck's panel and the flagship world's authored size, and
-1920×1080), and two workloads. Every cell's script first waits, for up to 180
+(1280×800, the Steam Deck's panel, and 1920×1080), and one workload. Every cell's script first waits, for up to 180
 seconds, for the engine to be ready (`world.wait ready`): a clean install
 builds the engine's pipelines on a cold driver cache, so the warm-up counts
 from readiness rather than from boot.
 
 | Workload | World | What a cell does |
 |---|---|---|
-| `flagship` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
-| `ink-pipeline` | `Assets/worlds/pipeline.world.json` | Waits for the `ink` pipeline to install, warms up 120 ticks, soaks 900, then reloads the pipeline three times, resizes its slot to half and back three times, and unloads and loads it three times, settling four counted submissions after each step. |
+| `debug` | `Assets/worlds/debug.world.json` | Warms up 900 ticks, long enough for the boot's mesh bake, soaks 1800, reloads the world twice with a 900-tick warm-up after each, and soaks 1800 again. |
 
-The `flagship` workload boots the flagship world the package ships. The
+The `debug` workload boots the debug world, the one live world. A workload may
+also churn a pipeline (`pipeline`: reloads, resizes, loads and unloads of a
+`views.graphs` row, each settled over counted submissions); the quarantined
+`ink-pipeline` workload did, and the debug world has none. The
 [forcing world](../plans/state-and-language.md#the-forcing-world) is not
 authored yet, so no workload boots it. Every length is ticks of the world's
 simulation clock or frames the pipeline submits, never time. A workload's `timeoutSeconds` is only the
@@ -167,27 +170,29 @@ A refused profile, package or plan also exits 2.
 
 ## Thresholds
 
-The profile sets one threshold for the pipeline workload, peak owned pipeline
-bytes, on every cell. It is the `ink` graph's planned replacement peak at the
-cell's extent. The installed graph's steady state holds three storages (a
-16-byte float simulation image and two 4-byte color images) in each of three
-frame slots, 72 bytes a pixel. A replacement allocates a second graph beside
-it, but the float simulation history moves into the candidate rather than
-being allocated again, so the peak is 72 + 72 − 3 × 16 = 96 bytes a pixel:
-98,304,000 bytes at 1280×800 and 199,065,600 at 1920×1080. The node counts
-these bytes from its plan rather than asking the driver, so they are the same on
-every device and backend, and the threshold is the planned peak itself: any
-byte over it fails. The `flagship` workload has no pipeline, so its cells
-carry no threshold.
+Each cell sets a peak device-local bytes threshold, the most device-local memory
+the World process may hold at once: the largest `gpu.memory.device-local.peak`
+any of the cell's `world.counters --json` readings reports. Every cell's report
+records that peak whether or not its cell sets a threshold, which is how a
+threshold is set. Each is the published package's reading on the RTX 4070 with
+a tenth added and rounded up to a whole MiB, since the peak is a pacing count
+(when the bake's staging overlaps its meshes moves it), not a deterministic one:
 
-The profile defers three checks, and a run prints each with its reason:
+| Cell | Reading | Threshold |
+|---|---|---|
+| Vulkan, 1280×800 | 1,006,632,960 | 1,107,296,256 |
+| Vulkan, 1920×1080 | 1,645,248,512 | 1,809,842,176 |
+| Direct3D 12, 1280×800 | 1,031,751,680 | 1,135,607,808 |
+| Direct3D 12, 1920×1080 | 1,660,241,920 | 1,826,619,392 |
 
-- **Peak device-local bytes.** `memory.vulkan` and `memory.directx` count the
-  device-local bytes a World process allocates and releases at their actual
-  allocation sizes, and the peak held at once; swapchain images are never
-  counted. Every cell's `peakDeviceLocalBytes` is null, because each is set
-  from a qualification reading of the published package on the reference
-  devices and none has been taken.
+The AMD devices have no reading yet. A pipeline workload also sets peak owned
+pipeline bytes, a planned count that is the same on every device: the
+quarantined `ink-pipeline` workload's was the `ink` graph's planned replacement
+peak, 96 bytes a pixel. The `debug` workload churns no pipeline, so its cells
+carry none.
+
+The profile defers two checks, and a run prints each with its reason:
+
 - **Frame-time median and tail**, and **reload stalls**. Both need wall-clock
   and GPU timing, which is evidence beside counts and never a gate
   ([the rule](../decisions/rendering.md#the-pipeline-foundation)).

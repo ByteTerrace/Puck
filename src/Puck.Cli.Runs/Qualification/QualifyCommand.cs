@@ -402,7 +402,7 @@ public static class QualifyCommand {
             readings: readings
         );
 
-        Console.Out.WriteLine(value: $"{Verb}: {cell.Id}: {Label(outcome: verdict.Outcome)}{((readings?.PeakOwnedPipelineBytes is { } peak) ? $"; peak owned pipeline bytes {peak} of {Threshold(threshold: cell.Threshold)}" : string.Empty)}.");
+        Console.Out.WriteLine(value: $"{Verb}: {cell.Id}: {Label(outcome: verdict.Outcome)}{((readings?.PeakOwnedPipelineBytes is { } peak) ? $"; peak owned pipeline bytes {peak} of {Threshold(threshold: cell.Threshold)}" : string.Empty)}{((readings?.PeakDeviceLocalBytes is { } deviceLocal) ? $"; peak device-local bytes {deviceLocal}{((cell.Threshold.PeakDeviceLocalBytes is { } limit) ? $" of {limit}" : string.Empty)}" : string.Empty)}.");
 
         foreach (var finding in verdict.Findings) {
             Console.Out.WriteLine(value: $"  {finding}");
@@ -419,6 +419,8 @@ public static class QualifyCommand {
             Outcome: verdict.Outcome,
             PeakOwnedPipelineBytes: readings?.PeakOwnedPipelineBytes,
             PeakOwnedPipelineBytesThreshold: cell.Threshold.PeakOwnedPipelineBytes,
+            PeakDeviceLocalBytes: readings?.PeakDeviceLocalBytes,
+            PeakDeviceLocalBytesThreshold: cell.Threshold.PeakDeviceLocalBytes,
             Pipeline: cell.Workload.Pipeline,
             SoakTicks: cell.Workload.SoakTicks,
             ValidationMessages: (readings?.ValidationMessages.Count ?? 0),

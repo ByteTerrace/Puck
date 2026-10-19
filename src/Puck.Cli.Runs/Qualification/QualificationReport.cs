@@ -54,6 +54,9 @@ internal sealed record QualificationFunctionalResult(IReadOnlyList<string> Canar
 /// <param name="PeakOwnedPipelineBytes">The most bytes the pipeline instance owned or planned, or
 /// <see langword="null"/>.</param>
 /// <param name="PeakOwnedPipelineBytesThreshold">The cell's threshold for it, or <see langword="null"/>.</param>
+/// <param name="PeakDeviceLocalBytes">The most device-local bytes the World held at once, or <see langword="null"/>
+/// when no counters reading arrived: the reading a cell's threshold is set from.</param>
+/// <param name="PeakDeviceLocalBytesThreshold">The cell's threshold for it, or <see langword="null"/>.</param>
 /// <param name="ValidationMessages">The validation-layer messages the leg printed.</param>
 /// <param name="Outcome">The verdict.</param>
 /// <param name="Findings">Why the cell failed or was blocked.</param>
@@ -72,6 +75,8 @@ internal sealed record QualificationCellResult(
     string? MemoryProfile,
     long? PeakOwnedPipelineBytes,
     long? PeakOwnedPipelineBytesThreshold,
+    long? PeakDeviceLocalBytes,
+    long? PeakDeviceLocalBytesThreshold,
     int ValidationMessages,
     QualificationOutcome Outcome,
     IReadOnlyList<string> Findings

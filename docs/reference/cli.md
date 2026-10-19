@@ -2213,9 +2213,8 @@ puck qualify <package> --profile <file> [--list] [--output <file>]
 `artifacts/world`, to the release profile `--profile` names (a
 `puck.release.profile.v1` document whose schema `puck schema` generates); it
 has no default. The release profile,
-`experimental/tests/Puck.Qualification/release.profile.json`, is quarantined
-with the canaries and worlds it names while the debug world is the one live
-world, and the verb is not run until the owner calls for qualification
+`tests/Puck.Qualification/release.profile.json`, qualifies the debug world
+alone while it is the one live world, its functional canaries quarantined
 ([quarantined gates](../plans/open-items.md#quarantined-gates)). It never builds: it checks
 that the package's entry assembly is in the profile's publish mode, installs a
 clean copy, runs the profile's functional canaries on the copy's World with
