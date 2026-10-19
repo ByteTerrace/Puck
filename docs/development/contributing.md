@@ -75,7 +75,11 @@ macOS, and nothing here is verified there.
   `/codex:setup` checks the CLI afterwards. The versioned
   `.codex/config.toml` registers the `puck` MCP server for Codex, which reads
   it only once the project is trusted; everything else a Codex run writes
-  under `.codex/` stays untracked. The Windows sandbox's permission
+  under `.codex/` stays untracked. Codex finds skills under `.agents/skills/`,
+  so make that one directory link to `.claude/skills` (on Windows,
+  `New-Item -ItemType Junction -Path .agents/skills -Target .claude/skills`),
+  never a link per skill, which goes stale as skills are added and renamed;
+  `.agents/` is listed in `.git/info/exclude`. The Windows sandbox's permission
   cautions are under [hardware and toolchain cautions](#hardware-and-toolchain-cautions).
 - **A GPU machine** also follows [GPU support and shader builds](#gpu-support-and-shader-builds)
   and the [hardware and toolchain cautions](#hardware-and-toolchain-cautions),
