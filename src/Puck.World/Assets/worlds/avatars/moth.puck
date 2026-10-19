@@ -520,6 +520,233 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight cameras round the jetpack alone, framed on her hovering 2 m above the hero spawn (body.pose 48 2 -48 0 0 0 in
+  // flight mode, then view.isolate moth pod* nozzle*), tiled by the pods-hero layout: rear, rear-low, top, below, both
+  // sides, the body-facing front and a rear three-quarter.
+  {
+    name: "pods-rear"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 3.12, -45.4])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -45.4]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-rear-low"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 1.4229, -46.1029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear-low"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.4229, -46.1029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-top"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 5.4025, -47.0584])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-top"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 5.4025, -47.0584]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-below"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 0.8375, -47.0584])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-below"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 0.8375, -47.0584]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-side-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [45.6, 3.12, -47.8])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-side-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 3.12, -47.8]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-side-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50.4, 3.12, -47.8])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-side-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 3.12, -47.8]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 3.12, -50.2])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -50.2]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-rear-three-quarter"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.4901, 2.4988, -46.0241])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear-three-quarter"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.4901, 2.4988, -46.0241]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
   // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
   {
@@ -7497,6 +7724,71 @@ views {
       }
       {
         camera: "shoulders-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  // The jetpack from eight sides at once.
+  layout "pods-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "pods-rear"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "pods-rear-low"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "pods-top"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "pods-below"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "pods-side-left"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "pods-side-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "pods-front"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "pods-rear-three-quarter"
         height: 0.5
         width: 0.25
         x: 0.75
