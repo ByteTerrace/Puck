@@ -8,7 +8,7 @@ namespace Puck.World.Client;
 /// reads one of the wearing body's action-state slots as its latest snapshot carried it
 /// (<see cref="WorldLookLaneReads"/>).
 /// Supports a restricted arithmetic subset of <see cref="Instruction"/> (constants, state reads, and the basic
-/// arithmetic/comparison/min/max/clamp/sign operators); every other token, a malformed stack, or a failed read
+/// arithmetic, min, max, clamp, sign and absolute operators <see cref="WorldLookLaneVocabulary"/> admits); every other token, a malformed stack, or a failed read
 /// (division by zero, an absent cell) evaluates to 0 — matching an unauthored lane, never a thrown exception on a
 /// per-frame render path.</summary>
 public static class WorldLookLaneEvaluator {

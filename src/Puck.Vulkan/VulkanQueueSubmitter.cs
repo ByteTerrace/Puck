@@ -62,6 +62,68 @@ public sealed unsafe class VulkanQueueSubmitter {
             ).ThrowIfFailed(device: device, operation: "vkQueueSubmit");
         }
     }
+    // Submits a batch's deferred submissions in one vkQueueSubmit, a submit info each with its own waits, arming one
+    // fence for the whole batch (VulkanSubmissionBatch.Flush).
+    internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, nint fenceHandle) {
+        var commandBuffers = 0;
+        var waits = 0;
+
+        foreach (var entry in entries) {
+            commandBuffers += entry.CommandBuffers.Length;
+            waits += entry.WaitSemaphores.Length;
+        }
+
+        var allCommandBuffers = new nint[commandBuffers];
+        var allWaits = new nint[waits];
+        var allValues = new ulong[waits];
+        var allStages = new uint[waits];
+        var timelines = new VkTimelineSemaphoreSubmitInfo[entries.Length];
+        var submits = new VkSubmitInfo[entries.Length];
+
+        // An external wait holds every stage of its submission, as a single submission's does.
+        Array.Fill(array: allStages, value: VulkanPipelineStageFlags.AllCommands);
+
+        fixed (nint* commandBuffersPointer = allCommandBuffers)
+        fixed (nint* waitsPointer = allWaits)
+        fixed (ulong* valuesPointer = allValues)
+        fixed (uint* stagesPointer = allStages)
+        fixed (VkTimelineSemaphoreSubmitInfo* timelinesPointer = timelines)
+        fixed (VkSubmitInfo* submitsPointer = submits) {
+            var commandBuffer = 0;
+            var wait = 0;
+
+            for (var index = 0; (index < entries.Length); index++) {
+                var entry = entries[index];
+
+                entry.CommandBuffers.CopyTo(destination: allCommandBuffers.AsSpan(start: commandBuffer));
+                entry.WaitSemaphores.CopyTo(destination: allWaits.AsSpan(start: wait));
+                entry.WaitValues.CopyTo(destination: allValues.AsSpan(start: wait));
+                timelinesPointer[index] = new VkTimelineSemaphoreSubmitInfo {
+                    PWaitSemaphoreValues = ((nint)(valuesPointer + wait)),
+                    SType = VkTimelineSemaphoreSubmitInfo.StructureType,
+                    WaitSemaphoreValueCount = ((uint)entry.WaitSemaphores.Length),
+                };
+                submitsPointer[index] = new VkSubmitInfo {
+                    CommandBufferCount = ((uint)entry.CommandBuffers.Length),
+                    PCommandBuffers = ((nint)(commandBuffersPointer + commandBuffer)),
+                    PNext = ((entry.WaitSemaphores.Length == 0) ? 0 : ((nint)(timelinesPointer + index))),
+                    PWaitDstStageMask = ((nint)(stagesPointer + wait)),
+                    PWaitSemaphores = ((nint)(waitsPointer + wait)),
+                    SType = StructureTypeSubmitInfo,
+                    WaitSemaphoreCount = ((uint)entry.WaitSemaphores.Length),
+                };
+                commandBuffer += entry.CommandBuffers.Length;
+                wait += entry.WaitSemaphores.Length;
+            }
+
+            device.QueueSubmit(
+                graphicsQueue.Handle,
+                ((uint)entries.Length),
+                in submitsPointer[0],
+                fenceHandle
+            ).ThrowIfFailed(device: device, operation: "vkQueueSubmit");
+        }
+    }
 
     /// <summary>Submits command buffers without a fence or an idle wait.</summary>
     /// <param name="device">The command table of the logical device that owns the queue.</param>
@@ -75,6 +137,8 @@ public sealed unsafe class VulkanQueueSubmitter {
         if (commandBufferHandles.IsEmpty) {
             return;
         }
+        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
+        device.Batch.Flush(device: device);
 
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
@@ -98,6 +162,8 @@ public sealed unsafe class VulkanQueueSubmitter {
         if (commandBufferHandles.IsEmpty) {
             return;
         }
+        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
+        device.Batch.Flush(device: device);
 
         SubmitCore(
             commandBufferHandles: commandBufferHandles,
@@ -117,6 +183,8 @@ public sealed unsafe class VulkanQueueSubmitter {
     /// <param name="semaphore">The native timeline <c>VkSemaphore</c>.</param>
     /// <param name="value">The value the semaphore is set to; greater than every value it was set to before.</param>
     public void Signal(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint semaphore, ulong value) {
+        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
+        device.Batch.Flush(device: device);
         Span<nint> semaphores = [semaphore];
         Span<ulong> values = [value];
 
@@ -143,6 +211,8 @@ public sealed unsafe class VulkanQueueSubmitter {
         if (commandBufferHandles.IsEmpty) {
             return;
         }
+        // Work deferred to the device's open batch reaches the queue first (VulkanSubmissionBatch).
+        device.Batch.Flush(device: device);
 
         SubmitCore(
             commandBufferHandles: commandBufferHandles,

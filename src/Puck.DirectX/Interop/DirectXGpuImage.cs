@@ -50,7 +50,8 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
         var initialState = DirectXTextures.InitialStateOf(usage: usage);
         var (resourceFormat, viewFormat) = DirectXTextures.FormatsOf(format: dxgiFormat, usage: usage);
 
-        m_resource = ((nint)DirectXTextures.CreateCommitted(
+        m_resource = ((nint)DirectXTextures.Create(
+            arena: (deviceContext as DirectXDeviceContext)?.HeapArena,
             clearValue: clearValue,
             device: ((ID3D12Device*)deviceContext.Device.Handle),
             flags: flags,

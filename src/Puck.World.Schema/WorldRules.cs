@@ -123,6 +123,8 @@ public enum WorldRuleRefusal : byte {
     BodyFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a '$bodyState:' channel does not spell '$bodyState:<bodyRef>:<slot>' with a slot the document's state.body or state.identity declares", kind: RefusalKind.Verdict)]
     BodyStateMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a '$bodyPosition:' channel does not spell '$bodyPosition:<bodyRef>:<axis>' with an axis of x, y or z", kind: RefusalKind.Verdict)]
+    BodyPositionMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel names a fact that is not a cell name, or the channel does not spell '$identity:<bodyRef>:<fact>'", kind: RefusalKind.Verdict)]
     IdentityFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document declaring no 'identity' lane row in state.world", kind: RefusalKind.Verdict)]

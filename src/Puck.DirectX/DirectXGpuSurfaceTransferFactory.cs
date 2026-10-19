@@ -172,7 +172,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var paddedRowPitch = AlignRowPitch(packedRowBytes: packedRowBytes);
         var readbackByteLength = (((ulong)paddedRowPitch) * height);
 
-        m_readbackBuffer = ((nint)DirectXBuffers.CreateCommitted(
+        m_readbackBuffer = ((nint)DirectXBuffers.Create(
             device: device,
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,

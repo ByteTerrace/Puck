@@ -53,6 +53,14 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
+    /// <remarks>Direct3D 12 keeps each submission its own <c>ExecuteCommandLists</c>: a default-heap buffer decays to
+    /// <c>COMMON</c> at every call's end, and the resource states the recorders track (<see cref="DirectXResourceStates"/>)
+    /// assume that decay between submissions, so a batch here submits as it goes.</remarks>
+    public void BeginBatch() { }
+    /// <inheritdoc/>
+    /// <remarks>Nothing is deferred on Direct3D 12 (<see cref="BeginBatch"/>).</remarks>
+    public void FlushBatch() { }
+    /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence() =>
         new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.Device.Handle));
 

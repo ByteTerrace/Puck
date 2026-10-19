@@ -25,6 +25,7 @@ namespace Puck.DirectX.Interop;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuDeviceRemoval, IGpuPipelineCache, IDisposable {
+    private DirectXHeapArena? m_heapArena;
     private readonly long m_adapterLuid;
     private readonly IDirectXDeviceApi m_deviceApi;
     private readonly Func<long>? m_adapterLuidProvider;
@@ -514,6 +515,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         }
 
         try {
+            m_heapArena?.FreeAll();
+            m_heapArena = null;
             Memory?.EndDevice(device: device.Handle);
         } finally {
             device.Dispose();
@@ -543,6 +546,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
     }
 
+    /// <summary>Gets the heaps this device places its buffers and images in (<see cref="DirectXHeapArena"/>), released with
+    /// the device.</summary>
+    public DirectXHeapArena HeapArena => (m_heapArena ??= new DirectXHeapArena(calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)Device.Handle)), device: Device.Handle, memory: Memory));
     /// <inheritdoc/>
     public void WaitIdle() {
         ObjectDisposedException.ThrowIf(
@@ -775,6 +781,9 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
         m_bindings.ReleaseDeviceHeaps();
+        // The arena's heaps go before the live objects are reported; a placed resource still alive keeps its own.
+        m_heapArena?.FreeAll();
+        m_heapArena = null;
         ReportLiveObjects();
 
         if (0 != m_infoQueue) {

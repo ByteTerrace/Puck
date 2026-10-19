@@ -14,7 +14,6 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     private const uint MemoryPropertyHostVisibleBit = 0x00000002;
     private const uint SharingModeExclusive = 0;
     private const uint StructureTypeBufferCreateInfo = 12;
-    private const uint StructureTypeMemoryAllocateInfo = 5;
 
     /// <summary>Returns the <c>VkMemoryPropertyFlagBits</c> a memory type must carry for <paramref name="memory"/>,
     /// whether a type without them fails the creation rather than falling back to the first permitted type, and the
@@ -76,35 +75,19 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                 out var memoryProperties
             );
 
-            var allocateInfo = new VkMemoryAllocateInfo {
-                AllocationSize = memoryRequirements.Size,
-                MemoryTypeIndex = VulkanMemoryTypes.FindIndex(
+            memoryHandle = commands.Arena.Bind(
+                image: false,
+                memoryTypeIndex: VulkanMemoryTypes.FindIndex(
                     memoryProperties: in memoryProperties,
                     memoryTypeBits: memoryRequirements.MemoryTypeBits,
                     preferredProperties: preferredProperties,
                     requireProperties: requireProperties,
                     resourceDescription: $"a buffer of usage 0x{usage:X8}"
                 ),
-                SType = StructureTypeMemoryAllocateInfo,
-            };
-
-            commands.AllocateMemory(
-                commands.Handle,
-                in allocateInfo,
-                0,
-                out memoryHandle
-            ).ThrowIfFailed(device: commands, operation: "vkAllocateMemory");
-            commands.CountAllocated(
-                allocationSize: allocateInfo.AllocationSize,
-                memoryHandle: memoryHandle,
+                requirements: in memoryRequirements,
+                resource: bufferHandle,
                 role: role
             );
-            commands.BindBufferMemory(
-                commands.Handle,
-                bufferHandle,
-                memoryHandle,
-                0
-            ).ThrowIfFailed(device: commands, operation: "vkBindBufferMemory");
             return new VulkanBufferHandles(
                 Buffer: bufferHandle,
                 Device: commands,
@@ -129,6 +112,11 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     /// <inheritdoc/>
     /// <exception cref="VulkanException">The native memory mapping call failed.</exception>
     public nint Map(VulkanBufferHandles handles, ulong sizeBytes) {
+        // A buffer the arena bound is mapped for its block's life, at its offset.
+        if (handles.Device.Arena.TryMapped(pointer: out var blockMapping, resource: handles.Buffer)) {
+            return blockMapping;
+        }
+
         handles.Device.MapMemory(
             handles.Device.Handle,
             handles.Memory,
@@ -141,9 +129,15 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
         return mappedMemory;
     }
     /// <inheritdoc/>
-    public void Unmap(VulkanBufferHandles handles) =>
+    public void Unmap(VulkanBufferHandles handles) {
+        // A block stays mapped while it lives.
+        if (handles.Device.Arena.TryMapped(pointer: out _, resource: handles.Buffer)) {
+            return;
+        }
+
         handles.Device.UnmapMemory(
             handles.Device.Handle,
             handles.Memory
         );
+    }
 }
