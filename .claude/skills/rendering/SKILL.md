@@ -357,6 +357,9 @@ owns its flags.
   meshes stay readable under the `--identity` an earlier report printed.
   `--history --group <shape>` compares every build's stored bake of one
   geometry.
+- **The audit reads stored meshes against the CPU field; `world.slice` reads the
+  live field.** Use the slice to see what the GPU walk answers on a plane, the
+  audit to see what the bake made of it.
 - **Read the metrics together.** Sawtooth edges show as face normals off the
   gradient and folds strung along an edge; torn or dropped walls as uncovered
   crossings and open edges; a cutter that is only a lower bound (a stretched

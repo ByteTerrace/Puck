@@ -348,7 +348,7 @@ public sealed class SdfMeshPathBake {
                 var taps = 0;
                 // A slice's lattices come first, within the same share, so a long bake never holds a diagnostic back.
                 while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
-                    if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: WorldSelector) is not { } next) { break; }
+                    if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
                     if ((lattices.Count > 0) && (((taps + next.Taps) > m_frameBudget) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
                         slice.Return(ticket: lattice);
                         break;
