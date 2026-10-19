@@ -696,6 +696,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Submissions++;
         Complete(through: Submitted(commandBufferHandles: commandBufferHandles));
     }
+    // The fake submits at once, so a batch only counts the frames that flushed one.
+    public int BatchesFlushed { get; private set; }
+    public void BeginBatch() { }
+    public void FlushBatch() => BatchesFlushed++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordImageBarrier(commandBufferHandle: commandBufferHandle, imageHandle: imageHandle, barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask));
     public void WaitIdle() {

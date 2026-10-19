@@ -509,6 +509,8 @@ internal sealed class UploadModelGpu :
         Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.SubmitAndWait(commandBufferHandles: commandBufferHandles);
     }
+    void IGpuQueueSubmitter.BeginBatch() => m_inner.Services.QueueSubmitter.BeginBatch();
+    void IGpuQueueSubmitter.FlushBatch() => m_inner.Services.QueueSubmitter.FlushBatch();
 
     // The Direct3D 12 buffer states the replay tracks, as their D3D12_RESOURCE_STATES bits combine.
     [Flags]

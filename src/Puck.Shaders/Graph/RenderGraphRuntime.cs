@@ -1285,230 +1285,239 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             (convergence.Samples >= convergence.Request.Converge) &&
             (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
 
-        for (var position = 0; (position < renders.Count); position++) {
-            var index = renders[position];
-            var row = schedule.Instances[index];
+        // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
+        // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
+        var queue = m_device.Services.QueueSubmitter;
 
-            // The display encoder may still be building after the last requested sample. Keep the contributing
-            // images alive until readback completes; another render would silently capture a later jitter sample.
-            if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
-                if (index == m_captureInstance) {
-                    m_nodes[index]?.PollCapture();
+        queue.BeginBatch();
+        try {
+            for (var position = 0; (position < renders.Count); position++) {
+                var index = renders[position];
+                var row = schedule.Instances[index];
+
+                // The display encoder may still be building after the last requested sample. Keep the contributing
+                // images alive until readback completes; another render would silently capture a later jitter sample.
+                if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
+                    if (index == m_captureInstance) {
+                        m_nodes[index]?.PollCapture();
+                    }
+                    m_unproduced++;
+                    schedule.Next.Withdraw(index: index, previous: prior);
+                    continue;
                 }
-                m_unproduced++;
-                schedule.Next.Withdraw(index: index, previous: prior);
-                continue;
-            }
 
-            // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
-            // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
-            // could not produce is withdrawn from the history, so its cadence counts from its last completed frame and a
-            // source that renders once is asked again on the next frame.
-            if (m_producers[index] is { } producer) {
-                var reads = BindExternalReads(
+                // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
+                // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
+                // could not produce is withdrawn from the history, so its cadence counts from its last completed frame and a
+                // source that renders once is asked again on the next frame.
+                if (m_producers[index] is { } producer) {
+                    var reads = BindExternalReads(
+                        index: index,
+                        schedule: schedule
+                    );
+
+                    if (
+                        (index == m_captureInstance) &&
+                        (m_capture.PendingPath is not null) &&
+                        (m_taintedReads[index] is null) &&
+                        !MarkReadStale(index: index, schedule: schedule)
+                    ) {
+                        m_capture.Forward(target: producer);
+                    }
+
+                    var produced = (((row.Width > 0) && (row.Height > 0))
+                        ? producer.Produce(
+                            context: in context,
+                            height: ((uint)row.Height),
+                            reads: reads,
+                            width: ((uint)row.Width)
+                        )
+                        : FrameRender.Waiting(reason: "the schedule gave it no extent"));
+
+                    reads?.RetireUntaken();
+
+                    if (!produced.IsRendered) {
+                        m_unproduced++;
+                        MarkProduction(
+                            index: index,
+                            production: produced
+                        );
+                        schedule.Next.Withdraw(
+                            index: index,
+                            previous: prior
+                        );
+                    } else {
+                        m_historySucceeded[index] = true;
+                        MarkRendered(index: index, schedule: schedule);
+                    }
+
+                    continue;
+                }
+
+                var node = m_nodes[index]!;
+                var source = m_sources[index];
+
+                // An uploaded source writes its image for the frame's tick into its region; one with no image is withdrawn,
+                // as an external producer's render is, so its cadence counts from its last converted frame.
+                if (
+                    (source is not null) &&
+                    (source.Write(
+                        node: node,
+                        tick: frame.Tick
+                    ) is { IsRendered: false } written)
+                ) {
+                    m_unproduced++;
+
+                    if (written.Completion == FrameCompletion.Refused) {
+                        MarkProduction(
+                            index: index,
+                            production: written
+                        );
+                    } else {
+                        MarkUnproduced(
+                            index: index,
+                            node: node,
+                            waiting: written.Reason
+                        );
+                    }
+
+                    schedule.Next.Withdraw(
+                        index: index,
+                        previous: prior
+                    );
+
+                    continue;
+                }
+                if (!Bind(
+                    index: index,
+                    schedule: schedule
+                )) {
+                    m_unproduced++;
+                    if (!MarkReadStale(index: index, schedule: schedule)) {
+                        MarkStale(
+                            index: index,
+                            reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
+                        );
+                    }
+
+                    continue;
+                }
+
+                // The reads its graph binds to no version reach its package passes, their taint the instance's; what they
+                // leave is retired with the frame.
+                node.Reads = BindUnboundReads(
+                    index: index,
+                    schedule: schedule
+                );
+                // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
+                if (
+                    (source is null) &&
+                    (row.Width > 0) &&
+                    (row.Height > 0)
+                ) {
+                    node.Resize(
+                        height: ((uint)row.Height),
+                        width: ((uint)row.Width)
+                    );
+                }
+                // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
+                // frame it produces is the one the capture reads; until then it stays armed here, where
+                // UnservedCaptureReasonOf explains it.
+                // A node whose published image stands for one that is gone serves no capture until it has rendered again,
+                // which a shown one does this frame (WithRerenders).
+                if (
+                    (index == m_captureInstance) &&
+                    (m_capture.PendingPath is not null) &&
+                    CanServeConvergence &&
+                    node.IsReady &&
+                    (m_standInReads[index] is null) &&
+                    (m_taintedReads[index] is null) &&
+                    !HasPackageTaint(index: index) &&
+                    (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0)) &&
+                    !MarkReadStale(index: index, schedule: schedule)
+                ) {
+                    m_capture.Forward(target: node);
+                }
+
+                OfferCaptureSource(
+                    index: index,
+                    node: node
+                );
+
+                var rendered = node.FrameCounter;
+                var submitted = node.SubmissionCount;
+                // Readback may complete inline in ProduceFrame. That still counts the final rendered sample of this request.
+                var converging = (((index == m_captureInstance) && IsConverging(index: index)) ? m_convergence : null);
+                Surface surface;
+
+                // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
+                node.ShownAtItsExtent = (index == m_root);
+                node.UnreadFrames = m_unreadFrames[index];
+
+                try {
+                    surface = node.ProduceFrame(context: in context);
+                } finally {
+                    if (node.FrameCounter != rendered) {
+                        m_historySucceeded[index] = true;
+                        RememberOutput(index: index, node: node, schedule: schedule, surface: node.PublishedSurface);
+                    }
+                    node.Reads?.RetireUntaken();
+                    node.Reads = null;
+                    NoteOwedReadbacks(index: index);
+                }
+
+                if (node.FrameCounter == rendered) {
+                    m_unproduced++;
+                    MarkUnproduced(
+                        index: index,
+                        node: node
+                    );
+                    // A paused node presents its last image as this frame's output on purpose, writing nothing: the frame it
+                    // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
+                    if (Stands(index: index)) {
+                        m_historySucceeded[index] = true;
+                    }
+
+                    // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
+                    if (source is not null) {
+                        schedule.Next.Withdraw(
+                            index: index,
+                            previous: prior
+                        );
+                    }
+
+                    if (node.SubmissionCount == submitted) {
+                        continue;
+                    }
+                }
+
+                // A sample rendered at an extent the node was not asked for is one its capture never reads.
+                if ((node.FrameCounter != rendered) && (converging is not null) &&
+                    (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
+                    converging.Count();
+                }
+
+                MarkRendered(
                     index: index,
                     schedule: schedule
                 );
 
-                if (
-                    (index == m_captureInstance) &&
-                    (m_capture.PendingPath is not null) &&
-                    (m_taintedReads[index] is null) &&
-                    !MarkReadStale(index: index, schedule: schedule)
-                ) {
-                    m_capture.Forward(target: producer);
+                submitter = node;
+                if (node.FrameCounter == rendered) {
+                    RememberOutput(index: index, node: node, schedule: schedule, surface: in surface);
                 }
-
-                var produced = (((row.Width > 0) && (row.Height > 0))
-                    ? producer.Produce(
-                        context: in context,
-                        height: ((uint)row.Height),
-                        reads: reads,
-                        width: ((uint)row.Width)
-                    )
-                    : FrameRender.Waiting(reason: "the schedule gave it no extent"));
-
-                reads?.RetireUntaken();
-
-                if (!produced.IsRendered) {
-                    m_unproduced++;
-                    MarkProduction(
-                        index: index,
-                        production: produced
-                    );
-                    schedule.Next.Withdraw(
-                        index: index,
-                        previous: prior
-                    );
-                } else {
-                    m_historySucceeded[index] = true;
-                    MarkRendered(index: index, schedule: schedule);
-                }
-
-                continue;
             }
 
-            var node = m_nodes[index]!;
-            var source = m_sources[index];
-
-            // An uploaded source writes its image for the frame's tick into its region; one with no image is withdrawn,
-            // as an external producer's render is, so its cadence counts from its last converted frame.
-            if (
-                (source is not null) &&
-                (source.Write(
-                    node: node,
-                    tick: frame.Tick
-                ) is { IsRendered: false } written)
-            ) {
-                m_unproduced++;
-
-                if (written.Completion == FrameCompletion.Refused) {
-                    MarkProduction(
-                        index: index,
-                        production: written
-                    );
-                } else {
-                    MarkUnproduced(
-                        index: index,
-                        node: node,
-                        waiting: written.Reason
-                    );
-                }
-
-                schedule.Next.Withdraw(
-                    index: index,
-                    previous: prior
-                );
-
-                continue;
-            }
-            if (!Bind(
-                index: index,
-                schedule: schedule
-            )) {
-                m_unproduced++;
-                if (!MarkReadStale(index: index, schedule: schedule)) {
-                    MarkStale(
-                        index: index,
-                        reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
-                    );
-                }
-
-                continue;
-            }
-
-            // The reads its graph binds to no version reach its package passes, their taint the instance's; what they
-            // leave is retired with the frame.
-            node.Reads = BindUnboundReads(
-                index: index,
-                schedule: schedule
+            ConvertForCapture(
+                context: in context,
+                frame: frame.Index,
+                schedule: schedule,
+                tick: frame.Tick
             );
-            // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
-            if (
-                (source is null) &&
-                (row.Width > 0) &&
-                (row.Height > 0)
-            ) {
-                node.Resize(
-                    height: ((uint)row.Height),
-                    width: ((uint)row.Width)
-                );
-            }
-            // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
-            // frame it produces is the one the capture reads; until then it stays armed here, where
-            // UnservedCaptureReasonOf explains it.
-            // A node whose published image stands for one that is gone serves no capture until it has rendered again,
-            // which a shown one does this frame (WithRerenders).
-            if (
-                (index == m_captureInstance) &&
-                (m_capture.PendingPath is not null) &&
-                CanServeConvergence &&
-                node.IsReady &&
-                (m_standInReads[index] is null) &&
-                (m_taintedReads[index] is null) &&
-                !HasPackageTaint(index: index) &&
-                (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0)) &&
-                !MarkReadStale(index: index, schedule: schedule)
-            ) {
-                m_capture.Forward(target: node);
-            }
-
-            OfferCaptureSource(
-                index: index,
-                node: node
-            );
-
-            var rendered = node.FrameCounter;
-            var submitted = node.SubmissionCount;
-            // Readback may complete inline in ProduceFrame. That still counts the final rendered sample of this request.
-            var converging = (((index == m_captureInstance) && IsConverging(index: index)) ? m_convergence : null);
-            Surface surface;
-
-            // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
-            node.ShownAtItsExtent = (index == m_root);
-            node.UnreadFrames = m_unreadFrames[index];
-
-            try {
-                surface = node.ProduceFrame(context: in context);
-            } finally {
-                if (node.FrameCounter != rendered) {
-                    m_historySucceeded[index] = true;
-                    RememberOutput(index: index, node: node, schedule: schedule, surface: node.PublishedSurface);
-                }
-                node.Reads?.RetireUntaken();
-                node.Reads = null;
-                NoteOwedReadbacks(index: index);
-            }
-
-            if (node.FrameCounter == rendered) {
-                m_unproduced++;
-                MarkUnproduced(
-                    index: index,
-                    node: node
-                );
-                // A paused node presents its last image as this frame's output on purpose, writing nothing: the frame it
-                // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
-                if (Stands(index: index)) {
-                    m_historySucceeded[index] = true;
-                }
-
-                // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
-                if (source is not null) {
-                    schedule.Next.Withdraw(
-                        index: index,
-                        previous: prior
-                    );
-                }
-
-                if (node.SubmissionCount == submitted) {
-                    continue;
-                }
-            }
-
-            // A sample rendered at an extent the node was not asked for is one its capture never reads.
-            if ((node.FrameCounter != rendered) && (converging is not null) &&
-                (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
-                converging.Count();
-            }
-
-            MarkRendered(
-                index: index,
-                schedule: schedule
-            );
-
-            submitter = node;
-            if (node.FrameCounter == rendered) {
-                RememberOutput(index: index, node: node, schedule: schedule, surface: in surface);
-            }
+            Complete();
+        } finally {
+            queue.FlushBatch();
         }
-
-        ConvertForCapture(
-            context: in context,
-            frame: frame.Index,
-            schedule: schedule,
-            tick: frame.Tick
-        );
-        Complete();
 
         // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
         // retire displaced package owners against this actual reader fence, without another producer submission.
