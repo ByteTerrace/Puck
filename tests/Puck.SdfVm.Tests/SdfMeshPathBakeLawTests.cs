@@ -137,6 +137,23 @@ public sealed class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: 3, actual: junction.Count);
         Assert.True(condition: (strip > 10), userMessage: $"{strip} triangles of the strip's material lie on it");
     }
+    // A turned box whose edges are rounded by a little less than the lattice's cell: the contour puts a crease vertex
+    // where its crossings' planes meet, at the faces' meeting line proud of the rounded edge in the cells whose crossings
+    // miss the rounding, so the bake moves every vertex its planes placed that the field puts off the surface back onto it.
+    // Every vertex lies within the check's tolerance of the box, a tenth of the 5 mm fine cell.
+    [Fact]
+    public void ARoundedEdgeKeepsItsVerticesOnTheRounding() {
+        Shape[] boxes = [new(Center: new Vector3(x: 0.003f, y: 0.2f, z: -0.004f), Half: new Vector3(value: 0.15f), Rotation: Turn, Material: 0, Round: 0.012f)];
+        var (program, materials) = Program(shapes: boxes);
+        var bake = new SdfMeshPathBake { Residency = "rounded" };
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
+
+        Drive(bake: bake, frame: frame, materials: materials, shapes: boxes);
+
+        var positions = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
+        var worst = positions.Max(selector: point => MathF.Abs(Field(shape: boxes[0], point: point)));
+        Assert.True(condition: (worst < 0.00055f), userMessage: $"a vertex lies {worst} from the rounded box");
+    }
     [Fact]
     public void ASharpEdgeShadesAsTheFacesMeetingAtIt() {
         var (bake, frame) = Baked.Value;
@@ -214,13 +231,13 @@ public sealed class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: Meshes(bake: baked), actual: Meshes(bake: mended));
     }
 
-    private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material);
+    private readonly record struct Shape(Vector3 Center, Vector3 Half, Quaternion Rotation, int Material, float Round = 0f);
 
     private static float Field(Shape shape, Vector3 point) {
         var local = Vector3.Transform(value: (point - shape.Center), rotation: Quaternion.Conjugate(value: shape.Rotation));
-        var q = (Vector3.Abs(value: local) - shape.Half);
+        var q = (Vector3.Abs(value: local) - (shape.Half - new Vector3(value: shape.Round)));
 
-        return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f));
+        return ((Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f)) - shape.Round);
     }
     // The union of the first `count` shapes from `first`, and the material of the nearest.
     private static float Union(Vector3 point, int count, int first = 0) => Nearest(count: count, first: first, point: point, shapes: Shapes).Value;
@@ -248,7 +265,7 @@ public sealed class SdfMeshPathBakeLawTests {
                 .ResetPoint()
                 .Translate(offset: shape.Center)
                 .Rotate(rotation: shape.Rotation)
-                .Box(halfExtents: shape.Half, material: materials[shape.Material], round: 0f)
+                .Box(halfExtents: shape.Half, material: materials[shape.Material], round: shape.Round)
                 .EndInstance();
         }
 

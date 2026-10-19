@@ -189,7 +189,11 @@ owns the explanation.
   planes all meet and turn by over 30 degrees is a feature: it lies on the
   crease, inside its cell (a point past the cell folds the quads around it into
   teeth along the edge), takes its crossings' normals, and
-  `SdfContour.SplitAtCreases` splits it per side.
+  `SdfContour.SplitAtCreases` splits it per side at 32 degrees, just past the
+  feature test's 30 (at 45, a chamfer's own turn, the split flipped vertex by
+  vertex and dented flat faces). Every vertex no crossing pins to the surface
+  (`SdfContour.Solved`) is checked against the field before the split and moved
+  onto the surface where a rounding near the cell's size left it proud.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel

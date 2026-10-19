@@ -20,14 +20,22 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// apart by more than thirty degrees meet; empty when the contour records none. A vertex
     /// <see cref="SplitAtCreases"/> appends records none.</summary>
     public bool[] Features { get; init; } = [];
+    /// <summary>Gets, per vertex, whether the contour placed it where no crossing pins it to the surface: drawn by its
+    /// crossings' tangent planes away from their mean (to a crease, or to the point the planes of a face rounded within the
+    /// cell share, proud of the rounding), or merged from a refined cell's fine vertices, which interpolate the cell's
+    /// coarse corners. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
+    /// none.</summary>
+    public bool[] Solved { get; init; } = [];
 
-    // The least turn, in degrees, between two quads' facings at a crease vertex that splits it (SplitAtCreases): more than a
-    // smooth face's quads turn at the lattice spacings the bake uses, less than a right-angled edge.
-    private const double CreaseDegrees = 45.0;
+    // The least turn, in degrees, between two quads' facings at a crease vertex that splits it (SplitAtCreases): just past
+    // the turn that makes a vertex a crease (SdfDualContouring's thirty degrees), so every crease its planes found splits.
+    // At the forty-five degrees a chamfer turns, a threshold at forty-five split its vertices or not by the quads' noise
+    // from one vertex to the next, and the flat faces beside the chamfer dented where they did.
+    private const double CreaseDegrees = 32.0;
 
     /// <summary>Returns the contour with its crease vertices split: a <see cref="Features"/> vertex two of whose quads face
-    /// apart by more than 45 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
-    /// area-weighted facing of the vertex's quads within 45 degrees of that quad's, so a sharp edge shades as the two faces
+    /// apart by more than 32 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
+    /// area-weighted facing of the vertex's quads within 32 degrees of that quad's, so a sharp edge shades as the two faces
     /// meeting at it rather than as a band of blended normals. A quad folded against its own vertices' normals neither
     /// splits nor lends its facing.</summary>
     /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
@@ -1126,6 +1134,7 @@ public sealed class SdfSampledLattice {
             Quads: quads
         ) {
             Features = surface.Features,
+            Solved = surface.Solved,
         };
 
         static Vector3 Vertex(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
