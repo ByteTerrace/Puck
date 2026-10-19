@@ -20,10 +20,11 @@ decision here.
   fixed-point result, a refusal or overflow boundary, a determinism property.
   CI requires 100% line coverage of live `src/`, so a new public member lands
   with a law (or an existing test) that reaches it.
-- Author at the `Default` tier. A Smoke sentinel or Deep mirror repeats a
-  Default statement and adds no line coverage; add one only when the lead or
-  owner asks for it, and delete a mirror you touch whose operands are no
-  stronger than its sibling's.
+- Author at the `Default` tier. A Deep row that only draws more random
+  operands from its Default sibling's domain adds no evidence and no line
+  coverage; write one only for a domain Default cannot reach (the exhaustive
+  edge cross product, a whole finite carrier, a longer ladder), and delete a
+  mirror you touch that does not.
 - The suite's own machinery (the coverage ratchet, the leg gate, declaration
   parity, the recorded registers) was written by agents and is a tool, not a
   precondition. When it blocks a deletion, rename or restructure, change it in
@@ -77,9 +78,10 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
 `dotnet test` forwards switches it does not know to the test host, which exits
-5, so `-nodeReuse:false` belongs to the build step only. The plain run is Smoke
-plus Default and includes the ratchet and leg gates, which only a run that
-includes the Default tier checks. Deep and Exhaustive cases are explicit:
+5, so `-nodeReuse:false` belongs to the build step only. The plain run is the
+Default tier (about half a minute) and includes the ratchet and leg gates,
+which only a run that includes the Default tier checks. Deep and Exhaustive
+cases are explicit:
 `--explicit on --filter-trait tier=<tier>`, and without `--explicit on` such a
 filter selects no test. One law runs with
 `--explicit on --filter-display-name '<law-id>*'`; the trailing wildcard is

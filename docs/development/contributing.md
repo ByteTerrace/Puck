@@ -284,9 +284,12 @@ What the C# loop costs:
   `src/Puck.World` took 32 to 48 s cold and 8 to 9 s warm on the reference
   machine, under 60 to 90% load from other work. Idle nodes exit after a while,
   so the first build after a long pause is cold. The `-nodeReuse:false` every
-  agent build passes ([verification](../../.claude/skills/verification/SKILL.md))
+  agent build and restore passes ([verification](../../.claude/skills/verification/SKILL.md))
   keeps shared agent machines free of lingering nodes and makes every agent
-  build cold; an agent timing this loop says which it measured.
+  build cold; an agent timing this loop says which it measured. The switch
+  belongs to the build and the restore alone: `dotnet test` on the xUnit v3
+  projects forwards switches it does not know to the test host, which exits 5,
+  so an agent builds with `-nodeReuse:false` and then runs `dotnet test --no-build`.
 - **One compile.** An edit that keeps its project's public surface keeps its
   reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
   compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
@@ -472,15 +475,18 @@ scenario. The manifest covers no portal transfer, since that needs more than one
 world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
-`dotnet test` runs the default tier (Smoke and Default), the everyday gate;
+`dotnet test` runs the Default tier, the everyday gate and the only tier whose
+line coverage CI counts (about half a minute on the reference machine);
 Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
-is selected by its `tier` trait:
+is selected by its `tier` trait. Pass `-nodeReuse:false` to the build and the
+restore only: `dotnet test` forwards a switch it does not know to the xUnit v3
+test host, which exits 5.
 
 ```powershell
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
+dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive
 ```
 
 Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no

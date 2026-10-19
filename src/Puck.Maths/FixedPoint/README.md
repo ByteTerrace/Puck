@@ -1373,22 +1373,19 @@ or by nothing:
 | `position.*` | Canonicalization, `Delta`, `Translate`, the group structure, and the render-relative ladder. |
 | `rate.*` | Scalar and vector integration against an exact `BigInteger` ledger, the unit-advance closure, and both refusal ladders. |
 | `symmetric-solve.*` | `FixedSymmetricSolve`: the 2×2/3×3 apply, solve and invert kernels, against independent `BigInteger` Cramer's-rule and Bareiss-elimination oracles, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope. |
-| `smoke.*` | The fast mirrors—a ties-to-even witness for four of the five rounding carriers (`FixedQ4816`'s multiply and its divide, `UFixedQ4816`, `UnitFraction32`, `UnitInterval32`), a fused-product witness, and the twin spot checks. `UnitFraction16` has **no** smoke witness; its only mirror is `deep.unit-fraction16-exhaustive`, which lives in the Deep tier. |
-| `deep.*` | The exhaustive and full-range mirrors of everything above, including the complete `UnitFraction16` sweep. |
+| `deep.*` | What Default does not reach: the exhaustive four-operand edge cross product for the planar trio, the complete `UnitFraction16` sweep, and the longer ladders. |
 
 **The tiers.**
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-The bare command is the default tier (Smoke + Default). Its **budget** is under
-30 s, which it meets on an idle machine—but that is a budget the tests README
-owns, not a promise about your run: a contended machine has been measured at
-three times it. Nothing records it for you. The suite's machine-written
+The bare command is the Default tier, which takes about half a minute on an
+idle machine; the tests README owns that figure, and a contended machine
+measures longer. Nothing records it for you. The suite's machine-written
 [`RESULTS.md`](../../../tests/Puck.Maths.Tests/RESULTS.md) deliberately carries
 no duration at all—every figure in it is machine-independent, so it stays
 meaningful across the machines this engine is tested on, and a wall time would
@@ -1399,7 +1396,7 @@ lands.
 
 **Where doc-versus-code divergences are tracked.** They are not tracked by
 hand. A law that pins what a kernel *does* where the member's own XML doc says
-otherwise must be spelled `Leg.PinnedAsObserved`, and the ledger derives a
+otherwise must be declared as a structural leg whose citation opens `DOC GAP:`, and the ledger derives a
 register from those declarations on every run—a register here being a table
 the test run rebuilds from scratch rather than one anyone edits. That one is
 **Register: behaviour pinned as observed against its own XML doc**, in

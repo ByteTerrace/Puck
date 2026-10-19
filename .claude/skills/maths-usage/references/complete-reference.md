@@ -295,7 +295,7 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 
 (`dotnet test` forwards switches it does not know, `-nodeReuse:false` included,
 to the test host, which exits 5. Build first with `-nodeReuse:false`, then run
-this with `--no-build`.) That is the Default tier — Smoke + Default, **under a minute** (declared budget: thirty seconds). It is
+this with `--no-build`.) That is the Default tier, **about half a minute**. It is
 cheap on purpose and it is where the *structural* gates live: the coverage
 ratchet and both leg gates carry the `Default` trait, so this run is the only
 one that checks a new public member is classified, that legs are declared and
@@ -311,9 +311,8 @@ in a change loop.
 
 | Tier | Command | Budget | When |
 |---|---|---|---|
-| Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
-| **Default** | *(a plain run — no filter)* | declared < 30 s; under a minute in practice | the quick check for a change |
-| Deep | `--explicit on --filter-trait tier=Deep` | minutes | optional breadth, worth it for a rounding change |
+| **Default** | *(a plain run — no filter)* | about half a minute | the quick check for a change |
+| Deep | `--explicit on --filter-trait tier=Deep` | about a minute | optional breadth, worth it for a rounding change |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and expensive finite combinatorial-prime checks, as classified by `maths-laws` |
 
 **Do not run the `Exhaustive` tier reflexively.** It takes tens of minutes;
@@ -351,7 +350,7 @@ Authoring the case or the waiver itself belongs to
 
 **When the documentation and the behaviour disagree, do not edit the generated
 register.** A law that pins behaviour against the member's own XML doc must be
-spelled `Leg.PinnedAsObserved`; `tests/Puck.Maths.Tests/leg-ledger.md` is
+declared as a structural leg whose citation opens `DOC GAP:`; `tests/Puck.Maths.Tests/leg-ledger.md` is
 derived from those declarations on every run, so a row closes only by correcting
 the doc (or the code) and re-spelling the leg — mechanism in
 [FixedPoint → Verifying changes](../../../../src/Puck.Maths/FixedPoint/README.md#verifying-changes).

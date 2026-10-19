@@ -109,7 +109,7 @@ them.
 ## Verify
 
 Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj
--c Release -nodeReuse:false`), then run the suite, which takes under a minute:
+-c Release -nodeReuse:false`), then run the suite, which takes about half a minute:
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
@@ -117,7 +117,7 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 
 `dotnet test` forwards switches it does not know, `-nodeReuse:false` among them,
 to the test host, which then exits 5; pass it to the build step only. The run is
-the Default tier (Smoke plus Default). A rounding change or a new value
+the Default tier. A rounding change or a new value
 kernel also earns Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
 takes tens of minutes: run it only when the member's waiver or the coverage
 manifest names it as the gate of record, and narrow it to one law with

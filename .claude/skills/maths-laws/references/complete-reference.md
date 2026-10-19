@@ -44,7 +44,7 @@ do), because the loader reads every `*.json` in the directory and keys by id.
 ```json
 {
   "Id": "<family>.<kebab-statement>",
-  "Tier": "Smoke|Default|Deep|Exhaustive",
+  "Tier": "Default|Deep|Exhaustive",
   "Members": [ { "Type": "Puck.Maths.FixedQ4816", "Name": "Multiply" } ],
   "Legs": [ {
     "Kind": "Classical|PresentedTwin|InTreeIndependent|SharedSubstrate|Structural",
@@ -58,22 +58,21 @@ do), because the loader reads every `*.json` in the directory and keys by id.
 ``Puck.Maths.PresentedAlgebra`2`` and a closed one carries its assembly-qualified
 arguments. Copy the string verbatim from an existing row wherever the same member
 already appears rather than reconstructing it. `Flavor` is `None` unless `Kind`
-is `SharedSubstrate`. The seven prose slots map onto the named `Legs.cs`
-factories below. No code calls those factories: a JSON row is materialized
-directly (`LegText.ToLeg`), and `LegLedgerTests` enforces what the factories
-encode, so the table is the vocabulary a row's slots follow:
+is `SharedSubstrate`. A row is materialized directly (`LegText.ToLeg`, into the
+`Leg` record in `Legs.cs`), and `LegLedgerTests` rejects an illegal slot
+combination, so the table is the vocabulary a row's slots follow:
 
-| Factory | Slots it fills |
+| Leg | Slots it fills |
 |---|---|
-| `Classical(subject, against)` | Subject, Against |
-| `PublishedConstant(subject, table, provenance)` | Subject, Against=table, Citation=provenance |
-| `InTreeIndependent(subject, against, envelope)` | + Citation=envelope |
-| `FusedSubstrate` / `IntraPresented` / `SharedUpstream(subject, against, shared)` | + Shared |
-| `SharedExactKernel` / `DelegationTwin(subject, against, shared, envelope)` | + Shared, Citation=envelope |
-| `FaithfulCarriage(subject, against, transcribes, witness)` | Shared=transcribes, Citation=witness |
-| `Structural(statement)` | Subject=statement |
-| `PinnedAsObserved(statement, documented)` | Subject, Citation carries the `DOC GAP:` marker |
-| `RelativeCanary(subject, against, absolute)` | Kind=Structural, + Absolute |
+| Classical | Subject, Against |
+| Published constant (classical) | Subject, Against=table, Citation=provenance |
+| InTreeIndependent | + Citation=envelope |
+| FusedSubstrate / IntraPresented / SharedUpstream | + Shared |
+| SharedExactKernel / DelegationTwin | + Shared, Citation=envelope |
+| Transcription (faithful carriage) | Shared=transcribes, Citation=witness |
+| Structural | Subject=statement |
+| Doc gap (structural) | Subject, Citation carries the `DOC GAP:` marker |
+| Relative canary (structural) | Kind=Structural, + Absolute |
 
 **The binding** — the one thing JSON cannot carry — is a line in
 `LawRegistry.Build()`:
@@ -132,7 +131,7 @@ trusting a pasted list:
 grep -hoE '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws/*.json | sed -E 's/"Id": "|\.$//g' | sort -u
 ```
 
-Mirrors take the **tier** as their prefix instead: `smoke.*` and `deep.*`.
+Deep rows take the **tier** as their prefix instead: `deep.*`.
 Reuse a family; do not invent one for a type that has one.
 
 ### The combinators (`Laws.cs`) — instantiate, never re-implement
@@ -167,13 +166,12 @@ is by construction the state the run's generator started from.
 
 Tier selection is declarative — **no environment variables anywhere**. Every
 case carries its tier as the `tier` trait, and Deep and Exhaustive cases are
-explicit, so plain `dotnet test` runs Smoke + Default.
+explicit, so plain `dotnet test` runs the Default tier.
 
-| Tier | Selected by | Declared budget | When it runs |
+| Tier | Selected by | Measured | When it runs |
 |---|---|---|---|
-| Smoke | `--filter-trait tier=Smoke` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
-| Default (Smoke + Default) | a plain run | < 30 s declared; under a minute in practice | **every change**, unconditionally |
-| Deep | `--explicit on --filter-trait tier=Deep` | minutes | before you commit, and before any rounding change lands |
+| Default | a plain run | about half a minute | **every change**, unconditionally |
+| Deep | `--explicit on --filter-trait tier=Deep` | about a minute | before any rounding change lands |
 | Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
 
 Explicit cases never fire on a plain `dotnet test`, and without
@@ -194,12 +192,11 @@ advance the frontier counter its Default sibling reads, sliding that sibling's
 operands as a side effect of a sweep having run. Use `Laws.Claim` with its own
 basis there.
 
-The budgets are **declared design targets** (`Tier`'s XML docs + the project
-README), not enforced by any assertion, and **nothing records what a session
-cost** — `RESULTS.md` carries no duration, by design, because every figure in
-it is machine-independent and a wall time is not (see that file's own header).
-Treat a budget as the ceiling your new case must not blow through, and if you
-want to know what it costs, time the run yourself on an idle machine and
+The times are **measurements, not enforced budgets** (the project README
+states them), and **nothing records what a session cost** — `RESULTS.md`
+carries no duration, by design, because every figure in it is
+machine-independent and a wall time is not (see that file's own header). If you
+want to know what a case costs, time the run yourself on an idle machine and
 compare it only against that same machine. No law measures time: a claim about
 cost is stated as a deterministic count (an allocation meter reading, a
 case or operand count) or it is `puck bench`'s measurement, not a law.
@@ -209,18 +206,16 @@ case or operand count) or it is `puck bench`'s measurement, not a law.
 - **Default** is the home tier. Choose another tier only for the stronger or
   cheaper execution contract described below; do not infer placement from the
   current inventory.
-- **Deep mirrors** run the *same statement at strictly stronger operands* —
-  the exhaustive four-operand edge cross product (`Domains.Quads` switches to
-  the full product only at Deep) and a 4096-draw random batch. A Deep case
-  whose operands are not strictly stronger than its Default sibling's is
-  buying nothing. A mirror adds no line coverage, so write one only when the
-  lead or owner asks; where one stays, say `MIRROR of <id> at strictly stronger
-  operands` in the leg so the ledger reads honestly.
-- **Smoke sentinels** mirror the **hottest kernel** of a family on
-  `SmokeDomain` (block 64, 16 random draws). A smoke row carries *no new
-  evidence* and its leg says so: `MIRROR of <id> at SmokeDomain: no new
-  evidence`. Under the owner's target a sentinel is a deletion candidate, not
-  something to add.
+- **Deep rows** hold exact results over a domain Default does not reach: the
+  exhaustive four-operand edge cross product (`Domains.Quads` switches to the
+  full product only at Deep), a finite carrier swept whole, or a modulus,
+  degree or band ladder longer than Default's. A Deep case that only draws
+  more random operands (the 4096-draw batch against Default's 256) from its
+  Default sibling's domain buys nothing and adds no line coverage; do not write
+  one, and delete one you touch. Where a Deep row stays, say `MIRROR of <id>`
+  and what it adds in the leg so the ledger reads honestly.
+- There is no Smoke tier: a sentinel repeated a Default statement on a tiny
+  domain and added neither evidence nor line coverage.
 
 Deep and Default siblings normally share a domain **key**, so they advance one
 frontier counter together.
@@ -230,26 +225,24 @@ frontier counter together.
 ## 3. Legs: what the statement stands on
 
 A leg is a declared answer to "what does agreement here actually prove?".
-Each row of the table is a factory in `Legs.cs`. In a `laws/*.json` row, fill
-the matching `Kind`, `Flavor` and prose slots; the leg gate rejects an illegal
-combination (a flavorless shared-substrate leg, a delegation twin with nothing
-cited, a canary with no absolute sibling) by name.
+In a `laws/*.json` row, fill the matching `Kind`, `Flavor` and prose slots; the
+leg gate rejects an illegal combination (a flavorless shared-substrate leg, a
+delegation twin with nothing cited, a canary with no absolute sibling) by name.
 
-| Factory | Kind | Use when |
-|---|---|---|
-| `Leg.Classical(subject, against)` | classical | the reference is independently authored (`Oracles`, or an exact inline expectation) and shares no code and no rounding substrate |
-| `Leg.PublishedConstant(subject, table, provenance)` | classical | the reference is a constant table; `provenance` is **required** and is what makes it classical rather than a regression pin |
-| `Leg.PresentedTwin(subject, against)` | presented-twin | the other side is the presented charged algebra object |
-| `Leg.InTreeIndependent(subject, against, envelope)` | in-tree-independent | a second *shipped* implementation; cite the envelope it itself rests on |
-| `Leg.FusedSubstrate(subject, against, shared)` | shared-substrate | both sides round through a house fused rounding kernel — name it, and say identical member vs sibling copy |
-| `Leg.SharedExactKernel(subject, against, shared, envelope)` | shared-substrate | both sides call the same *exact* kernel; (B) is vacuous, cite where that kernel is pinned |
-| `Leg.DelegationTwin(subject, against, shared, envelope)` | shared-substrate | one side wraps the other — carriage only; cite the delegated-to kernel's own evidence |
-| `Leg.FaithfulCarriage(subject, against, transcribes, witness)` | shared-substrate | the reference transcribes the subject's own rule, or is built from its output; name the independent witness, or say in those words that none stands |
-| `Leg.IntraPresented(subject, against, shared)` | shared-substrate | both sides live inside the presented world |
-| `Leg.SharedUpstream(subject, against, shared)` | shared-substrate | both sides consume one upstream computation neither owns |
-| `Leg.Structural(statement)` | structural | purity, refusal, an identity element, a certificate shape, a measured floor |
-| `Leg.PinnedAsObserved(statement, documented)` | structural | behaviour diverges from the member's own XML doc |
-| `Leg.RelativeCanary(subject, against, absolute)` | structural, with `Absolute` set | two disciplines **required to differ**; name the absolute sibling |
+| Leg (`Kind` / `Flavor`) | Use when |
+|---|---|
+| Classical | the reference is independently authored (`Oracles`, or an exact inline expectation) and shares no code and no rounding substrate; a constant table is classical only with its provenance in `Citation`, otherwise it is a regression pin and a structural leg |
+| PresentedTwin | the other side is the presented charged algebra object |
+| InTreeIndependent | a second *shipped* implementation; cite the envelope it itself rests on in `Citation` |
+| SharedSubstrate / FusedSubstrate | both sides round through a house fused rounding kernel — name it, and say identical member vs sibling copy |
+| SharedSubstrate / SharedExactKernel | both sides call the same *exact* kernel; (B) is vacuous, cite where that kernel is pinned |
+| SharedSubstrate / DelegationTwin | one side wraps the other — carriage only; cite the delegated-to kernel's own evidence |
+| SharedSubstrate / Transcription | the reference transcribes the subject's own rule, or is built from its output; name the independent witness, or say in those words that none stands |
+| SharedSubstrate / IntraPresented | both sides live inside the presented world |
+| SharedSubstrate / SharedUpstream | both sides consume one upstream computation neither owns |
+| Structural | purity, refusal, an identity element, a certificate shape, a measured floor |
+| Structural with a `DOC GAP:` citation | behaviour diverges from the member's own XML doc |
+| Structural with `Absolute` set | a relative canary: two disciplines **required to differ**; name the absolute sibling |
 
 **Name evidence honestly, and name the shared thing.** On any
 shared-substrate leg the `shared` field must say *what* is shared and *which*
@@ -277,15 +270,14 @@ words, they are what the ledger's registers are read against):
 - `OWED:` opening a citation — the evidence named is not there yet. This is
   the one spelling the owed-marker register keys on; a gap named in any other
   words is invisible to it.
-- `MIRROR of <id> …` — a tier mirror, with what it adds (or that it adds
-  nothing).
+- `MIRROR of <id> …` — a Deep row's Default sibling, with what the Deep row
+  adds.
 - `UNCERTAIN (sweep):` — a classification you are not sure of, with the
   alternative reading stated.
 
 **Doc gaps.** When behaviour and the member's XML doc disagree, pin the
 behaviour with a structural leg whose citation opens `DOC GAP:` and says what
-the XML doc claims (the spelling `Leg.PinnedAsObserved(statement, documented)`
-writes) — never a plain structural leg. The ledger's *behaviour pinned as
+the XML doc claims — never a plain structural leg. The ledger's *behaviour pinned as
 observed* register is derived from that citation, a doc-gap citation on any
 other leg kind fails the leg gate, and one that does not say what the doc
 claims fails it too. In a `laws/*.json` row that is `"Kind": "Structural"` with
@@ -360,10 +352,10 @@ Each law declares a `Domain` and receives three streams from it:
    24-raw set of extremes and off-by-ones around every boundary the kernels
    branch on (`0, ±1`, both carrier extremes, `±2³¹` and `±2⁴⁷` each with both
    off-by-ones, `±65536`, `±32768`, `±256`). Exhaustive square for pairs; for
-   quads, a budget-bounded rotation at Smoke/Default and the **full
+   quads, a budget-bounded rotation at Default and the **full
    four-operand cross product at Deep**.
 2. the **edge-biased random batch** — `Pcg32XshRr` seeded purely from the key
-   and the frontier counter; 16 draws at Smoke, 256 at Default, 4096 at Deep.
+   and the frontier counter; 256 draws at Default, 4096 at Deep.
 3. the **frontier block** — contiguous stratified `DigitalNetSampler` indices
    mapped by `Domains.FrontierRaw`.
 
@@ -476,7 +468,7 @@ runs that consumed domains **and stayed green**. A filtered or single-tier run
 therefore leaves every other record exactly as its own last run left it — and
 can never quiet a gate it never ran. Because the ratchet and leg gate carry the
 `Default` trait, **only a run that includes the Default tier
-regenerates the manifest and the ledger**; a Smoke-only or Deep-only run will
+regenerates the manifest and the ledger**; a Deep-only run will
 not. Commit whatever a recording run regenerates as part of your change.
 
 ---
@@ -561,7 +553,6 @@ to the test host, which exits 5, so the tests run with `--no-build`:
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --filter-trait tier=Smoke
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Deep
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build --explicit on --filter-trait tier=Exhaustive
 ```

@@ -3650,7 +3650,7 @@ baseline is what a recording replaces; a run that does not write its records, or
 |---|---|---|
 | `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
-| `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier (Smoke and Default) |
+| `maths-ledger` | `coverage-manifest.json`, `leg-ledger.md`, `frontier.json`, `RESULTS.md` in `tests/Puck.Maths.Tests` | the Default tier |
 
 The `state` baseline and its tests, and the tictactoe state hashes `browser-parity`
 also recorded, are quarantined with the worlds they need, under `experimental/tests`;
