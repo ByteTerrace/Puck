@@ -63,7 +63,7 @@ only.
 |---|---|---|
 | `Trapezoid` | uses the shape's `taper` | yes |
 | `RoundedRectangle` | `cornerRadius` as a fraction of the smaller half-extent, [0,1] | yes |
-| `Polygon` | `sides` in [3, 32] | **no — renderable only** |
+| `Polygon` | `sides` in [3, 32] | yes up to 8 sides (a convex polygon); **no** past 8 |
 | `Ellipse` | none | yes |
 | `ChamferedRectangle` | `cornerRadius` as a chamfer fraction, [0,1] | yes |
 | `Convex` | `vertices`, 3 to 8 points; `cornerRadius` rounds them uniformly | yes |
@@ -230,7 +230,7 @@ folds may not carry either.
 
 ## Contact admission
 
-- **Refused by name:** non-detail Polygon prisms when the solid row
+- **Refused by name:** non-detail Polygon prisms of more than eight sides when the solid row
   requires deterministic field contact; Revolve where contact is owed;
   folds that cannot expand within the contact copy budget.
 - **Accepted but omitted:** creation contact emission skips sweeps entirely
@@ -253,7 +253,7 @@ A uniform scale is always admitted, so this only bites an anisotropic shape.
 |---|---|
 | Sphere, Ellipsoid, Superellipsoid, Box, Plane | RoundCone |
 | Torus when `scale.x == scale.z` (an elliptic section revolved) | Torus when `scale.x != scale.z` |
-| Prism with a Trapezoid, RoundedRectangle, ChamferedRectangle or Ellipse profile | Prism with a Convex profile (Polygon is already refused) |
+| Prism with a Trapezoid, RoundedRectangle, ChamferedRectangle, Ellipse or Convex profile, or a Polygon profile of at most 8 sides (or of more, scaled alike in X and Y) | Prism with a Polygon profile of more than 8 sides scaled differently in X and Y |
 | Capsule and Cone when `scale.x == scale.z`; Cylinder at any scale (elliptic when `scale.x != scale.z`) | Capsule and Cone when `scale.x != scale.z` |
 
 None of the right column is refused by name — each validates, renders, and fails

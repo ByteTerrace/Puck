@@ -901,6 +901,24 @@ public sealed class AuthoredShapeAdmissionLawTests {
             requiresField: true
         );
     }
+    // A polygon of at most eight sides lowers to its exact convex polygon, which the deterministic evaluator answers.
+    [Fact]
+    public void AFewSidedPolygonPrismAdmitsFieldContact() {
+        var shape = Shape(
+            SdfSolidPrimitive.Prism,
+            new Vector3(
+                x: .4f,
+                y: .2f,
+                z: .1f
+            )
+        ) with { Profile = new(SdfPrismProfileKind.Polygon, Sides: 6) };
+
+        AssertWorldValidates(
+            shape,
+            requiresField: true
+        );
+    }
+    // A polygon of more sides than a convex polygon holds stays render-only.
     [InlineData(SdfPrismProfileKind.Polygon)]
     [Theory]
     public void RenderOnlyProfilesRefuseUnsupportedFieldContact(SdfPrismProfileKind kind) {
@@ -911,7 +929,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
                 y: .2f,
                 z: .1f
             )
-        ) with { Profile = new(kind) };
+        ) with { Profile = new(kind, Sides: 12) };
 
         AssertWorldValidates(shape);
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(

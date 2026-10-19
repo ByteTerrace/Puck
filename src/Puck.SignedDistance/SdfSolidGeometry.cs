@@ -105,6 +105,37 @@ public static class SdfSolidGeometry {
             rounding,
             detail: detail
         ),
+            // A regular polygon of at most MaxConvexVertices sides, at any scale, is the convex polygon of its vertices scaled
+            // into place (vertex k at k·2π/n from +Y toward +X, the shader's convention, which runs clockwise): its exact
+            // distance, rounded as the regular polygon rounds. With more sides it is exact only while X and Y scale alike,
+            // as a native regular polygon; scaled apart it keeps the unit polygon under its scale.
+            SdfPrismProfileKind.Polygon when (profile.Sides <= SdfPrismProfile.MaxConvexVertices) => ConvexProfile(
+            chain: chain,
+            vertices: RegularVertices(sides: profile.Sides, scale: new Vector2(x: scale.X, y: scale.Y)),
+            cornerFraction: 0f,
+            rounding: rounding,
+            lift: lift,
+            liftAmount: (revolve
+            ? revolveOffset
+            : scale.Z),
+            material: material,
+            blend: blend,
+            smooth: smooth,
+            detail: detail
+        ),
+            SdfPrismProfileKind.Polygon when (scale.X == scale.Y) => chain.RegularPolygon(
+            profile.Sides,
+            scale.X,
+            lift,
+            (revolve
+            ? revolveOffset
+            : scale.Z),
+            material,
+            blend,
+            smooth,
+            rounding,
+            detail: detail
+        ),
             SdfPrismProfileKind.Polygon => chain.Scale(scale: polygonScale).RegularPolygon(
             profile.Sides,
             1f,
@@ -171,6 +202,12 @@ public static class SdfSolidGeometry {
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(profile)),
         };
     }
+    private static Vector2[] RegularVertices(int sides, Vector2 scale) => [.. Enumerable.Range(start: 0, count: sides)
+        .Select(selector: vertex => {
+            var (sin, cos) = MathF.SinCos(x: ((vertex * MathF.Tau) / sides));
+
+            return new Vector2(x: (sin * scale.X), y: (cos * scale.Y));
+        })];
     private static SdfProgramBuilder ConvexProfile(SdfProgramBuilder chain, Vector2[] vertices, float cornerFraction, float rounding,
         SdfLift lift, float liftAmount, int material, SdfBlendOp blend, float smooth, bool detail) =>
         chain.ConvexPolygon(
