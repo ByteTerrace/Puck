@@ -184,8 +184,9 @@ owns the explanation.
 - **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
   `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
   A final lattice refines the cells its samples cannot
-  resolve (`SdfSampledLattice.Refine`: sheets or gaps thinner than a cell,
-  outside corners of different materials, two patches in one cell) and contours
+  resolve (`SdfSampledLattice.Refine`: sheets or gaps thinner than a cell, not
+  a solid's edge or crease a line crosses near its tip, outside corners of
+  different materials, two patches in one cell) and contours
   them at the fine spacing through `SdfDualContouring.ExtractRefined`; the cells
   touching them contour fine from interpolated coarse values and merge each piece
   into one vertex, which keeps the mesh crack-free. Never refine a cell without
@@ -195,12 +196,20 @@ owns the explanation.
 - **Features are placed and shaded as features.** A vertex whose crossings'
   planes all meet and turn by over 30 degrees is a feature: it lies on the
   crease, inside its cell (a point past the cell folds the quads around it into
-  teeth along the edge), takes its crossings' normals, and
+  teeth along the edge). A convex crease up to half a cell past its cell is
+  handed to the neighbour that holds it (`SdfDualContouring.HandOff`), whose
+  vertex moves onto it; clamped instead, a diagonal or curved crease loses its
+  vertices in a row of notches. A feature takes its crossings' normals, each quad
+  splits along the diagonal that turns least from its non-crease corners'
+  normals, and
   `SdfContour.SplitAtCreases` splits it per side at 32 degrees, just past the
   feature test's 30 (at 45, a chamfer's own turn, the split flipped vertex by
   vertex and dented flat faces). Every vertex no crossing pins to the surface
   (`SdfContour.Solved`) is checked against the field before the split and moved
-  onto the surface where a rounding near the cell's size left it proud.
+  onto the surface where a rounding near the cell's size left it proud; one the
+  contour kept beside a sharp convex crease (`SdfContour.Beside`) that lies
+  inside the solid stays a crease vertex when moved, or its face's normal shades
+  the other face's quads beside the edge.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel
