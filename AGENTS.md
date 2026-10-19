@@ -48,8 +48,11 @@ agent works in that mode by default, without asking:
     engine to seeing it in the running debug world.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
-    and counters ceilings, test durations, and `VerifiedCode` brands are
-    deleted, with the verbs and analyzers that maintained them.
+    and counters ceilings, test durations, `VerifiedCode` brands, the emulator
+    Post expectation ledgers (`Expectations.json`,
+    `AccuracyCoinExpectations.json`, `--accept`, `--lane`) and the recorded
+    snapshot layout hashes are deleted, with the verbs and analyzers that
+    maintained them.
   - Direct3D 12 is the primary backend during development; Vulkan catches up
     when the owner calls for qualification.
   - Every project stays in the build.
