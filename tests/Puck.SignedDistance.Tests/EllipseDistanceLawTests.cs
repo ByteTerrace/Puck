@@ -110,7 +110,7 @@ public sealed class EllipseDistanceLawTests {
     }
     // The distance to the nearest point of the curve: the best of many samples of its parameter, refined by
     // golden-section search on the distance about it, signed by whether the point lies inside.
-    private static double Reference(double px, double py, double semiX, double semiY) {
+    internal static double Reference(double px, double py, double semiX, double semiY) {
         const int Samples = 20000;
         var best = 0.0;
         var bestDistance = double.MaxValue;

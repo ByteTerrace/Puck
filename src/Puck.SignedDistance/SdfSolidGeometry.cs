@@ -654,6 +654,18 @@ public static class SdfSolidGeometry {
             radii: (EllipsoidRadii * effectiveScale),
             smooth: smooth
         ),
+            // A torus scaled alike in X and Z is its minor section stretched into an ellipse, revolved at the stretched major
+            // radius: the exact distance of the scaled torus, since the section never reaches the axis.
+            SdfSolidPrimitive.Torus when (effectiveScale.X == effectiveScale.Z) => chain.Ellipse(
+            blend: blend,
+            detail: detail,
+            lift: SdfLift.Revolve,
+            liftAmount: (TorusMajor * effectiveScale.X),
+            material: material,
+            semiX: (TorusMinor * effectiveScale.X),
+            semiY: (TorusMinor * effectiveScale.Y),
+            smooth: smooth
+        ),
             SdfSolidPrimitive.Capsule when (effectiveScale.X == effectiveScale.Z) => chain.Capsule(
             blend: blend,
             detail: detail,
