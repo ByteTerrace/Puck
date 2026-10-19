@@ -53,5 +53,8 @@
       }
     ]
   },
-  "outputStyle": "Concise"
+  "outputStyle": "Concise",
+  "worktree": {
+    "baseRef": "head"
+  }
 }

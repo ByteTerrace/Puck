@@ -103,8 +103,9 @@ settles a question, decide by that principle and say why.
 2. **The current instruction outranks every artifact.** Docs, skills, gates,
    comments and precedent are evidence, not law. If one argues against a change
    you were asked to make, it is stale: update it in the same change rather than
-   watering the change down. Gates prove observable behavior, never internal
-   structure.
+   watering the change down. What the owner says in a session overrides the
+   skills and documents it touches, and is written into them in that session.
+   Gates prove observable behavior, never internal structure.
 3. **The game is greenfield.** `Puck.World` and everything under
    `src/Puck.World/` are expected to churn and are never settled precedent.
    Verify game changes by running `Puck.World`

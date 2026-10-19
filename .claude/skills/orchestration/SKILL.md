@@ -175,6 +175,44 @@ Delegating to subagents needs no one's permission. A follow-on wave much larger
 than the last (dozens of agents, or a second full fan-out) is a spend decision:
 state its plan and cost to the owner in one sentence before launching it.
 
+### The Claude roster
+
+When the owner pairs with the lead, the lead stays free for that conversation
+and subagents do the work: implementation, investigation, verification runs and
+reviews. The lead writes briefs, inspects results, merges and reports. The
+project agents under `.claude/agents/` carry the four Claude models the owner
+allows, in order of rising cost:
+
+| Agent | Model | Effort | Use for |
+|---|---|---|---|
+| `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. It edits nothing. |
+| `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
+| `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
+| `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
+
+Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
+agentic coding on a hard lane, `max` only when correctness outweighs cost.
+Opus 5.5 and Haiku 5.5 run at `medium` when nothing sets an effort, which is
+why each agent file names one. Pass `model` only to put a role on another
+model.
+
+Writers run in their own worktree (`isolation: worktree`), branched from the
+lead's HEAD (`worktree.baseRef` in `.claude/settings.json`), so their edits
+never touch the checkout the owner is pairing in. Every agent reaches the live
+World through the session's `puck` MCP server. That World runs the main
+checkout's build and sources, so a lane sees its own edits running only after
+the lead merges and reloads, or in a World of its own under a GPU grant, named
+by `world` on every call. Reads and captures of the live World are always
+allowed; a brief names the live mutations a lane may make.
+
+Codex lanes reach the same World: the repository's `.codex/config.toml` starts
+the same `puck` MCP launcher, so a companion `task` run in this checkout or a
+worktree of it can call `puck_worlds` and the rest. Both Astra and Sol accept
+`low` through `ultra` effort, but the companion passes only `none` through
+`xhigh`. The owner's own Codex Desktop thread holds a writer lock while it is
+open, so the lead never resumes it with `codex exec resume`; the lead and that
+thread talk through the owner, or through a file both read.
+
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
