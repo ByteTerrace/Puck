@@ -55,6 +55,13 @@ public sealed class SdfMeshLawTests {
         Assert.Equal(expected: "normals", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, normals: new Vector3[] { Vector3.UnitZ }, positions: Positions)).ParamName);
         Assert.Equal(expected: "triangleMaterials", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, positions: Positions, triangleMaterials: new uint[] { 0, 1 })).ParamName);
         Assert.Equal(expected: "normals", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, normals: new Vector3[] { Vector3.UnitZ, new(x: float.NaN, y: 0f, z: 1f), Vector3.UnitZ }, positions: Positions)).ParamName);
+        // A vertex names a member the mesh has, a member's pose is finite, and a mesh's vertices ride at most 255 members.
+        var member = new SdfMeshMember(Orientation: Quaternion.Identity, Position: Vector3.Zero, SlotOffset: 1);
+
+        Assert.Equal(expected: "vertexMembers", actual: Assert.Throws<ArgumentException>(testCode: static () => new SdfMesh(indices: Indices, positions: Positions, vertexMembers: new byte[] { 0, 0 })).ParamName);
+        Assert.Equal(expected: "vertexMembers", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: Indices, members: new[] { member }, positions: Positions, vertexMembers: new byte[] { 0, 1, SdfMesh.NoMember })).ParamName);
+        Assert.Equal(expected: "members", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: Indices, members: new[] { (member with { Position = new Vector3(x: float.NaN, y: 0f, z: 0f) }) }, positions: Positions)).ParamName);
+        Assert.Equal(expected: "members", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: Indices, members: Enumerable.Repeat(element: member, count: (SdfMesh.MaxMembers + 1)).ToArray(), positions: Positions)).ParamName);
     }
 
     // A draw list that only counts: the region refuses it on its count before reading any draw.

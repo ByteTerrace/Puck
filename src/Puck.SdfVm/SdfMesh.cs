@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 /// <remarks>Triangles wind counter-clockwise seen from their front, in the right-handed convention of
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A world prototype's inline mesh becomes one, placed by its
 /// placements and stamps, and so does each group the mesh-path bake contours (<see cref="SdfMeshPathBake"/>), which also
-/// carries each vertex's normal and each triangle's palette entry. The mesh pass rasterizes it.</remarks>
+/// carries each vertex's normal and each triangle's palette entry, and, for a group whose shapes ride slots of their own,
+/// each vertex's member (<see cref="Members"/>). The mesh pass rasterizes it.</remarks>
 public sealed record SdfMesh {
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
@@ -17,11 +18,15 @@ public sealed record SdfMesh {
     /// or empty for each triangle's face normal.</param>
     /// <param name="triangleMaterials">One palette entry per triangle, added to its draw's material, or empty for the
     /// draw's material on every triangle.</param>
+    /// <param name="members">The slots besides its draw's frame slot whose motion carries some of its vertices, at most
+    /// <see cref="MaxMembers"/>, or none.</param>
+    /// <param name="vertexMembers">One entry per vertex: the index in <paramref name="members"/> of the member it rides, or
+    /// <see cref="NoMember"/> for one that rides its draw; empty when every vertex rides its draw.</param>
     /// <exception cref="ArgumentException">The index count is zero or not a multiple of three, the mesh has more than
-    /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position or normal is not finite, or an
-    /// attribute is neither empty nor one per vertex (one per triangle for
-    /// <paramref name="triangleMaterials"/>).</exception>
-    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default) {
+    /// <see cref="MaxTriangles"/> triangles, an index names no vertex, a position, normal or member pose is not finite,
+    /// an attribute is neither empty nor one per vertex (one per triangle for <paramref name="triangleMaterials"/>), the
+    /// mesh has more than <see cref="MaxMembers"/> members, or a vertex names no member.</exception>
+    public SdfMesh(ReadOnlyMemory<Vector3> positions, ReadOnlyMemory<uint> indices, ReadOnlyMemory<Vector3> normals = default, ReadOnlyMemory<uint> triangleMaterials = default, ReadOnlyMemory<SdfMeshMember> members = default, ReadOnlyMemory<byte> vertexMembers = default) {
         if (
             indices.IsEmpty ||
             ((indices.Length % 3) != 0)
@@ -77,15 +82,51 @@ public sealed record SdfMesh {
             }
         }
 
+        RequireAttribute(
+            count: vertexMembers.Length,
+            expected: positions.Length,
+            name: nameof(vertexMembers),
+            per: "vertex"
+        );
+        if (members.Length > MaxMembers) {
+            throw new ArgumentException(
+                message: $"A mesh's vertices ride at most {MaxMembers} members; this one has {members.Length}.",
+                paramName: nameof(members)
+            );
+        }
+        foreach (var member in members.Span) {
+            if (!IsFinite(value: member.Position) || !float.IsFinite(f: member.Orientation.X) || !float.IsFinite(f: member.Orientation.Y) || !float.IsFinite(f: member.Orientation.Z) || !float.IsFinite(f: member.Orientation.W)) {
+                throw new ArgumentException(
+                    message: "Every member's pose must be finite.",
+                    paramName: nameof(members)
+                );
+            }
+        }
+        foreach (var member in vertexMembers.Span) {
+            if ((member != NoMember) && (member >= members.Length)) {
+                throw new ArgumentException(
+                    message: $"Vertex member {member} names none of the {members.Length} the mesh has.",
+                    paramName: nameof(vertexMembers)
+                );
+            }
+        }
+
         Positions = positions;
         Indices = indices;
         Normals = normals;
         TriangleMaterials = triangleMaterials;
+        Members = members;
+        VertexMembers = vertexMembers;
     }
 
     /// <summary>The most triangles a mesh holds: the mesh pass writes a covered pixel's triangle as a float, which holds
     /// every whole number up to 2^24 exactly, so the last triangle is 2^24 - 1.</summary>
     public const int MaxTriangles = (1 << 24);
+    /// <summary>The most members a mesh's vertices ride: a vertex names its member in a byte, and this value is
+    /// <see cref="NoMember"/>.</summary>
+    public const int MaxMembers = byte.MaxValue;
+    /// <summary>The vertex member of a vertex that rides its draw rather than a member.</summary>
+    public const byte NoMember = byte.MaxValue;
 
     /// <summary>Gets three vertex indices per triangle.</summary>
     public ReadOnlyMemory<uint> Indices { get; }
@@ -97,6 +138,11 @@ public sealed record SdfMesh {
     public int TriangleCount => (Indices.Length / 3);
     /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
     public ReadOnlyMemory<uint> TriangleMaterials { get; }
+    /// <summary>Gets the slots besides its draw's frame slot whose motion carries some of its vertices, or none.</summary>
+    public ReadOnlyMemory<SdfMeshMember> Members { get; }
+    /// <summary>Gets each vertex's index in <see cref="Members"/>, or <see cref="NoMember"/> for a vertex that rides its
+    /// draw; none when every vertex rides its draw.</summary>
+    public ReadOnlyMemory<byte> VertexMembers { get; }
 
     private static bool IsFinite(Vector3 value) => (
         float.IsFinite(f: value.X) &&
@@ -112,6 +158,14 @@ public sealed record SdfMesh {
         }
     }
 }
+/// <summary>A slot whose motion carries some of a mesh's vertices (<see cref="SdfMesh.Members"/>): a shape of a baked group
+/// riding a slot of its own beside the group's.</summary>
+/// <param name="SlotOffset">The slot's number less the draw's frame slot (<see cref="SdfMeshDraw.FrameSlot"/>), which one
+/// creation's emission keeps in every program.</param>
+/// <param name="Position">Where the slot stood in the mesh's object space when the mesh was baked.</param>
+/// <param name="Orientation">How it was turned there. A vertex riding the member is carried into the slot's frame by the
+/// inverse of this pose, then out by the slot's transform in the frame that draws it.</param>
+public readonly record struct SdfMeshMember(int SlotOffset, Vector3 Position, Quaternion Orientation);
 /// <summary>One placement of an <see cref="SdfMesh"/> in a frame.</summary>
 /// <param name="Mesh">The triangles to draw.</param>
 /// <param name="ObjectToWorld">The object-to-world transform, in the row-vector convention of
@@ -149,14 +203,16 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. Its word offsets are counted from
 /// the region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the
 /// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
-/// vertex without a normal holds zeros there, and the flags say which a mesh has. The record is thirty-two whole words,
-/// so it has no padding a structured-buffer reader could disagree on.
+/// vertex without a normal holds zeros there, and the flags say which a mesh has. Word 32 is the word a mesh with
+/// members (<see cref="SkinFlag"/>) keeps them at, past its indices: their count, then <see cref="MemberWords"/> words a
+/// member (its slot offset, then its position and orientation), then one word a vertex naming its member. The record is
+/// whole words, so it has no padding a structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
-    /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh, its normal matrix and its
-    /// frame slot.</summary>
-    public const int DrawWords = 32;
+    /// <summary>The words of one draw's record: a 4×4 matrix, a material, the draw's mesh, its normal matrix, its frame
+    /// slot and the word its mesh's members sit at.</summary>
+    public const int DrawWords = 33;
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -173,6 +229,10 @@ public static class SdfMeshRegion {
     public const uint NormalsFlag = 1u;
     /// <summary>The flag a record carries when its mesh has <see cref="SdfMesh.TriangleMaterials"/>.</summary>
     public const uint MaterialsFlag = 2u;
+    /// <summary>The flag a record carries when its mesh has <see cref="SdfMesh.VertexMembers"/>.</summary>
+    public const uint SkinFlag = 4u;
+    /// <summary>The words of one member in a mesh's members: its slot offset, its position and its orientation.</summary>
+    public const int MemberWords = 8;
 
     /// <summary>Counts the region a list of draws needs.</summary>
     /// <param name="draws">The draws.</param>
@@ -208,6 +268,7 @@ public static class SdfMeshRegion {
         var vertices = 0;
         var materials = 0;
         var indices = 0;
+        var skins = 0;
 
         for (var draw = 0; (draw < draws.Count); draw++) {
             var mesh = draws[draw].Mesh;
@@ -218,22 +279,25 @@ public static class SdfMeshRegion {
                     IndexCount: mesh.Indices.Length,
                     IndexWord: indices,
                     MaterialWord: materials,
-                    VertexWord: vertices
+                    VertexWord: vertices,
+                    SkinWord: skins
                 )
             )) {
                 vertices = checked((vertices + mesh.Positions.Length));
                 materials = checked((materials + mesh.TriangleMaterials.Length));
                 indices = checked((indices + mesh.Indices.Length));
+                skins = checked((skins + SkinWordsOf(mesh: mesh)));
             }
         }
 
-        _ = checked(((((draws.Count * DrawWords) + (vertices * VertexWords)) + materials) + indices));
+        _ = checked((((((draws.Count * DrawWords) + (vertices * VertexWords)) + materials) + indices) + skins));
 
         var layout = new SdfMeshRegionLayout(
             DrawCount: draws.Count,
             IndexCount: indices,
             MaterialCount: materials,
-            VertexCount: vertices
+            VertexCount: vertices,
+            SkinCount: skins
         );
 
         // The first pass counted each mesh's place within its section; a placement names absolute words.
@@ -244,21 +308,32 @@ public static class SdfMeshRegion {
                 IndexCount: counted.IndexCount,
                 IndexWord: (layout.IndexWordOffset + counted.IndexWord),
                 MaterialWord: (layout.MaterialWordOffset + counted.MaterialWord),
-                VertexWord: (layout.VertexWordOffset + (counted.VertexWord * VertexWords))
+                VertexWord: (layout.VertexWordOffset + (counted.VertexWord * VertexWords)),
+                SkinWord: (mesh.VertexMembers.IsEmpty ? 0 : (layout.SkinWordOffset + counted.SkinWord))
             );
         }
 
         return layout;
     }
-    /// <summary>The words one mesh takes when its vertices, triangle materials and indices lie together, as a mesh
-    /// region arena places it (<see cref="SdfMeshRegionArena"/>).</summary>
+    /// <summary>The words one mesh takes when its vertices, triangle materials, indices and members lie together, as a
+    /// mesh region arena places it (<see cref="SdfMeshRegionArena"/>).</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns>Its words.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     public static int WordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked((((mesh.Positions.Length * VertexWords) + mesh.TriangleMaterials.Length) + mesh.Indices.Length));
+        return checked(((((mesh.Positions.Length * VertexWords) + mesh.TriangleMaterials.Length) + mesh.Indices.Length) + SkinWordsOf(mesh: mesh)));
+    }
+    /// <summary>The words a mesh's members take: none for a mesh without them, otherwise their count, each member's
+    /// <see cref="MemberWords"/> words and one word a vertex.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns>Its members' words.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static int SkinWordsOf(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(mesh);
+
+        return (mesh.VertexMembers.IsEmpty ? 0 : checked((1 + (mesh.Members.Length * MemberWords)) + mesh.VertexMembers.Length));
     }
     /// <summary>Writes a list of draws into the region's words as <paramref name="layout"/> places them.</summary>
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
@@ -327,13 +402,14 @@ public static class SdfMeshRegion {
             record[17] = ((uint)placement.IndexWord);
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)placement.VertexWord);
-            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag));
+            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SkinFlag));
             record[21] = ((uint)placement.MaterialWord);
             WriteNormalMatrix(
                 matrix: matrix,
                 record: record[22..]
             );
             record[31] = unchecked((uint)(draws[draw].FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
+            record[32] = ((uint)placement.SkinWord);
         }
     }
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
@@ -385,6 +461,32 @@ public static class SdfMeshRegion {
 
         mesh.TriangleMaterials.Span.CopyTo(destination: destination[placement.MaterialWord..]);
         mesh.Indices.Span.CopyTo(destination: destination[placement.IndexWord..]);
+        if (mesh.VertexMembers.IsEmpty) { return; }
+
+        var members = mesh.Members.Span;
+        var skin = destination[placement.SkinWord..];
+
+        skin[0] = ((uint)members.Length);
+        for (var member = 0; (member < members.Length); member++) {
+            var words = skin.Slice(length: MemberWords, start: (1 + (member * MemberWords)));
+            var (offset, position, orientation) = members[member];
+
+            words[0] = unchecked((uint)offset);
+            words[1] = BitConverter.SingleToUInt32Bits(value: position.X);
+            words[2] = BitConverter.SingleToUInt32Bits(value: position.Y);
+            words[3] = BitConverter.SingleToUInt32Bits(value: position.Z);
+            words[4] = BitConverter.SingleToUInt32Bits(value: orientation.X);
+            words[5] = BitConverter.SingleToUInt32Bits(value: orientation.Y);
+            words[6] = BitConverter.SingleToUInt32Bits(value: orientation.Z);
+            words[7] = BitConverter.SingleToUInt32Bits(value: orientation.W);
+        }
+
+        var vertexMembers = mesh.VertexMembers.Span;
+        var perVertex = skin[(1 + (members.Length * MemberWords))..];
+
+        for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
+            perVertex[vertex] = ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]);
+        }
     }
 
     private static void RequireDestination(Span<uint> destination, SdfMeshRegionLayout layout) {
@@ -426,14 +528,17 @@ public static class SdfMeshRegion {
 /// <param name="MaterialWord">The word the mesh's first triangle material sits at.</param>
 /// <param name="IndexWord">The word the mesh's first index sits at.</param>
 /// <param name="IndexCount">The mesh's index count.</param>
-public readonly record struct SdfMeshRegionMesh(int VertexWord, int MaterialWord, int IndexWord, int IndexCount);
+/// <param name="SkinWord">The word the mesh's members start at, or zero for a mesh without them.</param>
+public readonly record struct SdfMeshRegionMesh(int VertexWord, int MaterialWord, int IndexWord, int IndexCount, int SkinWord = 0);
 /// <summary>The sections of one mesh region (<see cref="SdfMeshRegion"/>), in words from the region's start.</summary>
 /// <param name="DrawCount">The draw records, from word zero.</param>
 /// <param name="VertexCount">The vertices, <see cref="SdfMeshRegion.VertexWords"/> words each, from
 /// <see cref="VertexWordOffset"/>.</param>
 /// <param name="MaterialCount">The triangle materials, one word each, from <see cref="MaterialWordOffset"/>.</param>
 /// <param name="IndexCount">The indices, one word each, from <see cref="IndexWordOffset"/>.</param>
-public readonly record struct SdfMeshRegionLayout(int DrawCount, int VertexCount, int MaterialCount, int IndexCount) {
+/// <param name="SkinCount">The meshes' members' words (<see cref="SdfMeshRegion.SkinWordsOf"/>), from
+/// <see cref="SkinWordOffset"/>.</param>
+public readonly record struct SdfMeshRegionLayout(int DrawCount, int VertexCount, int MaterialCount, int IndexCount, int SkinCount = 0) {
     /// <summary>Gets the region's size in bytes.</summary>
     public ulong Bytes => (((ulong)Words) * sizeof(uint));
     /// <summary>Gets the word the index section starts at.</summary>
@@ -442,6 +547,8 @@ public readonly record struct SdfMeshRegionLayout(int DrawCount, int VertexCount
     public int MaterialWordOffset => (VertexWordOffset + (VertexCount * SdfMeshRegion.VertexWords));
     /// <summary>Gets the word the vertex section starts at, past the draw records.</summary>
     public int VertexWordOffset => (DrawCount * SdfMeshRegion.DrawWords);
+    /// <summary>Gets the word the members section starts at, past the indices.</summary>
+    public int SkinWordOffset => (IndexWordOffset + IndexCount);
     /// <summary>Gets the region's size in words.</summary>
-    public int Words => (IndexWordOffset + IndexCount);
+    public int Words => (SkinWordOffset + SkinCount);
 }

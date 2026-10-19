@@ -5,6 +5,7 @@
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
 [[vk::binding(4, 3)]] StructuredBuffer<float4> motionCases : register(t4, space3);
 [[vk::binding(5, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> motionResults : register(u5, space3);
+[[vk::binding(6, 3)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t6, space3);
 struct MotionPass { float4 previousView[6]; };
 static MotionPass passGroup;
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-reprojection.hlsli"

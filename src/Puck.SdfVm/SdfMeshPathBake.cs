@@ -417,12 +417,17 @@ public sealed class SdfMeshPathBake {
         var values = new float[count];
         var materials = new int[count];
         var gradients = (request.Gradients ? new float[(3 * count)] : null);
+        // A points lattice without gradients answers each point's winning slot where a gradient would lie.
+        var slots = ((!request.Gradients && !request.Points.IsEmpty) ? new int[count] : null);
 
         for (var index = 0; (index < count); index++) {
             var record = samples.Slice(start: ((index * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
             values[index] = BinaryPrimitives.ReadSingleLittleEndian(source: record);
             materials[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[4..]);
+            if (slots is not null) {
+                slots[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[8..]);
+            }
             if (gradients is not null) {
                 gradients[(3 * index)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[8..]);
                 gradients[((3 * index) + 1)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]);
@@ -434,7 +439,9 @@ public sealed class SdfMeshPathBake {
             lock (m_gate) {
                 group.InFlight = false;
                 if (!m_groups.Contains(item: group)) { return; }
-                if (group.Final is { } final) {
+                if (group.Skin is not null) {
+                    AnswerPoints(group: group, materials: slots!, request: in request);
+                } else if (group.Final is { } final) {
                     AnswerFinal(final: final, gradients: gradients, group: group, materials: materials, request: in request, values: values);
                 } else if (group.Creases is not null) {
                     AnswerCreases(gradients: gradients!, group: group, request: in request, values: values);
@@ -482,7 +489,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -1102,7 +1109,7 @@ public sealed class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Advance(group: group));
+        _ = (group.Skin is null) ? Task.Run(action: () => Advance(group: group)) : Task.Run(action: () => Land(group: group, mesh: Skinned(group: group)));
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
     private void Advance(Group group) {
@@ -1136,6 +1143,56 @@ public sealed class SdfMeshPathBake {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
 
+        lock (m_gate) {
+            m_cutEdges += group.Cut!.Edges;
+            group.Contour = null;
+            group.Creases = null;
+            group.Cut = null;
+            // A group whose shapes ride slots besides its own asks which shape wins at each vertex, so each vertex follows
+            // its own shape's slot as it moves (SdfMesh.Members).
+            if ((mesh is not null) && group.Dynamic && group.Geometry.Poses.Keys.Any(predicate: slot => (slot != group.Slot))) {
+                var positions = mesh.Positions.Span;
+                var normals = mesh.Normals.Span;
+                var points = new Vector4[positions.Length];
+
+                for (var vertex = 0; (vertex < points.Length); vertex++) {
+                    points[vertex] = new Vector4(value: (positions[vertex] + (normals.IsEmpty ? Vector3.Zero : (normals[vertex] * SkinLift))), w: 0f);
+                }
+                group.Contouring = false;
+                group.Skin = mesh;
+                group.Points = points;
+                group.PointMaterials = new int[points.Length];
+                group.PointsAnswered = 0;
+                group.Next = PointChunk(group: group);
+                return;
+            }
+        }
+        Land(group: group, mesh: mesh);
+    }
+    // The skin round's answer: the group's mesh with each vertex riding the member slot that won at it, or the mesh as it
+    // is when every vertex's winner is the group's own slot.
+    private static SdfMesh Skinned(Group group) {
+        var mesh = group.Skin!;
+        var slots = group.PointMaterials;
+        var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).Take(count: SdfMesh.MaxMembers).ToArray();
+        var vertexMembers = new byte[slots.Length];
+        var any = false;
+
+        for (var vertex = 0; (vertex < slots.Length); vertex++) {
+            var member = Array.FindIndex(array: others, match: pose => (pose.Key == slots[vertex]));
+
+            vertexMembers[vertex] = ((member < 0) ? SdfMesh.NoMember : (byte)member);
+            any |= (member >= 0);
+        }
+        if (!any) { return mesh; }
+
+        var members = others.Select(selector: pose => new SdfMeshMember(Orientation: pose.Value.Orientation, Position: pose.Value.Position, SlotOffset: (pose.Key - group.Slot))).ToArray();
+
+        return new SdfMesh(indices: mesh.Indices, members: members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: mesh.TriangleMaterials, vertexMembers: vertexMembers);
+    }
+    // Lands a group's finished mesh: in the library, which keeps it for another program or residency and its store, and as
+    // the group's drawn mesh.
+    private void Land(Group group, SdfMesh? mesh) {
         if (mesh is not null) {
             Library.Store(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
         }
@@ -1145,10 +1202,7 @@ public sealed class SdfMeshPathBake {
             group.Done = true;
             group.Mesh = mesh;
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
-            m_cutEdges += group.Cut!.Edges;
-            group.Contour = null;
-            group.Creases = null;
-            group.Cut = null;
+            group.Skin = null;
             group.Points = null;
             group.PointMaterials = [];
             Finish();
@@ -1188,17 +1242,22 @@ public sealed class SdfMeshPathBake {
         var meshes = m_groups.Count(predicate: static group => (group.Mesh is not null));
         var triangles = m_groups.Sum(selector: static group => (long)(group.Mesh?.TriangleCount ?? 0));
         var vertices = m_groups.Sum(selector: static group => (long)(group.Mesh?.Positions.Length ?? 0));
+        // The meshes some of whose vertices ride a member's slot rather than the group's.
+        var skinned = m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
 
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it
     // (AnswerCreases): past the field's noise at a sharp crease, short of where a rounding near a cell's size leaves its
     // faces' meeting line.
     private const float CreaseTolerance = 0.02f;
+    // How far off the surface, along its normal, a vertex's skin point lies, where a hit reads the shape whose surface the
+    // vertex lies on: the material cut's lift.
+    private const float SkinLift = 0.0005f;
 
     // One bake group: the instances it selects, the frame its mesh is stored in, its box, and where its bake stands.
     private sealed class Group(int selector, bool dynamic) {
@@ -1222,6 +1281,8 @@ public sealed class SdfMeshPathBake {
         // two the group reads holds the identity.
         public int PoseFirst { get; private set; }
         public Vector4[] PoseRows { get; private set; } = [];
+        // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
+        public SdfMesh? Skin { get; set; }
 
         public void Seal() {
             Sealed = Geometry.Geometry;

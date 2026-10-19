@@ -8,9 +8,10 @@
 // samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame dispatches it only while a bake is pending.
 //
 // The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the field's
-// gradient from the tetrahedral taps in field units per world unit (zero without gradients), whose magnitude the contour
-// divides a value by to read it as a distance (SdfSampledLattice.AnswerGradients). KEEP IN SYNC with SdfMeshPathBake's
-// reader and SdfFrameBlock.WriteMeshBake.
+// gradient from the tetrahedral taps in field units per world unit, whose magnitude the contour divides a value by to
+// read it as a distance (SdfSampledLattice.AnswerGradients); a points lattice without gradients writes the dynamic-
+// transform slot of the shape that won the sample in the first gradient word instead (a group's vertex rides it,
+// SdfMesh.Members), and zeros after it. KEEP IN SYNC with SdfMeshPathBake's reader and SdfFrameBlock.WriteMeshBake.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_MESH_BAKE_POSES
 #define SDF_INSTANCE_MASKS
@@ -84,6 +85,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint taps = ((mode == 3u) ? 5u : 1u);
         float value = 0.0;
         int material = 0;
+        int frameSlot = SDF_TRANSFORM_SLOT_NONE;
         float3 gradient = float3(0.0, 0.0, 0.0);
 
         [loop]
@@ -94,6 +96,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             if (tap == 0u) {
                 value = hit.distance;
                 material = hit.material;
+                frameSlot = hit.frameSlot;
             } else {
                 gradient += (SdfBakeTaps[tap - 1u] * hit.distance);
             }
@@ -107,7 +110,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
         meshBakeSamplesRW[word] = asuint(value);
         meshBakeSamplesRW[word + 1u] = asuint(material);
-        meshBakeSamplesRW[word + 2u] = asuint(gradient.x);
+        meshBakeSamplesRW[word + 2u] = ((mode == 2u) ? asuint(frameSlot) : asuint(gradient.x));
         meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
         meshBakeSamplesRW[word + 4u] = asuint(gradient.z);
         sdfWorkTexels = 1u;

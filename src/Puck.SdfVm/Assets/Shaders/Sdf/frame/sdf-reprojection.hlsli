@@ -14,6 +14,24 @@ bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previ
         (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
 }
 
+// Where a draw's index `k` stood in the preceding consumed frame: under the draw's previous matrix, or, for a vertex
+// riding a member, under that member's slot's previous transform.
+float3 sdfMeshPreviousPosition(uint draw, uint record, uint k) {
+    float3 object = sdfMeshObjectPosition(record, k);
+    uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, k));
+
+    if (entry != 0u) {
+        uint slot = sdfMeshMemberSlot(record, entry);
+
+        return (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz);
+    }
+
+    uint previousMatrix = (4u * draw);
+
+    return ((object.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
+        (object.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
+        (object.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz);
+}
 // Returns the point carried by the same mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
     previousPoint = currentPoint;
@@ -28,12 +46,8 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
         sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
         return false;
     }
-    float3 local = ((weights.x * sdfMeshObjectPosition(mesh, first)) +
-        (weights.y * sdfMeshObjectPosition(mesh, first + 1u)) + (weights.z * sdfMeshObjectPosition(mesh, first + 2u)));
-    uint previousMatrix = (4u * draw);
-    previousPoint = ((local.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
-        (local.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +
-        (local.z * sdfPreviousMeshTransforms[previousMatrix + 2u].xyz) + sdfPreviousMeshTransforms[previousMatrix + 3u].xyz);
+    previousPoint = (((weights.x * sdfMeshPreviousPosition(draw, mesh, first)) + (weights.y * sdfMeshPreviousPosition(draw, mesh, first + 1u))) +
+        (weights.z * sdfMeshPreviousPosition(draw, mesh, first + 2u)));
     return true;
 }
 // A view's camera rows, as SdfFrameBlock.WritePreviousView lays them: position and validity, right and tan(fov / 2),

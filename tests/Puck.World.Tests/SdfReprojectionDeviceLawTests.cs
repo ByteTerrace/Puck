@@ -118,7 +118,7 @@ public sealed class SdfReprojectionDeviceLawTests {
 
             MemoryMarshal.Cast<byte, Vector4>(span: block.AsSpan(length: 96, start: offset)).CopyTo(destination: probes.AsSpan(length: 6, start: ((index * 7) + 1)));
         }
-        // No draw carries a frame slot, so the dynamic transforms are never read; the binding needs one row.
+        // No draw carries a frame slot or members, so neither frame's dynamic transforms are read; each binding needs a row.
         var previousMatrices = new[] { PreviousMesh, StillMesh, BehindMesh };
         byte[][] contents = [
             MemoryMarshal.AsBytes(span: meshWords.AsSpan()).ToArray(),
@@ -131,7 +131,8 @@ public sealed class SdfReprojectionDeviceLawTests {
             Layout: new GpuPipelineLayoutDescription(groups: [new GpuGroupLayoutDescription(ordinal: 3,
                 bindings: [.. Enumerable.Range(count: 5, start: 0).Select(selector: index =>
                     new GpuGroupBinding(binding: ((uint)index), kind: GpuBindingKind.ReadOnlyBuffer)),
-                    new GpuGroupBinding(binding: 5, kind: GpuBindingKind.StorageImage)])], pushesIndex: false, stages: GpuShaderStage.Compute));
+                    new GpuGroupBinding(binding: 5, kind: GpuBindingKind.StorageImage),
+                    new GpuGroupBinding(binding: 6, kind: GpuBindingKind.ReadOnlyBuffer)])], pushesIndex: false, stages: GpuShaderStage.Compute));
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
@@ -154,6 +155,13 @@ public sealed class SdfReprojectionDeviceLawTests {
                     descriptorSetHandle: set, elementStride: ((index is 0 or 3) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
             }
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 5, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
+
+            var previousTransforms = services.BufferFactory.CreateHostVisible(sizeBytes: (3 * 16), usage: GpuBufferUsage.Storage, name: default);
+
+            buffers.Add(item: previousTransforms);
+            previousTransforms.Write<byte>(data: new byte[3 * 16]);
+            services.Bindings.WriteBuffer(binding: 6, bufferHandle: previousTransforms.BufferHandle, bufferSize: previousTransforms.SizeBytes,
+                descriptorSetHandle: set, elementStride: 16u, kind: GpuBindingKind.ReadOnlyBuffer);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 

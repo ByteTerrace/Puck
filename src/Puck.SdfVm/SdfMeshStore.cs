@@ -30,10 +30,13 @@ public sealed class SdfMeshStore {
     /// <summary>The extension of an entry's file.</summary>
     public const string Extension = ".mesh";
 
-    // "PUCKMSH1": the entry format. Another layout is another magic, so an older entry is refused rather than misread.
-    private const ulong Magic = 0x3148534D4B435550ul;
-    // The magic, the key, and five counts: vertices, normals, indices, triangle materials and the group's materials.
-    private const int HeaderBytes = (sizeof(ulong) + 16 + (5 * sizeof(int)));
+    // "PUCKMSH2": the entry format. Another layout is another magic, so an older entry is refused rather than misread.
+    private const ulong Magic = 0x3248534D4B435550ul;
+    // The magic, the key, and seven counts: vertices, normals, indices, triangle materials, the group's materials, members
+    // and vertex members.
+    private const int HeaderBytes = (sizeof(ulong) + 16 + (7 * sizeof(int)));
+    // A member's bytes: its slot offset, its position and its orientation.
+    private const int MemberBytes = (sizeof(int) + (7 * sizeof(float)));
     private const int ChecksumBytes = 16;
     // The most entries a store keeps, past any world's groups many times over: its bytes bound it first.
     private const int MaxEntries = 65_536;
@@ -184,7 +187,9 @@ public sealed class SdfMeshStore {
         var indices = MemoryMarshal.AsBytes(span: mesh.Indices.Span);
         var triangleMaterials = MemoryMarshal.AsBytes(span: mesh.TriangleMaterials.Span);
         var groupMaterials = MemoryMarshal.AsBytes(span: materials.AsSpan());
-        var bytes = new byte[(((((HeaderBytes + groupMaterials.Length) + positions.Length) + normals.Length) + indices.Length) + triangleMaterials.Length) + ChecksumBytes];
+        var members = mesh.Members.Span;
+        var vertexMembers = mesh.VertexMembers.Span;
+        var bytes = new byte[(((((((HeaderBytes + groupMaterials.Length) + positions.Length) + normals.Length) + indices.Length) + triangleMaterials.Length) + (members.Length * MemberBytes)) + vertexMembers.Length) + ChecksumBytes];
         var at = bytes.AsSpan();
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: at, value: Magic);
@@ -194,6 +199,8 @@ public sealed class SdfMeshStore {
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[32..], value: mesh.Indices.Length);
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[36..], value: mesh.TriangleMaterials.Length);
         BinaryPrimitives.WriteInt32LittleEndian(destination: at[40..], value: materials.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: at[44..], value: members.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: at[48..], value: vertexMembers.Length);
         var offset = HeaderBytes;
 
         groupMaterials.CopyTo(destination: at[offset..]);
@@ -206,6 +213,21 @@ public sealed class SdfMeshStore {
         offset += indices.Length;
         triangleMaterials.CopyTo(destination: at[offset..]);
         offset += triangleMaterials.Length;
+        foreach (var (slotOffset, position, orientation) in members) {
+            var member = at.Slice(length: MemberBytes, start: offset);
+
+            BinaryPrimitives.WriteInt32LittleEndian(destination: member, value: slotOffset);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[4..], value: position.X);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[8..], value: position.Y);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[12..], value: position.Z);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[16..], value: orientation.X);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[20..], value: orientation.Y);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[24..], value: orientation.Z);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: member[28..], value: orientation.W);
+            offset += MemberBytes;
+        }
+        vertexMembers.CopyTo(destination: at[offset..]);
+        offset += vertexMembers.Length;
         BinaryPrimitives.WriteUInt128LittleEndian(destination: at[offset..], value: XxHash128.HashToUInt128(source: bytes.AsSpan(length: (bytes.Length - ChecksumBytes), start: 0)));
 
         return bytes;
@@ -222,6 +244,9 @@ public sealed class SdfMeshStore {
         var vertices = BinaryPrimitives.ReadInt32LittleEndian(source: body[24..]);
         var normals = BinaryPrimitives.ReadInt32LittleEndian(source: body[28..]);
         var indices = BinaryPrimitives.ReadInt32LittleEndian(source: body[32..]);
+        var triangleMaterials = BinaryPrimitives.ReadInt32LittleEndian(source: body[36..]);
+        var memberCount = BinaryPrimitives.ReadInt32LittleEndian(source: body[44..]);
+        var vertexMemberCount = BinaryPrimitives.ReadInt32LittleEndian(source: body[48..]);
         var offset = HeaderBytes;
 
         materials = MemoryMarshal.Cast<byte, int>(span: body.Slice(length: (4 * groupMaterials), start: offset)).ToArray();
@@ -239,10 +264,27 @@ public sealed class SdfMeshStore {
 
         offset += (4 * indices);
 
-        var materialData = MemoryMarshal.Cast<byte, uint>(span: body[offset..]).ToArray();
+        var materialData = MemoryMarshal.Cast<byte, uint>(span: body.Slice(length: (4 * triangleMaterials), start: offset)).ToArray();
+
+        offset += (4 * triangleMaterials);
+
+        var members = new SdfMeshMember[memberCount];
+
+        for (var index = 0; (index < memberCount); index++) {
+            var member = body.Slice(length: MemberBytes, start: offset);
+
+            members[index] = new SdfMeshMember(
+                Orientation: new Quaternion(x: BinaryPrimitives.ReadSingleLittleEndian(source: member[16..]), y: BinaryPrimitives.ReadSingleLittleEndian(source: member[20..]), z: BinaryPrimitives.ReadSingleLittleEndian(source: member[24..]), w: BinaryPrimitives.ReadSingleLittleEndian(source: member[28..])),
+                Position: new Vector3(x: BinaryPrimitives.ReadSingleLittleEndian(source: member[4..]), y: BinaryPrimitives.ReadSingleLittleEndian(source: member[8..]), z: BinaryPrimitives.ReadSingleLittleEndian(source: member[12..])),
+                SlotOffset: BinaryPrimitives.ReadInt32LittleEndian(source: member)
+            );
+            offset += MemberBytes;
+        }
+
+        var vertexMemberData = body.Slice(length: vertexMemberCount, start: offset).ToArray();
 
         try {
-            mesh = new SdfMesh(indices: indexData, normals: normalData, positions: positionData, triangleMaterials: materialData);
+            mesh = new SdfMesh(indices: indexData, members: members, normals: normalData, positions: positionData, triangleMaterials: materialData, vertexMembers: vertexMemberData);
         } catch (ArgumentException exception) {
             refusal = $"is no mesh: {exception.Message}";
 
@@ -267,9 +309,11 @@ public sealed class SdfMeshStore {
         var indices = BinaryPrimitives.ReadInt32LittleEndian(source: body[32..]);
         var triangleMaterials = BinaryPrimitives.ReadInt32LittleEndian(source: body[36..]);
         var groupMaterials = BinaryPrimitives.ReadInt32LittleEndian(source: body[40..]);
-        var expected = ((((((long)HeaderBytes + (4L * groupMaterials)) + (12L * vertices)) + (12L * normals)) + (4L * indices)) + (4L * triangleMaterials));
+        var members = BinaryPrimitives.ReadInt32LittleEndian(source: body[44..]);
+        var vertexMembers = BinaryPrimitives.ReadInt32LittleEndian(source: body[48..]);
+        var expected = ((((((((long)HeaderBytes + (4L * groupMaterials)) + (12L * vertices)) + (12L * normals)) + (4L * indices)) + (4L * triangleMaterials)) + (((long)MemberBytes) * members)) + vertexMembers);
 
-        return (((vertices < 0) || (normals < 0) || (indices < 0) || (triangleMaterials < 0) || (groupMaterials < 0) || (expected != body.Length)) ? "holds counts its length does not" : null);
+        return (((vertices < 0) || (normals < 0) || (indices < 0) || (triangleMaterials < 0) || (groupMaterials < 0) || (members < 0) || (vertexMembers < 0) || (expected != body.Length)) ? "holds counts its length does not" : null);
     }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));

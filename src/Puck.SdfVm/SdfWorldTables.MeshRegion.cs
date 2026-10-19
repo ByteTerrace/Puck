@@ -167,7 +167,8 @@ public sealed partial class SdfWorldTables {
                 IndexCount: placement.IndexCount,
                 IndexWord: (placement.IndexWord - placement.VertexWord),
                 MaterialWord: (placement.MaterialWord - placement.VertexWord),
-                VertexWord: 0
+                VertexWord: 0,
+                SkinWord: ((placement.SkinWord == 0) ? 0 : (placement.SkinWord - placement.VertexWord))
             )
         );
         _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: destination), offset: (placement.VertexWord * sizeof(uint)));

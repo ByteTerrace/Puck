@@ -308,6 +308,98 @@ public sealed class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: rows.ToArray(), actual: table.AsSpan(start: near.PoseBase(lattice: 0)).ToArray());
         Assert.Equal(expected: (near.Samples + rows.Length), actual: near.PoseBase(lattice: 1));
     }
+    // A blend group's two shapes ride two slots, the group's own and a second turned on a hinge: each vertex of its mesh
+    // rides the slot of the shape it lies on, so the second shape's vertices follow that slot as it moves (SdfMesh.Members),
+    // the region lays the member and each vertex's member out for the vertex stage, and the store keeps them.
+    [Fact]
+    public void AGroupWhoseShapesRideTwoSlotsBakesEachVertexOntoItsOwnShapesSlot() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-skin-");
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder.BeginInstanceDynamic(slot: 1, boundOffset: Vector3.Zero, boundRadius: 1f)
+            .ResetPoint()
+            .TransformDynamic(slot: 1)
+            .Box(halfExtents: new Vector3(value: 0.2f), material: material, round: 0f)
+            .ResetPoint()
+            .TransformDynamic(slot: 2)
+            .Box(halfExtents: new Vector3(value: 0.1f), material: material, round: 0f)
+            .EndInstance()
+            .Build();
+        var hinge = Quaternion.CreateFromAxisAngle(angle: 0.4f, axis: Vector3.UnitX);
+        Shape[] pair = [
+            new(Center: Vector3.Zero, Half: new Vector3(value: 0.2f), Rotation: Quaternion.Identity, Material: material),
+            new(Center: new Vector3(x: 0.35f, y: 0f, z: 0f), Half: new Vector3(value: 0.1f), Rotation: hinge, Material: material),
+        ];
+        var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
+            DynamicTransforms = [default, new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero), new DynamicTransform(Orientation: hinge, Position: pair[1].Center)],
+            FarDistance = 100f,
+        };
+        var directory = scratch.PathOf(name: "meshes");
+        SdfMeshPathBake Run(string name) {
+            var bake = new SdfMeshPathBake { Identity = 7, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
+            var index = 0L;
+
+            TestLiveness.Until(reason: bake.Describe, step: () => {
+                _ = bake.Dress(frame: frame);
+                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                    bake.Record(batch: batch);
+                    bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
+                }
+
+                return !bake.Pending;
+            });
+
+            return bake;
+        }
+
+        var baked = Run(name: "first");
+        var draw = Assert.Single(collection: baked.Dress(frame: frame).MeshDraws);
+        var mesh = draw.Mesh;
+        var member = Assert.Single(collection: mesh.Members.ToArray());
+        var positions = mesh.Positions.ToArray();
+        var vertexMembers = mesh.VertexMembers.ToArray();
+
+        Assert.Contains(expectedSubstring: "skinned=1", actualString: baked.Describe());
+        Assert.Equal(expected: 1, actual: member.SlotOffset);
+        Assert.Equal(expected: 0.35f, actual: member.Position.X, tolerance: 0.001f);
+        Assert.Equal(expected: hinge.X, actual: member.Orientation.X, tolerance: 0.001f);
+        // Away from the seam each vertex rides the shape it lies on: the hinged box's its member, the group's box none.
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            var own = Field(point: positions[vertex], shape: pair[0]);
+            var other = Field(point: positions[vertex], shape: pair[1]);
+
+            if (MathF.Abs(own - other) > 0.01f) {
+                Assert.Equal(expected: ((other < own) ? (byte)0 : SdfMesh.NoMember), actual: vertexMembers[vertex]);
+            }
+        }
+        Assert.Contains(collection: vertexMembers, filter: static member => (member == 0));
+        Assert.Contains(collection: vertexMembers, filter: static member => (member == SdfMesh.NoMember));
+
+        // The region's record flags the members and names their words: the count, the member and a word a vertex.
+        var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
+        var layout = SdfMeshRegion.Plan(draws: [draw], meshes: placements);
+        var words = new uint[layout.Words];
+
+        SdfMeshRegion.Write(destination: words, draws: [draw], layout: layout, meshes: placements);
+
+        var skin = (int)words[32];
+
+        Assert.Equal(expected: SdfMeshRegion.SkinFlag, actual: (words[20] & SdfMeshRegion.SkinFlag));
+        Assert.Equal(expected: 1u, actual: words[skin]);
+        Assert.Equal(expected: 1u, actual: words[skin + 1]);
+        Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: member.Orientation.W), actual: words[skin + 8]);
+        for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
+            Assert.Equal(expected: ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]), actual: words[skin + 1 + SdfMeshRegion.MemberWords + vertex]);
+        }
+
+        // Another run loads the group from the store with its members.
+        var loaded = Run(name: "second");
+        var reloaded = Assert.Single(collection: loaded.Dress(frame: frame).MeshDraws).Mesh;
+
+        Assert.Contains(expectedSubstring: "loaded=1", actualString: loaded.Describe());
+        Assert.Equal(expected: mesh.Members.ToArray(), actual: reloaded.Members.ToArray());
+        Assert.Equal(expected: vertexMembers, actual: reloaded.VertexMembers.ToArray());
+    }
     // The program: one static instance per shape with its tight bound, the second baking with the first, or with
     // `oneCopy` every shape after the first baking with the one before it.
     private static (SdfProgram Program, int[] Materials) Program(Shape[] shapes, bool oneCopy = false) {
@@ -374,6 +466,44 @@ public sealed class SdfMeshPathBakeLawTests {
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
                 BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
+            }
+        }
+
+        return bytes;
+    }
+    // The bake kernel's answer to a pair's batch: each sample's value, material and tetrahedral gradient over the shapes, the
+    // first riding slot one and the second slot two; a points lattice without gradients answers the winning shape's slot in
+    // the first gradient word.
+    private static byte[] AnswerSlots(SdfMeshBakeBatch batch, Shape[] shapes) {
+        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
+        var sample = 0;
+        ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
+
+        foreach (var lattice in batch.Lattices) {
+            var spacing = (0.015625f * MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)));
+
+            for (var local = 0; (local < lattice.Samples); local++, sample++) {
+                var position = (lattice.Points.IsEmpty
+                    ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
+                    : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
+                var (value, shape) = Nearest(count: shapes.Length, first: 0, point: position, shapes: shapes);
+                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
+
+                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
+                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: shapes[shape].Material);
+                if (lattice.Gradients) {
+                    var gradient = Vector3.Zero;
+
+                    foreach (var tap in taps) {
+                        gradient += (tap * Nearest(count: shapes.Length, first: 0, point: (position + (tap * spacing)), shapes: shapes).Value);
+                    }
+                    gradient *= (0.25f / spacing);
+                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
+                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
+                    BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
+                } else if (!lattice.Points.IsEmpty) {
+                    BinaryPrimitives.WriteInt32LittleEndian(destination: record[8..], value: (shape + 1));
+                }
             }
         }
 

@@ -696,8 +696,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
-        // its normal matrix (the inverse transpose of its upper 3x3), and its frame slot, -1 for a mesh stored in world
-        // space. The arena starts past the reserved draw records, and each
+        // its normal matrix (the inverse transpose of its upper 3x3), its frame slot, -1 for a mesh stored in world
+        // space, and the word its members sit at, zero for a mesh without them. The arena starts past the reserved draw
+        // records, and each
         // mesh lies whole there in the order the list first names it: the quad's four vertices and six indices, then the
         // triangle's three vertices, its one triangle material and its three indices.
         var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRegion.DrawWords);
@@ -725,6 +726,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
+            expected.Add(item: 0u);
         }
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {

@@ -529,6 +529,233 @@ bodyMotionPrograms [
 ]
 
 cameras [
+  // Eight cameras round the jetpack alone, framed on her hovering 2 m above the hero spawn (body.pose 48 2 -48 0 0 0 in
+  // flight mode, then view.isolate moth pod* nozzle*), tiled by the pods-hero layout: rear, rear-low, top, below, both
+  // sides, the body-facing front and a rear three-quarter.
+  {
+    name: "pods-rear"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 3.12, -45.4])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -45.4]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-rear-low"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 1.4229, -46.1029])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear-low"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.4229, -46.1029]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-top"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 5.4025, -47.0584])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-top"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 5.4025, -47.0584]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-below"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 0.8375, -47.0584])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-below"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 0.8375, -47.0584]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-side-left"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [45.6, 3.12, -47.8])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-side-left"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 3.12, -47.8]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-side-right"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [50.4, 3.12, -47.8])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-side-right"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 3.12, -47.8]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-front"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [48, 3.12, -50.2])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-front"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -50.2]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pods-rear-three-quarter"
+    renderHeight: 450
+    renderWidth: 320
+    rig {
+      anchorOp {
+        opcode: "anchor"
+        subject: worldPoint(point: [49.4901, 2.4988, -46.0241])
+      }
+      fovOp {
+        fieldOfViewRadians: 0.62
+        opcode: "fov"
+      }
+      lookAtOp {
+        focusDistance: 6
+        opcode: "lookAt"
+        subject: worldPoint(point: [48, 3.12, -47.8])
+        worldAxes: false
+      }
+      name: "pods-rear-three-quarter"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [49.4901, 2.4988, -46.0241]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
   // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
   // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
   {
@@ -4793,11 +5020,29 @@ prototypes {
         }
       }
 
-      shape Box "podCoreClip-left" {
+      shape Superellipsoid "podBack-left" {
         id: 1102
-        position [1.04, 1.13, -0.4675]
+        position [0.2, 1.13, -0.2122]
+        rotation [0, 0, 0.0998, 0.995]
+        scale [0.1365, 0.4251, 0.0273]
+        material: charcoal
+        group: 90
+        parent: "pod-left"
+        exponent: 2.8
+        flare {
+          amount: 0.15
+          bulge: 0
+          span: 0.4446
+          top: 0
+          startScale: 1
+        }
+      }
+
+      shape Box "podCoreClip-left" {
+        id: 1103
+        position [1.04, 1.13, -0.4239]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2391]
         material: charcoal
         blend: "Intersection"
         group: 90
@@ -4805,7 +5050,7 @@ prototypes {
       }
 
       shape Box "podCoreCut-left" {
-        id: 1103
+        id: 1104
         position [0.7473, 1.6778, 0.0131]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [1, 1, 1]
@@ -4816,8 +5061,19 @@ prototypes {
         parent: "pod-left"
       }
 
+      shape Superellipsoid "podHanger-left" {
+        id: 1105
+        position [0.105, 1.5, -0.18]
+        rotation [0, 0, 0, 1]
+        scale [0.024, 0.12, 0.016]
+        material: charcoal
+        group: 90
+        parent: "pod-left"
+        exponent: 6
+      }
+
       shape Superellipsoid "podCap-left" {
-        id: 1104
+        id: 1106
         position [0.2, 1.13, -0.195]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.1841, 0.4446, 0.2387]
@@ -4835,10 +5091,10 @@ prototypes {
       }
 
       shape Box "podCapClip-left" {
-        id: 1105
-        position [1.04, 1.13, -0.4675]
+        id: 1107
+        position [1.04, 1.13, -0.4376]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -4847,7 +5103,7 @@ prototypes {
       }
 
       shape Box "podCapCut-left" {
-        id: 1106
+        id: 1108
         position [0.605, 1.5082, -0.0337]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [0.78, 0.78, 0.78]
@@ -4859,7 +5115,7 @@ prototypes {
       }
 
       shape Superellipsoid "podCapBottom-left" {
-        id: 1107
+        id: 1109
         position [0.3229, -0.1512, -0.195]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.6327, 1.56, 0.78]
@@ -4872,7 +5128,7 @@ prototypes {
       }
 
       shape Box "podShoulderTop-left" {
-        id: 1108
+        id: 1110
         position [0.014, 1.0923, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
@@ -4884,7 +5140,7 @@ prototypes {
       }
 
       shape Box "podShoulderOuter-left" {
-        id: 1109
+        id: 1111
         position [0.0545, 1.1005, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
@@ -4896,7 +5152,7 @@ prototypes {
       }
 
       shape Box "podShoulderSpine-left" {
-        id: 1110
+        id: 1112
         position [0.0218, 1.0939, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
@@ -4908,7 +5164,7 @@ prototypes {
       }
 
       shape Box "podVent-left" {
-        id: 1111
+        id: 1113
         position [0.1141, 1.3772, -0.4123]
         rotation [-0.3605, -0.5774, 0.513, 0.523]
         scale [0.039, 0.0109, 0.0281]
@@ -4920,7 +5176,7 @@ prototypes {
       }
 
       shape Box "podVentSlot-left" {
-        id: 1112
+        id: 1114
         position [0.1154, 1.3749, -0.4017]
         rotation [-0.3605, -0.5774, 0.513, 0.523]
         scale [0.0265, 0.0047, 0.0125]
@@ -4929,7 +5185,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1-left" {
-        id: 1113
+        id: 1115
         position [0.1999, 1.1303, -0.2069]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.1771, 0.4446, 0.2317]
@@ -4947,10 +5203,10 @@ prototypes {
       }
 
       shape Box "podBand1Clip-left" {
-        id: 1114
-        position [1.04, 1.13, -0.4675]
+        id: 1116
+        position [1.04, 1.13, -0.4376]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -4959,7 +5215,7 @@ prototypes {
       }
 
       shape Box "podBand1Cut-left" {
-        id: 1115
+        id: 1117
         position [0.605, 1.5082, -0.0337]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [0.78, 0.78, 0.78]
@@ -4971,7 +5227,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Top-left" {
-        id: 1116
+        id: 1118
         position [0.3211, -0.1424, -0.2705]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -4984,7 +5240,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Bottom-left" {
-        id: 1117
+        id: 1119
         position [0.3475, -0.2726, -0.2771]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -4997,7 +5253,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMid-left" {
-        id: 1118
+        id: 1120
         position [0.2, 1.1301, -0.2006]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.17, 0.4446, 0.2246]
@@ -5015,10 +5271,10 @@ prototypes {
       }
 
       shape Box "podMidClip-left" {
-        id: 1119
-        position [1.04, 1.13, -0.4675]
+        id: 1121
+        position [1.04, 1.13, -0.4376]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -5027,7 +5283,7 @@ prototypes {
       }
 
       shape Box "podMidCut-left" {
-        id: 1120
+        id: 1122
         position [0.605, 1.5082, -0.0337]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [0.78, 0.78, 0.78]
@@ -5039,7 +5295,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMidTop-left" {
-        id: 1121
+        id: 1123
         position [0.3462, -0.2659, -0.2705]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -5052,7 +5308,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMidBottom-left" {
-        id: 1122
+        id: 1124
         position [0.3755, -0.4106, -0.2779]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -5065,7 +5321,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2-left" {
-        id: 1123
+        id: 1125
         position [0.2, 1.13, -0.1935]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.163, 0.4446, 0.2176]
@@ -5083,10 +5339,10 @@ prototypes {
       }
 
       shape Box "podBand2Clip-left" {
-        id: 1124
-        position [1.04, 1.13, -0.4675]
+        id: 1126
+        position [1.04, 1.13, -0.4376]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -5095,7 +5351,7 @@ prototypes {
       }
 
       shape Box "podBand2Cut-left" {
-        id: 1125
+        id: 1127
         position [0.605, 1.5082, -0.0337]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [0.78, 0.78, 0.78]
@@ -5107,7 +5363,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Top-left" {
-        id: 1126
+        id: 1128
         position [0.3741, -0.4039, -0.2705]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -5120,7 +5376,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Bottom-left" {
-        id: 1127
+        id: 1129
         position [0.3991, -0.5268, -0.2768]
         rotation [0.0249, 0.0025, 0.0998, 0.9947]
         scale [0.6327, 1.56, 0.78]
@@ -5133,7 +5389,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirt-left" {
-        id: 1128
+        id: 1130
         position [0.2003, 1.1284, -0.1729]
         rotation [0.0746, 0.0075, 0.0996, 0.9922]
         scale [0.1638, 0.4446, 0.2211]
@@ -5151,10 +5407,10 @@ prototypes {
       }
 
       shape Box "podSkirtClip-left" {
-        id: 1129
-        position [1.04, 1.13, -0.4675]
+        id: 1131
+        position [1.04, 1.13, -0.4376]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -5163,7 +5419,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtCavity-left" {
-        id: 1130
+        id: 1132
         position [0.2003, 1.1284, -0.1729]
         rotation [0.0746, 0.0075, 0.0996, 0.9922]
         scale [0.1209, 0.4017, 0.1782]
@@ -5182,7 +5438,7 @@ prototypes {
       }
 
       shape Box "podSkirtCut-left" {
-        id: 1131
+        id: 1133
         position [0.605, 1.5082, -0.0337]
         rotation [-0.0356, -0.0977, 0.9346, 0.3402]
         scale [0.78, 0.78, 0.78]
@@ -5194,7 +5450,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtTop-left" {
-        id: 1132
+        id: 1134
         position [0.3947, -0.5053, -0.4207]
         rotation [0.0746, 0.0075, 0.0996, 0.9922]
         scale [0.6327, 1.56, 0.78]
@@ -5207,21 +5463,32 @@ prototypes {
       }
 
       shape Cylinder "nozzle-left" {
-        id: 1133
-        position [0.2599, 0.8928, -0.2765]
+        id: 1135
+        position [0.2621, 0.8978, -0.3011]
         rotation [0.0977, -0.0356, -0.3402, 0.9346]
-        scale [0.0734, 0.0546, 0.0734]
+        scale [0.0551, 0.0546, 0.0551]
         material: charcoal
         group: 96
         parent: "pod-left"
         rounding: 0.025
       }
 
+      shape Box "nozzleClip-left" {
+        id: 1136
+        position [1.04, 1.13, -0.4239]
+        rotation [0, 0, 0, 1]
+        scale [1, 1, 0.2391]
+        material: charcoal
+        blend: "Intersection"
+        group: 96
+        parent: "pod-left"
+      }
+
       shape Cylinder "nozzleBore-left" {
-        id: 1134
-        position [0.2255, 0.8519, -0.2878]
+        id: 1137
+        position [0.2278, 0.8568, -0.3124]
         rotation [0.0977, -0.0356, -0.3402, 0.9346]
-        scale [0.0573, 0.014, 0.0573]
+        scale [0.043, 0.014, 0.043]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -5230,20 +5497,20 @@ prototypes {
       }
 
       shape Superellipsoid "nozzleGlow-left" {
-        id: 1135
-        position [0.2324, 0.8601, -0.2855]
+        id: 1138
+        position [0.2346, 0.865, -0.3102]
         rotation [0.0977, -0.0356, -0.3402, 0.9346]
-        scale [0.022, 0.0055, 0.022]
+        scale [0.0165, 0.0055, 0.0165]
         material: cyan
         parent: "nozzle-left"
         exponent: softness
       }
 
       shape Superellipsoid "nozzleCore-left" {
-        id: 1136
-        position [0.23, 0.8572, -0.2863]
+        id: 1139
+        position [0.2322, 0.8621, -0.311]
         rotation [0.0977, -0.0356, -0.3402, 0.9346]
-        scale [0.0099, 0.0047, 0.0099]
+        scale [0.0074, 0.0047, 0.0074]
         material: glow
         parent: "nozzle-left"
         exponent: softness
@@ -6338,11 +6605,29 @@ prototypes {
         }
       }
 
-      shape Box "podCoreClip-right" {
+      shape Superellipsoid "podBack-right" {
         id: 1202
-        position [-1.04, 1.13, -0.4675]
+        position [-0.2, 1.13, -0.2122]
+        rotation [0.0998, 0.995, 0, 0]
+        scale [0.1365, 0.4251, 0.0273]
+        material: charcoal
+        group: 100
+        parent: "pod-right"
+        exponent: 2.8
+        flare {
+          amount: 0.15
+          bulge: 0
+          span: 0.4446
+          top: 0
+          startScale: 1
+        }
+      }
+
+      shape Box "podCoreClip-right" {
+        id: 1203
+        position [-1.04, 1.13, -0.4239]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2391]
         material: charcoal
         blend: "Intersection"
         group: 100
@@ -6350,7 +6635,7 @@ prototypes {
       }
 
       shape Box "podCoreCut-right" {
-        id: 1203
+        id: 1204
         position [-0.7473, 1.6778, 0.0131]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [1, 1, 1]
@@ -6361,8 +6646,19 @@ prototypes {
         parent: "pod-right"
       }
 
+      shape Superellipsoid "podHanger-right" {
+        id: 1205
+        position [-0.105, 1.5, -0.18]
+        rotation [0, 1, 0, 0]
+        scale [0.024, 0.12, 0.016]
+        material: charcoal
+        group: 100
+        parent: "pod-right"
+        exponent: 6
+      }
+
       shape Superellipsoid "podCap-right" {
-        id: 1204
+        id: 1206
         position [-0.2, 1.13, -0.195]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.1841, 0.4446, 0.2387]
@@ -6380,10 +6676,10 @@ prototypes {
       }
 
       shape Box "podCapClip-right" {
-        id: 1205
-        position [-1.04, 1.13, -0.4675]
+        id: 1207
+        position [-1.04, 1.13, -0.4376]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6392,7 +6688,7 @@ prototypes {
       }
 
       shape Box "podCapCut-right" {
-        id: 1206
+        id: 1208
         position [-0.605, 1.5082, -0.0337]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [0.78, 0.78, 0.78]
@@ -6404,7 +6700,7 @@ prototypes {
       }
 
       shape Superellipsoid "podCapBottom-right" {
-        id: 1207
+        id: 1209
         position [-0.3229, -0.1512, -0.195]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.6327, 1.56, 0.78]
@@ -6417,7 +6713,7 @@ prototypes {
       }
 
       shape Box "podShoulderTop-right" {
-        id: 1208
+        id: 1210
         position [-0.014, 1.0923, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
@@ -6429,7 +6725,7 @@ prototypes {
       }
 
       shape Box "podShoulderOuter-right" {
-        id: 1209
+        id: 1211
         position [-0.0545, 1.1005, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
@@ -6441,7 +6737,7 @@ prototypes {
       }
 
       shape Box "podShoulderSpine-right" {
-        id: 1210
+        id: 1212
         position [-0.0218, 1.0939, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
@@ -6453,7 +6749,7 @@ prototypes {
       }
 
       shape Box "podVent-right" {
-        id: 1211
+        id: 1213
         position [-0.1141, 1.3772, -0.4123]
         rotation [-0.513, -0.523, 0.3605, 0.5774]
         scale [0.039, 0.0109, 0.0281]
@@ -6465,7 +6761,7 @@ prototypes {
       }
 
       shape Box "podVentSlot-right" {
-        id: 1212
+        id: 1214
         position [-0.1154, 1.3749, -0.4017]
         rotation [-0.513, -0.523, 0.3605, 0.5774]
         scale [0.0265, 0.0047, 0.0125]
@@ -6474,7 +6770,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1-right" {
-        id: 1213
+        id: 1215
         position [-0.1999, 1.1303, -0.2069]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.1771, 0.4446, 0.2317]
@@ -6492,10 +6788,10 @@ prototypes {
       }
 
       shape Box "podBand1Clip-right" {
-        id: 1214
-        position [-1.04, 1.13, -0.4675]
+        id: 1216
+        position [-1.04, 1.13, -0.4376]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6504,7 +6800,7 @@ prototypes {
       }
 
       shape Box "podBand1Cut-right" {
-        id: 1215
+        id: 1217
         position [-0.605, 1.5082, -0.0337]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [0.78, 0.78, 0.78]
@@ -6516,7 +6812,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Top-right" {
-        id: 1216
+        id: 1218
         position [-0.3211, -0.1424, -0.2705]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6529,7 +6825,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Bottom-right" {
-        id: 1217
+        id: 1219
         position [-0.3475, -0.2726, -0.2771]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6542,7 +6838,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMid-right" {
-        id: 1218
+        id: 1220
         position [-0.2, 1.1301, -0.2006]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.17, 0.4446, 0.2246]
@@ -6560,10 +6856,10 @@ prototypes {
       }
 
       shape Box "podMidClip-right" {
-        id: 1219
-        position [-1.04, 1.13, -0.4675]
+        id: 1221
+        position [-1.04, 1.13, -0.4376]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6572,7 +6868,7 @@ prototypes {
       }
 
       shape Box "podMidCut-right" {
-        id: 1220
+        id: 1222
         position [-0.605, 1.5082, -0.0337]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [0.78, 0.78, 0.78]
@@ -6584,7 +6880,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMidTop-right" {
-        id: 1221
+        id: 1223
         position [-0.3462, -0.2659, -0.2705]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6597,7 +6893,7 @@ prototypes {
       }
 
       shape Superellipsoid "podMidBottom-right" {
-        id: 1222
+        id: 1224
         position [-0.3755, -0.4106, -0.2779]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6610,7 +6906,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2-right" {
-        id: 1223
+        id: 1225
         position [-0.2, 1.13, -0.1935]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.163, 0.4446, 0.2176]
@@ -6628,10 +6924,10 @@ prototypes {
       }
 
       shape Box "podBand2Clip-right" {
-        id: 1224
-        position [-1.04, 1.13, -0.4675]
+        id: 1226
+        position [-1.04, 1.13, -0.4376]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6640,7 +6936,7 @@ prototypes {
       }
 
       shape Box "podBand2Cut-right" {
-        id: 1225
+        id: 1227
         position [-0.605, 1.5082, -0.0337]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [0.78, 0.78, 0.78]
@@ -6652,7 +6948,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Top-right" {
-        id: 1226
+        id: 1228
         position [-0.3741, -0.4039, -0.2705]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6665,7 +6961,7 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Bottom-right" {
-        id: 1227
+        id: 1229
         position [-0.3991, -0.5268, -0.2768]
         rotation [0.0998, 0.9947, 0.0249, 0.0025]
         scale [0.6327, 1.56, 0.78]
@@ -6678,7 +6974,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirt-right" {
-        id: 1228
+        id: 1230
         position [-0.2003, 1.1284, -0.1729]
         rotation [0.0996, 0.9922, 0.0746, 0.0075]
         scale [0.1638, 0.4446, 0.2211]
@@ -6696,10 +6992,10 @@ prototypes {
       }
 
       shape Box "podSkirtClip-right" {
-        id: 1229
-        position [-1.04, 1.13, -0.4675]
+        id: 1231
+        position [-1.04, 1.13, -0.4376]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.2555]
+        scale [1, 1, 0.2254]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6708,7 +7004,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtCavity-right" {
-        id: 1230
+        id: 1232
         position [-0.2003, 1.1284, -0.1729]
         rotation [0.0996, 0.9922, 0.0746, 0.0075]
         scale [0.1209, 0.4017, 0.1782]
@@ -6727,7 +7023,7 @@ prototypes {
       }
 
       shape Box "podSkirtCut-right" {
-        id: 1231
+        id: 1233
         position [-0.605, 1.5082, -0.0337]
         rotation [0.9346, 0.3402, -0.0356, -0.0977]
         scale [0.78, 0.78, 0.78]
@@ -6739,7 +7035,7 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtTop-right" {
-        id: 1232
+        id: 1234
         position [-0.3947, -0.5053, -0.4207]
         rotation [0.0996, 0.9922, 0.0746, 0.0075]
         scale [0.6327, 1.56, 0.78]
@@ -6752,21 +7048,32 @@ prototypes {
       }
 
       shape Cylinder "nozzle-right" {
-        id: 1233
-        position [-0.2599, 0.8928, -0.2765]
+        id: 1235
+        position [-0.2621, 0.8978, -0.3011]
         rotation [-0.3402, 0.9346, 0.0977, -0.0356]
-        scale [0.0734, 0.0546, 0.0734]
+        scale [0.0551, 0.0546, 0.0551]
         material: charcoal
         group: 106
         parent: "pod-right"
         rounding: 0.025
       }
 
+      shape Box "nozzleClip-right" {
+        id: 1236
+        position [-1.04, 1.13, -0.4239]
+        rotation [0, 1, 0, 0]
+        scale [1, 1, 0.2391]
+        material: charcoal
+        blend: "Intersection"
+        group: 106
+        parent: "pod-right"
+      }
+
       shape Cylinder "nozzleBore-right" {
-        id: 1234
-        position [-0.2255, 0.8519, -0.2878]
+        id: 1237
+        position [-0.2278, 0.8568, -0.3124]
         rotation [-0.3402, 0.9346, 0.0977, -0.0356]
-        scale [0.0573, 0.014, 0.0573]
+        scale [0.043, 0.014, 0.043]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -6775,20 +7082,20 @@ prototypes {
       }
 
       shape Superellipsoid "nozzleGlow-right" {
-        id: 1235
-        position [-0.2324, 0.8601, -0.2855]
+        id: 1238
+        position [-0.2346, 0.865, -0.3102]
         rotation [-0.3402, 0.9346, 0.0977, -0.0356]
-        scale [0.022, 0.0055, 0.022]
+        scale [0.0165, 0.0055, 0.0165]
         material: cyan
         parent: "nozzle-right"
         exponent: softness
       }
 
       shape Superellipsoid "nozzleCore-right" {
-        id: 1236
-        position [-0.23, 0.8572, -0.2863]
+        id: 1239
+        position [-0.2322, 0.8621, -0.311]
         rotation [-0.3402, 0.9346, 0.0977, -0.0356]
-        scale [0.0099, 0.0047, 0.0099]
+        scale [0.0074, 0.0047, 0.0074]
         material: glow
         parent: "nozzle-right"
         exponent: softness
@@ -7004,7 +7311,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-left"
-          position [0.0155, -0.4106, -0.2555]
+          position [0.0177, -0.4057, -0.2801]
           rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
@@ -7043,7 +7350,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-right"
-          position [-0.0155, -0.4106, -0.2555]
+          position [-0.0177, -0.4057, -0.2801]
           rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
@@ -7506,6 +7813,71 @@ views {
       }
       {
         camera: "shoulders-front-right"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  // The jetpack from eight sides at once.
+  layout "pods-hero" {
+    seatCount: 0
+    slots [
+      {
+        camera: "pods-rear"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0
+      }
+      {
+        camera: "pods-rear-low"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0
+      }
+      {
+        camera: "pods-top"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "pods-below"
+        height: 0.5
+        width: 0.25
+        x: 0.75
+        y: 0
+      }
+      {
+        camera: "pods-side-left"
+        height: 0.5
+        width: 0.25
+        x: 0
+        y: 0.5
+      }
+      {
+        camera: "pods-side-right"
+        height: 0.5
+        width: 0.25
+        x: 0.25
+        y: 0.5
+      }
+      {
+        camera: "pods-front"
+        height: 0.5
+        width: 0.25
+        x: 0.5
+        y: 0.5
+      }
+      {
+        camera: "pods-rear-three-quarter"
         height: 0.5
         width: 0.25
         x: 0.75
