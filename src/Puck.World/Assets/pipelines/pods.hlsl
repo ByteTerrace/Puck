@@ -40,29 +40,28 @@ static const float INNER_X = 0.052;          // the straight inner edge, beside 
 static const float BAND_TILT = 0.5;
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
-static const float PLATE_CHAMFER = 0.006;    // the chamfer on each plate's edge where it meets a groove
+static const float PLATE_ROUND = 0.005;      // how soft each plate's edge is where it meets a groove
 static const float COLUMN_X = 0.0;
 // The bottom cut, in the pod's frame: a plane from the inner edge part-way down to the pointed outer tip, facing in,
 // down and back; the casing is open under it and its rim is trimmed in gunmetal.
-static const float3 CUT_P = float3(-0.125, -0.06, 0.0);
-static const float3 CUT_N = float3(-0.82, -0.47, 0.32);
+static const float3 CUT_P = float3(-0.125, -0.19, 0.0);
+static const float3 CUT_N = float3(-0.5, -0.55, 0.67);
 static const float TRIM_W = 0.009;
 // The inner core the casing wraps, blended into the thruster housing that swells out of the open rim.
 static const float3 CORE_R = float3(0.1, 0.43, 0.075);
 static const float3 CORE_SHIFT = float3(-0.01, -0.02, -0.01);
 static const float CORE_BLEND = 0.025;
-static const float CORE_BELOW = 0.012;
-// The thruster housing: centred NOZ_ALONG along the cut line from CUT_P toward the tip, NOZ_DROP below the rim plane,
-// its axis NOZ_AXIS (world frame) pointing down and back.
+static const float CORE_BELOW = -0.008;
+// The thruster housing: NOZ_ALONG along the cut line from CUT_P toward the tip, its axis square to the opening.
 static const float NOZ_ALONG = 0.13;
-static const float NOZ_DROP = -0.004;
-static const float3 NOZ_AXIS = float3(-0.08, -0.72, 0.69);
-static const float NOZ_R = 0.072;
+static const float NOZ_PROUD = 0.004;          // how far the nozzle's face stands out of the opening's plane
+
+static const float NOZ_R = 0.075;
 static const float NOZ_H = 0.055;
-static const float NOZ_ROUND = 0.03;
-static const float DISH_R = 0.078;
-static const float DISH_DEPTH = 0.03;
-static const float LENS_R = 0.014;
+static const float NOZ_ROUND = 0.012;
+static const float DISH_R = 0.09;
+static const float DISH_DEPTH = 0.02;
+static const float LENS_R = 0.02;
 static const float RING_R = 0.03;
 static const float RING_DEPTH = 0.012;
 // Details on the face: a framed vent in the cap's inner column, a grey panel on the lower cream band's outer column.
@@ -103,13 +102,13 @@ float cmax(float a, float b, float r) { return max(max(a, b), (a + b + r) * 0.70
 void add(inout float2 h, float d, float m) { if (d < h.x) h = float2(d, m); }
 
 float3 podFrame(float3 p) { float3 s = float3(abs(p.x), p.y, p.z) - POD_C; s.xy = mul(s.xy, rot(ROLL)); return s; }
-float3 nozzleAxis() { float3 a = normalize(NOZ_AXIS); a.xy = mul(a.xy, rot(ROLL)); return a; }
+float3 nozzleAxis() { return normalize(CUT_N); }   // square to the opening, so the face lies flush in it
 float3 nozzleCentre() {
     float3 n = normalize(CUT_N);
     float3 p = CUT_P + NOZ_ALONG * normalize(float3(-CUT_N.y, CUT_N.x, 0.));
-    return p - n * dot(p - CUT_P, n) + n * NOZ_DROP;
+    return p - n * dot(p - CUT_P, n) - n * (NOZ_H - NOZ_PROUD);
 }
-float3 lensCentre() { return nozzleCentre() + nozzleAxis() * (NOZ_H - DISH_DEPTH - RING_DEPTH + LENS_R * 0.4); }
+float3 lensCentre() { return nozzleCentre() + nozzleAxis() * (NOZ_H - DISH_DEPTH - LENS_R * 0.35); }
 // The casing's outer surface: an ellipsoid with a broad flat back and a bevelled outer edge.
 float casingOuter(float3 s) {
     // Below the waist the casing narrows toward its pointed tip.
@@ -118,12 +117,12 @@ float casingOuter(float3 s) {
     float d = sdEllipsoid(r, SHELL_R) * min(1., 1. + TAPER * min(s.y, 0.) / SHELL_R.y);
     // The top is an angular shoulder: a nearly flat edge, a broad chamfer down to the outer side and a small one at
     // the spine.
-    d = smax(d, s.y - TOP_Y, 0.008);
-    d = smax(d, dot(s.xy, normalize(float2(0.77, 0.63))) - TOP_OUTER_D, 0.008);
-    d = smax(d, dot(s.xy, normalize(float2(-0.707, 0.707))) - TOP_INNER_D, 0.006);
+    d = smax(d, s.y - TOP_Y, 0.03);
+    d = smax(d, dot(s.xy, normalize(float2(0.77, 0.63))) - TOP_OUTER_D, 0.04);
+    d = smax(d, dot(s.xy, normalize(float2(-0.707, 0.707))) - TOP_INNER_D, 0.02);
     d = smax(d, s.z - FACE_Z, 0.02);
-    d = smax(d, dot(s.xz, normalize(float2(0.8, 0.6))) - BEVEL_D, 0.008);
-    d = max(d, dot(s.xz, normalize(float2(-0.75, 0.66))) - INNER_BEVEL_D);
+    d = smax(d, dot(s.xz, normalize(float2(0.8, 0.6))) - BEVEL_D, 0.025);
+    d = smax(d, dot(s.xz, normalize(float2(-0.75, 0.66))) - INNER_BEVEL_D, 0.02);
     return d;
 }
 
@@ -145,7 +144,7 @@ float2 pod(float3 q) {
     for (int i = 0; i < 4; i++) seamD = min(seamD, abs(b - edges[i]));
     seamD = min(seamD, abs(s.x - COLUMN_X));
     float groove = max(max(seamD - SEAM, -GROOVE - outer), cut + TRIM_W);
-    float plates = cmax(casing, -groove, PLATE_CHAMFER);
+    float plates = smax(casing, -groove, PLATE_ROUND);
     // The vent: a gunmetal frame recessed into the cap, a black slot deeper in it.
     float2 vp = s.xy - VENT_C;
     float frame = max(sdBox2(vp, VENT_FRAME, 0.007), -0.006 - outer);
@@ -167,21 +166,20 @@ float2 pod(float3 q) {
     if (slot < 0.002) mat = CORE;
     if (cut > -TRIM_W) mat = GUNMETAL;
     add(h, plates, mat);
-    // The inner core, its lower end the thruster housing with a dish face, an inner ring and a small lens.
+    // The inner core stays inside the casing; the thruster is a clean rounded can tucked under the trimmed rim, its face
+    // a smooth lip around a shallow dish with the lens at its centre.
     float3 c = nozzleCentre(); float3 ax = nozzleAxis();
     float3 d = s - c; float y = dot(d, ax); float rr = length(d - ax * y);
     float2 w = float2(rr - (NOZ_R - NOZ_ROUND), abs(y) - (NOZ_H - NOZ_ROUND));
     float housing = min(max(w.x, w.y), 0.) + length(max(w, 0.)) - NOZ_ROUND;
-    float dish = length(s - (c + ax * (NOZ_H + DISH_R - DISH_DEPTH))) - DISH_R;
-    float well = sdCappedCylinder(s, c + ax * (NOZ_H - DISH_DEPTH), ax, RING_R, RING_DEPTH);
     h.x = max(h.x, -housing);
     float core = smax(sdEllipsoid(s - CORE_SHIFT, CORE_R), edge + 0.006, 0.006);
-    core = smax(core, cut - CORE_BELOW, 0.01);   // the core stays tucked inside the rim; only the housing swells out
-    core = smin(core, housing, CORE_BLEND);
-    core = smax(smax(core, -dish, 0.006), -well, 0.003);
+    core = smax(core, cut - CORE_BELOW, 0.01);
     add(h, core, BLACK);
-    add(h, length(s - lensCentre()) - LENS_R, CYAN);
-    return h;
+    float dish = length(s - (c + ax * (NOZ_H + DISH_R - DISH_DEPTH))) - DISH_R;
+    housing = smax(housing, -dish, 0.008);
+    add(h, housing, BLACK);
+    add(h, length(s - lensCentre()) - LENS_R, CYAN);    return h;
 }
 
 // The spine between the pods, recessed behind the casings' faces and starting just below their shoulders: a stack of
@@ -193,17 +191,18 @@ float chamferBox(float3 p, float3 b, float c) {
     d = max(d, (abs(p.y) + abs(p.z) - b.y - b.z + c) * 0.7071);
     return max(d, (abs(p.x) + abs(p.y) - b.x - b.y + c * 0.6) * 0.7071);
 }
+float roundBox(float3 p, float3 b, float r) { return sdBox(p, b - r, r); }
 float spine(float3 p) {
     float3 q = p - SPINE_C;
     // The blocks between the cap and the bottom block, repeated down the column.
     float top = SPINE_HALF.y - 0.09, bottom = -SPINE_HALF.y + 0.12;
     float k = clamp(round((q.y - bottom) / SPINE_BLOCK - 0.5), 0., floor((top - bottom) / SPINE_BLOCK) - 1.);
     float3 bq = q - float3(0., bottom + (k + 0.5) * SPINE_BLOCK, 0.);
-    float block = chamferBox(bq, float3(SPINE_HALF.x * 0.85, SPINE_BLOCK * 0.5 - 0.004, SPINE_HALF.z - 0.008), 0.014);
-    float strip = chamferBox(bq - float3(0., 0., 0.008), float3(SPINE_HALF.x * 0.32, SPINE_BLOCK * 0.5 - 0.012, SPINE_HALF.z - 0.008), 0.008);
+    float block = roundBox(bq, float3(SPINE_HALF.x * 0.85, SPINE_BLOCK * 0.5 - 0.004, SPINE_HALF.z - 0.008), 0.012);
+    float strip = roundBox(bq - float3(0., 0., 0.006), float3(SPINE_HALF.x * 0.32, SPINE_BLOCK * 0.5 - 0.012, SPINE_HALF.z - 0.008), 0.006);
     float d = min(block, strip);
-    float cap = chamferBox(q - float3(0., SPINE_HALF.y - 0.045, 0.004), float3(SPINE_HALF.x, 0.045, SPINE_HALF.z - 0.004), 0.022);
-    float lower = chamferBox(q - float3(0., -SPINE_HALF.y + 0.06, 0.), float3(SPINE_HALF.x * 1.05, 0.06, SPINE_HALF.z), 0.018);
+    float cap = roundBox(q - float3(0., SPINE_HALF.y - 0.045, 0.004), float3(SPINE_HALF.x, 0.045, SPINE_HALF.z - 0.004), 0.018);
+    float lower = roundBox(q - float3(0., -SPINE_HALF.y + 0.06, 0.), float3(SPINE_HALF.x * 1.05, 0.06, SPINE_HALF.z), 0.016);
     float core = sdBox(q - float3(0., -SPINE_HALF.y - 0.06, -0.012), float3(SPINE_HALF.x * 0.7, 0.08, SPINE_HALF.z - 0.014), 0.012);
     // The column behind the blocks, set well back, closes the gaps.
     float back = sdBox(q - float3(0., 0., -0.02), float3(SPINE_HALF.x * 0.75, SPINE_HALF.y, SPINE_HALF.z - 0.02), 0.004);
@@ -259,7 +258,7 @@ void camera(int view, out float3 target, out float yaw, out float pitch, out flo
     if (view == 3) { yaw = 0.; pitch = 0.; }
     if (view == 4) { yaw = 0.; pitch = -1.45; }
     if (view == 6) { yaw = 0.; pitch = -0.05; dist = 0.85; target = float3(0., 1.42, 0.0); }
-    if (view == 5) { yaw = 0.35; pitch = -0.7; dist = 0.55; target = float3(0.14, 1.06, 0.0); }
+    if (view == 5) { yaw = 0.3; pitch = -0.55; dist = 0.6; target = float3(0.13, 0.98, 0.02); }
 }
 
 float3 render(float2 uv, int view, bool orbit) {
