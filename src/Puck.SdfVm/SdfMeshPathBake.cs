@@ -988,6 +988,7 @@ public sealed class SdfMeshPathBake {
             }
             group.Creases = [.. creases];
             group.CreaseSpacing = lattice.ContourCell;
+            group.CreaseSlope = lattice.SurfaceSlope();
             group.Points = new Vector4[creases.Count];
             for (var index = 0; (index < creases.Count); index++) {
                 var vertex = creases[index];
@@ -1017,7 +1018,8 @@ public sealed class SdfMeshPathBake {
     // along the gradient, takes the gradient for its normal and is no crease, except one the contour put inside its cell
     // beside a sharp convex crease past it (SdfContour.Beside) that the field puts inside the solid: moved onto the face
     // nearer it, its quads still turn across the crease, and as no crease its face's normal would shade the other face's
-    // quads up to 90 degrees off, where a vertex proud of a rounding lies outside. Once every vertex is answered, the
+    // quads up to 90 degrees off, where a vertex proud of a rounding lies outside. A vertex whose gradient reads shorter
+    // than KinkGradient of the field's typical slope sits on a crease the gradient's taps straddle and stays. Once every vertex is answered, the
     // contour splits at the creases that remain on the thread pool.
     private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
         var contour = group.Contour!;
@@ -1028,7 +1030,7 @@ public sealed class SdfMeshPathBake {
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
             var length = gradient.Length();
 
-            if (!(length > 0f)) { continue; }
+            if (!(length > (KinkGradient * group.CreaseSlope))) { continue; }
 
             var distance = (values[index] / length);
 
@@ -1240,6 +1242,12 @@ public sealed class SdfMeshPathBake {
     // (AnswerCreases): past the field's noise at a sharp crease, short of where a rounding near a cell's size leaves its
     // faces' meeting line.
     private const float CreaseTolerance = 0.02f;
+    // The shortest field gradient at a vertex, as a share of the field's typical slope across its surface
+    // (SdfSampledLattice.SurfaceSlope), that gives AnswerCreases a direction and distance to the surface. Gradient taps
+    // straddling a sharp crease the vertex lies on read the two faces' gradients cancelling, a few hundredths of the
+    // slope, and the value over that length puts the surface many cells off. A field that is no true distance reads well
+    // under its slope in places (a fifth of the distance on the Moth's shins), whose vertices still move.
+    private const float KinkGradient = 0.1f;
     // How far off the surface, along its normal, a vertex's skin point lies, where a hit reads the shape whose surface the
     // vertex lies on: the material cut's lift.
     private const float SkinLift = 0.0005f;
@@ -1257,10 +1265,11 @@ public sealed class SdfMeshPathBake {
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
         public SdfMeshMaterialCut? Cut { get; set; }
-        // While the contour's unpinned vertices are checked against the field, the vertices, and the spacing their
-        // gradient taps scale by.
+        // While the contour's unpinned vertices are checked against the field, the vertices, the spacing their
+        // gradient taps scale by, and the field's typical slope across its surface (SdfSampledLattice.SurfaceSlope).
         public int[]? Creases { get; set; }
         public Vector3 CreaseSpacing { get; set; } = Vector3.One;
+        public float CreaseSlope { get; set; } = 1f;
         public Vector4[]? Points { get; set; }
         public int[] PointMaterials { get; set; } = [];
         public int PointsAnswered { get; set; }

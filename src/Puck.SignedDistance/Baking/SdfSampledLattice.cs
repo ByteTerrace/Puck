@@ -659,10 +659,11 @@ public sealed class SdfSampledLattice {
 
         return slope;
     }
-    // The field's typical change per world unit across its surface: the median, over the coarse lattice edges that change
-    // sign, of the change along the edge over its length. A field that is no true distance changes by less, or more,
-    // than one.
-    private float SurfaceSlope() {
+    /// <summary>Returns the field's typical change per world unit across its surface: the median, over the coarse lattice
+    /// edges that change sign, of the change along the edge over its length. A field that is no true distance changes by
+    /// less, or more, than one.</summary>
+    /// <returns>The median slope, in field units per world unit; one where no edge changes sign.</returns>
+    public float SurfaceSlope() {
         var slopes = new List<float>();
 
         for (var z = 0; (z < m_samplesZ); z++) {
@@ -852,12 +853,14 @@ public sealed class SdfSampledLattice {
             return deepest;
         }
         var side = new int[3];
+        var beside = new int[3];
         var clear = (0.1f * step * SurfaceSlope());
         // Whether a fine sample lies inside a sheet: inside, outside a step to either side along some axis by more than a
         // tenth of the field's typical change over a step, which a surface grazing the line within its samples' noise is
         // not, and no neighbour deeper inside than those two lie outside, as a solid's edge or corner, which a line near it
-        // also crosses twice within a step, would hold; with `thinner`, a sheet whose crossings on that line lie less than a
-        // step apart.
+        // also crosses twice within a step, would hold, nor a line beside it inside for two steps (Thickens), as a wedge
+        // too acute for its neighbours to reach deep would; with `thinner`, a sheet whose crossings on that line lie less
+        // than a step apart.
         bool Sheet(Span<int> at, bool thinner) {
             var value = FineValue(x: at[0], y: at[1], z: at[2]);
 
@@ -876,8 +879,46 @@ public sealed class SdfSampledLattice {
                 side[axis] += 2;
                 var high = (Within(at: side) ? FineValue(x: side[0], y: side[1], z: side[2]) : -1f);
 
-                if ((low > clear) && (high > clear) && (deepest > -MathF.Max(low, high)) && (!thinner || (((-value / (low - value)) + (-value / (high - value))) < 1f))) {
+                if ((low > clear) && (high > clear) && (deepest > -MathF.Max(low, high)) && (!thinner || (((-value / (low - value)) + (-value / (high - value))) < 1f)) &&
+                    !Thickens(at: at, axis: axis, first: (at[axis] - 1), last: (at[axis] + 1))) {
                     return true;
+                }
+            }
+
+            return false;
+        }
+        // Whether a fine line parallel to fine sample `at`'s line along `axis`, up to Reach fine steps from it across or
+        // diagonally, holds two neighbouring samples inside from `first` to `last` along it, widened by its distance
+        // (Refine's Thickens at the fine spacing): a solid's acute edge or wedge, which a line crosses near its tip or
+        // grazes, thickens within a few fine steps beside it into the body, where a sheet thinner than a fine step does
+        // not.
+        bool Thickens(Span<int> at, int axis, int first, int last) {
+            var u = ((axis + 1) % 3);
+            var v = ((axis + 2) % 3);
+            const int Reach = 3;
+
+            for (var distance = 1; (distance <= Reach); distance++) {
+                for (var direction = 0; (direction < 8); direction++) {
+                    var (du, dv) = (direction switch { 0 => (1, 0), 1 => (-1, 0), 2 => (0, 1), 3 => (0, -1), 4 => (1, 1), 5 => (1, -1), 6 => (-1, 1), _ => (-1, -1) });
+
+                    var run = 0;
+
+                    for (var step = (first - distance); (step <= (last + distance)); step++) {
+                        beside[0] = at[0];
+                        beside[1] = at[1];
+                        beside[2] = at[2];
+                        beside[u] += (du * distance);
+                        beside[v] += (dv * distance);
+                        beside[axis] = step;
+                        if (!Within(at: beside)) {
+                            run = 0;
+                            continue;
+                        }
+                        run = ((FineValue(x: beside[0], y: beside[1], z: beside[2]) < 0f) ? (run + 1) : 0);
+                        if (run >= 2) {
+                            return true;
+                        }
+                    }
                 }
             }
 
@@ -932,9 +973,11 @@ public sealed class SdfSampledLattice {
                     var further = FineValue(x: p[0], y: p[1], z: p[2]);
 
                     // A solid's edge the line grazes falls toward the pair from both sides as a sheet does, but holds
-                    // a neighbour of the pair deeper inside than half a step, which a sheet thinner than a step cannot.
+                    // a neighbour of the pair deeper inside than half a step, which a sheet thinner than a step cannot,
+                    // or, an acute wedge's, a line beside the pair inside for two steps (Thickens).
                     if ((before < 0f) || (first < 0f) || (second < 0f) || (further < 0f) ||
                         (deepest < (-0.5f * spacing[axis] * MathF.Max(firstSlope, secondSlope))) ||
+                        Thickens(at: p, axis: axis, first: (p[axis] - 3), last: p[axis]) ||
                         !PassesBetween(after: second, before: before, further: further, reach: (spacing[axis] * MathF.Max(firstSlope, secondSlope)), value: first)) {
                         continue;
                     }

@@ -723,7 +723,10 @@ in the cells the coarse samples saw a thin sheet or gap cross: a fine sample
 inside one reads as inside by half the field's change over a fine step; where
 one passed between two fine samples of a line, the nearer reads as far inside as
 it lay outside, unless a neighbour lies deeper inside than half a step, as beside
-a solid's edge the line grazes; and a sheet one sample thick stepping diagonally
+a solid's edge the line grazes, or a line up to three fine steps beside it lies
+inside for two steps running, as beside a wedge too acute for the neighbours to
+reach deep (a window cut through a thin shell, whose rim otherwise closes into
+lumps a centimetre proud); and a sheet one sample thick stepping diagonally
 across the lattice is joined along the faces its steps share. Its samples alone
 leave it holed, its two faces closer than a vertex's placement can tell apart,
 and its thinning end frayed into slivers and specks: the white fringe and the
@@ -754,8 +757,15 @@ side vertex, cutting the corner in a regular row of notches that shade as dark
 teeth. So a convex crease up to half a cell past the cell is handed to the
 neighbour that holds it (`HandOff`): that cell's vertex moves onto the crease,
 which bounds the patch it holds, and the cell that found it keeps its vertex
-inside itself. A vertex taken past its cell instead lands beside the
-neighbour's and folds the quads they share. A straight crease, whose planes the
+inside itself (`BesideCrease`), on the side of the crease its crossings lie on:
+clamped across to the other face, past the neighbour's crease vertex, it folds
+the quads they share (the corners of boxes turned about an axis). Where that
+point already lies on both faces, it moves onto the face its crossings lie
+nearer and takes that face's normal, so the strip to the crease vertex lies flat
+on the face rather than a millimetre off it, and a crease within a twentieth of
+a cell stays its own, since handed over it would drag the neighbour's vertex
+along the crease (`TouchedCrease`). A vertex taken past its cell instead lands
+beside the neighbour's and folds the quads they share. A straight crease, whose planes the
 mean-biased solution meets too, keeps that point past the cell, as does a
 concave one. A point that is no feature and lies past the cell is pulled back
 along the line from the crossings' mean, not clamped axis by axis, which would
@@ -789,7 +799,12 @@ taps). A vertex the contour kept inside its cell beside a sharp convex crease
 past it (`SdfContour.Beside`), which the field puts inside the solid rather than
 proud of a rounding, moves onto the surface but stays a crease vertex: its quads
 turn across the crease, and with its own face's normal the other face's quads
-beside the edge shade up to 90 degrees off. The contour then splits each feature vertex whose quads face apart by
+beside the edge shade up to 90 degrees off. A vertex whose gradient reads
+shorter than a tenth of the field's typical slope across its surface stays where
+the contour put it
+(`KinkGradient`): the gradient's taps straddle a crease the vertex lies on, and
+the value over that length puts the surface a centimetre or more off, at a
+shell window's rim. The contour then splits each feature vertex whose quads face apart by
 more than 32 degrees, just past the thirty that make it a feature, into one
 vertex per side, each with the area-weighted facing of its side
 (`SdfContour.SplitAtCreases`); at 45 degrees, the very turn of a chamfer, the
