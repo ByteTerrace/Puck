@@ -146,7 +146,7 @@ Puck.World extends the rule compiler the way any host does (see
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$bodyPosition:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, and `$board:cellOf:`. `bodyState(each, fuel)` reads one of a
   body's action-state slots (declared in `state.body` or `state.identity`, the
   slots a kit's `compareState` and a hold's `spend` use) as the body's step
@@ -154,7 +154,12 @@ Puck.World extends the rule compiler the way any host does (see
   the world does not declare is refused with
   `WorldRuleRefusal.BodyStateMalformed`. A look's render lane reads the same
   slot of the body wearing it as `bodyState($body, fuel)`, from the value each
-  snapshot entry carries. Its key family answers `$pair:`. Its effect arms cover body motion and
+  snapshot entry carries. `bodyPosition(each, y)` reads one world axis (`x`,
+  `y` or `z`) of the body's live position in metres, as fixed point, and `0`
+  for a reference resolving to no live body; any other axis is refused with
+  `WorldRuleRefusal.BodyPositionMalformed`. A gate over it with a `pose`
+  effect recovers a body that falls out of the world, as the debug world's
+  `fall-respawn` rule does. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and

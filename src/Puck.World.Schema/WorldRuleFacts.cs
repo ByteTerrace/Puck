@@ -22,6 +22,15 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
     /// smallest cell; it accepts the same optional <c>:where:&lt;filterRow&gt;</c> suffix.</summary>
     public const string ArgMinPrefix = "$argmin:";
+    /// <summary>The prefix; <c>$bodyPosition:&lt;bodyRef&gt;:x|y|z</c> (<c>bodyPosition(each, y)</c> in <c>.puck</c>)
+    /// reads one world axis of the named body's live position, in metres, as the
+    /// <see cref="Puck.Maths.FixedQ4816"/> the body's own step left it this tick (rules evaluate after every body has
+    /// advanced). A gate compares it against an authored bound — <c>bodyPosition(body, 0, y) &lt; -40</c> is "she has
+    /// fallen out of the world" — so a world recovers a fallen body with an ordinary <c>pose</c> effect. A reference
+    /// resolving to no live body reads <c>0</c>, the origin, the convention <see cref="BodyStatePrefix"/> sets. An axis
+    /// other than <c>x</c>, <c>y</c> or <c>z</c> is refused by name
+    /// (<see cref="WorldRuleRefusal.BodyPositionMalformed"/>).</summary>
+    public const string BodyPositionPrefix = "$bodyPosition:";
     /// <summary>The prefix; <c>$bodyState:&lt;bodyRef&gt;:&lt;slot&gt;</c> (<c>bodyState(each, fuel)</c> in
     /// <c>.puck</c>) reads one of the named body's action-state slots, declared in <c>state.body</c> or
     /// <c>state.identity</c>: a counter's value, or a timer's remaining seconds

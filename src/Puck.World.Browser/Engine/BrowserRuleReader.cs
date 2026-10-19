@@ -15,7 +15,7 @@ namespace Puck.World.Browser.Engine;
 /// <see cref="RuleEvaluation.DescribeFact(in RuleFact)"/>) — <c>absent</c>, <c>forever</c>, or the raw value.</param>
 public readonly record struct BrowserHostFact(string Rule, string Operand, string Answer);
 /// <summary>The session's own effect host: a <see cref="ArenaEffectHost"/> over the session's
-/// <see cref="StateArena"/>, widened to <see cref="IWorldFacts"/> — the world's seventeen operand facts, the two
+/// <see cref="StateArena"/>, widened to <see cref="IWorldFacts"/> — the world's operand facts, the two
 /// body-reference resolutions, and the host-owned row reads <c>Puck.World.Server.WorldServer</c> answers from real
 /// bodies, machines, a clock, and adjacencies. This engine ships none of those, so each read answers the vacuous
 /// fact a world with no bodies, no machines, no clock, and no adjacencies gives, and each host-owned row read
@@ -75,11 +75,12 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         return true;
     }
 
-    // IWorldFacts — the seventeen world-operand facts, each the vacuous answer this build's own documentation
+    // IWorldFacts — the world-operand facts, each the vacuous answer this build's own documentation
     // commits to for "no such body"/"no such machine"/"no such clock"/"no such link", applied here for "there is no
     // host at all": population 0, physics vacuously quiescent, no clock, no region occupants, no machine byte, no
     // argmax/argmin/nearest body (-1), the engine's largest distance between two bodies that do not exist, no sight
-    // line, never parked, perfectly upright, a link never established, a zero channel, and no navigation state.
+    // line, never parked, perfectly upright, at the origin, a link never established, a zero channel, and no navigation
+    // state.
     // PlacementInfluenceOperand alone reads Absent — an unrepresented influence provider is unknowable, never a
     // falsely safe zero, exactly as WorldServer.Influence.cs already answers it for the one real case that reads
     // Absent today.
@@ -161,6 +162,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         operand: nameof(BodyFactOperand),
         fact: RuleFact.Finite(
             kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldFacts.Read(BodyPositionOperand operand) => Record(
+        operand: nameof(BodyPositionOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Fixed,
             value: 0L
         )
     );

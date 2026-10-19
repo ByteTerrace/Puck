@@ -25,6 +25,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.LineOfSightPrefix}<a>:<b>",
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
             $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
+            $"{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:x|y|z",
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
@@ -632,6 +633,61 @@ public static partial class WorldFactsVocabulary {
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,
                     valueKind: CellKind.Int,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.BodyPositionPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var width = WorldFactsCompileContext.BodyRefTokenWidth(
+                    start: 0,
+                    tokens: tokens
+                );
+                var axis = ((tokens.Length == (width + 1))
+                    ? tokens[width] switch {
+                        "x" => 0,
+                        "y" => 1,
+                        "z" => 2,
+                        _ => -1,
+                    }
+                    : -1
+                );
+
+                if (axis < 0) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.BodyPositionPrefix}<bodyRef>:<axis>' ({WorldFactsCompileContext.BodyRefVocabulary}, then x, y or z)",
+                        refusal: WorldRuleRefusal.BodyPositionMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(
+                    channel: name,
+                    ruleName: ruleName,
+                    start: 0,
+                    tokens: tokens
+                );
+                var operand = new BodyPositionOperand(
+                    axis: axis,
+                    body: body
+                );
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: -1,
+                    valueKind: CellKind.Fixed,
                     world: world
                 );
             } else if (name.StartsWith(
