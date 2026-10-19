@@ -953,7 +953,7 @@ Facts a script needs:
   input setting and not an operator lever (the engine default is zero, so
   `player.look` and a look stick turn nothing until a world authors
   `seatDefaults.seatCameraFeel`, which the debug world's Moth basis does, at a
-  stick rate of 2.6 radians a second; `world.row.set playerDefaults.seatLook`
+  stick rate of 3.5 radians a second; `world.row.set playerDefaults.seatLook`
   edits it live).
   `pose <x> <y> <z> <yaw> <pitch> [<fov>]` sets an absolute eye and heading,
   `look <x> <y> <z> <tx> <ty> <tz> [<fov>]` an eye facing a point, and
@@ -1158,7 +1158,9 @@ Facts a script needs:
 - `Assets/`—the shipped worlds. While the current campaign runs, the one live
   world is `worlds/debug.puck` (the boot default, compiled to
   `debug.world.json`), with its basis `worlds/avatars/moth.puck`, the
-  `quality.puck` presets that avatar imports, the `skies.puck` it imports and
+  `quality.puck` presets that avatar imports, the `skies.puck` and `shapes.puck`
+  modules it imports, the `theme.puck` theme and the `controls.puck` cursor, key
+  hints, icons, binding bar and play wheel it and the garden import, and
   `worlds/garden.puck`, the destination its portal frame opens onto
   ([the portal demo](Assets/worlds/debug.md));
   every other world named in this bullet is quarantined at the same path under
@@ -2122,7 +2124,7 @@ The `render.skyFieldScale` boot value and a preset's `skyFieldScale` default
 to one; preset application and `world.save` retain the selected fraction. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
-`Assets/worlds/quality.puck`: the standard world imports it, and a world on
+`Assets/worlds/quality.puck`: the Moth basis imports it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers. Render scale applies
 to both seat views and named cameras as each view's ceiling. A layout

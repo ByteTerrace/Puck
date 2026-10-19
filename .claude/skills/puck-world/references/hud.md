@@ -27,8 +27,8 @@ a world-level kill switch plus the drawn pointer cursor's per-world policy —
 `WorldHudCursor(HoverRadius, SizePx, Role, Visible?)` (hover reach in world
 units, ring radius in px, the bare cursor's `WorldHudCursorRole` hue token, an
 optional visibility predicate; null draws no cursor at all, since the engine
-has none of its own and the standard policy is authored in
-`Assets/worlds/standard.puck`; whole-row replace semantics on
+has none of its own and the live policy is authored in
+`Assets/worlds/controls.puck`; whole-row replace semantics on
 `SetHudDefaults`, so a defaults row authored without it clears the cursor). Validated by `hud.CursorInvalid`;
 echoed RESOLVED by `world.hud`; the live pointer state (position, visibility
 verdict, hover target) echoes through `world.view.pointer`

@@ -28,11 +28,12 @@ ruled such a world unplayable. A solid is therefore rendered and collided from
 one declaration, and presentation-only decoration is a non-solid placement: a
 solid placement carrying a wallpaper fold refuses by name.
 
-**The standards are state.** `standard.puck`, the basis every shipped
-world deltas over, carries the shared values as state rows: a `transforms`
+**The standards are state.** `standard.puck`, the basis the quarantined
+worlds delta over, carries the shared values as state rows: a `transforms`
 text row (`identity`, `origin`, `unit`) and a `colors` text row, which
-documents reference as `state.<row>.<key>` instead of restating literals,
-beside the standard `theme`, so each standard value has one home.
+documents reference as `state.<row>.<key>` instead of restating literals, so
+each standard value has one home. The standard `theme` is its own document,
+`theme.puck`, which a world imports beside its basis.
 
 **Every world stands over a safety net.** The basis places one solid `Plane`
 (`groundPlane`) far below the playable space to catch anything that falls; it

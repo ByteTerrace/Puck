@@ -352,7 +352,7 @@ public sealed partial record WorldDefinition(
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
     /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
     /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the shipped presets are authored in
-    /// <c>quality.puck</c>, which <c>standard.puck</c> imports.</summary>
+    /// <c>quality.puck</c>, which the Moth basis imports.</summary>
     [JsonIgnore]
     public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
@@ -450,8 +450,8 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
     /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
-    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
-    /// <c>standard.puck</c>.</summary>
+    /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in <c>theme.puck</c>, which a
+    /// world imports.</summary>
     [JsonIgnore]
     public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
     /// <summary>Gets the <c>timeline</c> section, the world's named presentation clocks — ABSENT resolves to

@@ -69,9 +69,10 @@ authors it today.
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
-bar draws. No shipped world or basis
-authors `bindingBar` today — check `Assets/worlds/schema/bindingOverlays.schema.json`
-for the shape before relying on a live example. The first world row, when one
+bar draws. The live example is `Assets/worlds/controls.puck`, which the debug world
+and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
+(two layouts, `keys` and `pad`, switched by `state.bar.layout`, and an `iconRow`
+keyed by entry id), authors the `icons` table, and appends a `play-wheel` row. The first world row, when one
 is authored, supplies the world
 floor; the selected identity's own first row may replace it for that seat,
 matching the existing first-row binding-layer consumer in `WorldIdentity`.
@@ -274,7 +275,9 @@ relative to the displayed hub; this deliberately permits direct mouse/touch
 targeting and gamepad excursion on the same authored radial.
 
 Selection, ring navigation, commit, and cancel sources are ordinary entries
-on each hold page. No checked-in world authors a `wheels` row today.
+on each hold page. `Assets/worlds/controls.puck`'s `play-primary` is the live
+example: two hold pages (Tab, LB) that inherit the resting page, and one ring
+whose labels and icons read `state.wheelLabels`/`state.wheelIcons`.
 `WorldWheelFeed` owns presentation;
 its drawn labels, icons and hub label come from `WorldWheelRings`
 (`Puck.World.Client`), which reads the label and icon rows through the seat's

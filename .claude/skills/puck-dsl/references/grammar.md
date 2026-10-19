@@ -103,6 +103,13 @@ import "path" [as alias]
 export read|action|binding name, name2         // names may wrap across indented lines
 ```
 
+The path decides the kind of import. A path ending `.puck` (`import "skies.puck"`)
+loads a module: its `let` and `template` declarations become usable in the importer,
+and any section it authors is not carried. A path without the extension
+(`import "theme"`, `import "../quality"`) is a document import: it lowers to an
+`imports` entry, and the named document's sections compose over the basis at load,
+refining or appending its keyed rows.
+
 Each `let`'s unit conversion is checked separately per destination field.
 Duplicate declarations, missing/duplicate template arguments, unknown
 templates, cyclic bindings, integer overflow, and non-finite results all

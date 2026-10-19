@@ -484,7 +484,9 @@ safety-net placements and prototypes, a body sleep default, and an import of the
 `quality.puck` render presets; the island (`puck.world.json`) names it as its
 `basis` and authors its own channels, bindings, kits, body-motion programs and
 chase rig, and the quilt shards take the island as theirs. Another world takes a
-different basis (the Parlor games share `parlor.basis.puck`). Absent means
+different basis (the Parlor games share `parlor.basis.puck`). The live debug world and garden take
+the Moth avatar as their basis and import `theme.puck` (the standard theme) and
+`controls.puck` (cursor, key hints, icons, binding bar, play wheel) as documents. Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
