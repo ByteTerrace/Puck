@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-puck\s+references\b[\s\S]{0,200}--implementers
+(puck|Puck\.Cli\.dll)\s+references\b[^\n]{0,200}--implementers

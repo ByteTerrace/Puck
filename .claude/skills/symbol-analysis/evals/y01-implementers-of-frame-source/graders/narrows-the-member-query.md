@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response narrows a member query for CaptureFrame without conflating same-named symbols.
+--containing
