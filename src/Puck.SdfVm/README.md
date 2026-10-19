@@ -8,7 +8,9 @@ draws every view of it reads), bakes the program into meshes on the GPU
 (`SdfMeshPathBake`), and `SdfWorldPasses` records each view as an `sdf.world`
 instance of the render graph that rasterizes those meshes and shades them into
 the instance's own output image. No frame walks the field per pixel; the bake
-is the one GPU consumer of the field interpreter. The single-source HLSL
+is the one GPU consumer of the field interpreter, and a field diagnostic
+(`SdfFieldSlice`, behind `world.slice`) rides it as points lattices with
+gradients (`SdfMeshPathBake.Probe`), drawn on the CPU. The single-source HLSL
 kernels (`Assets/Shaders/Sdf`) compile to both SPIR-V (Vulkan) and, on Windows,
 DXIL (Direct3D 12) from one shared source, and the C# side of the
 instruction-set contract they decode lives one project away.

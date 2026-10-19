@@ -128,6 +128,7 @@ nonuniform `Scale`, likewise surface only there.
 
 ```bash
 dotnet run --project src/Puck.Cli -- creation stats --world <path> [--prototype <id>]
+dotnet run --project src/Puck.Cli -- creation shape --world <path> --prototype <id> [--shape <name>...]
 dotnet run --project src/Puck.Cli -- creation sculpts
 dotnet run --project src/Puck.Cli -- creation sculpt <name> --world <path>
 dotnet run --project src/Puck.Cli -- schema --check
@@ -149,6 +150,21 @@ selected path forwards the blend. Animated ungrouped shapes take pooled Union
 defaults, so their unsupported authored blend can still appear in a histogram
 with exit 0. Stats proves neither authored-blend preservation across paths,
 live motion, nor rendered appearance.
+
+`creation shape --world <path> --prototype <id> [--shape <name>...]` and its
+live twin `creation.shape <prototype> [<shape-name>...]` (headless too) read
+each shape off its own lowering: `lowered=` (what the renderer emits for it
+alone), `distance=exact | bound gain=<g> | approximate`, `step=` when a warp
+clamps the march, `cpu=` (the fixed-point evaluator's verdict) and `contact=`
+(admitted with `contact-omits=`, omitted, or refused and why). A `bound` is a
+field that underestimates: `|grad d|` lies in `[g, 1]`, from a non-uniform
+`Scale` the primitive has no native spelling for (a capsule, cone or torus
+scaled apart in X and Z) or the superellipsoid gauge an ellipsoid lowers to.
+A bound keeps the authored zero set and its gradient's direction, so the bake
+contours the right surface; contact refuses the residual `Scale` and admits the
+gauge. To see a field rather than read it,
+`world.slice <placement> <x|y|z> <path.png>` writes the distance bands and the
+`|grad d|` panel through the running World (see the `Puck.World` README).
 
 `creation sculpt` applies a registered sculpt's patch to a file, validating
 before writing and leaving the file untouched on refusal. The live twins are

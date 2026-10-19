@@ -222,6 +222,14 @@ owns the explanation.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
   their own group. The pass block's lattice rows are a sync pair with
   `SdfFrameBlock.WriteMeshBake`.
+- **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
+  `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
+  bake (`SdfMeshPathBake.Probe`, taken before any group, a frame's share at a
+  time, `Pending` while it samples), over every instance and over the unowned
+  segments, and draws the distance bands and `|grad d|` on the CPU from the
+  answers. Every transform there is the frame's own: the slice passes no poses.
+  A per-pixel field view would put a second interpreter copy in a pixel kernel;
+  sample a lattice instead.
 - **Cascades are depth only**: the shadow pipeline (`SdfMeshRasterPass.ShadowKey`,
   `sdf-mesh-shadow.vert`/`.frag`) draws the mesh draws into each cascade's
   sampled `D32Float` depth from the light camera `SdfFrameBlock.WriteShadowCamera`
