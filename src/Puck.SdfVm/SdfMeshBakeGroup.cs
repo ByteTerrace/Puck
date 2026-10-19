@@ -33,9 +33,6 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public int Slot => Selector;
     /// <summary>Gets the instances a static group's run holds, from <c>-(Selector + 1)</c> on.</summary>
     public int Instances { get; internal set; } = 1;
-    /// <summary>Gets the indices of the program's instances the group selects, in program order; empty for the world
-    /// group.</summary>
-    public IReadOnlyList<int> InstanceIndices => m_instances;
     /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, and the finest
     /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice.</summary>
     public List<(Vector3 Center, float Radius, float Detail)> Members { get; } = [];

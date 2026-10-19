@@ -170,25 +170,19 @@ public static class MeshCommand {
     private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options) {
         var label = scene.Label(group: group, owner: owner);
         var toWorld = scene.ToWorld(group: group);
-        SdfFieldEvaluator field;
 
-        try {
-            field = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: group, program: scene.Program), reading: SdfFieldReading.Render);
-        } catch (ArgumentException exception) {
+        if (!SdfMeshAudit.TryEvaluator(field: out var field, program: SdfMeshAudit.Field(group: group, program: scene.Program), refusal: out var why)) {
             var held = store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out _, refusal: out _);
 
-            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: (held ? $"field refused: {FirstSentence(text: exception.Message)}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
+            return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: (held ? $"field {why}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
         }
 
-        var shapes = new List<(string Name, SdfFieldEvaluator Field)>();
-
-        foreach (var (instruction, shapeField) in SdfMeshAudit.ShapeFields(group: group, program: scene.Program)) {
-            try {
-                shapes.Add(item: (scene.ShapeName(group: group, instruction: instruction), new SdfFieldEvaluator(program: shapeField, reading: SdfFieldReading.Render)));
-            } catch (ArgumentException) {
-                // A shape whose own field the evaluator refuses cannot be named nearest; the group's field holds it.
-            }
-        }
+        // A shape whose own field no evaluator reads cannot be named nearest; the group's field still holds it.
+        var shapes = SdfMeshAudit.ShapeFields(group: group, program: scene.Program)
+            .Select(selector: shape => (Name: scene.ShapeName(group: group, instruction: shape.Instruction), Field: (SdfMeshAudit.TryEvaluator(field: out var own, program: shape.Field, refusal: out _) ? own : null)))
+            .Where(predicate: static shape => (shape.Field is not null))
+            .Select(selector: static shape => (shape.Name, shape.Field!))
+            .ToList();
 
         if (!store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out var mesh, refusal: out var refusal)) {
             return new Outcome(Field: field, Label: label, Mesh: null, Owner: owner, Refusal: (refusal ?? "no stored mesh"), Report: null, Stored: (refusal is not null), ToWorld: toWorld);
@@ -290,11 +284,6 @@ public static class MeshCommand {
         string.Create(provider: CultureInfo.InvariantCulture, handler: $"p50 {statistic.P50 * scale:0.00} p99 {statistic.P99 * scale:0.00} max {statistic.Max * scale:0.00} over {statistic.Over}/{statistic.Count}");
     private static string Millimetres(float metres) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{metres * 1000f:0.0}");
     private static string Point(Vector3 point) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"({point.X:0.000}, {point.Y:0.000}, {point.Z:0.000})");
-    private static string FirstSentence(string text) {
-        var end = text.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
-
-        return ((end < 0) ? text : text[..(end + 1)]);
-    }
 
     // What the verb was asked: the world, which groups, which store and identity, and what to report.
     private sealed record AuditRequest(string World, string? Prototype, string? Group, string? CacheRoot, string? Build, string? Identity, string Backend, int Top, int Worst, string? Images, bool History);

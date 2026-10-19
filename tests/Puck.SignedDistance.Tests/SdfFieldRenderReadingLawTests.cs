@@ -152,4 +152,24 @@ public sealed class SdfFieldRenderReadingLawTests {
         Assert.Equal(expected: -0.25f, actual: Read(field: turned, point: new Vector3(x: -1f, y: 0f, z: 0f)), tolerance: 1e-4f);
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => program.Excerpt(indices: [program.Instructions.Count]));
     }
+    [Fact]
+    public void AnExcerptCarriesThePathsAndSweepsOfTheShapesItKeeps() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var square = new SdfPathContour(new Vector2(x: -0.2f, y: -0.2f), [new(new Vector2(x: 0.2f, y: -0.2f)), new(new Vector2(x: 0.2f, y: 0.2f)), new(new Vector2(x: -0.2f, y: 0.2f))]);
+        var program = builder
+            .ResetPoint().Sphere(material: material, radius: 0.1f)
+            .ResetPoint().Path(halfDepth: 0.05f, material: material, profile: new SdfPathProfile([square]), scale: Vector2.One)
+            .ResetPoint().Sweep(a: Vector3.Zero, b: new Vector3(x: 0.5f, y: 0.5f, z: 0f), bulge: 0f, c: Vector3.UnitY, material: material, radiusEnd: 0.05f, radiusStart: 0.05f, strandOffset: 0f, strands: 1, twist: 0f)
+            .Build();
+        var sweep = Enumerable.Range(start: 0, count: program.Instructions.Count).Last(predicate: index => (program.Instructions[index].Op == SdfOp.ShapeBlend));
+        var excerpt = program.Excerpt(indices: [.. Enumerable.Range(start: 2, count: (program.Instructions.Count - 2))]);
+        var swept = new SdfFieldEvaluator(program: program.Excerpt(indices: [.. Enumerable.Range(start: (sweep - 1), count: 2)]));
+
+        // The path and the sweep keep their tables, so each excerpt builds; the sweep alone reads its own curve, and the
+        // path, which no reading interprets, is refused by name.
+        Assert.Equal(expected: 2, actual: excerpt.Instructions.Count(predicate: static instruction => (instruction.Op == SdfOp.ShapeBlend)));
+        Assert.Equal(expected: -0.05f, actual: Read(field: swept, point: Vector3.Zero), tolerance: 1e-3f);
+        _ = Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: excerpt, reading: SdfFieldReading.Render));
+    }
 }

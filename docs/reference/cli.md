@@ -2882,8 +2882,12 @@ world, the stored meshes and the options, so a later run proves a fix.
 
 The field is read through `SdfFieldEvaluator`'s render reading
 (`SdfFieldReading.Render`), which admits a non-uniform scale and the flare and
-twist warps; a group holding a shape it cannot interpret (an `Ellipse` prism)
-reports `field refused`. The group of segments no instance owns matches a
+twist warps; a group holding what it cannot interpret (another warp, a regular
+polygon, a path, a multi-strand sweep) reports `field refused`, and one whose
+evaluation faults reports `field failed`. A static group is labelled by its
+first instance and the placement and prototype it stands for, a body's group by
+its slot and the creation shape the slot carries, so `--group` takes either
+name. The group of segments no instance owns matches a
 stored mesh only when nothing but the scene emits into the program. Exit codes:
 0 every selected group reported; 1 the world failed to load, or no selected
 group had a stored mesh (with how to store them); 2 a usage error.

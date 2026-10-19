@@ -2,9 +2,11 @@ using System.Numerics;
 
 using Puck.Cli.Mesh;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Testing;
 using Puck.World;
+using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Transpiler.Composition;
 using Xunit;
@@ -35,6 +37,37 @@ public sealed class MeshCommandTests {
         var scene = RestScene.Compose(definition: definition, sourcePath: world);
 
         return (scene, SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms));
+    }
+    // The world with two boxes placed beside the Moth: a plain one, a static group whose shapes have no slot to be named
+    // by, and a sheared one, whose field the evaluator refuses, since no reading interprets a shear.
+    private static string Placed(string path) {
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
+
+        static WorldPrototype Prototype(string name, ShapeShearDocument? shear) {
+            var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
+                Schema: CreationDocument.CurrentSchema,
+                Name: name,
+                Palette: null,
+                Shapes: [new ShapeDocument(Id: 0, Name: "slab", Type: SdfSolidPrimitive.Box, Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: new Vector3(value: 0.2f), Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Shear: shear)],
+                Frames: null
+            ));
+
+            return new WorldPrototype(name, canonical.Document, canonical.Hash);
+        }
+
+        WorldDefinitionSerialization.Save(
+            definition: definition with {
+                CreationsRaw = [.. definition.Creations, Prototype(name: "plain", shear: null), Prototype(name: "sheared", shear: new ShapeShearDocument(Linear: 0.3f))],
+                PlacementRowsRaw = [
+                    .. definition.Placements,
+                    new WorldPlacement(Id: "plain", PrototypeId: "plain", Position: new Vector3(x: -3f, y: 1f, z: 0f), YawDegrees: 0f, Scale: 1f),
+                    new WorldPlacement(Id: "sheared", PrototypeId: "sheared", Position: new Vector3(x: 3f, y: 1f, z: 0f), YawDegrees: 0f, Scale: 1f),
+                ],
+            },
+            path: path
+        );
+
+        return path;
     }
     private static SdfMeshBakeGroup Group(RestScene scene, List<SdfMeshBakeGroup> groups, string shape) =>
         groups.Single(predicate: group => scene.Label(group: group, owner: scene.Owner(group: group)).EndsWith(value: $" {shape}", comparisonType: StringComparison.Ordinal));
@@ -70,32 +103,43 @@ public sealed class MeshCommandTests {
     [Fact]
     public void ARefusedFieldADamagedEntryAndAMissingMeshAreReportedAsSuch() {
         using var directory = new TemporaryDirectory(prefix: "puck-mesh-audit-");
-        var world = TempWorldCopy(directory: directory);
+        var world = Placed(path: TempWorldCopy(directory: directory));
         var (scene, groups) = Plan(world: world);
         var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
-        var helmet = Group(groups: groups, scene: scene, shape: "helmet");
+        var refused = Group(groups: groups, scene: scene, shape: "sheared (sheared)");
+        var plain = Group(groups: groups, scene: scene, shape: "plain (plain)");
         var hinge = Group(groups: groups, scene: scene, shape: "podHinge-right");
         var dummy = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
+        var box = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: plain, program: scene.Program), reading: SdfFieldReading.Render);
 
-        Assert.True(condition: store.Write(geometry: helmet.Sealed, identity: Identity, materials: helmet.MaterialOrder, mesh: dummy));
+        Assert.True(condition: store.Write(geometry: refused.Sealed, identity: Identity, materials: refused.MaterialOrder, mesh: dummy));
+        Assert.True(condition: store.Write(geometry: plain.Sealed, identity: Identity, materials: plain.MaterialOrder, mesh: SdfMeshContour.Bake(field: box, high: plain.High, low: plain.Low, samples: 25)));
 
-        var helmetEntry = Assert.Single(collection: store.EntryPaths());
+        var sound = store.EntryPaths();
 
         Assert.True(condition: store.Write(geometry: hinge.Sealed, identity: Identity, materials: hinge.MaterialOrder, mesh: dummy));
 
-        var damaged = store.EntryPaths().Single(predicate: path => (path != helmetEntry));
+        var damaged = store.EntryPaths().Single(predicate: path => !sound.Contains(value: path));
 
         File.WriteAllBytes(bytes: File.ReadAllBytes(path: damaged)[..20], path: damaged);
 
         var identity = Identity.ToString(format: "x32", provider: null);
-        var (refused, output) = Invoke("mesh", "audit", "--world", world, "--group", "helmet", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+        var (refusal, output) = Invoke("mesh", "audit", "--world", world, "--group", "sheared", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
-        Assert.Equal(expected: 0, actual: refused);
-        Assert.Contains(expectedSubstring: "helmet: field refused: SdfFieldEvaluator cannot interpret", actualString: output);
+        Assert.Equal(expected: 0, actual: refusal);
+        Assert.Contains(expectedSubstring: "sheared (sheared): field refused: SdfFieldEvaluator is warp-free this wave and cannot interpret", actualString: output);
 
-        var (truncated, damage) = Invoke("mesh", "audit", "--world", world, "--group", "podHinge-right", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+        var (audited, report) = Invoke("mesh", "audit", "--world", world, "--group", "plain", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
+
+        Assert.Equal(expected: 0, actual: audited);
+        Assert.Contains(expectedSubstring: "plain (plain): ", actualString: report);
+        Assert.Contains(expectedSubstring: " triangles, ", actualString: report);
+
+        // Mirrored hinges share one geometry, so both read the one damaged entry.
+        var (truncated, damage) = Invoke("mesh", "audit", "--world", world, "--group", "podHinge", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         Assert.Equal(expected: 0, actual: truncated);
+        Assert.Contains(expectedSubstring: "2 group(s) of", actualString: damage);
         Assert.Contains(expectedSubstring: "is truncated", actualString: damage);
 
         var (absent, guidance) = Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
@@ -116,6 +160,28 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--identity", "5", "--build", directory.RootPath), text: "--identity takes 32 hex digits"));
         Assert.Equal(expected: (2, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--build", directory.RootPath, "--backend", "vulkan"), text: "cannot read the bake identity"));
         Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "audit", "--world", malformed), text: "failed to load"));
+        // This build's own identity, read from its assemblies and kernels, keys nothing in an empty store.
+        Assert.Equal(expected: (1, true), actual: Refused(output: Invoke("mesh", "audit", "--world", world, "--group", "podCap-left", "--cache-dir", directory.PathOf(name: "empty")), text: ", build "));
+    }
+    [Fact]
+    public void TheRestScenesSurroundSendsAndAnswersNothing() {
+        var inert = new RestScene.Inert();
+        var answered = false;
+
+        inert.Query(completion: _ => answered = true, query: default!);
+        inert.SubmitIntent(submission: default);
+        inert.SubmitSession(completion: _ => answered = true, request: default!);
+        inert.SubmitCue(eventToken: "cue", site: null);
+        inert.BeginTick(tick: 1UL);
+
+        Assert.False(condition: answered);
+        Assert.Equal(expected: 0L, actual: inert.SubmitEnvelope(payload: default!, principal: default));
+        Assert.Equal(expected: WorldBodyContactMode.Solid, actual: inert.LocalBodyContact(index: 0));
+        Assert.Equal(expected: default, actual: inert.LocalEntityAddress(index: 0));
+        Assert.False(condition: inert.TryResolve(adjacencyName: "east", neighbour: out var neighbour));
+        Assert.Null(@object: neighbour);
+        Assert.Empty(collection: inert.Visuals());
+        Assert.False(condition: inert.TryLocalDepartedFrom(departedFrom: out _, index: 0));
     }
 
     private static (int ExitCode, bool Named) Refused((int ExitCode, string Output) output, string text) =>

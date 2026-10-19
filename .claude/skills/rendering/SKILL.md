@@ -356,9 +356,10 @@ owns its flags.
   shape whose own field is loosest there.
 - **What it cannot read.** The render reading interprets the flare
   (`AxialProfile`) and twist (`RotatePlane`) warps and a non-uniform scale, a
-  sync pair with their `mapCore` cases; a group holding another warp or an
-  `Ellipse` prism reports `field refused`. Mirrored groups (left and right) share
-  one geometry and one stored mesh.
+  sync pair with their `mapCore` cases; a group holding another warp (shear, bumps,
+  a polar fold), a regular polygon, a path or a multi-strand sweep reports `field
+  refused`, and one whose evaluation faults `field failed`. Mirrored groups (left
+  and right) share one geometry and one stored mesh.
 
 ## Performance and cost
 

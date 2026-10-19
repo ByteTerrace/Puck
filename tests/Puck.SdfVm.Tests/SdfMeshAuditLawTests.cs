@@ -133,6 +133,75 @@ public sealed class SdfMeshAuditLawTests {
         Assert.True(condition: (SdfMeshAudit.Distance(field: field, point: Vector3.Zero) < SdfMeshAudit.Distance(field: shapes[1].Field, point: Vector3.Zero)));
     }
 
+    [Fact]
+    public void MalformedTrianglesAreCountedAndFlagged() {
+        var (_, field, shapes) = Fields(program: Sphere());
+        var mesh = SdfMeshContour.Bake(field: field, high: High, low: Low, samples: Samples);
+        var positions = mesh.Positions.ToArray().ToList();
+        var normals = mesh.Normals.ToArray().ToList();
+        var indices = mesh.Indices.ToArray().ToList();
+        var (a, b, c) = (indices[0], indices[1], indices[2]);
+        var top = positions.IndexOf(item: positions.MaxBy(keySelector: static position => position.Y));
+
+        // A copy of the first triangle (its edges then held three times), a sliver with two corners at one point, a
+        // triangle about the sphere's centre where the field has no gradient, and the first vertex's shading normal
+        // reversed.
+        indices.AddRange(collection: [a, b, c]);
+        indices.AddRange(collection: [(uint)top, (uint)top, a]);
+        positions.AddRange(collection: [new Vector3(x: -0.01f, y: -0.01f, z: 0f), new Vector3(x: 0.01f, y: -0.01f, z: 0f), new Vector3(x: 0f, y: 0.02f, z: 0f)]);
+        normals.AddRange(collection: [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ]);
+        indices.AddRange(collection: [(uint)(positions.Count - 3), (uint)(positions.Count - 2), (uint)(positions.Count - 1)]);
+        normals[(int)a] = -normals[(int)a];
+
+        var report = Audit(field: field, mesh: new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: new uint[indices.Count / 3]), shapes: shapes);
+
+        Assert.True(condition: (report.NonManifoldEdges > 0));
+        Assert.True(condition: (report.Slivers > 0));
+        Assert.True(condition: (report.NormalError.Count < report.Triangles));
+        Assert.True(condition: (report.ShadingError.Over > 0));
+        Assert.Contains(collection: report.Clusters, filter: static cluster => (cluster.Shaded > 0));
+    }
+    [Fact]
+    public void AFoldBackAlongAnOpenEdgeIsAFold() {
+        var (_, field, shapes) = Fields(program: Sphere());
+        var mesh = SdfMeshContour.Bake(field: field, high: High, low: Low, samples: Samples);
+        var positions = mesh.Positions.ToArray().ToList();
+        var normals = mesh.Normals.ToArray().ToList();
+        var indices = mesh.Indices.ToArray()[3..].ToList();
+        var (a, b, c) = (mesh.Indices.Span[0], mesh.Indices.Span[1], mesh.Indices.Span[2]);
+
+        // The first triangle is dropped, which opens its edges; a new triangle folds back across its edge a-b, its far
+        // corner a hair off the dropped triangle's.
+        positions.Add(item: (positions[(int)c] + (Vector3.Normalize(value: normals[(int)c]) * 0.001f)));
+        normals.Add(item: normals[(int)c]);
+        indices.AddRange(collection: [b, a, (uint)(positions.Count - 1)]);
+
+        var report = Audit(field: field, mesh: new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: new uint[indices.Count / 3]), shapes: shapes);
+
+        Assert.True(condition: (report.Folds > 0));
+        Assert.Contains(collection: report.Clusters, filter: static cluster => (cluster.Folded > 0));
+    }
+    [Fact]
+    public void TheWorldGroupHoldsTheSegmentsNoInstanceOwns() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder
+            .ResetPoint().Translate(offset: new Vector3(x: 2f, y: 0f, z: 0f)).Sphere(material: material, radius: Radius)
+            .BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f).ResetPoint().Sphere(material: material, radius: Radius).EndInstance()
+            .Build();
+        var groups = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 40f, program: program, transforms: []);
+        var world = groups[^1];
+        var field = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: world, program: program), reading: SdfFieldReading.Render);
+
+        Assert.Equal(expected: 2, actual: groups.Count);
+        Assert.True(condition: world.IsWorld);
+        Assert.Equal(expected: [0, 1, 2], actual: world.InstructionIndices(program: program));
+        Assert.Equal(expected: -Radius, actual: SdfMeshAudit.Distance(field: field, point: new Vector3(x: 2f, y: 0f, z: 0f)), tolerance: 1e-4f);
+        Assert.True(condition: SdfMeshAudit.TryEvaluator(field: out _, program: SdfMeshAudit.Field(group: world, program: program), refusal: out _));
+        Assert.False(condition: SdfMeshAudit.TryEvaluator(field: out _, program: Program(emit: static (builder, material) => builder.Shear(cubic: 0f, driver: SdfAxis.Y, linear: 0.2f, quadratic: 0f, target: SdfAxis.X).Sphere(material: material, radius: Radius)), refusal: out var refusal));
+        Assert.StartsWith(expectedStartString: "refused: ", actualString: refusal);
+    }
+
     private sealed class Near : IEqualityComparer<Vector3> {
         public bool Equals(Vector3 x, Vector3 y) => (Vector3.Distance(value1: x, value2: y) < 1e-3f);
         public int GetHashCode(Vector3 obj) => 0;

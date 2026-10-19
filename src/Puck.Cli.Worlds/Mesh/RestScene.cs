@@ -39,7 +39,11 @@ public sealed class RestScene {
     // The spacing, in metres, between the bodies the scene stands, past any creation's reach.
     private const float BodySpacing = 8f;
 
-    private RestScene(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, IReadOnlyList<RestBody> bodies) {
+    // The frame's instances by the placements and prototypes they stand for.
+    private readonly ISdfPickMap? m_picks;
+
+    private RestScene(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, IReadOnlyList<RestBody> bodies, ISdfPickMap? picks) {
+        m_picks = picks;
         Program = program;
         Transforms = transforms;
         Bodies = bodies;
@@ -58,18 +62,19 @@ public sealed class RestScene {
     /// <returns>The scene.</returns>
     public static RestScene Compose(WorldDefinition definition, string sourcePath) {
         var routes = new WorldSeatAuthorityRouter();
+        var inert = new Inert();
         var client = new WorldClient(
             composition: new WorldCompositionState(),
             definition: definition,
-            roster: new PlayerRoster(definition: definition, link: new SilentLink(), seatBindings: new WorldSeatBindings(definition: definition)),
+            roster: new PlayerRoster(definition: definition, link: inert, seatBindings: new WorldSeatBindings(definition: definition)),
             seatRouter: routes
         );
         var pool = new WorldStampPool();
         var emitter = new WorldSceneEmitter(
             animator: pool,
-            audio: new SilentAudio(),
+            audio: inert,
             client: client,
-            continuum: new WorldContinuum(client, routes, new NoNeighbours()),
+            continuum: new WorldContinuum(client, routes, inert),
             text: new WorldTextCatalog(source: new WorldDefinitionSource(Definition: definition, SourcePath: sourcePath))
         );
         var dresser = new KeptFrame();
@@ -95,10 +100,12 @@ public sealed class RestScene {
 
         client.DeliverSnapshot(snapshot: new WorldSnapshot(Authority: "rest", Entries: entries.ToArray(), Revision: 1, StepTicks: 1UL, Tick: 1UL));
         client.UpdateRenderPoses(alpha: 1f);
+        ISdfPickMap? picks = null;
+
         // Two frames: the first registers the bodies' stamps, the second packs their poses.
         for (var frame = 0; (frame < 2); frame++) {
             emitter.Tick(deltaSeconds: 0f);
-            _ = frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64);
+            picks = frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64).PickMap;
         }
 
         var bodies = new List<RestBody>();
@@ -113,7 +120,7 @@ public sealed class RestScene {
             bodies.Add(item: new RestBody(BodyIndex: entry.Index, Creation: creation, Origin: entry.Position, RootSlot: root, Scale: look.Scale));
         }
 
-        return new RestScene(bodies: bodies, program: dresser.Program!, transforms: dresser.Transforms);
+        return new RestScene(bodies: bodies, picks: picks, program: dresser.Program!, transforms: dresser.Transforms);
     }
     /// <summary>Returns the body whose pool carries a dynamic group's slot, or <see langword="null"/> for a static
     /// group.</summary>
@@ -127,7 +134,7 @@ public sealed class RestScene {
     /// <returns>The label.</returns>
     public string Label(SdfMeshBakeGroup group, RestBody? owner) {
         if (group.IsWorld) { return "world segments"; }
-        if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{group.Instances - 1}" : string.Empty)}"; }
+        if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{group.Instances - 1}" : string.Empty)}{Placed(instance: -(group.Selector + 1))}"; }
         if (owner is null) { return $"slot {group.Slot}"; }
 
         return $"slot {group.Slot} {owner.Creation.Id} body {owner.BodyIndex} {SlotName(owner: owner, slot: group.Slot)}";
@@ -166,6 +173,12 @@ public sealed class RestScene {
         return point => (transform.Position + Vector3.Transform(value: point, rotation: turn));
     }
 
+    // The placement and prototype a static instance stands for, as the frame's pick map names it; empty where it names
+    // none.
+    private string Placed(int instance) =>
+        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: (uint)(instance + 1))) is WorldPickTarget { Placement: { } placement } target)
+            ? $" {placement} ({target.Prototype})"
+            : string.Empty);
     private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + WorldStampPool.SlotsPerPlacement))));
     private static string SlotName(RestBody owner, int slot) {
         var shapes = (owner.Creation.EngineDocument.Shapes ?? []);
@@ -193,25 +206,34 @@ public sealed class RestScene {
             };
         }
     }
-    // The link of a client that sends nothing: the rest scene submits no intent and asks no question.
-    private sealed class SilentLink : IServerLink {
+
+    /// <summary>The world around a rest scene, which has none: a server link that sends nothing and is answered nothing,
+    /// an audio sink that plays nothing, and no neighbouring worlds, every body solid.</summary>
+    public sealed class Inert : IServerLink, IWorldAudioCueSink, IWorldAdjacencySource {
+        /// <inheritdoc/>
         public void Query(WorldQuery query, Action<QueryAnswer> completion) { }
+        /// <inheritdoc/>
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => 0L;
+        /// <inheritdoc/>
         public void SubmitIntent(in IntentSubmission submission) { }
+        /// <inheritdoc/>
         public void SubmitSession(SessionRequest request, Action<SessionReply> completion) { }
-    }
-    private sealed class SilentAudio : IWorldAudioCueSink {
+        /// <inheritdoc/>
         public void SubmitCue(string eventToken, Vector3? site) { }
-    }
-    private sealed class NoNeighbours : IWorldAdjacencySource {
+        /// <inheritdoc/>
         public void BeginTick(ulong tick) { }
+        /// <inheritdoc/>
         public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
+        /// <inheritdoc/>
         public WorldEntityAddress LocalEntityAddress(int index) => default;
+        /// <inheritdoc/>
         public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
             neighbour = null;
             return false;
         }
+        /// <inheritdoc/>
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        /// <inheritdoc/>
         public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
             departedFrom = default;
             return false;

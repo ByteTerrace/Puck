@@ -347,6 +347,32 @@ public static class SdfMeshAudit {
             Vertices: positions.Length
         );
     }
+    /// <summary>Builds the evaluator that reads a field as the renderer samples it (<see cref="SdfFieldReading.Render"/>),
+    /// or says why none reads it: a program the evaluator refuses by name, or one whose arithmetic faults, which is an
+    /// evaluator defect reported against the field rather than thrown through an audit of many.</summary>
+    /// <param name="program">The field (<see cref="Field"/>, <see cref="ShapeFields"/>).</param>
+    /// <param name="field">The evaluator, when this returns <see langword="true"/>.</param>
+    /// <param name="refusal">Why no evaluator reads the field, when this returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the evaluator reads the field.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
+    public static bool TryEvaluator(SdfProgram program, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfFieldEvaluator? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: false)] out string? refusal) {
+        ArgumentNullException.ThrowIfNull(argument: program);
+
+        try {
+            field = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+            refusal = null;
+
+            return true;
+        } catch (Exception exception) when (exception is ArgumentException or ArithmeticException) {
+            var message = exception.Message;
+            var end = message.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
+
+            field = null;
+            refusal = $"{((exception is ArgumentException) ? "refused" : "failed")}: {((end < 0) ? message : message[..(end + 1)])}";
+
+            return false;
+        }
+    }
     /// <summary>Reads a field at a point in its frame.</summary>
     /// <param name="field">The field.</param>
     /// <param name="point">The point, in metres.</param>
@@ -641,8 +667,8 @@ public static class SdfMeshAudit {
         return axis;
     }
     // Which shape makes the field loose at each point, tallied one entry a name, most first: of the shapes whose own
-    // surfaces lie within reach of the point, the one whose own field is loosest there; the nearest when none is within
-    // reach.
+    // surfaces lie within reach of the point, the one whose own field is loosest there, or of them all when none is
+    // within reach.
     private static SdfMeshAuditShapeCount[] Tally(List<Vector3> points, IReadOnlyList<(string Name, SdfFieldEvaluator Field)> shapes, float reach, float step, int count) {
         if (shapes.Count == 0) { return []; }
 
@@ -657,9 +683,7 @@ public static class SdfMeshAudit {
             if (near.Length == 0) { continue; }
 
             var within = near.Where(predicate: shape => (shape.Distance <= reach)).ToArray();
-            var named = ((within.Length == 0)
-                ? near.MinBy(keySelector: static shape => shape.Distance).Name
-                : within.MinBy(keySelector: shape => Slope(field: shape.Field, point: point, step: step).Length()).Name);
+            var named = ((within.Length > 0) ? within : near).MinBy(keySelector: shape => Slope(field: shape.Field, point: point, step: step).Length()).Name;
 
             tally[named] = (tally.GetValueOrDefault(key: named) + 1);
         }
