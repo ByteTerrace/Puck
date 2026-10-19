@@ -14,32 +14,30 @@ public sealed partial class SdfProgramBuilder {
         ArgumentOutOfRangeException.ThrowIfNegative(shapeCount);
         m_reservedPathWords = checked((m_reservedPathWords + ((shapeCount * SdfPathProfile.MaxEdges) * 8)));
     }
-    /// <summary>Emits one bounded, render-only path extrusion. XY scale stretches the finished profile, including
-    /// its stroke; depth is independent. Flattening happens once, never during a ray query. Invalid geometry or an
-    /// exceeded subdivision budget throws ArgumentException. No field inflation hides approximation error.</summary>
+    /// <summary>Emits one bounded, render-only path extrusion. XY scale places the finished profile's edges, so a fill
+    /// keeps its exact distance at any scale; a stroke stays a run of round disks, its radii scaled by the geometric mean
+    /// of the two factors (the factor itself when they agree). Depth is independent. Flattening happens once, never
+    /// during a ray query. Invalid geometry or an exceeded subdivision budget throws ArgumentException. No field
+    /// inflation hides approximation error.</summary>
     public SdfProgramBuilder Path(SdfPathProfile profile, Vector2 scale, float halfDepth, int material,
         SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         ArgumentNullException.ThrowIfNull(profile);
         RequirePositive(scale.X, nameof(scale), "Path X scale");
         RequirePositive(scale.Y, nameof(scale), "Path Y scale");
         RequirePositive(halfDepth, nameof(halfDepth), "Path half-depth");
-        // Keep circular stroke cross-sections in profile space. The shared scale op supplies the conservative
-        // min-axis distance correction for anisotropic XY, without changing the authored zero set.
+
+        var radiusScale = MathF.Sqrt(x: (scale.X * scale.Y));
         var edges = profile.Compile();
         var reach = 0f;
 
-        foreach (var edge in edges) {
-            reach = MathF.Max(x: reach, y: MathF.Max(x: (edge.A.Length() + edge.RadiusA), y: (edge.B.Length() + edge.RadiusB)));
-        }
-        // Scale Z by the smaller XY factor too, and compensate the authored depth. A uniformly resized
-        // outline then keeps an exact distance in Z instead of needlessly shortening every frontal ray step.
-        var depthScale = MathF.Min(x: scale.X, y: scale.Y);
-        var localDepth = (halfDepth / depthScale);
+        for (var index = 0; (index < edges.Length); index++) {
+            var edge = edges[index];
 
-        RequirePositive(localDepth, nameof(halfDepth), "Scaled path half-depth");
-        Scale(scale: new Vector3(value: scale, z: depthScale));
+            edges[index] = new SdfPathEdge(A: (edge.A * scale), B: (edge.B * scale), RadiusA: (edge.RadiusA * radiusScale), RadiusB: (edge.RadiusB * radiusScale));
+            reach = MathF.Max(x: reach, y: MathF.Max(x: (edges[index].A.Length() + edges[index].RadiusA), y: (edges[index].B.Length() + edges[index].RadiusB)));
+        }
         m_paths.Add(item: new(m_instructions.Count, edges));
-        return Shape(dimensions: new Vector4(0f, edges.Length, reach, localDepth), material: material,
+        return Shape(dimensions: new Vector4(0f, edges.Length, reach, halfDepth), material: material,
             shape: SdfShapeType.Path, blend: blend, smooth: smooth, detail: detail,
             derived1: ((profile.Stroke is null) ? 0f : 1f));
     }

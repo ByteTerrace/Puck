@@ -528,7 +528,11 @@ public static class WorldPlacementStamper {
                 placementRotation: rotation,
                 reflectionNormal: instance.ReflectionNormal
             );
-            if (hasText) {
+            // Text that carves the shapes (engraved) or takes their noise stays inside their scope; embossed text on a
+            // noiseless creation bakes as its own detailed group after it, as in the per-shape branch above.
+            var textApart = (hasText && (creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)));
+
+            if (hasText && !textApart) {
                 EmitTextRuns(instance: instance);
             }
             if (
@@ -550,6 +554,16 @@ public static class WorldPlacementStamper {
                 _ = builder.PopField();
             }
             _ = builder.EndInstance();
+
+            if (textApart) {
+                _ = builder.BeginInstance(
+                    boundCenter: instance.Origin,
+                    boundRadius: (reach + PlacementBoundMargin),
+                    detail: TextDetail(creation: creation, scale: placement.Scale)
+                );
+                EmitTextRuns(instance: instance);
+                _ = builder.EndInstance();
+            }
         }
     }
 

@@ -16,7 +16,7 @@ let gallerySpacing = 3
 
 let uniformRow = ["shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone", "shape-cone", "shape-superellipsoid", "shape-plane"]
 let stretchedRow = ["shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz", "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"]
-let extrudeRow = ["shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy", "shape-ellipse", "shape-chamfered-rectangle", "shape-convex", "shape-path-fill", "shape-path-stroke"]
+let extrudeRow = ["shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy", "shape-ellipse", "shape-chamfered-rectangle", "shape-convex", "shape-path-fill", "shape-path-stroke", "shape-path-stroke-xy"]
 let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", "shape-revolve-polygon-6", "shape-revolve-ellipse", "shape-revolve-chamfered-rectangle", "shape-revolve-convex"]
 let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
 
@@ -478,6 +478,42 @@ template galleryPrototypes() {
         scale [0.8, 0.8, 0.08]
       }
       exhibit(label: "PATH STROKE")
+    }
+  }
+
+  prototype "shape-path-stroke-xy" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            stroke {
+              radiusStart: 0.08
+              radiusEnd: 0.025
+              smooth: true
+              from: 0
+              to: 1
+            }
+            contours [
+              {
+                start [-0.5, 0]
+                segments [
+                  {
+                    control [0, -0.8]
+                    end [0.5, 0]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        scale [1.1, 0.5, 0.08]
+      }
+      exhibit(label: "PATH STROKE XY")
     }
   }
 

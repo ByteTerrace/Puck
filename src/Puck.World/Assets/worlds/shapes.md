@@ -16,7 +16,7 @@ scope or bound reaching its siblings. Exhibits stand 3 m apart from x = 14.
 |---|---|---|
 | Uniform | 14 | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
 | Stretched | 19 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3) |
-| Extruded profiles | 24 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke |
+| Extruded profiles | 24 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
 | Revolved profiles | 29 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
 | Sweeps and facets | 34 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
 
