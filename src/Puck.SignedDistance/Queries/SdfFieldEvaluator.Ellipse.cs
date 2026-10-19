@@ -30,8 +30,8 @@ public sealed partial class SdfFieldEvaluator {
         );
     // The signed Euclidean distance from p to the ellipse of semi-axes (semiX, semiY), negative inside: Eberly's robust
     // projection, whose parameter is the one root of F(s) = (r·z0 / (s + r))² + (z1 / (s + 1))² − 1 on its bracket, bisected
-    // to the format's resolution, so the answer is exact to Q48.16 and the same on every machine. The shader answers the
-    // same distance in closed form (sdfEllipse2D in field/sdf-ellipse.hlsli).
+    // to the format's resolution, so the answer is exact to Q48.16 and the same on every machine. The shader bisects the
+    // same root in float (sdfEllipse2D in field/sdf-ellipse.hlsli, KEEP IN SYNC).
     private static FixedQ4816 SdfEllipse2D(FixedVector2 p, FixedQ4816 semiX, FixedQ4816 semiY) {
         var y0 = FixedQ4816.Abs(value: p.X);
         var y1 = FixedQ4816.Abs(value: p.Y);
