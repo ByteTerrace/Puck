@@ -314,6 +314,7 @@ bindingOverlays [
             entries [
               {
                 channel: "forward"
+                id: "forward"
                 scale: 1
                 sources [
                   "keyboard.w"
@@ -322,6 +323,7 @@ bindingOverlays [
               }
               {
                 channel: "forward"
+                id: "back"
                 scale: -1
                 sources [
                   "keyboard.s"
@@ -330,6 +332,7 @@ bindingOverlays [
               }
               {
                 channel: "strafe"
+                id: "left"
                 scale: -1
                 sources [
                   "keyboard.a"
@@ -337,6 +340,7 @@ bindingOverlays [
               }
               {
                 channel: "strafe"
+                id: "right"
                 scale: 1
                 sources [
                   "keyboard.d"
@@ -344,6 +348,7 @@ bindingOverlays [
               }
               {
                 channel: "turn"
+                id: "turnLeft"
                 scale: 1
                 sources [
                   "keyboard.arrowLeft"
@@ -351,6 +356,7 @@ bindingOverlays [
               }
               {
                 channel: "turn"
+                id: "turnRight"
                 scale: -1
                 sources [
                   "keyboard.arrowRight"
@@ -358,18 +364,21 @@ bindingOverlays [
               }
               {
                 command: "player.move.strafe"
+                id: "move"
                 sources [
                   "gamepad.leftStick"
                 ]
               }
               {
                 command: "player.look.steer"
+                id: "look"
                 sources [
                   "gamepad.rightStick"
                 ]
               }
               {
                 command: "player.look.recenter"
+                id: "recenter"
                 label: "Recenter"
                 sources [
                   "gamepad.rightStickPress"
@@ -377,12 +386,14 @@ bindingOverlays [
               }
               {
                 command: "player.orbit"
+                id: "orbit"
                 sources [
                   "mouse.button1"
                 ]
               }
               {
                 command: "player.steer"
+                id: "steer"
                 label: "Steer"
                 sources [
                   "mouse.button2"
@@ -390,6 +401,7 @@ bindingOverlays [
               }
               {
                 channel: "flight"
+                id: "flight"
                 scale: 1
                 sources [
                   "keyboard.f"
@@ -398,6 +410,7 @@ bindingOverlays [
               }
               {
                 channel: "rise"
+                id: "rise"
                 scale: 1
                 sources [
                   "keyboard.space"
@@ -406,6 +419,7 @@ bindingOverlays [
               }
               {
                 channel: "jump"
+                id: "jump"
                 scale: 1
                 sources [
                   "keyboard.space"
@@ -414,6 +428,7 @@ bindingOverlays [
               }
               {
                 channel: "rise"
+                id: "descend"
                 scale: -1
                 sources [
                   "keyboard.controlLeft"
@@ -8020,7 +8035,7 @@ rule "blink-open" {
   blinkAt[$each] = $tick + blinkRest
 }
 
-// The seat camera's feel: pointer orbit at a milliradian a pixel, and the look stick (or a typed player.look) at 2.6
+// The seat camera's feel: pointer orbit at a milliradian a pixel, and the look stick (or a typed player.look) at 3.5
 // radians a second at full deflection. Without it every look input turns the camera by zero.
 seatDefaults {
   seatCameraFeel {

@@ -1,0 +1,475 @@
+// The on-screen controls of the worlds the Moth walks: the drawn cursor, a key-hint strip, the icons every badge and
+// action draws, the binding bar over the Moth's own controls (`avatars/moth.puck`'s `bare` overlay), and the play
+// wheel. The debug world and the garden import it beside the theme, so a seat keeps its bar and wheel through the
+// portal:
+//
+//   import "theme"
+//   import "controls"
+//
+// Hold Tab (or LB) to open the play wheel, aim it with the mouse (or the right stick) and release to run the sector
+// under the pointer; releasing at the hub cancels. The bar shows the keyboard while `state.bar.layout` reads `keys` and
+// the pad while it reads `pad`; the wheel's Keys / pad sector flips it, as does `world.state.cell.set bar layout pad`.
+// Every action icon is ordinary state: a plate's icon is `state.barIcons.<entry id>`, a sector's label and icon
+// `state.wheelLabels.<sector id>` and `state.wheelIcons.<sector id>`, each naming a row of `icons`.
+
+let mono = "jetbrains-mono-regular"
+
+// The cursor and the bar stay up while the seat is playing and fade a second after six seconds without input.
+let shownWhilePlaying = {
+  $type: "recently"
+  fact: SeatInput
+  windowSeconds: 6
+  fadeSeconds: 1
+}
+
+hud {
+  defaults {
+    enabled: true
+    // A small ring drawn at the pointer for three seconds after it moves, lit in the accent while it hovers something
+    // within 48 m.
+    cursor {
+      hoverRadius: 48
+      sizePx: 7
+      role: TextPrimary
+      visible {
+        $type: "recently"
+        fact: PointerMotion
+        windowSeconds: 3
+        fadeSeconds: 0.5
+      }
+    }
+  }
+  panels [
+    {
+      id: "hints"
+      rect { x: 0.012, y: 0.016, width: 0.3, height: 0.034 }
+      layer: Under
+      style: Strip
+      visible: shownWhilePlaying
+      elements [
+        {
+          id: "keys"
+          kind: Text
+          rect { x: 0.03, y: 0, width: 0.94, height: 1 }
+          style: Dim
+          text: "` console   Tab/LB wheel   F2/Back build"
+        }
+      ]
+    }
+  ]
+}
+
+icons {
+  rows [
+    // Key caps.
+    { name: "key.w", label: "W" }
+    { name: "key.a", label: "A" }
+    { name: "key.s", label: "S" }
+    { name: "key.d", label: "D" }
+    { name: "key.f", label: "F" }
+    { name: "key.1", label: "1" }
+    { name: "key.2", label: "2" }
+    { name: "key.3", label: "3" }
+    { name: "key.4", label: "4" }
+    { name: "key.5", label: "5" }
+    { name: "key.f2", label: "F2" }
+    { name: "key.f3", label: "F3" }
+    { name: "key.f4", label: "F4" }
+    { name: "key.space", glyph { font: mono, glyph: "U+2423" } }
+    { name: "key.ctrl", glyph { font: mono, glyph: "U+2303" } }
+    { name: "key.tab", glyph { font: mono, glyph: "U+21E5" } }
+    { name: "mouse.left", label: "LM" }
+    { name: "mouse.right", label: "RM" }
+
+    // Pad buttons: the Xbox letters by default, with the PlayStation shapes and the Switch's swapped letters.
+    { name: "pad.a", label: "A" }
+    { name: "pad.b", label: "B" }
+    { name: "pad.x", label: "X" }
+    { name: "pad.y", label: "Y" }
+    { name: "pad.cross", glyph { font: mono, glyph: "U+2715" } }
+    { name: "pad.circle", glyph { font: mono, glyph: "U+25CB" } }
+    { name: "pad.square", glyph { font: mono, glyph: "U+25A1" } }
+    { name: "pad.triangle", glyph { font: mono, glyph: "U+25B3" } }
+    { name: "pad.lb", label: "LB" }
+    { name: "pad.l1", label: "L1" }
+    { name: "pad.l", label: "L" }
+    { name: "pad.rb", label: "RB" }
+    { name: "pad.r1", label: "R1" }
+    { name: "pad.r", label: "R" }
+    { name: "pad.ls", label: "LS" }
+    { name: "pad.rs", label: "RS" }
+    { name: "pad.r3", label: "R3" }
+    { name: "pad.back", label: "BK" }
+    { name: "pad.minus", label: "-" }
+
+    // Arrows, for the d-pad and for movement.
+    { name: "arrow.up", glyph { font: mono, glyph: "U+2191" } }
+    { name: "arrow.down", glyph { font: mono, glyph: "U+2193" } }
+    { name: "arrow.left", glyph { font: mono, glyph: "U+2190" } }
+    { name: "arrow.right", glyph { font: mono, glyph: "U+2192" } }
+
+    // Actions.
+    { name: "act.turnLeft", glyph { font: mono, glyph: "U+21A9" } }
+    { name: "act.turnRight", glyph { font: mono, glyph: "U+21AA" } }
+    { name: "act.move", glyph { font: mono, glyph: "U+2295" } }
+    { name: "act.look", glyph { font: mono, glyph: "U+25CE" } }
+    { name: "act.recenter", glyph { font: mono, glyph: "U+2302" } }
+    { name: "act.orbit", glyph { font: mono, glyph: "U+25CC" } }
+    { name: "act.steer", glyph { font: mono, glyph: "U+279C" } }
+    { name: "act.flight", glyph { font: mono, glyph: "U+26A1" } }
+    { name: "act.rise", glyph { font: mono, glyph: "U+25B2" } }
+    { name: "act.descend", glyph { font: mono, glyph: "U+25BC" } }
+    { name: "act.jump", glyph { font: mono, glyph: "U+21A5" } }
+    { name: "act.camera1", label: "C1" }
+    { name: "act.camera2", label: "C2" }
+    { name: "act.camera3", label: "C3" }
+    { name: "act.camera4", label: "C4" }
+    { name: "act.camera5", label: "C5" }
+    { name: "act.annotate", glyph { font: mono, glyph: "U+22A1" } }
+    { name: "act.isolate", glyph { font: mono, glyph: "U+25C9" } }
+    { name: "act.build", glyph { font: mono, glyph: "U+229E" } }
+    { name: "act.console", label: ">_" }
+    { name: "act.where", glyph { font: mono, glyph: "U+25C8" } }
+    { name: "act.channels", glyph { font: mono, glyph: "U+2261" } }
+    { name: "act.layout", glyph { font: mono, glyph: "U+2328" } }
+    { name: "act.respawn", glyph { font: mono, glyph: "U+23CE" } }
+    { name: "act.disengage", glyph { font: mono, glyph: "U+238B" } }
+  ]
+
+  // Which cap each physical control wears on the bar, its modifier row and the build bar.
+  badges [
+    { source: "keyboard.w", icon: "key.w" }
+    { source: "keyboard.a", icon: "key.a" }
+    { source: "keyboard.s", icon: "key.s" }
+    { source: "keyboard.d", icon: "key.d" }
+    { source: "keyboard.f", icon: "key.f" }
+    { source: "keyboard.1", icon: "key.1" }
+    { source: "keyboard.2", icon: "key.2" }
+    { source: "keyboard.3", icon: "key.3" }
+    { source: "keyboard.4", icon: "key.4" }
+    { source: "keyboard.5", icon: "key.5" }
+    { source: "keyboard.f2", icon: "key.f2" }
+    { source: "keyboard.f3", icon: "key.f3" }
+    { source: "keyboard.f4", icon: "key.f4" }
+    { source: "keyboard.space", icon: "key.space" }
+    { source: "keyboard.controlLeft", icon: "key.ctrl" }
+    { source: "keyboard.tab", icon: "key.tab" }
+    { source: "mouse.button1", icon: "mouse.left" }
+    { source: "mouse.button2", icon: "mouse.right" }
+    {
+      source: "gamepad.buttonSouth"
+      icon: "pad.a"
+      overrides [{ family: "PlayStation5", icon: "pad.cross" }, { family: "SwitchPro", icon: "pad.b" }]
+    }
+    {
+      source: "gamepad.buttonEast"
+      icon: "pad.b"
+      overrides [{ family: "PlayStation5", icon: "pad.circle" }, { family: "SwitchPro", icon: "pad.a" }]
+    }
+    {
+      source: "gamepad.buttonWest"
+      icon: "pad.x"
+      overrides [{ family: "PlayStation5", icon: "pad.square" }, { family: "SwitchPro", icon: "pad.y" }]
+    }
+    {
+      source: "gamepad.buttonNorth"
+      icon: "pad.y"
+      overrides [{ family: "PlayStation5", icon: "pad.triangle" }, { family: "SwitchPro", icon: "pad.x" }]
+    }
+    {
+      source: "gamepad.leftShoulder"
+      icon: "pad.lb"
+      overrides [{ family: "PlayStation5", icon: "pad.l1" }, { family: "SwitchPro", icon: "pad.l" }]
+    }
+    {
+      source: "gamepad.rightShoulder"
+      icon: "pad.rb"
+      overrides [{ family: "PlayStation5", icon: "pad.r1" }, { family: "SwitchPro", icon: "pad.r" }]
+    }
+    { source: "gamepad.leftStick", icon: "pad.ls" }
+    { source: "gamepad.rightStick", icon: "pad.rs" }
+    { source: "gamepad.rightStickPress", icon: "pad.r3" }
+    {
+      source: "gamepad.back"
+      icon: "pad.back"
+      overrides [{ family: "SwitchPro", icon: "pad.minus" }]
+    }
+    { source: "gamepad.dpadUp", icon: "arrow.up" }
+    { source: "gamepad.dpadDown", icon: "arrow.down" }
+    { source: "gamepad.dpadLeft", icon: "arrow.left" }
+    { source: "gamepad.dpadRight", icon: "arrow.right" }
+  ]
+}
+
+state {
+  world {
+    // The bar's live layout: `keys` or `pad`.
+    table bar {
+      layout = "keys"
+    }
+
+    // The icon each Moth control's plate shows, by its binding entry id.
+    table barIcons {
+      forward = "arrow.up"
+      back = "arrow.down"
+      left = "arrow.left"
+      right = "arrow.right"
+      turnLeft = "act.turnLeft"
+      turnRight = "act.turnRight"
+      move = "act.move"
+      look = "act.look"
+      recenter = "act.recenter"
+      orbit = "act.orbit"
+      steer = "act.steer"
+      flight = "act.flight"
+      rise = "act.rise"
+      descend = "act.descend"
+      jump = "act.jump"
+      camera1 = "act.camera1"
+      camera2 = "act.camera2"
+      camera3 = "act.camera3"
+      camera4 = "act.camera4"
+      camera5 = "act.camera5"
+      annotate = "act.annotate"
+      jetpackAlone = "act.isolate"
+      build = "act.build"
+    }
+
+    // The play wheel's sector labels and icons, by sector id; `cancel` is the hub's label while nothing is hovered.
+    table wheelLabels {
+      console = "Console"
+      build = "Build"
+      where = "Where"
+      channels = "Channels"
+      annotate = "Annotate"
+      layout = "Keys / pad"
+      respawn = "Respawn"
+      disengage = "Disengage"
+      cancel = "Cancel"
+    }
+
+    table wheelIcons {
+      console = "act.console"
+      build = "act.build"
+      where = "act.where"
+      channels = "act.channels"
+      annotate = "act.annotate"
+      layout = "act.layout"
+      respawn = "act.respawn"
+      disengage = "act.disengage"
+    }
+  }
+}
+
+bindingOverlays [
+  // The bar rides the Moth's own overlay: it shows the page that overlay rests on.
+  {
+    id: "bare"
+    bindingBar {
+      slotSet [
+        "keyboard.w"
+        "keyboard.a"
+        "keyboard.s"
+        "keyboard.d"
+        "keyboard.space"
+        "keyboard.controlLeft"
+        "keyboard.f"
+        "keyboard.1"
+        "keyboard.2"
+        "keyboard.3"
+        "keyboard.4"
+        "keyboard.5"
+        "keyboard.f2"
+        "keyboard.f3"
+        "keyboard.f4"
+        "mouse.button1"
+        "mouse.button2"
+        "gamepad.leftStick"
+        "gamepad.rightStick"
+        "gamepad.rightStickPress"
+        "gamepad.back"
+        "gamepad.buttonNorth"
+        "gamepad.buttonWest"
+        "gamepad.buttonEast"
+        "gamepad.buttonSouth"
+      ]
+      banks [
+        {
+          id: "play"
+          pageId: "base"
+          alpha: 1
+        }
+      ]
+      iconRow: "state.barIcons"
+      layout: "keys"
+      layoutCell: "state.bar.layout"
+      visible: shownWhilePlaying
+      layouts {
+        // Pitches from the bottom-centre anchor, x right and y up: the WASD cross on the left, then the vertical and
+        // flight keys and the mouse buttons, with the camera and function keys on the row above.
+        keys {
+          tables {
+            move [
+              { source: "keyboard.w", x: 0, y: 1, badge [0, 1] }
+              { source: "keyboard.a", x: -1, y: 0, badge [-1, 0] }
+              { source: "keyboard.s", x: 0, y: 0, badge [0, -1] }
+              { source: "keyboard.d", x: 1, y: 0, badge [1, 0] }
+            ]
+            act [
+              { source: "keyboard.space", x: 0, y: 0 }
+              { source: "keyboard.controlLeft", x: 1, y: 0 }
+              { source: "keyboard.f", x: 2, y: 0 }
+            ]
+            mouse [
+              { source: "mouse.button1", x: 0, y: 0 }
+              { source: "mouse.button2", x: 1, y: 0 }
+            ]
+            cameras [
+              { source: "keyboard.1", x: 0, y: 0 }
+              { source: "keyboard.2", x: 1, y: 0 }
+              { source: "keyboard.3", x: 2, y: 0 }
+              { source: "keyboard.4", x: 3, y: 0 }
+              { source: "keyboard.5", x: 4, y: 0 }
+            ]
+            functions [
+              { source: "keyboard.f2", x: 0, y: 0 }
+              { source: "keyboard.f3", x: 1, y: 0 }
+              { source: "keyboard.f4", x: 2, y: 0 }
+            ]
+          }
+          banks {
+            play {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+          }
+        }
+
+        // The left stick and Back on the left, the right stick and its press in the middle, the face diamond right.
+        pad {
+          tables {
+            left [
+              { source: "gamepad.leftStick", x: 0, y: 0 }
+              { source: "gamepad.back", x: 2, y: 0 }
+            ]
+            right [
+              { source: "gamepad.rightStick", x: 0, y: 0 }
+              { source: "gamepad.rightStickPress", x: 1, y: 0 }
+            ]
+            face [
+              { source: "gamepad.buttonNorth", x: 0, y: 1, badge [0, 1] }
+              { source: "gamepad.buttonWest", x: -1, y: 0, badge [-1, 0] }
+              { source: "gamepad.buttonEast", x: 1, y: 0, badge [1, 0] }
+              { source: "gamepad.buttonSouth", x: 0, y: -1, badge [0, -1] }
+            ]
+          }
+          banks {
+            play {
+              pieces [
+                { table: "left", at [-5, 0] }
+                { table: "right", at [-1, 0] }
+                { table: "face", at [4, 0] }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
+  // the build toggle again under an id, so its plate carries an icon.
+  {
+    id: "play-wheel"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              {
+                command: "player.build"
+                id: "build"
+                label: "Build"
+                sources ["keyboard.f2", "gamepad.back"]
+              }
+            ]
+          }
+        }
+        {
+          chord ["keyboard.tab"]
+          group: "play"
+          page {
+            id: "wheel-keys"
+            inherits: "base"
+            label: "Wheel"
+            entries [
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["keyboard.tab"]
+              }
+            ]
+          }
+        }
+        {
+          chord ["gamepad.leftShoulder"]
+          group: "play"
+          page {
+            id: "wheel-pad"
+            inherits: "base"
+            label: "Wheel"
+            entries [
+              {
+                command: "player.wheel.select"
+                sources ["gamepad.rightStick"]
+              }
+              {
+                command: "player.wheel.commit"
+                activateOn: Completed
+                sources ["gamepad.leftShoulder"]
+              }
+            ]
+          }
+        }
+      ]
+      wheels [
+        {
+          id: "play-primary"
+          group: "play"
+          holdPages ["wheel-keys", "wheel-pad"]
+          labelRow: "state.wheelLabels"
+          iconRow: "state.wheelIcons"
+          style {
+            placement: ViewportCenter
+          }
+          rings [
+            {
+              id: "play-acts"
+              label: "Act"
+              entries [
+                { id: "console", command: "console", sources: null }
+                { id: "build", command: "player.build", sources: null }
+                { id: "where", command: "body.where", sources: null }
+                { id: "channels", command: "body.channels", sources: null }
+                { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
+                { id: "layout", command: "player.state.cell.toggle", text: "bar layout keys pad", sources: null }
+                { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
+                { id: "disengage", command: "body.disengage", sources: null }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -45,25 +45,42 @@ switch immediately so a close-up does not render overlapping camera transitions.
 
 ## Controls
 
-| Input | Action |
-|---|---|
-| W / S | Move forward / backward |
-| A / D | Strafe |
-| Left / right arrows | Turn |
-| Space | Take off / rise |
-| Ctrl | Descend and land |
-| 1 | Native three-quarter inspection |
-| 2 | Native front inspection |
-| 3 | Native rear inspection |
-| 4 | Wide flight inspection |
-| 5 | Following gameplay view |
-| Left mouse drag | Orbit the gameplay camera |
-| Right mouse drag | Steer |
+| Keyboard and mouse | Gamepad | Action |
+|---|---|---|
+| W / S, up / down arrows | Left stick | Move forward / backward |
+| A / D | Left stick | Strafe |
+| Left / right arrows | | Turn |
+| Left mouse drag | | Orbit the gameplay camera |
+| Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
+| | Right stick press (hold) | Recenter the camera behind the body |
+| F | North | Switch flight mode on or off |
+| Space | South | Jump, twice before landing; in flight mode, rise |
+| Ctrl | East | In flight mode, descend and land |
+| 1 | | Native three-quarter inspection |
+| 2 | | Native front inspection |
+| 3 | | Native rear inspection |
+| 4 | | Wide flight inspection |
+| 5 | | Following gameplay view |
+| F3 | | Toggle the annotation outlines (`view.annotate`) |
+| F4 | | Show the jetpack alone (`view.isolate`) |
+| F2 | Back | Switch between playing and building (`player.build`) |
+| Tab (hold) | LB (hold) | Open the play wheel |
+| Backtick | | Show or hide the console |
 
-Releasing Space holds altitude. Inspection cameras stay at the studio origin;
-use **5** when moving away from it. A gamepad uses the left stick to move, the
-right stick to steer, the south face button to rise and the east face button to
-descend. Return to the comparison with `view.override layout pipeline`.
+Out of flight mode, letting go of Space while still rising cuts the jump short.
+In flight mode, releasing Space holds altitude. Inspection cameras stay at the
+studio origin; use **5** when moving away from it. Return to the comparison
+with `view.override layout pipeline`.
+
+The debug world and the garden draw these controls on screen from
+[`controls.puck`](../controls.puck): a binding bar along the bottom edge (the
+keyboard while `state.bar.layout` reads `keys`, the pad while it reads `pad`),
+a key-hint strip at the top left, and the play wheel. Hold Tab and point with
+the mouse, or hold LB and aim the right stick, then release over a sector:
+Console, Build, Where (`body.where`), Channels (`body.channels`), Annotate,
+Keys / pad (flips the bar's layout), Respawn (back to the stage) and
+Disengage. Releasing at the hub cancels. The bar and the hint strip fade
+after six seconds without input.
 
 ## Edit the native character live
 

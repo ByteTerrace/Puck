@@ -10,6 +10,10 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "garden"
 
+// The debug world's chrome, so a traveller keeps its bar and wheel here.
+import "theme"
+import "controls"
+
 // The garden's palette slots.
 let frameGold = 0 // #C9A43A
 
