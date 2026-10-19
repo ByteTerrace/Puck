@@ -388,7 +388,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                     );
                 }
             );
-            var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
+            var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.TexelBytes(format: Output.Format))));
 
             m_consumerPixels = allocatePixels(outputByteLength);
             m_publishedPixels = allocatePixels(outputByteLength);

@@ -13,11 +13,11 @@ using static Puck.DirectX.DirectXConstants;
 namespace Puck.DirectX.Interop;
 
 /// <summary>
-/// Materializes a tightly packed mip chain of CPU pixels, or of 4x4 blocks for a block-compressed format, into a
-/// shader-resource-view-sampled Direct3D 12 texture, against a shared <see cref="IDirectXDeviceContext"/>. It owns the
-/// default-heap texture, an upload-heap staging buffer laid out by the device's copyable footprints, and the command
-/// resources to drive the copy, rebuilding the texture and buffer when the extent, format or level count changes. Each
-/// <see cref="Upload"/> copies every level into the texture and leaves it in both shader-resource states; a consumer
+/// Materializes tightly packed CPU pixels into a single-level, shader-resource-view-sampled Direct3D 12 texture,
+/// against a shared <see cref="IDirectXDeviceContext"/>. It owns the default-heap texture, an upload-heap staging buffer
+/// laid out by the device's copyable footprint, and the command resources to drive the copy, rebuilding the texture and
+/// buffer when the extent or format changes. Each <see cref="Upload"/> copies the pixels into the texture and leaves it
+/// in both shader-resource states; a consumer
 /// binds <see cref="TextureHandle"/> through a set of its own pool, a range of the device's shader-visible heaps, so the
 /// upload holds no descriptor. This is the Direct3D 12 peer of <c>VulkanSurfaceUpload</c> — the consumer/ingest half that
 /// lets a DirectX host sample a surface that arrived as host memory. A recording that fails is discarded: the next
@@ -47,12 +47,11 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     private DXGI_FORMAT m_format;
     private uint m_height;
     private nint m_imageViewHandle;
-    // Each level's placement in the staging buffer, its row count (block rows for a block-compressed format) and its
-    // tightly packed row size, as GetCopyableFootprints reports them for the texture.
-    private D3D12_PLACED_SUBRESOURCE_FOOTPRINT[] m_layouts = [];
-    private uint m_levels;
-    private uint[] m_rowCounts = [];
-    private ulong[] m_rowSizes = [];
+    // The texture's placement in the staging buffer, its row count and its tightly packed row size, as
+    // GetCopyableFootprints reports them.
+    private D3D12_PLACED_SUBRESOURCE_FOOTPRINT m_layout;
+    private uint m_rowCount;
+    private ulong m_rowSize;
 
     // The textures and staging buffers a rebuild replaced, each with the value of the fence signalled behind everything
     // submitted when it was replaced. Command lists hold no reference to what they read, so another consumer's pending
@@ -124,31 +123,28 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     /// <summary>Gets the <c>DXGI_FORMAT</c> the texture was last uploaded as.</summary>
     public DXGI_FORMAT TextureFormat => m_format;
 
-    nint IGpuSurfaceUpload.Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels) {
-        Upload(pixels: pixels.Span, format: format, width: width, height: height, levels: levels);
+    nint IGpuSurfaceUpload.Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) {
+        Upload(pixels: pixels.Span, format: format, width: width, height: height);
         return m_imageViewHandle;
     }
 
-    /// <summary>Copies an image's levels into the SRV texture and leaves it sampleable by every shader stage.</summary>
-    /// <param name="pixels">The image's levels from level 0, tightly packed and back to back
-    /// (<see cref="GpuPixelFormats.ChainByteLength"/>): rows of texels, or rows of 4x4 blocks for a block-compressed
-    /// format.</param>
+    /// <summary>Copies an image into the SRV texture and leaves it sampleable by every shader stage.</summary>
+    /// <param name="pixels">The image's rows of texels, tightly packed
+    /// (<see cref="GpuPixelFormats.ImageByteLength"/>).</param>
     /// <param name="format">The pixel format.</param>
-    /// <param name="width">The width of level 0, in texels.</param>
-    /// <param name="height">The height of level 0, in texels.</param>
-    /// <param name="levels">The number of mip levels <paramref name="pixels"/> holds.</param>
+    /// <param name="width">The width, in texels.</param>
+    /// <param name="height">The height, in texels.</param>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    /// <exception cref="ArgumentException"><paramref name="pixels"/> is not exactly the chain's length.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is zero, a dimension exceeds
-    /// Direct3D 12's two-dimensional texture limit (`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, refused before any
-    /// resource is touched, so the current texture and its view stay), or the level count exceeds the extent's full
-    /// chain.</exception>
+    /// <exception cref="ArgumentException"><paramref name="pixels"/> is not exactly the image's length.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is zero, or exceeds Direct3D 12's two-dimensional
+    /// texture limit (`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, refused before any resource is touched, so the current
+    /// texture and its view stay).</exception>
     /// <exception cref="NotSupportedException">The device cannot sample a two-dimensional texture of
     /// <paramref name="format"/>.</exception>
     /// <exception cref="InvalidOperationException">The context's device is not the one this upload was created on: its owner
     /// did not release it on a device loss.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
-    public void Upload(ReadOnlySpan<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) {
+    public void Upload(ReadOnlySpan<byte> pixels, GpuPixelFormat format, uint width, uint height) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -166,11 +162,10 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             dimension: height,
             name: nameof(height)
         );
-        _ = GpuPixelFormats.RequireChain(
+        _ = GpuPixelFormats.RequireImage(
             byteLength: pixels.Length,
             format: format,
             height: height,
-            levels: levels,
             width: width
         );
         SettleSubmission();
@@ -178,7 +173,6 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         EnsureResources(
             format: format,
             height: height,
-            levels: levels,
             width: width
         );
         WriteUploadBuffer(pixels: pixels);
@@ -211,29 +205,24 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             );
         }
 
-        for (var level = 0U; (level < m_levels); level++) {
-            var destinationLocation = new D3D12_TEXTURE_COPY_LOCATION {
-                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                pResource = texture,
-            };
+        var destinationLocation = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            pResource = texture,
+        };
+        var sourceLocation = new D3D12_TEXTURE_COPY_LOCATION {
+            Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+            pResource = ((ID3D12Resource*)m_uploadBuffer),
+        };
 
-            destinationLocation.Anonymous.SubresourceIndex = level;
-
-            var sourceLocation = new D3D12_TEXTURE_COPY_LOCATION {
-                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-                pResource = ((ID3D12Resource*)m_uploadBuffer),
-            };
-
-            sourceLocation.Anonymous.PlacedFootprint = m_layouts[level];
-            commandList->CopyTextureRegion(
-                DstX: 0,
-                DstY: 0,
-                DstZ: 0,
-                pDst: in destinationLocation,
-                pSrc: in sourceLocation,
-                pSrcBox: ((D3D12_BOX?)null)
-            );
-        }
+        sourceLocation.Anonymous.PlacedFootprint = m_layout;
+        commandList->CopyTextureRegion(
+            DstX: 0,
+            DstY: 0,
+            DstZ: 0,
+            pDst: in destinationLocation,
+            pSrc: in sourceLocation,
+            pSrcBox: ((D3D12_BOX?)null)
+        );
 
         var toShaderResource = DirectXBarriers.Transition(
             after: DirectXResourceStates.ShaderRead,
@@ -276,8 +265,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         }
     }
     // Refuses a format the device cannot sample from a two-dimensional texture, naming the format and what the device
-    // reports for it. Every Direct3D 12 device at feature level 11_0 samples BC1 to BC7; the query still answers for the
-    // device in hand.
+    // reports for it.
     private static void RequireSampled(ID3D12Device* device, GpuPixelFormat format, DXGI_FORMAT dxgiFormat) {
         const D3D12_FORMAT_SUPPORT1 Required = D3D12_FORMAT_SUPPORT1.D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1.D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
 
@@ -296,15 +284,14 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             throw new NotSupportedException(message: $"The Direct3D 12 device cannot sample {format} textures: it reports {support.Support1} for {dxgiFormat}.");
         }
     }
-    private void EnsureResources(GpuPixelFormat format, uint width, uint height, uint levels) {
+    private void EnsureResources(GpuPixelFormat format, uint width, uint height) {
         var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
 
         if (
             (0 != m_texture) &&
             (m_width == width) &&
             (m_height == height) &&
-            (m_format == dxgiFormat) &&
-            (m_levels == levels)
+            (m_format == dxgiFormat)
         ) {
             return;
         }
@@ -323,28 +310,23 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         var description = DirectXTextures.Describe(
             format: dxgiFormat,
             height: height,
-            mipLevels: checked((ushort)levels),
             width: width
         );
-        var layouts = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT[levels];
-        var rowCounts = new uint[levels];
-        var rowSizes = new ulong[levels];
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout;
+        uint rowCount;
+        ulong rowSize;
         var uploadBytes = 0UL;
 
-        fixed (D3D12_PLACED_SUBRESOURCE_FOOTPRINT* layoutPointer = layouts)
-        fixed (uint* rowCountPointer = rowCounts)
-        fixed (ulong* rowSizePointer = rowSizes) {
-            device->GetCopyableFootprints(
-                BaseOffset: 0UL,
-                FirstSubresource: 0U,
-                NumSubresources: levels,
-                pLayouts: layoutPointer,
-                pNumRows: rowCountPointer,
-                pResourceDesc: &description,
-                pRowSizeInBytes: rowSizePointer,
-                pTotalBytes: &uploadBytes
-            );
-        }
+        device->GetCopyableFootprints(
+            BaseOffset: 0UL,
+            FirstSubresource: 0U,
+            NumSubresources: 1U,
+            pLayouts: &layout,
+            pNumRows: &rowCount,
+            pResourceDesc: &description,
+            pRowSizeInBytes: &rowSize,
+            pTotalBytes: &uploadBytes
+        );
 
         var texture = DirectXTextures.CreateCommitted(
             calls: m_calls,
@@ -353,7 +335,6 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             height: height,
             initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             memory: m_deviceContext.Memory,
-            mipLevels: checked((ushort)levels),
             width: width
         );
         ID3D12Resource* uploadBuffer;
@@ -410,12 +391,11 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_uploadBuffer = ((nint)uploadBuffer);
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
         m_imageViewHandle = view;
-        m_layouts = layouts;
-        m_rowCounts = rowCounts;
-        m_rowSizes = rowSizes;
+        m_layout = layout;
+        m_rowCount = rowCount;
+        m_rowSize = rowSize;
         m_format = dxgiFormat;
         m_height = height;
-        m_levels = levels;
         m_width = width;
         DirectXImageViews.Release(handle: retiredView);
 
@@ -453,7 +433,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_commandList = ((nint)commandList);
         m_commandsFaulted = false;
     }
-    // Writes each level's rows, tightly packed and back to back in the source, at its footprint's offset and row pitch.
+    // Writes the image's rows, tightly packed in the source, at the footprint's offset and row pitch.
     private void WriteUploadBuffer(ReadOnlySpan<byte> pixels) {
         var uploadBuffer = ((ID3D12Resource*)m_uploadBuffer);
         var mapped = ((byte*)DirectXCommandCalls.Map(
@@ -462,24 +442,20 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         ));
 
         try {
+            var rowBytes = checked((int)m_rowSize);
             var source = 0;
 
-            for (var level = 0; (level < m_layouts.Length); level++) {
-                var layout = m_layouts[level];
-                var rowBytes = checked((int)m_rowSizes[level]);
-
-                for (var row = 0U; (row < m_rowCounts[level]); row++) {
-                    pixels
-                        .Slice(
-                        length: rowBytes,
-                        start: source
-                    )
-                        .CopyTo(destination: new Span<byte>(
-                        length: rowBytes,
-                        pointer: ((mapped + layout.Offset) + (((ulong)row) * layout.Footprint.RowPitch))
-                    ));
-                    source += rowBytes;
-                }
+            for (var row = 0U; (row < m_rowCount); row++) {
+                pixels
+                    .Slice(
+                    length: rowBytes,
+                    start: source
+                )
+                    .CopyTo(destination: new Span<byte>(
+                    length: rowBytes,
+                    pointer: ((mapped + m_layout.Offset) + (((ulong)row) * m_layout.Footprint.RowPitch))
+                ));
+                source += rowBytes;
             }
         } finally {
             uploadBuffer->Unmap(

@@ -10,7 +10,7 @@ namespace Puck.Vulkan.Factories;
 /// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>fragmentStoresAndAtomics</c> and
 /// <c>shaderDemoteToHelperInvocation</c> always, refusing a device without any of them,
 /// and the optional pipeline-executable-properties,
-/// storage-image-without-format, block-compressed texture (<c>textureCompressionBC</c>), external memory and semaphore,
+/// storage-image-without-format, external memory and semaphore,
 /// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
 /// physical device supports them.
 /// </summary>
@@ -71,10 +71,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_present_wait",
     ];
 
-    // The 0-based VkPhysicalDeviceFeatures flag index of textureCompressionBC: every BC1 to BC7 format is sampleable
-    // from optimal-tiling images. VulkanLogicalDevice.SamplesBlockCompression records whether it was enabled, and an
-    // upload of a block-compressed format refuses a device without it.
-    private const uint TextureCompressionBcFeatureIndex = 22u;
     // The 0-based VkPhysicalDeviceFeatures flag index of shaderSampledImageArrayDynamicIndexing: an array of sampled
     // images or samplers may be indexed by a dynamically uniform value, as the SDF screen shading always indexes its
     // screen sources and samplers, so a device without it is refused.
@@ -99,11 +95,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private static readonly (uint StructureType, string Feature, string Need)[] RequiredFeatureStructures = [
         (StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures, "shaderDemoteToHelperInvocation", "the SDF impostor card's fragments need to discard the texels outside its silhouette (OpDemoteToHelperInvocation)"),
     ];
-    // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: textureCompressionBC,
-    // storage-image read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
+    // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
+    // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
     // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
     // arrays; callers that need those probe separately and fall back otherwise.
-    private static readonly uint[] OptionalBaseFeatureIndices = [TextureCompressionBcFeatureIndex, 31u, 32u, 36u];
+    private static readonly uint[] OptionalBaseFeatureIndices = [31u, 32u, 36u];
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -494,7 +490,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 Identity = identity,
                 MemoryProfile = memoryProfile,
                 PipelineCache = pipelineCache,
-                SamplesBlockCompression = featureIndices.Contains(value: TextureCompressionBcFeatureIndex),
             };
         } catch {
             pipelineCache?.Dispose();

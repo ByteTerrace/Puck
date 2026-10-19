@@ -95,7 +95,6 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
 
         recording.TransitionImageLayout(
             aspectMask: VulkanGpuFormats.ColorAspect,
-            baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: (release
                 ? 0U
@@ -108,7 +107,6 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
                 : VulkanPipelineStageFlags.AllCommands),
             device: device,
             imageHandle: imageHandle,
-            mipLevelCount: 1,
             newLayout: VulkanImageLayout.General,
             oldLayout: VulkanImageLayout.General,
             sourceAccessMask: (release

@@ -1457,13 +1457,11 @@ settled carves into 128-cubed bricks (`SdfWorldTables.BrickBake.cs`).
 
 The pixel-format fold is done: `GpuPixelFormat` is the one vocabulary a GPU
 image, a presented or captured `Surface` and a swapchain are stored in, and
-`GpuPixelFormats` states each format's texel or block size once, which the
-upload chain check and the shader pipeline budget read. It names the block
-formats BC4, BC5, BC6H and BC7, sampled only, and the one image upload
-(`IGpuSurfaceUpload.Upload`) takes every level of a chain and refuses by name a
-device that cannot sample the format: a Vulkan device created without
-`textureCompressionBC`, or a Direct3D 12 device whose format support lacks
-two-dimensional sampling. `ImagePixelFormat` stays apart: it is the code an
+`GpuPixelFormats` states each format's texel size once, which the upload's
+length check and the shader pipeline budget read. Every format is uncompressed,
+and the one image upload (`IGpuSurfaceUpload.Upload`) takes a single level of
+tightly packed texels and refuses by name a Direct3D 12 device whose format
+support lacks two-dimensional sampling. `ImagePixelFormat` stays apart: it is the code an
 uploaded source's region header carries for its conversion kernel, including
 the palette-indexed and NV12 host layouts no GPU image is created in.
 

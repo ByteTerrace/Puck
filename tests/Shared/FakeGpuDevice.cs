@@ -818,7 +818,7 @@ internal sealed class FakeGpuDevice :
         public const nint ViewHandle = 11;
 
         public void Dispose() { }
-        public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) => ViewHandle;
+        public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) => ViewHandle;
     }
     private sealed class Readback : IGpuSurfaceReadback {
         private byte[] m_pixels = [];

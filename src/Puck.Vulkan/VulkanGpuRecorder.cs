@@ -335,13 +335,11 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment) || VulkanGpuImage.IsDepth(imageHandle: imageHandle))
                 ? VulkanGpuFormats.DepthAspect
                 : VulkanGpuFormats.ColorAspect),
-            baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
             destinationStageMask: ToVulkanStage(stage: destinationStageMask),
             device: Device,
             imageHandle: imageHandle,
-            mipLevelCount: 1,
             newLayout: ToVulkanLayout(layout: newLayout),
             oldLayout: ToVulkanLayout(layout: oldLayout),
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),

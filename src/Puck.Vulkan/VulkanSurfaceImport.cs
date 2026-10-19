@@ -107,13 +107,11 @@ public sealed class VulkanSurfaceImport : IDisposable {
         ).ThrowIfFailed(device: device.Commands, operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.TransitionImageLayout(
             aspectMask: VulkanGpuFormats.ColorAspect,
-            baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: VulkanAccessFlags.ShaderRead,
             destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
             device: device.Commands,
             imageHandle: m_imageHandle,
-            mipLevelCount: 1,
             newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
             oldLayout: VulkanImageLayout.Undefined,
             sourceAccessMask: 0,

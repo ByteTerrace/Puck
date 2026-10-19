@@ -117,11 +117,10 @@ file sealed class VulkanGpuSurfaceReadback(VulkanSurfaceReadback inner) : IGpuSu
 }
 file sealed class VulkanGpuSurfaceUpload(VulkanSurfaceUpload inner) : IGpuSurfaceUpload {
     public void Dispose() => inner.Dispose();
-    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels = 1U) =>
+    public nint Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height) =>
         inner.Upload(
             format: format,
             height: height,
-            levels: levels,
             pixels: pixels,
             width: width
         );
