@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Maps Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, Puck.Shaders packages, pipelines and the frame-graph runtime, and how world render data reaches SdfFrame. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, the baked-mesh frame or hot reload; a bake; GPU cost, capacity or world.budget; cross-backend parity or captures. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage."
+description: "Maps Puck's SDF renderer and GPU code. Use for mapCore, the mesh bake, HLSL kernels, sdf-isa.hlsli, SdfOp, C#/HLSL layouts, world.shaders.reload, field scopes, GPU cost. Sculpting: sdf-authoring."
 ---
 
 # Rendering
@@ -21,14 +21,14 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 |---|---|---|
 | Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`, `SdfOpRoles`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, its `Bounds`, `Cull` and `Certificates` partials, `BakedWorldQuery`) | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
-| Mesh bake | `src/Puck.SdfVm` (`SdfMeshPathBake`, `SdfMeshLibrary`, `SdfMeshRegionArena`); `src/Puck.SignedDistance/Baking` (`SdfSampledLattice`, `SdfDualContouring`) | [the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake) |
+| Mesh bake | `src/Puck.SdfVm` (`SdfMeshPathBake`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshRegionArena`); `src/Puck.SignedDistance/Baking` (`SdfSampledLattice`, `SdfDualContouring`) | [mesh bake](references/mesh-bake.md) |
 | GPU engine | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldPipelines`) | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, one `*.comp.hlsl` wrapper per dispatch and the stage modules under `passes/` | [kernels](references/kernels.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf`: `isa/` (generated), `field/` (the interpreter the bake samples through: `mapCore` in `sdf-map.hlsli`, the part walk in `sdf-parts.hlsli`), `frame/` (the visibility record, the mesh tables, reprojection), `shade/`, `sky/`, `debug/`, and under `passes/` one `*.comp.hlsl` wrapper per dispatch plus the stage modules | [kernels](references/kernels.md) |
 | Generated kernel declarations | `src/Puck.SdfVm.Model` (`SdfIsaHlsl`, `SdfKernelInterfaces`, `SdfSkyKindsHlsl`) and `src/Puck.Shaders.Model` (`ShaderDeclarations`); written by `src/Puck.Shaders.Generator` before any kernel compiles | [sync pairs](references/sync-pairs.md) |
 | Cameras and views | `src/Puck.SdfVm/Views`; `WorldViewInstances`, `WorldScreenBinder.*` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`); `CreationStampEmitter` | `puck-world` skill |
 | Shader packages, pipelines, render graph | `src/Puck.Shaders` (`RenderGraphRuntime`, `ShaderPipelineRenderNode`, `ShaderPipelineCompiler`), `build/Shaders.targets` | [shaders reference](../../../docs/reference/shaders.md), [runtime contracts](references/runtime-contracts.md) |
-| Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds) |
+| Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` and their `.Presentation` projects | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds) |
 
 Find the existing mechanism before adding one: `puck references`,
 `puck declarations` and `puck search -M 0` (the `symbol-analysis` and
@@ -40,9 +40,9 @@ A view is a chain of separate dispatches: `mask` → `bake` (only while the
 residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
 the cascades) → `mesh` (graphics) → `pyramid` (the occlusion's depth pyramid
-from the mesh target) → `surface` (each pixel's visibility record
-from the mesh target: normal, screen-space AO, the cascades' soft shadows into
-K; `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
+from the mesh target) → `surface` (each pixel's visibility record from the mesh
+target: normal, screen-space AO, the cascades' soft shadows into K;
+`passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. The surface and
 views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
@@ -56,7 +56,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
   nothing; the window and the pattern's tile are a pair. `world.debug-view ao`
-  and `world.debug-view shadow` show the filtered values.
+  and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
+  the occlusion live.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
@@ -67,9 +68,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 
 - **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
   the only GPU kernel that walks the field, and it does so through one rolled
-  loop; every call site is a full inlined copy of the interpreter, costing
-  register pressure, compile time and a driver translation on every cold boot.
-  Never add `[noinline]`: a real SPIR-V call loses the device on NVIDIA's
+  `[loop]` over its samples. Every call site is a full inlined copy of the
+  interpreter, costing register pressure, compile time and a driver translation
+  on every cold boot, so more samples go through that loop, never through a new
+  call. Never add `[noinline]`: a real SPIR-V call loses the device on NVIDIA's
   Vulkan driver.
 - **Keep each pixel kernel's include closure its own.** A pixel kernel includes
   the common head (`passes/sdf-pixel-pass.hlsli`), only its own stage module,
@@ -84,20 +86,21 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `world.shaders.status` (`unchanged` means no shipped kernel compiles the code
   you edited). A host ABI, buffer-layout or C# ISA change needs a rebuild: the
   reload keeps the previous kernels when a tree's kernels do not match the
-  host's interface. Change the C# layout and the HLSL layout together
+  host's interface, so a kernel reading a field the C# side just gained keeps
+  running its previous build. Change the C# layout and the HLSL layout together
   ([sync pairs](references/sync-pairs.md)).
-- **No signed `%` of a value that can be negative.** NVIDIA's Vulkan driver answers a
-  signed remainder (`OpSRem`, which DXC emits for `%` on `int`) of a negative operand
-  wrongly where Direct3D 12 answers it right: lift the value to non-negative and
-  wrap it as `uint`, as `sdfMeshIrradianceSlot` does.
-- **One walk in `mapCore`.** NVIDIA's Direct3D 12 driver on Turing (the RTX 2060)
-  takes a second walk chosen by a program-uniform flag (a linear all-segment walk
-  beside the instance merge) for instanced programs too, so every bake group
-  samples the whole program; Vulkan on the same card does not. A program with no
-  instance lists every segment as a world segment, so the merge covers it. When
-  one backend's bake disagrees, compare `[sdf.mesh-bake] done` on both: a group
-  that empties on one backend alone (an axis line under the floor) is the walk
-  ignoring its mask.
+- **No signed `%` of a value that can be negative.** NVIDIA's Vulkan driver
+  answers a signed remainder (`OpSRem`, which DXC emits for `%` on `int`) of a
+  negative operand wrongly where Direct3D 12 answers it right: lift the value to
+  non-negative and wrap it as `uint`, as `sdfMeshIrradianceSlot` does.
+- **One walk in `mapCore`.** NVIDIA's Direct3D 12 driver on Turing (the RTX
+  2060) takes a second walk chosen by a program-uniform flag (a linear
+  all-segment walk beside the instance merge) for instanced programs too, so
+  every bake group samples the whole program; Vulkan on the same card does not.
+  A program with no instance lists every segment as a world segment, so the
+  merge covers it. When one backend's bake disagrees, compare
+  `[sdf.mesh-bake] done` on both: a group that empties on one backend alone (an
+  axis line under the floor) is the walk ignoring its mask.
 - **Index local arrays by constants only.** NVIDIA's Vulkan compiler keeps a
   dynamically indexed local array, a `static const` table included, in
   per-thread local memory. Unroll the loop to the array's length and guard the
@@ -111,7 +114,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 
 First ask whether the new op, shape or blend composes from existing vocabulary;
 if it does, ship it as a `SdfProgramBuilder` method emitting existing
-instructions. A real new instruction touches every partner in one change:
+instructions. A real new instruction touches every partner in one change, and a
+GPU parity pass alone does not finish it:
 
 1. **C# model.** The enum, `SdfProgramBuilder` (its `RequireDefined` maximum),
    `SdfProgram` validation and packing, the Lipschitz analysis, its row in
@@ -120,10 +124,12 @@ instructions. A real new instruction touches every partner in one change:
    or `HasUnmaskableInfluence`.
 3. **Generated declarations.** `isa/sdf-isa.hlsli` is generated from the C#
    model by `SdfIsaHlsl`; building `Puck.SdfVm` regenerates it, and
-   `puck shaders generate` writes it by hand. The define's name is the enum's
+   `puck shaders generate` writes it on demand. The define's name is the enum's
    prefix plus the member in upper snake case (`SdfOp.CellDisplace` is
-   `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value. Give the
-   instruction a call in `SdfEncodingProbe` that passes every field it packs
+   `SDF_OP_CELL_DISPLACE`), and its value is the member's: members are numbered
+   densely in declaration order. Never hand-write a `#define` for an ISA value;
+   add the enum member and regenerate. Give the instruction a call in
+   `SdfEncodingProbe` that passes every field it packs
    (`SdfEncodingProbeLawTests` refuses one that is missing). Regenerating also
    rewrites `SdfIsaFingerprint.cs`.
 4. **Every GPU call site.** `mapCore` (rigid-leaf fast paths included) and the
@@ -138,9 +144,9 @@ instructions. A real new instruction touches every partner in one change:
 
 When two lanes both add an instruction, the merge conflicts in generated files
 (`sdf-isa.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
-regenerate with `puck shaders generate` or a build. Never hand-merge a
-generated file; `puck shaders generate --check` (and CI) only reports one that
-drifted.
+regenerate with `puck shaders generate` or a build of `Puck.SdfVm`. Never
+hand-merge a generated file; `puck shaders generate --check` (and CI) only
+compares and fails naming the file that drifted, it writes nothing.
 
 ## Field contracts that bite
 
@@ -161,7 +167,8 @@ drifted.
   GPU cost.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
-- **Path (shape 21) is presentation-only;** the fixed-point evaluator refuses it.
+- **`SdfShapeType.Path` is presentation-only;** the fixed-point evaluator
+  refuses it.
 
 ## Capacity and emission
 
@@ -174,235 +181,37 @@ drifted.
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.
 
-## The baked-mesh path
+## The baked mesh
 
-Every view renders a residency's program from meshes the program is baked into,
-with no field walk in the frame;
-[frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)
-owns the explanation.
+Every view renders meshes the program is baked into, with no field walk in the
+frame. Read [mesh bake](references/mesh-bake.md) before changing the bake, the
+contour, grouping, the mesh region or the store, or when a baked mesh looks
+wrong. The contracts that bite most often:
 
-- **One contouring.** `SdfSampledLattice` contours a GPU-sampled lattice through
-  `SdfDualContouring` over `ISdfContourLattice`; never write a second mesher.
-  A final lattice refines the cells its samples cannot
-  resolve (`SdfSampledLattice.Refine`: sheets or gaps thinner than a cell, not
-  a solid's edge or crease a line crosses near its tip, outside corners of
-  different materials, two patches in one cell) and contours
-  them at the fine spacing through `SdfDualContouring.ExtractRefined`; the cells
-  touching them contour fine from interpolated coarse values and merge each piece
-  into one vertex, which keeps the mesh crack-free. Never refine a cell without
-  that ring: a whole cell next to measured fine samples cracks
-  (`SdfSampledLatticeLawTests`). Refining every cell instead (5 mm across the
-  Moth) bakes about 8 M triangles in 20 s.
-- **Features are placed and shaded as features.** A vertex whose crossings'
-  planes all meet and turn by over 30 degrees is a feature: it lies on the
-  crease, inside its cell (a point past the cell folds the quads around it into
-  teeth along the edge). A convex crease up to half a cell past its cell is
-  handed to the neighbour that holds it (`SdfDualContouring.HandOff`), whose
-  vertex moves onto it; clamped instead, a diagonal or curved crease loses its
-  vertices in a row of notches. The cell that hands it over keeps its vertex on
-  its crossings' side of the crease (`BesideCrease`), or the quads it shares
-  with the crease vertex fold. A feature takes its crossings' normals, each quad
-  splits along the diagonal that turns least from its non-crease corners'
-  normals, and
-  `SdfContour.SplitAtCreases` splits it per side at 32 degrees, just past the
-  feature test's 30 (at 45, a chamfer's own turn, the split flipped vertex by
-  vertex and dented flat faces). Every vertex no crossing pins to the surface
-  (`SdfContour.Solved`) is checked against the field before the split and moved
-  onto the surface where a rounding near the cell's size left it proud; one the
-  contour kept beside a sharp convex crease (`SdfContour.Beside`) that lies
-  inside the solid stays a crease vertex when moved, or its face's normal shades
-  the other face's quads beside the edge. A gradient shorter than a tenth of the
-  field's typical slope straddles a crease and moves nothing
-  (`SdfMeshPathBake.KinkGradient`): value over length is no distance there.
-- **The bake's field is no true distance.** Scopes, flares and non-uniform
-  scales read well under the distance (a fifth of it on the Moth's shins). A
-  value becomes a distance only over the gradient's magnitude (the bake kernel
-  writes the gradient in field units per world unit), and a test of how a value
-  changes over a step is measured against the field's own slope there, never
-  against the step's length (`SdfSampledLattice.PassesBetween`).
-- **Sheets thinner than the fine cell are closed before they contour**
-  (`SdfSampledLattice.CloseSheets`): left to their samples they hole, fray into
-  slivers where they thin, and their two faces cross. An acute wedge reads as a
-  sheet along a line near its tip; a line a few fine steps beside it inside for
-  two steps tells it apart (`Thickens`), or its rim closes into lumps. Only features and single-face cells read crossing
-  normals: elsewhere (a fillet under the cell) they smudge flat faces, so other
-  vertices keep the interpolated gradients. Such a vertex on a fillet under the
-  cell carries the fillet's normal, so `SdfContour.SplitAtCreases` gives the
-  corners of its quads that face more than 32 degrees from that normal a copy
-  with their face's normal (a plinth's 6 mm BoxRound fillet at 21 mm cells
-  otherwise shades a band a cell wide along every edge). The material cut
-  samples and searches by place, not by copy (`SdfMeshMaterialCut`), so the
-  pieces either side of a split edge meet at one boundary point.
-- **A static copy is one group.** Its shapes bake as their union
-  (`SdfInstanceRange.BakesWithPrevious`) on a cubic lattice past the per-axis
-  cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
-  serial contour of about a million samples is the bake's long pole on the
-  debug world, so unions take each frame's first lattices.
-- **The bake samples through the interpreter**, in the fragment's `mask` and
-  `bake` parts, only while `SdfMeshPathBake.Pending`.
-  `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
-  their own group. The pass block's lattice rows are a sync pair with
-  `SdfFrameBlock.WriteMeshBake`.
+- **One contouring:** `SdfSampledLattice` through `SdfDualContouring`; never
+  write a second mesher.
 - **A field diagnostic is a bake lattice, never a pixel-kernel walk.**
   `SdfFieldSlice` (`world.slice`) queues points lattices with gradients on the
-  bake (`SdfMeshPathBake.Probe`, taken before any group, a frame's share at a
-  time, `Pending` while it samples), over every instance and over the unowned
-  segments, and draws the distance bands and `|grad d|` on the CPU from the
-  answers. Every transform there is the frame's own: the slice passes no poses.
-  A per-pixel field view would put a second interpreter copy in a pixel kernel;
-  sample a lattice instead.
-- **Cascades are depth only**: the shadow pipeline (`SdfMeshRasterPass.ShadowKey`,
-  `sdf-mesh-shadow.vert`/`.frag`) draws the mesh draws into each cascade's
-  sampled `D32Float` depth from the light camera `SdfFrameBlock.WriteShadowCamera`
-  writes, with the view cameras' handedness; `sdfMeshShadowDepth` in
-  `passes/sdf-surface-stage.hlsli` decodes that reversed, linear depth, so the two
-  projections are a sync pair. The shadow tier sizes the cascades
-  (`SdfShadowResolution`, `meshShadowTexels`) and a view holds the second slot's
-  cascade only while its world holds a second stable slot
-  (`SdfWorldPackage.WithShadows`).
-- **A bake never reads the frame's transforms.** A dynamic group's box,
-  lattices and points are slot-local, and `sdf-mesh-bake` reads every transform
-  through the poses the group's geometry hashed (`SdfMeshGeometryBuilder.Poses`,
-  staged after the batch's points, named by each lattice's fourth row,
-  `SDF_MESH_BAKE_POSES`), so a mesh is a function of its geometry: a body moving
-  while it bakes bakes whole, and two boots of one device bake alike. The
-  contour is the mesh, already in that frame.
-- **Materials are point-sampled, not taken from the lattice.** Each final quad's
-  quarters and vertices are sampled through `sdfMeshBakePoints` (a staged World
-  table the residency writes before the upload); a quad whose quarters disagree
-  splits into them, and one whose vertices disagree is cut along the boundary
-  its edges' bisection finds (`SdfMeshMaterialCut`). A material boundary only
-  lies on the surface within one group: two groups' shapes meet as crossing
-  meshes, whatever their materials. The draw
-  record's word 31 carries the mesh's frame slot (`SdfMeshDraw.FrameSlot`), a
-  sync pair with `SdfMeshFrameSlotWord` in `frame/sdf-mesh.hlsli`.
-- **A group's vertices follow their own shape's slot.** A dynamic group whose
-  shapes ride slots besides its own gets one more points round over its finished
-  mesh: the bake kernel answers each vertex's winning slot in the first gradient
-  word of a points lattice without gradients, and the mesh keeps each other slot
-  as a member (`SdfMesh.Members`: its offset from the group's slot and the pose
-  it was baked at) and each vertex's member (`SdfMesh.VertexMembers`). Word 32 of
-  the draw record names the members (`SdfMeshRegion.SkinFlag`), and every mesh
-  read (`sdfMeshWorldPosition`, `sdfMeshWorldNormal`, `sdfMeshPreviousPosition`)
-  carries a member's vertex out through that slot's live (or previous) transform,
-  so the mesh interface binds the dynamic transforms. A cut or intersection face
-  keeps the slot of the shape it shapes (`sdfComposeCandidate`); only a union-family
-  winner hands its slot on. Rigid per-vertex skinning stretches a blend seam
-  between members that move far apart.
-- **Meshes keep their words; draws repack only their records.** The tables
-  place each mesh whole in an arena past a reserve of draw records
-  (`SdfMeshRegionArena`), where it stays while a draw names it, so
-  `StageMeshRegion` (`SdfWorldTables.MeshRegion.cs`) writes the draw records
-  (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
-  layout that moves placed meshes when one lands (sections by attribute) made
-  every landing rewrite the whole million-triangle region, 45 to 120 ms frames
-  on the debug world. Newly placed meshes land within
-  `SdfWorldTables.MeshLandingWords` a frame, their draws waiting out of the
-  staged records until they do, and a grown region takes the words it held. A
-  placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
-  belongs in the record, never in a mesh's words.
-- **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
-  field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample counts
-  five), and a longer frame takes a share for each whole 60 Hz frame it spans, up
-  to eight (`FrameBudget`); every lattice is chunked to fit one share (final lattices in slabs, material
-  and gradient, fine and material points in chunks). Gradients are measured only
-  at the samples `SdfDualContouring` reads a normal at
-  (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
-  corners, so no other sample needs one.
-- **A batch answers the bake that took it.** `SdfMeshBakeBatch.Bake` names it, and
-  `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame, so a
-  view that leaves the frame or follows another residency never strands a bake.
-  Groups are keyed by geometry (`SdfMeshGeometryBuilder`: instructions with
-  side-table values for offsets, materials by place, a dynamic bound's radius
-  alone, other slots by their rounded pose in the group's frame, lane-erosion
-  lanes, the reach of a box it clamps) and every meshed group is stored in the `SdfMeshLibrary` all of a
-  presentation's residencies share, so a rebuild, a returning body or a body
-  crossing from another world takes its mesh; only new geometry bakes. The key
-  has two failure modes. A field the hash reads that a program assigns by
-  position (a slot, a table offset, a palette index) breaks sharing silently:
-  canonicalize it in the builder. Anything the bake samples that the
-  instructions do not hold (another slot's transform, a lane, a table) leaves a
-  stale mesh drawing after an edit: hash it in the builder. A stamp-pool blend
-  group is one instance on its first shape's slot whose later shapes ride their
-  own slots, so their places and turns are frame transforms; the symptom of a
-  miss is an edit that shows only once the group's first shape changes. The key
-  is taken from the frame a program arrives in, so shapes that move against one
-  another later keep the mesh of that pose. The World's library persists across
-  runs (`SdfMeshStore`, the `meshes` device cache), keyed by geometry and the
-  bake's identity (bake kernels' bytecode, `Puck.SignedDistance`'s build, the
-  hash of `PuckMeshBakeSource` in `Puck.SdfVm.csproj`): a new file the bake's CPU
-  code reads joins that list, or an edit to it reads stale meshes. A boot that
-  bakes nothing shows `done … loaded=N` with `dispatches=0`.
-- **A view without shadows holds no cascade.** A view whose quality skips shadows
-  (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its fragment:
-  the cascades' passes and their 252 MB of targets go, and the surface pass binds
-  the filler.
-- **Shadow handoffs are pass values.** The outgoing light fades from its slot's
-  cascade by the handoff's weight; the incoming light lights unshadowed until
-  it holds the slot. No handoff plans or allocates anything.
-- **Indirect light is the irradiance volume.** `SdfWorldResidency.IndirectTier`
-  (the host lever, else the frame's tier) drives `SdfMeshIrradiance`, staged
-  before the upload into the staged World table `sdfMeshIrradiance` and
-  described by the pass-block values `meshIrradianceVolume` and
-  `meshIrradianceLow`. The probe layout, key, toroidal slot, normal bias and
-  probe weights are a sync pair between `SdfMeshIrradiance` (its CPU feedback
-  read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
-  kernel compiles. The trace reads static mesh draws through
-  `SdfMeshIrradianceScene`; never route it through the field interpreter. The
-  [handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
-  owns the technique and its limits.
-- **Groups are planned in one place.** `SdfMeshBakeGroup.Plan` forms a program's
-  groups, geometry and pose rows; the bake and the mesh audit both call it, so a
-  change to grouping changes both.
-
-## Auditing a bake
-
-`puck mesh audit --world <file>` finds bake defects without a GPU or a person
-looking: it reads the meshes a World boot stored (`SdfMeshStore`, never
-writing it), measures each against its group's own field on the CPU
-(`SdfMeshAudit`, through `SdfFieldEvaluator`'s render reading), and prints per
-group, worst first, the off-surface error at vertices, centroids and edge
-midpoints, face and shading normal error against the field gradient, folds,
-flips, open edges, uncovered surface and how loose the field is, then the worst
-clusters with rest-pose and author-frame positions and the shapes nearest them.
-The [CLI reference](../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
-owns its flags.
-
-- **Run it before calling a bake or mesh-path change done**, and on a changed
-  creation's groups (`--prototype`, `--group <shape>`); a later run over the same
-  store proves a fix. `--images <dir>` draws each worst cluster on the CPU,
-  shading beside face normals: the offline twin of `world.debug-view normals`.
-- **`--cpu` measures a bake change with no GPU.** It drives `SdfMeshPathBake`
-  with each lattice answered through the group's CPU field, so a contour,
-  refinement or field change shows in the audit without a boot. Where the
-  fixed-point field and the kernel's agree, its mesh matches a stored Direct3D
-  12 bake of the group to the triangle; a field the evaluator refuses (a path, a
-  warp, a multi-strand sweep) needs a World boot.
-- **The store is keyed by the bake identity of the build that booted.** From
-  your own worktree's CLI, audit a World you ran from the same checkout, or name
-  another build with `--build <its Puck.World bin dir>`; a rebuilt build's
-  meshes stay readable under the `--identity` an earlier report printed.
-  `--history --group <shape>` compares every build's stored bake of one
-  geometry.
-- **The audit reads stored meshes against the CPU field; `world.slice` reads the
-  live field.** Use the slice to see what the GPU walk answers on a plane, the
-  audit to see what the bake made of it.
-- **Read the metrics together.** Sawtooth edges show as face normals off the
-  gradient and folds strung along an edge; torn or dropped walls as uncovered
-  crossings and open edges; a cutter that is only a lower bound (a stretched
-  ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to the
-  shape whose own field is loosest there.
-- **What it cannot read.** The render reading interprets the flare
-  (`AxialProfile`) and twist (`RotatePlane`) warps and a non-uniform scale, a
-  sync pair with their `mapCore` cases; a group holding another warp (shear, bumps,
-  a polar fold), a regular polygon, a path or a multi-strand sweep reports `field
-  refused`, and one whose evaluation faults `field failed`. Mirrored groups (left
-  and right) share one geometry and one stored mesh.
+  bake and draws the distance bands and `|grad d|` on the CPU from the answers.
+  A per-pixel field view would put a second interpreter copy in a pixel kernel.
+- **A mesh is a function of its geometry.** Groups are keyed by
+  `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
+  not hold leaves a stale mesh drawing after an edit until the builder hashes
+  it.
+- **Baked meshes persist across runs** (`SdfMeshStore`), keyed by geometry and
+  the bake's identity: the bake kernels' bytecode, `Puck.SignedDistance`'s
+  build, and the `PuckMeshBakeSource` files listed in `Puck.SdfVm.csproj`. A
+  new `Puck.SdfVm` file the bake's CPU code reads joins that list, or the World
+  keeps drawing meshes baked before the edit.
+- **`puck mesh audit --world <file>` checks a bake without a GPU or a person
+  looking**, against the CPU field; `--cpu` bakes offline so a contour or field
+  change shows with no boot. Run it before calling a bake change done.
 
 ## Performance and cost
 
 Judge cost by counted work, code and disassembly; a wall-clock or GPU-timestamp
-reading is evidence beside the counts of the same run, never the verdict alone.
+reading is evidence beside the counts of the same run on a quiet machine, never
+the verdict alone.
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
@@ -422,65 +231,36 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 
 ## Seeing a change
 
-- Build: `dotnet build src/Puck.SdfVm -c Release` runs DXC (needs `dxc` on
-  `PATH`). A Windows build of one project builds DXIL only, and a World run of
-  it refuses `--backend vulkan`; run Vulkan from a solution build or with
-  `-p:PuckShaderSpirvEnabled=true`. A build of one suite under `tests/` builds
-  SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
+- Build: `dotnet build src/Puck.SdfVm -c Release -nodeReuse:false` runs DXC
+  (needs `dxc` on `PATH`). A Windows build of one project builds DXIL only, and
+  a World run of it refuses `--backend vulkan`; run Vulkan from a solution
+  build or with `-p:PuckShaderSpirvEnabled=true`. A build of one suite under
+  `tests/` builds SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
   from the per-user shader cache; never copy bytecode between trees.
 - Run it and look: `dotnet run --project src/Puck.World -c Release --
   --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at. A boot bakes the groups the mesh store does not hold (the whole debug
-  world takes 15 to 20 s on an RTX 4070, longer on a slower card; a reboot of an
-  unchanged world loads them instead) and then traces the irradiance volume (about
-  2 s): a script that captures the finished image waits on `world.wait 2400` or
-  longer and checks for `[sdf.mesh-gi] done` in the log before the capture line.
+  looked at. A boot bakes the groups the mesh store does not hold (the whole
+  debug world takes 15 to 20 s on an RTX 4070, longer on a slower card; a
+  reboot of an unchanged world loads them instead) and then traces the
+  irradiance volume (about 2 s): a script that captures the finished image
+  waits on `world.wait 2400` or longer and checks for `[sdf.mesh-gi] done` in
+  the log before the capture line.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
-  (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. `puck parity
-  --world <file>` compares Vulkan and Direct3D 12 on one world.
-- GPU captures: boot with `--capture-tool pix` (Direct3D 12) or `--capture-tool
-  renderdoc` (either backend), then `gpu.capture <path> [<frames>]` captures the
-  next frames and narrates `[gpu.capture] <tool> wrote <file>`. A crossing lands
-  on the same tick every run, so put `world.wait <ticks>` before the capture to
-  catch it; a steady frame is any frame after `[sdf.mesh-gi] done`. Launch
-  through `dotnet <dll>` or `dotnet run`, never `Puck.World.exe`. Read a capture
-  with RenderDoc on either backend: `renderdoccmd convert -f x.rdc -o
-  x.zip.xml -c zip.xml` exports every call of the frame with its parameters and
-  debug names, which is how submissions, barriers and copies are counted. PIX
-  analysis (`pixtool`, the PIX UI) needs Windows developer mode and a PIX
-  timing capture an answered UAC prompt; both are the owner's to grant. Pass
-  timestamps are recorded only under `world.gpu-timing`; read pass times there,
-  beside the capture. A removed
-  Direct3D 12 device prints its DRED record as `[d3d12-dred]` lines;
-  `gpu.faults remove` removes one on purpose. A lost Vulkan device reports
-  `VK_EXT_device_fault` and its last pass checkpoints
-  (`VK_NV_device_diagnostic_checkpoints`) in the loss's message.
-- Under `--debug-layers`, any `[vulkan-debug] validation`, `SYNC-HAZARD-*` or
-  `[d3d12-debug]` line is a bug to fix in the engine, never a message to filter.
-  `--debug-layers full` adds Direct3D 12 GPU-based validation and Vulkan
-  GPU-assisted validation (out-of-bounds access, groupshared races) and best
-  practices; the boot's bake takes minutes under it, so wait on
-  `[sdf.mesh-bake] done` before judging a frame. Its `[vulkan-debug]
-  best-practices` lines are advice to triage, not failures, and the layer's own
-  `validation WARNING` notices at device creation (adjusted features, core plus
-  GPU-assisted being slow) are not about the engine.
-- A World run that dies with `Fatal error. Internal CLR error. (0x80131506)`
-  is first checked against the pinned JIT's GC hole around inline P/Invoke
-  ([toolchain cautions](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)):
-  a CsWin32 COM call in an optimized loop can hit it, and the debug layer makes
-  it likelier because each call stays in native code longer. The managed stack
-  it prints is whichever thread allocated, not the culprit.
-  `DirectXCommandListRecorder.RecordBackBuffer` keeps
-  `[MethodImpl(MethodImplOptions.NoOptimization)]` until that note says the JIT
-  is fixed.
+  (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
+  parity (`puck parity --world <file>`) needs a parity world with its contract
+  beside it, and none exists while the debug world is the one live world; until
+  one does, compare the two backends' captures and counts yourself.
+- GPU captures, device faults and the validation layers:
+  [kernels](references/kernels.md#captures-faults-and-validation).
 
 ## References
 
 | File | Read it for |
 |---|---|
-| [references/kernels.md](references/kernels.md) | The shader build, hot reload, the frame's passes, the visibility record, bindings, diagnostics |
+| [references/kernels.md](references/kernels.md) | The shader build, hot reload, the frame's passes, the visibility record, bindings, diagnostics, captures and device faults |
 | [references/sync-pairs.md](references/sync-pairs.md) | Every C#↔HLSL coupling and which side is generated |
+| [references/mesh-bake.md](references/mesh-bake.md) | The bake's contouring, groups, mesh region, store and `puck mesh audit` |
 | [references/runtime-contracts.md](references/runtime-contracts.md) | The render-graph runtime's invariants, before changing `RenderGraphRuntime`, a recorder, a capture path or pacing |
 
 ## Route adjacent work
@@ -492,3 +272,4 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 | `puck-dsl` | `.puck` grammar and the compile/lint verbs. |
 | `maths-usage` | Fixed-point primitives for the query evaluator. |
 | `dotnet-performance` | Host-side C# hot paths. |
+| `verification` | The landing bar, GPU legs and how to read a failed check. |
