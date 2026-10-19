@@ -5,7 +5,7 @@
 // Frame: x to the viewer's right seen from behind, y up, +z out of her back toward a viewer behind her. The pair
 // mirrors about x = 0; a pod's local u = |x| runs from the spine outward.
 // Drag the pointer to orbit. VIEW picks the start: 0 rear-low (reference 08), 1 rear three-quarter, 2 side,
-// 3 straight behind, 4 below.
+// 3 straight behind, 4 below, 5 a close-up of the right-hand nozzle.
 #define VIEW 0
 #define AA 2
 #define MAX_STEPS 160
@@ -31,18 +31,28 @@ static const float INNER_X = 0.04;           // the straight inner edge, beside 
 // The cut, in the pod's frame: a plane from the inner side at mid-height to the bottom tip, facing in, down and back.
 static const float3 CUT_P = float3(-0.15, -0.12, 0.0);
 static const float3 CUT_N = float3(-0.65, -0.76, 0.3);
-static const float TRIM_W = 0.012;           // the gunmetal lip along the cut
+static const float TRIM_W = 0.008;           // the gunmetal lip along the cut
 // Plate edges along the pod's axis, from the top; the cap, band, mid plate, band and skirt fall between them.
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
 static const float COLUMN_X = -0.035;        // the seam splitting each plate into an inner and an outer column
-// The nozzle, flush in the underside: NOZ_ALONG metres along the cut line from CUT_P toward the outer tip, NOZ_Z toward
-// the back; its lens sits NOZ_DEPTH inside the face.
-static const float NOZ_ALONG = 0.13;
-static const float NOZ_Z = 0.0;
-static const float NOZ_R = 0.06;
-static const float NOZ_H = 0.07;
-static const float NOZ_DEPTH = 0.022;
+// The nozzle housing, in the pod's frame: centred NOZ_ALONG metres along the cut line from CUT_P toward the outer tip and
+// NOZ_DROP below the underside, so the wing hoods its top; its axis NOZ_AXIS (world frame) points down and back.
+static const float NOZ_ALONG = 0.105;
+static const float NOZ_DROP = -0.004;
+static const float3 NOZ_AXIS = float3(0.0, -0.72, 0.69);
+static const float NOZ_R = 0.062;
+static const float NOZ_H = 0.05;
+static const float NOZ_ROUND = 0.03;
+static const float DISH_R = 0.07;            // the face's concave dish: a sphere this big...
+static const float DISH_DEPTH = 0.03;        // ...sunk this far into the face
+static const float LENS_R = 0.014;
+// The inner core the casing wraps: an ellipsoid in the pod's frame, blended into the nozzle housing.
+static const float3 CORE_R = float3(0.105, 0.3, 0.06);
+static const float3 CORE_SHIFT = float3(-0.01, -0.02, -0.005);
+static const float CORE_BLEND = 0.025;
+static const float RING_R = 0.03;          // the inner ring's opening
+static const float RING_DEPTH = 0.012;
 float2x2 rot(float a) { float c = cos(a), s = sin(a); return float2x2(c, -s, s, c); }
 float sdEllipsoid(float3 p, float3 r) {
     float k0 = length(p / r), k1 = length(p / (r * r));
@@ -61,6 +71,15 @@ float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 void add(inout float2 h, float d, float m) { if (d < h.x) h = float2(d, m); }
 
+float3 nozzleAxis() { float3 a = normalize(NOZ_AXIS); a.xy = mul(a.xy, rot(ROLL)); return a; }
+float3 nozzleCentre() {
+    float3 n = normalize(CUT_N);
+    float3 p = CUT_P + NOZ_ALONG * normalize(float3(-CUT_N.y, CUT_N.x, 0.));
+    return p - n * dot(p - CUT_P, n) + n * NOZ_DROP;
+}
+float3 lensCentre() { return nozzleCentre() + nozzleAxis() * (NOZ_H - DISH_DEPTH - RING_DEPTH + LENS_R * 0.4); }
+// A world point in one pod's frame (the pod on the point's side).
+float3 podFrame(float3 p) { float3 s = float3(abs(p.x), p.y, p.z) - POD_C; s.xy = mul(s.xy, rot(ROLL)); return s; }
 // One pod, q in the mirrored world frame (q.x = |x|).
 float2 pod(float3 q) {
     float2 h = float2(1e9, 0.);
@@ -71,15 +90,16 @@ float2 pod(float3 q) {
     float back = -(s.z + 0.01);
     float edge = INNER_X - q.x;
     float cut = dot(s - CUT_P, normalize(CUT_N));
-    // A closed wing case: the shell's back half, the straight inner edge and the flat underside under the cut.
-    float solid = smax(smax(smax(outer, back, 0.004), edge, 0.006), cut, 0.005);
+    // The casing: a shell SHELL_T thick over the back half, straight along the spine, open under the cut.
+    float inner = sdEllipsoid(s, SHELL_R - SHELL_T);
+    float solid = smax(smax(smax(max(outer, -inner), back, 0.004), edge, 0.006), cut, 0.004);
     // Seams are grooves SEAM wide and GROOVE deep in the armour face, between plates and between the two columns.
     const float edges[4] = { 0.2, 0.09, -0.01, -0.15 };
     float seamD = 1e9;
     for (int i = 0; i < 4; i++) seamD = min(seamD, abs(s.y - edges[i]));
     seamD = min(seamD, abs(s.x - COLUMN_X));
     float groove = max(seamD - SEAM, -GROOVE - outer);
-    groove = max(groove, cut + 0.004);   // seams stop at the underside's rim
+    groove = max(groove, cut + TRIM_W);   // seams stop at the trimmed rim
     float plates = smax(solid, -groove, 0.0015);
     // The vent: a framed slot in the cap's inner column.
     float vent = max(sdBox(s - float3(-0.075, 0.27, 0.12), float3(0.022, 0.012, 0.08), 0.006), -0.014 - outer);
@@ -89,20 +109,30 @@ float2 pod(float3 q) {
     if (s.y < edges[2] && s.y > edges[3]) mat = CREAM;
     if (seamD < SEAM + 0.002 && outer < -0.003) mat = CORE;
     if (vent < 0.004) mat = CORE;
-    // The underside is violet, ringed at its rim by the gunmetal trim.
-    if (cut > -0.006) mat = (outer > -TRIM_W) ? GUNMETAL : VIOLET;
+    // The casing's open rim is trimmed in gunmetal.
+    if (cut > -TRIM_W) mat = GUNMETAL;
     add(h, plates, mat);
-    // The nozzle sits flush in the underside: a housing buried in the shell along the underside's normal, its rim a
-    // black ring in the underside face around a recessed lens.
-    float3 ax = normalize(CUT_N);
-    float3 face = CUT_P + NOZ_ALONG * normalize(float3(-CUT_N.y, CUT_N.x, 0.)) + float3(0., 0., NOZ_Z);
-    face -= ax * dot(face - CUT_P, ax);
-    float ring = sdCappedCylinder(s, face - ax * NOZ_H, ax, NOZ_R, NOZ_H + 0.002);
-    float bore = sdCappedCylinder(s, face, ax, NOZ_R * 0.72, NOZ_DEPTH);
-    float pocket = min(sdCappedCylinder(s, face, ax, NOZ_R + 0.002, 0.01), sdCappedCylinder(s, face, ax, NOZ_R * 0.72, NOZ_DEPTH + 0.004));
-    h.x = smax(h.x, -pocket, 0.002);
-    add(h, smax(ring, -bore, 0.002), BLACK);
-    add(h, sdCappedCylinder(s, face - ax * (NOZ_DEPTH - 0.003), ax, NOZ_R * 0.7, 0.003), CYAN);    return h;
+    // The nozzle: a soft black housing tucked under the wing's trimmed edge, which hoods its top, with a concave dish
+    // face and a small glowing lens deep in the dish.
+    float3 c = nozzleCentre(); float3 ax = nozzleAxis();
+    float3 d = s - c; float y = dot(d, ax); float rr = length(d - ax * y);
+    float2 w = float2(rr - (NOZ_R - NOZ_ROUND), abs(y) - (NOZ_H - NOZ_ROUND));
+    float housing = min(max(w.x, w.y), 0.) + length(max(w, 0.)) - NOZ_ROUND;
+    float body = housing;
+    float dish = length(s - (c + ax * (NOZ_H + DISH_R - DISH_DEPTH))) - DISH_R;
+    housing = smax(housing, -dish, 0.006);
+    // The dish steps down through an inner ring to the lens.
+    float3 floorC = c + ax * (NOZ_H - DISH_DEPTH);
+    float well = sdCappedCylinder(s, floorC, ax, RING_R, RING_DEPTH);
+    housing = smax(housing, -well, 0.003);
+    // The inner core: a dark body inside the casing whose lower end swells out of the open rim as the thruster.
+    float core = sdEllipsoid(s - CORE_SHIFT, CORE_R);
+    core = smax(core, edge + 0.006, 0.006);
+    core = smin(core, body, CORE_BLEND);
+    core = smax(core, -dish, 0.006);
+    core = smax(core, -well, 0.003);
+    add(h, core, BLACK);
+    add(h, length(s - lensCentre()) - LENS_R, CYAN);    return h;
 }
 // The spine between the pods: a ribbed black column.
 float spine(float3 p) {
@@ -159,6 +189,7 @@ float3 render(float2 uv) {
     if (VIEW == 2) { yaw = 1.5708; pitch = -0.1; }
     if (VIEW == 3) { yaw = 0.; pitch = 0.; }
     if (VIEW == 4) { yaw = 0.; pitch = -1.45; }
+    if (VIEW == 5) { yaw = 0.35; pitch = -0.7; dist = 0.55; target = float3(0.15, 1.08, 0.0); }
     if (SPIN == 1) yaw += frameGroup.time * 0.4;
     if (frameGroup.pointerPresses != 0) {
         yaw = (frameGroup.pointer.x / resolution.x - 0.5) * 2. * PI;
@@ -192,6 +223,8 @@ float3 render(float2 uv) {
     float rim = pow(1. - saturate(dot(n, v)), 4.) * 0.25;
     float3 light = float3(1.0, 0.97, 0.93) * dif * 1.25 + float3(0.55, 0.6, 0.7) * fil * 0.45 + float3(0.6, 0.62, 0.68) * sky * 0.35 * occ;
     float3 c = col * light + spec + rim * occ * float3(0.8, 0.82, 0.9);
+    float lensD = length(podFrame(p) - lensCentre());
+    if (h.y == BLACK) c += float3(0.05, 0.6, 1.0) * 0.35 * exp(-lensD * 70.);
     if (h.y == CYAN) {
         float facing = saturate(dot(n, v));
         c = float3(0.0, 0.06, 0.14) + float3(0.0, 0.45, 0.9) * pow(facing, 3.) + float3(0.35, 0.85, 1.0) * pow(facing, 30.);
