@@ -206,7 +206,10 @@ owns the explanation.
   feature test's 30 (at 45, a chamfer's own turn, the split flipped vertex by
   vertex and dented flat faces). Every vertex no crossing pins to the surface
   (`SdfContour.Solved`) is checked against the field before the split and moved
-  onto the surface where a rounding near the cell's size left it proud.
+  onto the surface where a rounding near the cell's size left it proud; one the
+  contour kept beside a sharp convex crease (`SdfContour.Beside`) that lies
+  inside the solid stays a crease vertex when moved, or its face's normal shades
+  the other face's quads beside the edge.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel

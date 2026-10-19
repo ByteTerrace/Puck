@@ -27,6 +27,12 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// coarse corners. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
     /// none.</summary>
     public bool[] Solved { get; init; } = [];
+    /// <summary>Gets, per vertex, whether the contour placed it inside its cell beside a curved convex crease that lies
+    /// past the cell, where it may lie inside the solid off both faces and its quads turn across the crease: moved onto
+    /// the surface, it stays a crease vertex (<see cref="Features"/>) so <see cref="SplitAtCreases"/> shades each face's
+    /// quads as that face. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
+    /// none.</summary>
+    public bool[] Beside { get; init; } = [];
 
     // The least turn, in degrees, between two quads' facings at a crease vertex that splits it (SplitAtCreases): just past
     // the turn that makes a vertex a crease (SdfDualContouring's thirty degrees), so every crease its planes found splits.
@@ -1188,6 +1194,7 @@ public sealed class SdfSampledLattice {
             Quads: quads
         ) {
             Features = surface.Features,
+            Beside = surface.Beside,
             Solved = surface.Solved,
         };
     }

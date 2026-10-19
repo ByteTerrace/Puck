@@ -785,7 +785,11 @@ value and gradient there, and a vertex more than a fiftieth of the contour's
 finest cell off the surface moves onto it along the gradient, takes the gradient
 for its normal and is no crease (`SdfMeshPathBake`, `softened=` on its line; on
 the debug world about 100,000 vertices, 190 more dispatches and 0.8 M more
-taps). The contour then splits each feature vertex whose quads face apart by
+taps). A vertex the contour kept inside its cell beside a sharp convex crease
+past it (`SdfContour.Beside`), which the field puts inside the solid rather than
+proud of a rounding, moves onto the surface but stays a crease vertex: its quads
+turn across the crease, and with its own face's normal the other face's quads
+beside the edge shade up to 90 degrees off. The contour then splits each feature vertex whose quads face apart by
 more than 32 degrees, just past the thirty that make it a feature, into one
 vertex per side, each with the area-weighted facing of its side
 (`SdfContour.SplitAtCreases`); at 45 degrees, the very turn of a chamfer, the

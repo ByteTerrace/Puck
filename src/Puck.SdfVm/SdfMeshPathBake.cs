@@ -1123,8 +1123,11 @@ public sealed class SdfMeshPathBake {
     // vertex at the faces' meeting line, proud of the rounding, while a neighbour with a crossing on the rounding puts its
     // own there, so the rim steps in and out from cell to cell and its flat faces dent where the vertices beside it split.
     // A vertex the field puts farther off the surface than CreaseTolerance of the contour's cell moves onto the surface
-    // along the gradient, takes the gradient for its normal and is no crease. Once every vertex is answered, the contour
-    // splits at the creases that remain on the thread pool.
+    // along the gradient, takes the gradient for its normal and is no crease, except one the contour put inside its cell
+    // beside a sharp convex crease past it (SdfContour.Beside) that the field puts inside the solid: moved onto the face
+    // nearer it, its quads still turn across the crease, and as no crease its face's normal would shade the other face's
+    // quads up to 90 degrees off, where a vertex proud of a rounding lies outside. Once every vertex is answered, the
+    // contour splits at the creases that remain on the thread pool.
     private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
         var contour = group.Contour!;
         var tolerance = (CreaseTolerance * MathF.Min(group.CreaseSpacing.X, MathF.Min(group.CreaseSpacing.Y, group.CreaseSpacing.Z)));
@@ -1140,7 +1143,9 @@ public sealed class SdfMeshPathBake {
 
             if (!(MathF.Abs(distance) > tolerance)) { continue; }
             gradient /= length;
-            if (vertex < contour.Features.Length) { contour.Features[vertex] = false; }
+            var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
+
+            if ((vertex < contour.Features.Length) && !cut) { contour.Features[vertex] = false; }
             contour.Positions[(3 * vertex)] -= (distance * gradient.X);
             contour.Positions[((3 * vertex) + 1)] -= (distance * gradient.Y);
             contour.Positions[((3 * vertex) + 2)] -= (distance * gradient.Z);

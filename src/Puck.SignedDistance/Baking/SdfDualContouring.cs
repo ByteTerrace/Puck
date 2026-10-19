@@ -23,6 +23,9 @@ internal sealed class SdfSurface {
     // point the planes of a face rounded within its cell share, or it merges a refined cell's fine vertices, which
     // interpolate that cell's coarse corners (Merge): a place no crossing pins to the surface. Empty where none is.
     public bool[] Solved { get; init; } = [];
+    // Per vertex, whether it lies inside its cell beside a curved convex crease past it (Place's `beside`): cut off the
+    // crease, it may lie inside the solid, and its quads turn across the crease. Empty where none does.
+    public bool[] Beside { get; init; } = [];
     public int VertexCount => (Positions.Length / 3);
 }
 /// <summary>The sampled lattice a surface is contoured from (<see cref="SdfDualContouring"/>): cells along each axis, each
@@ -141,6 +144,7 @@ internal static class SdfDualContouring {
         var normals = new List<double>();
         var features = new List<bool>();
         var solveds = new List<bool>();
+        var besides = new List<bool>();
         // Per vertex whose crease lies past its cell, the crease's point in lattice coordinates (HandOff).
         var handoffs = new List<(int Vertex, double X, double Y, double Z)>();
 
@@ -178,7 +182,7 @@ internal static class SdfDualContouring {
                             }
                         }
 
-                        var (px, py, pz) = Place(beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, x: x, y: y, z: z);
+                        var (px, py, pz) = Place(beside: out var beside, beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, x: x, y: y, z: z);
                         var (wx, wy, wz) = grid.World(x: (x + px), y: (y + py), z: (z + pz));
                         var (nx, ny, nz) = VertexNormal(crossingNormal: crossingNormal, crossings: (feature || flat), grid: grid, x: wx, y: wy, z: wz);
 
@@ -194,12 +198,13 @@ internal static class SdfDualContouring {
                         normals.Add(item: nz);
                         features.Add(item: feature);
                         solveds.Add(item: solved);
+                        besides.Add(item: beside);
                     }
                 }
             }
         }
 
-        HandOff(features: features, grid: grid, handoffs: handoffs, positions: positions, solveds: solveds, target: (x, y, z) => {
+        HandOff(besides: besides, features: features, grid: grid, handoffs: handoffs, positions: positions, solveds: solveds, target: (x, y, z) => {
             var (tx, ty, tz) = (((int)Math.Floor(x)), ((int)Math.Floor(y)), ((int)Math.Floor(z)));
 
             if ((tx < 0) || (ty < 0) || (tz < 0) || (tx >= cellsX) || (ty >= cellsY) || (tz >= cellsZ)) {
@@ -214,6 +219,7 @@ internal static class SdfDualContouring {
         var (quads, quadCorners) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
         return new SdfSurface {
+            Beside = [.. besides],
             Features = [.. features],
             Solved = [.. solveds],
             Normals = [.. normals],
@@ -249,6 +255,7 @@ internal static class SdfDualContouring {
         var owners = new List<int>();
         var features = new List<bool>();
         var solveds = new List<bool>();
+        var besides = new List<bool>();
         // Per merged fine vertex, its crossings' tangent planes in world space (Place's worldPlanes).
         var vertexPlanes = new Dictionary<int, List<double>>();
         // Per vertex whose crease lies past its cell, the crease's point in fine lattice coordinates (HandOff).
@@ -293,7 +300,7 @@ internal static class SdfDualContouring {
 
                 // A fine vertex its cell merges keeps its crossings' tangent planes for the merged vertex's placement.
                 var planes = (((owner >= 0) && grid.CrossingNormals) ? new List<double>() : null);
-                var (px, py, pz) = Place(beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, stride: stride, worldPlanes: planes, x: x, y: y, z: z);
+                var (px, py, pz) = Place(beside: out var beside, beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, stride: stride, worldPlanes: planes, x: x, y: y, z: z);
                 var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
                 var (nx, ny, nz) = VertexNormal(crossingNormal: crossingNormal, crossings: (feature || flat), grid: grid, x: wx, y: wy, z: wz);
 
@@ -313,6 +320,7 @@ internal static class SdfDualContouring {
                 owners.Add(item: owner);
                 features.Add(item: feature);
                 solveds.Add(item: solved);
+                besides.Add(item: beside);
             }
         }
 
@@ -607,7 +615,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quads: quads, solveds: solveds, vertexPlanes: vertexPlanes);
+        return Merge(besides: besides, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quads: quads, solveds: solveds, vertexPlanes: vertexPlanes);
     }
     // The point of a merged piece every one of its fine vertices' tangent planes `planes` (world space, nx, ny, nz, d
     // each) passes through, within MergedResidual of a fine cell root mean square, solved toward the piece's mean along the
@@ -616,7 +624,7 @@ internal static class SdfDualContouring {
     // cell, `Inside` is the point the piece's vertex takes instead: the mean-biased point, which a straight crease's planes
     // meet too, as Place keeps it; else the point inside the cell (CellSolve.Inside), the crease handed to the neighbour
     // (`HandOff`). Null otherwise. The planes are solved in the coarse cell's unit coordinates, as Place solves a cell's.
-    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, int owner, ReadOnlySpan<double> planes) where TLattice : ISdfRefinedContourLattice {
+    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff, bool Beside)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, int owner, ReadOnlySpan<double> planes) where TLattice : ISdfRefinedContourLattice {
         var factor = grid.Refinement;
         var coarseX = (grid.CellsX / factor);
         var coarseY = (grid.CellsY / factor);
@@ -664,7 +672,7 @@ internal static class SdfDualContouring {
         var past = Math.Max(val1: 0.0, val2: (Math.Max(val1: Math.Abs(value: (x - 0.5)), val2: Math.Max(val1: Math.Abs(value: (y - 0.5)), val2: Math.Abs(value: (z - 0.5)))) - 0.5));
         var (faceA, faceB) = Faces(planes: local);
         (double X, double Y, double Z)? inside = null;
-        var handOff = false;
+        var (handOff, beside) = (false, false);
 
         if ((past > 0.0) && (past <= grid.FeatureReach) && (faceA >= 0) && ConvexCrease(faceA: faceA, faceB: faceB, planes: local, point: (mx, my, mz)) &&
             cell.Solve(bias: MeanBias, x: out var sx, y: out var sy, z: out var sz)) {
@@ -682,18 +690,18 @@ internal static class SdfDualContouring {
             var straight = ((sResidual <= ((tolerance * tolerance) * (local.Length / 4))) && (sPast <= grid.FeatureReach));
             var (ix, iy, iz) = (straight ? (sx, sy, sz) : cell.Inside(x: sx, y: sy, z: sz, planes: local));
 
-            handOff = (!straight && !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz)));
-
+            beside = !straight;
+            handOff = (beside && !OnBoth(faceA: faceA, faceB: faceB, planes: local, point: (ix, iy, iz)));
             inside = ((low.X + (ix * ex)), (low.Y + (iy * ey)), (low.Z + (iz * ez)));
         }
 
-        return ((low.X + (x * ex)), (low.Y + (y * ey)), (low.Z + (z * ez)), past, inside, handOff);
+        return ((low.X + (x * ex)), (low.Y + (y * ey)), (low.Z + (z * ez)), past, inside, handOff, beside);
     }
     // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at the feature
     // point their crossings' planes meet at (MergedFeature), inside the coarse cell where a convex crease lies past it, or
     // at their mean, with their mean normal, and drops the quads that collapse to fewer than three vertices. Two fine
     // vertices of one cell are one piece when a quad joins them.
-    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, List<double>> vertexPlanes, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex) where TLattice : ISdfRefinedContourLattice {
+    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, Dictionary<int, List<double>> vertexPlanes, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
         var parent = new int[vertexCount];
 
@@ -733,6 +741,7 @@ internal static class SdfDualContouring {
         var mergedNormals = new List<double>();
         var mergedFeatures = new List<bool>();
         var mergedSolved = new List<bool>();
+        var mergedBesides = new List<bool>();
         // Per piece, whether any of its fine vertices lies on a crease.
         var pieceFeatures = new HashSet<int>();
 
@@ -768,6 +777,7 @@ internal static class SdfDualContouring {
                 }
                 mergedFeatures.Add(item: ((owners[root] < 0) && features[root]));
                 mergedSolved.Add(item: ((owners[root] < 0) && solveds[root]));
+                mergedBesides.Add(item: ((owners[root] < 0) && besides[root]));
             }
             remap[vertex] = remap[root];
         }
@@ -790,13 +800,14 @@ internal static class SdfDualContouring {
             // piece's vertex stays inside the cell, as Place keeps a cell's.
             var piecePlanes = planeLists.GetValueOrDefault(key: root);
             var meeting = (((sum.Count > 1) && (piecePlanes is not null)) ? MergedFeature(grid: grid, mean: (x, y, z), owner: owners[root], planes: CollectionsMarshal.AsSpan(list: piecePlanes)) : null);
-            var feature = ((meeting is var (fx, fy, fz, past, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
+            var feature = ((meeting is var (fx, fy, fz, past, _, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
 
-            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff)) && pieceFeatures.Contains(item: root)) {
+            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && pieceFeatures.Contains(item: root)) {
                 if (handOff) {
                     mergedHandoffs.Add(item: (remap[root], ((bx - origin.X) / unit.X), ((by - origin.Y) / unit.Y), ((bz - origin.Z) / unit.Z)));
                 }
                 feature = inside;
+                mergedBesides[remap[root]] = besideCrease;
             }
             (x, y, z) = (feature ?? (x, y, z));
             mergedFeatures[remap[root]] = ((feature is not null) ? pieceFeatures.Contains(item: root) : ((sum.Count == 1) && features[root]));
@@ -817,7 +828,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(features: mergedFeatures, grid: grid, handoffs: mergedHandoffs, positions: mergedPositions, solveds: mergedSolved, target: (x, y, z) => {
+        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs, positions: mergedPositions, solveds: mergedSolved, target: (x, y, z) => {
             var vertex = cellVertex(x, y, z);
 
             return ((vertex < 0) ? -1 : remap[vertex]);
@@ -853,6 +864,7 @@ internal static class SdfDualContouring {
 
         return new SdfSurface {
             Features = [.. mergedFeatures],
+            Beside = [.. mergedBesides],
             Solved = [.. mergedSolved],
             Normals = [.. mergedNormals],
             Positions = [.. mergedPositions],
@@ -869,7 +881,7 @@ internal static class SdfDualContouring {
     // cuts its corner in a notch. A target that holds a crease of its own, a cell of several patches and a cell the
     // surface misses take none. A vertex that hands its crease over stays inside its cell and keeps its
     // crease mark, since its quads turn across the crease.
-    private static void HandOff<TLattice>(TLattice grid, List<double> positions, List<bool> features, List<bool> solveds, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
+    private static void HandOff<TLattice>(TLattice grid, List<double> positions, List<bool> features, List<bool> solveds, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
         if (handoffs.Count == 0) {
             return;
         }
@@ -900,6 +912,7 @@ internal static class SdfDualContouring {
             positions[((3 * to) + 2)] = (sum.Z / sum.Count);
             features[to] = true;
             solveds[to] = true;
+            besides[to] = false;
         }
     }
     /// <summary>Returns how many surface patches a cell with corner-sign mask <paramref name="mask"/> holds: more than
@@ -1090,9 +1103,10 @@ internal static class SdfDualContouring {
     // `stride` samples apart; the vertex is still in the cell's own unit coordinates. `crossingNormal` is the sum of the
     // crossings' unit world normals.
     // `worldPlanes`, when given, takes the crossings' tangent planes in world space (nx, ny, nz, d each) for Merge.
-    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, out (double X, double Y, double Z)? beyond, int stride = 1, List<double>? worldPlanes = null) where TLattice : ISdfContourLattice {
+    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, out (double X, double Y, double Z)? beyond, out bool beside, int stride = 1, List<double>? worldPlanes = null) where TLattice : ISdfContourLattice {
         var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
         beyond = null;
+        beside = false;
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
         Span<double> planes = stackalloc double[(4 * CellEdges.Length)];
         // Each plane's unit normal in world space, which the vertex normal reads (NearNormal).
@@ -1219,9 +1233,11 @@ internal static class SdfDualContouring {
                     result = (fx, fy, fz);
                     placed = true;
                 } else if (feature && (past <= grid.FeatureReach) && ConvexCrease(faceA: faceA, faceB: faceB, planes: cellPlanes, point: mean) &&
-                    !Meets(x: sx, y: sy, z: sz, planes: cellPlanes) &&
-                    !OnBoth(point: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), faceA: faceA, faceB: faceB, planes: cellPlanes)) {
-                    beyond = (fx, fy, fz);
+                    !Meets(x: sx, y: sy, z: sz, planes: cellPlanes)) {
+                    beside = true;
+                    if (!OnBoth(point: cell.Inside(x: sx, y: sy, z: sz, planes: cellPlanes), faceA: faceA, faceB: faceB, planes: cellPlanes)) {
+                        beyond = (fx, fy, fz);
+                    }
                 }
             }
             // A sharp feature whose faces' planes meet just past the cell (an edge the next cell holds but whose crossings
