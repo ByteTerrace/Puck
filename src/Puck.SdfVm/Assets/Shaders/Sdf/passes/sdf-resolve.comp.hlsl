@@ -34,12 +34,26 @@
 // The words an output pixel holds in the history surface: the identity of the tap nearest the pixel's center, then its ray distance and the
 // gathered weight as two half floats (the distance low; the far limit 8192 and the weight cap stay normal halves, each
 // within a relative 2^-11, far inside SdfHistoryDepthTolerance), then the accumulated transport's two words
-// (sdfPackTransport). KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
-static const uint SdfHistorySurfaceWords = 4u;
+// (sdfPackTransport), then the accumulated mean of the squared luma (YCoCg Y) as a float, with the color's weights.
+// KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
+static const uint SdfHistorySurfaceWords = 5u;
+// A frame whose 3x3 luma mean lies within this many of the history's own standard deviations of its luma, plus
+// SdfHistorySteadyFloor, is the jitter visiting a detail finer than a pixel rather than a change: the history joins it
+// unclipped. A thin stroke the jitter hits in some frames and misses in others keeps its average instead of flickering,
+// while a change on a surface that held steady, whose spread is near zero, is clipped as before.
+static const float SdfHistorySteadySpread = 3.0;
+static const float SdfHistorySteadyFloor = 0.02;
+// The most, in output pixels, a history may have moved and still count as steady, and only over a surface, since an
+// uncovered pixel moves with the camera's rotation alone: past it, resampling the history blurs
+// it, and an unclipped blur trails behind whatever moves.
+static const float SdfHistorySteadyTravel = 0.05;
 // The relative ray-distance disagreement a reprojected history sample may carry and still describe the same surface.
 // The accumulated weight history saturates at: one jitter period of full-weight samples. KEEP IN SYNC with
 // SdfTemporalHistory.Period.
 static const float SdfHistoryWeightCap = 8.0;
+// The weight a steady history (SdfHistorySteadySpread) saturates at: four jitter periods, so a detail the jitter visits
+// in one frame of eight moves the mean by a thirty-third of its contrast a frame rather than a ninth.
+static const float SdfHistorySteadyWeightCap = 32.0;
 // The falloff of the Gaussian a sample is weighted by, over its squared distance in output pixels from the output
 // pixel's center: 1 / (2 * 0.35^2), a reconstruction about as wide as one output pixel's box.
 static const float SdfResolveFilterFalloff = 4.08;
@@ -189,6 +203,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     float centerWeight = -1.0;
     uint centerIdentity = 0u;
     float centerT = 0.0;
+    float lumaSum = 0.0;
+    float lumaSquareSum = 0.0;
 
     [unroll] for (int dy = -1; dy <= 1; dy++) {
         [unroll] for (int dx = -1; dx <= 1; dx++) {
@@ -227,6 +243,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             sum += (weight * color);
             transportSum += (weight * transport);
             weightSum += weight;
+            lumaSum += (weight * ycocg.x);
+            lumaSquareSum += (weight * (ycocg.x * ycocg.x));
             boxMin = min(boxMin, ycocg);
             boxMax = max(boxMax, ycocg);
             coverageMin = min(coverageMin, color.a);
@@ -240,6 +258,9 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     accepted = false;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
+    float historyLumaSquare = 0.0;
+    // How far, in output pixels, the history moved to reach this pixel; a steady history is trusted only when it barely moved.
+    float travel = 1.0e9;
 
     if ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0)) {
         float4 currentRows[6];
@@ -275,6 +296,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float2 motion = ((previousPixel / passGroup.previousView[4].xy) - (currentPixel / float2(render)));
 
             historyPosition = (((float2(id.xy) + 0.5) + (motion * float2(extent))) - 0.5);
+            travel = length(motion * float2(extent));
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
                 uint word = (SdfHistorySurfaceWords * ((texel.y * extent.x) + texel.x));
@@ -286,6 +308,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
                 float shift = (hit ? (previousT - hitT) : 0.0);
 
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);
+                historyLumaSquare = asfloat(historySurface[word + 4u]);
                 [unroll] for (uint tap = 0u; tap < 9u; tap++) {
                     accepted = (accepted || ((identities[tap] == 0u)
                         ? (historyIdentity == 0u)
@@ -301,6 +324,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     float historyWeight = 0.0;
     float4 history = float4(0.0, 0.0, 0.0, 0.0);
     float4 historyTransport = float4(0.0, 0.0, 0.0, 0.0);
+    float historySquare = 0.0;
+    float weightCap = SdfHistoryWeightCap;
 
     if (accepted) {
         float4 previous;
@@ -308,20 +333,26 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
         sdfHistoryAt(historyPosition, extent, previous, previousTransport);
         // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
-        accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
+        accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)) && isfinite(historyLumaSquare));
         if (accepted) {
-            historyWeight = (clamp(historyWeightGathered, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
-            history = float4(
-                sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax)),
-                clamp(previous.a, coverageMin, coverageMax)
-            );
+            float3 previousYCoCg = sdfToYCoCg(max(previous.rgb, 0.0));
+            float spread = sqrt(max((historyLumaSquare - (previousYCoCg.x * previousYCoCg.x)), 0.0));
+            bool steady = (hit && (travel <= SdfHistorySteadyTravel) && (abs((lumaSum / max(weightSum, 1.0e-6)) - previousYCoCg.x) <= ((SdfHistorySteadySpread * spread) + SdfHistorySteadyFloor)));
+            float3 kept = (steady ? previousYCoCg : sdfClipToBox(previousYCoCg, boxMin, boxMax));
+
+            weightCap = (steady ? SdfHistorySteadyWeightCap : SdfHistoryWeightCap);
+            historyWeight = (clamp(historyWeightGathered, 0.0, weightCap) * (1.0 - reactive));
+            history = float4(sdfFromYCoCg(kept), clamp(previous.a, coverageMin, coverageMax));
             historyTransport = clamp(previousTransport, transportMin, transportMax);
+            // A clipped history starts its spread again from the luma it was clipped to.
+            historySquare = (steady ? historyLumaSquare : (kept.x * kept.x));
         }
     }
 
     total = (historyWeight + weightSum);
     accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
+    float accumulatedSquare = (((historySquare * historyWeight) + lumaSquareSum) / max(total, 1.0e-6));
     uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
@@ -329,11 +360,12 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = centerIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
+    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, weightCap) : 0.0) << 16u));
     uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
 
     historySurfaceRW[word + 2u] = historyTransportWords.x;
     historySurfaceRW[word + 3u] = historyTransportWords.y;
+    historySurfaceRW[word + 4u] = asuint((reusable && isfinite(accumulatedSquare)) ? accumulatedSquare : 0.0);
 }
 
 [numthreads(8, 8, 1)]
