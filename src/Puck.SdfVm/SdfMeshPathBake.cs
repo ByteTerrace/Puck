@@ -164,8 +164,9 @@ public sealed class SdfMeshPathBake {
     private long m_taps;
     private long m_discarded;
     private long m_refinedCells;
-    // The mesh edges the material cuts searched for a boundary.
+    // The mesh edges the material cuts searched for a boundary, and the vertices the field check moved onto the surface.
     private long m_cutEdges;
+    private long m_softened;
     private double m_seconds;
     private bool m_reported;
     private long m_loaded;
@@ -391,6 +392,8 @@ public sealed class SdfMeshPathBake {
                 if (!m_groups.Contains(item: group)) { return; }
                 if (group.Final is { } final) {
                     AnswerFinal(final: final, gradients: gradients, group: group, materials: materials, request: in request, values: values);
+                } else if (group.Creases is not null) {
+                    AnswerCreases(gradients: gradients!, group: group, request: in request, values: values);
                 } else {
                     AnswerPoints(group: group, materials: materials, request: in request);
                 }
@@ -435,7 +438,7 @@ public sealed class SdfMeshPathBake {
                 bytes += (((long)mesh.Positions.Length * SdfMeshRegion.VertexBytes) + ((long)mesh.Indices.Length * sizeof(uint)) + ((long)mesh.TriangleCount * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} loaded={m_loaded} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000}";
         }
     }
 
@@ -578,6 +581,7 @@ public sealed class SdfMeshPathBake {
             m_discarded = 0;
             m_refinedCells = 0;
             m_cutEdges = 0;
+            m_softened = 0;
             m_loaded = 0;
             m_reported = false;
             m_clock.Restart();
@@ -920,7 +924,7 @@ public sealed class SdfMeshPathBake {
         SdfContour? contour = null;
 
         try {
-            contour = lattice.Contour().SplitAtCreases();
+            contour = lattice.Contour();
         } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {exception.Message}");
         }
@@ -934,6 +938,93 @@ public sealed class SdfMeshPathBake {
                 Finish();
                 return;
             }
+            group.Contour = contour;
+
+            var creases = new List<int>();
+
+            for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
+                if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { creases.Add(item: vertex); }
+            }
+            if (creases.Count == 0) {
+                group.Contouring = true;
+                _ = Task.Run(action: () => Split(group: group));
+                return;
+            }
+            group.Creases = [.. creases];
+            group.CreaseSpacing = lattice.ContourCell;
+            group.Points = new Vector4[creases.Count];
+            for (var index = 0; (index < creases.Count); index++) {
+                var vertex = creases[index];
+
+                group.Points[index] = new Vector4(x: contour.Positions[(3 * vertex)], y: contour.Positions[((3 * vertex) + 1)], z: contour.Positions[((3 * vertex) + 2)], w: 1f);
+            }
+            group.PointsAnswered = 0;
+            group.Next = CreaseChunk(group: group);
+        }
+    }
+    // The next chunk of the vertices a group's field check measures, as many as a frame's share of field evaluations takes.
+    private static SdfMeshBakeRequest CreaseChunk(Group group) {
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (FrameTaps / 5));
+
+        return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
+            Instances = group.Instances,
+            Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
+        };
+    }
+    // Answers a chunk of a group's field check with the field's value and gradient at each vertex no crossing pins to the
+    // surface (SdfContour.Features and SdfContour.Solved): a vertex its crossings' tangent planes placed, and a refined
+    // cell's merged vertex. The planes meet on the surface only at a sharp crease: where an edge is rounded by a fillet,
+    // chamfer or rounding near the cell's size (a smooth blend's), a cell whose crossings all lie on the two faces puts its
+    // vertex at the faces' meeting line, proud of the rounding, while a neighbour with a crossing on the rounding puts its
+    // own there, so the rim steps in and out from cell to cell and its flat faces dent where the vertices beside it split.
+    // A vertex the field puts farther off the surface than CreaseTolerance of the contour's cell moves onto the surface
+    // along the gradient, takes the gradient for its normal and is no crease. Once every vertex is answered, the contour
+    // splits at the creases that remain on the thread pool.
+    private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
+        var contour = group.Contour!;
+        var tolerance = (CreaseTolerance * MathF.Min(group.CreaseSpacing.X, MathF.Min(group.CreaseSpacing.Y, group.CreaseSpacing.Z)));
+
+        for (var index = 0; (index < request.Samples); index++) {
+            var vertex = group.Creases![(group.PointsAnswered + index)];
+            var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
+            var length = gradient.Length();
+
+            if (!(length > 0f)) { continue; }
+
+            var distance = (values[index] / length);
+
+            if (!(MathF.Abs(distance) > tolerance)) { continue; }
+            gradient /= length;
+            if (vertex < contour.Features.Length) { contour.Features[vertex] = false; }
+            contour.Positions[(3 * vertex)] -= (distance * gradient.X);
+            contour.Positions[((3 * vertex) + 1)] -= (distance * gradient.Y);
+            contour.Positions[((3 * vertex) + 2)] -= (distance * gradient.Z);
+            contour.Normals[(3 * vertex)] = gradient.X;
+            contour.Normals[((3 * vertex) + 1)] = gradient.Y;
+            contour.Normals[((3 * vertex) + 2)] = gradient.Z;
+            m_softened++;
+        }
+        group.PointsAnswered += request.Samples;
+        if (group.PointsAnswered < group.Points!.Length) {
+            group.Next = CreaseChunk(group: group);
+            return;
+        }
+
+        group.Creases = null;
+        group.Points = null;
+        group.Next = null;
+        group.Contouring = true;
+        _ = Task.Run(action: () => Split(group: group));
+    }
+    // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
+    // (SdfMeshMaterialCut).
+    private void Split(Group group) {
+        var contour = group.Contour!.SplitAtCreases();
+
+        lock (m_gate) {
+            group.Contouring = false;
+            if (!m_groups.Contains(item: group)) { return; }
+            group.Contour = contour;
             group.Cut = new SdfMeshMaterialCut(contour: contour, owns: group.Materials);
             group.Points = group.Cut.Points();
             group.PointMaterials = new int[group.Points.Length];
@@ -1007,6 +1098,7 @@ public sealed class SdfMeshPathBake {
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
             m_cutEdges += group.Cut!.Edges;
             group.Contour = null;
+            group.Creases = null;
             group.Cut = null;
             group.Points = null;
             group.PointMaterials = [];
@@ -1051,8 +1143,13 @@ public sealed class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} loaded={m_loaded} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
+        return $"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} loaded={m_loaded} triangles={triangles} vertices={vertices} seconds={m_seconds:0.000}" + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty);
     }
+
+    // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it
+    // (AnswerCreases): past the field's noise at a sharp crease, short of where a rounding near a cell's size leaves its
+    // faces' meeting line.
+    private const float CreaseTolerance = 0.02f;
 
     // One bake group: the instances it selects, the frame its mesh is stored in, its box, and where its bake stands.
     private sealed class Group(int selector, bool dynamic) {
@@ -1086,6 +1183,10 @@ public sealed class SdfMeshPathBake {
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
         public SdfMeshMaterialCut? Cut { get; set; }
+        // While the contour's unpinned vertices are checked against the field, the vertices, and the spacing their
+        // gradient taps scale by.
+        public int[]? Creases { get; set; }
+        public Vector3 CreaseSpacing { get; set; } = Vector3.One;
         public Vector4[]? Points { get; set; }
         public int[] PointMaterials { get; set; } = [];
         public int PointsAnswered { get; set; }

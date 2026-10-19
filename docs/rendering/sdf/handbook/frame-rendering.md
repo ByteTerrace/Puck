@@ -719,15 +719,37 @@ bias only the planes' common null space feels, so it lies on the crease rather
 than drawn a few hundredths of a cell toward the crossings' mean, and it is taken
 only inside its cell (`SdfDualContouring.Place`): a point past it, as a thin
 wedge's tip or a crease the next cell holds gives, folds the quads the vertex
-shares with its neighbours into teeth along the edge. A merged piece
+shares with its neighbours into teeth along the edge. A point that is no
+feature and lies past the cell is pulled back along the line from the
+crossings' mean, not clamped axis by axis, which would pin it to the cell's
+faces and step the vertices along an unresolved edge into a staircase aligned
+with the lattice. A merged piece
 of a refined cell that measured nothing is placed the same way from its fine
 crossings' planes (`MergedFeature`), so an edge keeps its line through the cells
 around a refined run (a seam between two materials). A feature vertex takes its
 normal from the crossings whose planes pass through it, as does a vertex whose
 crossings all face one way (one flat face); any other reads the gradients the
-lattice interpolates at it. The contour then splits each feature vertex whose
-quads face apart by more than 45 degrees into one vertex per side, each with the
-area-weighted facing of its side (`SdfContour.SplitAtCreases`), so a sharp edge
+lattice interpolates at it.
+
+The planes meet on the surface only at a sharp crease. Where an edge is rounded
+by a fillet, a chamfer or a rounding near the cell's size (a smooth blend's), a
+cell whose crossings all lie on the two faces puts its vertex at the faces'
+meeting line, proud of the rounding by up to a third of the rounding's radius,
+while a neighbour with a crossing on the rounding puts its own on it, so a rim
+steps in and out from cell to cell. So the bake checks every vertex no crossing
+pins to the surface (`SdfContour.Solved`: one its planes drew more than a
+twentieth of a cell from their crossings' mean, and every merged vertex of a
+refined cell) against the field: a second points round measures the field's
+value and gradient there, and a vertex more than a fiftieth of the contour's
+finest cell off the surface moves onto it along the gradient, takes the gradient
+for its normal and is no crease (`SdfMeshPathBake`, `softened=` on its line; on
+the debug world about 100,000 vertices, 190 more dispatches and 0.8 M more
+taps). The contour then splits each feature vertex whose quads face apart by
+more than 32 degrees, just past the thirty that make it a feature, into one
+vertex per side, each with the area-weighted facing of its side
+(`SdfContour.SplitAtCreases`); at 45 degrees, the very turn of a chamfer, the
+quads' noise split a chamfer's vertices or not from one to the next and dented
+the flat faces beside it (the Moth's heel blocks and heel lugs). A sharp edge
 shades as the two faces meeting at it rather than as a band of blended normals a
 cell wide, the band that serrated the test room's plates and frayed the Moth's
 plate rims into pale and dark fringes. Pieces of the surface apart from the rest,

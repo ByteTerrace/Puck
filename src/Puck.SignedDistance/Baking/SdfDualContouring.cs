@@ -20,6 +20,10 @@ internal sealed class SdfSurface {
     public required int[] QuadInsideCorners { get; init; }
     // Per vertex, whether it lies on a crease or corner of the surface (Place's feature): empty where no vertex does.
     public bool[] Features { get; init; } = [];
+    // Per vertex, whether its crossings' tangent planes drew it away from their mean (Place), as to a crease or to the
+    // point the planes of a face rounded within its cell share, or it merges a refined cell's fine vertices, which
+    // interpolate that cell's coarse corners (Merge): a place no crossing pins to the surface. Empty where none is.
+    public bool[] Solved { get; init; } = [];
     public int VertexCount => (Positions.Length / 3);
 }
 /// <summary>The sampled lattice a surface is contoured from (<see cref="SdfDualContouring"/>): cells along each axis, each
@@ -102,6 +106,9 @@ internal static class SdfDualContouring {
     // The cosine of the least turn between two crossings' planes that makes their meeting line a crease (thirty degrees);
     // planes that turn less (a curved face's) meet along a line far from the surface.
     private const double CreaseCosine = 0.866;
+    // How far, in cells, a vertex lies from its crossings' mean for the contour to record it as placed by its planes
+    // (SdfSurface.Solved).
+    private const double SolvedDrift = 0.05;
 
     // The twelve edges of a cell as corner-offset pairs, each offset packed as x | y << 1 | z << 2.
     private static readonly (int A, int B)[] CellEdges = [
@@ -131,6 +138,7 @@ internal static class SdfDualContouring {
         var positions = new List<double>();
         var normals = new List<double>();
         var features = new List<bool>();
+        var solveds = new List<bool>();
 
         Array.Fill(array: vertexOfPatch, value: -1);
 
@@ -166,7 +174,7 @@ internal static class SdfDualContouring {
                             }
                         }
 
-                        var (px, py, pz) = Place(crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, x: x, y: y, z: z);
+                        var (px, py, pz) = Place(crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, x: x, y: y, z: z);
                         var (wx, wy, wz) = grid.World(x: (x + px), y: (y + py), z: (z + pz));
                         var (nx, ny, nz) = VertexNormal(crossingNormal: crossingNormal, crossings: (feature || flat), grid: grid, x: wx, y: wy, z: wz);
 
@@ -178,6 +186,8 @@ internal static class SdfDualContouring {
                         normals.Add(item: ny);
                         normals.Add(item: nz);
                         features.Add(item: feature);
+                solveds.Add(item: solved);
+                        solveds.Add(item: solved);
                     }
                 }
             }
@@ -187,6 +197,7 @@ internal static class SdfDualContouring {
 
         return new SdfSurface {
             Features = [.. features],
+            Solved = [.. solveds],
             Normals = [.. normals],
             Positions = [.. positions],
             QuadCorners = quadCorners,
@@ -220,6 +231,7 @@ internal static class SdfDualContouring {
         // Per vertex, the unmeasured refined cell whose fine vertices it merges with, or -1.
         var owners = new List<int>();
         var features = new List<bool>();
+        var solveds = new List<bool>();
         // Per merged fine vertex, its crossings' tangent planes in world space (Place's worldPlanes).
         var vertexPlanes = new Dictionary<int, double[]>();
 
@@ -262,7 +274,7 @@ internal static class SdfDualContouring {
 
                 // A fine vertex its cell merges keeps its crossings' tangent planes for the merged vertex's placement.
                 var planes = (((owner >= 0) && grid.CrossingNormals) ? new double[10] : null);
-                var (px, py, pz) = Place(crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, stride: stride, worldPlanes: planes, x: x, y: y, z: z);
+                var (px, py, pz) = Place(crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, stride: stride, worldPlanes: planes, x: x, y: y, z: z);
                 var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
                 var (nx, ny, nz) = VertexNormal(crossingNormal: crossingNormal, crossings: (feature || flat), grid: grid, x: wx, y: wy, z: wz);
 
@@ -277,6 +289,7 @@ internal static class SdfDualContouring {
                 normals.Add(item: nz);
                 owners.Add(item: owner);
                 features.Add(item: feature);
+                solveds.Add(item: solved);
             }
         }
 
@@ -553,7 +566,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(features: features, grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quadInsideCorners: quadInsideCorners, quads: quads, vertexPlanes: vertexPlanes);
+        return Merge(features: features, solveds: solveds, grid: grid, normals: normals, owners: owners, positions: positions, quadCorners: quadCorners, quadInsideCorners: quadInsideCorners, quads: quads, vertexPlanes: vertexPlanes);
     }
     // Merges the fine vertices of each connected piece of an unmeasured refined cell's surface into one, at the feature
     // point their crossings' planes meet at (MergedFeature) or else their mean, with their mean normal, and drops the quads
@@ -593,7 +606,7 @@ internal static class SdfDualContouring {
             ? (x, y, z)
             : null);
     }
-    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<int> owners, List<int> quads, List<int> quadCorners, List<int> quadInsideCorners, Dictionary<int, double[]> vertexPlanes) where TLattice : ISdfRefinedContourLattice {
+    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, List<int> quadInsideCorners, Dictionary<int, double[]> vertexPlanes) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
         var parent = new int[vertexCount];
 
@@ -632,6 +645,7 @@ internal static class SdfDualContouring {
         var mergedPositions = new List<double>();
         var mergedNormals = new List<double>();
         var mergedFeatures = new List<bool>();
+        var mergedSolved = new List<bool>();
         // Per piece, whether any of its fine vertices lies on a crease.
         var pieceFeatures = new HashSet<int>();
 
@@ -668,6 +682,7 @@ internal static class SdfDualContouring {
                     mergedNormals.Add(item: normals[((3 * root) + axis)]);
                 }
                 mergedFeatures.Add(item: ((owners[root] < 0) && features[root]));
+                mergedSolved.Add(item: ((owners[root] < 0) && solveds[root]));
             }
             remap[vertex] = remap[root];
         }
@@ -682,6 +697,7 @@ internal static class SdfDualContouring {
 
             (x, y, z) = (feature ?? (x, y, z));
             mergedFeatures[remap[root]] = ((feature is not null) ? pieceFeatures.Contains(item: root) : ((sum.Count == 1) && features[root]));
+            mergedSolved[remap[root]] = true;
 
             mergedPositions[at] = x;
             mergedPositions[(at + 1)] = y;
@@ -730,6 +746,7 @@ internal static class SdfDualContouring {
 
         return new SdfSurface {
             Features = [.. mergedFeatures],
+            Solved = [.. mergedSolved],
             Normals = [.. mergedNormals],
             Positions = [.. mergedPositions],
             QuadCorners = [.. mergedCorners],
@@ -925,7 +942,7 @@ internal static class SdfDualContouring {
     // `stride` samples apart; the vertex is still in the cell's own unit coordinates. `crossingNormal` is the sum of the
     // crossings' unit world normals.
     // `worldPlanes`, when given, accumulates the crossings' tangent planes in world space as MergedFeature reads them.
-    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, int stride = 1, double[]? worldPlanes = null) where TLattice : ISdfContourLattice {
+    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, int stride = 1, double[]? worldPlanes = null) where TLattice : ISdfContourLattice {
         var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
         Span<double> planes = stackalloc double[(4 * CellEdges.Length)];
@@ -936,6 +953,7 @@ internal static class SdfDualContouring {
 
         crossingNormal = (0.0, 0.0, 0.0);
         feature = false;
+        solved = false;
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {
             if ((edges & (1 << edge)) == 0) {
@@ -1063,15 +1081,106 @@ internal static class SdfDualContouring {
                 result = ((!inside && (Math.Max(val1: Math.Abs(value: (sx - 0.5)), val2: Math.Max(val1: Math.Abs(value: (sy - 0.5)), val2: Math.Abs(value: (sz - 0.5)))) <= (0.5 + grid.FeatureReach)) &&
                     Meets(x: sx, y: sy, z: sz, planes: planes[..(4 * planeCount)]))
                     ? (sx, sy, sz)
-                    : (Math.Clamp(max: 1.0, min: 0.0, value: sx), Math.Clamp(max: 1.0, min: 0.0, value: sy), Math.Clamp(max: 1.0, min: 0.0, value: sz)));
+                    : Inside(x: sx, y: sy, z: sz, planes: planes[..(4 * planeCount)]));
             }
         }
 
+        // The crossings' mean lies on the surface where it is flat across the cell and within it where it curves; a vertex
+        // the planes draw away from it (to their meeting point, or past the cell and back) may lie proud of a surface that
+        // rounds within the cell.
+        solved = (((((result.X - mean.X) * (result.X - mean.X)) + ((result.Y - mean.Y) * (result.Y - mean.Y))) + ((result.Z - mean.Z) * (result.Z - mean.Z))) > (SolvedDrift * SolvedDrift));
         crossingNormal = NearNormal(all: crossingNormal, normals: crossingNormals[..(3 * planeCount)], planes: planes[..(4 * planeCount)], point: result);
         flat = Flat(normals: crossingNormals[..(3 * planeCount)]);
 
         return result;
 
+        // The point within the cell for a solution (x, y, z) past it: of the least-squares point with each coordinate past
+        // the cell held at the cell's face (Bounded) and the point the segment from the crossings' mean toward the solution
+        // leaves the cell at (Clip), the one nearer the planes. Clamping each coordinate on its own leaves the free ones
+        // where the unconstrained solve put them, off the planes, and along an edge the cells cannot resolve steps the
+        // vertices into a staircase aligned with the lattice; the segment keeps them near the surface the crossings sample,
+        // and the held solve keeps a corner the cell's faces cut on the corner.
+        (double X, double Y, double Z) Inside(double x, double y, double z, ReadOnlySpan<double> planes) {
+            var held = Bounded(x: x, y: y, z: z);
+            var clipped = Clip(from: mean, to: (x, y, z));
+
+            return ((Residual(point: clipped, planes: planes) < Residual(point: held, planes: planes)) ? clipped : held);
+        }
+        static double Residual((double X, double Y, double Z) point, ReadOnlySpan<double> planes) {
+            var sum = 0.0;
+
+            for (var plane = 0; (plane < planes.Length); plane += 4) {
+                var distance = ((((planes[plane] * point.X) + (planes[(plane + 1)] * point.Y)) + (planes[(plane + 2)] * point.Z)) - planes[(plane + 3)]);
+
+                sum += (distance * distance);
+            }
+
+            return sum;
+        }
+        static (double X, double Y, double Z) Clip((double X, double Y, double Z) from, (double X, double Y, double Z) to) {
+            var t = 1.0;
+
+            t = Math.Min(val1: t, val2: Reach(from: from.X, to: to.X));
+            t = Math.Min(val1: t, val2: Reach(from: from.Y, to: to.Y));
+            t = Math.Min(val1: t, val2: Reach(from: from.Z, to: to.Z));
+
+            return ((from.X + (t * (to.X - from.X))), (from.Y + (t * (to.Y - from.Y))), (from.Z + (t * (to.Z - from.Z))));
+
+            static double Reach(double from, double to) => ((to > 1.0) ? ((1.0 - from) / (to - from)) : ((to < 0.0) ? (from / (from - to)) : 1.0));
+        }
+        (double X, double Y, double Z) Bounded(double x, double y, double z) {
+            Span<double> point = [x, y, z];
+            Span<bool> held = [false, false, false];
+
+            for (var round = 0; (round < 3); round++) {
+                var any = false;
+
+                for (var axis = 0; (axis < 3); axis++) {
+                    if (!held[axis] && ((point[axis] < 0.0) || (point[axis] > 1.0))) {
+                        point[axis] = Math.Clamp(value: point[axis], min: 0.0, max: 1.0);
+                        held[axis] = true;
+                        any = true;
+                    }
+                }
+                if (!any) {
+                    break;
+                }
+                SolveHeld(held: held, point: point);
+            }
+
+            return (Math.Clamp(value: point[0], min: 0.0, max: 1.0), Math.Clamp(value: point[1], min: 0.0, max: 1.0), Math.Clamp(value: point[2], min: 0.0, max: 1.0));
+        }
+        // Solves the biased normal equations for the coordinates not `held`, the held ones fixed at their values in `point`.
+        void SolveHeld(ReadOnlySpan<bool> held, Span<double> point) {
+            Span<double> m = [(a00 + Bias), a01, a02, a01, (a11 + Bias), a12, a02, a12, (a22 + Bias)];
+            Span<double> r = [(b0 + (Bias * mean.X)), (b1 + (Bias * mean.Y)), (b2 + (Bias * mean.Z))];
+            Span<int> free = stackalloc int[3];
+            var count = 0;
+
+            for (var axis = 0; (axis < 3); axis++) {
+                if (held[axis]) {
+                    for (var row = 0; (row < 3); row++) {
+                        r[row] -= (m[((3 * row) + axis)] * point[axis]);
+                    }
+                } else {
+                    free[count++] = axis;
+                }
+            }
+            if (count == 1) {
+                var a = free[0];
+
+                point[a] = (r[a] / m[((3 * a) + a)]);
+            } else if (count == 2) {
+                var (a, b) = (free[0], free[1]);
+                var (p, q, t) = (m[((3 * a) + a)], m[((3 * a) + b)], m[((3 * b) + b)]);
+                var det = ((p * t) - (q * q));
+
+                if (Math.Abs(value: det) > 1e-12) {
+                    point[a] = (((r[a] * t) - (q * r[b])) / det);
+                    point[b] = (((p * r[b]) - (q * r[a])) / det);
+                }
+            }
+        }
         // Whether every plane (nx, ny, nz, d) passes within FeatureResidual of the point.
         static bool Meets(double x, double y, double z, ReadOnlySpan<double> planes) {
             for (var plane = 0; (plane < planes.Length); plane += 4) {
