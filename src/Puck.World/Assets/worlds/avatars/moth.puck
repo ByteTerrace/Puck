@@ -4731,44 +4731,18 @@ prototypes {
       // bottom plate the largest, hooding the nozzle that sits flush in the opening under it. Built from the pods lab.
       shape Superellipsoid "pod-left" {
         id: 1100
-        position [0.1653, 1.1839, -0.2372]
+        position [0.1853, 1.1139, -0.1872]
         rotation [0, 0, 0, 1]
         scale [0.078, 0.3186, 0.0585]
         material: charcoal
         group: 90
         parent: "torso"
         exponent: 2
-        swings [
-          {
-            driver: "wings"
-            axis [0, 0, 1]
-            amplitude: 0.105
-            pivot [0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-          {
-            driver: "wings"
-            axis [1, 0, 0]
-            amplitude: 0.07
-            pivot [0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-          {
-            driver: "bank"
-            axis [0, 1, 0]
-            amplitude: 0.05
-            pivot [0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-        ]
       }
 
       shape Box "podCoreClip-left" {
         id: 1101
-        position [1.04, 1.2, -0.2625]
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: charcoal
@@ -4779,7 +4753,7 @@ prototypes {
 
       shape Box "podCoreCut-left" {
         id: 1102
-        position [0.6944, 1.7661, 0.1169]
+        position [0.7144, 1.6961, 0.1669]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [1, 1, 1]
         material: charcoal
@@ -4791,29 +4765,10 @@ prototypes {
 
       shape Superellipsoid "podCap-left" {
         id: 1103
-        position [0.17, 1.2, -0.245]
+        position [0.19, 1.13, -0.195]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.1209, 0.4446, 0.1014]
         material: violetPodLeft
-        group: 91
-        parent: "pod-left"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podCapInner-left" {
-        id: 1104
-        position [0.17, 1.2, -0.245]
-        rotation [0, 0, 0.0998, 0.995]
-        scale [0.1037, 0.4274, 0.0359]
-        material: violetPodLeft
-        blend: "Subtraction"
         group: 91
         parent: "pod-left"
         exponent: 2.4
@@ -4827,8 +4782,8 @@ prototypes {
       }
 
       shape Box "podCapClip-left" {
-        id: 1105
-        position [1.04, 1.2, -0.2625]
+        id: 1104
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: violetPodLeft
@@ -4839,8 +4794,8 @@ prototypes {
       }
 
       shape Box "podCapCut-left" {
-        id: 1106
-        position [0.5664, 1.6136, 0.0391]
+        id: 1105
+        position [0.5864, 1.5436, 0.0891]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -4851,8 +4806,8 @@ prototypes {
       }
 
       shape Superellipsoid "podCapBottom-left" {
-        id: 1107
-        position [0.3645, -0.1276, -0.245]
+        id: 1106
+        position [0.3845, -0.1976, -0.195]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.6327, 1.56, 0.78]
         material: violetPodLeft
@@ -4864,8 +4819,8 @@ prototypes {
       }
 
       shape Box "podShoulderTop-left" {
-        id: 1108
-        position [-0.016, 1.1623, -0.245]
+        id: 1107
+        position [0.004, 1.0923, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -4876,8 +4831,8 @@ prototypes {
       }
 
       shape Box "podShoulderOuter-left" {
-        id: 1109
-        position [0.0245, 1.1705, -0.245]
+        id: 1108
+        position [0.0445, 1.1005, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -4888,8 +4843,8 @@ prototypes {
       }
 
       shape Box "podShoulderSpine-left" {
-        id: 1110
-        position [-0.0082, 1.1639, -0.245]
+        id: 1109
+        position [0.0118, 1.0939, -0.195]
         rotation [0, 0, -0.633, 0.7742]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -4900,8 +4855,8 @@ prototypes {
       }
 
       shape Box "podVent-left" {
-        id: 1111
-        position [0.0841, 1.4472, -0.3152]
+        id: 1110
+        position [0.1041, 1.3772, -0.2652]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.0265, 0.0218, 0.0062]
         material: violetPodLeft
@@ -4912,8 +4867,8 @@ prototypes {
       }
 
       shape Box "podVentSlot-left" {
-        id: 1112
-        position [0.0841, 1.4472, -0.309]
+        id: 1111
+        position [0.1041, 1.3772, -0.259]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.0172, 0.0086, 0.0031]
         material: charcoal
@@ -4921,30 +4876,11 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1-left" {
-        id: 1113
-        position [0.1693, 1.2033, -0.2821]
+        id: 1112
+        position [0.1893, 1.1333, -0.2321]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.1209, 0.4446, 0.1014]
         material: shinCream
-        group: 92
-        parent: "pod-left"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podBand1Inner-left" {
-        id: 1114
-        position [0.1693, 1.2033, -0.2821]
-        rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1037, 0.4274, 0.0359]
-        material: shinCream
-        blend: "Subtraction"
         group: 92
         parent: "pod-left"
         exponent: 2.4
@@ -4958,8 +4894,8 @@ prototypes {
       }
 
       shape Box "podBand1Clip-left" {
-        id: 1115
-        position [1.04, 1.2, -0.2625]
+        id: 1113
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: shinCream
@@ -4970,8 +4906,8 @@ prototypes {
       }
 
       shape Box "podBand1Cut-left" {
-        id: 1116
-        position [0.5664, 1.6136, 0.0391]
+        id: 1114
+        position [0.5864, 1.5436, 0.0891]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [0.78, 0.78, 0.78]
         material: shinCream
@@ -4982,8 +4918,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Top-left" {
-        id: 1117
-        position [0.3571, -0.091, -0.5198]
+        id: 1115
+        position [0.3771, -0.161, -0.4698]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -4995,8 +4931,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Bottom-left" {
-        id: 1118
-        position [0.3755, -0.1817, -0.5366]
+        id: 1116
+        position [0.3955, -0.2517, -0.4866]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -5008,30 +4944,11 @@ prototypes {
       }
 
       shape Superellipsoid "podMid-left" {
-        id: 1119
-        position [0.1696, 1.202, -0.2676]
+        id: 1117
+        position [0.1896, 1.132, -0.2176]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.1209, 0.4446, 0.1014]
         material: violetPodLeft
-        group: 93
-        parent: "pod-left"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podMidInner-left" {
-        id: 1120
-        position [0.1696, 1.202, -0.2676]
-        rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1037, 0.4274, 0.0359]
-        material: violetPodLeft
-        blend: "Subtraction"
         group: 93
         parent: "pod-left"
         exponent: 2.4
@@ -5045,8 +4962,8 @@ prototypes {
       }
 
       shape Box "podMidClip-left" {
-        id: 1121
-        position [1.04, 1.2, -0.2625]
+        id: 1118
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: violetPodLeft
@@ -5057,8 +4974,8 @@ prototypes {
       }
 
       shape Box "podMidCut-left" {
-        id: 1122
-        position [0.5664, 1.6136, 0.0391]
+        id: 1119
+        position [0.5864, 1.5436, 0.0891]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -5069,8 +4986,8 @@ prototypes {
       }
 
       shape Superellipsoid "podMidTop-left" {
-        id: 1123
-        position [0.3733, -0.1709, -0.5198]
+        id: 1120
+        position [0.3933, -0.2409, -0.4698]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: violetPodLeft
@@ -5082,8 +4999,8 @@ prototypes {
       }
 
       shape Superellipsoid "podMidBottom-left" {
-        id: 1124
-        position [0.3946, -0.2759, -0.5392]
+        id: 1121
+        position [0.4146, -0.3459, -0.4892]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: violetPodLeft
@@ -5095,8 +5012,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2-left" {
-        id: 1125
-        position [0.1699, 1.2005, -0.2503]
+        id: 1122
+        position [0.1899, 1.1305, -0.2003]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.1209, 0.4446, 0.1014]
         material: shinCream
@@ -5112,28 +5029,9 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "podBand2Inner-left" {
-        id: 1126
-        position [0.1699, 1.2005, -0.2503]
-        rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1037, 0.4274, 0.0359]
-        material: shinCream
-        blend: "Subtraction"
-        group: 94
-        parent: "pod-left"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
       shape Box "podBand2Clip-left" {
-        id: 1127
-        position [1.04, 1.2, -0.2625]
+        id: 1123
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: shinCream
@@ -5144,8 +5042,8 @@ prototypes {
       }
 
       shape Box "podBand2Cut-left" {
-        id: 1128
-        position [0.5664, 1.6136, 0.0391]
+        id: 1124
+        position [0.5864, 1.5436, 0.0891]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [0.78, 0.78, 0.78]
         material: shinCream
@@ -5156,8 +5054,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Top-left" {
-        id: 1129
-        position [0.3924, -0.2653, -0.5198]
+        id: 1125
+        position [0.4124, -0.3353, -0.4698]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -5169,8 +5067,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Bottom-left" {
-        id: 1130
-        position [0.4122, -0.3631, -0.5379]
+        id: 1126
+        position [0.4322, -0.4331, -0.4879]
         rotation [0.0894, 0.009, 0.0994, 0.991]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -5182,8 +5080,8 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirt-left" {
-        id: 1131
-        position [0.1705, 1.1976, -0.2282]
+        id: 1127
+        position [0.1905, 1.1276, -0.1782]
         rotation [0.1428, 0.0143, 0.0988, 0.9847]
         scale [0.1269, 0.4446, 0.1065]
         material: violetPodLeft
@@ -5199,28 +5097,9 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "podSkirtInner-left" {
-        id: 1132
-        position [0.1705, 1.1976, -0.2282]
-        rotation [0.1428, 0.0143, 0.0988, 0.9847]
-        scale [0.1089, 0.4274, 0.0377]
-        material: violetPodLeft
-        blend: "Subtraction"
-        group: 95
-        parent: "pod-left"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
       shape Box "podSkirtClip-left" {
-        id: 1133
-        position [1.04, 1.2, -0.2625]
+        id: 1128
+        position [1.04, 1.13, -0.2125]
         rotation [0, 0, 0, 1]
         scale [1, 1, 0.0566]
         material: violetPodLeft
@@ -5231,8 +5110,8 @@ prototypes {
       }
 
       shape Box "podSkirtCut-left" {
-        id: 1134
-        position [0.5664, 1.6136, 0.0391]
+        id: 1129
+        position [0.5864, 1.5436, 0.0891]
         rotation [-0.0634, -0.1741, 0.9234, 0.3361]
         scale [0.78, 0.78, 0.78]
         material: violetPodLeft
@@ -5243,8 +5122,8 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtTop-left" {
-        id: 1135
-        position [0.4025, -0.3148, -0.6809]
+        id: 1130
+        position [0.4225, -0.3848, -0.6309]
         rotation [0.1428, 0.0143, 0.0988, 0.9847]
         scale [0.6327, 1.56, 0.78]
         material: violetPodLeft
@@ -5256,8 +5135,8 @@ prototypes {
       }
 
       shape Cylinder "nozzle-left" {
-        id: 1136
-        position [0.201, 1.0204, -0.2305]
+        id: 1131
+        position [0.221, 0.9504, -0.1805]
         rotation [0.1741, -0.0634, -0.3361, 0.9234]
         scale [0.0585, 0.0429, 0.0585]
         material: charcoal
@@ -5266,25 +5145,34 @@ prototypes {
         rounding: 0.012
       }
 
-      shape Sphere "nozzleBore-left" {
-        id: 1137
-        position [0.1426, 0.9508, -0.266]
-        rotation [0, 0, 0.0998, 0.995]
-        scale [0.0702, 0.0702, 0.0702]
-        material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.006
-        group: 96
+      shape Cylinder "nozzleInset-left" {
+        id: 1132
+        position [0.1943, 0.9187, -0.1967]
+        rotation [0.1741, -0.0634, -0.3361, 0.9234]
+        scale [0.0491, 0.0039, 0.0491]
+        material: jet
         parent: "nozzle-left"
+        rounding: 0.002
       }
 
-      shape Sphere "nozzleGlow-left" {
-        id: 1138
-        position [0.1879, 1.0048, -0.2385]
-        rotation [0, 0, 0.0998, 0.995]
-        scale [0.0156, 0.0156, 0.0156]
+      shape Superellipsoid "nozzleGlow-left" {
+        id: 1133
+        position [0.1925, 0.9164, -0.1978]
+        rotation [0.1741, -0.0634, -0.3361, 0.9234]
+        scale [0.0398, 0.0062, 0.0398]
         material: cyan
         parent: "nozzle-left"
+        exponent: softness
+      }
+
+      shape Superellipsoid "nozzleCore-left" {
+        id: 1134
+        position [0.1901, 0.9136, -0.1993]
+        rotation [0.1741, -0.0634, -0.3361, 0.9234]
+        scale [0.0172, 0.0047, 0.0172]
+        material: glow
+        parent: "nozzle-left"
+        exponent: softness
       }
 
       shape Cylinder "podHinge-left" {
@@ -6323,44 +6211,18 @@ prototypes {
       // bottom plate the largest, hooding the nozzle that sits flush in the opening under it. Built from the pods lab.
       shape Superellipsoid "pod-right" {
         id: 1200
-        position [-0.1653, 1.1839, -0.2372]
+        position [-0.1853, 1.1139, -0.1872]
         rotation [0, 0, 0, 1]
         scale [0.078, 0.3186, 0.0585]
         material: charcoal
         group: 100
         parent: "torso"
         exponent: 2
-        swings [
-          {
-            driver: "wings"
-            axis [0, 0, 1]
-            amplitude: -0.105
-            pivot [-0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-          {
-            driver: "wings"
-            axis [1, 0, 0]
-            amplitude: 0.07
-            pivot [-0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-          {
-            driver: "bank"
-            axis [0, 1, 0]
-            amplitude: -0.05
-            pivot [-0.09, 1.6015, -0.185]
-            wave: "linear"
-            phase: 0
-          }
-        ]
       }
 
       shape Box "podCoreClip-right" {
         id: 1201
-        position [-1.04, 1.2, -0.2625]
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: charcoal
@@ -6371,7 +6233,7 @@ prototypes {
 
       shape Box "podCoreCut-right" {
         id: 1202
-        position [-0.6944, 1.7661, 0.1169]
+        position [-0.7144, 1.6961, 0.1669]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [1, 1, 1]
         material: charcoal
@@ -6383,29 +6245,10 @@ prototypes {
 
       shape Superellipsoid "podCap-right" {
         id: 1203
-        position [-0.17, 1.2, -0.245]
+        position [-0.19, 1.13, -0.195]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.1209, 0.4446, 0.1014]
         material: violetPodRight
-        group: 101
-        parent: "pod-right"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podCapInner-right" {
-        id: 1204
-        position [-0.17, 1.2, -0.245]
-        rotation [0.0998, 0.995, 0, 0]
-        scale [0.1037, 0.4274, 0.0359]
-        material: violetPodRight
-        blend: "Subtraction"
         group: 101
         parent: "pod-right"
         exponent: 2.4
@@ -6419,8 +6262,8 @@ prototypes {
       }
 
       shape Box "podCapClip-right" {
-        id: 1205
-        position [-1.04, 1.2, -0.2625]
+        id: 1204
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: violetPodRight
@@ -6431,8 +6274,8 @@ prototypes {
       }
 
       shape Box "podCapCut-right" {
-        id: 1206
-        position [-0.5664, 1.6136, 0.0391]
+        id: 1205
+        position [-0.5864, 1.5436, 0.0891]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6443,8 +6286,8 @@ prototypes {
       }
 
       shape Superellipsoid "podCapBottom-right" {
-        id: 1207
-        position [-0.3645, -0.1276, -0.245]
+        id: 1206
+        position [-0.3845, -0.1976, -0.195]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.6327, 1.56, 0.78]
         material: violetPodRight
@@ -6456,8 +6299,8 @@ prototypes {
       }
 
       shape Box "podShoulderTop-right" {
-        id: 1208
-        position [0.016, 1.1623, -0.245]
+        id: 1207
+        position [-0.004, 1.0923, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6468,8 +6311,8 @@ prototypes {
       }
 
       shape Box "podShoulderOuter-right" {
-        id: 1209
-        position [-0.0245, 1.1705, -0.245]
+        id: 1208
+        position [-0.0445, 1.1005, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6480,8 +6323,8 @@ prototypes {
       }
 
       shape Box "podShoulderSpine-right" {
-        id: 1210
-        position [0.0082, 1.1639, -0.245]
+        id: 1209
+        position [-0.0118, 1.0939, -0.195]
         rotation [-0.633, 0.7742, 0, 0]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6492,8 +6335,8 @@ prototypes {
       }
 
       shape Box "podVent-right" {
-        id: 1211
-        position [-0.0841, 1.4472, -0.3152]
+        id: 1210
+        position [-0.1041, 1.3772, -0.2652]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.0265, 0.0218, 0.0062]
         material: violetPodRight
@@ -6504,8 +6347,8 @@ prototypes {
       }
 
       shape Box "podVentSlot-right" {
-        id: 1212
-        position [-0.0841, 1.4472, -0.309]
+        id: 1211
+        position [-0.1041, 1.3772, -0.259]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.0172, 0.0086, 0.0031]
         material: charcoal
@@ -6513,30 +6356,11 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1-right" {
-        id: 1213
-        position [-0.1693, 1.2033, -0.2821]
+        id: 1212
+        position [-0.1893, 1.1333, -0.2321]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.1209, 0.4446, 0.1014]
         material: shinCream
-        group: 102
-        parent: "pod-right"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podBand1Inner-right" {
-        id: 1214
-        position [-0.1693, 1.2033, -0.2821]
-        rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1037, 0.4274, 0.0359]
-        material: shinCream
-        blend: "Subtraction"
         group: 102
         parent: "pod-right"
         exponent: 2.4
@@ -6550,8 +6374,8 @@ prototypes {
       }
 
       shape Box "podBand1Clip-right" {
-        id: 1215
-        position [-1.04, 1.2, -0.2625]
+        id: 1213
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: shinCream
@@ -6562,8 +6386,8 @@ prototypes {
       }
 
       shape Box "podBand1Cut-right" {
-        id: 1216
-        position [-0.5664, 1.6136, 0.0391]
+        id: 1214
+        position [-0.5864, 1.5436, 0.0891]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [0.78, 0.78, 0.78]
         material: shinCream
@@ -6574,8 +6398,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Top-right" {
-        id: 1217
-        position [-0.3571, -0.091, -0.5198]
+        id: 1215
+        position [-0.3771, -0.161, -0.4698]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -6587,8 +6411,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand1Bottom-right" {
-        id: 1218
-        position [-0.3755, -0.1817, -0.5366]
+        id: 1216
+        position [-0.3955, -0.2517, -0.4866]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -6600,30 +6424,11 @@ prototypes {
       }
 
       shape Superellipsoid "podMid-right" {
-        id: 1219
-        position [-0.1696, 1.202, -0.2676]
+        id: 1217
+        position [-0.1896, 1.132, -0.2176]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.1209, 0.4446, 0.1014]
         material: violetPodRight
-        group: 103
-        parent: "pod-right"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
-      shape Superellipsoid "podMidInner-right" {
-        id: 1220
-        position [-0.1696, 1.202, -0.2676]
-        rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1037, 0.4274, 0.0359]
-        material: violetPodRight
-        blend: "Subtraction"
         group: 103
         parent: "pod-right"
         exponent: 2.4
@@ -6637,8 +6442,8 @@ prototypes {
       }
 
       shape Box "podMidClip-right" {
-        id: 1221
-        position [-1.04, 1.2, -0.2625]
+        id: 1218
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: violetPodRight
@@ -6649,8 +6454,8 @@ prototypes {
       }
 
       shape Box "podMidCut-right" {
-        id: 1222
-        position [-0.5664, 1.6136, 0.0391]
+        id: 1219
+        position [-0.5864, 1.5436, 0.0891]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6661,8 +6466,8 @@ prototypes {
       }
 
       shape Superellipsoid "podMidTop-right" {
-        id: 1223
-        position [-0.3733, -0.1709, -0.5198]
+        id: 1220
+        position [-0.3933, -0.2409, -0.4698]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: violetPodRight
@@ -6674,8 +6479,8 @@ prototypes {
       }
 
       shape Superellipsoid "podMidBottom-right" {
-        id: 1224
-        position [-0.3946, -0.2759, -0.5392]
+        id: 1221
+        position [-0.4146, -0.3459, -0.4892]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: violetPodRight
@@ -6687,8 +6492,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2-right" {
-        id: 1225
-        position [-0.1699, 1.2005, -0.2503]
+        id: 1222
+        position [-0.1899, 1.1305, -0.2003]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.1209, 0.4446, 0.1014]
         material: shinCream
@@ -6704,28 +6509,9 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "podBand2Inner-right" {
-        id: 1226
-        position [-0.1699, 1.2005, -0.2503]
-        rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1037, 0.4274, 0.0359]
-        material: shinCream
-        blend: "Subtraction"
-        group: 104
-        parent: "pod-right"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
       shape Box "podBand2Clip-right" {
-        id: 1227
-        position [-1.04, 1.2, -0.2625]
+        id: 1223
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: shinCream
@@ -6736,8 +6522,8 @@ prototypes {
       }
 
       shape Box "podBand2Cut-right" {
-        id: 1228
-        position [-0.5664, 1.6136, 0.0391]
+        id: 1224
+        position [-0.5864, 1.5436, 0.0891]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [0.78, 0.78, 0.78]
         material: shinCream
@@ -6748,8 +6534,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Top-right" {
-        id: 1229
-        position [-0.3924, -0.2653, -0.5198]
+        id: 1225
+        position [-0.4124, -0.3353, -0.4698]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -6761,8 +6547,8 @@ prototypes {
       }
 
       shape Superellipsoid "podBand2Bottom-right" {
-        id: 1230
-        position [-0.4122, -0.3631, -0.5379]
+        id: 1226
+        position [-0.4322, -0.4331, -0.4879]
         rotation [0.0994, 0.991, 0.0894, 0.009]
         scale [0.6327, 1.56, 0.78]
         material: shinCream
@@ -6774,8 +6560,8 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirt-right" {
-        id: 1231
-        position [-0.1705, 1.1976, -0.2282]
+        id: 1227
+        position [-0.1905, 1.1276, -0.1782]
         rotation [0.0988, 0.9847, 0.1428, 0.0143]
         scale [0.1269, 0.4446, 0.1065]
         material: violetPodRight
@@ -6791,28 +6577,9 @@ prototypes {
         }
       }
 
-      shape Superellipsoid "podSkirtInner-right" {
-        id: 1232
-        position [-0.1705, 1.1976, -0.2282]
-        rotation [0.0988, 0.9847, 0.1428, 0.0143]
-        scale [0.1089, 0.4274, 0.0377]
-        material: violetPodRight
-        blend: "Subtraction"
-        group: 105
-        parent: "pod-right"
-        exponent: 2.4
-        flare {
-          amount: -0.7
-          bulge: 0
-          span: 0.4446
-          top: 0
-          startScale: 1
-        }
-      }
-
       shape Box "podSkirtClip-right" {
-        id: 1233
-        position [-1.04, 1.2, -0.2625]
+        id: 1228
+        position [-1.04, 1.13, -0.2125]
         rotation [0, 1, 0, 0]
         scale [1, 1, 0.0566]
         material: violetPodRight
@@ -6823,8 +6590,8 @@ prototypes {
       }
 
       shape Box "podSkirtCut-right" {
-        id: 1234
-        position [-0.5664, 1.6136, 0.0391]
+        id: 1229
+        position [-0.5864, 1.5436, 0.0891]
         rotation [0.9234, 0.3361, -0.0634, -0.1741]
         scale [0.78, 0.78, 0.78]
         material: violetPodRight
@@ -6835,8 +6602,8 @@ prototypes {
       }
 
       shape Superellipsoid "podSkirtTop-right" {
-        id: 1235
-        position [-0.4025, -0.3148, -0.6809]
+        id: 1230
+        position [-0.4225, -0.3848, -0.6309]
         rotation [0.0988, 0.9847, 0.1428, 0.0143]
         scale [0.6327, 1.56, 0.78]
         material: violetPodRight
@@ -6848,8 +6615,8 @@ prototypes {
       }
 
       shape Cylinder "nozzle-right" {
-        id: 1236
-        position [-0.201, 1.0204, -0.2305]
+        id: 1231
+        position [-0.221, 0.9504, -0.1805]
         rotation [-0.3361, 0.9234, 0.1741, -0.0634]
         scale [0.0585, 0.0429, 0.0585]
         material: charcoal
@@ -6858,25 +6625,34 @@ prototypes {
         rounding: 0.012
       }
 
-      shape Sphere "nozzleBore-right" {
-        id: 1237
-        position [-0.1426, 0.9508, -0.266]
-        rotation [0.0998, 0.995, 0, 0]
-        scale [0.0702, 0.0702, 0.0702]
-        material: charcoal
-        blend: "SmoothSubtraction"
-        smooth: 0.006
-        group: 106
+      shape Cylinder "nozzleInset-right" {
+        id: 1232
+        position [-0.1943, 0.9187, -0.1967]
+        rotation [-0.3361, 0.9234, 0.1741, -0.0634]
+        scale [0.0491, 0.0039, 0.0491]
+        material: jet
         parent: "nozzle-right"
+        rounding: 0.002
       }
 
-      shape Sphere "nozzleGlow-right" {
-        id: 1238
-        position [-0.1879, 1.0048, -0.2385]
-        rotation [0.0998, 0.995, 0, 0]
-        scale [0.0156, 0.0156, 0.0156]
+      shape Superellipsoid "nozzleGlow-right" {
+        id: 1233
+        position [-0.1925, 0.9164, -0.1978]
+        rotation [-0.3361, 0.9234, 0.1741, -0.0634]
+        scale [0.0398, 0.0062, 0.0398]
         material: cyan
         parent: "nozzle-right"
+        exponent: softness
+      }
+
+      shape Superellipsoid "nozzleCore-right" {
+        id: 1234
+        position [-0.1901, 0.9136, -0.1993]
+        rotation [-0.3361, 0.9234, 0.1741, -0.0634]
+        scale [0.0172, 0.0047, 0.0172]
+        material: glow
+        parent: "nozzle-right"
+        exponent: softness
       }
 
       shape Cylinder "podHinge-right" {
@@ -7088,9 +6864,9 @@ prototypes {
       volumes [
         {
           kind: "flow"
-          parent: "nozzle-left"
-          position [0, -0.27, 0]
-          rotation [0, 0, 0, 1]
+          parent: "pod-left"
+          position [0.0072, -0.435, -0.177]
+          rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
@@ -7127,9 +6903,9 @@ prototypes {
         }
         {
           kind: "flow"
-          parent: "nozzle-right"
-          position [0, -0.27, 0]
-          rotation [0, 0, 0, 1]
+          parent: "pod-right"
+          position [-0.0072, -0.435, -0.177]
+          rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
           width: 0.0432
