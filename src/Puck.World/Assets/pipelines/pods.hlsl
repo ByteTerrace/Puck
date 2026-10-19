@@ -43,7 +43,11 @@ static const float BAND_ARCH = 1.6;          // the bands arch, highest near the
 static const float SEAM = 0.004;
 static const float GROOVE = 0.008;
 static const float PLATE_CHAMFER = 0.005;    // the crisp chamfer on each plate's edge where it meets a groove
-static const float SHINGLE = 0.012;          // how far each plate's lower edge stands proud of the plate below
+static const float TOPS[5] = { 0.62, 0.27, 0.16, 0.01, -0.14 };   // each plate's top edge, in the band coordinate
+static const float KICK = -0.12;             // radians each plate swings out about its top edge
+static const float TUCK = 0.02;              // how far a plate's top runs up beneath the plate above
+static const float PLATE_GAP = 0.002;
+static const float PLATE_EDGE = 0.006;
 static const float COLUMN_X = 0.0;
 // The bottom cut, in the pod's frame: a plane from the inner edge part-way down to the pointed outer tip, facing in,
 // down and back; the casing is open under it and its rim is trimmed in gunmetal.
@@ -135,25 +139,29 @@ float2 pod(float3 q) {
     float3 s = q - POD_C;
     s.xy = mul(s.xy, rot(ROLL));
     s.y /= POD_HEIGHT;
-    // The plates shingle: each thickens toward its lower edge by up to SHINGLE, so it stands proud over the plate below.
-    float b = s.y + BAND_TILT * s.x + BAND_ARCH * s.x * s.x;
-    const float edges[4] = { 0.27, 0.16, 0.01, -0.14 };
-    float above = 0.62, below = -0.62;
-    for (int j = 0; j < 4; j++) { if (b < edges[j]) above = edges[j]; else { below = max(below, edges[j]); } }
-    if (b >= edges[0]) { above = 0.62; below = edges[0]; }
-    float lift = SHINGLE * saturate((above - b) / max(above - below, 0.01));
-    float outer = casingOuter(s) - lift;
-    float inner = casingOuter(s * (SHELL_R / (SHELL_R - SHELL_T)) ) * ((SHELL_R.x - SHELL_T) / SHELL_R.x);
     float back = -(s.z + WRAP);
     float edge = INNER_X - q.x;
     float cut = dot(s - CUT_P, normalize(CUT_N));
-    float casing = smax(smax(smax(max(outer, -inner), back, 0.004), edge, 0.005), cut, 0.003);
-    // Grooves between plates and between the columns, stopping short of the trimmed rim.
-    float seamD = 1e9;
-    for (int i = 0; i < 4; i++) seamD = min(seamD, abs(b - edges[i]));
-    seamD = min(seamD, abs(s.x - COLUMN_X));
-    float groove = max(max(seamD - SEAM, -GROOVE - outer), cut + TRIM_W);
-    float plates = cmax(casing, -groove, PLATE_CHAMFER);
+    float outer = casingOuter(s);
+    // The shell is a chain of separate plates, linked like segmented armour: plate i spans the band coordinate between
+    // TOPS[i + 1] and TOPS[i], is hinged at its top edge and swung KICK outward, so its lower edge overlaps the plate
+    // below, whose top tucks TUCK up beneath it.
+    float plates = 1e9, mat = VIOLET;
+    for (int i = 0; i < 5; i++) {
+        float hi = TOPS[i], lo = (i < 4) ? TOPS[i + 1] : -0.7;
+        float3 r = s;
+        float2 yz = float2(r.y - hi, r.z);
+        yz = mul(yz, rot((i == 0) ? 0. : KICK));   // the cap is the fixed plate the rest hang from
+        r.y = yz.x + hi; r.z = yz.y;
+        float o = casingOuter(r);
+        float n = casingOuter(r * (SHELL_R / (SHELL_R - SHELL_T))) * ((SHELL_R.x - SHELL_T) / SHELL_R.x);
+        float bb = r.y + BAND_TILT * r.x + BAND_ARCH * r.x * r.x;
+        float slab = max(lo + PLATE_GAP - bb, bb - hi - ((i > 0) ? TUCK : 0.)) * 0.7;
+        float piece = max(max(o, -n), slab);
+        piece = cmax(piece, slab + PLATE_EDGE, PLATE_EDGE);   // a crisp chamfer along the plate's own top and bottom edges
+        if (piece < plates) { plates = piece; mat = ((i & 1) == 1) ? CREAM : VIOLET; }
+    }
+    plates = smax(smax(smax(plates, back, 0.004), edge, 0.005), cut, 0.003);
     // The vent: a gunmetal frame recessed into the cap, a black slot deeper in it.
     float2 vp = s.xy - VENT_C;
     float frame = max(sdBox2(vp, VENT_FRAME, 0.007), -0.006 - outer);
@@ -166,10 +174,6 @@ float2 pod(float3 q) {
     // Rivets: a round dimple on the violet inner plate, a square one on the cream plate below it.
     float rivet = min(length(s.xy - RIVET_ROUND) - 0.0045, sdBox2(s.xy - RIVET_SQUARE, float2(0.005, 0.005), 0.0015));
     plates = max(plates, -max(rivet, -0.003 - outer));
-    float mat = VIOLET;
-    if (b < edges[0] && b > edges[1]) mat = CREAM;
-    if (b < edges[2] && b > edges[3]) mat = CREAM;
-    if (seamD < SEAM + 0.002 && outer < -0.003) mat = CORE;
     if (panel < 0.002) mat = GREY;
     if (frame < 0.002) mat = FRAME;
     if (slot < 0.002) mat = CORE;
