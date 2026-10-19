@@ -4742,9 +4742,9 @@ prototypes {
 
       shape Box "podCoreClip-left" {
         id: 1101
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: charcoal
         blend: "Intersection"
         group: 90
@@ -4767,7 +4767,7 @@ prototypes {
         id: 1103
         position [0.19, 1.13, -0.195]
         rotation [0, 0, 0.0998, 0.995]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: violetPodLeft
         group: 91
         parent: "pod-left"
@@ -4783,9 +4783,9 @@ prototypes {
 
       shape Box "podCapClip-left" {
         id: 1104
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -4856,7 +4856,7 @@ prototypes {
 
       shape Box "podVent-left" {
         id: 1110
-        position [0.1041, 1.3772, -0.2652]
+        position [0.1041, 1.3772, -0.3548]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.0265, 0.0218, 0.0062]
         material: violetPodLeft
@@ -4868,7 +4868,7 @@ prototypes {
 
       shape Box "podVentSlot-left" {
         id: 1111
-        position [0.1041, 1.3772, -0.259]
+        position [0.1041, 1.3772, -0.3485]
         rotation [0, 0, 0.0998, 0.995]
         scale [0.0172, 0.0086, 0.0031]
         material: charcoal
@@ -4879,7 +4879,7 @@ prototypes {
         id: 1112
         position [0.1893, 1.1333, -0.2321]
         rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: shinCream
         group: 92
         parent: "pod-left"
@@ -4895,9 +4895,9 @@ prototypes {
 
       shape Box "podBand1Clip-left" {
         id: 1113
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -4947,7 +4947,7 @@ prototypes {
         id: 1117
         position [0.1896, 1.132, -0.2176]
         rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: violetPodLeft
         group: 93
         parent: "pod-left"
@@ -4963,9 +4963,9 @@ prototypes {
 
       shape Box "podMidClip-left" {
         id: 1118
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -5015,7 +5015,7 @@ prototypes {
         id: 1122
         position [0.1899, 1.1305, -0.2003]
         rotation [0.0894, 0.009, 0.0994, 0.991]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: shinCream
         group: 94
         parent: "pod-left"
@@ -5031,9 +5031,9 @@ prototypes {
 
       shape Box "podBand2Clip-left" {
         id: 1123
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -5083,7 +5083,7 @@ prototypes {
         id: 1127
         position [0.1905, 1.1276, -0.1782]
         rotation [0.1428, 0.0143, 0.0988, 0.9847]
-        scale [0.1269, 0.4446, 0.1065]
+        scale [0.1269, 0.4446, 0.2211]
         material: violetPodLeft
         group: 95
         parent: "pod-left"
@@ -5099,9 +5099,9 @@ prototypes {
 
       shape Box "podSkirtClip-left" {
         id: 1128
-        position [1.04, 1.13, -0.2125]
+        position [1.04, 1.13, -0.4675]
         rotation [0, 0, 0, 1]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodLeft
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6222,9 +6222,9 @@ prototypes {
 
       shape Box "podCoreClip-right" {
         id: 1201
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: charcoal
         blend: "Intersection"
         group: 100
@@ -6247,7 +6247,7 @@ prototypes {
         id: 1203
         position [-0.19, 1.13, -0.195]
         rotation [0.0998, 0.995, 0, 0]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: violetPodRight
         group: 101
         parent: "pod-right"
@@ -6263,9 +6263,9 @@ prototypes {
 
       shape Box "podCapClip-right" {
         id: 1204
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6336,7 +6336,7 @@ prototypes {
 
       shape Box "podVent-right" {
         id: 1210
-        position [-0.1041, 1.3772, -0.2652]
+        position [-0.1041, 1.3772, -0.3548]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.0265, 0.0218, 0.0062]
         material: violetPodRight
@@ -6348,7 +6348,7 @@ prototypes {
 
       shape Box "podVentSlot-right" {
         id: 1211
-        position [-0.1041, 1.3772, -0.259]
+        position [-0.1041, 1.3772, -0.3485]
         rotation [0.0998, 0.995, 0, 0]
         scale [0.0172, 0.0086, 0.0031]
         material: charcoal
@@ -6359,7 +6359,7 @@ prototypes {
         id: 1212
         position [-0.1893, 1.1333, -0.2321]
         rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: shinCream
         group: 102
         parent: "pod-right"
@@ -6375,9 +6375,9 @@ prototypes {
 
       shape Box "podBand1Clip-right" {
         id: 1213
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6427,7 +6427,7 @@ prototypes {
         id: 1217
         position [-0.1896, 1.132, -0.2176]
         rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: violetPodRight
         group: 103
         parent: "pod-right"
@@ -6443,9 +6443,9 @@ prototypes {
 
       shape Box "podMidClip-right" {
         id: 1218
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6495,7 +6495,7 @@ prototypes {
         id: 1222
         position [-0.1899, 1.1305, -0.2003]
         rotation [0.0994, 0.991, 0.0894, 0.009]
-        scale [0.1209, 0.4446, 0.1014]
+        scale [0.1209, 0.4446, 0.2106]
         material: shinCream
         group: 104
         parent: "pod-right"
@@ -6511,9 +6511,9 @@ prototypes {
 
       shape Box "podBand2Clip-right" {
         id: 1223
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: shinCream
         blend: "SmoothIntersection"
         smooth: 0.005
@@ -6563,7 +6563,7 @@ prototypes {
         id: 1227
         position [-0.1905, 1.1276, -0.1782]
         rotation [0.0988, 0.9847, 0.1428, 0.0143]
-        scale [0.1269, 0.4446, 0.1065]
+        scale [0.1269, 0.4446, 0.2211]
         material: violetPodRight
         group: 105
         parent: "pod-right"
@@ -6579,9 +6579,9 @@ prototypes {
 
       shape Box "podSkirtClip-right" {
         id: 1228
-        position [-1.04, 1.13, -0.2125]
+        position [-1.04, 1.13, -0.4675]
         rotation [0, 1, 0, 0]
-        scale [1, 1, 0.0566]
+        scale [1, 1, 0.2555]
         material: violetPodRight
         blend: "SmoothIntersection"
         smooth: 0.005
