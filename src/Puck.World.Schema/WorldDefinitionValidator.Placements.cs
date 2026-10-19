@@ -1713,15 +1713,8 @@ public static partial class WorldDefinitionValidator {
                                 continue;
                             }
 
-                            if (requiresField && ((((solidShape.Profile?.Kind == SdfPrismProfileKind.Polygon) && (solidShape.Profile.Sides > SdfPrismProfile.MaxConvexVertices)) || (solidShape.Profile?.Kind == SdfPrismProfileKind.Path)))) {
-                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} uses profile {solidShape.Profile.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.");
-                            }
-
-                            // Both contact compilers read a per-axis-scaled local box off SdfSolidGeometry.GetLocalBounds.
-                            // A revolve reads scale.z as a radial offset rather than an extent, so that box would not
-                            // describe the solid a body stands on. Renderable everywhere; refused where contact is owed.
-                            if (solidShape.Lift is SdfLift.Revolve) {
-                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} lifts by revolve; a revolve reads scale.z as a radial offset, which no contact compiler's per-axis local box describes. Use the extrude lift on a solid row.");
+                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(requiresField: requiresField, shape: solidShape)) {
+                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
                             }
 
                             if (!ShapeDomainOps.TryExpand(

@@ -107,8 +107,8 @@ public sealed class CreationCommandTests {
             expectedSubstring: "none registered"
         );
     }
-    /// <summary>Schema and render admission cannot stand in for contact compilation. A Convex prism leaves a
-    /// residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
+    /// <summary>Schema and render admission cannot stand in for contact compilation. A capsule scaled apart in X and Z
+    /// leaves a residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
     [Theory]
     [InlineData(true, true, 1)]
     [InlineData(true, false, 0)]
@@ -120,8 +120,8 @@ public sealed class CreationCommandTests {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
         var shape = new ShapeDocument(
             Id: 0,
-            Name: "convex",
-            Type: SdfSolidPrimitive.Prism,
+            Name: "capsule",
+            Type: SdfSolidPrimitive.Capsule,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: (nonuniform
@@ -134,25 +134,7 @@ public sealed class CreationCommandTests {
             Material: 0,
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
-            Group: 0,
-            Profile: new(
-                SdfPrismProfileKind.Convex,
-                Vertices: [
-                new(
-                        x: -1f,
-                        y: -1f
-                    ), new(
-                        x: -1f,
-                        y: 1f
-                    ), new(
-                        x: 1f,
-                        y: 1f
-                    ), new(
-                        x: 1f,
-                        y: -1f
-                    ),
-            ]
-            )
+            Group: 0
         );
         var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
@@ -374,5 +356,34 @@ public sealed class CreationCommandTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "contact: accepted"
         );
+    }
+    /// <summary><c>shape</c> reads the named shapes' laws in the order named, refuses an unknown prototype or shape by
+    /// name (exit 2), and a file that does not load (exit 1).</summary>
+    [Fact]
+    public void ShapeReadsNamedShapesAndRefusesUnknownNames() {
+        using var directory = new TemporaryDirectory();
+        var path = TempWorldCopy(directory: directory);
+
+        var (exitCode, output) = Invoke("creation", "shape", "--world", path, "--prototype", "moth", "--shape", "torso", "--shape", "beltClasp");
+
+        Assert.Equal(expected: 0, actual: exitCode);
+        Assert.Contains(expectedSubstring: "[creation shape: moth shapes=2/", actualString: output, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: " torso Superellipsoid ", actualString: output, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: " beltClasp Prism/Convex ", actualString: output, comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: (output.IndexOf(value: " torso ", comparisonType: StringComparison.Ordinal) < output.IndexOf(value: " beltClasp ", comparisonType: StringComparison.Ordinal)), userMessage: output);
+
+        (exitCode, output) = Invoke("creation", "shape", "--world", path, "--prototype", "nope");
+        Assert.Equal(expected: 2, actual: exitCode);
+        Assert.Contains(expectedSubstring: "names no prototype 'nope'", actualString: output, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "moth", actualString: output[output.IndexOf(value: "prototypes:", comparisonType: StringComparison.Ordinal)..], comparisonType: StringComparison.Ordinal);
+
+        (exitCode, output) = Invoke("creation", "shape", "--world", path, "--prototype", "moth", "--shape", "nope");
+        Assert.Equal(expected: 2, actual: exitCode);
+        Assert.Contains(expectedSubstring: "'moth' has no shape named 'nope'", actualString: output, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "shapes: pelvis, torso,", actualString: output, comparisonType: StringComparison.Ordinal);
+
+        (exitCode, output) = Invoke("creation", "shape", "--world", directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]"), "--prototype", "moth");
+        Assert.Equal(expected: 1, actual: exitCode);
+        Assert.Contains(expectedSubstring: "failed to load", actualString: output, comparisonType: StringComparison.Ordinal);
     }
 }

@@ -541,6 +541,7 @@ public static class WorldBootComposition {
         });
         services.AddSingleton<ICommandModule, WorldRowCommandModule>();
         services.AddSingleton<ICommandModule, WorldSculptCommandModule>();
+        services.AddSingleton<ICommandModule, WorldShapeLawCommandModule>();
         // world.grid/world.snap move a seat's editor state; world.place/.nudge/.turn edit placements through the
         // same section upsert and window guard world.row.set uses.
         services.AddSingleton<ICommandModule, WorldEditorCommandModule>();
