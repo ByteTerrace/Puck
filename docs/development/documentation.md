@@ -343,9 +343,13 @@ questioned: `AGENTS.md` rule 2 makes skills evidence, outranked by the current
 request. A skill is a map: where the code lives, the few contracts that bite
 and how to run or see the thing, without restating what the code already
 says. Its frontmatter carries `name` (lowercase kebab case, matching the
-directory) and `description` (third person: the capability, the requests that
-should load it, and the skill that owns each excluded area). It closes with a
-routing table to its sibling skills. A skill stays only while its evaluation
+directory) and `description`: third person, at most 200 characters, naming the
+capability and the words a request that should load it uses (files, types,
+verbs, symptoms), with at most a short pointer to the sibling that owns a
+look-alike area. `claude plugin eval` lists a longer description by the skill's
+name alone, so its triggering goes unmeasured, and every session carries every
+description. It closes with a routing table to its sibling skills, which names
+the owner of each excluded area. A skill stays only while its evaluation
 shows it changes outcomes ([evaluating a skill](#evaluate-an-agent-skill)).
 
 ## Evaluate an agent skill
