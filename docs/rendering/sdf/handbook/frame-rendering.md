@@ -749,7 +749,11 @@ more than 32 degrees, just past the thirty that make it a feature, into one
 vertex per side, each with the area-weighted facing of its side
 (`SdfContour.SplitAtCreases`); at 45 degrees, the very turn of a chamfer, the
 quads' noise split a chamfer's vertices or not from one to the next and dented
-the flat faces beside it (the Moth's heel blocks and heel lugs). A sharp edge
+the flat faces beside it (the Moth's heel blocks and heel lugs). A quad at a
+crease folded across it, its two triangles facing apart past the split angle,
+splits into its triangles first, so each takes its own side's normal rather
+than the whole quad taking one side's and its other triangle shading as a spike
+of that side (the star points round the Moth's ankle bezels). A sharp edge
 shades as the two faces meeting at it rather than as a band of blended normals a
 cell wide, the band that serrated the test room's plates and frayed the Moth's
 plate rims into pale and dark fringes. Pieces of the surface apart from the rest,
@@ -771,7 +775,10 @@ of its two triangles whose ends disagree is bisected over four more rounds for
 the point its material changes, and each triangle splits along the line between
 its edges' points, so a boundary between two shapes of one group (a nozzle's
 glow disc in its bore) follows its true place to a thirty-second of an edge,
-unbroken across triangles, rather than stepping in half cells. On the debug
+unbroken across triangles, rather than stepping in half cells. Where the
+boundary runs along a crease (a raised bezel's foot or rim), each piece takes
+its own edge end's normal at the boundary point, so the pieces shade as their
+own faces rather than with a normal blended across the crease. On the debug
 world the cut searches about 14,000 edges, adding about 480,000 points, 60
 dispatches and 20,000 triangles to the bake. A boundary between two groups is
 the meshes' crossing and no cut reaches it.

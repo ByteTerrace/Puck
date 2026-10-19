@@ -43,12 +43,40 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     public SdfContour SplitAtCreases() {
         var positions = Positions;
         var normals = Normals;
-        int[] quads = [.. Quads];
-        var quadCount = (quads.Length / 4);
         var vertexCount = (positions.Length / 3);
         var cosine = Math.Cos(d: (CreaseDegrees * (Math.PI / 180.0)));
 
         Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+
+        // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
+        // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
+        // takes one side's normal at every corner, and its other triangle shades as a spike of that side on this one.
+        var quadList = new List<int>(capacity: Quads.Length);
+        var materialList = new List<int>(capacity: QuadMaterials.Length);
+
+        for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
+            var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
+            var atCrease = (Feature(vertex: ia) || Feature(vertex: ib) || Feature(vertex: ic) || Feature(vertex: id));
+
+            if (atCrease && (ic != id)) {
+                var a = At(values: positions, vertex: ia);
+                var first = Vector3.Cross(vector1: (At(values: positions, vertex: ib) - a), vector2: (At(values: positions, vertex: ic) - a));
+                var second = Vector3.Cross(vector1: (At(values: positions, vertex: ic) - a), vector2: (At(values: positions, vertex: id) - a));
+
+                if ((first.LengthSquared() > 0f) && (second.LengthSquared() > 0f) && (Vector3.Dot(vector1: Vector3.Normalize(value: first), vector2: Vector3.Normalize(value: second)) < cosine)) {
+                    quadList.AddRange(collection: [ia, ib, ic, ic, ia, ic, id, id]);
+                    materialList.Add(item: QuadMaterials[quad]);
+                    materialList.Add(item: QuadMaterials[quad]);
+                    continue;
+                }
+            }
+            quadList.AddRange(collection: [ia, ib, ic, id]);
+            materialList.Add(item: QuadMaterials[quad]);
+        }
+
+        int[] quads = [.. quadList];
+        var quadCount = (quads.Length / 4);
+        var folded = (quadCount != QuadMaterials.Length);
 
         // Each quad's area-weighted facing: its two triangles along its first diagonal.
         var facings = new Vector3[quadCount];
@@ -161,9 +189,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
         }
 
-        return ((addedPositions.Count == 0)
+        return (((addedPositions.Count == 0) && !folded)
             ? this
-            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], Quads = quads }));
+            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], QuadMaterials = [.. materialList], Quads = quads }));
+
+        bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
     }
 }
 /// <summary>An axis-aligned box of a sampled lattice's frame whose surface <see cref="SdfSampledLattice.Refine"/> contours
