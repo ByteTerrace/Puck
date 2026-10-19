@@ -198,6 +198,31 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         orientation = Quaternion.Identity;
         return false;
     }
+    /// <summary>Reads the pose a presentation draws an entity at this frame: its previous and current delivered poses
+    /// blended by <see cref="InterpolationAlpha"/>, the fraction the endpoint's own scene draws its bodies at, so a camera
+    /// following the entity moves with it every frame rather than at each delivered snapshot. Only while the complete
+    /// generation-addressed identity is still the active occupant.</summary>
+    /// <param name="entity">The entity's address.</param>
+    /// <param name="position">The presented position, when this returns <see langword="true"/>.</param>
+    /// <param name="orientation">The presented orientation, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the entity is the active occupant of its slot.</returns>
+    public bool TryPresentedEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
+        if (
+            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+            m_mirror.IsActive(index: entity.Index) &&
+            (m_mirror.Address(index: entity.Index) == entity)
+        ) {
+            var alpha = m_mirror.InterpolationAlpha;
+
+            position = Vector3.Lerp(value1: m_mirror.PreviousPosition(index: entity.Index), value2: m_mirror.CurrentPosition(index: entity.Index), amount: alpha);
+            orientation = Quaternion.Normalize(value: Quaternion.Lerp(quaternion1: m_mirror.PreviousOrientation(index: entity.Index), quaternion2: m_mirror.CurrentOrientation(index: entity.Index), amount: alpha));
+            return true;
+        }
+
+        position = default;
+        orientation = Quaternion.Identity;
+        return false;
+    }
     /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
     public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
         if (

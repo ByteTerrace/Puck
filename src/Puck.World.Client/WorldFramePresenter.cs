@@ -1353,6 +1353,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
     /// than interpolated toward it — set for an offscreen presentation, whose captures pin the fraction to one.</summary>
     public bool PinsStateFraction { get; init; }
+    /// <summary>Gets the trace each framed seat's camera eye, presented body and interpolation fraction are recorded in,
+    /// or <see langword="null"/> to record none (<c>world.view.motion</c>).</summary>
+    public WorldSeatMotionTrace? MotionTrace { get; init; }
     /// <summary>Gets or sets whether the render chain owes a capture. Such a frame presents the completed simulation
     /// tick itself, including body poses, rather than interpolating from its predecessor.</summary>
     public Func<bool>? CapturePending { get; set; }
@@ -1601,6 +1604,19 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Forward: (target - eye),
                 Joined: true
             );
+            if (MotionTrace is { } trace) {
+                var presentedBody = (m_continuum.TryResolvePresentedSeatPose(interpolationAlpha: interpolationAlpha, orientation: out _, position: out var bodyPosition, slot: slot)
+                    ? bodyPosition
+                    : Vector3.Zero);
+
+                trace.Record(
+                    alpha: ((presentedElsewhere is null) ? interpolationAlpha : presentedElsewhere.InterpolationAlpha),
+                    body: presentedBody,
+                    eye: eye,
+                    slot: slot,
+                    world: (presentedElsewhere?.Identity ?? "boot")
+                );
+            }
             seatSlotBound[slot] = true;
             m_markerSeats[markerSeatCount++] = ComposeMarkerSeat(
                 camera: in camera,

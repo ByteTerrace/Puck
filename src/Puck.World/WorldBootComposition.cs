@@ -905,6 +905,7 @@ public static class WorldBootComposition {
         // same verb name or the document refuses once its vocabulary composes. Composition submission and the
         // composer are both core, so view.override and world.view.state genuinely work headless; WorldCursorFeed is
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
+        services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 
         // The on-screen annotations (view.annotate): presentation-only state, core like view.override because the
@@ -1272,6 +1273,7 @@ public static class WorldBootComposition {
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
+            MotionTrace = sp.GetRequiredService<WorldSeatMotionTrace>(),
         }.AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The default render graph, touching no GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a
@@ -1635,7 +1637,9 @@ public static class WorldBootComposition {
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
             domains: sp.GetRequiredService<WorldValueDomainGuard>()
-        ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
+        ) {
+            MotionTrace = sp.GetRequiredService<WorldSeatMotionTrace>(),
+        }.AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack
         // loaded. Neither touches the GPU, so the boot's pre-flight (WorldPostBuildWiring) refuses a views.post config
