@@ -210,10 +210,12 @@ rejection and on stdout for an acceptance.
 ## Intents — the separate buffer
 
 `PlayerIntent` (`src/Puck.World.Schema/PlayerIntent.cs`) is a fixed 16-slot vector of
-`FixedQ4816` channel values (`ChannelLimits.MaxChannels = 16`,
-`RoleCount = 6`, so 10 composition channels). `ChannelRole` occupies fixed
-ordinals 0–5: `MoveAdvance, MoveStrafe, Turn, MoveUp, Pitch, Roll`; ordinals
-6+ are the document's declared composition channels in declaration order.
+`FixedQ4816` channel values (`ChannelLimits.MaxChannels = 16`). The compiled
+world channel table (`WorldChannelTable`) assigns every declared channel an
+ordinal consecutively, in declaration order, and resolves each role a channel
+claims (`ChannelRole`: `MoveAdvance`, `MoveStrafe`, `Turn`, `MoveUp`, `Pitch`,
+`Roll`, `FaceX`/`FaceY`/`FaceZ`, `MoveX`/`MoveY`/`MoveZ`) to that authored
+ordinal; no role owns a fixed slot, and an ordinal no channel claims reads zero.
 There is no button bitmask — a button is a `Binary`-shaped channel
 (`ChannelShape`: `Bipolar`/`Unipolar`/`Binary`); edges derive from threshold
 crossings against the previous sub-step, never carried.
@@ -225,7 +227,8 @@ because the fold is arrival-order-independent: unipolar/binary channels max
 across contributors, bipolar channels sum raw and unclamped with the single
 clamp deferred to `FoldChannelContributions` (a per-contributor clamp would
 make the result order-dependent). `HeldChannels` is the always-overlay
-device image (ordinals 6+ only; movement rides `Intent`).
+device image of the composition (non-role) channels; movement roles ride
+`Intent`.
 
 Per-entity intent sources: `IntentSource` = `Live`, `Idle`, `Producer(name)`
 (a named producer program, whose `ProduceSteeringIntent` op dispatches between

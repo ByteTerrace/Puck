@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response reads the participant's status line with world.extensions.
+The response says world.extensions reports the participant's status line.

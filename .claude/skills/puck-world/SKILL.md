@@ -1,6 +1,6 @@
 ---
 name: puck-world
-description: Maps Puck.World across its document and Protocol model, authoritative server simulation, composition root, mutation and authority systems, adjacency and federation, ordered submissions, HUD and views, engagement and session lifecycles, addons, replay, extensions, console verbs, and `.puck` world-DSL authoring. Use whenever changing or diagnosing any src/Puck.World* project, especially console verbs, mutation kinds, document sections, grants or refusals, transfers, seamless boundaries, HUD or view bindings, addon or replay behavior, client/server seams, and authoring or refusing a world's `.puck` source — rule/gate/effect sugar, `world.row.set` vs. `.puck` authoring, and PUCK0xx world-vocabulary refusals (route pure language/grammar/CLI questions to `puck-dsl` instead). Also use before writing stdin-driven game runs, because it gives the run recipe and the encoding, indexing, drain, screenshot and replay-proof rules.
+description: Maps Puck.World: .puck worlds, rules, grants, console verbs, extensions, the live MCP World. Use to run or verify a World change (stdin script, stale binary, headless run) or debug a refusal.
 ---
 
 # Puck.World
@@ -18,11 +18,31 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 **One live world.** The debug world (`src/Puck.World/Assets/worlds/debug.puck`,
 basis `avatars/moth`) is the only live world and the default boot, with the
 garden (`garden.puck`) its portal frame opens onto; `debug.md` beside them is
-the portal demo and its inspection verbs. Every other
-world (the island `puck.world.json`, its districts, the games) and their
-canary, parity and verdict fixtures are quarantined under `experimental/`; do
-not boot, repair or retarget them
+the portal demo and its inspection verbs. It boots on the Moth's seat chase
+camera: the first authored `views` layout is what a boot shows, and the Moth's
+is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
+`view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
+authors the body, its motion programs, its camera (`seatControl`,
+`seatRig "moth-camera"`) and its seat camera feel. A new rule or feature for
+the live world goes in `debug.puck` (or a scratch `.puck` world booted with
+`--world`). Every other world (the island
+`puck.world.json`, its districts, the games) and their canary, parity and
+verdict fixtures are quarantined under `experimental/`; do not boot, repair or
+retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
+
+**The live World is shared.** The World the owner pairs in runs the main
+checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
+tools:
+`puck_worlds` lists the running Worlds, and `puck_exec`, `puck_capture_frame`
+and `puck_state_vector_write` take a `world` argument (attachment id or
+process id) that reaches exactly that World; name it whenever more than one
+runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
+`body.*`, `player.*`, `view.override`) changes what the owner sees: make one
+only when the task allows it, and restore what you changed. To run your own
+edits, boot your own World from your worktree with its own `--state-dir` (and
+`--control` to attach to it), name it on every call, and stop only that
+process ([references/hosting-and-release.md](references/hosting-and-release.md)).
 
 ## The model
 
@@ -47,11 +67,45 @@ and validating it exactly like a JSON boot, and `world.reload` recompiles it
 from disk. A world source has no committed JSON beside it; the build compiles it
 into its output. Every construct of the world vocabulary is described once in
 `src/Puck.World.Transpiler/Vocabulary/`, and `puck vocabulary` generates
-[the inventory](../../../docs/reference/world-vocabulary.md) from it. The
-rule/gate/effect sugar and what each lowers to (`schedule` → `scheduleState`,
-`remove` → `removeStateCell`, folding through the rule frame) are in
-[references/mutations.md](references/mutations.md). `world.row.set` edits a
-live document row; it is not the way to author a new rule.
+[the inventory](../../../docs/reference/world-vocabulary.md) from it.
+
+A rule is a `when` gate, a trigger `mode`, an optional `forEach`, and effect
+statements. A deadline is a cell holding a due tick: `schedule` writes it and a
+later rule gates on `$tick >=` it (the Moth's `boot-boost-*` and `blink-*` rules
+are the live pattern), never a remainder decremented each tick:
+
+```text
+state {
+  world {
+    table armed { "0" = 1 }
+    table cooldownEnd { "0" = 0 }
+    table stale { "0" = 7 }
+  }
+}
+
+rule "cooldown-arm" {
+  when armed[$each] == 1
+  mode: Edge
+  forEach: armed
+  schedule cooldownEnd[$each] in 2s   // scheduleState: Write of the due tick, folds as UpsertStateCell
+}
+
+rule "cooldown-expire" {
+  when armed[$each] == 1 and $tick >= cooldownEnd[$each]
+  mode: Level
+  forEach: armed
+  remove stale[$each]                 // removeStateCell: Remove, folds as RemoveStateCell
+  armed[$each] = 0
+}
+```
+
+`puck compile <file> --validate` compiles that source and runs the boot
+validator over it. Every effect writes the tick's `StateArena` through the rule
+frame and folds into an existing state mutation kind, never a path of its own;
+the full effect table is in
+[references/mutations.md](references/mutations.md#rule-effect-sugar-puck--state-mutation-kind).
+`world.row.set` edits a live document row; it is not the way to author a new
+rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 
 ## Projects
 
@@ -66,8 +120,13 @@ live document row; it is not the way to author a new rule.
 | `src/Puck.World.Addons` | The scripting-guest addon host |
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host (`WorldMachineHost`, `WorldMachineCatalog`) |
 | `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldSeatBindings` (over `Puck.World.Vocabulary`'s `WorldAffordances`), `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
-| `src/Puck.World` | The sole composition root: `Program.cs`, audio, the screen binder, the shipped worlds under `Assets/` |
-| `src/Puck.World.AgentBridge`, `.AgentHarness`, `.AgentHarness.Azure` | Optional agent-participant extensions; no base world project references them |
+| `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
+| `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompiler`, `WorldCompileCache`, `Vocabulary/` |
+| `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
+| `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder, the shipped worlds under `Assets/` |
+| `src/Puck.World.Silo` | The hosted multi-world silo (Orleans activation lifecycle only; game traffic rides the World's own wire) |
+| `src/Puck.World.Browser` | The engine in a browser tab: a `browser-wasm` publish of Schema, State and the `.puck` toolchain |
+| `src/Puck.World.AgentBridge`, `.AgentHarness`, `.AgentHarness.Azure`, `.Azure`, `.Embeddings` | Optional extensions (agent participants, Azure resource operations, text embeddings); no base world project references them |
 
 `build/Architecture.props` enforces the layering (`PUCKARCH` diagnostics):
 Schema never references Protocol or Server, Server knows nothing about
@@ -120,9 +179,19 @@ device lands there with a test.
 
 **Adding an authorable feature owes, in one change:**
 
-1. Search `src/Puck.World.Schema` for existing vocabulary first (a camera
-   tunable, for example, belongs to the seat camera path:
-   `views.seatControl`/`playerDefaults.seatLook` and the camera program's ops).
+1. Search `src/Puck.World.Schema` for existing vocabulary first; the value
+   often exists already. A camera tunable belongs to the seat camera path:
+   framing and pitch limits in `views.seatControl` and the camera program's ops
+   (`views.seatRig`), input feel in `seatDefaults.seatCameraFeel`
+   (`WorldSeatCameraFeel`: pointer `yawSensitivity`/`pitchSensitivity` in
+   radians per pixel, `stickLookRate`, inversion, gyro; absent means zero
+   response). A seat reads the feel of the document that owns it: the world's
+   for an unclaimed seat, the claiming identity document's own
+   `seatDefaults.seatCameraFeel` for a claimed one. So a value for one seat (one
+   player's preference, which travels with them) belongs in that identity
+   document, and a value in a world's basis changes every world built on it.
+   Its console row path is `playerDefaults.seatLook` and its read-back is
+   `world.view.camera`.
 2. Author the value as a document record with a default that preserves today's
    behavior. Behaviour is an operation, or an operation's parameter, in the
    program vocabularies (the owner's ruling): body movement in
@@ -147,8 +216,11 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 ```
 
 - **Build first.** A failed build leaves the previous binaries in place, so a
-  run after it exercises old code and shows nothing about the change. Fix the
-  build until it exits 0 after the last edit, then rerun the same script.
+  run after it exercises old code and shows nothing about the change, however
+  well it behaves. The change is not verified until the build exits 0 after the
+  last edit and the same script, rerun through this recipe with its own
+  `--state-dir`, shows the behavior. Report what ran (build, command, script,
+  what it showed); the commit body carries it.
 - `--exit-after-seconds 0` or absent runs until the window closes. `--world`
   takes a `.puck` or JSON path. `Program.cs` parses the full flag surface;
   host flags are deployment overrides of the document's `host` section.
@@ -156,9 +228,19 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   their own.
 - **Presentation modes** (`host.presentation`): windowed, `offscreen` (GPU
   composition to images, what `puck parity` boots) and `none`
-  (`HeadlessWorldSimulation`, full authority, no GPU). A headless run uses no
-  GPU and may run beside GPU work; windowed and offscreen runs are GPU work.
-  Check the effective mode, deployment overrides included.
+  (`HeadlessWorldSimulation`, full authority, no GPU, so no capture). The Moth
+  basis authors `Windowed`, so the debug world boots windowed. `--headless`
+  (or `--headless true`) forces `none` for one run and `--headless false`
+  forces windowed; offscreen is a document's `host.presentation`. Check the
+  effective mode, overrides included.
+- **Sharing the GPU.** A run whose effective mode is `none` uses no GPU: while
+  another session holds the GPU grant for a parity, counters or windowed leg, it
+  may run beside that leg with its own `--state-dir`, as may builds and other
+  CPU work. Windowed and offscreen runs are GPU work and wait for the grant and
+  an idle GPU (`puck host load` prints `GPU busy` or `GPU idle`). A process
+  search of your own matches its own command line, so exclude it before
+  concluding another job is running
+  ([verification](../verification/SKILL.md#what-uses-the-gpu)).
 - **Capture both streams.** Read-back answers land on stdout; refusals,
   narration, boot lines, capture announcements and `[world.mutation: …]`
   echoes land on stderr.
@@ -209,7 +291,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | Grants, principals, verdicts, budgets, refusals, `world.why` | [authority.md](references/authority.md) |
 | `SubmissionEnvelope`, the one queue, completions, echo routing | [ordered-domain.md](references/ordered-domain.md) |
 | HUD schema, overlay reservation, bindings, HUD verbs | [hud.md](references/hud.md) |
-| Camera rigs, seat control and seat look, layouts, `views.*` verbs | [views.md](references/views.md) |
+| Camera rigs, seat control and seat camera feel, layouts, `world.view.*` and `view.override` | [views.md](references/views.md) |
 | Boundaries, federation, handoff, crossing logs | [adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `body.engage`, control applications, machines | [engagement.md](references/engagement.md) |
 | Join, leave, park, resume | [session-lifecycle.md](references/session-lifecycle.md) |
@@ -218,7 +300,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | Command modules, routing, output contract, screenshots | [console.md](references/console.md) |
 | Render validation, stamp capacity, rigid/carry/tether facets | [documents-render.md](references/documents-render.md) |
 | Navigation, the tabletop primitive, records and pools | [documents-state.md](references/documents-state.md) |
-| Districts and the sculpting library | [documents-composition.md](references/documents-composition.md) |
+| Boot-only sections (gravity, portals, simulation rate, references), `basis`/`imports` composition, the validator, serialization, the sculpting library | [documents-composition.md](references/documents-composition.md) |
 | How a body's look animates: creation drivers, swings, effectors and look followers, all read in `WorldStampPool.PackTransforms` (presentation only); the moth's turning, directional gait and stepping feet are authored there, never in client code | [documents-composition.md](references/documents-composition.md), [sdf-authoring rig](../sdf-authoring/references/rig.md#how-the-moth-moves) |
 | Extensions (`IPuckExtension`, `PuckExtensionSet`, installed `extensions/<name>/<name>.dll`), agent participants, the silo, MCP, release | [hosting-and-release.md](references/hosting-and-release.md) |
 | `captures`, `schedule`, verdict rows, `puck test` | [schedules-and-tests.md](references/schedules-and-tests.md) |
@@ -241,3 +323,4 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 | `rendering` | The renderer and SDF VM the frame source feeds. |
 | `gaming-bricks`, `rom-forge` | Emulators behind engaged screens; cartridges. |
 | `maths-usage` | Fixed-point primitives on simulation value paths. |
+| `verification` | The landing bar, the private CLI copy, GPU grants and flake-versus-failure. |

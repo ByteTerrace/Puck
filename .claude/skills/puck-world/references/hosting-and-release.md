@@ -7,13 +7,78 @@ cloud SDK; everything here is an extension or a host concern.
 
 ## Contents
 
+- Run an agent participant
 - Agent participants and the MCP attachment
 - Host provider boundary
 - Production silo verification
 
+## Run an agent participant
+
+A model-driven participant (a guide, a companion) on a body is configuration,
+not code. `Puck.World.AgentHarness` contributes the `agent.harness`
+participant type and `Puck.World.AgentHarness.Azure` the `azure.openai`
+`ChatClientProvider` (an Azure OpenAI or Foundry chat deployment). Neither base
+host references them: publish both beside each host that runs one
+(`dotnet publish src/Puck.World.AgentHarness -c Release -o extensions/Puck.World.AgentHarness`,
+the same for `.Azure`), and `world.extensions.catalog` then lists them.
+
+The participant is a `participants` row of a `puck.world.extensions.v1`
+document (`WorldExtensionConfiguration`):
+
+```json
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "<the world's documentId>",
+  "lineage": "<a new UUID, kept across restarts>",
+  "participants": [
+    {
+      "name": "guide",
+      "type": "agent.harness",
+      "principal": "addon:guide",
+      "body": 5,
+      "settings": {
+        "objective": "Help visitors reach the observatory.",
+        "provider": "azure.openai",
+        "providerSettings": { "endpoint": "https://<resource>.openai.azure.com/", "deployment": "<chat-deployment>" },
+        "approval": "refuse"
+      }
+    }
+  ]
+}
+```
+
+- Locally, a World reads it through `--extensions-config-file <file>`; a silo
+  row names the same file in its `extensions` member, and both hosts attach it
+  through `WorldConfiguredExtensions.Attach`, so one file behaves the same in
+  both. Each silo row needs its own file and lineage.
+- `body` is the 0-based body index. `principal` is a seat, addon or peer, never
+  `console`. The configuration grants nothing: the world itself grants the
+  principal `Observe` and `Drive` over that body (document `grants` or
+  `world.grant`).
+- `approval` is the consent, since no operator is in the loop: `refuse` (the
+  default) offers the model only observing tools; `allow` offers the mutating
+  ones (`puck_move`, `puck_press_channel`, `puck_stop`) without a prompt. Grants
+  still decide every action.
+- `azure.openai` signs in with `DefaultAzureCredential` (a managed identity on a
+  host, the developer's own Azure sign-in on a workstation) and refuses a key
+  member such as `apiKey` by name. Its `providerSettings` are `endpoint`
+  (https), `deployment`, and optionally `tenantId` and
+  `managedIdentityClientId`; the identity needs a data-plane role such as
+  Cognitive Services OpenAI User.
+- An unknown type, provider or setting, a blank objective, or a console
+  principal refuses the whole configuration by name; at most 16 participants.
+- `world.extensions` echoes one status line per participant: type, principal,
+  body, provider, state, completed turns and the last failure.
+- Verify with `WorldAgentParticipantLawTests` and `AzureOpenAiChatClientLawTests`
+  (`tests/Puck.World.Agents.Tests`), and `WorldSiloExtensionLawTests` and
+  `ExtensionModelLawTests` (`tests/Puck.World.Silo.Tests`); no test reaches a
+  live model. The participant section of
+  `src/Puck.World.Server/ExtensionConfiguration.md` and the two projects'
+  READMEs own the settings tables.
+
 ## Agent participants and the MCP attachment
 
-A host runs an agent as an extension-configuration `participants` row (`WorldParticipantType`, in Protocol), which `WorldConfiguredExtensions` creates, pumps at every closed boundary, and disposes; the participant acts only through its principal's grants and refuses the console principal. Verify with `WorldAgentParticipantLawTests` (`tests/Puck.World.Agents.Tests`) and `WorldSiloExtensionLawTests`. The Operator MCP adapter lives in
+A host runs an agent as an extension-configuration `participants` row (`WorldParticipantType`, in Protocol), which `WorldConfiguredExtensions` creates, pumps at every closed boundary, and disposes; the participant acts only through its principal's grants and refuses the console principal. The Operator MCP adapter lives in
 `Puck.Mcp`, referenced by CLI for local stdio, never by base World or the silo. Remote MCP is the installed
 `Puck.Mcp` extension's `HostedControl`, started by the silo's `--mcp <remote.json>` (which is what
 `puck mcp --silo <silo.json> --http <remote.json>` runs); the silo exposes only Hosting's neutral
@@ -71,6 +136,39 @@ Cloud-specific implementations belong in extensions, and every host composes the
 | DI | `AddPuckExtensions` (`Puck.Launcher`): the set, `PuckHostedService` contributions, the one `HostedControl` when a control configuration is named, `world.extensions.catalog`. |
 | Selection | `PuckExtensionSet.Select<T>(key, purpose)` (`Puck.Abstractions`) refuses an uninstalled key naming the installed ones; a null key takes the kind's one installed contribution and refuses none or several by name. |
 | Configuration | One `puck.world.extensions.v1` document (`WorldExtensionConfiguration.Load`) attached by `WorldConfiguredExtensions.Attach` to a row: World's `--extensions-config-file` on the boot row, each silo row's `extensions` path. `WorldInstance.Extensions` holds the runtime; `world.extensions` (`Puck.World.Console`) echoes it in both hosts. A provider `type` installed as both operation and embedding is refused by name. |
+
+The contribution kinds, each registered by an extension method on
+`IPuckExtensionRegistry` under a key unique within its kind:
+
+| Kind | Key | Registered with | Read by |
+|---|---|---|---|
+| `IMachineEngine`, `IMachineContentProvider` | engine id | `AddMachineEngine` | every host's `WorldMachineCatalog.From` |
+| `WorldSiloStorageProvider` | store `type` | `AddStorage` | the silo document's `store` |
+| `WorldSiloRetirementProvider` | observer `type` | `AddRetirement` | the silo's `lifecycle.observer` |
+| `WorldAuthenticationProvider` | `type` | `AddAuthentication` | silo row admission; World's `--authentication-config-file` |
+| `WorldExtensionProviderType`, `WorldExtensionEmbeddingProviderType` | provider `type` | `AddOperation`, `AddEmbedding` | the extension configuration's `providers` |
+| `WorldParticipantType` | participant `type` | `AddParticipant` | the extension configuration's `participants` |
+| `ChatClientProvider` | provider name | `AddChatClient` | an `agent.harness` participant's `provider` |
+| `WorldHealthCheck` | request path | `AddHealthCheck` | the silo's health listener |
+| `PuckHostedService` | any | `registry.Add` | every host, started and stopped with it |
+| `HostedControl` | always `control` | `AddHostedControl` | a host with an `IControlSessionHost`; one per host |
+| `McpServicesProvider` | provider name | `registry.Add` | remote MCP, when its configuration names `services` |
+
+A new provider (a GCP or S3 blob store for the silo, say) is one optional
+extension project: an `IPuckExtension` with a public parameterless constructor,
+named after its assembly and declared with `[assembly: PuckExtension(typeof(...))]`,
+whose `Register` calls the kind's method (`registry.AddStorage(provider: new WorldSiloStorageProvider(...))`
+under the `type` a silo document's `store` names, as `Puck.World.Azure`'s
+`AzureWorldExtension` does for `azure.blob`). The project sets
+`<EnableDynamicLoading>true</EnableDynamicLoading>` and publishes into
+`extensions/<AssemblyName>`; no host, the silo, `Puck.Mcp` or the CLI references
+it, and it adds no static registry, no directory scan of its own and no
+per-kind extension interface. Registration does no I/O. A remote-MCP service is
+an `McpServicesProvider` contribution, selected only when the MCP configuration
+names `services` and refused with none or two installed. Check the composed
+result with `world.extensions.catalog` in a running host
+(`Puck.World.Server: WorldSiloStorageProvider directory` is a built-in line), and
+verify with `ExtensionModelLawTests`.
 
 `Puck.World` built-ins: both Gaming Brick forges plus `WorldServerExtension` (`directory` storage); the silo's:
 `WorldServerExtension`. Both search `./extensions` then `<app>/extensions`. The silo selects persistence,

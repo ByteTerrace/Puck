@@ -339,7 +339,8 @@ behavior transitions in
 `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n>[+<substepTicks>] order=<n>`;
 `world.save` settles the value to the current index/node at epoch `0`. Read
 laws: `tests/Puck.World.Schema.Tests/StateCycleReadLawTests.cs` and
-`StateCycleWordLawTests.cs`; live proof: `tests/Puck.World.Canaries/state-cycle-trait`.
+`StateCycleWordLawTests.cs`. The `state-cycle-trait` canary that ran it live is
+quarantined under `experimental/tests/Puck.World.Canaries/`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** The
 rule lives in `StateReservedCells.TryValidateReservedCell`
@@ -375,7 +376,7 @@ opposite}]`, `edges: [{from, to, direction, oneWay?}]`; one neighbour per
 (cell, direction) slot, so k neighbours need k directions; `offset` refuses
 it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
-positions against (the Parlor chess world's `chessBoard` — see
+positions against (the quarantined Parlor chess world's `chessBoard` — see
 `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section). The board facet's own `enforcement` (`record`, the default, or
 `return`) is the one engine-side reaction to its `verdict` row refusing a
 move — `return` poses the mover back onto `move`'s `from` cell on the
@@ -474,7 +475,7 @@ rule writes a body's transient into a world row through (an eased
 `airPose` cell a creation's drivers then read), where `$identity:` is the
 persisted fact lane. `$bodyPosition:<bodyRef>:x|y|z` reads one axis of a
 body's live position (fixed-point metres, 0 for no live body).
-See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the Parlor package's `worlds/parlor/chess.puck` (`chessBoard`) is the worked example.
+See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the quarantined `experimental/worlds/parlor/chess.puck` (`chessBoard`) is the worked example.
 
 ## Authored randomness — SOURCE x SITE x MOMENT
 
@@ -522,8 +523,9 @@ paint list: it overwrites earlier fills and later fills overwrite it. Whole-
 document rebuild/load/reset repaint every draw row; undo repaints only a row
 whose cursor/mask position rewound, preserving unrelated reaction-evolved
 fields. Read law:
-`tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
-`tests/Puck.World.Canaries/lattice-draw-fill`.
+`tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`. The
+`lattice-draw-fill` canary that ran it live is quarantined under
+`experimental/tests/Puck.World.Canaries/`.
 
 `GeneratorCapacity`: 64 contexts, 256 alternatives per context (one
 drawn-mask bit each), bound ≤ 256, token ≤ 64 UTF-16 units, 256 weighted outcomes,
@@ -703,8 +705,9 @@ Dealt placement instances carry reserved `dealSlot` identities independently of 
 selects instance-owned transforms, prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,
 and opaque influence channels; static planning does not ban dynamic facets from ordinary placements. Reflow previews
 travel through attributed queries and return an ordinary batch with spatial, named-input, and payment guards.
-The granary module guide owns the spatial/reflow
-authoring contract: `src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court`.
+The quarantined granary module guide records the spatial/reflow
+authoring contract: `experimental/src/Puck.World/Assets/worlds/modules/README.md`
+("Grow and rearrange the court").
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
 step/slope limits, a vertical capsule, and swept neighbour edges from
