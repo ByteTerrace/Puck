@@ -11,8 +11,8 @@
 //   its distance in output pixels;
 // - the pixel's motion is the nearest-depth sample's, reprojected through sdfReprojection's modules, or, where the 3x3
 //   saw no surface, the camera's rotation alone;
-// - the history at the moved position is rejected when the history surface there names another identity, or a ray
-//   distance more than SdfHistoryDepthTolerance from the reprojected one; the pixel then shows the spatial path at this
+// - the history at the moved position is rejected when the receiver the history surface there names (the tap nearest
+//   that pixel's center) matches no 3x3 tap's identity within SdfHistoryDepthTolerance of its ray distance; the pixel then shows the spatial path at this
 //   frame's sample grid and its history restarts from this frame's samples;
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
 //   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through.
@@ -31,7 +31,7 @@
 #include "../shade/sdf-transport.hlsli"
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
-// The words an output pixel holds in the history surface: the nearest surface's identity, then its ray distance and the
+// The words an output pixel holds in the history surface: the identity of the tap nearest the pixel's center, then its ray distance and the
 // gathered weight as two half floats (the distance low; the far limit 8192 and the weight cap stay normal halves, each
 // within a relative 2^-11, far inside SdfHistoryDepthTolerance), then the accumulated transport's two words
 // (sdfPackTransport). KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
@@ -181,6 +181,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint hitIdentity = 0u;
     uint hitRecord = 0u;
     uint2 hitPixel = uint2(0u, 0u);
+    // Each 3x3 tap's surface identity (0 on a miss) and ray distance, and the receiver the history keeps for this pixel:
+    // the tap nearest its center. Validating against every tap keeps an edge's history whichever side of it the jitter
+    // puts the nearest-depth tap on; the clip below still bounds what the history contributes.
+    uint identities[9];
+    float distances[9];
+    float centerWeight = -1.0;
+    uint centerIdentity = 0u;
+    float centerT = 0.0;
 
     [unroll] for (int dy = -1; dy <= 1; dy++) {
         [unroll] for (int dx = -1; dx <= 1; dx++) {
@@ -199,6 +207,15 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
             if (surface) {
                 transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
+            }
+            uint tap = ((uint)((dy + 1) * 3) + (uint)(dx + 1));
+
+            identities[tap] = (surface ? visibility.identity : 0u);
+            distances[tap] = (surface ? visibility.t : 0.0);
+            if (weight > centerWeight) {
+                centerWeight = weight;
+                centerIdentity = identities[tap];
+                centerT = distances[tap];
             }
             if (surface && (!hit || (visibility.t < hitT))) {
                 hit = true;
@@ -265,8 +282,15 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
                 uint distanceAndWeight = historySurface[word + 1u];
                 float historyT = f16tof32(distanceAndWeight & 0xFFFFu);
 
+                // A tap's distance in the preceding view: its own, shifted by the camera's move along the nearest hit.
+                float shift = (hit ? (previousT - hitT) : 0.0);
+
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);
-                accepted = (hit ? sdfHistoryReceiverMatches(hitIdentity, historyIdentity, previousT, historyT) : (historyIdentity == hitIdentity));
+                [unroll] for (uint tap = 0u; tap < 9u; tap++) {
+                    accepted = (accepted || ((identities[tap] == 0u)
+                        ? (historyIdentity == 0u)
+                        : sdfHistoryReceiverMatches(identities[tap], historyIdentity, (distances[tap] + shift), historyT)));
+                }
             }
         }
     }
@@ -304,8 +328,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
 
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
-    historySurfaceRW[word] = hitIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
+    historySurfaceRW[word] = centerIdentity;
+    historySurfaceRW[word + 1u] = (f32tof16(centerT) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
     uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
 
     historySurfaceRW[word + 2u] = historyTransportWords.x;

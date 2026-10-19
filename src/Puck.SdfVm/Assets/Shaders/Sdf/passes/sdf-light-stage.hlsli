@@ -2,7 +2,7 @@
 // nothing on a miss. It samples a bound screen, loads the material, lights the surface through the one light interface (sdf-light.hlsli), each
 // slotted light under its own shadow, adds the irradiance volume's indirect light, applies the editor grid, and reports
 // the pixel's coverage: one for a hit, zero on a miss. It also reports the pixel's reactivity for a temporal view's
-// resolve: one for a screen, whose content changes on its own, and for emission, which the material model cannot tell
+// resolve: one for a display screen, whose content changes on its own, zero for an opening, and for emission, which the material model cannot tell
 // animated from steady, the share of the color the material that actually shaded the pixel emits. The sky,
 // the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
 #ifndef PASSES_SDF_LIGHT_STAGE_HLSLI
@@ -42,6 +42,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         // screen is its own light source, like a real display), but shaped by the CRT glass face before the shared
         // distance fog. The screen also lights the room: see the screen lights below.
         sampledScreen = sampleScreenSurface(material, surfacePoint, p.rayDirection, (p.pixelFootprint * s.t), color);
+        if (sampledScreen) {
+            // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
+            // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge.
+            ScreenMappingData opening = worldScreenMapping((uint)(material - SDF_SCREEN_MATERIAL - 1));
+
+            reactivity = (((opening.imageU.w != 0.0) && (opening.state.w == 0.0)) ? 0.0 : reactivity);
+        }
     }
 #endif
 
