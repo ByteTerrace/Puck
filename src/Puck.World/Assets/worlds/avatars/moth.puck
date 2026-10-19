@@ -5109,27 +5109,18 @@ prototypes {
         parent: "boot-left"
       }
 
-      shape Box "soleHeelSlot-left" {
+      // The heel is bevelled away behind a plane parallel to the heel thruster's plume and 6 cm ahead of it, so the sole
+      // ends clear of the jet and the thruster overhangs the cut.
+      shape Box "heelBevel-left" {
         id: 970
-        position [0.2, 0.08, -0.17]
-        scale [0.072, 0.08, 0.08]
-        material: jet
+        position [0.2, 0.135, -0.2046]
+        rotation [-0.5, 0, 0, 0.866025]
+        scale [0.12, 0.05, 0.2]
+        material: violet
         blend: "SmoothSubtraction"
         smooth: 0.006
         group: 23
         parent: "boot-left"
-      }
-
-      shape Box "heelBlock-left" {
-        id: 971
-        position [0.2, 0.036, -0.165]
-        scale [0.06, 0.036, 0.055]
-        material: gunmetal
-        blend: "SmoothUnion"
-        smooth: 0.006
-        group: 23
-        parent: "boot-left"
-        chamfer: 0.016
       }
 
       shape Box "sole-left" {
@@ -6843,27 +6834,18 @@ prototypes {
         parent: "boot-right"
       }
 
-      shape Box "soleHeelSlot-right" {
+      // The heel is bevelled away behind a plane parallel to the heel thruster's plume and 6 cm ahead of it, so the sole
+      // ends clear of the jet and the thruster overhangs the cut.
+      shape Box "heelBevel-right" {
         id: 978
-        position [-0.2, 0.08, -0.17]
-        scale [0.072, 0.08, 0.08]
-        material: jet
+        position [-0.2, 0.135, -0.2046]
+        rotation [-0.5, 0, 0, 0.866025]
+        scale [0.12, 0.05, 0.2]
+        material: violet
         blend: "SmoothSubtraction"
         smooth: 0.006
         group: 37
         parent: "boot-right"
-      }
-
-      shape Box "heelBlock-right" {
-        id: 979
-        position [-0.2, 0.036, -0.165]
-        scale [0.06, 0.036, 0.055]
-        material: gunmetal
-        blend: "SmoothUnion"
-        smooth: 0.006
-        group: 37
-        parent: "boot-right"
-        chamfer: 0.016
       }
 
       shape Box "sole-right" {
