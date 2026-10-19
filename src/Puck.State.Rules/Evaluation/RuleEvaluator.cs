@@ -46,6 +46,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private Puck.Abstractions.Counting.WorkCount m_firings;
     private Puck.Abstractions.Counting.WorkCount m_skips;
 
+    private readonly List<int> m_bodyIndexScratch = [];
     private readonly List<CellKey> m_eachKeyScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
     private readonly List<CellAccess> m_readScratch = [];
@@ -262,6 +263,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             return;
         }
+        if (rule.ForEachBodies) {
+            BodyKeys();
+
+            return;
+        }
 
         var arena = m_host.Arena;
         var cursor = 0;
@@ -272,6 +278,25 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             rowOrdinal: rule.ForEachOrdinal
         )) {
             m_eachKeyScratch.Add(item: key);
+        }
+    }
+    // A body sweep binds each live body's index key in ascending index order. The compiler interned every index the
+    // body capacity admits, so a live body always resolves; RuleNeeds.Admit already refused a host that is not an
+    // ILiveBodies, which the rule's needs name.
+    private void BodyKeys() {
+        m_bodyIndexScratch.Clear();
+        ((ILiveBodies)m_host).CollectLiveBodies(into: m_bodyIndexScratch);
+
+        var keys = m_host.Arena.Keys;
+
+        foreach (var index in m_bodyIndexScratch) {
+            if (RuleReads.TryIndexKey(
+                index: index,
+                key: out var key,
+                keys: keys
+            )) {
+                m_eachKeyScratch.Add(item: key);
+            }
         }
     }
     private List<StateInstanceHandle> PoolHandles(StatePoolDescriptor pool, int bindingSlot) {
@@ -356,7 +381,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         var bindings = latch.Bindings(name: rule.Name);
 
-        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && (rule.PoolForEach is null)) {
+        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null)) {
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,

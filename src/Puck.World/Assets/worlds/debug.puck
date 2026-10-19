@@ -393,11 +393,12 @@ render {
 }
 
 // The ground is 256 m across with nothing beneath it. Forty metres under the lowest ground a body is out of the world,
-// and the rule stands body 0, the seat's Moth, back up at the hero spawn.
+// and the rule stands every live body that falls there, a seat's Moth or any other, back up at the hero spawn.
 let respawnFloor = -40
 
 rule "fall-respawn" {
-  when bodyPosition(body, 0, y) < respawnFloor
+  when bodyPosition(each, y) < respawnFloor
   mode: Level
-  pose(key: 0, spawnPoint: "hero")
+  forEach: $bodies
+  pose(key: $each, spawnPoint: "hero")
 }

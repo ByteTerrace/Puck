@@ -38,7 +38,7 @@
       },
       "forEach": {
         "$ref": "./common.schema.json#/$defs/StateChannelRefNonNullable",
-        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s interned CellKey ordinal, so a key keeps its latch wherever it sits in the row.",
+        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), $bodies to iterate every live body in ascending index order (ForEachBodies), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s interned CellKey ordinal, so a key keeps its latch wherever it sits in the row.",
         "default": null
       },
       "decision": {

@@ -257,6 +257,10 @@ public sealed class RuleRefusalLawTests {
                 name: "vectoradd"
             )
         ),
+        [RuleRefusal.BodiesUnserved] = static () => Compile(rule: RulesFixture.Rule(
+            forEach: RuleFacts.ForEachBodies,
+            name: "bodies"
+        )),
     };
 
     private static void Compile(Rule rule) => Compile(

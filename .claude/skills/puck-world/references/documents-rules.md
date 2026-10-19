@@ -26,10 +26,12 @@ rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `dead == 1 && $tick >= respawnIn` rule move a body its own gate row has frozen.
-A body that falls out of the world comes back the same way: a gate over
-`bodyPosition(body, 0, y)` (`$bodyPosition:<bodyRef>:x|y|z`, the live position
-in fixed-point metres) fires `pose(key: 0, spawnPoint: "hero")`, the debug
-world's `fall-respawn` rule.
+A body that falls out of the world comes back the same way: the debug world's
+`fall-respawn` rule sweeps `forEach: $bodies` (every live body, ascending
+index, `each`/`$each` bound to it; `RuleFacts.ForEachBodies`, served by
+`WorldRuleHost` as `ILiveBodies`), gates on `bodyPosition(each, y)`
+(`$bodyPosition:<bodyRef>:x|y|z`, the live position in fixed-point metres) and
+fires `pose(key: $each, spawnPoint: "hero")`.
 `setState` with `text` writes a `kind=Text` cell (exactly one of `value`/
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
@@ -54,7 +56,9 @@ order, `""` a gap) makes `$zones[<index>]` a row position anywhere in the rule �
 transfer ends, expression rows — with an infix key as the index (`game[from]`,
 `$each`, `$local:<name>`, an expression); an evaluation whose index selects no zone
 reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none>]`);
-`forEach: "$zones"` iterates the table. Rule-authored
+`forEach: "$zones"` iterates the table, and `forEach: "$bodies"` iterates the
+live bodies (refused on a decision, `BodiesUnserved` on a document with no
+bodies). Rule-authored
 transfers resolve their `key`, `from`, and `to` before each transaction step;
 direct mutations use literal keys and zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.

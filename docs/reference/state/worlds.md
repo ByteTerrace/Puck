@@ -159,7 +159,7 @@ Puck.World extends the rule compiler the way any host does (see
   for a reference resolving to no live body; any other axis is refused with
   `WorldRuleRefusal.BodyPositionMalformed`. A gate over it with a `pose`
   effect recovers a body that falls out of the world, as the debug world's
-  `fall-respawn` rule does. Its key family answers `$pair:`. Its effect arms cover body motion and
+  `fall-respawn` rule does for every live body through `forEach: $bodies`. Its key family answers `$pair:`. Its effect arms cover body motion and
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and

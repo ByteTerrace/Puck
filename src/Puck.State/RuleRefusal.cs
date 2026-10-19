@@ -191,6 +191,10 @@ public enum RuleRefusal : byte {
     /// order or value would disclose what that reader is refused (<see cref="StateVisibility.Encloses"/>).</summary>
     [Refusal(door: "state.rule.compile", condition: "a transform writes a row whose audience a row it reads does not enclose", kind: RefusalKind.Verdict)]
     TransformWidensAudience,
+
+    /// <summary>A rule iterates <c>forEach: $bodies</c> against a section whose document declares no bodies.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a rule iterates 'forEach: $bodies' against a document whose body capacity is zero", kind: RefusalKind.Verdict)]
+    BodiesUnserved,
 }
 /// <summary>Reports a rule compilation refusal — caught and reported by name at validation. The category is a
 /// <see cref="RuleRefusal"/> for the refusals the state-neutral compiler raises itself, or a member of a document

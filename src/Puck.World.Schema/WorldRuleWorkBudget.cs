@@ -359,7 +359,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 rule: rule,
                 context: WorldFactsCompiler.Context(definition: definition)
             )}"
-            : "no forEach — priced once"
+            : (rule.ForEachBodies
+                ? $"forEach {RuleFacts.ForEachBodies} body capacity={definition.Population.Capacity}"
+                : "no forEach — priced once")
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

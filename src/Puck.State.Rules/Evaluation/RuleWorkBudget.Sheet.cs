@@ -228,7 +228,7 @@ public static partial class RuleWorkBudget {
         return writers;
     }
     /// <summary>Returns how many evaluations one tick's cost is multiplied by: the iterated row's cell capacity, the
-    /// zone table's entry count, or 1 for a rule evaluated once.</summary>
+    /// zone table's entry count, the document's body capacity for a body sweep, or 1 for a rule evaluated once.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="context">The context the rule was resolved against.</param>
     /// <returns>The multiplier.</returns>
@@ -236,6 +236,9 @@ public static partial class RuleWorkBudget {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
+        if (rule.ForEachBodies) {
+            return context.BodyCapacity;
+        }
         if (rule.ForEachZones) {
             return (rule.Zones?.Indices.Length ?? 1);
         }
@@ -246,7 +249,7 @@ public static partial class RuleWorkBudget {
         return context.RowCapacity(rowOrdinal: rule.ForEachOrdinal);
     }
     /// <summary>Returns what one sweep of a rule costs before its first evaluation: one unit per key the sweep
-    /// snapshots, which is the iterated row's capacity or the zone table's entry count, and nothing for a rule
+    /// snapshots, which is the iterated row's capacity, the zone table's entry count or the body capacity, and nothing for a rule
     /// evaluated once.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="context">The context the rule was resolved against.</param>
@@ -254,7 +257,7 @@ public static partial class RuleWorkBudget {
     public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones)
+        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies)
             ? RuleWork.Zero
             : RuleWork.Known(units: ForEachCount(
                 context: context,

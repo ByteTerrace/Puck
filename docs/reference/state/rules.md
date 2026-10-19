@@ -30,7 +30,7 @@ Every rule has a name and at least one effect. The rest is optional:
 | Locals | Values computed once per evaluation, in declared order, before the gate. The gate and every effect can read them. A local is never stored; it lives for one evaluation. | `price` |
 | Gate | The predicate that must hold. A rule with no gate always holds. | `coins >= price` |
 | Mode | Whether a holding gate fires on every evaluation (`Level`, the default) or only when it opens (`Edge`). | `Edge` |
-| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, and `rule name for each x in pool` once per live pool instance. | none |
+| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, and `rule name for each x in pool` once per live pool instance. | none |
 | Effects | The ordered changes the rule attempts when it fires. | two assignments |
 | Zones | A table of ordered piles the rule can select from at runtime. | none |
 
@@ -173,6 +173,7 @@ refusal inside the rule, such as `gate`, `locals[0]`, or
 | `DurationNotExactEngineTicks`, `DurationEngineTicksOutOfRange` | A duration that is negative or isn't a whole number of engine ticks, or one past the 64-bit carrier. |
 | `ReduceChannelMalformed`, `SymmetryChannelMalformed`, `ArgRowNotKeyed` | A malformed reserved channel, or a key-yielding read over an unkeyed row. |
 | `ZoneTableMalformed` | An empty zone table, an entry that isn't an ordered zone, entries over different token domains or kinds, or `forEach: $zones` with no table. |
+| `BodiesUnserved` | `forEach: $bodies` against a document that declares no bodies. |
 | `RuleGroupMalformed` | A malformed rule group or undo declaration. |
 | `IrreversibleResultRead` | A later effect reads what an irreversible arm writes. |
 | `Vector…` | A vector operand, mix, filter, or destination refused; see [Vectors and embedding spaces](vectors.md). |
@@ -626,6 +627,14 @@ domain, and a keyed Int row `game` with cells `from` and `to`.
   expression row reads.
 - `forEach: $zones` iterates the table's non-empty indices with `$each` bound to
   each.
+
+`forEach: $bodies` needs no table: the rule evaluates once per body the host
+holds active, in ascending body-index order, with `$each` and the `each`
+participant reference bound to that body. A body-keyed effect takes it as
+`key: $each`. The sweep is priced at the document's body capacity, and a host
+that holds no bodies refuses the rule at admission by the facet it lacks
+(`ILiveBodies`). A decision cannot iterate it; a decision's `forEach` names a
+keyed row.
 
 Before the gate, the evaluator resolves each distinct spelling once. If any
 spelling selects an index outside the table or at a gap, the gate reads closed

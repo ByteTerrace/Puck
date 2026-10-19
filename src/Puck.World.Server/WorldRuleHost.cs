@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 /// groups, interactions and tables, their edge latches, the decision, pattern, identity-fact and influence-fact
 /// runtimes, the queries, the trace and the world's own effect arms. The arena is the store every read and write
 /// addresses, and the world facts only the server can answer reach a fact as the facet its declaration names.</summary>
-public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts {
+public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies {
     // The compiled `rules` section, adopted by Install on every recompile from the same WorldFactsCompiler path the
     // validator already ran over the candidate. Recomputed unconditionally: rules and state rows are both
     // small-capacity sections, so there is no AffectsRules classification predicate earning its keep here.
@@ -191,6 +191,19 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         return false;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>A live body is one the population holds active, the same bodies <c>$population</c> counts.</remarks>
+    public void CollectLiveBodies(List<int> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        var population = Host.Population;
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (population.IsActive(index: index)) {
+                into.Add(item: index);
+            }
+        }
+    }
     /// <inheritdoc/>
     public RuleFact Read(PopulationOperand operand) => RuleFact.Finite(
         kind: CellKind.Int,

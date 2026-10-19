@@ -265,7 +265,8 @@ answers no index) and any row position in it—a `compareState` `state`, a
 expression's row—spells `$zones[<index>]` with an infix key as the index
 (`game[from]`, `$each`, `$local:<name>`, an expression), so one authored rule
 serves every pile of a game; `forEach: "$zones"` visits the table's own
-indices, and an evaluation whose live index selects no entry reads its gate
+indices (`forEach: "$bodies"` visits every live body in ascending index order,
+the facet `ILiveBodies` the world rule host serves), and an evaluation whose live index selects no entry reads its gate
 closed (the table's gaps say which piles the rule is for; `world.rule.trace`
 lists what each spelling selected). `$zone:<ordered-zone>:first|last` selects
 an endpoint's original string key from the active store; an empty zone's
@@ -2266,8 +2267,9 @@ computed value; the tabletop primitive's own use is gating a piece's board
 occupancy derive so a knocked-over piece reads as displaced),
 `$bodyPosition:<bodyRef>:x|y|z` (one world axis of a body's live position in
 metres, fixed point, 0 for no live body; any other axis refuses as
-`BodyPositionMalformed`; the debug world's `fall-respawn` rule gates a `pose`
-on it to recover a body that falls off the ground), and
+`BodyPositionMalformed`; the debug world's `fall-respawn` rule sweeps
+`forEach: $bodies` and gates a `pose` on it to recover any body that falls off
+the ground), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and

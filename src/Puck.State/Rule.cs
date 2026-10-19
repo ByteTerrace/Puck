@@ -38,8 +38,9 @@ namespace Puck.State;
 /// default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). A rule that writes a row almost always wants
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> writes one journal entry per tick.</param>
 /// <param name="ForEach">A keyed state row to iterate, <c>$zones</c> to iterate the rule's own
-/// <paramref name="Zones"/> table (its non-empty indices, each bound to <c>$each</c>), or <see langword="null"/> for
-/// one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
+/// <paramref name="Zones"/> table (its non-empty indices, each bound to <c>$each</c>), <c>$bodies</c> to iterate every
+/// live body in ascending index order (<see cref="RuleFacts.ForEachBodies"/>), or <see langword="null"/> for one
+/// evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
 /// <c>$each</c> bound to that cell's key — the quantifier that lets one rule tick a status for every participant
 /// carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the <c>each</c>
 /// participant reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's

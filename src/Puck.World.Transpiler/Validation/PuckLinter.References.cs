@@ -40,7 +40,7 @@ public static partial class PuckLinter {
     private static readonly string[] KnownChannelPrefixes = [
         .. new[] {
             RuleFacts.MatchPrefix, RuleFacts.HistoryPrefix, RuleFacts.CellKeyPrefix, RuleFacts.ZoneKeyPrefix,
-            RuleFacts.LiveZonePrefix, RuleFacts.ForEachZones, RuleFacts.ExpressionKeyPrefix, RuleFacts.LocalPrefix,
+            RuleFacts.LiveZonePrefix, RuleFacts.ForEachZones, RuleFacts.ForEachBodies, RuleFacts.ExpressionKeyPrefix, RuleFacts.LocalPrefix,
             RuleFacts.TablePrefix, RuleFacts.ReducePrefix, RuleFacts.SymmetryPrefix, RuleFacts.Tick,
         }.Select(selector: static prefix => prefix.TrimEnd(
             ':',

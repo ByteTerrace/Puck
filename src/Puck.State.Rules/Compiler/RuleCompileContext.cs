@@ -256,6 +256,12 @@ public class RuleCompileContext : IRuleCostContext {
 
         return (row?.Capacity ?? (row?.CellCeiling ?? StateCapacity.MaxCellsPerRow));
     }
+
+    /// <inheritdoc/>
+    /// <remarks>The state-neutral context declares no bodies; a document project whose host holds bodies answers its
+    /// own capacity.</remarks>
+    public virtual long BodyCapacity => 0L;
+
     /// <summary>Resolves a declared cell set by name.</summary>
     /// <param name="name">The set's name.</param>
     /// <param name="set">The declared set, its name beside its expression, on success.</param>

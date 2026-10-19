@@ -880,6 +880,13 @@ public sealed class WorldDecisionLawTests {
         )));
 
         Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(rule with { Mode = ActionTriggerMode.Edge })));
+        Assert.Contains(
+            expectedSubstring: RuleFacts.ForEachBodies,
+            actualString: Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: Document(rule with {
+                ForEach = RuleFacts.ForEachBodies,
+            }))).Message,
+            comparisonType: StringComparison.Ordinal
+        );
         var typed = Policy(new WorldDecisionOption(
             Name(value: "a"),
             new(Instructions: [Instruction.Operand(name: "score")]),
