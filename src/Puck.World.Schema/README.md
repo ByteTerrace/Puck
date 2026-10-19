@@ -2263,7 +2263,11 @@ token, so it composes with `$distance:`/`$argmax:` directly; see
 against the world up its gravity opposes—1 exactly upright, falling toward
 0 as it tips onto its side; an absent body reads the neutral 1, never a
 computed value; the tabletop primitive's own use is gating a piece's board
-occupancy derive so a knocked-over piece reads as displaced), and
+occupancy derive so a knocked-over piece reads as displaced),
+`$bodyPosition:<bodyRef>:x|y|z` (one world axis of a body's live position in
+metres, fixed point, 0 for no live body; any other axis refuses as
+`BodyPositionMalformed`; the debug world's `fall-respawn` rule gates a `pose`
+on it to recover a body that falls off the ground), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and

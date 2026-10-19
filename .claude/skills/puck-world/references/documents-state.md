@@ -472,7 +472,8 @@ rather than occupying its last resting cell. `$fact:<bodyRef>:<fact>` reads
 one live `BodyFacts` bit (`Airborne`, `Grounded`, …) as 1/0 — the door a
 rule writes a body's transient into a world row through (an eased
 `airPose` cell a creation's drivers then read), where `$identity:` is the
-persisted fact lane.
+persisted fact lane. `$bodyPosition:<bodyRef>:x|y|z` reads one axis of a
+body's live position (fixed-point metres, 0 for no live body).
 See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the Parlor package's `worlds/parlor/chess.puck` (`chessBoard`) is the worked example.
 
 ## Authored randomness — SOURCE x SITE x MOMENT

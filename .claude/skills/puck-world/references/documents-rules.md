@@ -26,6 +26,10 @@ rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `dead == 1 && $tick >= respawnIn` rule move a body its own gate row has frozen.
+A body that falls out of the world comes back the same way: a gate over
+`bodyPosition(body, 0, y)` (`$bodyPosition:<bodyRef>:x|y|z`, the live position
+in fixed-point metres) fires `pose(key: 0, spawnPoint: "hero")`, the debug
+world's `fall-respawn` rule.
 `setState` with `text` writes a `kind=Text` cell (exactly one of `value`/
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value

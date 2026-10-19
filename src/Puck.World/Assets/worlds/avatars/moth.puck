@@ -2084,8 +2084,8 @@ looks {
         // flies. Lane 2 is flight mode itself, the heel and nozzle glows it lights.
         lanes [
           0
-          flightMode[$body] * (0.2 + 0.8 * airPose[$body])
-          flightMode[$body]
+          bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body])
+          bodyState($body, flightFuel) / 1000
         ]
         poses {
           blink: "state.blink.$body"
@@ -7640,14 +7640,8 @@ render {
 }
 
 // The flight pose and wings deploy only in flight mode; an ordinary jump keeps her upright.
-rule "flight-mode" {
-  when channel(1, flight) > 0
-  mode: Edge
-  flightMode[0] = 1 - flightMode[0]
-}
-
 rule "airborne-on" {
-  when fact(each, Airborne) == 1 and flightMode[$each] > 0
+  when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0
   mode: Edge
   forEach: airPose
   airPose[$each] = 1
@@ -7655,7 +7649,7 @@ rule "airborne-on" {
 }
 
 rule "airborne-off" {
-  when fact(each, Airborne) == 0 or flightMode[$each] == 0
+  when fact(each, Airborne) == 0 or bodyState(each, flightFuel) == 0
   mode: Edge
   forEach: airPose
   airPose[$each] = 0
@@ -7757,11 +7751,6 @@ state {
       ]
       kind: "Fixed"
       name: "airWings"
-    }
-    // Flight mode as the look and the flight-pose rules see it: the walker's flightFuel is per-body action state, which
-    // world rules and render lanes cannot read, so this row flips on the same flight press.
-    table flightMode {
-      "0" = 0
     }
     table blink {
       "0" = 0
