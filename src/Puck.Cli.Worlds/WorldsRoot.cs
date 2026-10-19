@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 
 using Puck.Cli.Creation;
+using Puck.Cli.Mesh;
 using Puck.Cli.Registry;
 using Puck.Cli.Test;
 using Puck.Cli.Transpiler;
@@ -20,7 +21,7 @@ public static class WorldsRoot {
     public const string CompilerAssembly = "Puck.Cli.Worlds.dll";
 
     /// <summary>Creates this assembly's verbs.</summary>
-    /// <returns>compile, creation, decompile, embed, lint, lsp, migrate, registry, test and vocabulary.</returns>
+    /// <returns>compile, creation, decompile, embed, lint, lsp, mesh, migrate, registry, test and vocabulary.</returns>
     public static IEnumerable<Command> Verbs() => [
         CompileCommand.Create(),
         CreationCommand.Create(),
@@ -28,6 +29,7 @@ public static class WorldsRoot {
         EmbedCommand.Create(),
         LintCommand.Create(),
         LspCommand.Create(),
+        MeshCommand.Create(),
         PuckMigrateCommand.Create(),
         RegistryCommand.Create(),
         TestCommand.Create(),

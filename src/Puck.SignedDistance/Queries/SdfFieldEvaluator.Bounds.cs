@@ -334,6 +334,11 @@ public sealed partial class SdfFieldEvaluator {
                         local = FoldBounds(instruction: in instruction, local: local);
                         break;
                     }
+                case SdfOp.AxialProfile:
+                case SdfOp.RotatePlane: {
+                        local = WarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
+                        break;
+                    }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
                 case SdfOp.Dilate: {
@@ -428,6 +433,39 @@ public sealed partial class SdfFieldEvaluator {
             seed: instruction.Shape
         ) - Point(value: Half)))),
         _ => (result - Point(value: instruction.Data0X)),
+    };
+    // The render reading's warps over a box (WarpPoint's inclusion rules). AxialProfile divides the two other axes by an s
+    // of at least FlareMinScale, so each lies between zero and its range over FlareMinScale. RotatePlane turns (u, v) about
+    // the plane's origin, so both lie within the largest radius the box's (u, v) rectangle reaches.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static IntervalVector3 WarpBounds(in CompiledInstruction instruction, IntervalVector3 local, ref FixedInterval distanceScale) {
+        if (instruction.Op == SdfOp.AxialProfile) {
+            var axis = (int)instruction.Shape;
+            var shrink = new FixedInterval(lower: FixedQ4816.Zero, upper: (FixedQ4816.One / FlareMinScale));
+
+            distanceScale *= Point(value: instruction.Data1X);
+
+            return new IntervalVector3(
+                X: ((axis == 0) ? local.X : (local.X * shrink)),
+                Y: ((axis == 1) ? local.Y : (local.Y * shrink)),
+                Z: ((axis == 2) ? local.Z : (local.Z * shrink))
+            );
+        }
+
+        var (u, v) = PlaneAxes(plane: instruction.Shape);
+        var radius = FixedInterval.Magnitude(x: Component(axis: u, box: local), y: Component(axis: v, box: local)).Upper;
+        var turned = new FixedInterval(lower: -radius, upper: radius);
+
+        return new IntervalVector3(
+            X: (((u == 0) || (v == 0)) ? turned : local.X),
+            Y: (((u == 1) || (v == 1)) ? turned : local.Y),
+            Z: (((u == 2) || (v == 2)) ? turned : local.Z)
+        );
+    }
+    private static FixedInterval Component(IntervalVector3 box, int axis) => axis switch {
+        0 => box.X,
+        1 => box.Y,
+        _ => box.Z,
     };
     [DoesNotReturn]
     private static void ThrowNoInclusionRule(SdfOp op) =>

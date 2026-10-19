@@ -79,7 +79,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             slotPosition = sdfDynamicTransformRow(3u * (uint)selector).xyz;
             slotOrientation = sdfDynamicTransformRow((3u * (uint)selector) + 1u);
         }
-        // The segments no instance owns form a group of their own (the selector SdfMeshPathBake.WorldSelector, whose
+        // The segments no instance owns form a group of their own (the selector SdfMeshBakeGroup.WorldSelector, whose
         // mask selects no instance); every other group samples its instances without them.
         sdfMapOmitWorldSegments = (asuint(row1.w) != 0x80000000u);
         uint taps = ((mode == 3u) ? 5u : 1u);

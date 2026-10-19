@@ -54,7 +54,7 @@
         A file the bake comes to read belongs in this list.
     -->
     <ItemGroup>
-        <PuckMeshBakeSource Include="SdfFrameBlock.Mesh.cs;SdfMesh.cs;SdfMeshGeometry.cs;SdfMeshLibrary.cs;SdfMeshMaterialCut.cs;SdfMeshPathBake.cs;SdfMeshStore.cs;SdfWorldTables.MeshBakePoints.cs;../Puck.Shaders.Model/Graph/SdfWorldPackage.Mesh.cs" />
+        <PuckMeshBakeSource Include="SdfFrameBlock.Mesh.cs;SdfMesh.cs;SdfMeshBakeGroup.cs;SdfMeshGeometry.cs;SdfMeshLibrary.cs;SdfMeshMaterialCut.cs;SdfMeshPathBake.cs;SdfMeshStore.cs;SdfWorldTables.MeshBakePoints.cs;../Puck.Shaders.Model/Graph/SdfWorldPackage.Mesh.cs" />
     </ItemGroup>
     <Target Name="PuckMeshBakeSourcesHash" BeforeTargets="GetAssemblyAttributes">
         <GetFileHash Files="@(PuckMeshBakeSource)" Algorithm="SHA256">

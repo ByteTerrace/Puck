@@ -330,6 +330,47 @@ owns the explanation.
   `SdfMeshIrradianceScene`; never route it through the field interpreter. The
   [handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
   owns the technique and its limits.
+- **Groups are planned in one place.** `SdfMeshBakeGroup.Plan` forms a program's
+  groups, geometry and pose rows; the bake and the mesh audit both call it, so a
+  change to grouping changes both.
+
+## Auditing a bake
+
+`puck mesh audit --world <file>` finds bake defects without a GPU or a person
+looking: it reads the meshes a World boot stored (`SdfMeshStore`, never
+writing it), measures each against its group's own field on the CPU
+(`SdfMeshAudit`, through `SdfFieldEvaluator`'s render reading), and prints per
+group, worst first, the off-surface error at vertices, centroids and edge
+midpoints, face and shading normal error against the field gradient, folds,
+flips, open edges, uncovered surface and how loose the field is, then the worst
+clusters with rest-pose and author-frame positions and the shapes nearest them.
+The [CLI reference](../../../docs/reference/cli.md#puck-mesh-auditbaked-mesh-audit)
+owns its flags.
+
+- **Run it before calling a bake or mesh-path change done**, and on a changed
+  creation's groups (`--prototype`, `--group <shape>`); a later run over the same
+  store proves a fix. `--images <dir>` draws each worst cluster on the CPU,
+  shading beside face normals: the offline twin of `world.debug-view normals`.
+- **The store is keyed by the bake identity of the build that booted.** From
+  your own worktree's CLI, audit a World you ran from the same checkout, or name
+  another build with `--build <its Puck.World bin dir>`; a rebuilt build's
+  meshes stay readable under the `--identity` an earlier report printed.
+  `--history --group <shape>` compares every build's stored bake of one
+  geometry.
+- **The audit reads stored meshes against the CPU field; `world.slice` reads the
+  live field.** Use the slice to see what the GPU walk answers on a plane, the
+  audit to see what the bake made of it.
+- **Read the metrics together.** Sawtooth edges show as face normals off the
+  gradient and folds strung along an edge; torn or dropped walls as uncovered
+  crossings and open edges; a cutter that is only a lower bound (a stretched
+  ellipsoid, a non-uniform `Scale`, a flare) as a slope deficit, attributed to the
+  shape whose own field is loosest there.
+- **What it cannot read.** The render reading interprets the flare
+  (`AxialProfile`) and twist (`RotatePlane`) warps and a non-uniform scale, a
+  sync pair with their `mapCore` cases; a group holding another warp (shear, bumps,
+  a polar fold), a regular polygon, a path or a multi-strand sweep reports `field
+  refused`, and one whose evaluation faults `field failed`. Mirrored groups (left
+  and right) share one geometry and one stored mesh.
 
 ## Performance and cost
 
