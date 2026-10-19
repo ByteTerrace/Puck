@@ -2440,7 +2440,7 @@ prototypes {
             {
               parent: "podCoreCut-left"
               type: "Box"
-              position [-0.0624, 0.9953, 0]
+              position [-0.117, 0.9953, 0]
               scale [0.22, 0.0109, 0.22]
               color: "#7A7F8C"
             }
@@ -2480,7 +2480,7 @@ prototypes {
             {
               parent: "podCoreCut-right"
               type: "Box"
-              position [-0.0624, 0.9953, 0]
+              position [-0.117, 0.9953, 0]
               scale [0.22, 0.0109, 0.22]
               color: "#7A7F8C"
             }
@@ -2567,7 +2567,7 @@ prototypes {
             {
               parent: "podCoreCut-right"
               type: "Box"
-              position [-0.0624, 0.9953, 0]
+              position [-0.117, 0.9953, 0]
               scale [0.22, 0.0109, 0.22]
               color: "#7A7F8C"
             }
@@ -2582,7 +2582,7 @@ prototypes {
             {
               parent: "podCoreCut-left"
               type: "Box"
-              position [-0.0624, 0.9953, 0]
+              position [-0.117, 0.9953, 0]
               scale [0.22, 0.0109, 0.22]
               color: "#7A7F8C"
             }
@@ -5199,20 +5199,20 @@ prototypes {
 
       shape Cylinder "nozzle-left" {
         id: 1133
-        position [0.168, 0.9046, -0.1627]
-        rotation [0.4657, -0.0617, -0.116, 0.8751]
-        scale [0.0936, 0.0702, 0.0936]
+        position [0.2365, 0.887, -0.1844]
+        rotation [0.0977, -0.0356, -0.3402, 0.9346]
+        scale [0.078, 0.0546, 0.078]
         material: charcoal
         group: 96
         parent: "pod-left"
-        rounding: 0.03
+        rounding: 0.025
       }
 
       shape Cylinder "nozzleBore-left" {
         id: 1134
-        position [0.1577, 0.8667, -0.2209]
-        rotation [0.4657, -0.0617, -0.116, 0.8751]
-        scale [0.0741, 0.0156, 0.0741]
+        position [0.2022, 0.8461, -0.1956]
+        rotation [0.0977, -0.0356, -0.3402, 0.9346]
+        scale [0.0608, 0.014, 0.0608]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -5222,9 +5222,9 @@ prototypes {
 
       shape Superellipsoid "nozzleGlow-left" {
         id: 1135
-        position [0.1596, 0.8734, -0.2105]
-        rotation [0.4657, -0.0617, -0.116, 0.8751]
-        scale [0.0273, 0.0055, 0.0273]
+        position [0.209, 0.8543, -0.1934]
+        rotation [0.0977, -0.0356, -0.3402, 0.9346]
+        scale [0.0234, 0.0055, 0.0234]
         material: cyan
         parent: "nozzle-left"
         exponent: softness
@@ -5232,9 +5232,9 @@ prototypes {
 
       shape Superellipsoid "nozzleCore-left" {
         id: 1136
-        position [0.159, 0.8713, -0.2138]
-        rotation [0.4657, -0.0617, -0.116, 0.8751]
-        scale [0.0123, 0.0047, 0.0123]
+        position [0.2066, 0.8514, -0.1942]
+        rotation [0.0977, -0.0356, -0.3402, 0.9346]
+        scale [0.0105, 0.0047, 0.0105]
         material: glow
         parent: "nozzle-left"
         exponent: softness
@@ -6744,20 +6744,20 @@ prototypes {
 
       shape Cylinder "nozzle-right" {
         id: 1233
-        position [-0.168, 0.9046, -0.1627]
-        rotation [-0.116, 0.8751, 0.4657, -0.0617]
-        scale [0.0936, 0.0702, 0.0936]
+        position [-0.2365, 0.887, -0.1844]
+        rotation [-0.3402, 0.9346, 0.0977, -0.0356]
+        scale [0.078, 0.0546, 0.078]
         material: charcoal
         group: 106
         parent: "pod-right"
-        rounding: 0.03
+        rounding: 0.025
       }
 
       shape Cylinder "nozzleBore-right" {
         id: 1234
-        position [-0.1577, 0.8667, -0.2209]
-        rotation [-0.116, 0.8751, 0.4657, -0.0617]
-        scale [0.0741, 0.0156, 0.0741]
+        position [-0.2022, 0.8461, -0.1956]
+        rotation [-0.3402, 0.9346, 0.0977, -0.0356]
+        scale [0.0608, 0.014, 0.0608]
         material: jet
         blend: "SmoothSubtraction"
         smooth: 0.004
@@ -6767,9 +6767,9 @@ prototypes {
 
       shape Superellipsoid "nozzleGlow-right" {
         id: 1235
-        position [-0.1596, 0.8734, -0.2105]
-        rotation [-0.116, 0.8751, 0.4657, -0.0617]
-        scale [0.0273, 0.0055, 0.0273]
+        position [-0.209, 0.8543, -0.1934]
+        rotation [-0.3402, 0.9346, 0.0977, -0.0356]
+        scale [0.0234, 0.0055, 0.0234]
         material: cyan
         parent: "nozzle-right"
         exponent: softness
@@ -6777,9 +6777,9 @@ prototypes {
 
       shape Superellipsoid "nozzleCore-right" {
         id: 1236
-        position [-0.159, 0.8713, -0.2138]
-        rotation [-0.116, 0.8751, 0.4657, -0.0617]
-        scale [0.0123, 0.0047, 0.0123]
+        position [-0.2066, 0.8514, -0.1942]
+        rotation [-0.3402, 0.9346, 0.0977, -0.0356]
+        scale [0.0105, 0.0047, 0.0105]
         material: glow
         parent: "nozzle-right"
         exponent: softness
@@ -6995,7 +6995,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-left"
-          position [-0.0523, -0.3958, -0.1886]
+          position [-0.0079, -0.4164, -0.1633]
           rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
@@ -7034,7 +7034,7 @@ prototypes {
         {
           kind: "flow"
           parent: "pod-right"
-          position [0.0523, -0.3958, -0.1886]
+          position [0.0079, -0.4164, -0.1633]
           rotation [0.3007, 0, 0, 0.9537]
           halfExtent [0.2, 0.25, 0.2]
           axis: 0.5
