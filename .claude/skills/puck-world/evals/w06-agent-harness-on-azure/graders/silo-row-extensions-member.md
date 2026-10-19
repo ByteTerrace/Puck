@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response passes the same file to the silo row through its extensions member.
+The response says the silo row takes the same configuration file through its extensions member.

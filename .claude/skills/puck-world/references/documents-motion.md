@@ -566,8 +566,9 @@ that case.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
-recorded 240-tick fixed-point trace. The dive module's `fishKit` (`modules/dive.puck`) is
-the worked example: a kit whose `diveFishMotion` program runs
+recorded 240-tick fixed-point trace. The quarantined dive module's `fishKit`
+(`experimental/src/Puck.World/Assets/worlds/modules/dive.puck`) is the worked
+example: a kit whose `diveFishMotion` program runs
 `ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets,
 and a trailing `air` row (`Free`, `Gravity`) for the water's own dry fallback.
 That row authors no `thrust` because its wander producer never writes the

@@ -157,9 +157,10 @@ provably inert).
 
 `WorldAddonChannelResolver` (in `WorldAddonWire.cs`) is the ONE place guest channel
 names meet the world's `WorldChannelTable`: the guest addresses its own
-declared name table by position; resolution returns the world ordinal (role
-channels at their fixed `ChannelRole` slots 0–5, composition channels from
-6 up); unresolved is a `-1` sentinel and the declaration is reported inert,
+declared name table by position; resolution returns the world ordinal (every
+declared channel occupies its consecutive document-order slot, and role claims
+are table metadata; the guest's index and the world's ordinal are separate
+namespaces, so a contribution is written only through the resolved ordinal); unresolved is a `-1` sentinel and the declaration is reported inert,
 never a mount fault. `Fold` writes `FixedQ4816.FromRawBits(act.Value)`
 verbatim — the world channel's convention IS the wire convention, no
 negation, no remap. `Submit` splits role ordinals into
