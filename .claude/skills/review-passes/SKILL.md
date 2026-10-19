@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes an optional review-and-fix pass on a lane (none by default; the lead's choice when a second reader pays for itself, or an explicit owner request; never a second round). Cross-family review is the usual choice unless the owner selects the reviewer. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verifying fixes, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns the landing bar and GPU legs; the changed area's skill supplies contracts and hunt classes.
+description: Runs an optional review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, landing fixes.
 ---
 
 # Review passes
@@ -11,7 +11,8 @@ owns the brief that starts it and the protocol that turns its uncommitted
 output into verified commits. It does not choose the model, effort or
 concurrency; the lead's brief names those. The user's current instruction
 outranks this skill; a rule here that argues against a requested change is
-stale and is corrected in the same change.
+stale and is corrected in the same change. What the owner says in a session
+overrides this skill and is written into it in that session.
 
 ## When a lane gets a review
 
@@ -65,15 +66,27 @@ stale and is corrected in the same change.
   commands. `--resume-last` sees only jobs the current Claude session started;
   another session continues a Codex thread with `codex exec resume
   <session-id>`. A Codex sandbox cannot write `.git` or reach the network, so
-  merges, commits and restores run outside it. Launch a Claude pass as an agent working in that worktree. A pass
-  cannot read this conversation, message a session or ask a question, so the
-  brief carries every string, decision and path it needs, and tells it to answer
-  its own questions from the code and the brief. A Codex pass that ends on a
-  question has done nothing: answer it in a prompt file and continue the same
-  thread with `task --resume-last`.
+  merges, commits and restores run outside it.
+- A pass cannot read this conversation, message a session or ask a question, so
+  the brief carries every string, decision and path it needs, and tells it to
+  answer its own questions from the code and the brief. A Codex pass that ends
+  on a question has done nothing: answer it in a prompt file, keeping what the
+  brief and the repository rules already decided, continue the same thread
+  with `task --resume-last`, and tighten later briefs so the pass settles that
+  kind of question itself.
+- Launch a Claude pass as a project agent (the roster is in
+  [`orchestration`](../orchestration/SKILL.md#the-claude-roster)). A project
+  agent runs in a worktree of its own, branched from the lead's HEAD, and is
+  refused git work in any other tree, so its brief names the lane's head commit
+  and tells it to run `git checkout --detach <lane head>` in its own worktree
+  before reading anything. It may commit its WIP there, since nothing sandboxes
+  its `.git`; the lead then fast-forwards the author's branch to the verified
+  head as in step 4 below.
 - Preserve the launch's working-directory spelling for `status`, `result` and
   `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
-  launch is invisible to a PowerShell `C:/...` query, and the reverse.
+  launch is invisible to a PowerShell `C:/...` query, and the reverse. A job
+  that looks missing under another spelling is still running: query it with
+  the launch's spelling, and never relaunch it.
 - Cancel from PowerShell with the launch's path form, or use
   `MSYS_NO_PATHCONV=1` under Git Bash: MSYS path conversion turns taskkill's
   `/PID` into a path and makes `cancel` fail. Then stop the companion's
@@ -160,14 +173,23 @@ no brief, so it raises compatibility findings and tries to run tests.
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Read the fix diff's deleted lines, not
    only its net size, and check a fact by reading the file, never by searching
-   for your own phrasing of it. Dismiss a compatibility finding under
-   `AGENTS.md` rule 5 once nothing checked in uses the old shape. A pass's
+   for your own phrasing of it. A claim that a file is missing is checked in
+   the author's branch, not only in the pass's tree, which may be detached at
+   an older head. Dismiss a compatibility finding under `AGENTS.md` rule 5 once
+   nothing checked in uses the old shape, and remove any alias or shim the pass
+   added for it. A pass's
    build, test and format claims count only when its own environment could
    run them: a sandbox that could not reach the SDK proved nothing, so step 3
    builds and proves every law outside it.
-   Record the fix range before continuing. If the pass changes
-   nothing, skip steps 2 to 5; report remaining blockers to the lead,
-   or go to step 5 when it reports none. Never create an empty WIP.
+   Record the fix range before continuing. A blocker the pass left open goes
+   to the lead before anyone repairs it; the lead rules on each one (a scoped
+   fix, a recorded open item, or a dismissal with its reason), and a scoped
+   fix it directs is verified in step 3, not reviewed again. A non-blocking
+   finding is reported, and its fix, if any, is verified the same way; neither
+   ever opens another review. If the
+   pass changes nothing, skip steps 2 to 4: report remaining blockers to the
+   lead, or go straight to step 5 when it reports none. Never create an empty
+   WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree
    (`review: <lane> pass, unverified`), so the output is never lost and its
@@ -177,9 +199,12 @@ no brief, so it raises compatibility findings and tries to run tests.
    each touched project with zero warnings, show each fix working by running
    or measuring it, run the tests the fixes added or touched, and resolve or
    report each open finding as verified, repaired, or rejected with the
-   reason. For documentation-only fixes, use `puck docs links` and build
-   only for changed XML comments. The lead reads the verified diff; nothing
-   here opens another pass.
+   reason. A law a fix added that still passes with the fix withheld pins
+   nothing, so a passing law does not make a fix right; a rejected fix is not
+   landed as written. For documentation-only fixes, run `puck docs links <changed .md
+   files>` and build only for changed XML comments. The lead reads the
+   verified diff; nothing here opens another pass, whether the verifier
+   repairs a fix, rejects one, or finds a regression the pass introduced.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
    `area: sentence` subjects, and land them on the author's working branch (a
    fast-forward when the pass ran detached at its head). From the clean
@@ -192,14 +217,15 @@ no brief, so it raises compatibility findings and tries to run tests.
 5. **Hand over.** Merge the integration branch's current tip into the working
    branch and rebuild what it touched. Once the
    [landing bar](../verification/SKILL.md#the-landing-bar) holds, push the
-   working branch, fast-forward only. Only the lead merges it
-   into the integration branch the lead's brief names.
+   working branch, fast-forward only; a local subagent's branch is never
+   pushed. Only the lead merges it into the integration branch the lead's
+   brief names.
 
 ## Route adjacent work
 
 | Skill | Route there for |
 |---|---|
-| [`orchestration`](../orchestration/SKILL.md) | Selecting models and coordinating assignments, machines, integration merges and finding destinations. |
+| [`orchestration`](../orchestration/SKILL.md) | Choosing the reviewer's model, effort and concurrency, and coordinating assignments, machines, integration merges and finding destinations. |
 | [`verification`](../verification/SKILL.md) | The landing bar, CLI copy and GPU legs the verifier uses. |
 | [`rendering`](../rendering/SKILL.md) | The render-graph runtime contracts and recurring bug classes to put in a render lane's hunt list. |
 | [`maths-laws`](../maths-laws/SKILL.md) | A Maths lane's laws, legs and mutation probe. |
