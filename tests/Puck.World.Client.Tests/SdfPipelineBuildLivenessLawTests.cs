@@ -251,7 +251,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (9, "building (0 of 9 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
+            expected: (10, "building (0 of 10 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)")
         );
 
         var release = new Thread(start: last.Dispose);

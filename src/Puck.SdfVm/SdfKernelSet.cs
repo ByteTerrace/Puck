@@ -78,6 +78,7 @@ public sealed class SdfKernelSet {
     public static string StemOf(SdfKernel kernel) => kernel switch {
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
+        SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
         SdfKernel.Surface => "sdf-world-surface",
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.Sky => "sdf-sky-runs",

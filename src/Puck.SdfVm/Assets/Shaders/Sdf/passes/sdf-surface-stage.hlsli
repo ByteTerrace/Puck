@@ -5,6 +5,7 @@
 #ifndef PASSES_SDF_SURFACE_STAGE_HLSLI
 #define PASSES_SDF_SURFACE_STAGE_HLSLI
 #ifdef SDF_SURFACE_PASS
+#include "../frame/sdf-mesh-pyramid.hlsli"
 
 // The screen-space occlusion's world radius, taps and strength. A tap occludes only past the cosine bias and the lift (a
 // height above the tangent plane in pixel footprints), which keep a tessellated curve's facets and a baked surface's
@@ -16,6 +17,10 @@ static const float SdfMeshAoStrength = 2.5;
 static const float SdfMeshAoBias = 0.1;
 static const float SdfMeshAoLift = 2.0;
 static const float SdfMeshAoMaxPixels = 128.0;
+// The reach, in pixels, past which a tap reads the depth pyramid (frame/sdf-mesh-pyramid.hlsli): a tap reaching r pixels
+// reads the level whose blocks are an eighth of r across or less, so it lands within a few percent of its reach of where
+// a full-resolution tap would, and a warp's far taps share the coarse level's cache sectors.
+static const uint SdfMeshAoPyramidShift = 3u;
 // The shadow filter's taps: a blocker search and the percentage-closer filter, each over a Vogel disk the pixel's
 // pattern turns and spaces.
 static const uint SdfMeshShadowSearchTaps = 12u;
@@ -68,7 +73,14 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
     float inverseRadius2 = (1.0 / (radius * radius));
     float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
-    float2 dims = float2(worldViewDims(p.view));
+    uint2 extent = worldViewDims(p.view);
+    float2 dims = float2(extent);
+    uint words;
+    uint stride;
+
+    sdfMeshPyramid.GetDimensions(words, stride);
+
+    uint levels = sdfMeshPyramidLevelsWithin(extent, words);
     float occlusion = 0.0;
 
     [loop]
@@ -81,13 +93,29 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
             continue;
         }
 
-        float4 texel = meshVisibility.Load(int3(int2(tap), 0));
+        // A tap within sixteen pixels reads the mesh target; a farther one the pyramid level its reach calls for, whose
+        // texel names the pixel it holds.
+        uint level = min(uint(max((int(firstbithigh(uint(reach))) - int(SdfMeshAoPyramidShift)), 0)), levels);
+        float2 source = tap;
+        float t = 0.0;
 
-        if (texel.y < 1.0) {
+        if (level == 0u) {
+            float4 texel = meshVisibility.Load(int3(int2(tap), 0));
+
+            t = ((texel.y >= 1.0) ? texel.x : 0.0);
+        } else {
+            uint word = sdfMeshPyramidWord(extent, level, (uint2(tap) >> level));
+            uint at = sdfMeshPyramid[word + 1u];
+
+            t = asfloat(sdfMeshPyramid[word]);
+            source = float2(float(at & 0xFFFFu), float(at >> 16u));
+        }
+
+        if (t <= 0.0) {
             continue;
         }
 
-        float3 offset = ((p.rayOrigin + (cameraRayDirection(p.view, ((tap + 0.5) / dims)) * texel.x)) - surfacePoint);
+        float3 offset = ((p.rayOrigin + (cameraRayDirection(p.view, ((source + 0.5) / dims)) * t)) - surfacePoint);
         float distance2 = dot(offset, offset);
 
         if (distance2 > 0.0) {

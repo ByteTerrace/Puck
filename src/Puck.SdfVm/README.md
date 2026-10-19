@@ -48,7 +48,8 @@ staged region of frame data owes, copied into its device-local buffer; see
 selection and field samples, only while a bake is pending) → the shadow
 cascades (`sdf-mesh-shadow.vert`/`.frag`, rasterizing the frame's mesh draws
 from each cascade's light camera into its depth alone) and the mesh pass
-(`sdf-mesh.vert`/`.frag` from the view's camera) →
+(`sdf-mesh.vert`/`.frag` from the view's camera) → `sdf-mesh-pyramid.comp` (the
+occlusion's depth pyramid from the mesh target) →
 `sdf-world-surface.comp` (each pixel's visibility record from the mesh target:
 the hit, its normal, a screen-space ambient occlusion and the stable shadow
 slots' cascade visibility) → `sdf-world-views.comp` (materials, lighting, the
@@ -104,7 +105,7 @@ resolution and a layout transition's dip set) changes dispatches and the packed 
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
 at its current grid. Views at a native ceiling that do not ask for temporal
-reconstruction retain their ten passes, allocate no resolve resources and
+reconstruction retain their eleven passes, allocate no resolve resources and
 ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.

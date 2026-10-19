@@ -26,6 +26,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
         SdfWorldPackage.MeshBakeSamplesWritten,
+        SdfWorldPackage.MeshPyramid,
+        SdfWorldPackage.MeshPyramidWritten,
     ];
     private static readonly uint MeshShadowNearBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNear);
     private static readonly uint MeshShadowFarBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFar);
@@ -259,6 +261,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 Follow();
                 m_owner.Begin(residency: m_view.Residency);
                 return ((m_view.Residency.Submit(context: in context).MeshDrawCount == 0) && TargetsWritten);
+            }
+            // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
+            case SdfWorldPackage.Parts.Pyramid: {
+                Follow();
+                m_owner.Begin(residency: m_view.Residency);
+                return (m_view.Residency.Submit(context: in context).MeshDrawCount == 0);
             }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
@@ -494,6 +502,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var pipeline = tables.Pipeline(kernel: m_part switch {
             SdfWorldPackage.Parts.Mask => SdfKernel.MeshBakeMask,
             SdfWorldPackage.Parts.Bake => SdfKernel.MeshBake,
+            SdfWorldPackage.Parts.Pyramid => SdfKernel.MeshPyramid,
             SdfWorldPackage.Parts.Surface => SdfKernel.Surface,
             _ => SdfKernel.Views,
         });
@@ -536,6 +545,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var (x, y) = m_part switch {
             SdfWorldPackage.Parts.Mask => ((uint)SdfWorldPackage.MeshBakeBatch, 1u),
             SdfWorldPackage.Parts.Bake => (((uint)(m_bakeSlots[recording.Slot].Batch!.Samples + 63) / 64u), 1u),
+            // One invocation a texel of the pyramid's first level, half the extent rounded up.
+            SdfWorldPackage.Parts.Pyramid => (((((recording.Width + 1u) / 2u) + 7u) / 8u), ((((recording.Height + 1u) / 2u) + 7u) / 8u)),
             _ => (((recording.Width + (SdfVisibility.GroupEdgePixels - 1)) / SdfVisibility.GroupEdgePixels),
                 ((recording.Height + (SdfVisibility.GroupEdgePixels - 1)) / SdfVisibility.GroupEdgePixels)),
         };
@@ -784,6 +795,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
+        SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramid,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
@@ -792,6 +804,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
         SdfWorldPackage.Parts.BakeSamples => SdfWorldPackage.MeshBakeSamplesWritten,
+        SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         _ => null,
     };
 

@@ -7,7 +7,7 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
 /// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, bake, the three
-/// shadow cascades, mesh, surface, views, sky and composite, the sky's field runs and the composite after the hits are
+/// shadow cascades, mesh, the depth pyramid, surface, views, sky and composite, the sky's field runs and the composite after the hits are
 /// shaded, and plans between them exactly the buffer transitions the kernels' reads and writes need, each after the pass
 /// that last wrote or read what the next writes or reads. Every scratch buffer is retained, one allocation shared by every
 /// frame slot, whose first use of a frame orders it after the frame before, and at every capacity the planner sizes each
@@ -26,6 +26,7 @@ public sealed partial class SdfPassPlanLawTests {
         SdfWorldPackage.Parts.ShadowFar,
         SdfWorldPackage.Parts.ShadowSecond,
         SdfWorldPackage.Parts.Mesh,
+        SdfWorldPackage.Parts.Pyramid,
         SdfWorldPackage.Parts.Surface,
         SdfWorldPackage.Parts.Views,
         SdfWorldPackage.Parts.Sky,
@@ -35,6 +36,7 @@ public sealed partial class SdfPassPlanLawTests {
     // before, and the accesses and stages on either side.
     private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
         (SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Bake, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.BakeSamples, SdfWorldPackage.Parts.Bake, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         // Views and the composite only read the records the surface pass wrote.
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
@@ -61,11 +63,12 @@ public sealed partial class SdfPassPlanLawTests {
     // The fragment part a spliced storage's name names.
     private static string PartOf(string storage) => storage[(Sdf.Length + 1)..];
     // The bytes the kernels index a fragment buffer by at counts: a bake batch's instance masks, the bake's largest
-    // sample lattice, and one visibility record a pixel of every viewport.
+    // sample lattice, one visibility record a pixel of every viewport, and the depth pyramid's word a pixel.
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
         SdfWorldPackage.Parts.InstanceMasks => ((SdfWorldPackage.MeshBakeBatch * counts.InstanceMaskWords) * sizeof(uint)),
         SdfWorldPackage.Parts.BakeSamples => ((((ulong)SdfWorldPackage.MeshBakeMaxSamples) * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)),
         SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityRecordByteLength),
+        SdfWorldPackage.Parts.MeshPyramid => ((((ulong)counts.Width) * counts.Height) * sizeof(uint)),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer), actualValue: buffer, message: "Not a fragment buffer."),
     };
 
@@ -93,7 +96,7 @@ public sealed partial class SdfPassPlanLawTests {
     // Each stage declares exactly what it reads and writes: only the surface pass reads the mesh and cascade targets, and
     // every later stage reads the hit from the visibility record.
     // THE LAW: a view that skips shadows runs every pass but the cascades, holds none of their depths, and its surface
-    // pass reads only the mesh target and the bake samples, whichever fragment it starts from.
+    // pass reads only the mesh target, the depth pyramid and the bake samples, whichever fragment it starts from.
     [Fact]
     public void AShadowlessFragmentDropsTheCascadesTheirDepthsAndTheirReads() {
         string[] cascades = [
@@ -110,7 +113,7 @@ public sealed partial class SdfPassPlanLawTests {
                 expected: fragment.Passes.Select(selector: static pass => pass.Name).Where(predicate: name => !cascades.Contains(value: name))
             );
             Assert.DoesNotContain(collection: shadowless.Resources, filter: resource => cascades.Contains(value: resource.Name));
-            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.BakeSamples]);
+            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.BakeSamples]);
             Assert.Equal(actual: surface.InputAccesses.Count, expected: surface.Inputs.Count);
         }
     }
@@ -132,7 +135,7 @@ public sealed partial class SdfPassPlanLawTests {
                 Assert.Equal(expected: ShaderPipelineResourceKind.Depth, actual: resource.Kind);
                 Assert.Equal(expected: ShaderPipelineDimensions.Absolute(height: 512, width: 512), actual: resource.Dimensions);
             });
-            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.BakeSamples]);
+            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.BakeSamples]);
             Assert.Equal(
                 actual: SdfWorldPackage.WithShadows(fragment: fragment, second: true, texels: 1024).Resources.Count(predicate: static resource => resource.Dimensions == ShaderPipelineDimensions.Absolute(height: 1024, width: 1024)),
                 expected: 3
@@ -159,7 +162,8 @@ public sealed partial class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.ShadowFar, "", SdfWorldPackage.Parts.ShadowFarDepth),
                 (SdfWorldPackage.Parts.ShadowSecond, "", SdfWorldPackage.Parts.ShadowSecondDepth),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
-                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.BakeSamples]), SdfWorldPackage.Parts.Visibility),
+                (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
+                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.BakeSamples]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Lit, string.Join(separator: ",", values: runs)),
                 (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.Visibility, .. runs]), SdfWorldPackage.Color),
@@ -218,6 +222,7 @@ public sealed partial class SdfPassPlanLawTests {
             expected: new[] {
                 SdfWorldPackage.Parts.BakeSamples,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.MeshPyramid,
                 SdfWorldPackage.Parts.Visibility,
             }.Order(comparer: StringComparer.Ordinal)
         );
@@ -243,6 +248,7 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.InstanceMasks,
                 SdfWorldPackage.Parts.Lit,
                 SdfWorldPackage.Parts.MeshDepth,
+                SdfWorldPackage.Parts.MeshPyramid,
                 SdfWorldPackage.Parts.MeshTarget,
                 SdfWorldPackage.Parts.ShadowFarDepth,
                 SdfWorldPackage.Parts.ShadowNearDepth,

@@ -29,7 +29,7 @@ world.budget
 - **`world.counters gpu`** echoes what each render node counted for its newest
   completed submission: per labeled pass (the residency's `fillers`, `bricks`, `upload` and
   `environment`, then each view's `mask`, `bake`, `shadow-near`, `shadow-far`,
-  `shadow-second`, `mesh`, `surface`, `views`, `resolve` where the view reduces
+  `shadow-second`, `mesh`, `pyramid`, `surface`, `views`, `resolve` where the view reduces
   or reconstructs, `sky` and `composite`) the dispatches, draws, barriers, binds,
   push-constant bytes and uploads it recorded and the march steps, shape
   evaluations, texels written, sky evaluations, hashes and texture loads its

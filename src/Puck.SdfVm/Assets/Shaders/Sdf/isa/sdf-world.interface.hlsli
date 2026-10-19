@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/1f44d0238b457a74062e6a7d4c5846f0ca1b179f9c874e092461352dd0d4050b). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/28bf1537b38c369f3be67aa2b8b9de942c48703949b7559792624ad9e17b39e8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -236,6 +236,8 @@ struct SdfWorldPass {
 [[vk::binding(42, 3)]] Texture2D<float4> meshShadowSecond : register(t42, space3);
 [[vk::binding(43, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u43, space3);
 [[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
+[[vk::binding(45, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t45, space3);
+[[vk::binding(46, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u46, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

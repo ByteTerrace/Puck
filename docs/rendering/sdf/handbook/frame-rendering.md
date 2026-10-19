@@ -17,11 +17,11 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's ten native passes into its own submission, reading the
+records the package's eleven native passes into its own submission, reading the
 tables the upload wrote. The passes finish that view's own output image:
 
 ```text
-   upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → surface → views → sky → composite
+   upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → pyramid → surface → views → sky → composite
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -61,6 +61,15 @@ stored as floats, so a region holds at most 2^24 draws and a mesh at most 2^24 t
 that. A frame with no mesh draws skips the pass, its target's and depth's barriers included. The target and its depth
 attachment, 20 bytes a pixel, are scratch the view's instance allocates with its graph.
 
+**pyramid** (`sdf-mesh-pyramid.comp.hlsl`) reduces the mesh target into the
+depth pyramid the surface pass's occlusion reads (`frame/sdf-mesh-pyramid.hlsli`):
+levels one to four, each texel standing for its block by one actual pixel of
+it, whose ray parameter and coordinate it holds, the pixel chosen on a rotated
+grid that turns with the occlusion's pattern step. One invocation a level-one
+texel writes every level its pixel represents, so no level reads another. The
+levels lie in 8×8 tiles in one buffer, two words a texel. A frame with no mesh
+draws skips the pass.
+
 **surface** (`sdf-world-surface.comp.hlsl`) calls no field query. It writes
 every pixel's whole visibility record from the mesh target, misses included:
 the ray parameter, identity, material, triangle and the draw's frame slot; the
@@ -70,7 +79,8 @@ nonuniform scale keeps them perpendicular to the surface; the face normal
 otherwise), turned toward the camera and clamped so a grazing ray never sees it
 lean away; a screen-space ambient occlusion, eight taps over the disk the
 occlusion radius projects to, each rebuilding the surface point its pixel's ray
-reached in the mesh target and occluding by its elevation above the hit's
+reached, from the mesh target within sixteen pixels and past that from the
+pyramid level whose blocks are an eighth of its reach across, and occluding by its elevation above the hit's
 tangent plane, so a plane never occludes itself; and the stable shadow slots'
 visibility into the K word, a percentage-closer soft shadow from the first
 cascade holding the point: a blocker search sizes the penumbra from the light's

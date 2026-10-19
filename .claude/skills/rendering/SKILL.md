@@ -39,7 +39,8 @@ Find the existing mechanism before adding one: `puck references`,
 A view is a chain of separate dispatches: `mask` → `bake` (only while the
 residency's bake is pending: `sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) → `shadow-near`, `shadow-far`, `shadow-second` (graphics,
-the cascades) → `mesh` (graphics) → `surface` (each pixel's visibility record
+the cascades) → `mesh` (graphics) → `pyramid` (the occlusion's depth pyramid
+from the mesh target) → `surface` (each pixel's visibility record
 from the mesh target: normal, screen-space AO, the cascades' soft shadows into
 K; `passes/sdf-surface-stage.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. The surface and

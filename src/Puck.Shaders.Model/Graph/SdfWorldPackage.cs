@@ -174,6 +174,12 @@ public static partial class SdfWorldPackage {
     public const string MeshVisibility = "meshVisibility";
     /// <summary>The glyph atlas.</summary>
     public const string GlyphAtlas = "sdfGlyphAtlas";
+    /// <summary>The mesh depth pyramid the surface pass's occlusion reads, which the pyramid pass writes through
+    /// <see cref="MeshPyramidWritten"/>: levels one up of the mesh visibility target, each texel an actual pixel's ray
+    /// parameter and coordinate (<c>frame/sdf-mesh-pyramid.hlsli</c>).</summary>
+    public const string MeshPyramid = "sdfMeshPyramid";
+    /// <summary>The pyramid pass's writable binding of <see cref="MeshPyramid"/>.</summary>
+    public const string MeshPyramidWritten = "sdfMeshPyramidRW";
 
     /// <summary>The screen sources: one sampled image per screen, indexed by screen index.</summary>
     public const string ScreenSources = "screenSources";
@@ -331,12 +337,14 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecond, type: ShaderValueType.Float4),
         Written(element: ShaderValueType.Uint, name: MeshBakeSamplesWritten),
         ShaderWorkCounters.BufferMember,
+        Read(element: ShaderValueType.Uint, name: MeshPyramid),
+        Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. While a bake is pending the mask and bake passes sample its lattices
     /// (<see cref="Parts.Mask"/>, <see cref="Parts.Bake"/>); the cascades and the mesh pass rasterize the frame's mesh
-    /// draws, the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), views shades
+    /// draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), views shades
     /// the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
     /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
     /// Every pass counts its kernels' work into the work counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>):
@@ -351,10 +359,11 @@ public static partial class SdfWorldPackage {
             ShadowRaster(name: Parts.ShadowFar, depth: Parts.ShadowFarDepth),
             ShadowRaster(name: Parts.ShadowSecond, depth: Parts.ShadowSecondDepth),
             Raster(name: Parts.Mesh, target: Parts.MeshTarget, depth: Parts.MeshDepth),
+            Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
             // back, stays live in the planned graph.
             Pass(
-                inputs: [Parts.MeshTarget, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth, Parts.BakeSamples],
+                inputs: [Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth, Parts.BakeSamples],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
             ),
@@ -382,6 +391,14 @@ public static partial class SdfWorldPackage {
             ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
+            // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
+            // padding, and the kernels bound every level by the buffer's length.
+            Buffer(
+                count: [Term(1, ShaderPipelineCountBasis.Extent)],
+                name: Parts.MeshPyramid,
+                sizeBytes: null,
+                strideBytes: sizeof(uint)
+            ),
             new ShaderPipelineResource(
                 Dimensions: ShaderPipelineDimensions.Relative(),
                 Format: MeshDepthFormat.ToString(),
@@ -507,6 +524,11 @@ public static partial class SdfWorldPackage {
         public const string ShadowSecondDepth = "shadowSecondDepth";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>
         public const string Mesh = "mesh";
+        /// <summary>The pyramid pass, writing the mesh depth pyramid the surface pass's occlusion reads from the mesh
+        /// target.</summary>
+        public const string Pyramid = "pyramid";
+        /// <summary>The mesh depth pyramid (<see cref="SdfWorldPackage.MeshPyramid"/>).</summary>
+        public const string MeshPyramid = "meshPyramid";
         /// <summary>The surface pass, writing every pixel's visibility record from the mesh target, the screen-space
         /// occlusion and the shadow cascades.</summary>
         public const string Surface = "surface";

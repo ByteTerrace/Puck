@@ -9,6 +9,8 @@ public enum SdfKernel {
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run
     /// only while a bake is pending. Full instruction set.</summary>
     MeshBake,
+    /// <summary>The pyramid pass: the mesh depth pyramid the surface pass's occlusion reads, from the mesh target.</summary>
+    MeshPyramid,
     /// <summary>The surface pass: every pixel's visibility record from the mesh target, screen-space occlusion and the
     /// shadow cascades, with no field query.</summary>
     Surface,

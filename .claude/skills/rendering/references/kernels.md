@@ -94,7 +94,7 @@ buffer-layout changes need a rebuild.
 
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices its selected package fragment into the one-pass graph the runtime makes
-for the instance. `NativeFragment` has ten passes, `sdf.world$mask` through
+for the instance. `NativeFragment` has eleven passes, `sdf.world$mask` through
 `sdf.world$views`, then `sdf.world$sky` and `sdf.world$composite`; `Fragment`,
 which a view below a native ceiling runs, puts `sdf.world$resolve` between views
 and the sky.
@@ -135,6 +135,7 @@ of its passes. The upload and the view's passes, in order:
 | `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours; only while a bake is pending. |
 | `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | Draw every mesh draw from the cascade's light camera into its sampled depth alone, 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
+| `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. |
 | `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion and the stable slots' cascade soft shadows into K, each one 4×4-tile tap pattern's estimate per pixel (`sdfMeshPattern`), unfiltered. Calls no field query. |
 | `views` | `sdf-world-views.comp` | Gathers each group's records with a two-pixel apron into group-shared memory and averages the occlusion and K over each pixel's 4×4 window (`sdfViewsFilter`), then materials and their paints (`sdfApplyPaints`, each one primitive through `evaluateShape` at the hit), lighting through the one light interface, the irradiance volume and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. Calls no field query: a paint evaluates one shape, never the program. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
@@ -146,7 +147,7 @@ The ceiling (`SdfViewSnapshot.RenderCeiling`) and the temporal ask
 and are the whole render-extent revision, so a fragment change is always a
 rebuild the node holds its last image through, never a frame of one graph at
 another's grid. A view at a native ceiling that asks for nothing temporal uses
-`SdfWorldPackage.NativeFragment`, ten passes whose composite writes `color`,
+`SdfWorldPackage.NativeFragment`, eleven passes whose composite writes `color`,
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
 `Fragment`, and a view asking for temporal reconstruction uses
 `SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
