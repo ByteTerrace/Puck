@@ -13,8 +13,8 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfPassBindingLawTests {
     // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
     // the curvature shading, temporal history, indirect controls, the light-camera flag, twelve cascade rows, shadow
-    // parameters, 48 bake-lattice rows and the irradiance volume, 16-aligned.
-    private const uint PassBlockBytes = 1584;
+    // parameters, 64 bake-lattice rows and the irradiance volume, 16-aligned.
+    private const uint PassBlockBytes = 1840;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views];
     // The kernels each light and sky table is bound by, and no other.

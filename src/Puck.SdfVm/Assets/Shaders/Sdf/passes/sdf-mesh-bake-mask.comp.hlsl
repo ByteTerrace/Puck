@@ -15,8 +15,8 @@ void CSMain(uint threadIndex : SV_GroupIndex, uint3 group : SV_GroupID) {
     uint maskWordCount = passGroup.instanceMaskWordCount;
     uint instanceCount = sdfInstanceCountClamped();
     uint instanceOffset = sdfInstanceDirectoryOffset();
-    int selector = (active ? asint(passGroup.meshBakeLattices[(lattice * 3u) + 1u].w) : 0);
-    uint run = (active ? max((asuint(passGroup.meshBakeLattices[(lattice * 3u) + 2u].w) >> 16u), 1u) : 1u);
+    int selector = (active ? asint(passGroup.meshBakeLattices[(lattice * 4u) + 1u].w) : 0);
+    uint run = (active ? max((asuint(passGroup.meshBakeLattices[(lattice * 4u) + 2u].w) >> 16u), 1u) : 1u);
 
     if (active) {
         [loop]

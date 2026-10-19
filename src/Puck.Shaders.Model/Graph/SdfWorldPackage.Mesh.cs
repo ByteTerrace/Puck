@@ -19,14 +19,15 @@ public static partial class SdfWorldPackage {
     /// each: the first sample's world position and, as bits, the lattice's first sample in the dispatch; the spacing along
     /// each axis and, as bits, the selector (a dynamic-transform slot whose instances it samples when non-negative, the one
     /// instance <c>-(selector + 1)</c> otherwise); then, as bits, the samples along each axis and whether it measures
-    /// gradients (<c>float4[48]</c>).</summary>
+    /// gradients; then, as bits, the point table entry the poses its group bakes through start at, their first slot and how
+    /// many slots they cover (<c>float4[64]</c>).</summary>
     public const string MeshBakeLattices = "meshBakeLattices";
     /// <summary>The pass-block value holding the lattices in <see cref="MeshBakeLattices"/> (<c>uint</c>).</summary>
     public const string MeshBakeCount = "meshBakeCount";
     /// <summary>The most lattices one bake dispatch samples: each selects its instances in its own mask words.</summary>
     public const int MeshBakeBatch = 16;
     /// <summary>The rows one lattice takes in <see cref="MeshBakeLattices"/>.</summary>
-    public const int MeshBakeLatticeRows = 3;
+    public const int MeshBakeLatticeRows = 4;
     /// <summary>The near shadow cascade's depth, sampled by the surface pass.</summary>
     public const string MeshShadowNear = "meshShadowNear";
     /// <summary>The far shadow cascade's depth, sampled by the surface pass.</summary>

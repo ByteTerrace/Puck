@@ -53,8 +53,10 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: ((uint)texels));
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
-    /// <summary>Writes the lattices one bake dispatch samples and the instances each selects, three rows a lattice
-    /// (<see cref="SdfWorldPackage.MeshBakeLattices"/>), the lattices' samples back to back.</summary>
+    /// <summary>Writes the lattices one bake dispatch samples and the instances each selects, four rows a lattice
+    /// (<see cref="SdfWorldPackage.MeshBakeLattices"/>), the lattices' samples back to back; the fourth names the point
+    /// table entry its group's poses start at, their first slot and how many slots they cover
+    /// (<see cref="SdfMeshBakeBatch.Poses"/>).</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="batch">The batch.</param>
     public static void WriteMeshBake(Span<byte> block, SdfMeshBakeBatch batch) {
@@ -77,6 +79,13 @@ public static partial class SdfFrameBlock {
             // The lattice's mode in the low half (three samples the point table with gradients, two without, zero a grid)
             // and, in the high half, the run of instances a static selector names.
             WriteUInt32(block: block, offset: (row + 44), value: ((lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)lattice.Instances) << 16)));
+
+            var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));
+
+            WriteUInt32(block: block, offset: (row + 48), value: ((uint)batch.PoseBase(lattice: index)));
+            WriteUInt32(block: block, offset: (row + 52), value: ((uint)poseFirst));
+            WriteUInt32(block: block, offset: (row + 56), value: ((uint)(poseRows.Length / 3)));
+            WriteUInt32(block: block, offset: (row + 60), value: 0u);
             first += ((uint)lattice.Samples);
         }
     }

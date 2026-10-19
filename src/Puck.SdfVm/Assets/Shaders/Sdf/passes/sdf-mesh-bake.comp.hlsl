@@ -1,17 +1,18 @@
 // The mesh bake's field sampler: one invocation per sample of the dispatch's batch of lattices (the pass block's
 // meshBakeLattices, each sample x fastest within its lattice, the lattices back to back), evaluating the instances its
 // lattice's instance mask selects (sdf-mesh-bake-mask.comp.hlsl) at the sample and, when the lattice asks for gradients, at
-// four tetrahedral taps around it, through the kernel's one interpreter call site. A lattice whose selector names a
-// dynamic-transform slot lies in that slot's frame: each sample and tap is carried to world space through the slot's
-// transform in this frame, so a body that moves while it bakes is sampled where it is, and its gradient comes back in
-// the slot's frame. The host meshes the samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame
-// dispatches it only while a bake is pending.
+// four tetrahedral taps around it, through the kernel's one interpreter call site. Every transform the walk reads comes
+// from the poses the lattice's group bakes through (the lattice's fourth row, SDF_MESH_BAKE_POSES in
+// field/sdf-program.hlsli), never from this frame's: a lattice whose selector names a dynamic-transform slot lies in that
+// slot's frame, which those poses hold at the identity, and its gradient comes back in that frame. The host meshes the
+// samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame dispatches it only while a bake is pending.
 //
 // The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the field's
 // gradient from the tetrahedral taps in field units per world unit (zero without gradients), whose magnitude the contour
 // divides a value by to read it as a distance (SdfSampledLattice.AnswerGradients). KEEP IN SYNC with SdfMeshPathBake's
 // reader and SdfFrameBlock.WriteMeshBake.
 #define SDF_DYNAMIC_TRANSFORMS
+#define SDF_MESH_BAKE_POSES
 #define SDF_INSTANCE_MASKS
 #define SDF_SAMPLED_REGIONS
 #define SDF_GLYPH_ATLAS
@@ -34,8 +35,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     [loop]
     for (uint index = 0u; (index < count); index++) {
-        uint4 dims = asuint(passGroup.meshBakeLattices[(index * 3u) + 2u]);
-        uint first = asuint(passGroup.meshBakeLattices[index * 3u].w);
+        uint4 dims = asuint(passGroup.meshBakeLattices[(index * 4u) + 2u]);
+        uint first = asuint(passGroup.meshBakeLattices[index * 4u].w);
 
         if ((sample >= first) && (sample < (first + (dims.x * dims.y * dims.z)))) {
             lattice = index;
@@ -43,9 +44,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     if (lattice != 0xFFFFFFFFu) {
-        float4 row0 = passGroup.meshBakeLattices[lattice * 3u];
-        float4 row1 = passGroup.meshBakeLattices[(lattice * 3u) + 1u];
-        uint4 dims = asuint(passGroup.meshBakeLattices[(lattice * 3u) + 2u]);
+        float4 row0 = passGroup.meshBakeLattices[lattice * 4u];
+        float4 row1 = passGroup.meshBakeLattices[(lattice * 4u) + 1u];
+        uint4 dims = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 2u]);
+        uint4 poses = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 3u]);
         uint local = (sample - asuint(row0.w));
         uint x = (local % dims.x);
         uint y = ((local / dims.x) % dims.y);
@@ -64,6 +66,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float spacing = (0.015625 * min(cell.x, min(cell.y, cell.z)));
         uint maskBase = worldInstanceMaskBase(lattice);
         int selector = asint(row1.w);
+
+        sdfBakePoseBase = poses.x;
+        sdfBakePoseFirst = poses.y;
+        sdfBakePoseCount = poses.z;
+
         float3 slotPosition = float3(0.0, 0.0, 0.0);
         float4 slotOrientation = float4(0.0, 0.0, 0.0, 1.0);
 

@@ -38,6 +38,22 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 /// <param name="Lattices">The lattices, in dispatch order.</param>
 /// <param name="Tickets">The group each lattice answers.</param>
 public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Tickets) {
+    /// <summary>Gets each lattice's group's poses: the first slot they cover and three rows a slot from it, laid out as
+    /// the dynamic-transform table lays a slot out, which the bake kernel reads in place of the frame's transforms; no
+    /// rows for a group that reads no slot.</summary>
+    public (int First, ReadOnlyMemory<Vector4> Rows)[] Poses { get; init; } = [];
+    /// <summary>Gets the point table entries the batch writes: its samples' points, then each lattice's poses.</summary>
+    public int TableEntries {
+        get {
+            var entries = Samples;
+
+            foreach (var (_, rows) in Poses) {
+                entries += rows.Length;
+            }
+
+            return entries;
+        }
+    }
     /// <summary>Gets the bake whose groups the batch's lattices answer, which its readback completes or abandons whatever
     /// residency the pass that dispatched it records by then; <see langword="null"/> for a batch no bake took.</summary>
     public SdfMeshPathBake? Bake { get; internal init; }
@@ -68,9 +84,9 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// arrive.</summary>
     public bool Answered { get; set; }
     /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
-    /// dispatch.</summary>
-    /// <param name="table">The table, at least <see cref="Samples"/> entries.</param>
-    /// <returns>Whether the batch holds a points lattice.</returns>
+    /// dispatch, then each lattice's poses from <see cref="PoseBase"/>.</summary>
+    /// <param name="table">The table, at least <see cref="TableEntries"/> entries.</param>
+    /// <returns>Whether the batch wrote an entry.</returns>
     public bool WritePoints(Span<Vector4> table) {
         var first = 0;
         var any = false;
@@ -82,8 +98,29 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             }
             first += lattice.Samples;
         }
+        for (var index = 0; (index < Poses.Length); index++) {
+            var rows = Poses[index].Rows;
+
+            if (!rows.IsEmpty) {
+                rows.Span.CopyTo(destination: table[PoseBase(lattice: index)..]);
+                any = true;
+            }
+        }
 
         return any;
+    }
+    /// <summary>Returns the point table entry a lattice's poses start at: after every sample's point and every earlier
+    /// lattice's poses.</summary>
+    /// <param name="lattice">The lattice's index in <see cref="Lattices"/>.</param>
+    /// <returns>The entry.</returns>
+    public int PoseBase(int lattice) {
+        var entry = Samples;
+
+        for (var index = 0; (index < Math.Min(lattice, Poses.Length)); index++) {
+            entry += Poses[index].Rows.Length;
+        }
+
+        return entry;
     }
 }
 /// <summary>
@@ -100,9 +137,9 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 /// of the cells the final lattice cannot resolve (<see cref="SdfSampledLattice.Refine"/>), and then gradients at the
 /// samples a contour reads one at alone (<see cref="SdfSampledLattice.GradientPoints"/>). The final samples contour on
 /// the thread pool (<see cref="SdfSampledLattice"/>) and split at their creases (<see cref="SdfContour.SplitAtCreases"/>).
-/// A dynamic group bakes in its slot's frame: its
-/// box, lattices and points are in that frame, and the kernel carries every sample through the slot's transform in the
-/// frame that dispatches it, so a body moving while it bakes is sampled where it is. Its vertices stay in that frame, and
+/// A dynamic group bakes in its slot's frame: its box, lattices and points are in that frame, and the kernel reads every
+/// transform through the poses the group's geometry hashed (<see cref="SdfMeshGeometryBuilder.Poses"/>), never the frame
+/// it dispatches in, so a mesh is a function of its geometry and a body moving while it bakes bakes whole. Its vertices stay in that frame, and
 /// its draw follows the slot's live transform; a static group's are in world space.</para>
 /// <para>A new program restarts the bake; the meshes of the last finished bake keep drawing until each group's new mesh
 /// lands. A group whose geometry the library holds takes that mesh, and one its store kept from an earlier run under the
@@ -269,24 +306,30 @@ public sealed class SdfMeshPathBake {
 
                 lattices.Clear();
                 tickets.Clear();
+                m_takenPoses.Clear();
                 var samples = 0;
+                var entries = 0;
                 var taps = 0;
                 for (var index = 0; (index < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch); index++) {
                     var group = m_groups[index];
 
                     if (group.Done || group.InFlight || group.Contouring || (group.Next is not { } next)) { continue; }
                     if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
+                    // The point table holds the samples' points and the lattices' poses after them.
+                    if ((entries + next.Samples + group.PoseRows.Length) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
                     // A frame's lattices stay within its share of field evaluations; its first is always taken, and no
                     // lattice holds more than a share.
                     if ((lattices.Count > 0) && ((taps + next.Taps) > FrameTaps)) { break; }
                     group.InFlight = true;
                     samples += next.Samples;
+                    entries += (next.Samples + group.PoseRows.Length);
                     taps += next.Taps;
                     lattices.Add(item: next);
                     tickets.Add(item: group);
+                    m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
                 }
                 if (lattices.Count > 0) {
-                    m_frameBatch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this };
+                    m_frameBatch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) { Bake = this, Poses = [.. m_takenPoses] };
                 }
             }
             batch = m_frameBatch;
@@ -294,6 +337,7 @@ public sealed class SdfMeshPathBake {
         }
     }
 
+    private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
     private long m_frameTaken = -1;
     private SdfMeshBakeBatch? m_frameBatch;
     private Vector4[] m_pointTable = [];
@@ -306,9 +350,9 @@ public sealed class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
         if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
-        if (m_pointTable.Length < batch.Samples) { m_pointTable = new Vector4[SdfWorldPackage.MeshBakeMaxSamples]; }
+        if (m_pointTable.Length < batch.TableEntries) { m_pointTable = new Vector4[SdfWorldPackage.MeshBakeMaxSamples]; }
         if (batch.WritePoints(table: m_pointTable)) {
-            tables.WriteMeshBakePoints(points: m_pointTable.AsSpan(length: batch.Samples, start: 0));
+            tables.WriteMeshBakePoints(points: m_pointTable.AsSpan(length: batch.TableEntries, start: 0));
         }
     }
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
@@ -467,8 +511,9 @@ public sealed class SdfMeshPathBake {
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
             // own frame, its center is that offset turned back by the slot's orientation in this frame.
             var orientation = ((instance.IsDynamic && (instance.Slot < frame.DynamicTransforms.Count)) ? frame.DynamicTransforms[instance.Slot].Orientation : default);
+            // Rounded as the geometry rounds a pose, so one geometry bakes over one box whatever frame turned it back.
             var center = (instance.IsDynamic
-                ? Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation)))
+                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation))))
                 : instance.Center);
             Group group;
 
@@ -593,6 +638,10 @@ public sealed class SdfMeshPathBake {
             m_drawnMeshes = -1;
         }
     }
+    // A position rounded to the steps a metre the geometry rounds a slot's position to.
+    private static Vector3 Rounded(Vector3 value) => new(x: Rounded(value: value.X), y: Rounded(value: value.Y), z: Rounded(value: value.Z));
+    private static float Rounded(float value) =>
+        (float)(Math.Round(value: ((double)value * SdfMeshGeometryBuilder.PositionSteps), mode: MidpointRounding.ToEven) / SdfMeshGeometryBuilder.PositionSteps);
     // The group of the shapes the program's segments outside every instance hold, keyed by every such instruction (the
     // transforms ahead of the first drawn shape place it too) with its absolute materials; null when no segment holds a
     // drawn shape. Its box is the reach about the origin, which its geometry holds.
@@ -1167,10 +1216,39 @@ public sealed class SdfMeshPathBake {
         public HashSet<int> Materials { get; } = [];
         public int[] MaterialOrder { get; private set; } = [];
 
+        // The poses the group bakes through: the turn from world axes into its frame, then from its first slot three rows a
+        // slot as the dynamic-transform table lays one out, what its geometry hashed, so its samples never read the frame's
+        // transforms and its mesh is a function of its geometry, whatever frame each lattice dispatches in. A slot between
+        // two the group reads holds the identity.
+        public int PoseFirst { get; private set; }
+        public Vector4[] PoseRows { get; private set; } = [];
+
         public void Seal() {
             Sealed = Geometry.Geometry;
             MaterialOrder = [.. Geometry.Materials];
             Materials.UnionWith(other: MaterialOrder);
+
+            var poses = Geometry.Poses;
+
+            if (poses.Count == 0) { return; }
+
+            var first = poses.Keys.First();
+            var rows = new Vector4[1 + (3 * ((poses.Keys.Last() - first) + 1))];
+            var turn = Geometry.BoundTurn;
+
+            rows[0] = new Vector4(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W);
+            for (var row = 2; (row < rows.Length); row += 3) {
+                rows[row] = new Vector4(x: 0f, y: 0f, z: 0f, w: 1f);
+            }
+            foreach (var (slot, pose) in poses) {
+                var row = (1 + (3 * (slot - first)));
+
+                rows[row] = new Vector4(value: pose.Position, w: 0f);
+                rows[row + 1] = new Vector4(x: pose.Orientation.X, y: pose.Orientation.Y, z: pose.Orientation.Z, w: pose.Orientation.W);
+                rows[row + 2] = pose.Lanes;
+            }
+            PoseFirst = first;
+            PoseRows = rows;
         }
         public Vector3 Low { get; set; }
         public Vector3 High { get; set; }

@@ -26,7 +26,7 @@ float sdfInstanceGap(uint instanceOffset, uint instance, float3 worldPosition) {
     if (!(bound.w >= 0.0) || !all(isfinite(bound))) { return -SDF_FAR_DISTANCE; }
     if (meta.x == SDF_BOUND_DYNAMIC) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        bound.xyz += sdfDynamicTransformRow(3u * meta.y).xyz;
+        bound.xyz = sdfDynamicBoundCenter(bound.xyz, meta.y);
 #else
         return -SDF_FAR_DISTANCE;
 #endif

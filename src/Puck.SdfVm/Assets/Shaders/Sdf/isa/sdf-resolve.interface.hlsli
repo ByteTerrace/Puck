@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/673bd4a632e978c3966a934de26c4d2bc51046f4bffd8bd47546c3c6c7d3727d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/2c8831318897a03e5fbc3fd409795415424999a952130977f859c44dc15637f9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -183,43 +183,43 @@ struct SdfResolvePass {
     [[vk::offset(292)]] uint meshBakeCount;
     [[vk::offset(296)]] uint _pad296;
     [[vk::offset(300)]] uint _pad300;
-    [[vk::offset(304)]] float4 meshBakeLattices[48];
-    [[vk::offset(1072)]] uint meshDraws;
-    [[vk::offset(1076)]] uint _pad1076;
-    [[vk::offset(1080)]] uint _pad1080;
-    [[vk::offset(1084)]] uint _pad1084;
-    [[vk::offset(1088)]] int4 meshIrradianceLow;
-    [[vk::offset(1104)]] uint4 meshIrradianceVolume;
-    [[vk::offset(1120)]] float4 meshShadowCascades[12];
-    [[vk::offset(1312)]] uint meshShadowCount;
-    [[vk::offset(1316)]] uint _pad1316;
-    [[vk::offset(1320)]] uint _pad1320;
-    [[vk::offset(1324)]] uint _pad1324;
-    [[vk::offset(1328)]] float4 meshShadowParameters;
-    [[vk::offset(1344)]] uint meshShadowTexels;
-    [[vk::offset(1348)]] float nearDistance;
-    [[vk::offset(1352)]] uint _pad1352;
-    [[vk::offset(1356)]] uint _pad1356;
-    [[vk::offset(1360)]] float4 previousView[6];
-    [[vk::offset(1456)]] uint screenCount;
-    [[vk::offset(1460)]] uint shadowFadeCount;
-    [[vk::offset(1464)]] uint shadowSlotCount;
-    [[vk::offset(1468)]] uint _pad1468;
-    [[vk::offset(1472)]] int4 shadowSlots;
-    [[vk::offset(1488)]] float tanHalfFieldOfView;
-    [[vk::offset(1492)]] uint temporal;
-    [[vk::offset(1496)]] float upscaleSharpness;
-    [[vk::offset(1500)]] uint viewBase;
-    [[vk::offset(1504)]] float3 viewForward;
-    [[vk::offset(1516)]] uint _pad1516;
-    [[vk::offset(1520)]] float3 viewPosition;
-    [[vk::offset(1532)]] uint _pad1532;
-    [[vk::offset(1536)]] float3 viewRight;
-    [[vk::offset(1548)]] uint _pad1548;
-    [[vk::offset(1552)]] float3 viewUp;
-    [[vk::offset(1564)]] uint viewportCount;
-    [[vk::offset(1568)]] uint workCounterRow;
-    [[vk::offset(1572)]] uint workCounterRowDetail;
+    [[vk::offset(304)]] float4 meshBakeLattices[64];
+    [[vk::offset(1328)]] uint meshDraws;
+    [[vk::offset(1332)]] uint _pad1332;
+    [[vk::offset(1336)]] uint _pad1336;
+    [[vk::offset(1340)]] uint _pad1340;
+    [[vk::offset(1344)]] int4 meshIrradianceLow;
+    [[vk::offset(1360)]] uint4 meshIrradianceVolume;
+    [[vk::offset(1376)]] float4 meshShadowCascades[12];
+    [[vk::offset(1568)]] uint meshShadowCount;
+    [[vk::offset(1572)]] uint _pad1572;
+    [[vk::offset(1576)]] uint _pad1576;
+    [[vk::offset(1580)]] uint _pad1580;
+    [[vk::offset(1584)]] float4 meshShadowParameters;
+    [[vk::offset(1600)]] uint meshShadowTexels;
+    [[vk::offset(1604)]] float nearDistance;
+    [[vk::offset(1608)]] uint _pad1608;
+    [[vk::offset(1612)]] uint _pad1612;
+    [[vk::offset(1616)]] float4 previousView[6];
+    [[vk::offset(1712)]] uint screenCount;
+    [[vk::offset(1716)]] uint shadowFadeCount;
+    [[vk::offset(1720)]] uint shadowSlotCount;
+    [[vk::offset(1724)]] uint _pad1724;
+    [[vk::offset(1728)]] int4 shadowSlots;
+    [[vk::offset(1744)]] float tanHalfFieldOfView;
+    [[vk::offset(1748)]] uint temporal;
+    [[vk::offset(1752)]] float upscaleSharpness;
+    [[vk::offset(1756)]] uint viewBase;
+    [[vk::offset(1760)]] float3 viewForward;
+    [[vk::offset(1772)]] uint _pad1772;
+    [[vk::offset(1776)]] float3 viewPosition;
+    [[vk::offset(1788)]] uint _pad1788;
+    [[vk::offset(1792)]] float3 viewRight;
+    [[vk::offset(1804)]] uint _pad1804;
+    [[vk::offset(1808)]] float3 viewUp;
+    [[vk::offset(1820)]] uint viewportCount;
+    [[vk::offset(1824)]] uint workCounterRow;
+    [[vk::offset(1828)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa5382F911 : register(b0, space3);
 #define passGroup passGroupIsa5382F911
