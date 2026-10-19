@@ -137,6 +137,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             DescriptorSize = pool.DescriptorSize,
             GpuBase = (pool.GpuBase + (((ulong)offset) * pool.DescriptorSize)),
             SlotByBinding = layout.SlotByBinding,
+            Views = new nint[slotCount],
         };
     }
     private static DirectXDescriptorSet PlaceGroupSet(DirectXDescriptorPool pool, DirectXGroupLayout group) {
@@ -162,6 +163,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             SamplerDescriptorSize = pool.SamplerDescriptorSize,
             SamplerGpuBase = (pool.SamplerGpuBase + (((ulong)samplerOffset) * pool.SamplerDescriptorSize)),
             SlotByBinding = group.SlotByBinding,
+            Views = new nint[group.ViewSlotCount],
         };
     }
     // The set a group write lands in, refused by name unless it is a set of a group declaring the binding as the kind
@@ -194,6 +196,9 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             message: $"An image descriptor write names image view 0x{imageViewHandle:X}, which has been destroyed."
         ));
     }
+    // Whether a set's slot already holds the live image view a write names (DirectXDescriptorSet.Views).
+    private static bool Holds(DirectXDescriptorSet set, uint slot, nint imageViewHandle) =>
+        ((set.Views[slot] == imageViewHandle) && (DirectXImageViews.Resolve(handle: imageViewHandle) is not null));
     private static D3D12_CPU_DESCRIPTOR_HANDLE ViewSlot(DirectXDescriptorSet set, uint binding, uint arrayElement) => new() {
         ptr = (set.CpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.DescriptorSize))),
     };
@@ -296,21 +301,32 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             ),
             pDesc: &cbvDesc
         );
+        set.Views[set.SlotByBinding[binding] + arrayElement] = 0;
     }
     /// <inheritdoc/>
-    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) =>
+    /// <remarks>A write of the live view the slot already holds creates nothing.</remarks>
+    public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        var set = GroupSetFor(
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            kind: GpuBindingKind.SampledImage
+        );
+        var slot = (set.SlotByBinding[binding] + arrayElement);
+
+        if (Holds(imageViewHandle: imageViewHandle, set: set, slot: slot)) {
+            return;
+        }
+
         CreateTextureView(
             destination: ViewSlot(
                 arrayElement: arrayElement,
                 binding: binding,
-                set: GroupSetFor(
-                    binding: binding,
-                    descriptorSetHandle: descriptorSetHandle,
-                    kind: GpuBindingKind.SampledImage
-                )
+                set: set
             ),
             imageViewHandle: imageViewHandle
         );
+        set.Views[slot] = imageViewHandle;
+    }
     /// <inheritdoc/>
     /// <remarks>The descriptor is created in the set's sampler table, a range of the device's sampler heap, with the
     /// filter the handle names and clamp-to-edge addressing: the sampler a pipeline created without a layout description
@@ -360,6 +376,8 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
+        set.Views[set.SlotByBinding[binding]] = 0;
+
         var raw = (0 == elementStride);
         var format = (raw
             ? DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS
@@ -420,16 +438,22 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A write of the live view the slot already holds creates nothing.</remarks>
     public void WriteStorageImage(
         nint descriptorSetHandle,
         uint binding,
         uint arrayElement,
         nint imageViewHandle
     ) {
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
-        var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
         var slotIndex = (set.SlotByBinding[binding] + arrayElement);
+
+        if (Holds(imageViewHandle: imageViewHandle, set: set, slot: slotIndex)) {
+            return;
+        }
+
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(slotIndex * set.DescriptorSize))),
         };
@@ -449,6 +473,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
             pDesc: &uavDesc,
             pResource: ((ID3D12Resource*)imageView.ResourceHandle)
         );
+        set.Views[slotIndex] = imageViewHandle;
     }
 
 }

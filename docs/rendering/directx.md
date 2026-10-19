@@ -278,9 +278,15 @@ device up and releases them when the context releases it, on `Recreate` and
 - **A clear takes a slot, not a heap.** A storage clear needs a GPU handle in
   the bound view heap and a CPU handle in a CPU-only heap. The device keeps
   `DirectXShaderVisibleHeaps.ClearDescriptors` of each: a range of the view heap
-  admitted with the heaps, mirrored slot for slot by one CPU-only heap. The
-  command list that records a clear holds its slot until it is reset or
-  released.
+  admitted with the heaps, mirrored slot for slot by one CPU-only heap. A
+  cleared resource holds a slot for each view a clear asks of it, written by
+  its first clear (`DirectXShaderVisibleHeaps.ClearOf`) and found again through
+  a tag the resource carries, never its address; its release returns them
+  (`ForgetClears`, from `DirectXDeviceMemory.CountReleased`).
+- **A set writes each image view once.** A set remembers the image view each
+  slot holds (`DirectXDescriptorSet.Views`); a view handle names one view for
+  its whole life, so a write of the live view a slot already holds creates
+  nothing. A debug-world frame creates no view.
 - **The heaps count as device memory.** Both shader-visible heaps count under
   `memory.directx` as device-local allocations of their descriptors at the
   device's increment, and their release ends those entries before the device's

@@ -97,6 +97,9 @@ public static unsafe class DirectXDeviceMemory {
     /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
     /// <param name="resource">The resource about to be released, or zero.</param>
     public static void CountReleased(GpuDeviceMemoryWork? memory, nint resource) {
+        if (0 != resource) {
+            DirectXShaderVisibleHeaps.ForgetClears(resource: resource);
+        }
         // A placed resource returns its range to its heap, which alone the counts hold.
         if ((0 != resource) && DirectXHeapArena.Release(resource: resource)) {
             return;

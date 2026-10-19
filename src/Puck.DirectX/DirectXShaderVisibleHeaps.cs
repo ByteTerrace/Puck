@@ -1,4 +1,7 @@
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
@@ -13,8 +16,9 @@ namespace Puck.DirectX;
 /// heaps never grow; every command list binds both heaps once (<see cref="Bind"/>).
 /// <para>A storage clear needs a descriptor in the bound view heap for its GPU handle and one in a CPU-only heap for its
 /// CPU handle, so the device keeps <see cref="ClearDescriptors"/> of each: one range of the view heap, admitted with the
-/// heaps, and a CPU-only heap of the same size whose slot <c>i</c> mirrors the range's slot <c>i</c>. A clear holds its
-/// slot until the command list that recorded it is reset or released.</para>
+/// heaps, and a CPU-only heap of the same size whose slot <c>i</c> mirrors the range's slot <c>i</c>. A cleared resource
+/// holds a slot for each view a clear has asked of it, written once (<see cref="ClearOf"/>), until the resource is
+/// released (<see cref="ForgetClears"/>).</para>
 /// <para>Both shader-visible heaps count under <see cref="GpuDeviceMemoryWork"/> as device-local allocations of their
 /// descriptors at the device's increment (<see cref="GpuDescriptorHeapBudget.HeapBytes"/>), and
 /// <see cref="Dispose"/> ends those entries before the device's teardown ends the device. Every member is safe to call
@@ -22,12 +26,18 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
-    /// <summary>The storage clears one device holds descriptors for at once, across every command list not yet reset:
-    /// four pipeline nodes each initializing <c>ShaderPipelineLimits.MaxResources</c> storages over three frames in
-    /// flight, with room.</summary>
+    /// <summary>The clear views one device holds at once, one for each view a clear has asked of a live resource: four
+    /// pipeline nodes each clearing <c>ShaderPipelineLimits.MaxResources</c> storages, with room.</summary>
     public const uint ClearDescriptors = 4096U;
+    /// <summary>The private-data key a cleared resource carries its clear tag under.</summary>
+    public static readonly Guid ClearKey = new(g: "b3e1a7c4-5d92-4f08-8c6e-1a4f9d2b7e35");
     /// <summary>The name the device's clear range is admitted under.</summary>
     public const string ClearOwner = "storage clears";
+
+    // Each cleared resource's clear views, by the tag it carries under ClearKey, never by its address, which a later
+    // resource may reuse.
+    private static readonly ConcurrentDictionary<long, List<(DirectXShaderVisibleHeaps Heaps, D3D12_UNORDERED_ACCESS_VIEW_DESC View, DirectXClearDescriptor Descriptor)>> Cleared = [];
+    private static long ClearTags;
 
     private readonly GpuDescriptorHeapBudget m_budget;
     private readonly GpuDescriptorAdmission m_clearAdmission;
@@ -247,13 +257,67 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             }
         }
     }
-    /// <summary>Takes one clear slot: a descriptor in the view heap for a clear's GPU handle and its mirror in the CPU-only
-    /// heap for its CPU handle.</summary>
-    /// <returns>The slot, which returns itself when disposed.</returns>
-    /// <exception cref="GpuRangeExhaustedException"><see cref="ClearDescriptors"/> clears are held by command lists
-    /// not yet reset.</exception>
+    /// <summary>Returns a resource's clear slot for a view: a descriptor in the view heap for a clear's GPU handle and its
+    /// mirror in the CPU-only heap for its CPU handle. The first clear to ask that view of the resource takes the slot,
+    /// and the caller writes the view into both descriptors then; the slot stays the resource's until it is released
+    /// (<see cref="ForgetClears"/>).</summary>
+    /// <param name="resource">The <c>ID3D12Resource*</c> the clear writes.</param>
+    /// <param name="view">The view the clear names.</param>
+    /// <param name="created">Whether the slot is new, its descriptors not yet written.</param>
+    /// <returns>The slot.</returns>
+    /// <exception cref="GpuRangeExhaustedException"><see cref="ClearDescriptors"/> clear views are held by live
+    /// resources.</exception>
     /// <exception cref="ObjectDisposedException">The heaps were released.</exception>
-    public DirectXClearDescriptor AllocateClear() {
+    /// <exception cref="COMException">The resource refused its clear tag.</exception>
+    public DirectXClearDescriptor ClearOf(nint resource, in D3D12_UNORDERED_ACCESS_VIEW_DESC view, out bool created) {
+        var calls = new DirectXDeviceCommandCalls(device: null);
+
+        if (!calls.TryReadTag(key: ClearKey, resource: ((ID3D12Resource*)resource), value: out var tag)) {
+            tag = Interlocked.Increment(location: ref ClearTags);
+            calls.Tag(key: ClearKey, resource: ((ID3D12Resource*)resource), value: tag).ThrowOnFailure();
+        }
+
+        var clears = Cleared.GetOrAdd(key: tag, valueFactory: static _ => []);
+        var asked = MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in view));
+
+        lock (clears) {
+            foreach (var clear in clears) {
+                if (
+                    ReferenceEquals(objA: clear.Heaps, objB: this) &&
+                    MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in clear.View)).SequenceEqual(other: asked)
+                ) {
+                    created = false;
+
+                    return clear.Descriptor;
+                }
+            }
+
+            var descriptor = AllocateClear();
+
+            clears.Add(item: (this, view, descriptor));
+            created = true;
+
+            return descriptor;
+        }
+    }
+    /// <summary>Returns the clear slots a resource holds, as it is released. Does nothing for a resource no clear
+    /// wrote.</summary>
+    /// <param name="resource">The <c>ID3D12Resource*</c>, still alive.</param>
+    public static void ForgetClears(nint resource) {
+        if (
+            Cleared.IsEmpty ||
+            !new DirectXDeviceCommandCalls(device: null).TryReadTag(key: ClearKey, resource: ((ID3D12Resource*)resource), value: out var tag) ||
+            !Cleared.TryRemove(key: tag, value: out var clears)
+        ) {
+            return;
+        }
+
+        lock (clears) {
+            foreach (var clear in clears) { clear.Descriptor.Dispose(); }
+        }
+    }
+
+    private DirectXClearDescriptor AllocateClear() {
         uint slot;
 
         lock (m_gate) {
@@ -303,8 +367,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
 /// <summary>
 /// One storage clear's descriptors from a device's <see cref="DirectXShaderVisibleHeaps"/>: the view-heap slot whose GPU
 /// handle the clear names, with its CPU handle for writing the view, and the CPU-only mirror whose CPU handle the clear
-/// names. Disposing it returns the slot; the command list that recorded the clear holds it until it is reset or
-/// released.
+/// names. Disposing it returns the slot; the resource it clears holds it until the resource is released.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXClearDescriptor : IDisposable {

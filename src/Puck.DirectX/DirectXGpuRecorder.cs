@@ -32,7 +32,6 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         var allocator = ((ID3D12CommandAllocator*)state.Allocator);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
 
-        state.ReleaseRetainedResources();
         state.BufferStates.Reset();
         DirectXCommandCalls.Reset(
             allocator: allocator,
@@ -198,7 +197,6 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var descriptors = ClearDescriptor(
-            state: state,
             view: new D3D12_UNORDERED_ACCESS_VIEW_DESC {
                 Anonymous = new D3D12_UNORDERED_ACCESS_VIEW_DESC._Anonymous_e__Union {
                     Texture2D = new D3D12_TEX2D_UAV { MipSlice = 0, PlaneSlice = 0, },
@@ -285,7 +283,6 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
         var descriptors = ClearDescriptor(
-            state: state,
             view: new D3D12_UNORDERED_ACCESS_VIEW_DESC {
                 Anonymous = new D3D12_UNORDERED_ACCESS_VIEW_DESC._Anonymous_e__Union {
                     Buffer = new D3D12_BUFFER_UAV {
@@ -711,26 +708,32 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         );
     }
 
-    // Takes one of the device's clear slots for a recording, held until the command buffer is reused or disposed, and
-    // writes the clear's view into both of its descriptors: the view-heap slot the GPU handle names, and the CPU-only
-    // mirror the CPU handle names.
-    private DirectXClearDescriptor ClearDescriptor(DirectXCommandBufferState state, D3D12_UNORDERED_ACCESS_VIEW_DESC view, nint resource) {
-        var device = ((ID3D12Device*)deviceContext.Device.Handle);
-        var descriptors = deviceContext.DescriptorHeaps.AllocateClear();
+    // The resource's clear slot for the view (DirectXShaderVisibleHeaps.ClearOf), whose two descriptors, the view-heap
+    // slot the GPU handle names and the CPU-only mirror the CPU handle names, are written the first time a clear asks the
+    // view of the resource.
+    private DirectXClearDescriptor ClearDescriptor(D3D12_UNORDERED_ACCESS_VIEW_DESC view, nint resource) {
+        var descriptors = deviceContext.DescriptorHeaps.ClearOf(
+            created: out var created,
+            resource: resource,
+            view: in view
+        );
 
-        state.RetainedResources.Add(item: descriptors);
-        device->CreateUnorderedAccessView(
-            DestDescriptor: descriptors.ViewCpuHandle,
-            pCounterResource: null,
-            pDesc: &view,
-            pResource: ((ID3D12Resource*)resource)
-        );
-        device->CreateUnorderedAccessView(
-            DestDescriptor: descriptors.ClearCpuHandle,
-            pCounterResource: null,
-            pDesc: &view,
-            pResource: ((ID3D12Resource*)resource)
-        );
+        if (created) {
+            var device = ((ID3D12Device*)deviceContext.Device.Handle);
+
+            device->CreateUnorderedAccessView(
+                DestDescriptor: descriptors.ViewCpuHandle,
+                pCounterResource: null,
+                pDesc: &view,
+                pResource: ((ID3D12Resource*)resource)
+            );
+            device->CreateUnorderedAccessView(
+                DestDescriptor: descriptors.ClearCpuHandle,
+                pCounterResource: null,
+                pDesc: &view,
+                pResource: ((ID3D12Resource*)resource)
+            );
+        }
 
         return descriptors;
     }

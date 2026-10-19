@@ -4,6 +4,8 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Testing;
 using Puck.DirectX.Interop;
+using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.Graphics.Dxgi.Common;
 using Xunit;
 
 namespace Puck.DirectX.Tests;
@@ -13,7 +15,8 @@ namespace Puck.DirectX.Tests;
 /// <see cref="DirectXDeviceContext.Recreate"/>; every pool a range of the view heap, a destroyed pool's range the one the
 /// next equal pool receives; a candidate that does not fit refused whole, by name, allocating nothing; both heaps'
 /// bytes counted under <c>memory.directx</c> and ended at teardown; no other shader-visible heap created, by a pool or the surface upload (<see cref="DirectXGpuBindings.ShaderVisibleHeapsCreated"/>); and a storage clear recorded, submitted and
-/// completed through a clear slot of the view heap with no heap of its own. Each law runs on a software (WARP) device
+/// completed through a clear slot of the view heap with no heap of its own, the slot the cleared resource's for that view
+/// until the resource is released. Each law runs on a software (WARP) device
 /// without the debug layer and skips when the host has none that meets the device floor.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXShaderVisibleHeapsLawTests {
@@ -176,10 +179,11 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         );
     }
     [Fact]
-    public void AClearRecordsThroughTheDevicesHeapsAndReturnsItsSlotWhenItsCommandBufferIsReused() {
+    public void AResourcesClearViewIsWrittenOnceAndItsSlotReturnsWhenTheResourceIsReleased() {
         using var context = WarpContext(memory: null);
         var services = context.Services;
-        using var buffer = services.BufferFactory.CreateDeviceLocal(
+        var heaps = context.DescriptorHeaps;
+        var buffer = services.BufferFactory.CreateDeviceLocal(
             name: default,
             sizeBytes: 256UL,
             usage: GpuBufferUsage.Storage
@@ -198,15 +202,39 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
         }
 
-        // The second recording's reset returned the first clear's slot, so the next clear takes the same one.
-        using var next = context.DescriptorHeaps.AllocateClear();
+        // Both recordings cleared through the one slot the buffer holds for that view, written by the first; another view
+        // of it takes a slot of its own.
+        var whole = heaps.ClearOf(created: out var created, resource: buffer.BufferHandle, view: RawView(words: 64U));
+
+        Assert.False(condition: created);
+        Assert.NotEqual(
+            actual: heaps.ClearOf(created: out created, resource: buffer.BufferHandle, view: RawView(words: 32U)).Slot,
+            expected: whole.Slot
+        );
+        Assert.True(condition: created);
+
+        // Released, the buffer returns its slots, and the next resource's first clear takes the first of them.
+        buffer.Dispose();
+        using var next = services.BufferFactory.CreateDeviceLocal(
+            name: default,
+            sizeBytes: 256UL,
+            usage: GpuBufferUsage.Storage
+        );
 
         Assert.Equal(
-            actual: next.Slot,
-            expected: 1U
+            actual: heaps.ClearOf(created: out created, resource: next.BufferHandle, view: RawView(words: 64U)).Slot,
+            expected: whole.Slot
         );
+        Assert.True(condition: created);
     }
 
+    private static D3D12_UNORDERED_ACCESS_VIEW_DESC RawView(uint words) => new() {
+        Anonymous = new D3D12_UNORDERED_ACCESS_VIEW_DESC._Anonymous_e__Union {
+            Buffer = new D3D12_BUFFER_UAV { Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW, NumElements = words, },
+        },
+        Format = DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
+        ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
+    };
     private static void UploadTwoExtents(DirectXDeviceContext context) {
         var bindings = context.Services.Bindings;
         using var upload = context.Services.SurfaceTransferFactory.CreateUpload();

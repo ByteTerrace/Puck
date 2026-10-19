@@ -53,8 +53,6 @@ public sealed unsafe class DirectXGpuCommandPool : IGpuCommandPool {
         if (m_token.IsAllocated) {
             var state = ((DirectXCommandBufferState)m_token.Target!);
 
-            state.ReleaseRetainedResources();
-
             if (0 != state.CommandList) {
                 _ = ((IUnknown*)state.CommandList)->Release();
                 state.CommandList = 0;

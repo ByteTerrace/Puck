@@ -11,8 +11,6 @@ namespace Puck.DirectX;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXCommandBufferState {
-    internal List<IDisposable> RetainedResources { get; } = [];
-
     /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; the recorder resets it when a recording begins.</summary>
     public DirectXBufferStates BufferStates { get; } = new();
     /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
@@ -20,11 +18,6 @@ public sealed class DirectXCommandBufferState {
     internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
     /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
     internal int BarrierDepth { get; set; }
-
-    internal void ReleaseRetainedResources() {
-        foreach (var resource in RetainedResources) { resource.Dispose(); }
-        RetainedResources.Clear();
-    }
 
     public nint Allocator;
     public nint CommandList;
@@ -218,6 +211,10 @@ public sealed class DirectXDescriptorSet {
     /// <summary>The owning layout's <see cref="DirectXPipelineLayout.SlotByBinding"/> packing, so each descriptor write
     /// lands at the same packed heap slot the root signature's range for that binding points at.</summary>
     public uint[] SlotByBinding = [];
+    /// <summary>The image view each view-table slot holds, by its <see cref="DirectXImageViews"/> handle, or zero for a
+    /// slot holding a buffer view or nothing yet. A handle names one view for the view's whole life, so a write of the
+    /// live view a slot already holds is the descriptor it already has, and is skipped.</summary>
+    public nint[] Views = [];
     /// <summary>The group a set of a pipeline created from a <see cref="GpuPipelineLayoutDescription"/> is allocated
     /// for, or <see langword="null"/> for a set of any other pipeline.</summary>
     public DirectXGroupLayout? Group;

@@ -12,8 +12,9 @@ namespace Puck.DirectX.Tests;
 /// grain layout's pass group takes its constant buffer, its separate image and its sampler through
 /// <see cref="IGpuBindings"/>, and a write of a kind the group does not declare at that binding, or a constant buffer
 /// view of an unaligned size, is refused by name. A recorded bind sets a group's view table and sampler table at that
-/// group and refuses a set bound at a group other than its own, or at a group the pipeline does not have. An image write
-/// naming no view, or a view whose image was destroyed, is refused by name. A pool's sets
+/// group and refuses a set bound at a group other than its own, or at a group the pipeline does not have. A write of the
+/// live view a slot already holds creates nothing. An image write naming no view, or a view whose image was destroyed,
+/// is refused by name, though the slot held it. A pool's sets
 /// release with it: a thousand cycles of creating a pool, allocating a set of each kind and destroying the pool leave
 /// the bindings holding the handles they began with.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -69,12 +70,15 @@ public sealed unsafe class DirectXGroupedBindingLawTests {
                 bufferSize: IGpuBindings.ConstantBufferAlignment,
                 descriptorSetHandle: pass
             );
-            bindings.WriteSampledImage(
-                arrayElement: 0,
-                binding: 1,
-                descriptorSetHandle: pass,
-                imageViewHandle: image.ImageViewHandle
-            );
+            // A second write of the view the slot holds is the descriptor the slot already has, and creates nothing.
+            for (var write = 0; (write < 2); write++) {
+                bindings.WriteSampledImage(
+                    arrayElement: 0,
+                    binding: 1,
+                    descriptorSetHandle: pass,
+                    imageViewHandle: image.ImageViewHandle
+                );
+            }
             bindings.WriteSampler(
                 arrayElement: 0,
                 binding: 2,
