@@ -24,6 +24,16 @@ public sealed partial class SdfFieldEvaluator {
             _ => false,
         };
     }
+    /// <summary>Gets the warps the evaluator interprets under <see cref="SdfFieldReading.Render"/> alone, each with a point
+    /// rule and an inclusion rule: <see cref="SdfOp.AxialProfile"/> and <see cref="SdfOp.RotatePlane"/>.</summary>
+    public static IReadOnlyList<SdfOp> RenderWarpOps { get; } = [SdfOp.AxialProfile, SdfOp.RotatePlane];
+    /// <summary>Returns whether the evaluator interprets <paramref name="op"/> under a reading; a program holding any other
+    /// op is refused at construction.</summary>
+    /// <param name="op">The op.</param>
+    /// <param name="reading">The reading.</param>
+    /// <returns><see langword="true"/> when the op is interpreted.</returns>
+    public static bool IsSupportedOp(SdfOp op, SdfFieldReading reading) =>
+        (IsSupportedOp(op: op) || ((reading == SdfFieldReading.Render) && (op is SdfOp.AxialProfile or SdfOp.RotatePlane)));
     /// <summary>Returns whether the evaluator interprets <paramref name="shape"/>; a program holding any other shape in its
     /// contact field is refused at construction.</summary>
     /// <param name="shape">The shape.</param>

@@ -566,6 +566,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 //   BEND_Y: angle keyed on y, rotates the XY plane
                 //   BEND_Z: angle keyed on y, rotates the YZ plane
                 // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
+                // KEEP IN SYNC with SdfFieldEvaluator.WarpPoint, the render reading the mesh audit samples.
                 case SDF_OP_ROTATE_PLANE: {
                     SDF_VM_LOAD_DATA0;
                     uint u = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X;
@@ -579,7 +580,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition[v] = -sn * pu + c * pv;
                     break;
                 }
-                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.AxialProfile): data0 = (amount, bulge, top,
+                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.AxialProfile and SdfFieldEvaluator.WarpPoint): data0 = (amount, bulge, top,
                 // 1/span), data1.x = the host-baked 1/max(s) size correction over t in [0, 1]. t folds toward the far
                 // end of the span; s(t) is floored at SDF_FLARE_MIN_SCALE so a parameter combination that drives it
                 // non-positive still warps finitely. distanceScale takes the size correction here, the same channel

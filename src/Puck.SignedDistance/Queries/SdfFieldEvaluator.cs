@@ -31,6 +31,11 @@ namespace Puck.SignedDistance.Queries;
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
 //
+// THE RENDER READING (SdfFieldReading.Render) lifts two of those refusals for a consumer that measures what the renderer
+// draws rather than clearance (the baked-mesh audit): a non-uniform Scale reads as mapCore's minimum-axis lower bound,
+// and AxialProfile and RotatePlane are interpreted (WarpPoint, WarpBounds), so their mapCore cases are a sync pair with
+// this file too. A contact reading never admits them.
+//
 // THE CULL (SdfFieldEvaluator.Cull.cs): both walkers skip an instance, or a chain of shapes inside one, whose
 // certificate (SdfFieldEvaluator.Certificates.cs), derived from the compiled fixed-point stream, proves it cannot move
 // the answer. A point walk's skip changes no distance, material or gradient; a box walk's skip changes no interval.
@@ -95,6 +100,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // Whether every compose outside a scope is a hard union, so the answer is the least of the instances' own answers
     // and a walk may evaluate its nearest instance first (see ComposesByHardUnion).
     private readonly bool m_primeable;
+    private readonly SdfFieldReading m_reading;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -107,10 +113,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// is excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
     /// <see cref="SdfOp.Rotate"/> plus a translate), but because THIS constructor takes only a program, never a
     /// per-frame dynamic-transform table against which to resolve a slot.</exception>
-    public SdfFieldEvaluator(SdfProgram program) {
+    public SdfFieldEvaluator(SdfProgram program) : this(program: program, reading: SdfFieldReading.Contact) { }
+    /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form, read as
+    /// <paramref name="reading"/> says: <see cref="SdfFieldReading.Contact"/> is the clearance the other constructor
+    /// reads; <see cref="SdfFieldReading.Render"/> also admits a non-uniform <see cref="SdfOp.Scale"/> and the
+    /// <see cref="RenderWarpOps"/>, answering the field the renderer's interpreter samples.</summary>
+    /// <param name="program">The program to wrap.</param>
+    /// <param name="reading">What the program is read as.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape the reading cannot
+    /// interpret, or, read for contact, a <see cref="SdfOp.Scale"/> whose axes differ in magnitude.</exception>
+    public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
-        m_instructions = Compile(program: program);
+        m_reading = reading;
+        m_instructions = Compile(program: program, reading: reading);
         m_stepScale = ConservativeStepScale(value: program.StepScale);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
         var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
@@ -165,7 +182,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
 
     /// <inheritdoc/>
-    public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    public FieldEvaluatorCapabilities Capabilities => new(WarpFree: (m_reading == SdfFieldReading.Contact));
+    /// <summary>Gets what the evaluator reads its program as.</summary>
+    public SdfFieldReading Reading => m_reading;
     /// <summary>Gets a value indicating whether the compiled stream declares any shape: without one, every query answers nothing.</summary>
     public bool HasShape => m_hasShape;
 
@@ -335,7 +354,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
     // Validates and converts a program's instruction stream ONCE — see the type remarks' excluded-ops rule for what
     // throws and why.
-    private static CompiledInstruction[] Compile(SdfProgram program) {
+    private static CompiledInstruction[] Compile(SdfProgram program, SdfFieldReading reading) {
         var instructions = program.Instructions;
         var convexPolygonProfiles = program.ConvexPolygonProfiles;
         var sweepCurves = program.SweepCurves;
@@ -345,6 +364,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             var instruction = instructions[index];
 
             if (
+                (reading == SdfFieldReading.Contact) &&
                 (instruction.Op == SdfOp.Scale) &&
                 ((MathF.Abs(x: instruction.Data0.X) != MathF.Abs(x: instruction.Data0.Y)) || (MathF.Abs(x: instruction.Data0.Y) != MathF.Abs(x: instruction.Data0.Z)))
             ) {
@@ -354,7 +374,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 );
             }
 
-            if (!IsSupportedOp(op: instruction.Op)) {
+            if (!IsSupportedOp(op: instruction.Op, reading: reading)) {
                 throw new ArgumentException(
                     message: $"SdfFieldEvaluator is warp-free this wave and cannot interpret instruction {index}'s op {instruction.Op}. See SdfFieldEvaluator.cs's KEEP-IN-SYNC header for the full excluded-op rule.",
                     paramName: nameof(instructions)
