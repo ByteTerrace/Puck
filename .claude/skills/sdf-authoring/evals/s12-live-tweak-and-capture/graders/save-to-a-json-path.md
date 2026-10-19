@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-If the world was booted from a .puck source, the response persists a live row edit with world.save to an explicit JSON path, not a bare world.save (refused against a .puck origin) and not world.reload (which rebuilds from disk and discards unsaved edits).
+If the response says how to keep a live edit, it uses world.save, and it does not offer world.reload as a way to keep one, since a reload rebuilds from disk and discards unsaved edits.

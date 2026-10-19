@@ -1,22 +1,22 @@
 ---
 name: sdf-authoring
-description: "Author and edit Puck creations inside world prototypes, in `.puck` DSL source or raw JSON: characters, armor, props, and SDF geometry. Use for sculpting, primitive/blend/warp selection, materials, state-driven looks, shape budgets, author-frame/scope/contact mismatches, and the `shape`/`prototypes` DSL sugar. Route pure `.puck` grammar, CLI verbs, or PUCK0xx language diagnostics to puck-dsl instead. Use rendering instead for the SDF VM, ISA, kernels, shaders, or GPU cost."
+description: "Authors Puck creations: shape rows, primitives, blends, folds, palettes, paints, render lanes, rigs, 367-shape budget, creation stats. Use to sculpt or fix a part. Grammar: puck-dsl; GPU: rendering."
 ---
 
 # Authoring a Puck creation
 
 A creation is a `puck.creation.v1` document: a palette, a list of shapes, and
 optional rig, motion, text, volume, and noise sections. Shapes are signed
-distance fields composed by blends, not meshes — so a "cut" is a subtraction, a
-"fillet" is a blend radius, and repetition is a fold rather than copies.
+distance fields composed by blends, not meshes: a cut is a subtraction, a
+fillet is a blend radius, and repetition is a fold rather than copies.
 
 **Where it lives.** On disk in a world document at `prototypes[].document`. The
 console addresses those same rows as section **`creations`**, keyed by prototype
-id. That mismatch is real: `world.row.set creations moth …` edits what the file
-spells `prototypes[id=moth].document`. Read `references/loop.md` before driving
-it live.
+id: `world.row.set creations moth …` edits what the file spells
+`prototypes[id=moth].document`. Read `references/loop.md` before driving it
+live.
 
-## The author frame — read this first
+## The author frame
 
 Every creation position, rotation, joint, pivot, axis, and camera offset is
 authored in one frame that is a **180° yaw about +Y away from the engine's**:
@@ -24,73 +24,64 @@ authored in one frame that is a **180° yaw about +Y away from the engine's**:
 | Author axis | Points |
 |---|---|
 | +Y | up |
-| +Z | the front the subject faces — toward a front-facing camera |
+| +Z | the front the subject faces, toward a front-facing camera |
 | +X | screen-right as you look at that front, which is the subject's own **left** |
 
 So a shape authored at +X appears on the viewer's right, on the character's left
-side. Getting this backwards is the single most expensive mistake in this
-surface, and it looks like a correct sculpt mirrored — not like a bug. The
-conversion is exact axis negation, `(x, y, z) → (−x, y, −z)`, and it is its own
-inverse (`src/Puck.World.Authoring/Authoring/CreationFrame.cs`).
+side. Getting this backwards is the most expensive mistake in this surface, and
+it looks like a correct sculpt mirrored rather than like a bug. The conversion
+is exact axis negation, `(x, y, z) → (−x, y, −z)`, and it is its own inverse
+(`src/Puck.World.Authoring/Authoring/CreationFrame.cs`). The frame is a document
+fact: it applies identically in raw JSON and in a `.puck` shape row.
 
 Scalars, camera yaw and pitch, and chain goal and pole do **not** convert.
-The conversion is field-specific: shape position, rotation, and joint convert;
-`curve.a/b/c` remain shape-local and ride that converted pose. Palette
-`inset.origin` and `inset.rotation` do not convert. Author them in the
-shader's winning frame (world space for static geometry; the owning dynamic
-slot's local frame otherwise). See [surface](references/surface.md#inset).
-The author-frame table above and its conversion apply identically whether the
-position array sits in raw JSON or in a `.puck` shape row — the frame is a
-document fact, not a spelling.
+Shape position, rotation, and joint convert; `curve.a/b/c` remain shape-local
+and ride that converted pose. Repeat and polar fold origins do not convert, so
+an author-space position `[x, y, z]` needs origin `[-x, y, -z]`
+([composition](references/composition.md#domain-folds)). Palette
+`inset.origin` and `inset.rotation` do not convert either: author them in the
+shader's winning frame ([surface](references/surface.md#inset)).
+[rig](references/rig.md#what-crosses-the-author-frame) lists every field.
 
-## Authoring in `.puck` instead of JSON
+## Authoring in `.puck`
 
-`.puck` is the checked-in authoring source for shipped creations —
-`src/Puck.World/Assets/worlds/avatars/moth.puck` sculpts the whole Moth
-character as `shape` rows inside `prototypes { prototype "moth" { document {
-} } }`, and `moth-courtyard.puck` shows the same sugar inside a `basis`-merge
-patch. A shape row is `shape Type "name" { field: value ... }`: array-valued
-fields take brackets with no colon (`position [0, 1.02, 0]`, `scale [x, y,
-z]`), scalar fields take a colon (`material: charcoal`, `exponent: softness`),
-and a `let name = value` binds a reusable constant — palette slots are named
-this way (`let charcoal = 2 // #252630`, then `material: charcoal` on every
-shape sharing it) rather than tracked as bare integers. `profile`, `domain`,
-`swings`, `slides`, and every other per-shape facet in this file are ordinary
-nested blocks with the same field spellings the JSON wire form uses; nothing
-below is renamed for the DSL. A `palette [ { ... } { ... } ]` array and a
-`prototypes { prototype "id" { document { } } }` block use that same
-container-is-a-block rule. The one-spelling grammar rule, `let`/`template`,
-units, and the CLI verbs belong to `puck-dsl` — load it before writing `.puck`
-source; this skill only teaches what the fields inside a shape/creation
-document mean.
+`.puck` is the checked-in source for shipped creations:
+`src/Puck.World/Assets/worlds/avatars/moth.puck` sculpts the whole Moth as
+`shape` rows inside `prototypes { prototype "moth" { document { } } }`. A shape
+row is `shape Type "name" { field: value ... }`: array-valued fields take
+brackets with no colon (`position [0, 1.02, 0]`, `scale [x, y, z]`), scalar
+fields take a colon (`material: charcoal`, `exponent: softness`), and
+`let name = value` binds a reusable constant; the Moth names its palette slots
+this way (`let charcoal = 2`, then `material: charcoal`). `profile`, `domain`,
+`swings`, `slides`, `panel`, `curve` and every other per-shape facet are
+ordinary nested blocks with the same field names the JSON form uses. The
+grammar, `let`/`template`/`for` and the CLI verbs belong to `puck-dsl`; load it
+before writing `.puck` source beyond shape rows.
 
-Compile and validate before trusting an edit:
+Check an edit offline before booting it, straight from the source:
 
 ```bash
-puck compile <file>.puck --output <file>.world.json --validate
-puck lint <file>.puck --strict
+puck compile <file>.puck --validate
+puck creation stats --world <file>.puck --prototype <id>
 ```
 
-`--validate` runs the same document-level checks described under "The
-budget" and "Composition" below — the stamp-budget count and the
-panel/trim/cells scope refusal both fire here, over every `prototypes[]`
-document, whether or not a placement uses it. What `--validate` does **not**
-run is emission or contact construction (`Morph`/`StairsUnion`/
-`StairsSubtraction`, the Path contact refusal, and a residual
-nonuniform `Scale`) — that tier is `creation stats`, described next.
+`compile --validate` runs document validation: the stamp budget and the
+panel/trim/cells creation-scope refusal fire here (PUCK030), over every
+`prototypes[]` document whether or not a placement uses it. It does **not** run
+emission or contact construction, so `Morph`/`StairsUnion`/
+`StairsSubtraction`, the Path contact refusal, and a residual nonuniform
+`Scale` on a solid placement pass it and fail only under `creation stats`.
+`creation stats`, `creation shape` and `mesh audit` read a `.puck` source
+directly, compiling it in memory with its relative `basis` resolved from the
+source's own directory; a compiled JSON copied elsewhere loses that basis.
 
-Never `puck decompile` over a `.puck` file you want to keep editing: a
-decompile is one-way and discards every `let`, `template`, and `for` in the
-source, replacing it with a flat, unnamed re-emission of the JSON. Decompile
-once to import a hand-authored JSON document, then edit the `.puck` from
-there.
+`puck decompile` is one-way: it discards every `let`, `template`, and `for`.
+Decompile once to import a hand-authored JSON document, then edit the `.puck`.
 
 ## The loop
 
 A world booted with `--world <file>.puck` transpiles in memory
-(`PuckWorldLoader`), and `world.reload` recompiles it from disk on request.
-Authoring against that live process is a live loop, not an edit-and-restart
-cycle:
+(`PuckWorldLoader`), and authoring against that live process needs no restart:
 
 ```
 world.row.set creations <id> document.shapes[name=<shape>].<field> <json>
@@ -99,27 +90,26 @@ world.wait    <ticks>
 world.screenshot <abs-path.png>
 ```
 
-`world.row.set`/`world.row` mutate the in-memory document and work
-regardless of source format. `world.reload` re-reads the document's on-disk
-origin and recompiles a `.puck` source (basis chain included), so editing the
-`.puck` file and reloading needs no restart. `world.save` writes authored row
-edits back through the source printer, retaining unrelated text. Generated
-rows refuse by name: edit their template or loop, or save a JSON target whose
-`basis` names the source. Rename a live duplicate before saving it to source.
+`world.row.set` replaces a whole field: a vector such as `scale` or `position`
+takes the full `[x, y, z]`, a rotation the full quaternion.
+`world.row.step creations.<id>.document.shapes[name=<shape>].<field> <delta>`
+steps a numeric scalar and refuses a vector. `world.row` reads the field back,
+so confirm each edit with it. Edits land at the tick boundary, one per row per
+tick. A `parent` carries only its animated delta, never its rest pose or
+scale, so rescaling a parent moves no child: edit the children's base poses
+too.
+
+`world.reload` recompiles the `.puck` from disk (basis chain included) and
+discards unsaved row edits; `world.save` writes the live edits back through
+the source printer, retaining unrelated text. A row generated by a template or
+a `for` can be edited live, but `world.save` refuses it by name: edit the
+template or loop, or save to a JSON target whose `basis` names the source.
 
 `world.screenshot` only **arms** a capture. Fence it with `world.wait` and
 confirm the `[capture] … -> <path>` line on **stderr** before reading the file.
 Read-backs land on stdout, refusals and capture confirmations on stderr, so
-capture both streams. Full verb surface, the offscreen recipe, and the
-sculpting library are in `references/loop.md`.
-
-Offline, `creation stats` (below, under Verifying) validates the whole world and checks the stamp budget, then emits text-free
-prototypes at unit placement scale to inspect static and pooled rest-pose clamps.
-It also constructs the whole world's deterministic contact field, including solid
-placements and screens, even with a prototype filter. Exit 1 can mean validation,
-render emission, or contact compilation failure; read the diagnostic.
-Text requires a resolved font atlas and reports clamp inspection unavailable.
-A successful check does not prove live motion, contact parity, or appearance.
+capture both streams. The verb surface, the offscreen recipe, and the sculpting
+library are in `references/loop.md`.
 
 ## Choosing geometry
 
@@ -130,67 +120,72 @@ from what you want the surface to *do*:
 | You want | Reach for | Notes |
 |---|---|---|
 | A softly swelling mass, squarish or round on demand | `Superellipsoid` + `exponent` 2..8 | 2 is an ellipsoid, 8 is nearly a box; the sleek middle is 2.5–4 |
-| A slab with a shaped outline | `Prism` + `profile` | rounded rect, chamfered rect, ellipse, regular polygon, or an arbitrary convex hull |
+| A slab with a shaped outline | `Prism` + `profile` | rounded rect, chamfered rect, ellipse, regular polygon, or a convex hull |
 | A tapering limb or fin | `Prism` + `taper` | 0 is a triangle, 1 is a rectangle |
-| A tube, cable, horn, braid, or lock of hair | `Sweep` + `curve` | quadratic Bézier, tapered radius, bulge, up to 4 helical strands |
+| A tube, cable, horn, braid, or lock of hair | `Sweep` + `curve` | quadratic Bézier, tapered radius, bulge, up to 4 helical strands; uniform scale only |
 | A part that swells or pinches along its length | `flare` | a scale profile along one axis with a mid-span bulge |
 | A leaning or S-curved mass | `shear` | polynomial offset of one axis driven by another |
 | A local dent or swelling | `bumps` | up to 4 gaussian pushes |
 | Softened edges | `rounding` (curved) or `chamfer` (45° bevel) | never both on one shape |
 | A hollow shell | `onion` | |
-| Repetition — ribs, teeth, plates, spokes | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
-| Cellular or faceted relief — scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
-| Erosion set by state when the program bakes | `erode` | frozen in the bake; never live — see "Binding to state" |
+| Repetition: ribs, teeth, plates, spokes, fins | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
+| Cellular or faceted relief: scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
+| A stripe, ring, panel outline or mouth line | a palette `paints` entry | colour drawn at the hit, never sculpted relief; see "Surface and look" |
 
 Exact scale conventions per primitive (a torus is not what you would guess), the
 facet-admission matrix, every ceiling, and every refusal message are in
 `references/shapes.md`. Check it before authoring a primitive you have not used
-here — `scale` means something different for a torus, a capsule, and a revolved
+here: `scale` means something different for a torus, a capsule, and a revolved
 prism.
+
+In `.puck` a fold is a call in the shape's `domain` array, such as
+`domain [ repeat(spacing: [0.1, 1, 1], limit: [2, 0, 0]) ]`, with per-axis
+vectors. A bounded repeat spans `-limit..+limit`, so a limit of n draws `2n+1`
+copies; an even count needs a composition such as a symmetry fold over an odd
+repeat ([composition](references/composition.md#domain-folds)).
 
 ## Composition, and the two scope rules that bite
 
 Blends run from `Union` through the smooth and chamfer families to the round
-seams — `GrooveUnion` carves a recessed seam along the intersection curve of two
+seams: `GrooveUnion` carves a recessed seam along the intersection curve of two
 solids, `PipeUnion` lays a bead along it, and both have subtraction twins. Reach
-for a groove when the desired seam follows that intersection; it can remove a
-separate cutter shape. It still forces the creation-wide scope.
+for a groove when the seam should follow that intersection; it removes a
+separate cutter shape, but it still forces the creation-wide scope. `Morph`,
+`StairsUnion` and `StairsSubtraction` exist in the blend enum but compose only
+at a field-scope pop; on a shape they validate and then fail at emission.
 
-Two rules decide whether facets are even available to you:
+Two rules decide whether facets are available at all:
 
 1. **Per-shape scope.** `dilate`, `onion`, `panel`, `flare`, `shear`, `bumps`,
    `erode`, and `cells` each make the shape request its own field scope. A
-   non-uniformly scaled sphere or ellipsoid does not: it bakes into the exact
-   1-Lipschitz exponent-2 superellipsoid gauge. When that depth is already occupied,
-   a warp's bound is shared at the enclosing group or creation pop; only an
-   unscoped chain taxes the program-wide step scale. A shared conservative
-   bound can make siblings march short; check clamps before diagnosing a soft
-   image from this symptom alone.
+   non-uniformly scaled sphere or ellipsoid does not: it bakes into the
+   1-Lipschitz exponent-2 superellipsoid gauge. A warped shape whose scope is
+   free clamps only itself at its own pop: `creation stats` shows
+   `scoped clamps 1 (0 shared)` and `globalStepScale 1`, and no other shape
+   marches shorter. Only when that depth is already occupied (the shape sits
+   in a group or creation scope) is its bound shared at the enclosing pop, and
+   only an unscoped chain taxes the program-wide step scale. So a warp does not
+   by itself soften a whole model: read the shared and global clamps
+   `creation stats` prints before naming the cause of a soft image.
 2. **The creation-wide scope.** If a creation has a `noise` facet, an engraved
    text run, **or any shape blend outside `Union` and `SmoothUnion`**, the whole
-   static creation emits inside one scope. The admission rule applies across
-   placement kinds: `panel`, `trims`, and `cells` are refused on **every**
-   shape in it. Pooled emission instead uses per-shape/group assembly; see
-   [composition](references/composition.md) before moving a CSG sculpt to a body.
+   static creation emits inside one scope, and `panel`, `trims`, and `cells`
+   are refused on **every** shape in it, whatever the placement kind.
 
-That second rule surprises people: one `Subtraction` anywhere costs you panels,
-trims, and cellular relief everywhere. Groove and pipe do too. Keep the
-creation all-union and use `panel`, use a trim where its own admission allows,
-or split prototypes. In an already scoped creation, explicit cutter shapes can
-replace panel shorthand; each costs shape budget, but no extra scope depth.
-Groove and pipe blends reach deterministic field contact; panels and trims do
-not. See [composition](references/composition.md) for shared-clamp diagnostics.
+The second rule surprises people: one `Subtraction` anywhere costs panels,
+trims, and cellular relief everywhere, and so does a groove or a pipe. Keep the
+creation all-union and use `panel`, or split prototypes. In an already scoped
+creation, explicit cutter shapes can replace panel shorthand; each costs shape
+budget but no extra scope depth. Groove and pipe blends reach deterministic
+field contact; panels and trims do not.
 
 In pooled emission, `group` collects interacting shapes into one instance and
 forwards their authored blends; ungrouped shapes use Union defaults. A group
 opens a shared scope when needed, and grouped shapes cannot carry panel, trims,
-or cells. Static emission ignores `group` entirely — it walks the list in order —
-so a group cannot be used to keep a subtraction off its siblings on a static
-placement.
-
-A text-bearing pooled creation keeps its shapes, groups and glyphs in one
-dynamic instance. Its outer field scope isolates engraving from other placements;
-the groups retain their own inner scopes. The VM admits two scope levels.
+or cells. Static emission ignores `group` and walks the list in order, so a
+group cannot keep a subtraction off its siblings on a static placement. The VM
+admits two scope levels. [composition](references/composition.md) has the
+formulas, folds, groups, panels, trims and shared-clamp diagnostics.
 
 ## The budget
 
@@ -198,27 +193,30 @@ the groups retain their own inner scopes. The VM admits two scope levels.
 
 - each shape counts 1, or **2** if it carries a `panel`
 - **+2 per trim**
-- **+ one per non-whitespace glyph** in every text run
+- **+1 per non-whitespace glyph** in every text run
 
-`puck creation stats` prints it as `shapes: N, stamp budget: M/367`. When you
-are over, reduce emitted shapes: fold repetition, remove panel/trim copies,
+`puck creation stats` prints `shapes: N, stamp budget: M/367`, and an
+over-budget document refuses at `compile --validate` with
+`<path> stamps <n> shapes, exceeding the 367-shape per-stamp budget.` To get
+under it, reduce emitted shapes: fold repetition, remove panel or trim copies,
 replace an appropriate cutter with a blend, or shorten text runs.
 `detail: true` saves contact work, **not stamp budget**; detail shapes are still
-charged, and the baked frame samples them like any other shape.
+charged, and the bake samples them like any other shape.
 
 ## Surface and look
 
-The palette carries far more than a color: `specular`, `roughness`, `metal`,
-`coat`, `sheen`, `emissive` (switched by a render lane with `emissiveLane`),
-plus `wrap` and `soften` for skin, `fill` for a
-warm interior fill, `weathering` for chips and scratches over a revealed
-substrate, and `inset` for a refracted layer beneath the surface — which is how
-an eye is authored, as color stops at radii rather than a dark sphere, and
-`paints` for surface detail that is colour rather than form — stripes, trims,
-panel outlines, a mouth line — drawn crisp at the pixel and never sculpted as a
-millimetre of relief the bake frays. Ranges,
-defaults, what each does visually, and the lighting and environment fields that
-make them read at all are in `references/surface.md`.
+The palette (up to 32 slots) carries far more than a colour: `specular`,
+`roughness`, `metal`, `coat`, `sheen`, `emissive` (switched by a render lane
+with `emissiveLane`), `wrap` and `soften` for skin, `fill` for a warm interior
+fill, `weathering` for chips and scratches over a revealed `under` substrate,
+`inset` for a refracted layer beneath the surface (how an eye is authored: a
+radial paint ramp of pupil, iris, limbus and sclera stops under a cornea, not a
+dark sphere), and `paints` for detail that is colour rather than form: stripes,
+trims, panel outlines, a mouth line. A paint is drawn crisp at the hit; relief
+finer than the bake's cell (5 mm refined, 15 mm on smooth parts) frays into
+jagged steps, so never sculpt a millimetre-proud stripe. Painted metal and
+clearcoat read only against something to reflect: the world's sky `panel`
+highlights. Ranges, defaults and examples are in `references/surface.md`.
 
 ## Binding to state
 
@@ -228,113 +226,97 @@ state. Only body registration supplies those lanes: an inhabited placement
 needs a look, kit, and body capacity. Static, animated, and attached placement
 registrations supply zero lanes. Use bare `hp` or `airPose[$body]` in a lane,
 and `bodyState($body, flightFuel)` for one of the body's own action-state slots;
-`state.hp` is driver/binding spelling and reads the wrong row here.
-Shapes and materials read a lane by index:
+`state.hp` is driver/binding spelling and reads the wrong row here. Shapes and
+materials read a lane by index:
 
-- `shapes[].erode` erodes a shape away over a lane range, with a ragged noise
-  front, and skips it entirely past the range
-- `palette[].weathering` scales its chips and scratches by a lane, with a
-  static floor for props
-- `palette[].emissiveLane` scales the slot's `emissive` by `saturate(lane)` —
-  the glow that switches on in flight mode
-- a volume's intensity can ride a lane — the jet that answers throttle
+| Consumer | Reads the lane |
+|---|---|
+| `shapes[].erode` | in the bake: erodes a shape away over a lane range with a ragged front, frozen at the value the bake read |
+| `palette[].weathering.lane` | at shading time, every frame: chips and scratches, with a static floor |
+| `palette[].emissiveLane` | at shading time, every frame: `emissive × saturate(lane)` |
+| `volumes[].intensityLane` | at shading time, every frame |
 
-Erosion is geometry, and every view draws baked meshes: the bake reads the
-lanes while a new program bakes (at boot, usually 0) and the mesh keeps that
-erosion until the program next changes. A lane change alone never rebakes, so
-**erode on a baked creation cannot show or hide a part live**, and a part that
-only appears as its lane rises bakes empty. Weathering, `emissiveLane` and
-volume intensity read the lane at shading time every frame; switch a look on and
-off with those. Static placements supply zero-valued lanes, so their erosion
-and lane-driven emission resolve at zero. See
-[surface](references/surface.md#render-lanes) and
-[composition](references/composition.md#the-three-scope-rules).
+Erosion is geometry, and every view draws baked meshes. A bake reads the lanes
+when a new program arrives (at boot, usually 0), and the mesh keeps that
+erosion until the program next changes; a lane change alone never rebakes. So
+**erode cannot show or hide a part live**, and a part that only appears as its
+lane rises bakes empty. Show live state with weathering, `emissiveLane` and
+volume intensity, or move a part away with rig motion driven by a state row.
+See [surface](references/surface.md#render-lanes).
 
 Author the meaning in the document's own cell names and the lane expression; the
 engine only ever sees a number. A reversed `from`/`to` range runs the fold
-backwards, which is how something bakes present only when its lane is high.
+backwards.
 
 ## Making it move
 
 `parent` is the skeleton: it names an **earlier** shape whose animated motion
-carries this one, which is why chains resolve in one pass and can never cycle.
-On top of that, `swings` rotate about a pivot and `slides` translate, both driven
-by a named `driver` reading a signal or a state row. Directional locomotion reads
-`travelDirection` and the planar accelerations, and a driver naming a world
-`dynamics` row trails and settles instead of tracking. A driver can ride an
-earlier driver's cycle (`driver.<name>`) and scale its cadence or weight by a
-world `curves` row of an earlier driver (`cadenceBy`, `weightBy`), which is how a
-stride lengthens with speed and a run's swings fade in over a walk's. `chains` plus `effectors`
-give CCD inverse kinematics with plant windows for feet, a `replant` latch that
-steps a resting foot rather than sliding it, and `align`, which keeps a planted
-sole flat on its contact. `frames` snapshot base poses. A
-behaviour the vocabulary cannot express is a new signal, member or op here,
-never a client special case. Details, caps, every refusal, and the moth's own
-driver map are in `references/rig.md`.
-
-A shape carrying `domain` folds may not also carry a swing or slide — a fold
-rides its parent's frame.
+carries this one, so chains resolve in one pass and can never cycle. On top of
+that, `swings` (up to 8) rotate about a pivot and `slides` (up to 4) translate,
+both driven by a named `driver` reading a signal or a state row (`state.hp`).
+Directional locomotion reads `travelDirection` and the planar accelerations,
+and a driver naming a world `dynamics` row trails and settles instead of
+tracking. A driver can ride an earlier driver's cycle (`driver.<name>`) and
+scale its cadence or weight by a world `curves` row (`cadenceBy`, `weightBy`).
+`chains` plus `effectors` give CCD inverse kinematics with plant windows for
+feet, a `replant` latch, and `align`. `frames` snapshot base poses. A behaviour
+the vocabulary cannot express is a new signal, member or op, never a client
+special case. A shape carrying `domain` folds may not also carry a swing or
+slide. Details, caps, every refusal, and the Moth's driver map are in
+`references/rig.md`.
 
 ## Render-only versus deterministic
 
 A solid placement requiring deterministic field contact refuses non-detail
-`Path` prism profiles. `Revolve` and domain folds that cannot
-expand are also refused where contact is owed. In contrast, `flare`, `shear`,
-`bumps`, `erode`, panels, trims, cells, sweeps, and creation noise may validate
-but are omitted from creation contact geometry (cells keep the base primitive).
-These authoring omissions are distinct from low-level VM interpreter support.
-See [shapes](references/shapes.md#contact-admission).
-
-Every view renders the residency's baked meshes, which the frame bakes from the
-program itself, so a shape contact omits still draws
-([the bake](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)).
+`Path` prism profiles (no fixed-point evaluator answers a Path), `Revolve`, and
+domain folds that cannot expand. `flare`, `shear`, `bumps`, `erode`, panels,
+trims, cells, sweeps, and creation noise validate but are omitted from contact
+geometry (cells keep the base primitive). For an arched or otherwise convex
+outline that must collide, a clockwise `Convex` profile (at most 32 vertices)
+or a union of admitted primitives keeps the shape. See
+[shapes](references/shapes.md#contact-admission). Every view still renders a
+shape contact omits.
 
 ## Verifying
 
 Source first, then structure, then pixels:
 
-```bash
-puck compile <file>.puck --output <file>.world.json --validate   # .puck only
-dotnet run --project src/Puck.Cli -- creation stats --world <file>.world.json --prototype <id>
-```
+1. `puck compile <file>.puck --validate` catches structure, budget and scope
+   refusals.
+2. `puck creation stats --world <file>.puck --prototype <id>` validates the
+   whole world, emits text-free prototypes at unit scale to report static and
+   pooled rest-pose clamps, and builds the world's deterministic contact field,
+   solid placements included, even with a prototype filter. Exit 1 means
+   validation, emission, or contact failed; read the diagnostic. A pass does not
+   prove live motion or appearance.
+3. `puck creation shape --world <file> --prototype <id> [--shape <name>]` (live:
+   `creation.shape`) says whether each shape's distance is exact, a bound or
+   uncertified, whether the fixed-point evaluator takes it, and what contact
+   makes of it. `world.slice <placement> <x|y|z> <path.png>` draws the field's
+   distance bands live.
+4. Run the game and look: a claim about how something reads is not verified
+   until you have looked at a capture (`references/loop.md`).
+5. Audit what the boot baked:
+   `puck mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>`
+   names the shapes at each group's worst clusters, in the author frame.
+   Frayed edges show as face normals off the gradient; a cutter whose field is
+   only a lower bound (a stretched ellipsoid, a non-uniform scale) shows as a
+   loose field; give that cutter an exact primitive instead. The
+   [rendering skill](../rendering/SKILL.md#auditing-a-bake) owns how the audit
+   reads a store.
 
-A hand-authored JSON document starts at `creation stats` directly.
+Run every `puck` verb from your lane's private copy of the head's CLI
+(`verification`).
 
-Whether one shape's distance is exact, a bound, or uncertified, whether
-the fixed-point evaluator takes it and what contact makes of it: `creation
-shape --world <file> --prototype <id> [--shape <name>]`, or `creation.shape
-<prototype> [<shape-name>]` live. `world.slice <placement> <x|y|z> <path.png>`
-writes the field's distance bands and `|grad d|` through the running World
-([loop](references/loop.md)).
+## References and routing
 
-Then run the game and look — a claim about how something reads is not verified
-until you have looked at a capture. The offscreen and windowed recipes, with the
-stream and fencing rules that keep them honest, are in `references/loop.md`.
-
-The boot that renders the capture also bakes the meshes it draws; before calling a
-visual change done, audit what it baked:
-
-```bash
-dotnet <your-cli-copy>/Puck.Cli.dll mesh audit --world <file>.puck --prototype <id> --group <shape> --images <dir>
-```
-
-The audit reads the boot's stored meshes, measures each group against its own
-field, and names the shapes at its worst clusters, with each cluster's position
-in the creation's author frame. Frayed or sawtoothed edges read as face normals
-off the gradient and folds along an edge; a dropped wall as uncovered crossings;
-a cutter whose field is only a lower bound (a stretched ellipsoid, a non-uniform
-scale) as a loose field the audit attributes to that cutter: give the cutter an
-exact primitive (a prism profile, an unscaled sphere) instead. Compare the
-report before and after the edit; the [rendering skill](../rendering/SKILL.md#auditing-a-bake)
-owns how the audit reads a store.
-
-## References
-
-| File | Read it for |
+| Where | Read it for |
 |---|---|
-| `references/shapes.md` | Every primitive's scale convention, profiles and lifts, which facets each admits, every ceiling and refusal message |
+| `references/shapes.md` | Every primitive's scale convention, profiles and lifts, which facets each admits, every ceiling and refusal message, contact admission |
 | `references/composition.md` | Blends with formulas, domain folds, groups, scopes, trims, panels, the budget arithmetic |
-| `references/surface.md` | Palette fields, weathering, inset, paints, render lanes, lighting, environment, tonemap, volumes |
+| `references/surface.md` | Palette fields, weathering, inset, paints, render lanes, volumes, the render fields a look depends on |
 | `references/rig.md` | parent/joint/swings/slides, frames, chains, drivers, effectors, parts, cameras, text runs |
-| `references/loop.md` | The `.puck` compile/lint/decompile loop, console verbs, capture recipes, `puck creation` verbs, the sculpting library for C# authoring |
-| [`puck-dsl` skill](../puck-dsl/SKILL.md) | `.puck` grammar (`let`/`template`/`for`, the one-spelling rule), the CLI verbs' flags, and PUCKnnn diagnostics not specific to a shape/creation field |
+| `references/loop.md` | Console verbs, capture recipes, the offline `puck creation` verbs, the sculpting library for C# authoring |
+| `puck-dsl` | `.puck` grammar (`let`/`template`/`for`, the one-spelling rule), CLI flags, PUCKnnn diagnostics not specific to a creation field |
+| `puck-world` | World sections around a creation (`looks`, `placements`, `render`, `state`), console semantics, booting `--world` |
+| `rendering` | The SDF VM, ISA, kernels, shaders, the bake's internals, GPU cost and captures |

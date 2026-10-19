@@ -48,7 +48,20 @@ ground plane, and its instance can never be culled by a sphere.
 
 `shapes[].domain` is up to four folds applied in creation space, after the
 creation and placement frame and **before** the shape's own transform. A fold is
-one shape drawn many times, not many shapes.
+one shape drawn many times, not many shapes. In `.puck` each fold is a call in
+the `domain` array, applied in order:
+
+```puck
+domain [
+  symmetry(normal: [1, 0, 0])
+  repeat(spacing: [0.1, 1, 1], limit: [2, 0, 0], origin: [-0.15, 0, 0])
+]
+```
+
+`spacing`, `limit` and `origin` are per-axis vectors; a limit of 0 on an axis
+leaves that axis unrepeated. `polar(count: 6, axis: Y)` and
+`wallpaper(cell: [1, 1], group: P4M, materialStride: 1)` take the same call
+form.
 
 | `$type` | Fields | Contact geometry |
 |---|---|---|
@@ -140,8 +153,8 @@ creation's text and geometry together without flattening its independent groups.
 
 **1. A shape takes its own scope** when it carries any of `dilate`, `onion`,
 `panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
-ellipsoid never does: every ellipsoid is the exact 1-Lipschitz exponent-2
-superellipsoid gauge, whatever its scale. The scope clamps that shape's Lipschitz factor onto
+ellipsoid never does: every ellipsoid is the 1-Lipschitz exponent-2
+superellipsoid gauge, whatever its scale, a bound that never oversteps. The scope clamps that shape's Lipschitz factor onto
 its own candidate at the pop. If that shape is already inside a group or
 creation scope, the enclosing pop owns the bound and its other members share
 the clamp. Only an unscoped chain contributes to the program-wide step scale.

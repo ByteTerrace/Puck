@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response's primitive histogram shows a Sweep primitive with a curve.
+The response's edited source adds a shape of type Sweep that carries a curve block.

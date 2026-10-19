@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response uses a whole-array row.set for vector scale or position and a four-component rotation, and does not suggest row.step on a vector.
+The response sets a vector field such as scale with world.row.set and a whole [x, y, z] array, and does not suggest world.row.step for a vector.

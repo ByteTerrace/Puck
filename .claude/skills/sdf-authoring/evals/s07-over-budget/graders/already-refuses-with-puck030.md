@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says the starting fixtures/over-budget.puck already refuses at puck compile --validate with PUCK030, naming the overage of 369 against 367 shapes.
+The response says this refusal is a document validation check that puck compile --validate reports itself (as PUCK030), before any boot.
