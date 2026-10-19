@@ -701,51 +701,74 @@ public sealed partial class WorldStampPool {
         var registration = new Registration {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
-            Look = stamp.Look,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
             Scale = stamp.Scale,
             FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
-            Cues = stamp.Look.Motion.Cues,
-            Replay = stamp.Look.Motion.ReplayFrames,
-            Lanes = stamp.Look.Motion.Lanes,
         };
 
-        if (stamp.Look.Motion.Poses is { Count: > 0 } poses) {
-            var frames = (stamp.Creation.Document.Frames ?? []);
+        LatchLook(
+            live: registration,
+            stamp: stamp
+        );
 
+        return registration;
+    }
+    // Latches what a body-rooted registration reads from its look: the lanes, the replay switch, the poses' frames and
+    // references, and the cues. Called on registration and again on every same-content update, so a live look edit (a
+    // retuned lane, a new pose) applies on the next frame; the cue clocks restart only when the cues themselves change.
+    private static void LatchLook(Registration live, BodyStamp stamp) {
+        var motion = stamp.Look.Motion;
+        var frames = (stamp.Creation.Document.Frames ?? []);
+
+        live.Look = stamp.Look;
+        live.Replay = motion.ReplayFrames;
+        live.Lanes = motion.Lanes;
+
+        if (motion.Poses is { Count: > 0 } poses) {
             ResolvePoses(
                 frames: frames,
                 poses: poses,
-                references: out registration.PoseReferences,
-                timelineFrames: out registration.PoseFrames
+                references: out live.PoseReferences,
+                timelineFrames: out live.PoseFrames
+            );
+        } else {
+            live.PoseReferences = [];
+            live.PoseFrames = [];
+        }
+
+        if (
+            (live.CueFrames.Length > 0) &&
+            ReferenceEquals(
+            objA: live.Cues,
+            objB: motion.Cues
+        )
+        ) {
+            return;
+        }
+
+        live.Cues = motion.Cues;
+
+        var cues = (motion.Cues ?? []);
+
+        live.CueFrames = new int[cues.Count];
+        live.CueNextSeconds = new float[cues.Count];
+        live.CueFires = new uint[cues.Count];
+
+        for (var index = 0; (index < cues.Count); index++) {
+            for (var frame = 0; (frame < frames.Count); frame++) {
+                if (string.Equals(a: frames[frame]?.Name, b: cues[index].Frame, comparisonType: StringComparison.Ordinal)) {
+                    live.CueFrames[index] = (frame + 1);
+
+                    break;
+                }
+            }
+
+            live.CueNextSeconds[index] = CueRest(
+                cue: cues[index],
+                fires: 0,
+                seed: ((uint)stamp.BodyIndex)
             );
         }
-
-        if (stamp.Look.Motion.Cues is { Count: > 0 } cues) {
-            var frames = (stamp.Creation.Document.Frames ?? []);
-
-            registration.CueFrames = new int[cues.Count];
-            registration.CueNextSeconds = new float[cues.Count];
-            registration.CueFires = new uint[cues.Count];
-
-            for (var index = 0; (index < cues.Count); index++) {
-                for (var frame = 0; (frame < frames.Count); frame++) {
-                    if (string.Equals(a: frames[frame]?.Name, b: cues[index].Frame, comparisonType: StringComparison.Ordinal)) {
-                        registration.CueFrames[index] = (frame + 1);
-
-                        break;
-                    }
-                }
-
-                registration.CueNextSeconds[index] = CueRest(
-                    cue: cues[index],
-                    fires: 0,
-                    seed: ((uint)stamp.BodyIndex)
-                );
-            }
-        }
-
-        return registration;
     }
     // Resolves a body-rooted registration's follower response state from its look's Motion against the definition's
     // declared dynamics rows: HasRootDynamics/RootResponse from Motion.Dynamics, and PartFollows/PartResponse from
@@ -1184,8 +1207,11 @@ public sealed partial class WorldStampPool {
                     },
                     update: (entry, stamp) => {
                         entry.Creation = stamp.Creation;
-                        entry.Look = stamp.Look;
                         entry.Scale = stamp.Scale;
+                        LatchLook(
+                            live: entry,
+                            stamp: stamp
+                        );
                         ApplyMotion(
                             live: entry,
                             motion: stamp.Look.Motion,
