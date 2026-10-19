@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response selects a rate-accumulator primitive for the per-tick advance.
+FixedVector3RateAccumulator
