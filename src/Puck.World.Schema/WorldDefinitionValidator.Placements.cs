@@ -1726,6 +1726,7 @@ public static partial class WorldDefinitionValidator {
 
                             if (!ShapeDomainOps.TryExpand(
                                 domain: solidShape.Domain,
+                                subject: solidShape.Position,
                                 frames: out var solidFrames,
                                 refusal: out var solidRefusal
                             )) {
