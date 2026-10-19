@@ -32,23 +32,44 @@ public sealed record WorldPrototype(
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null
 ) {
+    // Both caches derive from Document alone. A `with` copies them, so Document's init clears them; a `with` that
+    // keeps Document keeps caches that still hold.
     private CreationDocument? m_engineDocument;
+    private string? m_canonicalHash;
 
+    /// <summary>Gets the canonical (validated + normalized) creation document, the author's own bytes.</summary>
+    public CreationDocument Document {
+        get;
+        init {
+            field = value;
+            m_engineDocument = null;
+            m_canonicalHash = null;
+        }
+    } = Document;
     /// <summary>Gets <see cref="Document"/> converted once from the author frame to the engine frame
     /// (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
     /// reads this, never <see cref="Document"/>, which stays the author's own bytes (what <see cref="Hash"/> pins).
     /// Cached on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
     public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: Document));
-    /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes — <see cref="HashRaw"/> when
-    /// authored, else computed fresh through the same pipeline the validator re-verifies every hash against
-    /// (<see cref="Puck.World.Authoring.CreationCanonicalizer"/>), so an absent hash is trivially self-consistent
-    /// with no validator special case.</summary>
+    /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes, computed through
+    /// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> on first read and cached on this instance: the hash
+    /// is a function of <see cref="Document"/> alone, so an edit, which builds a new row or document, reads a fresh
+    /// one. The validator compares <see cref="HashRaw"/> against it.</summary>
+    /// <exception cref="Puck.Assets.Documents.DocumentValidationException"><see cref="Document"/> fails the
+    /// canonicalizer's validation.</exception>
     [JsonIgnore]
-    public string Hash => (HashRaw ?? Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
+    public string CanonicalHash => (m_canonicalHash ??= Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
         document: Document,
         source: Id
     ).Hash);
+    /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes — <see cref="HashRaw"/> when
+    /// authored, else <see cref="CanonicalHash"/>, so an absent hash is trivially self-consistent with no validator
+    /// special case.</summary>
+    /// <exception cref="Puck.Assets.Documents.DocumentValidationException"><see cref="HashRaw"/> is absent and
+    /// <see cref="Document"/> fails the canonicalizer's validation.</exception>
+    [JsonIgnore]
+    public string Hash => (HashRaw ?? CanonicalHash);
 }
 /// <summary>A prototype's mesh: an indexed triangle list in its creation's author frame, the frame
 /// <see cref="WorldPrototype.Document"/>'s shapes are authored in. Each triangle is three entries of

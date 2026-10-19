@@ -688,19 +688,16 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            // The hash pin: recompute through the ONE pipeline and compare — the only accepted hash is the one the
-            // pipeline itself computes over this document's canonical bytes.
-            var canonical = Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
-                document: creation.Document,
-                source: creation.Id
-            );
+            // The hash pin: the only accepted hash is the one the pipeline itself computes over this document's
+            // canonical bytes, which the row computes once and caches.
+            var canonicalHash = creation.CanonicalHash;
 
             if (!string.Equals(
                 a: creation.Hash,
-                b: canonical.Hash,
+                b: canonicalHash,
                 comparisonType: StringComparison.Ordinal
             )) {
-                errors.Add(item: $"{path}.hash '{creation.Hash}' does not match the canonical sha256 '{canonical.Hash}'.");
+                errors.Add(item: $"{path}.hash '{creation.Hash}' does not match the canonical sha256 '{canonicalHash}'.");
             }
 
             // A palette entry bound to state resolves against THIS world; the canonicalizer admits only the syntax.
