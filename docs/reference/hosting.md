@@ -209,7 +209,11 @@ previous frame's GPU work and each stage, not their sum, must fit a refresh:
 Direct3D 12 waits on the swap chain's frame-latency waitable object at a
 maximum frame latency of two, and Vulkan waits through `VK_KHR_present_wait`
 on a FIFO swapchain until the present before the last is visible. Neither
-spins.
+spins. Vulkan's wait gives a present at most 50 ms; after four presents in a
+row miss that bound (an occluded or remoted window, a capture layer) it only
+polls and the timer paces, until a poll sees a present displayed. The wait
+takes the swapchain under external synchronization, so it stays on the
+presenting thread and every call has a bound.
 
 The rate follows the display. Automatic pacing (`host.targetHertz: 0`)
 presents on every refresh of whatever signal the display runs, and a signal
