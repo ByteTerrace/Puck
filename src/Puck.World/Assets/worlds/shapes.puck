@@ -1,0 +1,779 @@
+// The shape gallery: every authored primitive, profile, lift and per-shape facet, one prototype an exhibit, each held
+// 1.2 m over a labelled plinth so it reads from every side, underside included. The debug world expands
+// `galleryPrototypes()` inside its `prototypes` block and `galleryPlacements()` inside its `placements` block; the rows
+// stand on the open ground at +X/+Z, every exhibit 3 m from the next, its label facing -Z, toward the origin:
+//
+//   z 14  each primitive at a uniform scale
+//   z 19  each primitive stretched unevenly, where an exact distance is hardest to keep
+//   z 24  each prism profile, extruded
+//   z 29  each prism profile, revolved
+//   z 34  sweeps, the per-shape facets and a domain fold
+//
+// `debug.md` lists the operator camera line that frames each exhibit.
+
+let galleryX = 14
+let gallerySpacing = 3
+
+let uniformRow = ["shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone", "shape-cone", "shape-superellipsoid", "shape-plane"]
+let stretchedRow = ["shape-sphere-xyz", "shape-box-xyz", "shape-torus-xz", "shape-torus-y", "shape-cylinder-xz", "shape-capsule-xz", "shape-ellipsoid-xyz", "shape-round-cone-xyz", "shape-cone-xz", "shape-superellipsoid-xyz"]
+let extrudeRow = ["shape-trapezoid", "shape-rounded-rectangle", "shape-polygon-6", "shape-polygon-12", "shape-polygon-12-xy", "shape-ellipse", "shape-chamfered-rectangle", "shape-convex", "shape-path-fill", "shape-path-stroke"]
+let revolveRow = ["shape-revolve-trapezoid", "shape-revolve-rounded-rectangle", "shape-revolve-polygon-6", "shape-revolve-ellipse", "shape-revolve-chamfered-rectangle", "shape-revolve-convex"]
+let facetRow = ["shape-sweep", "shape-sweep-tapered", "shape-sweep-strands", "shape-rounding", "shape-chamfer", "shape-onion", "shape-dilate", "shape-flare", "shape-shear", "shape-bumps", "shape-cells-f1", "shape-cells-f2", "shape-polar-fold"]
+
+let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
+
+// Slot 0 the exhibit, slot 1 the plinth, slot 2 the label.
+let exhibitMaterial = 0
+
+// The palette, the plinth beneath the exhibit and the plinth's label. Expanded after the exhibit's own shapes, so an
+// exhibit's subtraction or intersection never reaches the plinth.
+template exhibit(label) {
+  name: label
+  schema: "puck.creation.v1"
+  palette [
+    {
+      color: "#B9C4D0"
+      roughness: 0.45
+      specular: 0.3
+    }
+    {
+      color: "#3A3F47"
+      roughness: 0.85
+    }
+    {
+      color: "#F2EEE4"
+      roughness: 0.6
+    }
+  ]
+  shape Box "plinth" {
+    material: 1
+    position [0, 0.15, 0]
+    scale [0.6, 0.15, 0.25]
+  }
+  textRuns [
+    {
+      text: label
+      position [0, 0.15, 0.25]
+      rotation [0, 0, 0, 1]
+      emHeight: 0.1
+      depth: 0.006
+      mode: "emboss"
+      material: 2
+      align: "center"
+    }
+  ]
+}
+
+template galleryRow(names, z) {
+  for (name, index) in names {
+    placement $"{name}" {
+      prototype: name
+      position [(galleryX + (gallerySpacing * index)), 0, z]
+    }
+  }
+}
+
+template galleryPlacements() {
+  galleryRow(names: uniformRow, z: 14)
+  galleryRow(names: stretchedRow, z: 19)
+  galleryRow(names: extrudeRow, z: 24)
+  galleryRow(names: revolveRow, z: 29)
+  galleryRow(names: facetRow, z: 34)
+}
+
+template galleryPrototypes() {
+  // Each primitive at a uniform scale.
+  prototype "shape-sphere" {
+    document {
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "SPHERE")
+    }
+  }
+  prototype "shape-box" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.45, 0.45, 0.45]
+      }
+      exhibit(label: "BOX")
+    }
+  }
+  prototype "shape-torus" {
+    document {
+      shape Torus "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rotation [0.5, 0, 0, 0.866025]
+        scale [0.6, 0.6, 0.6]
+      }
+      exhibit(label: "TORUS")
+    }
+  }
+  prototype "shape-cylinder" {
+    document {
+      shape Cylinder "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.4, 0.5, 0.4]
+      }
+      exhibit(label: "CYLINDER")
+    }
+  }
+  prototype "shape-capsule" {
+    document {
+      shape Capsule "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.3, 0.4, 0.3]
+      }
+      exhibit(label: "CAPSULE")
+    }
+  }
+  prototype "shape-ellipsoid" {
+    document {
+      shape Ellipsoid "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "ELLIPSOID")
+    }
+  }
+  prototype "shape-round-cone" {
+    document {
+      shape RoundCone "subject" {
+        material: exhibitMaterial
+        position [0, 0.95, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+      exhibit(label: "ROUND CONE")
+    }
+  }
+  prototype "shape-cone" {
+    document {
+      shape Cone "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.45, 0.5, 0.45]
+      }
+      exhibit(label: "CONE")
+    }
+  }
+  prototype "shape-superellipsoid" {
+    document {
+      shape Superellipsoid "subject" {
+        exponent: 4
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.45, 0.45, 0.45]
+      }
+      exhibit(label: "SUPERELLIPSOID")
+    }
+  }
+  prototype "shape-plane" {
+    document {
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Plane "cut" {
+        blend: Intersection
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rotation [0.258819, 0, 0, 0.965926]
+      }
+      exhibit(label: "PLANE CUT")
+    }
+  }
+
+  // Each primitive stretched unevenly.
+  prototype "shape-sphere-xyz" {
+    document {
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.6, 0.4, 0.25]
+      }
+      exhibit(label: "SPHERE XYZ")
+    }
+  }
+  prototype "shape-box-xyz" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.6, 0.25, 0.15]
+      }
+      exhibit(label: "BOX XYZ")
+    }
+  }
+  prototype "shape-torus-xz" {
+    document {
+      shape Torus "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rotation [0.5, 0, 0, 0.866025]
+        scale [0.7, 0.5, 0.4]
+      }
+      exhibit(label: "TORUS XZ")
+    }
+  }
+  prototype "shape-torus-y" {
+    document {
+      shape Torus "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rotation [0.5, 0, 0, 0.866025]
+        scale [0.5, 0.9, 0.5]
+      }
+      exhibit(label: "TORUS Y")
+    }
+  }
+  prototype "shape-cylinder-xz" {
+    document {
+      shape Cylinder "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.4, 0.25]
+      }
+      exhibit(label: "CYLINDER XZ")
+    }
+  }
+  prototype "shape-capsule-xz" {
+    document {
+      shape Capsule "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.4, 0.3, 0.2]
+      }
+      exhibit(label: "CAPSULE XZ")
+    }
+  }
+  prototype "shape-ellipsoid-xyz" {
+    document {
+      shape Ellipsoid "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.6, 0.35, 0.22]
+      }
+      exhibit(label: "ELLIPSOID XYZ")
+    }
+  }
+  prototype "shape-round-cone-xyz" {
+    document {
+      shape RoundCone "subject" {
+        material: exhibitMaterial
+        position [0, 0.95, 0]
+        scale [0.55, 0.4, 0.3]
+      }
+      exhibit(label: "ROUND CONE XYZ")
+    }
+  }
+  prototype "shape-cone-xz" {
+    document {
+      shape Cone "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.25]
+      }
+      exhibit(label: "CONE XZ")
+    }
+  }
+  prototype "shape-superellipsoid-xyz" {
+    document {
+      shape Superellipsoid "subject" {
+        exponent: 3
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.6, 0.3, 0.4]
+      }
+      exhibit(label: "SUPER XYZ")
+    }
+  }
+
+  // Each prism profile, extruded along local Z.
+  prototype "shape-trapezoid" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.45, 0.2]
+        taper: 0.5
+      }
+      exhibit(label: "TRAPEZOID")
+    }
+  }
+  prototype "shape-rounded-rectangle" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.4
+        }
+        scale [0.5, 0.4, 0.2]
+      }
+      exhibit(label: "ROUNDED RECT")
+    }
+  }
+  prototype "shape-polygon-6" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Polygon"
+          sides: 6
+        }
+        scale [0.5, 0.5, 0.2]
+      }
+      exhibit(label: "POLYGON 6")
+    }
+  }
+  prototype "shape-polygon-12" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Polygon"
+          sides: 12
+        }
+        scale [0.5, 0.5, 0.2]
+      }
+      exhibit(label: "POLYGON 12")
+    }
+  }
+  prototype "shape-polygon-12-xy" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Polygon"
+          sides: 12
+        }
+        scale [0.6, 0.35, 0.2]
+      }
+      exhibit(label: "POLYGON 12 XY")
+    }
+  }
+  prototype "shape-ellipse" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Ellipse"
+        }
+        scale [0.6, 0.35, 0.2]
+      }
+      exhibit(label: "ELLIPSE")
+    }
+  }
+  prototype "shape-chamfered-rectangle" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.3
+        }
+        scale [0.5, 0.4, 0.2]
+      }
+      exhibit(label: "CHAMFER RECT")
+    }
+  }
+  prototype "shape-convex" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Convex"
+          vertices: galleryPentagon
+          cornerRadius: 0.05
+        }
+        scale [0.5, 0.5, 0.2]
+      }
+      exhibit(label: "CONVEX")
+    }
+  }
+  prototype "shape-path-fill" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            contours [
+              {
+                start [0, -0.55]
+                segments [
+                  {
+                    end [0.5, -0.05]
+                  }
+                  {
+                    end [0, 0.45]
+                    arcCenter [0.25, 0.2]
+                  }
+                  {
+                    end [-0.5, -0.05]
+                    arcCenter [-0.25, 0.2]
+                  }
+                  {
+                    end [0, -0.55]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        scale [0.8, 0.8, 0.1]
+      }
+      exhibit(label: "PATH FILL")
+    }
+  }
+  prototype "shape-path-stroke" {
+    document {
+      shape Prism "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Path"
+          cornerRadius: 0
+          path {
+            tolerance: 0.001
+            stroke {
+              radiusStart: 0.08
+              radiusEnd: 0.025
+              smooth: true
+              from: 0
+              to: 1
+            }
+            contours [
+              {
+                start [-0.5, 0]
+                segments [
+                  {
+                    control [0, -0.8]
+                    end [0.5, 0]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        scale [0.8, 0.8, 0.08]
+      }
+      exhibit(label: "PATH STROKE")
+    }
+  }
+
+  // Each prism profile, revolved about local Y; scale z is the radial offset of the profile from the axis.
+  prototype "shape-revolve-trapezoid" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.2, 0.3, 0.3]
+        taper: 0.5
+      }
+      exhibit(label: "REV TRAPEZOID")
+    }
+  }
+  prototype "shape-revolve-rounded-rectangle" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "RoundedRectangle"
+          cornerRadius: 0.5
+        }
+        scale [0.2, 0.3, 0.3]
+      }
+      exhibit(label: "REV ROUND RECT")
+    }
+  }
+  prototype "shape-revolve-polygon-6" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Polygon"
+          sides: 6
+        }
+        scale [0.2, 0.2, 0.3]
+      }
+      exhibit(label: "REV POLYGON 6")
+    }
+  }
+  prototype "shape-revolve-ellipse" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Ellipse"
+        }
+        scale [0.15, 0.3, 0.3]
+      }
+      exhibit(label: "REV ELLIPSE")
+    }
+  }
+  prototype "shape-revolve-chamfered-rectangle" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "ChamferedRectangle"
+          cornerRadius: 0.3
+        }
+        scale [0.2, 0.3, 0.3]
+      }
+      exhibit(label: "REV CHAMFER")
+    }
+  }
+  prototype "shape-revolve-convex" {
+    document {
+      shape Prism "subject" {
+        lift: "Revolve"
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        profile {
+          kind: "Convex"
+          vertices: galleryPentagon
+          cornerRadius: 0.05
+        }
+        scale [0.2, 0.2, 0.3]
+      }
+      exhibit(label: "REV CONVEX")
+    }
+  }
+
+  // Sweeps, the per-shape facets and a domain fold.
+  prototype "shape-sweep" {
+    document {
+      shape Sweep "subject" {
+        material: exhibitMaterial
+        position [0, 0.8, 0]
+        curve {
+          a [-0.4, 0, 0]
+          b [0, 1.0, 0.2]
+          c [0.4, 0, 0]
+          radiusStart: 0.08
+          radiusEnd: 0.08
+        }
+      }
+      exhibit(label: "SWEEP")
+    }
+  }
+  prototype "shape-sweep-tapered" {
+    document {
+      shape Sweep "subject" {
+        material: exhibitMaterial
+        position [0, 0.8, 0]
+        curve {
+          a [-0.4, 0, 0]
+          b [0, 1.0, 0.2]
+          c [0.4, 0, 0]
+          radiusStart: 0.14
+          radiusEnd: 0.04
+          bulge: 0.06
+        }
+      }
+      exhibit(label: "SWEEP TAPER")
+    }
+  }
+  prototype "shape-sweep-strands" {
+    document {
+      shape Sweep "subject" {
+        material: exhibitMaterial
+        position [0, 0.7, 0]
+        curve {
+          a [0, 0, 0]
+          b [0, 0.5, 0]
+          c [0, 1.0, 0]
+          radiusStart: 0.04
+          radiusEnd: 0.04
+          strands: 3
+          strandOffset: 0.08
+          twist: 1.5
+        }
+      }
+      exhibit(label: "SWEEP STRANDS")
+    }
+  }
+  prototype "shape-rounding" {
+    document {
+      shape Cylinder "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        rounding: 0.12
+        scale [0.4, 0.4, 0.4]
+      }
+      exhibit(label: "ROUNDING")
+    }
+  }
+  prototype "shape-chamfer" {
+    document {
+      shape Box "subject" {
+        chamfer: 0.1
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+      exhibit(label: "CHAMFER")
+    }
+  }
+  prototype "shape-onion" {
+    document {
+      shape Sphere "subject" {
+        material: exhibitMaterial
+        onion: 0.04
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Box "window" {
+        blend: Subtraction
+        material: exhibitMaterial
+        position [0, 1.45, 0.35]
+        scale [0.35, 0.3, 0.35]
+      }
+      exhibit(label: "ONION")
+    }
+  }
+  prototype "shape-dilate" {
+    document {
+      shape Box "subject" {
+        dilate: 0.1
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.3, 0.3, 0.3]
+      }
+      exhibit(label: "DILATE")
+    }
+  }
+  prototype "shape-flare" {
+    document {
+      shape Cylinder "subject" {
+        flare {
+          amount: 0.8
+          bulge: 0.2
+          span: 1
+          top: 0.5
+          axis: 1
+          startScale: 1
+        }
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.25, 0.5, 0.25]
+      }
+      exhibit(label: "FLARE")
+    }
+  }
+  prototype "shape-shear" {
+    document {
+      shape Box "subject" {
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.2, 0.5, 0.2]
+        shear {
+          linear: 0.3
+          quadratic: 0.6
+          target: 0
+          driver: 1
+        }
+      }
+      exhibit(label: "SHEAR")
+    }
+  }
+  prototype "shape-bumps" {
+    document {
+      shape Sphere "subject" {
+        bumps [
+          {
+            center [0.35, 0.2, 0.3]
+            radii [0.15, 0.15, 0.15]
+            push [0.08, 0.05, 0.07]
+          }
+          {
+            center [-0.3, -0.1, 0.35]
+            radii [0.2, 0.1, 0.1]
+            push [0.05, 0.02, -0.06]
+          }
+        ]
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "BUMPS")
+    }
+  }
+  prototype "shape-cells-f1" {
+    document {
+      shape Sphere "subject" {
+        cells {
+          amplitude: 0.28
+          frequency: 4
+          mode: "F1"
+          randomness: 0.46
+          seed: 3751
+        }
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "CELLS F1")
+    }
+  }
+  prototype "shape-cells-f2" {
+    document {
+      shape Sphere "subject" {
+        cells {
+          amplitude: 0.2
+          frequency: 4
+          mode: "F2MinusF1"
+          randomness: 0.2
+          seed: 3751
+        }
+        material: exhibitMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      exhibit(label: "CELLS F2 F1")
+    }
+  }
+  prototype "shape-polar-fold" {
+    document {
+      shape Box "subject" {
+        domain [
+          polar(count: 6, axis: Y)
+        ]
+        material: exhibitMaterial
+        position [0, 1.2, 0.35]
+        scale [0.1, 0.3, 0.06]
+      }
+      exhibit(label: "POLAR FOLD")
+    }
+  }
+}

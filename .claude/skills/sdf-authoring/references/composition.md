@@ -82,6 +82,12 @@ composition, such as two disjoint odd repeats, an odd repeat plus one endpoint,
 or symmetry over a correctly positioned half-pattern. Preserve positions as
 well as the count.
 
+A polar fold centres its first sector on the folded shape's own position
+about the axis (`SdfDomainOp.Polar.Subject`), so a shape authored at any angle
+draws one copy per sector, as contact expands it; content wider than a sector
+is still cut at the sector walls. A mirrored polar fold reflects across the
+plane through the axis and the shape.
+
 Cell centres lie at multiples of spacing from `origin`; a primitive displaced
 half a cell from that lattice can be sliced. Centre the fold on the primitive
 in the fold's coordinate frame and leave enough cell width for its extent.

@@ -128,7 +128,7 @@ public static class ShapeDomainOps {
 
         return probe;
     }
-    private static SdfDomainOp Map(ShapeDomainOp op) {
+    private static SdfDomainOp Map(ShapeDomainOp op, Vector3 subject) {
         return op switch {
             ShapeDomainOp.Symmetry symmetry => new SdfDomainOp.Symmetry(
             Normal: symmetry.Normal,
@@ -144,7 +144,8 @@ public static class ShapeDomainOps {
             Count: polar.Count,
             MaterialStride: (polar.MaterialStride ?? 0),
             Mirror: (polar.Mirror ?? false),
-            Origin: (polar.Origin?.Value ?? Vector3.Zero)
+            Origin: (polar.Origin?.Value ?? Vector3.Zero),
+            Subject: subject
         ),
             ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
             Cell: wallpaper.Cell,
@@ -164,9 +165,11 @@ public static class ShapeDomainOps {
     /// <summary>Applies every op in <paramref name="domain"/>, in authored order, as point folds.</summary>
     /// <param name="chain">The builder chain, already advanced past the creation/placement frame prefix.</param>
     /// <param name="domain">The shape's domain ops, or null/empty for no-op.</param>
+    /// <param name="subject">The shape's own position, in the frame the folds act in: the point a polar fold centres
+    /// its first sector on (<see cref="SdfDomainOp.Polar.Subject"/>).</param>
     /// <returns><paramref name="chain"/>, for further chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
-    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain) {
+    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain, Vector3 subject) {
         ArgumentNullException.ThrowIfNull(chain);
 
         if (domain is not { Count: > 0 }) {
@@ -175,7 +178,7 @@ public static class ShapeDomainOps {
 
         return SdfDomainOps.Apply(
             chain: chain,
-            domain: ToDomainOps(domain: domain)
+            domain: ToDomainOps(domain: domain, subject: subject)
         );
     }
     /// <summary>Returns a conservative bound on how far a shape's domain ops can carry its geometry from the
@@ -238,8 +241,10 @@ public static class ShapeDomainOps {
     /// <summary>Converts a shape's authored ops into the SDF VM vocabulary, resolving every absent optional to its
     /// documented default.</summary>
     /// <param name="domain">The shape's domain ops, or null/empty.</param>
+    /// <param name="subject">The shape's own position, in the frame the folds act in (see
+    /// <see cref="Apply"/>).</param>
     /// <returns>The converted ops, in authored order; empty when there are none.</returns>
-    public static IReadOnlyList<SdfDomainOp> ToDomainOps(IReadOnlyList<ShapeDomainOp>? domain) {
+    public static IReadOnlyList<SdfDomainOp> ToDomainOps(IReadOnlyList<ShapeDomainOp>? domain, Vector3 subject) {
         if (domain is not { Count: > 0 } ops) {
             return [];
         }
@@ -247,19 +252,21 @@ public static class ShapeDomainOps {
         var mapped = new SdfDomainOp[ops.Count];
 
         for (var index = 0; (index < ops.Count); index++) {
-            mapped[index] = Map(op: ops[index]);
+            mapped[index] = Map(op: ops[index], subject: subject);
         }
 
         return mapped;
     }
     /// <summary>Returns whether a shape's authored ops expand to a finite copy set, and that set.</summary>
     /// <param name="domain">The shape's domain ops, or null/empty for the identity copy.</param>
+    /// <param name="subject">The shape's own position, in the frame the folds act in (see <see cref="Apply"/>); it
+    /// places a mirrored polar fold's reflection plane, and a count of copies does not depend on it.</param>
     /// <param name="frames">The copies; a single identity frame when there are no ops, and empty on refusal.</param>
     /// <param name="refusal">Empty on success; otherwise a noun phrase naming what could not expand.</param>
     /// <returns><see langword="true"/> when the chain expanded.</returns>
-    public static bool TryExpand(IReadOnlyList<ShapeDomainOp>? domain, out SdfRigidFrame[] frames, out string refusal) =>
+    public static bool TryExpand(IReadOnlyList<ShapeDomainOp>? domain, Vector3 subject, out SdfRigidFrame[] frames, out string refusal) =>
         SdfDomainExpansion.TryExpand(
-            domain: ToDomainOps(domain: domain),
+            domain: ToDomainOps(domain: domain, subject: subject),
             frames: out frames,
             refusal: out refusal
         );
