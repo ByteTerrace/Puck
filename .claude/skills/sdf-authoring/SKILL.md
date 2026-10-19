@@ -302,7 +302,7 @@ Source first, then structure, then pixels:
    Frayed edges show as face normals off the gradient; a cutter whose field is
    only a lower bound (a stretched ellipsoid, a non-uniform scale) shows as a
    loose field; give that cutter an exact primitive instead. The
-   [rendering skill](../rendering/SKILL.md#auditing-a-bake) owns how the audit
+   [rendering skill](../rendering/references/mesh-bake.md#auditing-a-bake) owns how the audit
    reads a store.
 
 Run every `puck` verb from your lane's private copy of the head's CLI
