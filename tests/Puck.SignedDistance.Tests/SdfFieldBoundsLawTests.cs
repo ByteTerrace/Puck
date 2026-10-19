@@ -233,6 +233,7 @@ public sealed class SdfFieldBoundsLawTests {
 
         foreach (var lift in Enum.GetValues<SdfLift>()) {
             Shape(name: $"shape RoundedRectangle {lift}", emit: (b, m) => b.RoundedRectangle(cornerRadius: 0.2f, halfHeight: 0.6f, halfWidth: 0.9f, lift: lift, liftAmount: 0.3f, material: m, capChamfer: 0.05f));
+            Shape(name: $"shape Ellipse {lift}", emit: (b, m) => b.Ellipse(capChamfer: 0.05f, lift: lift, liftAmount: 0.3f, material: m, semiX: 0.9f, semiY: 0.4f));
             Shape(name: $"shape Trapezoid {lift}", emit: (b, m) => b.Trapezoid(bottomHalfWidth: 0.9f, halfHeight: 0.6f, lift: lift, liftAmount: 0.3f, material: m, topHalfWidth: 0.4f));
             Shape(name: $"shape ChamferedRectangle {lift}", emit: (b, m) => b.ChamferedRectangle(chamfer: 0.15f, halfHeight: 0.6f, halfWidth: 0.9f, lift: lift, liftAmount: 0.3f, material: m));
             Shape(name: $"shape ConvexPolygon {lift}", emit: (b, m) => b.ConvexPolygon(cornerRadius: 0f, lift: lift, liftAmount: 0.3f, material: m, vertices: hexagon));

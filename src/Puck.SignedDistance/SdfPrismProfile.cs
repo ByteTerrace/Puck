@@ -53,12 +53,22 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
         try { _ = Path.Compile(); return true; } catch (ArgumentException) { return false; }
     }
 
-    /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon: 3 to
-    /// <see cref="MaxConvexVertices"/> finite points inside the unit square (each coordinate in [-1, 1] — the
-    /// profile is scaled by the shape's own XY scale like every other Prism profile, and the Prism's cull reach
-    /// assumes exactly that frame), no two coincident, no three collinear, and every consecutive edge pair turning
-    /// the same way (a strictly negative 2D cross product at every vertex).</summary>
-    public static bool IsValidConvexHull(IReadOnlyList<Vector2>? vertices) {
+    /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex profile: a convex hull
+    /// (<see cref="IsConvexHull"/>) inside the unit square, each coordinate in [-1, 1], since the profile is scaled by
+    /// the shape's own XY scale like every other Prism profile and the Prism's cull reach assumes exactly that
+    /// frame.</summary>
+    /// <param name="vertices">The profile's vertices.</param>
+    /// <returns>Whether they are a valid convex profile.</returns>
+    public static bool IsValidConvexHull(IReadOnlyList<Vector2>? vertices) =>
+        (IsConvexHull(vertices: vertices) &&
+            vertices!.All(predicate: static vertex => ((MathF.Abs(x: vertex.X) <= 1f) && (MathF.Abs(x: vertex.Y) <= 1f))));
+    /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon at any size: 3 to
+    /// <see cref="MaxConvexVertices"/> finite points, no two coincident, no three collinear, and every consecutive edge
+    /// pair turning the same way (a strictly negative 2D cross product at every vertex). A positive per-axis scale of
+    /// one is another.</summary>
+    /// <param name="vertices">The polygon's vertices.</param>
+    /// <returns>Whether they are a convex hull.</returns>
+    public static bool IsConvexHull(IReadOnlyList<Vector2>? vertices) {
         if (
             (vertices is null) ||
             (vertices.Count < MinConvexVertices) ||
@@ -72,12 +82,7 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
         for (var i = 0; (i < count); i++) {
             var vertex = vertices[i];
 
-            if (
-                !float.IsFinite(f: vertex.X) ||
-                !float.IsFinite(f: vertex.Y) ||
-                (MathF.Abs(x: vertex.X) > 1f) ||
-                (MathF.Abs(x: vertex.Y) > 1f)
-            ) {
+            if (!float.IsFinite(f: vertex.X) || !float.IsFinite(f: vertex.Y)) {
                 return false;
             }
         }

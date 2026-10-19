@@ -123,7 +123,7 @@ and the panel/trim/cells creation-scope refusal both fire here (they walk
 every `prototypes[]` row unconditionally, whether or not a placement uses
 it). It does **not** run emission or contact construction — `Morph` and
 similar PopField-only blends validate here and only fail at the next step;
-a Polygon/Ellipse prism profile under a `solid` placement, and a residual
+a Polygon prism profile of more than eight sides under a `solid` placement, and a residual
 nonuniform `Scale`, likewise surface only there.
 
 ```bash

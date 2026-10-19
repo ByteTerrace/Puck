@@ -513,7 +513,7 @@ public sealed class SdfTrapezoidProfileLawTests {
             z: .4f
         ).Length()));
     }
-    [InlineData(SdfPrismProfileKind.Polygon, SdfShapeType.RegularPolygon)]
+    [InlineData(SdfPrismProfileKind.Polygon, SdfShapeType.ConvexPolygon)]
     [InlineData(SdfPrismProfileKind.Ellipse, SdfShapeType.Ellipse)]
     [Theory]
     public void ProfileUsesTheExistingRendererInstruction(SdfPrismProfileKind kind, SdfShapeType expected) {

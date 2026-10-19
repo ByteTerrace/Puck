@@ -785,7 +785,7 @@ public sealed partial class SdfProgramBuilder {
     /// <see cref="Build"/>. Exact and 1-Lipschitz (the polygon SDF is a true Euclidean distance to the boundary), so
     /// — like the rest of the family — it earns a real cull bound with no <c>AnalyzeLipschitz</c> step clamp.</summary>
     /// <param name="vertices">3 to <see cref="SdfPrismProfile.MaxConvexVertices"/> local XY points, clockwise,
-    /// convex, no coincident or collinear vertices — see <see cref="SdfPrismProfile.IsValidConvexHull"/>, which this
+    /// convex, no coincident or collinear vertices — see <see cref="SdfPrismProfile.IsConvexHull"/>, which this
     /// refuses against.</param>
     /// <param name="cornerRadius">The uniform corner-rounding radius, clamped by <see cref="ClampRounding"/> against
     /// <see cref="ConvexPolygonInradius"/> (and, for an extrude, the lift half-height); zero emits the sharp
@@ -800,12 +800,12 @@ public sealed partial class SdfProgramBuilder {
     /// exactly.</param>
     /// <param name="detail">Whether the emitted shape instruction is a detail shape (<see cref="SdfInstruction.Detail"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="vertices"/> is not a valid convex hull (see
-    /// <see cref="SdfPrismProfile.IsValidConvexHull"/>), <paramref name="liftAmount"/> is not finite, the derived
+    /// <see cref="SdfPrismProfile.IsConvexHull"/>), <paramref name="liftAmount"/> is not finite, the derived
     /// lifted bound radius is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a
     /// defined <see cref="SdfLift"/>, or <paramref name="smooth"/>/<paramref name="cornerRadius"/>/
     /// <paramref name="capChamfer"/> is not finite.</exception>
     public SdfProgramBuilder ConvexPolygon(IReadOnlyList<Vector2> vertices, float cornerRadius, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float capChamfer = 0f, bool detail = false) {
-        if (!SdfPrismProfile.IsValidConvexHull(vertices: vertices)) {
+        if (!SdfPrismProfile.IsConvexHull(vertices: vertices)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(vertices),
                 message: $"A convex-polygon profile must carry {SdfPrismProfile.MinConvexVertices}..{SdfPrismProfile.MaxConvexVertices} finite, clockwise, convex, non-degenerate vertices."

@@ -418,22 +418,25 @@ public sealed class SdfMaterialLawTests {
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgram([Shape()], [crowded]));
     }
     /// <summary>A paint shape is the instruction the builder packs for a document primitive: a residual scale transform
-    /// folds into its scale, a convex polygon carries its vertices and their count, and a primitive the views pass
+    /// folds into its scale (a torus scaled differently in X and Z keeps one; scaled alike, it packs its native ellipse), a convex polygon carries its vertices and their count, and a primitive the views pass
     /// cannot evaluate (a path profile) is refused.</summary>
     [Fact]
     public void PaintShapesCaptureThePrimitiveTheBuilderPacks() {
-        var torus = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 1f), type: SdfSolidPrimitive.Torus);
+        var torus = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 3f), type: SdfSolidPrimitive.Torus);
+        var elliptic = SdfPaintShape.Of(scale: new Vector3(x: 1f, y: 2f, z: 1f), type: SdfSolidPrimitive.Torus);
         var polygon = SdfPaintShape.Of(profile: new SdfPrismProfile(Kind: SdfPrismProfileKind.Convex, CornerRadius: 0f, Vertices: [new Vector2(x: -1f, y: -1f), new Vector2(x: 0f, y: 1f), new Vector2(x: 1f, y: -1f)]), scale: new Vector3(value: 0.5f), type: SdfSolidPrimitive.Prism);
 
         Assert.Equal(expected: SdfShapeType.Torus, actual: torus.Type);
-        Assert.Equal(expected: new Vector3(x: 1f, y: 2f, z: 1f), actual: torus.Scale);
+        Assert.Equal(expected: new Vector3(x: 1f, y: 2f, z: 3f), actual: torus.Scale);
         Assert.Empty(collection: torus.Table);
+        Assert.Equal(expected: SdfShapeType.Ellipse, actual: elliptic.Type);
+        Assert.Equal(expected: Vector3.One, actual: elliptic.Scale);
         Assert.Equal(expected: SdfShapeType.ConvexPolygon, actual: polygon.Type);
         Assert.Equal(expected: 3u, actual: BitConverter.SingleToUInt32Bits(value: polygon.Data0.X));
         Assert.Equal(expected: 6, actual: polygon.Table.Count);
         // Bounds: the canonical box at the scale, a revolve's reach on every axis, a sweep's control points widened by
         // its radius, and a plane unbounded.
-        Assert.Equal(expected: (SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Torus).HalfExtents * new Vector3(x: 1f, y: 2f, z: 1f)), actual: torus.Bound.HalfExtents);
+        Assert.Equal(expected: (SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Torus).HalfExtents * new Vector3(x: 1f, y: 2f, z: 3f)), actual: torus.Bound.HalfExtents);
         Assert.Equal(expected: new Vector3(value: 0.5f * 1.0001f), actual: polygon.Bound.HalfExtents);
         var revolve = SdfPaintShape.Of(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism);
         Assert.Equal(expected: new Vector3(value: SdfSolidGeometry.Reach(lift: SdfLift.Revolve, scale: new Vector3(x: 0.2f, y: 0.3f, z: 0.5f), type: SdfSolidPrimitive.Prism)), actual: revolve.Bound.HalfExtents);
