@@ -36,8 +36,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <summary>Returns the contour with its crease vertices split: a <see cref="Features"/> vertex two of whose quads face
     /// apart by more than 32 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 32 degrees of that quad's, so a sharp edge shades as the two faces
-    /// meeting at it rather than as a band of blended normals. A quad folded against its own vertices' normals neither
-    /// splits nor lends its facing.</summary>
+    /// meeting at it rather than as a band of blended normals. Any other vertex gives such a vertex to the corners of the
+    /// quads that face more than 32 degrees from its own normal: a vertex on a rounding narrower than its cell carries the
+    /// rounding's normal, which the faces beyond it would otherwise blend across a cell. A quad folded against its own
+    /// vertices' normals neither splits nor lends its facing.</summary>
     /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
     /// splits.</returns>
     public SdfContour SplitAtCreases() {
@@ -117,11 +119,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             around[(starts[vertex] + filled[vertex]++)] = (corner >> 2);
         }
 
-        // A vertex lies on a crease where two of its quads face apart by more than the crease angle.
+        // A feature vertex lies on a crease where two of its quads face apart by more than the crease angle.
         var creased = new bool[vertexCount];
 
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
-            if ((vertex >= Features.Length) || !Features[vertex]) { continue; }
+            if (!Feature(vertex: vertex)) { continue; }
             for (var first = starts[vertex]; (first < starts[(vertex + 1)]) && !creased[vertex]; first++) {
                 if (!(facings[around[first]].LengthSquared() > 0f)) { continue; }
                 var one = Vector3.Normalize(value: facings[around[first]]);
@@ -159,7 +161,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
                 var vertex = quads[at];
 
-                if (!creased[vertex]) { continue; }
+                // Any other vertex splits off the corners of the quads that face more than the crease angle from its own
+                // normal: it lies on a rounding narrower than its cell, where the field's normal turns, and those quads on
+                // a face beyond the rounding, which would otherwise shade as a band of the rounding's normal a cell wide.
+                if (!creased[vertex] && (Feature(vertex: vertex) || (Vector3.Dot(vector1: facing, vector2: At(values: normals, vertex: vertex)) >= cosine))) { continue; }
 
                 var sum = Vector3.Zero;
                 var group = int.MaxValue;

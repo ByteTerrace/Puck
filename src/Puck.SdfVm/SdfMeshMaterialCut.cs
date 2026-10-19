@@ -13,6 +13,10 @@ namespace Puck.SdfVm;
 /// <see cref="Rounds"/> more rounds for the point its material changes, and each triangle splits along the line between the
 /// points on its edges, so a boundary follows its true place to a thirty-second of an edge rather than stepping in half
 /// cells. An edge's point is shared by both triangles across it, so the boundary is one unbroken line.</para>
+/// <para>A crease splits a vertex into copies at one place with their own normals (<see cref="SdfContour.SplitAtCreases"/>).
+/// The copies are one site: the site's material is sampled once, along the normal of the vertex the contour placed, and an
+/// edge between two sites is searched once, whichever copies its triangles name, so the faces either side of a crease cut
+/// a boundary at one point and leave no crack between them.</para>
 /// </summary>
 internal sealed class SdfMeshMaterialCut {
     /// <summary>The bisection rounds after the first: each halves the interval a boundary lies in along its edge.</summary>
@@ -28,10 +32,12 @@ internal sealed class SdfMeshMaterialCut {
     private static readonly Vector2[] Quarters = [new(x: 0.25f, y: 0.25f), new(x: 0.75f, y: 0.25f), new(x: 0.75f, y: 0.75f), new(x: 0.25f, y: 0.75f)];
 
     private readonly SdfContour m_contour;
+    // Each vertex's site: the first vertex at its place, which the crease copies appended after it share.
+    private readonly int[] m_site;
     private int[] m_quarters = [];
     private int[] m_vertices = [];
-    // The edges searched, keyed by their two vertices (lower first), each with the interval its boundary lies in, as a
-    // fraction of the way from the lower vertex, and the material of that vertex.
+    // The edges searched, keyed by their two sites (lower first), each with the interval its boundary lies in, as a
+    // fraction of the way from the lower site, and the material of that site.
     private readonly Dictionary<(int Low, int High), int> m_edgeOf = [];
     private readonly List<(int Low, int High)> m_edges = [];
     private float[] m_from = [];
@@ -41,7 +47,13 @@ internal sealed class SdfMeshMaterialCut {
     /// <summary>Initializes a new instance of the <see cref="SdfMeshMaterialCut"/> class.</summary>
     /// <param name="contour">The contour, split at its creases, in the frame its group bakes in.</param>
     public SdfMeshMaterialCut(SdfContour contour) {
+        var first = new Dictionary<Vector3, int>(capacity: contour.VertexCount);
+
         m_contour = contour;
+        m_site = new int[contour.VertexCount];
+        for (var vertex = 0; (vertex < m_site.Length); vertex++) {
+            m_site[vertex] = (first.TryAdd(key: Position(vertex: vertex), value: vertex) ? vertex : first[Position(vertex: vertex)]);
+        }
     }
 
     /// <summary>Gets the mesh edges the cut searches for a boundary.</summary>
@@ -67,7 +79,7 @@ internal sealed class SdfMeshMaterialCut {
                 }
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
-                points[((4 * contour.QuadCount) + vertex)] = Lifted(normal: Normal(vertex: vertex), position: Position(vertex: vertex));
+                points[((4 * contour.QuadCount) + vertex)] = Lifted(normal: Normal(vertex: m_site[vertex]), position: Position(vertex: vertex));
             }
 
             return points;
@@ -109,18 +121,10 @@ internal sealed class SdfMeshMaterialCut {
         var contour = m_contour;
         var quadCount = contour.QuadCount;
 
-        m_quarters = new int[(4 * quadCount)];
+        m_quarters = materials[..(4 * quadCount)].ToArray();
         m_vertices = new int[contour.VertexCount];
-        Array.Fill(array: m_vertices, value: int.MinValue);
-        for (var quad = 0; (quad < quadCount); quad++) {
-            for (var index = 0; (index < 4); index++) {
-                var vertex = contour.Quads[((4 * quad) + index)];
-
-                m_quarters[((4 * quad) + index)] = materials[((4 * quad) + index)];
-                if (m_vertices[vertex] == int.MinValue) {
-                    m_vertices[vertex] = materials[((4 * quadCount) + vertex)];
-                }
-            }
+        for (var vertex = 0; (vertex < m_vertices.Length); vertex++) {
+            m_vertices[vertex] = materials[((4 * quadCount) + m_site[vertex])];
         }
 
         Span<int> triangle = stackalloc int[3];
@@ -135,8 +139,8 @@ internal sealed class SdfMeshMaterialCut {
                 for (var side = 0; (side < 3); side++) {
                     var (a, b) = (triangle[side], triangle[((side + 1) % 3)]);
 
-                    if ((m_vertices[a] != m_vertices[b]) && m_edgeOf.TryAdd(key: Key(a: a, b: b), value: m_edges.Count)) {
-                        m_edges.Add(item: Key(a: a, b: b));
+                    if ((m_vertices[a] != m_vertices[b]) && m_edgeOf.TryAdd(key: Key(a: m_site[a], b: m_site[b]), value: m_edges.Count)) {
+                        m_edges.Add(item: Key(a: m_site[a], b: m_site[b]));
                     }
                 }
             }
@@ -182,31 +186,29 @@ internal sealed class SdfMeshMaterialCut {
             _ = Add(normal: Normal(vertex: vertex), point: Position(vertex: vertex));
         }
 
-        // Each searched edge's boundary point, between the last interval's ends, as one vertex for the piece on each end's
-        // side. Where the ends' normals turn apart past CreaseCosine the boundary runs along a crease (a raised plate's foot,
-        // a bezel's rim), and each piece takes its own end's normal there: a normal blended across the crease shades the
-        // piece on the face as a spike of the face beyond it.
-        var lowSide = new uint[m_edges.Count];
-        var highSide = new uint[m_edges.Count];
-
-        for (var edge = 0; (edge < m_edges.Count); edge++) {
-            var (low, high) = m_edges[edge];
-            var (position, normal) = Along(edge: edge, t: (0.5f * (m_from[edge] + m_to[edge])));
-            var (lowNormal, highNormal) = (Vector3.Normalize(value: Normal(vertex: low)), Vector3.Normalize(value: Normal(vertex: high)));
-
-            if (Vector3.Dot(vector1: lowNormal, vector2: highNormal) < CreaseCosine) {
-                lowSide[edge] = Add(normal: lowNormal, point: position);
-                highSide[edge] = Add(normal: highNormal, point: position);
-            } else {
-                lowSide[edge] = highSide[edge] = Add(normal: normal, point: position);
-            }
-        }
+        // Each searched edge's boundary point, between the last interval's ends, as a vertex for the pieces it bounds, its
+        // normal blended between the vertices of the triangle that names it. Where those two normals turn apart past
+        // CreaseCosine the boundary runs along a crease (a raised plate's foot, a bezel's rim), and each piece takes its own
+        // end's normal there: a normal blended across the crease shades the piece on the face as a spike of the face beyond
+        // it. Every vertex of one edge lies at its one point.
+        var boundary = new Dictionary<(int Edge, int Low, int High, int Side), uint>();
 
         // The boundary vertex of the edge between `a` and `b` for the piece on `a`'s side.
         uint On(int a, int b) {
-            var edge = m_edgeOf[Key(a: a, b: b)];
+            var edge = m_edgeOf[Key(a: m_site[a], b: m_site[b])];
+            var middle = (0.5f * (m_from[edge] + m_to[edge]));
+            var (aNormal, bNormal) = (Vector3.Normalize(value: Normal(vertex: a)), Vector3.Normalize(value: Normal(vertex: b)));
+            var creased = (Vector3.Dot(vector1: aNormal, vector2: bNormal) < CreaseCosine);
+            var key = (edge, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b), (creased ? a : -1));
 
-            return ((a < b) ? lowSide[edge] : highSide[edge]);
+            if (!boundary.TryGetValue(key: key, value: out var vertex)) {
+                var fromA = ((m_site[a] == m_edges[edge].Low) ? middle : (1f - middle));
+
+                vertex = Add(normal: (creased ? aNormal : Vector3.Lerp(value1: Normal(vertex: a), value2: Normal(vertex: b), amount: fromA)), point: Along(edge: edge, t: middle).Position);
+                boundary.Add(key: key, value: vertex);
+            }
+
+            return vertex;
         }
 
         Span<int> triangle = stackalloc int[3];

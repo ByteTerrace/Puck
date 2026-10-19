@@ -184,7 +184,6 @@ internal static class SdfDualContouring {
                         normals.Add(item: ny);
                         normals.Add(item: nz);
                         features.Add(item: feature);
-                solveds.Add(item: solved);
                         solveds.Add(item: solved);
                     }
                 }
