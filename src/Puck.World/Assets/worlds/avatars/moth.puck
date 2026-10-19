@@ -1840,6 +1840,21 @@ dynamics [
     r: 0
     zeta: 1
   }
+  // Her vertical speed for the air pose: quick and critically damped, so the tuck follows the arc closely.
+  {
+    f: 5
+    name: "body-air"
+    r: 0
+    zeta: 1
+  }
+  // Her vertical speed for the landing give: slow enough to still read the fall a beat after touchdown, and
+  // underdamped so the crouch springs back up past rest.
+  {
+    f: 2.2
+    name: "body-land"
+    r: 0
+    zeta: 0.5
+  }
 ]
 
 gravity {
@@ -3171,6 +3186,14 @@ prototypes {
             pivot [0, 0, 0]
             wave: "linear"
           }
+          // Landing pitches her forward about the ground point, 0.08 rad at 4 m/s.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: -0.02
+            pivot [0, 0, 0]
+            wave: "linear"
+          }
         ]
         slides [
           {
@@ -3179,6 +3202,13 @@ prototypes {
             amplitude: 0.022
             phase: -1.5708
             wave: "sine"
+          }
+          // And drops her hips 10 cm at 4 m/s; the planted feet fold the legs under them.
+          {
+            driver: "land"
+            axis [0, 1, 0]
+            amplitude: 0.025
+            wave: "linear"
           }
         ]
       }
@@ -4098,6 +4128,24 @@ prototypes {
             wave: "linear"
             phase: 0
           }
+          // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
+          {
+            driver: "air"
+            axis [0, 0, 1]
+            amplitude: 0.03
+            pivot [0.295, 1.4515, 0]
+            wave: "linear"
+            phase: 15
+          }
+          // And lift forward 0.12 rad, 0.2 rising.
+          {
+            driver: "air"
+            axis [0.987688, -0.156434, 0]
+            amplitude: -0.015
+            pivot [0.295, 1.4515, 0]
+            wave: "linear"
+            phase: 8
+          }
         ]
       }
 
@@ -4215,6 +4263,23 @@ prototypes {
             pivot [0.345811, 1.165024, 0.005]
             wave: "linear"
             phase: 0
+          }
+          // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
+          {
+            driver: "air"
+            axis [0.660568, -0.349483, -0.664463]
+            amplitude: -0.03
+            pivot [0.345811, 1.165024, 0.005]
+            wave: "linear"
+            phase: 12
+          }
+          // And bend a little further as she lands.
+          {
+            driver: "land"
+            axis [0.660568, -0.349483, -0.664463]
+            amplitude: 0.05
+            pivot [0.345811, 1.165024, 0.005]
+            wave: "linear"
           }
         ]
       }
@@ -4432,6 +4497,23 @@ prototypes {
             wave: "linear"
             phase: 0
           }
+          // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: -0.06
+            pivot [0.145, 1.0265, 0]
+            wave: "linear"
+            phase: 13.3
+          }
+          // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: 0.1
+            pivot [0.145, 1.0265, 0]
+            wave: "linear"
+          }
         ]
       }
 
@@ -4517,6 +4599,23 @@ prototypes {
             pivot [0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
+          }
+          // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: 0.05
+            pivot [0.19, 0.7465, 0]
+            wave: "linear"
+            phase: 24
+          }
+          // The knee takes twice the hip's fold.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: -0.2
+            pivot [0.19, 0.7465, 0]
+            wave: "linear"
           }
         ]
       }
@@ -4879,6 +4978,23 @@ prototypes {
             pivot [0.2, 0.1715, 0.0075]
             wave: "linear"
             phase: 0
+          }
+          // The toes point 0.25 rad in the air, flattening toward the ground on the way down.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: 0.02
+            pivot [0.2, 0.1715, 0.0075]
+            wave: "linear"
+            phase: 12.5
+          }
+          // The ankle bends back as the knee folds, keeping the sole flat in the crouch.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: 0.1
+            pivot [0.2, 0.1715, 0.0075]
+            wave: "linear"
           }
         ]
       }
@@ -5747,6 +5863,24 @@ prototypes {
             wave: "linear"
             phase: 0
           }
+          // The arms open 0.45 rad from the sides at the peak, 0.6 on the way up and 0.3 coming down.
+          {
+            driver: "air"
+            axis [0, 0, 1]
+            amplitude: -0.03
+            pivot [-0.295, 1.4515, 0]
+            wave: "linear"
+            phase: 15
+          }
+          // And lift forward 0.12 rad, 0.2 rising.
+          {
+            driver: "air"
+            axis [0.987688, 0.156434, 0]
+            amplitude: -0.015
+            pivot [-0.295, 1.4515, 0]
+            wave: "linear"
+            phase: 8
+          }
         ]
       }
 
@@ -5864,6 +5998,23 @@ prototypes {
             pivot [-0.345811, 1.165024, 0.005]
             wave: "linear"
             phase: 0
+          }
+          // The elbows bend 0.36 rad at the peak, 0.51 rising and 0.21 falling.
+          {
+            driver: "air"
+            axis [0.660568, 0.349483, 0.664463]
+            amplitude: -0.03
+            pivot [-0.345811, 1.165024, 0.005]
+            wave: "linear"
+            phase: 12
+          }
+          // And bend a little further as she lands.
+          {
+            driver: "land"
+            axis [0.660568, 0.349483, 0.664463]
+            amplitude: 0.05
+            pivot [-0.345811, 1.165024, 0.005]
+            wave: "linear"
           }
         ]
       }
@@ -6078,6 +6229,23 @@ prototypes {
             wave: "linear"
             phase: 0
           }
+          // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: -0.06
+            pivot [-0.145, 1.0265, 0]
+            wave: "linear"
+            phase: 13.3
+          }
+          // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: 0.1
+            pivot [-0.145, 1.0265, 0]
+            wave: "linear"
+          }
         ]
       }
 
@@ -6163,6 +6331,23 @@ prototypes {
             pivot [-0.19, 0.7465, 0]
             wave: "linear"
             phase: 0
+          }
+          // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, the shin a little behind the knee.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: 0.05
+            pivot [-0.19, 0.7465, 0]
+            wave: "linear"
+            phase: 24
+          }
+          // The knee takes twice the hip's fold.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: -0.2
+            pivot [-0.19, 0.7465, 0]
+            wave: "linear"
           }
         ]
       }
@@ -6525,6 +6710,23 @@ prototypes {
             pivot [-0.2, 0.1715, 0.0075]
             wave: "linear"
             phase: 0
+          }
+          // The toes point 0.25 rad in the air, flattening toward the ground on the way down.
+          {
+            driver: "air"
+            axis [1, 0, 0]
+            amplitude: 0.02
+            pivot [-0.2, 0.1715, 0.0075]
+            wave: "linear"
+            phase: 12.5
+          }
+          // The ankle bends back as the knee folds, keeping the sole flat in the crouch.
+          {
+            driver: "land"
+            axis [1, 0, 0]
+            amplitude: 0.1
+            pivot [-0.2, 0.1715, 0.0075]
+            wave: "linear"
           }
         ]
       }
@@ -7496,6 +7698,7 @@ prototypes {
           cadence: 0.26
           signal: "turnRate"
           "when" [
+            "state.airPose.$body"
             "Airborne"
           ]
         }
@@ -7504,6 +7707,7 @@ prototypes {
           cadence: 0.18
           signal: "speed"
           "when" [
+            "state.airPose.$body"
             "Airborne"
             "moving"
           ]
@@ -7546,6 +7750,32 @@ prototypes {
           cadence: 1
           signal: "forwardAcceleration"
           dynamics: "body-lean"
+          "when" [
+            "Grounded"
+          ]
+        }
+        // Her vertical speed in metres per second, eased so the pose follows the arc without the frame's noise:
+        // positive rising, zero at the peak, negative falling. It poses her only in the air.
+        {
+          name: "air"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-air"
+          blendInSeconds: 0.06
+          blendOutSeconds: 0.04
+          "when" [
+            "Airborne"
+          ]
+        }
+        // The same speed through an underdamped response that lags it: touching down, it is still the fall's
+        // speed and decays to rest through a small rebound, which is the crouch and the spring back up.
+        {
+          name: "land"
+          cadence: 1
+          signal: "verticalSpeed"
+          dynamics: "body-land"
+          blendInSeconds: 0
+          blendOutSeconds: 0.08
           "when" [
             "Grounded"
           ]

@@ -71,7 +71,8 @@ public sealed record CreationDriverDocument(
     public const int MaxGateTokens = 4;
     /// <summary>Planar (horizontal) rendered travel, metres — a stride that a ramp's rise must not charge.</summary>
     public const string SignalPlanarTravel = "planarTravel";
-    /// <summary>The body's total rendered speed, metres per second.</summary>
+    /// <summary>The body's rendered ground speed, metres per second: planar, so a jump, a fall or a climb reads
+    /// zero.</summary>
     public const string SignalSpeed = "speed";
     /// <summary>The prefix of a driver signal: <c>driver.&lt;name&gt;</c> sets the phase to the cadence times the phase
     /// an earlier driver reached this frame, so a walk set and a run set of swings, or a bob at twice the step rate,

@@ -67,7 +67,7 @@ before it, the rule a shape's `parent` follows.
 | Signal | Behavior |
 |---|---|
 | `planarTravel`, `travel`, `time` | integrate |
-| `speed`, `verticalSpeed`, `turnRate` | set directly; `turnRate` is positive turning left |
+| `speed`, `verticalSpeed`, `turnRate` | set directly; `speed` is ground speed (vertical travel reads zero, and so never trips `moving`), `turnRate` is positive turning left |
 | `travelDirection` | set directly: eased planar travel off the facing, (−π, π], 0 forward, π backpedal, positive left; holds at rest |
 | `lateralAcceleration`, `forwardAcceleration` | set directly: eased planar acceleration across (positive left) and along (positive forward) the facing, m/s² |
 | `state.<row>[.<key>]` | read a state row |
@@ -168,7 +168,9 @@ Every part of the moth's motion is a driver, a swing or an effector in
 | Hips trail a turn, chest and head lead | `trail` (`turnRate` through `body-turn`) | pelvis −0.12, torso +0.08, helmet +0.07 |
 | Lean into a curving run, a start or a stop | `lean`, `surge` (accelerations through `body-lean`) | pelvis, pivoting about the ground point |
 | Feet plant while walking, step when turning in place or settling, soles flat on the ground | `foot-left`/`foot-right` effectors, `stride` windows plus `replant`, `align: 1` with `standoff` the boot centre's rest height | thigh–shin chains, boot tips |
-| Breath, flight pose, wings, airborne bank and cruise | `breath`, `flight`, `wings`, `bank`, `cruise` | torso, limbs, pods |
+| Breath, flight pose, wings, and in flight alone the bank and cruise | `breath`, `flight`, `wings`, `bank`, `cruise` (the last two gated on `state.airPose.$body` too) | torso, limbs, pods |
+| Jump: legs tucked and arms open in the air, tighter rising and reaching for the ground falling | `air` (`verticalSpeed` through `body-air`, `Airborne`, `linear` swings with a phase offset, so the peak pose is amplitude × phase) | thighs, shins, boots, upper arms, forearms |
+| Landing give: a crouch that springs back past rest | `land` (`verticalSpeed` through the underdamped `body-land`, `Grounded`): still the fall's speed a beat after touchdown | pelvis pitch and drop, thighs, shins, boots, forearms |
 
 The root shape is the pelvis, so a swing on it carries the whole body; the
 upper body undoes part of it through the torso and helmet, and each thigh's

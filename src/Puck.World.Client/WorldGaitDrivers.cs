@@ -66,7 +66,7 @@ public static class WorldGaitDrivers {
     /// <param name="lastOrientation">The attitude latched by the previous call; updated every call.</param>
     /// <param name="seeded">Whether a prior call latched an address; set <see langword="true"/> on return.</param>
     /// <param name="lastAddress">The address latched by the previous call; updated on a reseed.</param>
-    /// <param name="easedSpeed">The low-passed rendered speed backing the <c>moving</c>/<c>still</c> gate tokens,
+    /// <param name="easedSpeed">The low-passed rendered ground speed backing the <c>moving</c>/<c>still</c> gate tokens,
     /// metres per second; updated every call and zeroed on a reseed.</param>
     /// <param name="address">This call's entity address; uninhabited placements use index -1 with no body facts.</param>
     /// <param name="reads">The registration's reads of the state mirror a state-cell signal and a state gate token
@@ -103,9 +103,15 @@ public static class WorldGaitDrivers {
         var blend = WeightBlend(deltaSeconds: deltaSeconds);
 
         // The eased speed is latched whether or not the creation declares any driver, so a look gaining one mid-run
-        // reads a settled speed rather than a cold zero.
+        // reads a settled speed rather than a cold zero. It is ground speed: a jump or a fall is not a step, so
+        // vertical travel never opens a stride or reads as cruising.
+        var groundTravel = new Vector2(
+            x: travel.X,
+            y: travel.Z
+        ).Length();
+
         easedSpeed += (((((deltaSeconds > 0f)
-            ? (travel.Length() / deltaSeconds)
+            ? (groundTravel / deltaSeconds)
             : 0f) - easedSpeed) * blend));
 
         var moving = (easedSpeed > MovingSpeed);
@@ -125,11 +131,7 @@ public static class WorldGaitDrivers {
         }
 
         var planar = MathF.Min(
-            x: new Vector3(
-                x: travel.X,
-                y: 0f,
-                z: travel.Z
-            ).Length(),
+            x: groundTravel,
             y: MaxTravelPerFrame
         );
         var total = MathF.Min(
@@ -236,7 +238,7 @@ public static class WorldGaitDrivers {
             }
             if (!CreationDriverDocument.Integrates(signal: driver.Signal)) {
                 var target = (cadence * (driver.Signal switch {
-                    CreationDriverDocument.SignalSpeed => (total * perSecond),
+                    CreationDriverDocument.SignalSpeed => (planar * perSecond),
                     CreationDriverDocument.SignalVerticalSpeed => (travel.Y * perSecond),
                     CreationDriverDocument.SignalTravelDirection => (kinematics?.TravelDirection ?? 0f),
                     CreationDriverDocument.SignalLateralAcceleration => (kinematics?.LateralAcceleration ?? 0f),
